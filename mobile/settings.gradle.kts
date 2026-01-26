@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 
 include(":shared")
 include(":androidApp")
+include(":generated-api")

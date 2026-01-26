@@ -63,6 +63,9 @@ kotlin {
 
                 // Navigation
                 implementation("org.jetbrains.androidx.navigation:navigation-compose:2.7.0-alpha03")
+
+                // Generated API client
+                implementation(project(":generated-api"))
             }
         }
 

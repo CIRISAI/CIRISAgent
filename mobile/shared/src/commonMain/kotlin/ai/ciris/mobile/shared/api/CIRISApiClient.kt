@@ -17,6 +17,7 @@ import io.ktor.client.plugins.logging.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Unified API client for CIRIS backend using the generated OpenAPI SDK.
@@ -185,7 +186,7 @@ class CIRISApiClient(
             val body = response.body()
             logDebug(method, "Response body parsed successfully")
 
-            val data = body.`data`
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
             logInfo(method, "Message sent successfully: messageId=${data.messageId}")
 
             InteractResponse(
@@ -210,7 +211,8 @@ class CIRISApiClient(
             logDebug(method, "Response: status=${response.status}")
 
             val body = response.body()
-            val messages = body.`data`.messages.map { msg ->
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            val messages = data.messages.map { msg ->
                 ChatMessage(
                     id = msg.id,
                     text = msg.content,
@@ -245,7 +247,7 @@ class CIRISApiClient(
             logDebug(method, "Response: status=${response.status}")
 
             val body = response.body()
-            val data = body.`data`
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
 
             val healthyCount = data.services["healthy"]?.get("count") ?: 0
             val unhealthyCount = data.services["unhealthy"]?.get("count") ?: 0
@@ -274,7 +276,7 @@ class CIRISApiClient(
             logDebug(method, "Response: status=${response.status}")
 
             val body = response.body()
-            val data = body.`data`
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
 
             val healthyServices = data.healthyServices ?: 0
             val degradedServices = data.degradedServices ?: 0
@@ -438,7 +440,7 @@ class CIRISApiClient(
             logDebug(method, "Response: status=${response.status}")
 
             val body = response.body()
-            val data = body.`data`
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
 
             logInfo(method, "Transition result: success=${data.success}, currentState=${data.currentState}, previousState=${data.previousState}, message=${data.message}")
 
@@ -464,7 +466,7 @@ class CIRISApiClient(
             logDebug(method, "Response: status=${response.status}")
 
             val body = response.body()
-            val data = body.`data`
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
 
             logInfo(method, "Setup status: required=${data.setupRequired}, firstRun=${data.isFirstRun}, configExists=${data.configExists}")
 
@@ -496,7 +498,7 @@ class CIRISApiClient(
                 backupLlmModel = request.backup_llm_model,
                 templateId = request.template_id,
                 enabledAdapters = request.enabled_adapters,
-                adapterConfig = request.adapter_config,
+                adapterConfig = request.adapter_config.mapValues { JsonPrimitive(it.value) },
                 agentPort = request.agent_port,
                 systemAdminPassword = request.system_admin_password,
                 adminUsername = request.admin_username,
@@ -511,7 +513,7 @@ class CIRISApiClient(
             logDebug(method, "Response: status=${response.status}")
 
             val body = response.body()
-            val data = body.`data`
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
 
             val success = data["status"] == "completed"
             val message = data["message"] ?: "Setup completed"
@@ -584,7 +586,7 @@ class CIRISApiClient(
             }
 
             val body = response.body()
-            val data = body.`data`
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
             logInfo(method, "Adapters: total=${data.totalCount}, running=${data.runningCount}")
 
             AdaptersListData(
@@ -627,7 +629,7 @@ class CIRISApiClient(
             }
 
             val body = response.body()
-            val data = body.`data`
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
             logInfo(method, "Adapter reloaded: adapterId=${data.adapterId}, success=${data.success}")
 
             AdapterActionData(
@@ -658,7 +660,7 @@ class CIRISApiClient(
             }
 
             val body = response.body()
-            val data = body.`data`
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
             logInfo(method, "Adapter removed: adapterId=${data.adapterId}, success=${data.success}")
 
             AdapterActionData(

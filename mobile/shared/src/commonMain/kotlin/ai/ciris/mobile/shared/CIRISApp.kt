@@ -169,11 +169,18 @@ fun CIRISApp(
                             .onFailure { e -> println("[$TAG][WARN] Failed to save refreshed CIRIS token: ${e.message}") }
 
                         // Update .env file with fresh Google ID token for billing
+                        println("[$TAG][INFO] Writing Google ID token to .env for Python billing...")
                         envFileUpdater.updateEnvWithToken(googleIdToken)
                             .onSuccess { updated ->
-                                if (updated) println("[$TAG][INFO] Updated .env with fresh Google ID token for billing")
+                                if (updated) println("[$TAG][INFO] .env updated, .config_reload signal written")
                             }
-                            .onFailure { e -> println("[$TAG][WARN] Failed to update .env: ${e.message}") }
+                            .onFailure { e -> println("[$TAG][ERROR] Failed to update .env: ${e.message}") }
+
+                        // Wait for Python to detect .config_reload and reload .env
+                        // ResourceMonitor checks every 1 second, so 1.5s should be sufficient
+                        println("[$TAG][INFO] Waiting 1.5s for Python to reload billing token...")
+                        kotlinx.coroutines.delay(1500)
+                        println("[$TAG][INFO] Python reload wait complete")
 
                         tokenExchangeComplete = true
                     } catch (e: Exception) {
@@ -335,17 +342,23 @@ fun CIRISApp(
                                                         .onFailure { e -> println("[$TAG][WARN] Failed to save token: ${e.message}") }
 
                                                     // Update .env file with fresh Google ID token for billing
+                                                    println("[$TAG][INFO] Writing Google ID token to .env for Python billing...")
                                                     envFileUpdater.updateEnvWithToken(result.idToken)
                                                         .onSuccess { updated ->
-                                                            if (updated) println("[$TAG][INFO] Updated .env with fresh Google ID token for billing")
+                                                            if (updated) println("[$TAG][INFO] .env updated, .config_reload signal written")
                                                         }
-                                                        .onFailure { e -> println("[$TAG][WARN] Failed to update .env: ${e.message}") }
+                                                        .onFailure { e -> println("[$TAG][ERROR] Failed to update .env: ${e.message}") }
+
+                                                    // Wait for Python to detect .config_reload and reload .env
+                                                    println("[$TAG][INFO] Waiting 1.5s for Python to reload billing token...")
+                                                    kotlinx.coroutines.delay(1500)
+                                                    println("[$TAG][INFO] Python reload wait complete")
 
                                                     // Handle new token with TokenManager for periodic refresh
                                                     tokenManager.handleNewToken(result.idToken)
 
                                                     // Trigger data loading
-                                                    println("[$TAG][INFO] Triggering data load for ViewModels")
+                                                    println("[$TAG][INFO] Triggering billingViewModel.loadBalance()...")
                                                     billingViewModel.loadBalance()
                                                     adaptersViewModel.fetchAdapters()
 
@@ -419,22 +432,28 @@ fun CIRISApp(
                                     currentAccessToken = cirisToken
                                     apiClient.logTokenState() // Debug: confirm token was set
 
-                                    // Trigger data loading now that we have auth
-                                    println("[$TAG][INFO] Triggering data load for ViewModels after Google auth")
-                                    billingViewModel.loadBalance()
-                                    adaptersViewModel.fetchAdapters()
-
                                     // Store token for future sessions
                                     secureStorage.saveAccessToken(cirisToken)
                                         .onSuccess { println("[$TAG][INFO] Token saved to secure storage") }
                                         .onFailure { e -> println("[$TAG][WARN] Failed to save token to secure storage: ${e.message}") }
 
                                     // Update .env file with fresh Google ID token for billing
+                                    println("[$TAG][INFO] Writing Google ID token to .env for Python billing...")
                                     envFileUpdater.updateEnvWithToken(idToken)
                                         .onSuccess { updated ->
-                                            if (updated) println("[$TAG][INFO] Updated .env with fresh Google ID token for billing")
+                                            if (updated) println("[$TAG][INFO] .env updated, .config_reload signal written")
                                         }
-                                        .onFailure { e -> println("[$TAG][WARN] Failed to update .env: ${e.message}") }
+                                        .onFailure { e -> println("[$TAG][ERROR] Failed to update .env: ${e.message}") }
+
+                                    // Wait for Python to detect .config_reload and reload .env
+                                    println("[$TAG][INFO] Waiting 1.5s for Python to reload billing token...")
+                                    kotlinx.coroutines.delay(1500)
+                                    println("[$TAG][INFO] Python reload wait complete")
+
+                                    // Trigger data loading now that we have auth AND Python has reloaded
+                                    println("[$TAG][INFO] Triggering billingViewModel.loadBalance()...")
+                                    billingViewModel.loadBalance()
+                                    adaptersViewModel.fetchAdapters()
 
                                     // Clear pending tokens
                                     pendingGoogleIdToken = null

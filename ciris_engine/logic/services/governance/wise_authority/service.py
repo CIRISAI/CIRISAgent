@@ -623,16 +623,18 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             else:
                 outcome = f"Rejected by WA {response.wa_id}: {response.reason}"
 
+            # outcome_json expects JSON, wrap the outcome string
+            outcome_json = json.dumps({"status": "resolved", "message": outcome})
             cursor.execute(
                 f"""
                 UPDATE tasks
                 SET status = 'completed',
                     context_json = {placeholder},
-                    outcome = {placeholder},
+                    outcome_json = {placeholder},
                     updated_at = {placeholder}
                 WHERE task_id = {placeholder}
             """,
-                (json.dumps(context), outcome, self._now().isoformat(), task_id),
+                (json.dumps(context), outcome_json, self._now().isoformat(), task_id),
             )
 
             if cursor.rowcount == 0:

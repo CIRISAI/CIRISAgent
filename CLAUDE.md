@@ -349,54 +349,56 @@ secrets_tool
 
 ## Mobile Development
 
-### Pull Device Logs (ALWAYS USE THIS)
+### Mobile QA Runner (ALWAYS USE THIS)
 
-When debugging mobile app issues, **always** use the device logs script:
+When debugging mobile app issues, **always** use the QA runner to pull logs:
 
 ```bash
-# Pull all logs from device (debug build)
-bash mobile/androidApp/tools/pull-device-logs.sh
-
-# Live tail Python logs
-bash mobile/androidApp/tools/pull-device-logs.sh --live
+# Pull all logs from device (debug build) - THE COMMAND TO USE
+python3 -m tools.qa_runner.modules.mobile pull-logs
 
 # Specify output directory
-bash mobile/androidApp/tools/pull-device-logs.sh /path/to/output
+python3 -m tools.qa_runner.modules.mobile pull-logs -o ./my_logs
 
 # Specific device
-bash mobile/androidApp/tools/pull-device-logs.sh -s emulator-5554
+python3 -m tools.qa_runner.modules.mobile pull-logs -d emulator-5554
 ```
 
-**Files collected:**
+**Files collected (saved to `mobile_qa_reports/<timestamp>/`):**
 - `logs/latest.log` - Python runtime logs (CIRIS engine)
-- `logs/incidents_latest.log` - Incident/error logs
-- `logcat_combined.txt` - Android logcat (Python + Kotlin)
+- `logs/incidents_latest.log` - Incident/error logs (CHECK THIS FIRST!)
+- `logcat_python.txt` - Python stdout/stderr
+- `logcat_app.txt` - Kotlin/KMP logs (CIRISApp, ViewModels, etc.)
+- `logcat_combined.txt` - All relevant logs combined
+- `logcat_crashes.txt` - Android crashes
 - `databases/*.db` - SQLite databases (ciris_engine.db, secrets.db, audit.db)
+- `prefs/*.xml` - Shared preferences
+- `env_file.txt` - .env file (tokens redacted)
 - `app_info.txt` - Device and package info
 
 **Quick analysis:**
 ```bash
-# Check for errors
-cat /tmp/ciris-device-logs/*/logs/incidents_latest.log | grep -i error
+# Check for errors (ALWAYS DO THIS FIRST!)
+grep -i error mobile_qa_reports/*/logs/incidents_latest.log
 
 # Recent Python logs
-cat /tmp/ciris-device-logs/*/logs/latest.log | tail -100
+tail -100 mobile_qa_reports/*/logs/latest.log
 
-# Kotlin/KMP logs (CIRISApiClient, InteractViewModel)
-grep "System.out.*CIRIS" /tmp/ciris-device-logs/*/logcat_combined.txt
+# Kotlin/KMP logs (CIRISApp, ViewModels)
+grep -i "CIRISApp\|ViewModel\|error" mobile_qa_reports/*/logcat_app.txt
 ```
 
-### Mobile QA Runner
+### UI Automation Tests
 
 Automated UI testing for the CIRIS mobile app:
 
 ```bash
 # Full flow test with test account
-python3 -m tools.qa_runner.modules.mobile full_flow
+python3 -m tools.qa_runner.modules.mobile test full_flow
 
 # Individual tests
-python3 -m tools.qa_runner.modules.mobile app_launch
-python3 -m tools.qa_runner.modules.mobile google_signin
+python3 -m tools.qa_runner.modules.mobile test app_launch
+python3 -m tools.qa_runner.modules.mobile test google_signin
 python3 -m tools.qa_runner.modules.mobile setup_wizard
 python3 -m tools.qa_runner.modules.mobile chat_interaction
 

@@ -233,4 +233,7 @@ dependencies {
 
     // Google Sign-In (same as original android/ project)
     implementation "com.google.android.gms:play-services-auth:20.7.0"
+
+    // Google Play Billing for in-app purchases
+    implementation "com.android.billingclient:billing-ktx:7.0.0"
 }

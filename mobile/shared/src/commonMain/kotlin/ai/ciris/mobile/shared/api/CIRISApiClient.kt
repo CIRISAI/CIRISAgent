@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.api
 
 import ai.ciris.mobile.shared.models.*
+import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.viewmodels.SetupCompletionResult
 import ai.ciris.mobile.shared.viewmodels.StateTransitionResult
 import ai.ciris.api.apis.*
@@ -46,19 +47,25 @@ class CIRISApiClient(
         }
     }
 
-    private fun log(level: String, method: String, message: String) {
-        println("[$TAG][$level][$method] $message")
+    private fun logDebug(method: String, message: String) {
+        PlatformLogger.d(TAG, "[$method] $message")
     }
 
-    private fun logDebug(method: String, message: String) = log("DEBUG", method, message)
-    private fun logInfo(method: String, message: String) = log("INFO", method, message)
-    private fun logWarn(method: String, message: String) = log("WARN", method, message)
-    private fun logError(method: String, message: String) = log("ERROR", method, message)
+    private fun logInfo(method: String, message: String) {
+        PlatformLogger.i(TAG, "[$method] $message")
+    }
+
+    private fun logWarn(method: String, message: String) {
+        PlatformLogger.w(TAG, "[$method] $message")
+    }
+
+    private fun logError(method: String, message: String) {
+        PlatformLogger.e(TAG, "[$method] $message")
+    }
 
     private fun logException(method: String, e: Exception, context: String = "") {
         val contextStr = if (context.isNotEmpty()) " | Context: $context" else ""
-        logError(method, "Exception: ${e::class.simpleName}: ${e.message}$contextStr")
-        logError(method, "Stack trace: ${e.stackTraceToString().take(500)}")
+        PlatformLogger.e(TAG, "[$method] Exception: ${e::class.simpleName}: ${e.message}$contextStr", e)
     }
 
     private val jsonConfig = Json {
@@ -576,6 +583,50 @@ class CIRISApiClient(
                 totalUses = body.totalUses,
                 planName = body.planName,
                 purchaseRequired = body.purchaseRequired
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Verify a Google Play purchase and add credits.
+     */
+    suspend fun verifyGooglePlayPurchase(
+        purchaseToken: String,
+        productId: String,
+        packageName: String
+    ): GooglePlayVerifyData {
+        val method = "verifyGooglePlayPurchase"
+        logInfo(method, "Verifying Google Play purchase: productId=$productId")
+
+        return try {
+            val request = ai.ciris.api.models.GooglePlayVerifyRequest(
+                purchaseToken = purchaseToken,
+                productId = productId,
+                packageName = packageName
+            )
+            val response = billingApi.verifyGooglePlayPurchaseV1ApiBillingGooglePlayVerifyPost(
+                googlePlayVerifyRequest = request,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            logInfo(method, "Purchase verified: success=${body.success}, creditsAdded=${body.creditsAdded}, newBalance=${body.newBalance}")
+
+            GooglePlayVerifyData(
+                success = body.success,
+                creditsAdded = body.creditsAdded ?: 0,
+                newBalance = body.newBalance ?: 0,
+                alreadyProcessed = body.alreadyProcessed ?: false,
+                error = body.error
             )
         } catch (e: Exception) {
             logException(method, e)

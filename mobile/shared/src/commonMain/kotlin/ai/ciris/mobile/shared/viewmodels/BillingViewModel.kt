@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.CreditStatusData
+import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.ui.screens.CreditProduct
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -60,19 +61,25 @@ class BillingViewModel(
         )
     }
 
-    private fun log(level: String, method: String, message: String) {
-        println("[$TAG][$level][$method] $message")
+    private fun logDebug(method: String, message: String) {
+        PlatformLogger.d(TAG, "[$method] $message")
     }
 
-    private fun logDebug(method: String, message: String) = log("DEBUG", method, message)
-    private fun logInfo(method: String, message: String) = log("INFO", method, message)
-    private fun logWarn(method: String, message: String) = log("WARN", method, message)
-    private fun logError(method: String, message: String) = log("ERROR", method, message)
+    private fun logInfo(method: String, message: String) {
+        PlatformLogger.i(TAG, "[$method] $message")
+    }
+
+    private fun logWarn(method: String, message: String) {
+        PlatformLogger.w(TAG, "[$method] $message")
+    }
+
+    private fun logError(method: String, message: String) {
+        PlatformLogger.e(TAG, "[$method] $message")
+    }
 
     private fun logException(method: String, e: Exception, context: String = "") {
         val contextStr = if (context.isNotEmpty()) " | Context: $context" else ""
-        logError(method, "Exception: ${e::class.simpleName}: ${e.message}$contextStr")
-        logError(method, "Stack trace: ${e.stackTraceToString().take(500)}")
+        PlatformLogger.e(TAG, "[$method] Exception: ${e::class.simpleName}: ${e.message}$contextStr", e)
     }
 
     // Current credit balance (-1 means not loaded or requires sign-in)

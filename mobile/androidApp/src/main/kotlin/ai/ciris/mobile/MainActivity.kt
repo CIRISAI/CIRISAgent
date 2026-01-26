@@ -1,13 +1,19 @@
 package ai.ciris.mobile
 
+import ai.ciris.mobile.billing.BillingManager
+import ai.ciris.mobile.billing.PurchaseResult
+import ai.ciris.mobile.billing.VerifyResult
 import ai.ciris.mobile.shared.CIRISApp
 import ai.ciris.mobile.shared.GoogleSignInCallback
 import ai.ciris.mobile.shared.GoogleSignInResult
+import ai.ciris.mobile.shared.PurchaseLauncher
+import ai.ciris.mobile.shared.PurchaseResultCallback
+import ai.ciris.mobile.shared.PurchaseResultType
+import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.config.CIRISConfig
 import ai.ciris.mobile.shared.platform.PythonRuntime
 import android.content.Intent
 import android.os.Bundle
-import android.os.Process
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -23,7 +29,6 @@ import androidx.compose.ui.unit.sp
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
@@ -33,7 +38,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
-import kotlin.system.exitProcess
 
 /**
  * MainActivity for CIRIS Android (KMP version)
@@ -53,6 +57,13 @@ class MainActivity : ComponentActivity() {
     private lateinit var googleSignInClient: GoogleSignInClient
     private var pendingGoogleSignInCallback: ((GoogleSignInResult) -> Unit)? = null
 
+    // Google Play Billing
+    private lateinit var billingManager: BillingManager
+    private var purchaseResultCallback: PurchaseResultCallback? = null
+
+    // API client for purchase verification (will be set when server is ready)
+    private var apiClient: CIRISApiClient? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -68,6 +79,9 @@ class MainActivity : ComponentActivity() {
 
         // Initialize Google Sign-In
         initGoogleSignIn()
+
+        // Initialize Google Play Billing
+        initBilling()
 
         setContent {
             var pythonReady by remember { mutableStateOf(false) }
@@ -113,7 +127,8 @@ class MainActivity : ComponentActivity() {
                 CIRISApp(
                     accessToken = "pending", // Will be set after auth
                     baseUrl = "http://localhost:8080",
-                    googleSignInCallback = googleSignInCallback
+                    googleSignInCallback = googleSignInCallback,
+                    purchaseLauncher = purchaseLauncher
                 )
             } else {
                 // Minimal splash while Python starts
@@ -134,6 +149,77 @@ class MainActivity : ComponentActivity() {
 
         googleSignInClient = GoogleSignIn.getClient(this, gso)
         Log.i(TAG, "Google Sign-In initialized with client ID: ${CIRISConfig.GOOGLE_WEB_CLIENT_ID.take(20)}...")
+    }
+
+    /**
+     * Initialize Google Play Billing
+     */
+    private fun initBilling() {
+        Log.i(TAG, "Initializing Google Play Billing...")
+
+        // Create API client for purchase verification
+        apiClient = CIRISApiClient("http://localhost:8080")
+
+        billingManager = BillingManager(
+            context = this,
+            onVerifyPurchase = { purchaseToken, productId, packageName ->
+                // Verify purchase via API
+                val client = apiClient
+                if (client != null) {
+                    try {
+                        val result = client.verifyGooglePlayPurchase(purchaseToken, productId, packageName)
+                        VerifyResult(
+                            success = result.success,
+                            creditsAdded = result.creditsAdded,
+                            newBalance = result.newBalance,
+                            alreadyProcessed = result.alreadyProcessed,
+                            error = result.error
+                        )
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Purchase verification failed", e)
+                        VerifyResult(success = false, error = "Verification failed: ${e.message}")
+                    }
+                } else {
+                    Log.e(TAG, "API client not initialized")
+                    VerifyResult(success = false, error = "API client not ready")
+                }
+            }
+        )
+
+        // Set up purchase result callback
+        billingManager.onPurchaseResult = { result ->
+            Log.i(TAG, "Purchase result received: $result")
+            val purchaseResultType = when (result) {
+                is PurchaseResult.Success -> {
+                    PurchaseResultType.Success(result.creditsAdded, result.newBalance)
+                }
+                is PurchaseResult.Error -> {
+                    PurchaseResultType.Error(result.message)
+                }
+                PurchaseResult.Cancelled -> {
+                    PurchaseResultType.Cancelled
+                }
+            }
+            purchaseResultCallback?.onResult(purchaseResultType)
+        }
+
+        billingManager.initialize()
+        Log.i(TAG, "Google Play Billing initialized")
+    }
+
+    /**
+     * PurchaseLauncher implementation for CIRISApp
+     */
+    private val purchaseLauncher = object : PurchaseLauncher {
+        override fun launchPurchase(productId: String) {
+            Log.i(TAG, "Launching purchase for product: $productId")
+            billingManager.launchPurchaseFlowById(this@MainActivity, productId)
+        }
+
+        override fun setOnPurchaseResult(callback: PurchaseResultCallback) {
+            Log.i(TAG, "Setting purchase result callback")
+            purchaseResultCallback = callback
+        }
     }
 
     /**
@@ -272,6 +358,22 @@ class MainActivity : ComponentActivity() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Logcat reader error: ${e.message}")
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Process any pending purchases when activity resumes
+        if (::billingManager.isInitialized) {
+            billingManager.processPendingPurchases()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Clean up billing connection
+        if (::billingManager.isInitialized) {
+            billingManager.endConnection()
         }
     }
 }

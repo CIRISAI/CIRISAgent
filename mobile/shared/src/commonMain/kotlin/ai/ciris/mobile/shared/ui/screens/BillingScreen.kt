@@ -29,12 +29,25 @@ fun BillingScreen(
     currentBalance: Int,
     products: List<CreditProduct>,
     isLoading: Boolean,
+    errorMessage: String? = null,
     onProductClick: (CreditProduct) -> Unit,
     onRefresh: () -> Unit,
     onNavigateBack: () -> Unit,
+    onDismissError: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Show error in snackbar
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) {
+            snackbarHostState.showSnackbar(
+                message = errorMessage,
+                duration = SnackbarDuration.Long
+            )
+            onDismissError()
+        }
+    }
 
     Scaffold(
         topBar = {

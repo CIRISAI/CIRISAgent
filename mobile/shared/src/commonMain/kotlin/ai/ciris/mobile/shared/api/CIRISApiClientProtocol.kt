@@ -133,6 +133,17 @@ data class CreditStatusData(
 )
 
 /**
+ * Google Play purchase verification result
+ */
+data class GooglePlayVerifyData(
+    val success: Boolean,
+    val creditsAdded: Int,
+    val newBalance: Int,
+    val alreadyProcessed: Boolean,
+    val error: String?
+)
+
+/**
  * Adapters list data from system API
  */
 data class AdaptersListData(

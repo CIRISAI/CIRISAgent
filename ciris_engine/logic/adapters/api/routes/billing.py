@@ -244,12 +244,8 @@ def _get_simple_provider_response(has_credit: bool) -> CreditStatusResponse:
             total_uses=1,
             plan_name="free",
             purchase_required=False,  # Can't purchase when billing disabled
-            purchase_options={
-                "price_minor": 0,
-                "uses": 0,
-                "currency": "USD",
-                "message": "Contact administrator to enable billing",
-            },
+            # NOTE: purchase_options set to None for SDK compatibility
+            purchase_options=None,
         )
 
 
@@ -294,13 +290,8 @@ async def _query_billing_backend(billing_client: httpx.AsyncClient, check_payloa
 
 def _format_billing_response(credit_data: JSONDict) -> CreditStatusResponse:
     """Format billing backend response for frontend."""
-    purchase_options = None
-    if credit_data.get("purchase_required"):
-        purchase_options = {
-            "price_minor": credit_data.get("purchase_price_minor"),
-            "uses": credit_data.get("purchase_uses"),
-            "currency": "USD",
-        }
+    # NOTE: purchase_options intentionally set to None for SDK compatibility
+    # The mobile SDK expects a complex object type, not simple primitives
 
     return CreditStatusResponse(
         has_credit=credit_data["has_credit"],
@@ -310,7 +301,7 @@ def _format_billing_response(credit_data: JSONDict) -> CreditStatusResponse:
         total_uses=credit_data.get("total_uses", 0),
         plan_name=credit_data.get("plan_name"),
         purchase_required=credit_data.get("purchase_required", False),
-        purchase_options=purchase_options,
+        purchase_options=None,
     )
 
 
@@ -421,7 +412,9 @@ def _build_mobile_credit_response(result: Any) -> CreditStatusResponse:
         total_uses=0,
         plan_name="CIRIS Mobile",
         purchase_required=not result.has_credit,
-        purchase_options={"price_minor": 499, "uses": 100, "currency": "USD"} if not result.has_credit else None,
+        # NOTE: purchase_options intentionally set to None for SDK compatibility
+        # The mobile SDK expects a complex object type, not simple primitives
+        purchase_options=None,
     )
 
 

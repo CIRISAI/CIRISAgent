@@ -66,6 +66,40 @@ interface GoogleSignInCallback {
 }
 
 /**
+ * Callback interface for launching in-app purchases
+ * Platform implementations provide actual store integration (Google Play, App Store)
+ */
+interface PurchaseLauncher {
+    /**
+     * Launch the native purchase flow for a product.
+     * @param productId The product ID to purchase (e.g., "credits_100")
+     */
+    fun launchPurchase(productId: String)
+
+    /**
+     * Set callback for purchase results.
+     * Called by CIRISApp to receive purchase outcomes.
+     */
+    fun setOnPurchaseResult(callback: PurchaseResultCallback)
+}
+
+/**
+ * Result of a purchase attempt
+ */
+sealed class PurchaseResultType {
+    data class Success(val creditsAdded: Int, val newBalance: Int) : PurchaseResultType()
+    data class Error(val message: String) : PurchaseResultType()
+    object Cancelled : PurchaseResultType()
+}
+
+/**
+ * Callback for purchase results
+ */
+fun interface PurchaseResultCallback {
+    fun onResult(result: PurchaseResultType)
+}
+
+/**
  * Result of Google Sign-In attempt
  */
 sealed class GoogleSignInResult {
@@ -87,7 +121,8 @@ fun CIRISApp(
     pythonRuntime: PythonRuntimeProtocol = createPythonRuntime(),
     secureStorage: SecureStorage = createSecureStorage(),
     envFileUpdater: EnvFileUpdater = createEnvFileUpdater(),
-    googleSignInCallback: GoogleSignInCallback? = null
+    googleSignInCallback: GoogleSignInCallback? = null,
+    purchaseLauncher: PurchaseLauncher? = null
 ) {
     val TAG = "CIRISApp"
     val coroutineScope = rememberCoroutineScope()
@@ -220,6 +255,26 @@ fun CIRISApp(
     }
     val wiseAuthorityViewModel: WiseAuthorityViewModel = viewModel {
         WiseAuthorityViewModel(apiClient)
+    }
+
+    // Set up purchase result callback
+    LaunchedEffect(purchaseLauncher) {
+        purchaseLauncher?.setOnPurchaseResult { result ->
+            when (result) {
+                is PurchaseResultType.Success -> {
+                    println("[$TAG][INFO] Purchase success: creditsAdded=${result.creditsAdded}, newBalance=${result.newBalance}")
+                    billingViewModel.onPurchaseSuccess(result.creditsAdded, result.newBalance)
+                }
+                is PurchaseResultType.Error -> {
+                    println("[$TAG][ERROR] Purchase error: ${result.message}")
+                    billingViewModel.onPurchaseError(result.message)
+                }
+                PurchaseResultType.Cancelled -> {
+                    println("[$TAG][INFO] Purchase cancelled")
+                    billingViewModel.onPurchaseCancelled()
+                }
+            }
+        }
     }
 
     // Watch startup phase to check first-run when ready
@@ -528,6 +583,12 @@ fun CIRISApp(
                 val billingSuccess by billingViewModel.successMessage.collectAsState()
                 val isByokMode by billingViewModel.isByokMode.collectAsState()
 
+                // Load balance when entering billing screen
+                LaunchedEffect(Unit) {
+                    println("[$TAG][INFO][Screen.Billing] Loading balance on screen entry")
+                    billingViewModel.loadBalance()
+                }
+
                 println("[CIRISApp][DEBUG][Screen.Billing] Rendering billing screen: " +
                         "balance=$currentBalance, products=${products.size}, " +
                         "isByok=$isByokMode, isLoading=$isBillingLoading")
@@ -548,14 +609,18 @@ fun CIRISApp(
                     currentBalance = currentBalance,
                     products = products,
                     isLoading = isBillingLoading,
+                    errorMessage = billingError,
                     onProductClick = { product ->
                         println("[CIRISApp][INFO][Screen.Billing] Product clicked: ${product.productId}")
                         billingViewModel.onProductSelected(product) { selectedProduct ->
-                            // Platform-specific purchase flow would be triggered here
-                            // For now, just log that we're ready to purchase
-                            println("[CIRISApp][INFO][Screen.Billing] Ready to purchase: ${selectedProduct.productId}")
-                            // On Android, this would call BillingManager.launchPurchaseFlow()
-                            // On iOS, this would call StoreKit APIs
+                            println("[CIRISApp][INFO][Screen.Billing] Launching purchase for: ${selectedProduct.productId}")
+                            if (purchaseLauncher != null) {
+                                billingViewModel.onPurchaseStarted(selectedProduct.productId)
+                                purchaseLauncher.launchPurchase(selectedProduct.productId)
+                            } else {
+                                println("[CIRISApp][WARN][Screen.Billing] No purchase launcher available")
+                                billingViewModel.onPurchaseError("In-app purchases not available on this platform")
+                            }
                         }
                     },
                     onRefresh = {
@@ -565,6 +630,9 @@ fun CIRISApp(
                     onNavigateBack = {
                         println("[CIRISApp][INFO][Screen.Billing] Navigating back to Interact")
                         currentScreen = Screen.Interact
+                    },
+                    onDismissError = {
+                        billingViewModel.clearError()
                     }
                 )
             }

@@ -7,6 +7,7 @@ Usage:
 Commands:
     test [tests]      - Run UI automation tests (default)
     pull-logs         - Pull device logs and files for debugging
+    go-screen         - Navigate to a specific app screen and take a screenshot
 
 Examples:
     # Run full flow test with test account
@@ -21,17 +22,55 @@ Examples:
     # Pull device logs
     python -m tools.qa_runner.modules.mobile pull-logs
     python -m tools.qa_runner.modules.mobile pull-logs -d R5CRC3BWLRZ -o ./my_logs
+
+    # Navigate to a screen and take screenshot
+    python -m tools.qa_runner.modules.mobile go-screen billing
+    python -m tools.qa_runner.modules.mobile go-screen telemetry -o ./screenshots
 """
 
 import os
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 # Add parent paths for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from tools.qa_runner.modules.mobile.adb_helper import ADBHelper
 from tools.qa_runner.modules.mobile.test_runner import MobileTestConfig, MobileTestRunner
+from tools.qa_runner.modules.mobile.ui_automator import UIAutomator
+
+# ========== Screen Registry ==========
+# Extensible registry of app screens and how to navigate to them
+# Format: screen_name -> (menu_text, content_desc, description)
+# menu_text: Text to click in the overflow menu (Settings/Telemetry/etc.)
+# content_desc: Content description to find (for hamburger menu items)
+# description: Human-readable description of the screen
+
+SCREEN_REGISTRY: Dict[str, Tuple[str, Optional[str], str]] = {
+    "interact": (None, None, "Main chat/interaction screen (default)"),
+    "settings": ("Settings", "Settings", "App settings screen"),
+    "billing": ("Buy Credits", "Buy Credits", "Purchase credits screen"),
+    "telemetry": ("Telemetry", "Telemetry", "System telemetry/metrics screen"),
+    "sessions": ("Sessions", "Sessions", "Active sessions screen"),
+    "adapters": ("Adapters", "Adapters", "Adapter management screen"),
+    "wise_authority": ("Wise Authority", "Wise Authority", "Wise Authority deferrals screen"),
+}
+
+
+def register_screen(name: str, menu_text: Optional[str], content_desc: Optional[str], description: str) -> None:
+    """
+    Register a new screen for go-screen navigation.
+
+    Args:
+        name: Short name for the screen (used as CLI argument)
+        menu_text: Text to click in the menu to navigate to this screen
+        content_desc: Content description of the menu item (alternative to text)
+        description: Human-readable description
+    """
+    SCREEN_REGISTRY[name] = (menu_text, content_desc, description)
 
 
 def load_secret_file(path: str) -> str:
@@ -85,6 +124,190 @@ def pull_logs_command(args) -> int:
     print(f"  grep -i error {results['output_dir']}/logs/incidents_latest.log")
     print(f"  tail -100 {results['output_dir']}/logs/latest.log")
     print(f"  cat {results['output_dir']}/logcat_app.txt | grep -i 'EnvFileUpdater\\|billing\\|token'")
+
+    return 0
+
+
+def go_screen_command(args) -> int:
+    """Handle the go-screen subcommand."""
+    print("\n" + "=" * 60)
+    print("CIRIS Mobile Screen Navigator")
+    print("=" * 60 + "\n")
+
+    screen_name = args.screen.lower()
+
+    # Validate screen name
+    if screen_name not in SCREEN_REGISTRY:
+        print(f"[ERROR] Unknown screen: {screen_name}")
+        print("\nAvailable screens:")
+        for name, (_, _, desc) in SCREEN_REGISTRY.items():
+            print(f"  {name:15} - {desc}")
+        return 1
+
+    menu_text, content_desc, description = SCREEN_REGISTRY[screen_name]
+    print(f"[INFO] Navigating to: {screen_name} ({description})")
+
+    try:
+        adb = ADBHelper(adb_path=args.adb_path, device_serial=args.device)
+    except Exception as e:
+        print(f"[ERROR] Failed to initialize ADB: {e}")
+        return 1
+
+    # Check device connection
+    devices = adb.get_devices()
+    connected = [d for d in devices if d.state == "device"]
+
+    if not connected:
+        print("[ERROR] No devices connected")
+        return 1
+
+    if args.device:
+        device = next((d for d in connected if d.serial == args.device), None)
+        if not device:
+            print(f"[ERROR] Device {args.device} not found")
+            print(f"  Available: {[d.serial for d in connected]}")
+            return 1
+    else:
+        device = connected[0]
+        if len(connected) > 1:
+            print(f"[INFO] Multiple devices found, using: {device.serial}")
+
+    print(f"[INFO] Device: {device.serial} ({device.model or 'unknown model'})")
+
+    # Initialize UI Automator
+    ui = UIAutomator(adb)
+
+    # Ensure app is in foreground
+    package = args.package
+    print(f"[INFO] Bringing {package} to foreground...")
+    adb._run_adb(["shell", "monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"])
+    time.sleep(2)
+
+    # Navigate to the screen
+    if screen_name == "interact":
+        # Already on interact screen by default after app launch
+        print("[INFO] Already on interact screen (default)")
+    else:
+        # Need to open overflow menu and click the screen item
+        print(f"[INFO] Opening overflow menu...")
+
+        # First try to click "More options" (three dots menu) or "More" text
+        ui.refresh_hierarchy()
+
+        # Look for overflow menu button (could be "More options", "More", "MoreVert", etc.)
+        overflow_clicked = False
+        overflow_options = ["More options", "MoreVert", "overflow", "More"]
+
+        for option in overflow_options:
+            element = ui.find_by_content_desc(option, exact=False)
+            if element:
+                print(f"[INFO] Found overflow menu by content_desc: {option}")
+                ui.click(element)
+                overflow_clicked = True
+                time.sleep(0.5)
+                break
+
+        if not overflow_clicked:
+            # Try by text (some UIs show "More" as text)
+            element = ui.find_by_text("More", exact=True)
+            if element:
+                print("[INFO] Found overflow menu by text: More")
+                ui.click(element)
+                overflow_clicked = True
+                time.sleep(0.5)
+
+        if not overflow_clicked:
+            # Try finding by clickable icon in the top bar area
+            elements = ui.get_elements(refresh=True)
+            for elem in elements:
+                if elem.clickable and elem.bounds[1] < 200:  # Top bar area
+                    if "more" in elem.content_desc.lower() or "option" in elem.content_desc.lower():
+                        print(f"[INFO] Found potential overflow: {elem.content_desc}")
+                        ui.click(elem)
+                        overflow_clicked = True
+                        time.sleep(0.5)
+                        break
+
+        if not overflow_clicked:
+            print("[WARN] Could not find overflow menu, trying direct navigation...")
+
+        # Wait for menu to appear and click target
+        time.sleep(0.5)
+        ui.refresh_hierarchy()
+
+        target_clicked = False
+
+        # Try clicking by text first
+        if menu_text:
+            element = ui.find_by_text(menu_text, exact=False)
+            if element:
+                print(f"[INFO] Found menu item by text: {menu_text}")
+                ui.click(element)
+                target_clicked = True
+                time.sleep(1)
+
+        # Try content description if text didn't work
+        if not target_clicked and content_desc:
+            element = ui.find_by_content_desc(content_desc, exact=False)
+            if element:
+                print(f"[INFO] Found menu item by content_desc: {content_desc}")
+                ui.click(element)
+                target_clicked = True
+                time.sleep(1)
+
+        # If still not found, the menu might need to be expanded - try clicking "More" submenu
+        if not target_clicked:
+            print("[INFO] Target not found, trying to expand 'More' submenu...")
+            more_element = ui.find_by_text("More", exact=True)
+            if more_element:
+                print("[INFO] Clicking 'More' to expand submenu")
+                ui.click(more_element)
+                time.sleep(0.5)
+                ui.refresh_hierarchy()
+
+                # Now try again
+                if menu_text:
+                    element = ui.find_by_text(menu_text, exact=False)
+                    if element:
+                        print(f"[INFO] Found menu item in submenu by text: {menu_text}")
+                        ui.click(element)
+                        target_clicked = True
+                        time.sleep(1)
+
+                if not target_clicked and content_desc:
+                    element = ui.find_by_content_desc(content_desc, exact=False)
+                    if element:
+                        print(f"[INFO] Found menu item in submenu by content_desc: {content_desc}")
+                        ui.click(element)
+                        target_clicked = True
+                        time.sleep(1)
+
+        if not target_clicked:
+            print(f"[ERROR] Could not find menu item for screen: {screen_name}")
+            print("[DEBUG] Available text on screen:")
+            screen_texts = ui.get_screen_text()
+            for text in screen_texts[:20]:  # First 20 items
+                print(f"  - {text}")
+            return 1
+
+    # Wait for screen to load
+    time.sleep(1)
+
+    # Take screenshot
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    screenshot_path = output_dir / f"screen_{screen_name}_{timestamp}.png"
+
+    print(f"[INFO] Taking screenshot...")
+    if adb.screenshot(str(screenshot_path)):
+        print(f"[SUCCESS] Screenshot saved: {screenshot_path}")
+        # Print absolute path for easy access
+        print(f"[PATH] {screenshot_path.absolute()}")
+    else:
+        print(f"[ERROR] Failed to take screenshot")
+        return 1
 
     return 0
 
@@ -209,6 +432,40 @@ Examples:
         help="Android package name (default: ai.ciris.mobile)",
     )
 
+    # ========== go-screen subcommand ==========
+    screen_list = "\n".join([f"  {name:15} - {desc}" for name, (_, _, desc) in SCREEN_REGISTRY.items()])
+    go_screen_parser = subparsers.add_parser(
+        "go-screen",
+        help="Navigate to a specific app screen and take a screenshot",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=f"""
+Available screens:
+{screen_list}
+
+Examples:
+  python -m tools.qa_runner.modules.mobile go-screen billing
+  python -m tools.qa_runner.modules.mobile go-screen telemetry -o ./screenshots
+  python -m tools.qa_runner.modules.mobile go-screen settings -d emulator-5554
+""",
+    )
+    go_screen_parser.add_argument(
+        "screen",
+        help="Screen to navigate to (see list above)",
+    )
+    go_screen_parser.add_argument("--device", "-d", help="Device serial number (uses first device if not specified)")
+    go_screen_parser.add_argument("--adb-path", help="Path to adb binary")
+    go_screen_parser.add_argument(
+        "--output-dir",
+        "-o",
+        default="mobile_qa_reports",
+        help="Directory for screenshots (default: mobile_qa_reports)",
+    )
+    go_screen_parser.add_argument(
+        "--package",
+        default="ai.ciris.mobile",
+        help="Android package name (default: ai.ciris.mobile)",
+    )
+
     # ========== test subcommand ==========
     test_parser = subparsers.add_parser(
         "test",
@@ -297,6 +554,8 @@ Examples:
 
     if args.command == "pull-logs":
         return pull_logs_command(args)
+    elif args.command == "go-screen":
+        return go_screen_command(args)
     elif args.command == "test":
         return test_command(args)
     else:

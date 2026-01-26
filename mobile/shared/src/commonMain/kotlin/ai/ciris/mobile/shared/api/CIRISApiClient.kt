@@ -125,7 +125,7 @@ class CIRISApiClient(
 
     override fun setAccessToken(token: String) {
         val method = "setAccessToken"
-        logInfo(method, "Setting access token: ${maskToken(token)}")
+        logInfo(method, "Setting access token: ${maskToken(token)}, length=${token.length}")
         accessToken = token
         // Set bearer token on all API instances
         try {
@@ -139,6 +139,20 @@ class CIRISApiClient(
         } catch (e: Exception) {
             logException(method, e, "Failed to set bearer token on API instances")
         }
+    }
+
+    /**
+     * Log current token state for debugging auth issues.
+     * Call this when troubleshooting 401 errors.
+     */
+    override fun logTokenState() {
+        val method = "logTokenState"
+        logInfo(method, "=== TOKEN STATE DEBUG ===")
+        logInfo(method, "accessToken present: ${accessToken != null}")
+        logInfo(method, "accessToken preview: ${maskToken(accessToken)}")
+        logInfo(method, "accessToken length: ${accessToken?.length ?: 0}")
+        logInfo(method, "authHeader() returns: ${if (authHeader() != null) "Bearer <token>" else "null"}")
+        logInfo(method, "=========================")
     }
 
     private fun authHeader(): String? {
@@ -187,10 +201,12 @@ class CIRISApiClient(
 
     override suspend fun getMessages(limit: Int): List<ChatMessage> {
         val method = "getMessages"
-        logDebug(method, "Fetching messages: limit=$limit")
+        val authHeaderValue = authHeader()
+        logDebug(method, "Fetching messages: limit=$limit, hasAuthHeader=${authHeaderValue != null}, " +
+                "tokenPresent=${accessToken != null}, tokenPreview=${maskToken(accessToken)}")
 
         return try {
-            val response = agentApi.getHistoryV1AgentHistoryGet(limit, null, authHeader())
+            val response = agentApi.getHistoryV1AgentHistoryGet(limit, null, authHeaderValue)
             logDebug(method, "Response: status=${response.status}")
 
             val body = response.body()
@@ -212,7 +228,9 @@ class CIRISApiClient(
             logInfo(method, "Fetched ${messages.size} messages")
             messages
         } catch (e: Exception) {
-            logException(method, e, "limit=$limit")
+            val errorMsg = e.message ?: ""
+            val is401 = errorMsg.contains("401") || errorMsg.contains("Unauthorized", ignoreCase = true)
+            logException(method, e, "limit=$limit, is401=$is401, tokenPresent=${accessToken != null}, tokenPreview=${maskToken(accessToken)}")
             throw e
         }
     }

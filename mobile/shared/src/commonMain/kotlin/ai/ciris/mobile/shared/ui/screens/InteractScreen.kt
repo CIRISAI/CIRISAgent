@@ -64,6 +64,7 @@ fun InteractScreen(
     val isSending by viewModel.isSending.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val processingStatus by viewModel.processingStatus.collectAsState()
+    val authError by viewModel.authError.collectAsState()
 
     // Focus requester for the text input
     val focusRequester = remember { FocusRequester() }
@@ -75,7 +76,10 @@ fun InteractScreen(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFFFAFAFA)) // Light gray background
-            .imePadding() // Handle keyboard insets
+            // Use union of IME and navigation bar insets to handle both:
+            // - When keyboard open: IME insets provide bottom padding
+            // - When keyboard closed: Navigation bar insets provide bottom padding
+            .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
     ) {
         // Status bar (from fragment_interact.xml:10-63)
         ConnectionStatusBar(
@@ -84,6 +88,18 @@ fun InteractScreen(
             onShutdown = { viewModel.shutdown(emergency = false) },
             onEmergencyStop = { viewModel.shutdown(emergency = true) }
         )
+
+        // Auth error banner - shown when session expires
+        AnimatedVisibility(
+            visible = authError != null,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            AuthErrorBanner(
+                message = authError ?: "",
+                onDismiss = { viewModel.clearAuthError() }
+            )
+        }
 
         // AI Warning banner (from fragment_interact.xml:65-76)
         AIWarningBanner()
@@ -137,6 +153,8 @@ fun InteractScreen(
         }
 
         // Input bar (from fragment_interact.xml:243-291)
+        // Note: Don't use windowInsetsPadding(navigationBars) here as it conflicts
+        // with imePadding() on parent, creating a gap when keyboard is open
         ChatInputBar(
             text = inputText,
             onTextChange = { viewModel.onInputTextChanged(it) },
@@ -144,9 +162,7 @@ fun InteractScreen(
             enabled = isConnected && !isSending,
             focusRequester = focusRequester,
             onFocused = { keyboardController?.show() },
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.navigationBars)
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
@@ -215,6 +231,45 @@ private fun ConnectionStatusBar(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
             ) {
                 Text("STOP", fontSize = 11.sp, color = Color.White)
+            }
+        }
+    }
+}
+
+/**
+ * Auth error banner - shown when session expires
+ * Provides option to dismiss or navigate to re-authenticate
+ */
+@Composable
+private fun AuthErrorBanner(
+    message: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = Color(0xFFFEE2E2), // Light red background
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = message,
+                modifier = Modifier.weight(1f),
+                fontSize = 12.sp,
+                color = Color(0xFFDC2626) // Red text
+            )
+            TextButton(
+                onClick = onDismiss,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = "Dismiss",
+                    fontSize = 11.sp,
+                    color = Color(0xFFDC2626)
+                )
             }
         }
     }
@@ -363,7 +418,8 @@ private fun ChatMessageList(
         reverseLayout = true,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        items(messages.reversed(), key = { it.id }) { message ->
+        // Use distinctBy to prevent duplicate key crashes if same ID appears twice
+        items(messages.reversed().distinctBy { it.id }, key = { it.id }) { message ->
             when (message.type) {
                 MessageType.USER -> UserChatBubble(message)
                 MessageType.AGENT -> AgentChatBubble(message)

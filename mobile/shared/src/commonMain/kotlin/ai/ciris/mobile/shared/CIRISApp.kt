@@ -161,6 +161,7 @@ fun CIRISApp(
                         // Set the CIRIS token on the API client
                         apiClient.setAccessToken(cirisToken)
                         currentAccessToken = cirisToken
+                        apiClient.logTokenState() // Debug: confirm token was set
 
                         // Save CIRIS token to secure storage (not the Google ID token!)
                         secureStorage.saveAccessToken(cirisToken)
@@ -262,6 +263,7 @@ fun CIRISApp(
                                     println("[$TAG][INFO] Stored token is valid, setting on API client")
                                     apiClient.setAccessToken(storedToken)
                                     currentAccessToken = storedToken
+                                    apiClient.logTokenState() // Debug: confirm token was set
                                 }
 
                                 // Trigger data loading now that we have auth
@@ -325,6 +327,7 @@ fun CIRISApp(
                                                     // Set the token on the API client
                                                     apiClient.setAccessToken(cirisToken)
                                                     currentAccessToken = cirisToken
+                                                    apiClient.logTokenState() // Debug: confirm token was set
 
                                                     // Save to secure storage
                                                     secureStorage.saveAccessToken(cirisToken)
@@ -414,6 +417,7 @@ fun CIRISApp(
                                     // Set the token on the API client
                                     apiClient.setAccessToken(cirisToken)
                                     currentAccessToken = cirisToken
+                                    apiClient.logTokenState() // Debug: confirm token was set
 
                                     // Trigger data loading now that we have auth
                                     println("[$TAG][INFO] Triggering data load for ViewModels after Google auth")
@@ -468,10 +472,12 @@ fun CIRISApp(
                         )
                     }
                 ) { paddingValues ->
+                    // Only apply top padding from Scaffold - InteractScreen handles
+                    // bottom insets (keyboard + nav bar) via windowInsetsPadding
                     InteractScreen(
                         viewModel = interactViewModel,
                         onNavigateBack = { /* Already at root */ },
-                        modifier = Modifier.padding(paddingValues)
+                        modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
                     )
                 }
             }

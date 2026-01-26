@@ -65,9 +65,13 @@ class InteractViewModel(
     private val _processingStatus = MutableStateFlow("")
     val processingStatus: StateFlow<String> = _processingStatus.asStateFlow()
 
+    private val _authError = MutableStateFlow<String?>(null)
+    val authError: StateFlow<String?> = _authError.asStateFlow()
+
     private var pollingJob: Job? = null
     private var statusJob: Job? = null
     private var isFirstLoad = true
+    private var authErrorCount = 0
 
     init {
         logInfo("init", "InteractViewModel initialized")
@@ -248,24 +252,59 @@ class InteractViewModel(
     /**
      * Fetch message history from API
      */
+    fun clearAuthError() {
+        _authError.value = null
+        authErrorCount = 0
+    }
+
     private suspend fun fetchHistory() {
         val method = "fetchHistory"
         try {
             val messages = apiClient.getMessages(limit = 50)
+            // Success - clear any auth error
+            if (_authError.value != null) {
+                logInfo(method, "Auth restored, clearing error")
+                _authError.value = null
+                authErrorCount = 0
+            }
             if (messages.isNotEmpty()) {
                 logDebug(method, "Fetched ${messages.size} messages from API")
-                // Merge with existing messages, avoiding duplicates
+                // Deduplicate by ID (API might return same message from multiple channels)
+                val deduplicatedMessages = messages
+                    .distinctBy { it.id }
+                    .sortedBy { it.timestamp }
+                    .takeLast(50)
+
+                // Check if there are new messages
                 val existingIds = _messages.value.map { it.id }.toSet()
-                val newMessages = messages.filter { it.id !in existingIds }
+                val newMessages = deduplicatedMessages.filter { it.id !in existingIds }
                 if (newMessages.isNotEmpty()) {
                     logInfo(method, "Adding ${newMessages.size} new messages to chat")
-                    _messages.value = (messages).sortedBy { it.timestamp }.takeLast(50)
+                    _messages.value = deduplicatedMessages
                 }
             }
         } catch (e: Exception) {
-            // Silently fail on history fetch - don't spam logs during polling
+            // Check for auth errors (401)
+            val errorMessage = e.message ?: ""
+            val isAuthError = errorMessage.contains("401") ||
+                              errorMessage.contains("Unauthorized", ignoreCase = true) ||
+                              errorMessage.contains("authentication", ignoreCase = true)
+
+            if (isAuthError) {
+                authErrorCount++
+                logWarn(method, "Auth error #$authErrorCount: $errorMessage")
+                // Only show error after 3 consecutive failures to avoid flashing during token refresh
+                if (authErrorCount >= 3 && _authError.value == null) {
+                    logError(method, "Persistent auth error (3+ failures) - showing UI notification")
+                    _authError.value = "Session expired. Please sign in again."
+                }
+            } else {
+                logWarn(method, "Non-auth error: ${e::class.simpleName}: $errorMessage")
+            }
+
+            // Log on first load
             if (isFirstLoad) {
-                logWarn(method, "Failed to fetch history: ${e.message}")
+                logWarn(method, "Failed to fetch history on first load: ${e.message}")
             }
         }
     }

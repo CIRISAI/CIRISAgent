@@ -19,6 +19,14 @@ interface CIRISApiClientProtocol {
     fun setAccessToken(token: String)
 
     /**
+     * Log current token state for debugging auth issues.
+     * Call this when troubleshooting 401 errors.
+     */
+    fun logTokenState() {
+        // Default no-op implementation for test fakes
+    }
+
+    /**
      * Send a chat message to the agent
      */
     suspend fun sendMessage(message: String, channelId: String = "mobile_app"): InteractResponse

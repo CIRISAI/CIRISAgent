@@ -1050,10 +1050,10 @@ def test_screen_navigation(
             adb.screenshot(screenshot_path)
             screenshots.append(screenshot_path)
 
-            # Check for any indicator
+            # Check for any indicator (exact=False for partial/case-insensitive matching)
             found_indicator = None
             for indicator in screen_config["indicators"]:
-                if ui.is_text_visible(indicator, case_insensitive=True):
+                if ui.is_text_visible(indicator, exact=False):
                     found_indicator = indicator
                     break
 

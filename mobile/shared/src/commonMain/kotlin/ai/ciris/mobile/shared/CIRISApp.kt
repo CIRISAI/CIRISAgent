@@ -13,12 +13,15 @@ import ai.ciris.mobile.shared.platform.createSecureStorage
 import ai.ciris.mobile.shared.ui.screens.*
 import ai.ciris.mobile.shared.viewmodels.AdaptersViewModel
 import ai.ciris.mobile.shared.viewmodels.BillingViewModel
+import ai.ciris.mobile.shared.viewmodels.ConfigViewModel
+import ai.ciris.mobile.shared.viewmodels.ConsentViewModel
 import ai.ciris.mobile.shared.viewmodels.InteractViewModel
 import ai.ciris.mobile.shared.viewmodels.SessionsViewModel
 import ai.ciris.mobile.shared.viewmodels.SettingsViewModel
 import ai.ciris.mobile.shared.viewmodels.SetupViewModel
 import ai.ciris.mobile.shared.viewmodels.StartupPhase
 import ai.ciris.mobile.shared.viewmodels.StartupViewModel
+import ai.ciris.mobile.shared.viewmodels.SystemViewModel
 import ai.ciris.mobile.shared.viewmodels.TelemetryViewModel
 import ai.ciris.mobile.shared.viewmodels.WiseAuthorityViewModel
 import ai.ciris.mobile.shared.viewmodels.AuditViewModel
@@ -267,6 +270,15 @@ fun CIRISApp(
     }
     val memoryViewModel: MemoryViewModel = viewModel {
         MemoryViewModel(apiClient)
+    }
+    val configViewModel: ConfigViewModel = viewModel {
+        ConfigViewModel(apiClient)
+    }
+    val consentViewModel: ConsentViewModel = viewModel {
+        ConsentViewModel(apiClient)
+    }
+    val systemViewModel: SystemViewModel = viewModel {
+        SystemViewModel(apiClient)
     }
 
     // Set up purchase result callback
@@ -562,7 +574,10 @@ fun CIRISApp(
                             onWiseAuthorityClick = { currentScreen = Screen.WiseAuthority },
                             onAuditClick = { currentScreen = Screen.Audit },
                             onLogsClick = { currentScreen = Screen.Logs },
-                            onMemoryClick = { currentScreen = Screen.Memory }
+                            onMemoryClick = { currentScreen = Screen.Memory },
+                            onConfigClick = { currentScreen = Screen.Config },
+                            onConsentClick = { currentScreen = Screen.Consent },
+                            onSystemClick = { currentScreen = Screen.System }
                         )
                     }
                 ) { paddingValues ->
@@ -915,6 +930,154 @@ fun CIRISApp(
                     }
                 )
             }
+
+            Screen.Config -> {
+                val configData by configViewModel.configData.collectAsState()
+                val isConfigLoading by configViewModel.isLoading.collectAsState()
+                val configSearchQuery by configViewModel.searchQuery.collectAsState()
+                val configSelectedCategory by configViewModel.selectedCategory.collectAsState()
+                val configExpandedSections by configViewModel.expandedSections.collectAsState()
+                val configError by configViewModel.error.collectAsState()
+                val configSuccess by configViewModel.successMessage.collectAsState()
+
+                println("[CIRISApp][DEBUG][Screen.Config] Rendering config screen: " +
+                        "sections=${configData.sections.size}, totalConfigs=${configData.totalConfigs}, " +
+                        "isLoading=$isConfigLoading")
+
+                // Log status/error messages
+                LaunchedEffect(configError) {
+                    if (configError != null) {
+                        println("[CIRISApp][WARN][Screen.Config] Error: $configError")
+                    }
+                }
+                LaunchedEffect(configSuccess) {
+                    if (configSuccess != null) {
+                        println("[CIRISApp][INFO][Screen.Config] Success: $configSuccess")
+                        configViewModel.clearSuccess()
+                    }
+                }
+
+                ConfigScreen(
+                    configData = configData,
+                    isLoading = isConfigLoading,
+                    searchQuery = configSearchQuery,
+                    selectedCategory = configSelectedCategory,
+                    expandedSections = configExpandedSections,
+                    onSearchQueryChange = { configViewModel.updateSearchQuery(it) },
+                    onCategorySelect = { configViewModel.selectCategory(it) },
+                    onToggleSection = { configViewModel.toggleSection(it) },
+                    onUpdateConfig = { key, value -> configViewModel.updateConfig(key, value) },
+                    onDeleteConfig = { configViewModel.deleteConfig(it) },
+                    onRefresh = {
+                        println("[CIRISApp][INFO][Screen.Config] User triggered refresh")
+                        configViewModel.refresh()
+                    },
+                    onNavigateBack = {
+                        println("[CIRISApp][INFO][Screen.Config] Navigating back to Interact")
+                        currentScreen = Screen.Interact
+                    }
+                )
+            }
+
+            Screen.Consent -> {
+                val consentData by consentViewModel.consentData.collectAsState()
+                val isConsentLoading by consentViewModel.isLoading.collectAsState()
+                val consentError by consentViewModel.error.collectAsState()
+                val consentSuccess by consentViewModel.successMessage.collectAsState()
+
+                println("[CIRISApp][DEBUG][Screen.Consent] Rendering consent screen: " +
+                        "hasConsent=${consentData.hasConsent}, stream=${consentData.currentStream}, " +
+                        "isLoading=$isConsentLoading")
+
+                // Log status/error messages
+                LaunchedEffect(consentError) {
+                    if (consentError != null) {
+                        println("[CIRISApp][WARN][Screen.Consent] Error: $consentError")
+                    }
+                }
+                LaunchedEffect(consentSuccess) {
+                    if (consentSuccess != null) {
+                        println("[CIRISApp][INFO][Screen.Consent] Success: $consentSuccess")
+                        consentViewModel.clearSuccess()
+                    }
+                }
+
+                ConsentScreen(
+                    consentData = consentData,
+                    isLoading = isConsentLoading,
+                    onStreamSelect = { stream ->
+                        println("[CIRISApp][INFO][Screen.Consent] Changing stream to: $stream")
+                        consentViewModel.changeStream(stream)
+                    },
+                    onRequestPartnership = {
+                        println("[CIRISApp][INFO][Screen.Consent] Requesting partnership")
+                        consentViewModel.requestPartnership()
+                    },
+                    onRefresh = {
+                        println("[CIRISApp][INFO][Screen.Consent] User triggered refresh")
+                        consentViewModel.refresh()
+                    },
+                    onNavigateBack = {
+                        println("[CIRISApp][INFO][Screen.Consent] Navigating back to Interact")
+                        currentScreen = Screen.Interact
+                    }
+                )
+            }
+
+            Screen.System -> {
+                val systemData by systemViewModel.systemData.collectAsState()
+                val isSystemLoading by systemViewModel.isLoading.collectAsState()
+                val systemError by systemViewModel.error.collectAsState()
+                val systemSuccess by systemViewModel.successMessage.collectAsState()
+
+                println("[CIRISApp][DEBUG][Screen.System] Rendering system screen: " +
+                        "health=${systemData.health}, state=${systemData.cognitiveState}, " +
+                        "isLoading=$isSystemLoading")
+
+                // Start polling when screen is visible
+                DisposableEffect(Unit) {
+                    println("[CIRISApp][INFO][Screen.System] Starting system polling")
+                    systemViewModel.startPolling()
+                    onDispose {
+                        println("[CIRISApp][INFO][Screen.System] Stopping system polling")
+                        systemViewModel.stopPolling()
+                    }
+                }
+
+                // Log status/error messages
+                LaunchedEffect(systemError) {
+                    if (systemError != null) {
+                        println("[CIRISApp][WARN][Screen.System] Error: $systemError")
+                    }
+                }
+                LaunchedEffect(systemSuccess) {
+                    if (systemSuccess != null) {
+                        println("[CIRISApp][INFO][Screen.System] Success: $systemSuccess")
+                        systemViewModel.clearSuccess()
+                    }
+                }
+
+                SystemScreen(
+                    systemData = systemData,
+                    isLoading = isSystemLoading,
+                    onPauseRuntime = {
+                        println("[CIRISApp][INFO][Screen.System] Pausing runtime")
+                        systemViewModel.pauseRuntime()
+                    },
+                    onResumeRuntime = {
+                        println("[CIRISApp][INFO][Screen.System] Resuming runtime")
+                        systemViewModel.resumeRuntime()
+                    },
+                    onRefresh = {
+                        println("[CIRISApp][INFO][Screen.System] User triggered refresh")
+                        systemViewModel.refresh()
+                    },
+                    onNavigateBack = {
+                        println("[CIRISApp][INFO][Screen.System] Navigating back to Interact")
+                        currentScreen = Screen.Interact
+                    }
+                )
+            }
         }
     }
 }
@@ -959,7 +1122,10 @@ private fun CIRISTopBar(
     onWiseAuthorityClick: () -> Unit = {},
     onAuditClick: () -> Unit = {},
     onLogsClick: () -> Unit = {},
-    onMemoryClick: () -> Unit = {}
+    onMemoryClick: () -> Unit = {},
+    onConfigClick: () -> Unit = {},
+    onConsentClick: () -> Unit = {},
+    onSystemClick: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -1091,6 +1257,45 @@ private fun CIRISTopBar(
                             )
                         }
                     )
+                    DropdownMenuItem(
+                        text = { Text("Config") },
+                        onClick = {
+                            showMenu = false
+                            onConfigClick()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = null
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Consent") },
+                        onClick = {
+                            showMenu = false
+                            onConsentClick()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("System") },
+                        onClick = {
+                            showMenu = false
+                            onSystemClick()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Build,
+                                contentDescription = null
+                            )
+                        }
+                    )
                 }
             }
         },
@@ -1118,4 +1323,7 @@ private sealed class Screen {
     object Audit : Screen()
     object Logs : Screen()
     object Memory : Screen()
+    object Config : Screen()
+    object Consent : Screen()
+    object System : Screen()
 }

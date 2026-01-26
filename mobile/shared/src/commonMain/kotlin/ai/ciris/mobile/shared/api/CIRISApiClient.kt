@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.api
 
 import ai.ciris.mobile.shared.models.*
 import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.viewmodels.ConfigItemData
 import ai.ciris.mobile.shared.viewmodels.SetupCompletionResult
 import ai.ciris.mobile.shared.viewmodels.StateTransitionResult
 import ai.ciris.api.apis.*
@@ -11,6 +12,8 @@ import ai.ciris.api.models.SetupCompleteRequest as SdkSetupCompleteRequest
 import ai.ciris.api.models.ShutdownRequest as SdkShutdownRequest
 import ai.ciris.api.models.NativeTokenRequest as SdkNativeTokenRequest
 import ai.ciris.api.models.StateTransitionRequest as SdkStateTransitionRequest
+import ai.ciris.api.models.ConfigUpdate as SdkConfigUpdate
+import ai.ciris.api.models.ConsentRequest as SdkConsentRequest
 import io.ktor.client.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -153,6 +156,20 @@ class CIRISApiClient(
         jsonSerializer = jsonConfig
     )
 
+    private val configApi = ConfigApi(
+        baseUrl = baseUrl,
+        httpClientEngine = null,
+        httpClientConfig = httpClientConfig,
+        jsonSerializer = jsonConfig
+    )
+
+    private val consentApi = ConsentApi(
+        baseUrl = baseUrl,
+        httpClientEngine = null,
+        httpClientConfig = httpClientConfig,
+        jsonSerializer = jsonConfig
+    )
+
     init {
         logInfo("init", "CIRISApiClient initialized with baseUrl=$baseUrl")
     }
@@ -172,7 +189,9 @@ class CIRISApiClient(
             wiseAuthorityApi.setBearerToken(token)
             auditApi.setBearerToken(token)
             memoryApi.setBearerToken(token)
-            logInfo(method, "Bearer token set on all API instances (9 APIs)")
+            configApi.setBearerToken(token)
+            consentApi.setBearerToken(token)
+            logInfo(method, "Bearer token set on all API instances (11 APIs)")
         } catch (e: Exception) {
             logException(method, e, "Failed to set bearer token on API instances")
         }
@@ -868,6 +887,547 @@ class CIRISApiClient(
         }
     }
 
+    // ===== Config API =====
+
+    suspend fun listConfigs(prefix: String? = null): ConfigListData {
+        val method = "listConfigs"
+        logInfo(method, "Listing configs, prefix=$prefix")
+
+        return try {
+            val response = configApi.listConfigsV1ConfigGet(prefix, authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Configs: total=${data.total}")
+
+            ConfigListData(
+                configs = data.configs.map { config ->
+                    ConfigItemData(
+                        key = config.key,
+                        displayValue = config.`value`.toString(),
+                        updatedAt = config.updatedAt,
+                        updatedBy = config.updatedBy,
+                        isSensitive = config.isSensitive ?: false
+                    )
+                },
+                total = data.total
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    suspend fun getConfig(key: String): ConfigItemData {
+        val method = "getConfig"
+        logInfo(method, "Getting config: $key")
+
+        return try {
+            val response = configApi.getConfigV1ConfigKeyGet(key, authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Config retrieved: key=${data.key}")
+
+            ConfigItemData(
+                key = data.key,
+                displayValue = data.`value`.toString(),
+                updatedAt = data.updatedAt,
+                updatedBy = data.updatedBy,
+                isSensitive = data.isSensitive ?: false
+            )
+        } catch (e: Exception) {
+            logException(method, e, "key=$key")
+            throw e
+        }
+    }
+
+    suspend fun updateConfig(key: String, value: String, reason: String? = null): ConfigItemData {
+        val method = "updateConfig"
+        logInfo(method, "Updating config: $key")
+
+        return try {
+            val request = SdkConfigUpdate(
+                `value` = JsonPrimitive(value),
+                reason = reason
+            )
+            val response = configApi.updateConfigV1ConfigKeyPut(key, request, authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Config updated: key=${data.key}")
+
+            ConfigItemData(
+                key = data.key,
+                displayValue = data.`value`.toString(),
+                updatedAt = data.updatedAt,
+                updatedBy = data.updatedBy,
+                isSensitive = data.isSensitive ?: false
+            )
+        } catch (e: Exception) {
+            logException(method, e, "key=$key")
+            throw e
+        }
+    }
+
+    suspend fun deleteConfig(key: String) {
+        val method = "deleteConfig"
+        logInfo(method, "Deleting config: $key")
+
+        try {
+            val response = configApi.deleteConfigV1ConfigKeyDelete(key, authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            logInfo(method, "Config deleted: key=$key")
+        } catch (e: Exception) {
+            logException(method, e, "key=$key")
+            throw e
+        }
+    }
+
+    // ===== Consent API =====
+
+    suspend fun getConsentStatus(): ConsentStatusData? {
+        val method = "getConsentStatus"
+        logInfo(method, "Fetching consent status")
+
+        return try {
+            val response = consentApi.getConsentStatusV1ConsentStatusGet(authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            if (!body.hasConsent) {
+                logInfo(method, "No consent record exists")
+                return null
+            }
+
+            logInfo(method, "Consent status: stream=${body.stream}, expiresAt=${body.expiresAt}")
+
+            ConsentStatusData(
+                hasConsent = body.hasConsent,
+                userId = body.userId,
+                stream = body.stream,
+                grantedAt = body.grantedAt,
+                expiresAt = body.expiresAt
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    suspend fun getConsentStreams(): ConsentStreamsData {
+        val method = "getConsentStreams"
+        logInfo(method, "Fetching consent streams")
+
+        return try {
+            val response = consentApi.getConsentStreamsV1ConsentStreamsGet()
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            logInfo(method, "Consent streams: ${body.streams.size} available, default=${body.default}")
+
+            ConsentStreamsData(
+                streams = body.streams.mapValues { (_, metadata) ->
+                    StreamMetadataData(
+                        name = metadata.name,
+                        description = metadata.description,
+                        durationDays = metadata.durationDays,
+                        autoForget = metadata.autoForget ?: false,
+                        learningEnabled = metadata.learningEnabled ?: false,
+                        identityRemoved = metadata.identityRemoved ?: false,
+                        requiresCategories = metadata.requiresCategories ?: false
+                    )
+                },
+                default = body.default
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    suspend fun grantConsent(stream: String, categories: List<String> = emptyList(), reason: String? = null): ConsentGrantData {
+        val method = "grantConsent"
+        logInfo(method, "Granting consent: stream=$stream, categories=$categories")
+
+        return try {
+            val streamEnum = try {
+                ai.ciris.api.models.ConsentStream.valueOf(stream.uppercase())
+            } catch (e: IllegalArgumentException) {
+                ai.ciris.api.models.ConsentStream.TEMPORARY
+            }
+            val categoryEnums = categories.mapNotNull { cat ->
+                try {
+                    ai.ciris.api.models.ConsentCategory.valueOf(cat.uppercase())
+                } catch (e: IllegalArgumentException) {
+                    null
+                }
+            }
+            val request = SdkConsentRequest(
+                stream = streamEnum,
+                categories = categoryEnums,
+                reason = reason,
+                userId = "current_user" // userId is required
+            )
+            val response = consentApi.grantConsentV1ConsentGrantPost(request, authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            logInfo(method, "Consent granted: userId=${body.userId}, stream=${body.stream}")
+
+            ConsentGrantData(
+                userId = body.userId,
+                stream = body.stream.value,
+                grantedAt = body.grantedAt.toString(),
+                expiresAt = body.expiresAt?.toString()
+            )
+        } catch (e: Exception) {
+            logException(method, e, "stream=$stream")
+            throw e
+        }
+    }
+
+    suspend fun getConsentImpact(): ConsentImpactReportData {
+        val method = "getConsentImpact"
+        logInfo(method, "Fetching consent impact")
+
+        return try {
+            val response = consentApi.getImpactReportV1ConsentImpactGet(authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            logInfo(method, "Impact: interactions=${body.totalInteractions}, patterns=${body.patternsContributed}, helped=${body.usersHelped}")
+
+            ConsentImpactReportData(
+                userId = body.userId,
+                totalInteractions = body.totalInteractions,
+                patternsContributed = body.patternsContributed,
+                usersHelped = body.usersHelped,
+                impactScore = body.impactScore
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    suspend fun getConsentAudit(limit: Int = 100): List<ConsentAuditEntryApiData> {
+        val method = "getConsentAudit"
+        logInfo(method, "Fetching consent audit, limit=$limit")
+
+        return try {
+            val response = consentApi.getAuditTrailV1ConsentAuditGet(limit, authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            logInfo(method, "Audit entries: ${body.size}")
+
+            body.map { entry ->
+                ConsentAuditEntryApiData(
+                    entryId = entry.entryId,
+                    userId = entry.userId,
+                    timestamp = entry.timestamp.toString(),
+                    previousStream = entry.previousStream.value,
+                    newStream = entry.newStream.value,
+                    initiatedBy = entry.initiatedBy,
+                    reason = entry.reason
+                )
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    suspend fun getPartnershipStatus(): PartnershipStatusData {
+        val method = "getPartnershipStatus"
+        logInfo(method, "Fetching partnership status")
+
+        return try {
+            val response = consentApi.checkPartnershipStatusV1ConsentPartnershipStatusGet(authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            logInfo(method, "Partnership status: ${body.partnershipStatus}")
+
+            PartnershipStatusData(
+                status = body.partnershipStatus,
+                requestedAt = null,
+                decidedAt = null,
+                reason = body.message
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    suspend fun requestPartnership(reason: String? = null) {
+        val method = "requestPartnership"
+        logInfo(method, "Requesting partnership, reason=$reason")
+
+        try {
+            // Use grantConsent with PARTNERED stream to request partnership
+            val request = SdkConsentRequest(
+                stream = ai.ciris.api.models.ConsentStream.PARTNERED,
+                categories = emptyList(),
+                reason = reason ?: "Partnership requested via mobile app",
+                userId = "current_user"
+            )
+            val response = consentApi.grantConsentV1ConsentGrantPost(request, authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            logInfo(method, "Partnership request submitted")
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    // ===== Extended System API =====
+
+    suspend fun getSystemHealth(): SystemHealthData {
+        val method = "getSystemHealth"
+        logInfo(method, "Fetching system health")
+
+        return try {
+            val response = systemApi.getSystemHealthV1SystemHealthGet()
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "System health: status=${data.status}, cognitiveState=${data.cognitiveState}")
+
+            SystemHealthData(
+                status = data.status,
+                cognitiveState = data.cognitiveState ?: "UNKNOWN"
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    suspend fun getUnifiedTelemetry(): UnifiedTelemetryData {
+        val method = "getUnifiedTelemetry"
+        logInfo(method, "Fetching unified telemetry")
+
+        return try {
+            // Use telemetry overview instead since unified returns kotlin.Any
+            val response = telemetryApi.getTelemetryOverviewV1TelemetryOverviewGet(authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+
+            val healthyServices = data.healthyServices ?: 0
+            val degradedServices = data.degradedServices ?: 0
+            val cpuPercent = data.cpuPercent ?: 0.0
+            val memoryMb = data.memoryMb ?: 0.0
+
+            logInfo(method, "Telemetry: state=${data.cognitiveState}, " +
+                    "services=$healthyServices/$healthyServices, " +
+                    "cpu=$cpuPercent%, memory=${memoryMb}MB")
+
+            UnifiedTelemetryData(
+                health = if (degradedServices == 0) "healthy" else "degraded",
+                uptime = "${data.uptimeSeconds / 3600}h ${(data.uptimeSeconds % 3600) / 60}m",
+                cognitiveState = data.cognitiveState,
+                memoryMb = memoryMb.toInt(),
+                memoryPercent = 0, // Not available from overview
+                cpuPercent = cpuPercent.toInt(),
+                diskUsedMb = 0.0, // Not available from overview
+                servicesOnline = healthyServices,
+                servicesTotal = healthyServices + degradedServices,
+                services = emptyMap() // Not available from overview
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    suspend fun getEnvironmentalMetrics(): EnvironmentalMetricsData? {
+        val method = "getEnvironmentalMetrics"
+        logInfo(method, "Fetching environmental metrics")
+
+        // Environmental metrics endpoint may not exist - return stub data
+        return try {
+            // Return stub data since the endpoint is not available
+            EnvironmentalMetricsData(
+                carbonGrams = 0.0,
+                energyKwh = 0.0,
+                costCents = 0.0,
+                tokensLastHour = 0,
+                tokens24h = 0
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            null
+        }
+    }
+
+    suspend fun getProcessorStatus(): ProcessorStatusData? {
+        val method = "getProcessorStatus"
+        logInfo(method, "Fetching processor status")
+
+        return try {
+            // Use the system health endpoint which includes processor info
+            val response = systemApi.getSystemHealthV1SystemHealthGet()
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+
+            // Extract queue depth from services if available
+            val queueDepth = data.services["processing"]?.get("queue_depth") ?: 0
+
+            ProcessorStatusData(
+                isPaused = data.status == "paused",
+                cognitiveState = data.cognitiveState ?: "UNKNOWN",
+                queueDepth = queueDepth
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    suspend fun getChannels(): ChannelsData? {
+        val method = "getChannels"
+        logInfo(method, "Fetching channels")
+
+        return try {
+            // Note: This endpoint may not exist - return empty data if not available
+            ChannelsData(channels = emptyList())
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    suspend fun pauseRuntime() {
+        val method = "pauseRuntime"
+        logInfo(method, "Pausing runtime")
+
+        try {
+            val request = SdkStateTransitionRequest(
+                targetState = "SOLITUDE",
+                reason = "User paused runtime via mobile app"
+            )
+            val response = systemApi.transitionCognitiveStateV1SystemStateTransitionPost(request, authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            logInfo(method, "Runtime paused")
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    suspend fun resumeRuntime() {
+        val method = "resumeRuntime"
+        logInfo(method, "Resuming runtime")
+
+        try {
+            val request = SdkStateTransitionRequest(
+                targetState = "WORK",
+                reason = "User resumed runtime via mobile app"
+            )
+            val response = systemApi.transitionCognitiveStateV1SystemStateTransitionPost(request, authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            logInfo(method, "Runtime resumed")
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
     override fun close() {
         logInfo("close", "Closing CIRISApiClient")
     }
@@ -1184,6 +1744,124 @@ class CIRISApiClient(
         }
     }
 }
+
+// ===== Config Data Models =====
+
+data class ConfigListData(
+    val configs: List<ConfigItemData>,
+    val total: Int
+)
+
+// ===== Consent Data Models =====
+
+data class ConsentStatusData(
+    val hasConsent: Boolean,
+    val userId: String,
+    val stream: String?,
+    val grantedAt: String?,
+    val expiresAt: String?
+)
+
+data class ConsentStreamsData(
+    val streams: Map<String, StreamMetadataData>,
+    val default: String
+)
+
+data class StreamMetadataData(
+    val name: String,
+    val description: String,
+    val durationDays: Int?,
+    val autoForget: Boolean,
+    val learningEnabled: Boolean,
+    val identityRemoved: Boolean,
+    val requiresCategories: Boolean
+)
+
+data class ConsentGrantData(
+    val userId: String,
+    val stream: String,
+    val grantedAt: String,
+    val expiresAt: String?
+)
+
+data class ConsentImpactReportData(
+    val userId: String,
+    val totalInteractions: Int,
+    val patternsContributed: Int,
+    val usersHelped: Int,
+    val impactScore: Double
+)
+
+data class ConsentAuditEntryApiData(
+    val entryId: String,
+    val userId: String,
+    val timestamp: String,
+    val previousStream: String,
+    val newStream: String,
+    val initiatedBy: String,
+    val reason: String?
+)
+
+data class PartnershipStatusData(
+    val status: String,
+    val requestedAt: String?,
+    val decidedAt: String?,
+    val reason: String?
+)
+
+// ===== System Data Models =====
+
+data class SystemHealthData(
+    val status: String,
+    val cognitiveState: String
+)
+
+data class UnifiedTelemetryData(
+    val health: String,
+    val uptime: String,
+    val cognitiveState: String,
+    val memoryMb: Int,
+    val memoryPercent: Int,
+    val cpuPercent: Int,
+    val diskUsedMb: Double,
+    val servicesOnline: Int,
+    val servicesTotal: Int,
+    val services: Map<String, ServiceInfoData>
+)
+
+data class ServiceInfoData(
+    val healthy: Boolean,
+    val available: Boolean,
+    val serviceType: String?,
+    val capabilities: List<String>
+)
+
+data class EnvironmentalMetricsData(
+    val carbonGrams: Double,
+    val energyKwh: Double,
+    val costCents: Double,
+    val tokensLastHour: Int,
+    val tokens24h: Int
+)
+
+data class ProcessorStatusData(
+    val isPaused: Boolean,
+    val cognitiveState: String,
+    val queueDepth: Int
+)
+
+data class ChannelsData(
+    val channels: List<ChannelInfoData>
+)
+
+data class ChannelInfoData(
+    val channelId: String,
+    val displayName: String,
+    val channelType: String,
+    val isActive: Boolean,
+    val messageCount: Int,
+    val lastActivity: String?
+)
 
 // ===== Wise Authority Data Models =====
 

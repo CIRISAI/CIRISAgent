@@ -60,6 +60,9 @@ SCREEN_REGISTRY: Dict[str, Tuple[str, Optional[str], str]] = {
     "audit": ("Audit Trail", "Audit Trail", "System audit trail viewer screen"),
     "logs": ("Logs", "Logs", "System logs viewer screen"),
     "memory": ("Memory", "Memory", "Memory/graph database viewer screen"),
+    "config": ("Config", "Config", "Configuration management screen"),
+    "consent": ("Consent", "Consent", "User consent/GDPR management screen"),
+    "system": ("System", "System", "System management/control screen"),
 }
 
 

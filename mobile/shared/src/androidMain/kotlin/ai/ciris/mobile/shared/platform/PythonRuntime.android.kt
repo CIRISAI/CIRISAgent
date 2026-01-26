@@ -8,6 +8,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
 import java.net.HttpURLConnection
 import java.net.URL
+import org.json.JSONObject
 
 /**
  * Android implementation of Python runtime
@@ -293,15 +294,253 @@ actual class PythonRuntime : PythonRuntimeProtocol {
 
     /**
      * Attempt to shut down an existing server gracefully via API
-     * Simplified version - uses ServerManager internally
-     * Copied from MainActivity.kt lines 1305-1410
+     * Full SmartStartup Protocol implementation from MainActivity.kt lines 1305-1410
+     *
+     * SmartStartup Negotiation Protocol:
+     * 1. POST to /v1/system/local-shutdown (no auth required - localhost only)
+     *    - 200: Shutdown initiated - wait for death
+     *    - 202: Already shutting down - wait for death
+     *    - 409: Resume in progress - RETRY with backoff (Retry-After header)
+     *    - 503: Server not ready - retry
+     *    - 403: Not localhost - fall through to auth
+     * 2. Fall back to authenticated shutdown if local fails
      */
     private suspend fun shutdownExistingServer(onStatus: ((String) -> Unit)?): Boolean {
-        // This is a simplified stub - the full implementation should use ServerManager
-        // For now, just return false to indicate we can't shut down
-        Log.w(TAG, "[SmartStartup] shutdownExistingServer() - simplified stub")
-        return false
+        val maxRetries = 10  // Up to 10 retries for 409 (resume in progress)
+        var retryCount = 0
+        var totalWaitMs = 0L
+
+        Log.i(TAG, "[SmartStartup] Starting shutdown negotiation (max retries: $maxRetries)")
+        onStatus?.invoke("Shutting down existing server...")
+
+        while (retryCount < maxRetries) {
+            try {
+                Log.i(TAG, "[SmartStartup] Trying local-shutdown (attempt ${retryCount + 1}/$maxRetries)...")
+
+                val response = performLocalShutdown()
+
+                Log.i(TAG, "[SmartStartup] Response: code=${response.first}, status=${response.second.status}, " +
+                        "state=${response.second.serverState}, uptime=${response.second.uptimeSeconds}s, " +
+                        "resumeElapsed=${response.second.resumeElapsedSeconds}s")
+
+                val responseCode = response.first
+                val shutdownResponse = response.second
+
+                when (responseCode) {
+                    200 -> {
+                        Log.i(TAG, "[SmartStartup] ✓ Shutdown initiated: ${shutdownResponse.reason}")
+                        onStatus?.invoke("Shutdown initiated")
+                        return true
+                    }
+                    202 -> {
+                        Log.i(TAG, "[SmartStartup] ✓ Server already shutting down: ${shutdownResponse.reason}")
+                        onStatus?.invoke("Server already shutting down")
+                        return true
+                    }
+                    409 -> {
+                        // Resume in progress - retry with backoff
+                        val retryDelay = shutdownResponse.retryAfterMs ?: 2000L
+                        val resumeTimeout = shutdownResponse.resumeTimeoutSeconds ?: 30.0
+                        val resumeElapsed = shutdownResponse.resumeElapsedSeconds ?: 0.0
+
+                        Log.i(TAG, "[SmartStartup] Server busy (resume ${resumeElapsed}s / ${resumeTimeout}s), " +
+                                "retry in ${retryDelay}ms...")
+                        onStatus?.invoke("Server initializing... waiting (${resumeElapsed.toInt()}s)")
+
+                        delay(retryDelay)
+                        totalWaitMs += retryDelay
+                        retryCount++
+
+                        // Safety limit - don't wait forever
+                        if (totalWaitMs > 60000) {
+                            Log.w(TAG, "[SmartStartup] Exceeded 60s total wait time, giving up on retries")
+                            break
+                        }
+                        continue  // Retry
+                    }
+                    503 -> {
+                        // Server not ready - brief retry
+                        val retryDelay = shutdownResponse.retryAfterMs ?: 1000L
+                        Log.i(TAG, "[SmartStartup] Server not ready (503), retry in ${retryDelay}ms...")
+                        delay(retryDelay)
+                        totalWaitMs += retryDelay
+                        retryCount++
+                        continue
+                    }
+                    403 -> {
+                        Log.w(TAG, "[SmartStartup] Local-shutdown rejected (403) - not localhost?!")
+                        break  // Fall through to auth
+                    }
+                    else -> {
+                        Log.w(TAG, "[SmartStartup] Unexpected response $responseCode, falling back to auth")
+                        break  // Fall through to auth
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "[SmartStartup] Local-shutdown failed: ${e.message}")
+                break  // Fall through to auth
+            }
+        }
+
+        if (retryCount >= maxRetries) {
+            Log.w(TAG, "[SmartStartup] Exhausted $maxRetries retries (${totalWaitMs}ms total), trying auth shutdown")
+        }
+
+        // Fall back to authenticated shutdown
+        return tryAuthenticatedShutdown(onStatus)
     }
+
+    /**
+     * Perform HTTP POST to local-shutdown endpoint
+     * Returns (responseCode, ShutdownResponse)
+     */
+    private suspend fun performLocalShutdown(): Pair<Int, ShutdownResponse> = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("$serverUrl/v1/system/local-shutdown")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.apply {
+                requestMethod = "POST"
+                connectTimeout = 3000
+                readTimeout = 5000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+            }
+
+            connection.outputStream.bufferedWriter().use { it.write("{}") }
+
+            val responseCode = connection.responseCode
+
+            // Read response body for JSON data
+            val responseBody = try {
+                if (responseCode in 200..499) {
+                    val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
+                    stream?.bufferedReader()?.readText() ?: "{}"
+                } else {
+                    "{}"
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to read response body: ${e.message}")
+                "{}"
+            }
+            connection.disconnect()
+
+            val shutdownResponse = parseShutdownResponse(responseBody)
+            Pair(responseCode, shutdownResponse)
+        } catch (e: Exception) {
+            Log.w(TAG, "HTTP POST failed: ${e.message}")
+            Pair(0, ShutdownResponse("error", e.message, null, null, null, null, null))
+        }
+    }
+
+    /**
+     * Parse JSON response from local-shutdown endpoint
+     * Copied from MainActivity.kt lines 1272-1290
+     */
+    private fun parseShutdownResponse(json: String): ShutdownResponse {
+        return try {
+            val obj = JSONObject(json)
+            ShutdownResponse(
+                status = obj.optString("status", "unknown"),
+                reason = if (obj.has("reason") && !obj.isNull("reason")) obj.getString("reason") else null,
+                retryAfterMs = if (obj.has("retry_after_ms")) obj.getLong("retry_after_ms") else null,
+                serverState = if (obj.has("server_state") && !obj.isNull("server_state")) obj.getString("server_state") else null,
+                uptimeSeconds = if (obj.has("uptime_seconds")) obj.getDouble("uptime_seconds") else null,
+                resumeElapsedSeconds = if (obj.has("resume_elapsed_seconds") && !obj.isNull("resume_elapsed_seconds"))
+                    obj.getDouble("resume_elapsed_seconds") else null,
+                resumeTimeoutSeconds = if (obj.has("resume_timeout_seconds"))
+                    obj.getDouble("resume_timeout_seconds") else null
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to parse JSON response: ${e.message}")
+            ShutdownResponse("unknown", null, null, null, null, null, null)
+        }
+    }
+
+    /**
+     * Try authenticated shutdown endpoint as fallback
+     * Copied from MainActivity.kt lines 1415-1465
+     */
+    private suspend fun tryAuthenticatedShutdown(onStatus: ((String) -> Unit)?): Boolean {
+        return try {
+            Log.i(TAG, "[SmartStartup] Trying authenticated shutdown...")
+            onStatus?.invoke("Trying authenticated shutdown...")
+
+            // Note: We don't have access to saved tokens in the shared module easily
+            // This is a last-resort fallback that typically won't succeed after app data clear
+            val responseCode = performAuthShutdown(null)
+
+            Log.i(TAG, "[SmartStartup] Auth shutdown response: $responseCode")
+
+            when (responseCode) {
+                in 200..299 -> {
+                    Log.i(TAG, "[SmartStartup] ✓ Auth shutdown successful")
+                    onStatus?.invoke("Shutdown successful")
+                    true
+                }
+                401 -> {
+                    Log.w(TAG, "[SmartStartup] ✗ Auth failed (401) - token invalid or cleared")
+                    onStatus?.invoke("Auth failed - no valid token")
+                    false
+                }
+                403 -> {
+                    Log.w(TAG, "[SmartStartup] ✗ Forbidden (403) - insufficient permissions")
+                    onStatus?.invoke("Shutdown forbidden")
+                    false
+                }
+                else -> {
+                    Log.w(TAG, "[SmartStartup] ✗ Auth shutdown failed with $responseCode")
+                    onStatus?.invoke("Shutdown failed")
+                    false
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[SmartStartup] ✗ Auth shutdown exception: ${e.message}")
+            onStatus?.invoke("Shutdown error: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Perform authenticated shutdown request
+     */
+    private suspend fun performAuthShutdown(token: String?): Int = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("$serverUrl/v1/system/shutdown")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.apply {
+                requestMethod = "POST"
+                connectTimeout = 3000
+                readTimeout = 5000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+                if (token != null) {
+                    setRequestProperty("Authorization", "Bearer $token")
+                }
+            }
+
+            connection.outputStream.bufferedWriter().use { it.write("{}") }
+            val responseCode = connection.responseCode
+            connection.disconnect()
+            responseCode
+        } catch (e: Exception) {
+            Log.w(TAG, "HTTP POST with auth failed: ${e.message}")
+            0
+        }
+    }
+
+    /**
+     * Response from local-shutdown endpoint for SmartStartup negotiation
+     * Copied from MainActivity.kt lines 1259-1267
+     */
+    data class ShutdownResponse(
+        val status: String,           // "accepted", "busy", "error"
+        val reason: String?,
+        val retryAfterMs: Long?,
+        val serverState: String?,     // "STARTING", "INITIALIZING", "RESUMING", "READY", "SHUTTING_DOWN"
+        val uptimeSeconds: Double?,
+        val resumeElapsedSeconds: Double?,
+        val resumeTimeoutSeconds: Double?
+    )
 }
 
 /**

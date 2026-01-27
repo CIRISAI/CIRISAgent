@@ -1,11 +1,18 @@
-"""OpenAI Compatible LLM Service with Circuit Breaker Integration."""
+"""Multi-Provider LLM Service with Circuit Breaker Integration.
+
+Supports native SDKs for:
+- OpenAI (GPT models)
+- Anthropic (Claude models)
+- Google (Gemini models)
+"""
 
 import json
 import logging
 import os
 import re
 import time
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, cast
+from enum import Enum
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, Union, cast
 
 import instructor
 from openai import (
@@ -17,6 +24,16 @@ from openai import (
     RateLimitError,
 )
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class LLMProvider(str, Enum):
+    """Supported LLM providers."""
+
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    GOOGLE = "google"
+    OPENAI_COMPATIBLE = "openai_compatible"  # For OpenRouter, Groq, Together, etc.
+
 
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError
 from ciris_engine.logic.services.base_service import BaseService
@@ -342,16 +359,61 @@ def _handle_generic_llm_exception(
     raise RuntimeError(f"LLM call failed ({type(error).__name__}): {error_msg[:300]}") from error
 
 
-# Configuration class for OpenAI-compatible LLM services
+# Configuration class for LLM services (supports multiple providers)
 class OpenAIConfig(BaseModel):
+    """Configuration for LLM services. Supports OpenAI, Anthropic, and Google."""
+
     api_key: str = Field(default="")
     model_name: str = Field(default="gpt-4o-mini")
     base_url: Optional[str] = Field(default=None)
     instructor_mode: str = Field(default="JSON")
     max_retries: int = Field(default=3)
     timeout_seconds: int = Field(default=5)
+    # Provider selection - defaults to openai for backward compatibility
+    provider: LLMProvider = Field(default=LLMProvider.OPENAI)
 
     model_config = ConfigDict(protected_namespaces=())
+
+
+def _detect_provider_from_env() -> LLMProvider:
+    """Detect LLM provider from environment variables.
+
+    Checks LLM_PROVIDER first, then falls back to detecting based on
+    which API key is set.
+    """
+    # Explicit provider setting takes precedence
+    provider_env = os.environ.get("LLM_PROVIDER", "").lower()
+    if provider_env:
+        if provider_env in ("anthropic", "claude"):
+            return LLMProvider.ANTHROPIC
+        elif provider_env in ("google", "gemini"):
+            return LLMProvider.GOOGLE
+        elif provider_env == "openai":
+            return LLMProvider.OPENAI
+        elif provider_env in ("openai_compatible", "openrouter", "groq", "together"):
+            return LLMProvider.OPENAI_COMPATIBLE
+
+    # Auto-detect based on which API key is set
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return LLMProvider.ANTHROPIC
+    if os.environ.get("GOOGLE_API_KEY"):
+        return LLMProvider.GOOGLE
+
+    # Default to OpenAI (or OpenAI-compatible if base_url is set)
+    if os.environ.get("OPENAI_API_BASE"):
+        return LLMProvider.OPENAI_COMPATIBLE
+    return LLMProvider.OPENAI
+
+
+def _get_api_key_for_provider(provider: LLMProvider) -> str:
+    """Get the appropriate API key for the given provider."""
+    if provider == LLMProvider.ANTHROPIC:
+        return os.environ.get("ANTHROPIC_API_KEY", "")
+    elif provider == LLMProvider.GOOGLE:
+        return os.environ.get("GOOGLE_API_KEY", "")
+    else:
+        # OpenAI and OpenAI-compatible use OPENAI_API_KEY
+        return os.environ.get("OPENAI_API_KEY", "")
 
 
 logger = logging.getLogger(__name__)
@@ -426,29 +488,123 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         api_key = self.openai_config.api_key
         base_url = self.openai_config.base_url
         model_name = self.openai_config.model_name or "gpt-4o-mini"
+        provider = getattr(self.openai_config, "provider", LLMProvider.OPENAI)
+
+        # Store provider for later use
+        self.provider = provider
 
         # Require API key - no automatic fallback to mock
         if not api_key:
-            raise RuntimeError("No OpenAI API key found. Please set OPENAI_API_KEY environment variable.")
+            provider_name = provider.value if hasattr(provider, "value") else str(provider)
+            raise RuntimeError(
+                f"No API key found for {provider_name}. Please set the appropriate API key environment variable."
+            )
 
-        # Initialize OpenAI client
+        # Initialize client based on provider
         self.model_name = model_name
-        timeout = self.openai_config.timeout_seconds  # Use the configured timeout value
-        max_retries = 0  # Disable OpenAI client retries - we handle our own
+        timeout = self.openai_config.timeout_seconds
 
         try:
-            self.client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries)
-
-            instructor_mode = getattr(self.openai_config, "instructor_mode", "json").lower()
-            mode_map = {
-                "json": instructor.Mode.JSON,
-                "tools": instructor.Mode.TOOLS,
-                "md_json": instructor.Mode.MD_JSON,
-            }
-            selected_mode = mode_map.get(instructor_mode, instructor.Mode.JSON)
-            self.instruct_client = instructor.from_openai(self.client, mode=selected_mode)
+            self._initialize_provider_client(provider, api_key, base_url, model_name, timeout)
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize OpenAI client: {e}")
+            raise RuntimeError(f"Failed to initialize {provider.value} client: {e}")
+
+    def _initialize_provider_client(
+        self, provider: LLMProvider, api_key: str, base_url: Optional[str], model_name: str, timeout: int
+    ) -> None:
+        """Initialize the appropriate client based on provider.
+
+        Args:
+            provider: The LLM provider to use
+            api_key: API key for authentication
+            base_url: Optional base URL override
+            model_name: Model name/identifier
+            timeout: Request timeout in seconds
+        """
+        instructor_mode = getattr(self.openai_config, "instructor_mode", "json").lower()
+
+        if provider == LLMProvider.ANTHROPIC:
+            self._init_anthropic_client(api_key, model_name, timeout)
+        elif provider == LLMProvider.GOOGLE:
+            self._init_google_client(api_key, model_name, timeout)
+        else:
+            # OpenAI or OpenAI-compatible providers
+            self._init_openai_client(api_key, base_url, model_name, timeout, instructor_mode)
+
+    def _init_openai_client(
+        self, api_key: str, base_url: Optional[str], model_name: str, timeout: int, instructor_mode: str
+    ) -> None:
+        """Initialize OpenAI or OpenAI-compatible client."""
+        max_retries = 0  # Disable OpenAI client retries - we handle our own
+        self.client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries)
+
+        mode_map = {
+            "json": instructor.Mode.JSON,
+            "tools": instructor.Mode.TOOLS,
+            "md_json": instructor.Mode.MD_JSON,
+        }
+        selected_mode = mode_map.get(instructor_mode, instructor.Mode.JSON)
+        self.instruct_client = instructor.from_openai(self.client, mode=selected_mode)
+        logger.info(f"Initialized OpenAI client with model={model_name}, mode={selected_mode}")
+
+    def _init_anthropic_client(self, api_key: str, model_name: str, timeout: int) -> None:
+        """Initialize native Anthropic client for Claude models.
+
+        Falls back to OpenAI-compatible mode if SDK not available (e.g., on mobile).
+        """
+        try:
+            import anthropic
+        except ImportError:
+            # Fall back to OpenAI-compatible mode (e.g., via OpenRouter)
+            # This happens on mobile where native SDK has unsupported dependencies
+            logger.warning(
+                "Anthropic SDK not available - falling back to OpenAI-compatible mode. "
+                "For native Anthropic support, install: pip install anthropic"
+            )
+            # Use OpenAI client with OpenRouter base URL for Claude access
+            base_url = os.environ.get("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+            self._init_openai_client(api_key, base_url, model_name, timeout, "json")
+            return
+
+        # Create async Anthropic client
+        self.client = anthropic.AsyncAnthropic(api_key=api_key, timeout=timeout)
+
+        # Use instructor with Anthropic - ANTHROPIC_TOOLS mode for best results
+        self.instruct_client = instructor.from_anthropic(self.client, mode=instructor.Mode.ANTHROPIC_TOOLS)
+        logger.info(f"Initialized native Anthropic client with model={model_name}")
+
+    def _init_google_client(self, api_key: str, model_name: str, timeout: int) -> None:
+        """Initialize native Google client for Gemini models.
+
+        Falls back to OpenAI-compatible mode if SDK not available (e.g., on mobile).
+        """
+        try:
+            import google.generativeai as genai
+        except ImportError:
+            # Fall back to OpenAI-compatible mode (e.g., via OpenRouter)
+            # This happens on mobile where native SDK may have unsupported dependencies
+            logger.warning(
+                "Google Generative AI SDK not available - falling back to OpenAI-compatible mode. "
+                "For native Google support, install: pip install google-generativeai"
+            )
+            # Use OpenAI client with OpenRouter base URL for Gemini access
+            base_url = os.environ.get("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+            self._init_openai_client(api_key, base_url, model_name, timeout, "json")
+            return
+
+        # Configure Google API
+        genai.configure(api_key=api_key)
+
+        # Use instructor's from_provider for Google with async support
+        # Format: "google/model-name"
+        provider_string = f"google/{model_name}"
+        self.instruct_client = instructor.from_provider(
+            provider_string,
+            async_client=True,
+        )
+        # Store a reference to the genai module for potential direct access
+        self.client = genai
+        logger.info(f"Initialized native Google Gemini client with model={model_name}")
 
         # Metrics tracking (no caching - we never cache LLM responses)
         self._response_times: List[float] = []  # List of response times in ms

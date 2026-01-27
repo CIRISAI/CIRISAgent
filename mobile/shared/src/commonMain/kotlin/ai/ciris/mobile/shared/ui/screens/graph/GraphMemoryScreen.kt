@@ -205,7 +205,7 @@ fun GraphMemoryScreen(
             shape = RoundedCornerShape(8.dp)
         ) {
             Text(
-                text = "%.0f%%".format(state.viewport.scale * 100),
+                text = "${(state.viewport.scale * 100).toInt()}%",
                 modifier = Modifier.padding(8.dp),
                 style = MaterialTheme.typography.labelMedium,
                 color = GraphColors.LabelColorMuted
@@ -484,7 +484,7 @@ private fun NodeDetailsPanel(
             }
             original.updatedAt?.let { time ->
                 Text(
-                    text = "Updated: ${formatTimestamp(time)}",
+                    text = "Updated: ${formatTimestamp(time.toString())}",
                     style = MaterialTheme.typography.labelSmall,
                     color = GraphColors.LabelColorMuted
                 )

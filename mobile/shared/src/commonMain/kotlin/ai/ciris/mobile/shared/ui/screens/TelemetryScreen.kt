@@ -237,7 +237,7 @@ private fun ResourceUsageCard(
             val diskPercent = ((diskUsedMb / 10240.0) * 100).toInt().coerceIn(0, 100)
             ResourceUsageRow(
                 label = "Disk",
-                value = if (diskGb >= 1.0) "%.1f GB".format(diskGb) else "%.0f MB".format(diskUsedMb),
+                value = if (diskGb >= 1.0) "${((diskGb * 10).toInt() / 10.0)} GB" else "${diskUsedMb.toInt()} MB",
                 progress = diskPercent / 100f,
                 color = getUsageColor(diskPercent)
             )

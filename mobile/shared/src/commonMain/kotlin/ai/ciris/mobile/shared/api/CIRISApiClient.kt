@@ -29,6 +29,20 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
+ * LLM configuration data for display in settings
+ */
+data class LlmConfigData(
+    val provider: String,
+    val baseUrl: String?,
+    val model: String,
+    val apiKeySet: Boolean,
+    val isCirisProxy: Boolean,
+    val backupBaseUrl: String?,
+    val backupModel: String?,
+    val backupApiKeySet: Boolean
+)
+
+/**
  * Unified API client for CIRIS backend using the generated OpenAPI SDK.
  * This client wraps the generated API classes and provides a clean interface.
  *
@@ -946,24 +960,24 @@ class CIRISApiClient(
                     "step=${data.currentStepIndex}/${data.totalSteps}")
 
             ConfigSessionData(
-                sessionId = data.sessionId,
-                adapterType = data.adapterType,
-                status = data.status,
-                currentStepIndex = data.currentStepIndex,
-                totalSteps = data.totalSteps,
+                sessionId = data.sessionId ?: "",
+                adapterType = data.adapterType ?: "",
+                status = data.status ?: "",
+                currentStepIndex = data.currentStepIndex ?: 0,
+                totalSteps = data.totalSteps ?: 0,
                 currentStep = data.currentStep?.let { step ->
                     ConfigStepData(
-                        stepId = step.stepId,
-                        stepType = step.stepType,
-                        title = step.title,
+                        stepId = step.stepId ?: "",
+                        stepType = step.stepType ?: "",
+                        title = step.title ?: "",
                         description = step.description,
-                        required = step.required,
+                        required = step.required ?: false,
                         fields = step.fields?.map { field ->
                             ConfigFieldData(
-                                name = field.name,
-                                label = field.label,
-                                fieldType = field.fieldType,
-                                required = field.required,
+                                name = field.name ?: "",
+                                label = field.label ?: "",
+                                fieldType = field.fieldType ?: "",
+                                required = field.required ?: false,
                                 defaultValue = field.defaultValue,
                                 helpText = field.helpText
                             )
@@ -1887,8 +1901,8 @@ class CIRISApiClient(
                             appendLine("source: ${node.attributes.source}")
                             node.attributes.confidence?.let { c -> appendLine("confidence: $c") }
                         },
-                        createdAt = node.updatedAt,
-                        updatedAt = node.updatedAt
+                        createdAt = node.updatedAt?.toString(),
+                        updatedAt = node.updatedAt?.toString()
                     )
                 }
             } catch (e: Exception) {
@@ -1940,8 +1954,8 @@ class CIRISApiClient(
                             appendLine("source: ${node.attributes.source}")
                             node.attributes.confidence?.let { c -> appendLine("confidence: $c") }
                         },
-                        createdAt = node.updatedAt,
-                        updatedAt = node.updatedAt
+                        createdAt = node.updatedAt?.toString(),
+                        updatedAt = node.updatedAt?.toString()
                     )
                 }
             } catch (e: Exception) {
@@ -1982,8 +1996,8 @@ class CIRISApiClient(
                         node.attributes.confidence?.let { c -> appendLine("confidence: $c") }
                         node.attributes.category.let { cat -> appendLine("category: $cat") }
                     },
-                    createdAt = node.updatedAt,
-                    updatedAt = node.updatedAt
+                    createdAt = node.updatedAt?.toString(),
+                    updatedAt = node.updatedAt?.toString()
                 )
             } catch (e: Exception) {
                 logException(method, e)
@@ -2541,7 +2555,11 @@ data class AuditContextApiData(
     @SerialName("user_agent") val userAgent: String? = null,
     val result: String? = null,
     val error: String? = null,
-    val metadata: JsonObject? = null  // Dynamic JSON object for additional metadata
+    val metadata: JsonObject? = null,  // Dynamic JSON object for additional metadata
+    // Additional fields used by AuditViewModel
+    val outcome: String? = null,
+    val details: String? = null,
+    val service: String? = null
 )
 
 // ===== Logs Data Models =====

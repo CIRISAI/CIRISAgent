@@ -94,6 +94,13 @@ interface CIRISApiClientProtocol {
      */
     fun close()
 
+    // ===== Config API =====
+
+    /**
+     * Get LLM configuration
+     */
+    suspend fun getLlmConfig(): LlmConfigData
+
     // ===== Billing API =====
 
     /**

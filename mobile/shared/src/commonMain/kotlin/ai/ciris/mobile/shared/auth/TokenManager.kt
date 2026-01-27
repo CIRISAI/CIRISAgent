@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -307,7 +308,7 @@ class TokenManager(
         return remainingSeconds > MIN_TOKEN_VALIDITY_SECONDS
     }
 
-    private fun currentTimeSeconds(): Long = System.currentTimeMillis() / 1000
+    private fun currentTimeSeconds(): Long = Clock.System.now().epochSeconds
 
     /**
      * Clean up resources.

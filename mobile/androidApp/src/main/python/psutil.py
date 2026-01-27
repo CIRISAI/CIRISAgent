@@ -72,7 +72,7 @@ def virtual_memory():
                 except (ValueError, IndexError):
                     pass
 
-        total = mem.get("MemTotal", 4 * 1024 * 1024 * 1024)  # Default 4GB
+        total = mem.get("MemTotal", 1 * 1024 * 1024 * 1024)  # Default 1GB
         free = mem.get("MemFree", 0)
         available = mem.get("MemAvailable", free)
         buffers = mem.get("Buffers", 0)
@@ -99,8 +99,8 @@ def virtual_memory():
             slab=slab,
         )
 
-    # Fallback defaults
-    total = 4 * 1024 * 1024 * 1024  # 4GB
+    # Fallback defaults for mobile devices
+    total = 1 * 1024 * 1024 * 1024  # 1GB target for mobile
     return svmem(
         total=total,
         available=total // 2,

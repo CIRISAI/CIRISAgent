@@ -930,22 +930,47 @@ This directory contains critical cryptographic keys for the CIRIS system.
         if not hasattr(config, "services"):
             raise ValueError("Configuration missing LLM service settings")
 
-        # Get API key
-        api_key = os.environ.get("OPENAI_API_KEY", "")
+        # Detect provider and get appropriate API key
+        from ciris_engine.logic.services.runtime.llm_service import (
+            LLMProvider,
+            OpenAIConfig,
+            _detect_provider_from_env,
+            _get_api_key_for_provider,
+        )
+
+        provider = _detect_provider_from_env()
+        api_key = _get_api_key_for_provider(provider)
+
+        # Fall back to OPENAI_API_KEY for backward compatibility
         if not api_key:
-            logger.warning("No OPENAI_API_KEY found - LLM service will not be initialized")
+            api_key = os.environ.get("OPENAI_API_KEY", "")
+
+        if not api_key:
+            logger.warning(f"No API key found for {provider.value} - LLM service will not be initialized")
             return
 
         # Initialize real LLM service
-        logger.info("Initializing real LLM service")
-        from ciris_engine.logic.services.runtime.llm_service import OpenAIConfig
+        logger.info(f"Initializing LLM service with provider={provider.value}")
 
         # Get config values using helper to reduce complexity
-        base_url = os.environ.get("OPENAI_API_BASE") or self._get_llm_service_config_value(
-            config, "llm_endpoint", "http://localhost:11434/v1"
-        )
-        model_name = os.environ.get("OPENAI_MODEL") or self._get_llm_service_config_value(
-            config, "llm_model", "gpt-4o-mini"
+        # Base URL only applies to OpenAI-compatible providers
+        base_url = None
+        if provider in (LLMProvider.OPENAI, LLMProvider.OPENAI_COMPATIBLE):
+            base_url = os.environ.get("OPENAI_API_BASE") or self._get_llm_service_config_value(
+                config, "llm_endpoint", None
+            )
+
+        # Get model name - provider-specific defaults
+        default_models = {
+            LLMProvider.OPENAI: "gpt-4o-mini",
+            LLMProvider.OPENAI_COMPATIBLE: "gpt-4o-mini",
+            LLMProvider.ANTHROPIC: "claude-sonnet-4-20250514",
+            LLMProvider.GOOGLE: "gemini-2.0-flash",
+        }
+        model_name = (
+            os.environ.get("OPENAI_MODEL")
+            or os.environ.get("LLM_MODEL")
+            or self._get_llm_service_config_value(config, "llm_model", default_models.get(provider, "gpt-4o-mini"))
         )
 
         # LLM timeout - reduced default to 20s to allow failover within DMA timeout budget
@@ -955,14 +980,24 @@ This directory contains critical cryptographic keys for the CIRIS system.
             config, "llm_timeout", 20
         )
 
+        # Provider-specific instructor mode defaults
+        default_instructor_modes = {
+            LLMProvider.OPENAI: "JSON",
+            LLMProvider.OPENAI_COMPATIBLE: "JSON",
+            LLMProvider.ANTHROPIC: "ANTHROPIC_TOOLS",
+            LLMProvider.GOOGLE: "GENAI_TOOLS",
+        }
+        instructor_mode = os.environ.get("INSTRUCTOR_MODE") or default_instructor_modes.get(provider, "JSON")
+
         llm_config = OpenAIConfig(
             base_url=base_url,
             model_name=model_name,
             api_key=api_key,
-            instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),
+            instructor_mode=instructor_mode,
             timeout_seconds=llm_timeout,
             # Reduced from 3 to 2 to fit within DMA timeout budget
             max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 2),
+            provider=provider,
         )
 
         # Create and start service
@@ -978,7 +1013,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 provider=openai_service,
                 priority=Priority.HIGH,
                 capabilities=[LLMCapabilities.CALL_LLM_STRUCTURED],
-                metadata={"provider": "openai", "model": llm_config.model_name},
+                metadata={"provider": provider.value, "model": llm_config.model_name},
             )
 
         # Store reference

@@ -3,6 +3,9 @@ package ai.ciris.mobile.shared.ui.screens.graph
 import kotlin.math.sqrt
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.PI
 import kotlin.random.Random
 
 /**
@@ -47,10 +50,10 @@ class ForceSimulation(
         nodes.forEachIndexed { index, node ->
             if (!node.fixed) {
                 // Distribute nodes in a circle with some randomness
-                val angle = (index.toFloat() / nodes.size) * 2 * Math.PI.toFloat()
+                val angle = (index.toFloat() / nodes.size) * 2f * PI.toFloat()
                 val r = radius * (0.5f + Random.nextFloat() * 0.5f)
-                node.x = centerX + r * kotlin.math.cos(angle)
-                node.y = centerY + r * kotlin.math.sin(angle)
+                node.x = centerX + r * cos(angle)
+                node.y = centerY + r * sin(angle)
                 node.vx = 0f
                 node.vy = 0f
             }
@@ -226,7 +229,7 @@ class ForceSimulation(
             if (nodes.isEmpty()) return
 
             // Sort by creation time if available, otherwise by ID
-            val sorted = nodes.sortedBy { it.originalNode?.updatedAt ?: it.id }
+            val sorted = nodes.sortedBy { it.originalNode?.updatedAt?.toString() ?: it.id }
 
             val padding = 60f
             val availableWidth = width - 2 * padding
@@ -286,9 +289,9 @@ class ForceSimulation(
             val radius = min(width, height) * 0.35f
 
             nodes.forEachIndexed { index, node ->
-                val angle = (index.toFloat() / nodes.size) * 2 * Math.PI.toFloat()
-                node.x = centerX + radius * kotlin.math.cos(angle)
-                node.y = centerY + radius * kotlin.math.sin(angle)
+                val angle = (index.toFloat() / nodes.size) * 2f * PI.toFloat()
+                node.x = centerX + radius * cos(angle)
+                node.y = centerY + radius * sin(angle)
                 node.vx = 0f
                 node.vy = 0f
             }

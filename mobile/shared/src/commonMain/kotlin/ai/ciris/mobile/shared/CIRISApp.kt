@@ -5,6 +5,7 @@ import ai.ciris.mobile.shared.auth.SilentSignInResult
 import ai.ciris.mobile.shared.auth.TokenManager
 import ai.ciris.mobile.shared.auth.TokenState
 import ai.ciris.mobile.shared.platform.EnvFileUpdater
+import ai.ciris.mobile.shared.platform.PythonRuntime
 import ai.ciris.mobile.shared.platform.PythonRuntimeProtocol
 import ai.ciris.mobile.shared.platform.SecureStorage
 import ai.ciris.mobile.shared.platform.createEnvFileUpdater
@@ -134,7 +135,7 @@ sealed class GoogleSignInResult {
 fun CIRISApp(
     accessToken: String,
     baseUrl: String = "http://localhost:8080",
-    pythonRuntime: PythonRuntimeProtocol = createPythonRuntime(),
+    pythonRuntime: PythonRuntime = createPythonRuntime(),
     secureStorage: SecureStorage = createSecureStorage(),
     envFileUpdater: EnvFileUpdater = createEnvFileUpdater(),
     googleSignInCallback: GoogleSignInCallback? = null,
@@ -246,8 +247,10 @@ fun CIRISApp(
     }
 
     // ViewModels
+    // Cast to PythonRuntimeProtocol since actual implementations implement it
+    val pythonRuntimeProtocol: PythonRuntimeProtocol = pythonRuntime as PythonRuntimeProtocol
     val startupViewModel: StartupViewModel = viewModel {
-        StartupViewModel(pythonRuntime, apiClient)
+        StartupViewModel(pythonRuntimeProtocol, apiClient)
     }
     // SetupViewModel is a plain class, not an androidx ViewModel
     val setupViewModel = remember { SetupViewModel() }
@@ -1353,29 +1356,15 @@ fun CIRISApp(
 
 /**
  * Check if setup is required via /v1/setup/status API
+ * Uses the API client for platform-independent HTTP handling.
  */
-private suspend fun checkFirstRunStatus(baseUrl: String): Boolean = withContext(Dispatchers.IO) {
-    try {
-        val url = java.net.URL("$baseUrl/v1/setup/status")
-        val connection = url.openConnection() as java.net.HttpURLConnection
-        connection.connectTimeout = 5000
-        connection.readTimeout = 5000
-        connection.requestMethod = "GET"
-
-        if (connection.responseCode == 200) {
-            val response = connection.inputStream.bufferedReader().readText()
-            connection.disconnect()
-            // Parse JSON response - look for "setup_required": true
-            response.contains("\"setup_required\"") &&
-                response.contains("\"setup_required\": true") ||
-                response.contains("\"setup_required\":true")
-        } else {
-            connection.disconnect()
-            // If we can't check, assume first run for safety
-            true
-        }
+private suspend fun checkFirstRunStatus(baseUrl: String): Boolean {
+    return try {
+        val client = CIRISApiClient(baseUrl)
+        val setupStatus = client.getSetupStatus()
+        setupStatus.data.setup_required
     } catch (e: Exception) {
-        // On error, assume first run
+        // On error, assume first run for safety
         true
     }
 }

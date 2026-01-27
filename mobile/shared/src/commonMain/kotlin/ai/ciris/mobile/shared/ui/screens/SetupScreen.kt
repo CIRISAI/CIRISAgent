@@ -540,7 +540,7 @@ private fun LlmConfigurationStep(
             )
 
             var providerExpanded by remember { mutableStateOf(false) }
-            val providers = listOf("OpenAI", "Anthropic", "Azure OpenAI", "LocalAI")
+            val providers = listOf("OpenAI", "Anthropic", "Google AI", "OpenRouter", "Groq", "Together AI", "LocalAI")
 
             ExposedDropdownMenuBox(
                 expanded = providerExpanded,

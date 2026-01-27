@@ -623,7 +623,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 outcome_data = {
                     "status": "success",
                     "summary": f"Deferral approved by WA {response.wa_id}: {response.reason}",
-                    "actions_taken": [f"Deferred to WA", f"Approved by {response.wa_id}"],
+                    "actions_taken": ["Deferred to WA", f"Approved by {response.wa_id}"],
                     "memories_created": [],
                     "errors": [],
                 }
@@ -631,7 +631,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 outcome_data = {
                     "status": "failure",
                     "summary": f"Deferral rejected by WA {response.wa_id}: {response.reason}",
-                    "actions_taken": [f"Deferred to WA", f"Rejected by {response.wa_id}"],
+                    "actions_taken": ["Deferred to WA", f"Rejected by {response.wa_id}"],
                     "memories_created": [],
                     "errors": [f"Rejection reason: {response.reason}"],
                 }

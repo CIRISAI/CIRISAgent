@@ -70,7 +70,7 @@ async def get_user_filter_ids_for_observer(request: Request, auth: AuthContext) 
     user_role = auth.role
     apply_filtering = should_apply_user_filtering(user_role)
 
-    logger.info(f"[MEMORY-FILTER] User: {auth.user_id}, Role: {user_role}, " f"Apply Filtering: {apply_filtering}")
+    logger.info(f"[MEMORY-FILTER] User: {auth.user_id}, Role: {user_role}, Apply Filtering: {apply_filtering}")
 
     if not apply_filtering:
         logger.info(f"[MEMORY-FILTER] ADMIN+ user {auth.user_id} bypasses user filtering")

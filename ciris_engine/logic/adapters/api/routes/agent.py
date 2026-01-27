@@ -348,7 +348,7 @@ async def _handle_consent_for_user(auth: AuthContext, channel_id: str, request: 
                 categories=[],
                 reason="Default TEMPORARY consent on first interaction",
             )
-            consent_status = await consent_manager.grant_consent(consent_req, channel_id=channel_id)
+            await consent_manager.grant_consent(consent_req, channel_id=channel_id)
 
             # Return notice to add to response
             return "\n\n📝 Privacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."

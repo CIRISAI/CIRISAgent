@@ -362,13 +362,17 @@ async def test_resolve_deferral(wise_authority_service, time_service, temp_db):
     # Check original task was marked as COMPLETED
     conn = sqlite3.connect(temp_db)
     cursor = conn.cursor()
-    cursor.execute("SELECT status, outcome FROM tasks WHERE task_id = ?", ("task-resolve",))
+    cursor.execute("SELECT status, outcome_json FROM tasks WHERE task_id = ?", ("task-resolve",))
     row = cursor.fetchone()
     assert row is not None
-    status, outcome = row
+    status, outcome_json = row
     assert status == "completed"
-    assert "Approved" in outcome
-    assert "wa-2025-06-24-AUTH01" in outcome
+    # outcome_json is JSON with {"status": "resolved", "message": "..."}
+    import json
+
+    outcome_data = json.loads(outcome_json)
+    assert "Approved" in outcome_data["message"]
+    assert "wa-2025-06-24-AUTH01" in outcome_data["message"]
 
     # Check new guidance task was created
     cursor.execute(

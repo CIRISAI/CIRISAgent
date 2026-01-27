@@ -174,6 +174,109 @@ export AGENT_OCCURRENCE_ID="occurrence-1"
 
 Adapters are de-duplicated by (adapter_type, occurrence_id, config_hash) - same config on different occurrences is valid.
 
+## Enhanced ToolInfo Schema (v1.9.2+)
+
+Tools can now include rich skill-like documentation. All new fields are **optional** for backward compatibility.
+
+### New ToolInfo Fields
+
+```python
+from ciris_engine.schemas.adapters.tools import (
+    ToolInfo,
+    ToolRequirements,
+    ToolDocumentation,
+    ToolDMAGuidance,
+    BinaryRequirement,
+    EnvVarRequirement,
+    InstallStep,
+    UsageExample,
+    ToolGotcha,
+)
+
+ToolInfo(
+    # Existing fields...
+    name="weather:current",
+    description="Get current weather conditions",
+    parameters=ToolParameterSchema(...),
+
+    # NEW: Runtime requirements
+    requirements=ToolRequirements(
+        binaries=[BinaryRequirement(name="curl")],
+        env_vars=[EnvVarRequirement(name="WEATHER_API_KEY", secret=True)],
+        config_keys=[ConfigRequirement(key="adapters.weather.api_key")],
+        platforms=["darwin", "linux", "win32"],
+    ),
+
+    # NEW: Installation instructions
+    install_steps=[
+        InstallStep(
+            id="pip-weather",
+            kind="pip",  # brew, apt, pip, npm, manual, winget, choco
+            label="Install weather library",
+            package="python-weather",
+        ),
+    ],
+
+    # NEW: Rich documentation
+    documentation=ToolDocumentation(
+        quick_start="Provide latitude/longitude to get weather",
+        detailed_instructions="## Full Markdown\n\nLong-form docs here...",
+        examples=[
+            UsageExample(
+                title="San Francisco weather",
+                code='{"latitude": 37.77, "longitude": -122.42}',
+                language="json",
+            ),
+        ],
+        gotchas=[
+            ToolGotcha(
+                title="US locations only",
+                description="NOAA API only works for US locations",
+                severity="info",  # info, warning, error
+            ),
+        ],
+        related_tools=["weather:forecast"],
+        homepage="https://weather.gov",
+    ),
+
+    # NEW: DMA guidance
+    dma_guidance=ToolDMAGuidance(
+        when_not_to_use="For medical weather advice",
+        ethical_considerations="Weather data is informational only",
+        prerequisite_actions=["verify_location"],
+        followup_actions=["log_weather_query"],
+        min_confidence=0.3,  # 0.0-1.0
+        requires_approval=False,  # If True, triggers DEFER
+    ),
+
+    # NEW: Categorization
+    tags=["weather", "location", "api"],
+    version="1.0.0",
+)
+```
+
+### Schema Reference
+
+| Schema | Purpose |
+|--------|---------|
+| `ToolRequirements` | Runtime requirements (binaries, env vars, config, platforms) |
+| `BinaryRequirement` | Required CLI binary with optional version check |
+| `EnvVarRequirement` | Required environment variable |
+| `ConfigRequirement` | Required CIRIS config key |
+| `InstallStep` | Installation instruction for a package manager |
+| `ToolDocumentation` | Rich documentation with examples and gotchas |
+| `UsageExample` | Code example with title and language |
+| `ToolGotcha` | Common pitfall with severity level |
+| `ToolDMAGuidance` | Guidance for DMA tool selection decisions |
+
+### Benefits for Adapters
+
+1. **Self-Documenting Tools** - Users can discover how to use tools without external docs
+2. **Requirement Checking** - Platform can verify binaries/env vars before tool execution
+3. **DMA Awareness** - Agent knows when NOT to use a tool and ethical considerations
+4. **Install Guidance** - Users can see how to install missing dependencies
+5. **Discoverability** - Tags enable filtering/searching tools by category
+
 ## Guidelines
 
 - **Test services**: Set `"test_only": true` in manifest

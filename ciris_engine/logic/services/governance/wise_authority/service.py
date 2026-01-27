@@ -666,6 +666,9 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 if "correlation_id" in context:
                     guidance_context_dict["original_correlation_id"] = context["correlation_id"]
 
+                # Update context with new correlation_id to avoid UNIQUE constraint violation
+                guidance_context_dict["correlation_id"] = correlation_id
+
                 # Build TaskContext from the guidance context dict
                 task_context = TaskContext(
                     channel_id=channel_id,

@@ -886,8 +886,15 @@ class CIRISRuntime(ServicePropertyMixin):
 
     def _build_adapter_info(self, adapter: Any) -> JSONDict:
         """Build adapter info dictionary for authentication token creation."""
+        # Use stable adapter_id if available, otherwise use "default"
+        # IMPORTANT: Do NOT use id(adapter) as it changes on every restart,
+        # causing duplicate observer certificates to be created.
+        instance_id = "default"
+        if hasattr(adapter, "adapter_id") and adapter.adapter_id:
+            instance_id = str(adapter.adapter_id)
+
         adapter_info: JSONDict = {
-            "instance_id": str(id(adapter)),
+            "instance_id": instance_id,
             "startup_time": (
                 self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()
             ),

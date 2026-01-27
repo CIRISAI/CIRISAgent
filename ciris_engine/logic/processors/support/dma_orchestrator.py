@@ -16,6 +16,7 @@ from ciris_engine.logic.dma.dma_executor import (
 from ciris_engine.logic.dma.dsdma_base import BaseDSDMA
 from ciris_engine.logic.dma.idma import IDMAEvaluator
 from ciris_engine.logic.dma.pdma import EthicalPDMAEvaluator
+from ciris_engine.logic.dma.tsaspdma import TSASPDMAEvaluator
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker
 from ciris_engine.logic.utils.channel_utils import extract_channel_id
@@ -49,12 +50,14 @@ class DMAOrchestrator:
         llm_service: Optional[Any] = None,
         memory_service: Optional[Any] = None,
         idma_evaluator: Optional[IDMAEvaluator] = None,
+        tsaspdma_evaluator: Optional[TSASPDMAEvaluator] = None,
     ) -> None:
         self.ethical_pdma_evaluator = ethical_pdma_evaluator
         self.csdma_evaluator = csdma_evaluator
         self.dsdma = dsdma
         self.action_selection_pdma_evaluator = action_selection_pdma_evaluator
         self.idma_evaluator = idma_evaluator
+        self.tsaspdma_evaluator = tsaspdma_evaluator
         self.time_service = time_service
         self.app_config = app_config
         self.llm_service = llm_service

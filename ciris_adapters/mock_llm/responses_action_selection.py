@@ -47,6 +47,114 @@ def action_selection(
 
     logger = logging.getLogger(__name__)
 
+    # === TSASPDMA Detection ===
+    # TSASPDMA (Tool-Specific Action Selection) is called when ASPDMA selects TOOL action.
+    # Detect by looking for TSASPDMA-specific patterns in system messages.
+    is_tsaspdma = False
+    tsaspdma_tool_name = None
+    for msg in messages:
+        if isinstance(msg, dict) and msg.get("role") == "system":
+            content = msg.get("content", "")
+            if "reviewing a TOOL action" in content or "TSASPDMA" in content:
+                is_tsaspdma = True
+                logger.info("[MOCK_LLM] *** DETECTED TSASPDMA CONTEXT ***")
+                # Try to extract the tool name from the context
+                import re
+
+                # Match various patterns: **Tool:** name, Tool: name, tool_name, etc.
+                tool_patterns = [
+                    r"\*\*Tool:\*\*\s*(\S+)",
+                    r"Tool:\s*(\S+)",
+                    r'tool[_\s]?name[=:\s]+["\']?(\S+)["\']?',
+                    r"Evaluating tool:\s*(\S+)",
+                ]
+                for pattern in tool_patterns:
+                    tool_match = re.search(pattern, content, re.IGNORECASE)
+                    if tool_match:
+                        tsaspdma_tool_name = tool_match.group(1).strip("*\"',")
+                        logger.info(f"[MOCK_LLM] TSASPDMA for tool: {tsaspdma_tool_name}")
+                        break
+                break
+
+    # === TSASPDMA Early Return ===
+    # By default, TSASPDMA confirms the TOOL action (proceeds with execution).
+    # This simulates the agent reviewing documentation and deciding to proceed.
+    if is_tsaspdma:
+        # Also check user message for tool name if not found in system message
+        if not tsaspdma_tool_name:
+            for msg in messages:
+                if isinstance(msg, dict) and msg.get("role") == "user":
+                    content = msg.get("content", "")
+                    for pattern in [
+                        r"\*\*Tool:\*\*\s*(\S+)",
+                        r"Tool:\s*(\S+)",
+                        r'tool[_\s]?name[=:\s]+["\']?(\S+)["\']?',
+                    ]:
+                        tool_match = re.search(pattern, content, re.IGNORECASE)
+                        if tool_match:
+                            tsaspdma_tool_name = tool_match.group(1).strip("*\"',")
+                            logger.info(f"[MOCK_LLM] TSASPDMA tool from user msg: {tsaspdma_tool_name}")
+                            break
+                    if tsaspdma_tool_name:
+                        break
+        # Check user input for testing overrides ($tsaspdma_speak, $tsaspdma_ponder)
+        user_input = ""
+        for item in context:
+            if item.startswith("user_input:") or item.startswith("task:"):
+                user_input = item.split(":", 1)[1].strip()
+                break
+
+        if "$tsaspdma_speak" in user_input:
+            # Testing: TSASPDMA decides to ask for clarification
+            logger.info("[MOCK_LLM] TSASPDMA: Switching to SPEAK for clarification (test mode)")
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.SPEAK,
+                action_parameters=SpeakParams(
+                    content="TSASPDMA: I need clarification before proceeding with this tool."
+                ).model_dump(),
+                rationale="TSASPDMA: Documentation review revealed ambiguity requiring user clarification.",
+            )
+        elif "$tsaspdma_ponder" in user_input:
+            # Testing: TSASPDMA decides a different tool would be better
+            logger.info("[MOCK_LLM] TSASPDMA: Switching to PONDER to reconsider (test mode)")
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.PONDER,
+                action_parameters=PonderParams(
+                    questions=["Would a different tool be more appropriate?", "What are the gotchas?"]
+                ).model_dump(),
+                rationale="TSASPDMA: After reviewing documentation, reconsidering if this is the right approach.",
+            )
+        else:
+            # Default: Confirm TOOL action (proceed with execution)
+            # Extract tool parameters from the TSASPDMA message
+            tool_params: Dict[str, Any] = {}
+            for msg in messages:
+                if isinstance(msg, dict) and msg.get("role") == "user":
+                    content = msg.get("content", "")
+                    if "Tool Parameters:" in content or "parameters:" in content:
+                        import re
+
+                        # Try to extract JSON parameters
+                        json_match = re.search(r"```(?:json)?\s*(\{[^}]+\})\s*```", content, re.DOTALL)
+                        if json_match:
+                            try:
+                                import json
+
+                                tool_params = json.loads(json_match.group(1))
+                            except json.JSONDecodeError:
+                                pass
+                        break
+
+            logger.info(f"[MOCK_LLM] TSASPDMA: Confirming TOOL action for '{tsaspdma_tool_name or 'unknown'}'")
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.TOOL,
+                action_parameters=ToolParams(
+                    name=tsaspdma_tool_name or "unknown_tool",
+                    parameters=tool_params,
+                ).model_dump(),
+                rationale=f"TSASPDMA: Reviewed documentation for '{tsaspdma_tool_name}'. Proceeding with tool execution.",
+            )
+
     # === CRITICAL: Early follow-up detection ===
     # Check the FIRST system message for THOUGHT_TYPE=follow_up
     # This MUST happen before any other logic to ensure follow-ups are detected

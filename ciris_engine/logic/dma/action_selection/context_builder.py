@@ -262,27 +262,40 @@ Adhere strictly to the schema for your JSON output.
         return list(permitted_actions)
 
     def _get_available_tools_str(self, permitted_actions: List[HandlerActionType]) -> str:
-        """Get available tools string if TOOL action is permitted."""
-        available_tools_str = ""
-        if HandlerActionType.TOOL in permitted_actions:
-            try:
-                # Get tools from service registry if available
-                if self.service_registry:
-                    from ciris_engine.schemas.runtime.enums import ServiceType
+        """Get concise tool summaries if TOOL action is permitted.
 
-                    tool_services = self.service_registry.get_services_by_type(ServiceType.TOOL)
-                    _all_tools: List[str] = []
-                    for service in tool_services:
-                        if hasattr(service, "get_available_tools"):
-                            # This is an async method, so we need to handle it properly
-                            # For now, we'll skip the async call since we're in a sync context
-                            # The dynamic instruction generator will handle this better
-                            pass
-                    # Fall back to empty string if we can't get tools synchronously
-            except Exception:
-                pass
+        Returns quick guidance on WHEN to use each tool (not full parameters).
+        Full parameter schemas are provided separately in action_parameter_schemas.
+        """
+        if HandlerActionType.TOOL not in permitted_actions:
+            return ""
 
-        return available_tools_str
+        # Use pre-cached tools from instruction generator
+        if self._instruction_generator is None or not hasattr(self._instruction_generator, "_cached_tools"):
+            logger.debug("[CONTEXT] No cached tools available for tool summaries")
+            return ""
+
+        cached_tools = getattr(self._instruction_generator, "_cached_tools", {})
+        if not cached_tools:
+            return ""
+
+        # Build concise summaries using when_to_use (not full parameters)
+        summaries = ["\n\n## Quick Tool Guide (when to use each tool):"]
+        for tool_key, tool_info in cached_tools.items():
+            if isinstance(tool_info, dict):
+                tool_name = tool_info.get("name", tool_key)
+                # Prefer when_to_use for concise guidance, fall back to truncated description
+                when_to_use = tool_info.get("when_to_use", "")
+                if not when_to_use:
+                    desc = tool_info.get("description", "")
+                    when_to_use = desc[:100] + "..." if len(desc) > 100 else desc
+                if when_to_use:
+                    summaries.append(f"- **{tool_name}**: {when_to_use}")
+
+        if len(summaries) == 1:
+            return ""  # Only header, no tools
+
+        return "\n".join(summaries)
 
     def _build_ethical_summary(self, ethical_pdma_result: EthicalDMAResult) -> str:
         """Build ethical DMA summary."""

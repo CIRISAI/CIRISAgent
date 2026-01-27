@@ -22,6 +22,7 @@ from ciris_engine.logic.dma.csdma import CSDMAEvaluator
 from ciris_engine.logic.dma.factory import create_dsdma_from_identity
 from ciris_engine.logic.dma.idma import IDMAEvaluator
 from ciris_engine.logic.dma.pdma import EthicalPDMAEvaluator
+from ciris_engine.logic.dma.tsaspdma import TSASPDMAEvaluator
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies
 from ciris_engine.logic.infrastructure.handlers.handler_registry import build_action_dispatcher
 from ciris_engine.logic.processors import AgentProcessor
@@ -135,6 +136,14 @@ class ComponentBuilder:
             sink=self.runtime.bus_manager,
         )
 
+        # Create TSASPDMA evaluator for tool-specific instruction delivery
+        # Activated when ASPDMA selects TOOL action - provides full documentation
+        tsaspdma = TSASPDMAEvaluator(
+            service_registry=self.runtime.service_registry,
+            model_name=self.runtime.llm_service.model_name,
+            max_retries=config.services.llm_max_retries,
+        )
+
         # Get time service directly from service_initializer (not from registry)
         time_service = getattr(self.runtime.service_initializer, "time_service", None)
         if not time_service:
@@ -225,6 +234,7 @@ class ComponentBuilder:
             llm_service=self.runtime.llm_service,
             memory_service=self.runtime.memory_service,
             idma_evaluator=idma,  # CCA epistemic diversity monitoring
+            tsaspdma_evaluator=tsaspdma,  # Tool-specific action selection
         )
 
         context_builder = ContextBuilder(

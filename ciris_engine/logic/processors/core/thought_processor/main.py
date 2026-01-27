@@ -17,7 +17,8 @@ from ciris_engine.logic.utils.channel_utils import create_channel_context
 from ciris_engine.logic.utils.jsondict_helpers import get_bool, get_dict
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.actions.parameters import DeferParams, PonderParams
+from ciris_engine.schemas.actions.parameters import DeferParams, PonderParams, ToolParams
+from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import EpistemicData
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
@@ -240,6 +241,13 @@ class ThoughtProcessor(
 
         self._log_action_selection_result(action_result, thought)
 
+        # Phase 4.5: TSASPDMA - Tool-specific evaluation (if TOOL action selected)
+        # TSASPDMA provides full tool documentation and can:
+        # - Confirm TOOL action (possibly with refined parameters)
+        # - Switch to SPEAK for user clarification
+        # - Switch to PONDER to reconsider approach
+        action_result = await self._maybe_run_tsaspdma(thought_item, action_result)
+
         # Phase 5: CONSCIENCE_EXECUTION - Apply ethical safety validation
         conscience_result = await self._conscience_execution_step(
             thought_item, action_result, thought, dma_results, thought_context
@@ -267,6 +275,87 @@ class ThoughtProcessor(
                 )
         else:
             logger.error(f"ThoughtProcessor: No action result for thought {thought.thought_id}")
+
+    async def _maybe_run_tsaspdma(
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: ActionSelectionDMAResult,
+    ) -> ActionSelectionDMAResult:
+        """Run TSASPDMA if action is TOOL and tool has documentation.
+
+        TSASPDMA (Tool-Specific Action Selection PDMA) provides the agent with
+        full tool documentation and allows it to:
+        - Proceed with TOOL (optionally with refined parameters)
+        - Switch to SPEAK for user clarification
+        - Switch to PONDER to reconsider the approach
+
+        Returns:
+            The action result (possibly modified by TSASPDMA)
+        """
+        # Only run for TOOL actions
+        if action_result.selected_action != HandlerActionType.TOOL:
+            return action_result
+
+        # Extract tool name from parameters
+        tool_params = action_result.action_parameters
+        if not isinstance(tool_params, ToolParams):
+            logger.warning(f"TSASPDMA: TOOL action has invalid parameters type: {type(tool_params)}")
+            return action_result
+
+        tool_name = tool_params.name
+
+        # Get tool info from tool bus
+        tool_info: Optional[ToolInfo] = None
+        try:
+            tool_bus = self.dependencies.bus_manager.tool
+            tool_info = await tool_bus.get_tool_info(tool_name)
+        except Exception as e:
+            logger.warning(f"TSASPDMA: Failed to get tool info for '{tool_name}': {e}")
+            return action_result
+
+        if not tool_info:
+            logger.debug(f"TSASPDMA: No tool info for '{tool_name}', skipping")
+            return action_result
+
+        # Only run TSASPDMA if tool has documentation
+        if not tool_info.documentation:
+            logger.debug(f"TSASPDMA: Tool '{tool_name}' has no documentation, skipping")
+            return action_result
+
+        logger.info(
+            f"TSASPDMA: Running tool-specific evaluation for '{tool_name}' on thought {thought_item.thought_id}"
+        )
+
+        try:
+            from ciris_engine.logic.dma.dma_executor import run_tsaspdma
+
+            tsaspdma_result = await run_tsaspdma(
+                evaluator=self.dma_orchestrator.tsaspdma_evaluator,
+                tool_name=tool_name,
+                tool_info=tool_info,
+                tool_parameters=tool_params.parameters or {},
+                aspdma_rationale=action_result.rationale or "",
+                original_thought=thought_item,
+                context=None,
+                time_service=self._time_service,
+            )
+
+            logger.info(
+                f"TSASPDMA: Result for thought {thought_item.thought_id}: "
+                f"{tsaspdma_result.selected_action} (was TOOL)"
+            )
+
+            # TSASPDMA can return TOOL (proceed), SPEAK (clarify), or PONDER (reconsider)
+            return tsaspdma_result
+
+        except AttributeError:
+            # tsaspdma_evaluator not available on dma_orchestrator
+            logger.debug("TSASPDMA: Evaluator not available, skipping")
+            return action_result
+        except Exception as e:
+            logger.error(f"TSASPDMA: Failed for thought {thought_item.thought_id}: {e}", exc_info=True)
+            # On failure, proceed with original TOOL action
+            return action_result
 
     def _should_retry_with_conscience_guidance(self, conscience_result: Optional[ConscienceApplicationResult]) -> bool:
         """Check if we should retry action selection with conscience guidance."""

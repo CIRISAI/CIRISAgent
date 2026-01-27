@@ -24,7 +24,16 @@ from ciris_engine.schemas.adapters.cli_tools import (
     WriteFileParams,
     WriteFileResult,
 )
-from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
+from ciris_engine.schemas.adapters.tools import (
+    ToolDMAGuidance,
+    ToolDocumentation,
+    ToolExecutionResult,
+    ToolExecutionStatus,
+    ToolGotcha,
+    ToolInfo,
+    ToolParameterSchema,
+    UsageExample,
+)
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 from ciris_engine.schemas.telemetry.core import ServiceCorrelation, ServiceCorrelationStatus
@@ -341,6 +350,56 @@ class CLIToolService(BaseService, ToolService):
                 category="filesystem",
                 cost=0.0,
                 when_to_use="Use when you need to create or modify a file",
+                documentation=ToolDocumentation(
+                    quick_start="Writes content to a file, creating it if it doesn't exist. "
+                    "CAUTION: This overwrites existing content completely.",
+                    detailed_instructions="""
+## File Writing Behavior
+
+- Creates the file if it doesn't exist
+- **Overwrites** existing content completely (no append mode)
+- Parent directories must exist
+- Uses UTF-8 encoding
+
+## Path Considerations
+
+- Use absolute paths when possible for clarity
+- Relative paths are relative to the agent's working directory
+- Be careful with paths containing spaces or special characters
+""",
+                    examples=[
+                        UsageExample(
+                            title="Create a simple file",
+                            code='{"path": "/tmp/output.txt", "content": "Hello, World!"}',
+                        ),
+                        UsageExample(
+                            title="Write JSON data",
+                            code='{"path": "data/config.json", "content": "{\\n  \\"key\\": \\"value\\"\\n}"}',
+                            description="Remember to escape quotes in JSON content",
+                        ),
+                    ],
+                    gotchas=[
+                        ToolGotcha(
+                            title="Overwrites existing files",
+                            description="This tool completely replaces file content. "
+                            "If you need to preserve existing content, read the file first.",
+                            severity="warning",
+                        ),
+                        ToolGotcha(
+                            title="No append mode",
+                            description="To append to a file, you must read existing content, "
+                            "concatenate, and write back.",
+                            severity="info",
+                        ),
+                    ],
+                ),
+                dma_guidance=ToolDMAGuidance(
+                    when_not_to_use="Don't overwrite files without explicit user permission. "
+                    "Don't write to system directories or configuration files.",
+                    ethical_considerations="Always confirm with user before overwriting important files. "
+                    "Be transparent about what changes you're making.",
+                    prerequisite_actions=["read_file to check current content if file might exist"],
+                ),
             ),
             "shell_command": ToolInfo(
                 name="shell_command",
@@ -353,6 +412,65 @@ class CLIToolService(BaseService, ToolService):
                 category="system",
                 cost=0.0,
                 when_to_use="Use when you need to run system commands",
+                documentation=ToolDocumentation(
+                    quick_start="Executes a shell command and returns stdout, stderr, and return code. "
+                    "Use with caution - commands run with the agent's permissions.",
+                    detailed_instructions="""
+## Command Execution
+
+- Commands run in a subprocess with stdout/stderr captured
+- Return code indicates success (0) or failure (non-zero)
+- No interactive commands - stdin is not available
+- Commands have the same permissions as the agent process
+
+## Safety Considerations
+
+1. **Never run commands from untrusted input** - potential command injection
+2. **Avoid destructive commands** without explicit user confirmation
+3. **Prefer specific tools** (read_file, write_file) over shell equivalents
+4. **Check return code** before assuming success
+""",
+                    examples=[
+                        UsageExample(
+                            title="Check system info",
+                            code='{"command": "uname -a"}',
+                            description="Safe, read-only command",
+                        ),
+                        UsageExample(
+                            title="List directory",
+                            code='{"command": "ls -la /tmp"}',
+                            description="Prefer list_files tool for this",
+                        ),
+                    ],
+                    gotchas=[
+                        ToolGotcha(
+                            title="No interactive commands",
+                            description="Commands that require user input (like vim, less, or sudo -s) "
+                            "will hang or fail. Only use non-interactive commands.",
+                            severity="error",
+                        ),
+                        ToolGotcha(
+                            title="Command injection risk",
+                            description="Never construct commands from user input without sanitization. "
+                            "Prefer using specific tools instead of shell commands.",
+                            severity="error",
+                        ),
+                        ToolGotcha(
+                            title="Prefer specific tools",
+                            description="Use read_file/write_file/list_files instead of cat/echo/ls. "
+                            "They're safer and provide better error handling.",
+                            severity="warning",
+                        ),
+                    ],
+                ),
+                dma_guidance=ToolDMAGuidance(
+                    when_not_to_use="Avoid for file operations (use read_file, write_file, list_files). "
+                    "Never for destructive operations without explicit user confirmation.",
+                    ethical_considerations="Shell commands can have irreversible effects. "
+                    "Be conservative and prefer reversible, auditable actions.",
+                    prerequisite_actions=["Consider if a safer, more specific tool exists"],
+                    requires_approval=True,
+                ),
             ),
             "search_text": ToolInfo(
                 name="search_text",

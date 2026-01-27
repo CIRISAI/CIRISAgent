@@ -895,6 +895,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         _log_service_started(17, "RuntimeControl")
 
+        # Auto-load eligible skill adapters (if enabled)
+        await self._initialize_skill_adapters()
+
         # Mark end of startup process
         import time
 
@@ -1257,6 +1260,70 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         _log_service_started(10, "IncidentManagement")
 
+    async def _initialize_skill_adapters(self) -> None:
+        """Auto-load eligible skill adapters based on config.
+
+        Discovers adapters from configured paths, checks eligibility
+        (binary presence, env vars, etc.), and registers eligible ones
+        with the tool bus.
+        """
+        # Check if auto-discovery is enabled
+        adapters_config = self.essential_config.adapters
+        if not adapters_config.auto_discovery:
+            logger.info("[SKILL-ADAPTERS] Auto-discovery disabled by config")
+            return
+
+        logger.info("[SKILL-ADAPTERS] Starting auto-discovery...")
+
+        from ciris_engine.logic.services.tool import AdapterDiscoveryService
+
+        # Build service dependencies for adapter instantiation
+        service_deps = {
+            "bus_manager": self.bus_manager,
+            "memory_service": self.memory_service,
+            "time_service": self.time_service,
+            "filter_service": self.adaptive_filter_service,
+            "secrets_service": self.secrets_service,
+            "agent_id": self._get_runtime_agent_id(),
+            "agent_occurrence_id": self.essential_config.agent_occurrence_id,
+        }
+
+        # Create discovery service and load eligible adapters
+        discovery = AdapterDiscoveryService()
+        eligible = await discovery.load_eligible_adapters(
+            disabled_adapters=adapters_config.disabled_adapters,
+            service_dependencies=service_deps,
+        )
+
+        # Register eligible adapters with tool bus
+        if not eligible:
+            logger.info("[SKILL-ADAPTERS] No eligible adapters found")
+            return
+
+        for adapter_name, service in eligible.items():
+            try:
+                # Start the service if it has a start method
+                if hasattr(service, "start"):
+                    start_result = service.start()
+                    if hasattr(start_result, "__await__"):
+                        await start_result
+
+                # Register with tool bus if it provides tools
+                if hasattr(service, "get_all_tool_info"):
+                    self.service_registry.register_service(
+                        service_type=ServiceType.TOOL,
+                        provider=service,
+                        priority=Priority.NORMAL,
+                        capabilities=["execute_tool", "get_all_tool_info"],
+                        metadata={"adapter": adapter_name, "auto_loaded": True},
+                    )
+                    logger.info(f"[SKILL-ADAPTERS] Registered tool adapter: {adapter_name}")
+
+            except Exception as e:
+                logger.warning(f"[SKILL-ADAPTERS] Failed to register {adapter_name}: {e}")
+
+        logger.info(f"[SKILL-ADAPTERS] Auto-loaded {len(eligible)} eligible adapters")
+
     def verify_core_services(self) -> bool:
         """Verify all core services are operational."""
         try:
@@ -1429,13 +1496,13 @@ This directory contains critical cryptographic keys for the CIRIS system.
         Args:
             service_name: Name of the adapter to load (e.g. "reddit_adapter")
         """
-        from ciris_engine.logic.runtime.adapter_loader import AdapterLoader
+        from ciris_engine.logic.services.tool import AdapterDiscoveryService
 
         logger.info(f"Loading adapter: {service_name}")
 
-        # Discover and find the service
-        adapter_loader = AdapterLoader()
-        discovered_services = adapter_loader.discover_services()
+        # Use discovery service to scan all adapter paths (built-in, user, workspace)
+        discovery_service = AdapterDiscoveryService()
+        discovered_services = discovery_service.discover_adapters()
 
         manifest = self._find_service_manifest(service_name, discovered_services)
         if not manifest:
@@ -1447,7 +1514,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         for service_def in manifest.services:
             try:
                 # Load the specific service class for this service definition
-                service_class = adapter_loader.load_service_class(manifest, service_def.class_path)
+                service_class = discovery_service.load_service_class(manifest, service_def.class_path)
                 if not service_class:
                     logger.error(f"Failed to load service class for {manifest.module.name}")
                     continue

@@ -2,6 +2,7 @@
 
 from .faculty import ConscienceFailureContext, EnhancedDMAInputs, FacultyContext, FacultyEvaluationSet, FacultyResult
 from .prompts import PromptCollection, PromptMetadata, PromptTemplate, PromptVariable
+from .tsaspdma import TSASPDMAInputs
 
 __all__ = [
     "FacultyContext",
@@ -13,4 +14,6 @@ __all__ = [
     "PromptCollection",
     "PromptVariable",
     "PromptMetadata",
+    # TSASPDMA
+    "TSASPDMAInputs",
 ]

@@ -42,7 +42,7 @@
         android:id="@+id/tagline"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Your AI companion"
+        android:text="Ethical AI Assistant"
         android:textSize="16sp"
         android:textColor="@color/white"
         android:alpha="0.8"

@@ -381,14 +381,24 @@ class TimeRangeCalculator:
 
     @staticmethod
     def calculate_range(hours: int) -> Tuple[datetime, datetime]:
-        """Calculate start and end time from hours."""
-        now = datetime.now()
+        """Calculate start and end time from hours.
+
+        Uses UTC timezone to match database timestamps which are stored in UTC.
+        """
+        from datetime import timezone
+
+        now = datetime.now(timezone.utc)
         start_time = now - timedelta(hours=hours)
         return start_time, now
 
     @staticmethod
     def calculate_range_from_days(days: int) -> Tuple[datetime, datetime]:
-        """Calculate start and end time from days."""
-        now = datetime.now()
+        """Calculate start and end time from days.
+
+        Uses UTC timezone to match database timestamps which are stored in UTC.
+        """
+        from datetime import timezone
+
+        now = datetime.now(timezone.utc)
         start_time = now - timedelta(days=days)
         return start_time, now

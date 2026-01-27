@@ -61,6 +61,10 @@ async def query_timeline_nodes(
     # Calculate time range
     start_time, end_time = TimeRangeCalculator.calculate_range(hours)
 
+    logger.info(
+        f"[TIMELINE-QUERY] Time range: start={start_time.isoformat()}, end={end_time.isoformat()}, hours={hours}"
+    )
+
     # Build query with all filters (including user filtering for OBSERVER users)
     query, params = QueryBuilder.build_timeline_query(
         start_time=start_time,

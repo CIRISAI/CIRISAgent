@@ -347,6 +347,80 @@ secrets_tool
 - **RuntimeControlBus** → Multiple control interfaces
 - **WiseBus** → Multiple wisdom sources *(FOCUS AREA)*
 
+## Mobile Development
+
+### Mobile QA Runner (ALWAYS USE THIS)
+
+When debugging mobile app issues, **always** use the QA runner to pull logs:
+
+```bash
+# Pull all logs from device (debug build) - THE COMMAND TO USE
+python3 -m tools.qa_runner.modules.mobile pull-logs
+
+# Specify output directory
+python3 -m tools.qa_runner.modules.mobile pull-logs -o ./my_logs
+
+# Specific device
+python3 -m tools.qa_runner.modules.mobile pull-logs -d emulator-5554
+```
+
+**Files collected (saved to `mobile_qa_reports/<timestamp>/`):**
+- `logs/latest.log` - Python runtime logs (CIRIS engine)
+- `logs/incidents_latest.log` - Incident/error logs (CHECK THIS FIRST!)
+- `logcat_python.txt` - Python stdout/stderr
+- `logcat_app.txt` - Kotlin/KMP logs (CIRISApp, ViewModels, etc.)
+- `logcat_combined.txt` - All relevant logs combined
+- `logcat_crashes.txt` - Android crashes
+- `databases/*.db` - SQLite databases (ciris_engine.db, secrets.db, audit.db)
+- `prefs/*.xml` - Shared preferences
+- `env_file.txt` - .env file (tokens redacted)
+- `app_info.txt` - Device and package info
+
+**Quick analysis:**
+```bash
+# Check for errors (ALWAYS DO THIS FIRST!)
+grep -i error mobile_qa_reports/*/logs/incidents_latest.log
+
+# Recent Python logs
+tail -100 mobile_qa_reports/*/logs/latest.log
+
+# Kotlin/KMP logs (CIRISApp, ViewModels)
+grep -i "CIRISApp\|ViewModel\|error" mobile_qa_reports/*/logcat_app.txt
+```
+
+### UI Automation Tests
+
+Automated UI testing for the CIRIS mobile app:
+
+```bash
+# Full flow test with test account
+python3 -m tools.qa_runner.modules.mobile test full_flow
+
+# Individual tests
+python3 -m tools.qa_runner.modules.mobile test app_launch
+python3 -m tools.qa_runner.modules.mobile test google_signin
+python3 -m tools.qa_runner.modules.mobile setup_wizard
+python3 -m tools.qa_runner.modules.mobile chat_interaction
+
+# Build and test
+python3 -m tools.qa_runner.modules.mobile --build full_flow
+```
+
+**Test account:** ciristest1@gmail.com (password in `~/.ciristest1_password`)
+
+### Build and Deploy
+
+```bash
+# Build debug APK
+cd mobile && ./gradlew :androidApp:assembleDebug
+
+# Install to device
+adb install -r mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+
+# Or use ADB from Android SDK
+~/Android/Sdk/platform-tools/adb install -r ...
+```
+
 ## Development Workflow
 
 ### Grace - Your Development Companion

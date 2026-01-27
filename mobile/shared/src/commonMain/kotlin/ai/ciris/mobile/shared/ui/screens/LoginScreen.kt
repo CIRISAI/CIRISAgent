@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.sp
 
 /**
@@ -37,6 +38,9 @@ private object LoginColors {
 fun LoginScreen(
     onGoogleSignIn: () -> Unit,
     onLocalLogin: () -> Unit,
+    onPrivacyPolicy: () -> Unit = {
+        println("[LoginScreen][INFO][onPrivacyPolicy] Privacy policy link clicked - opening https://ciris.ai/privacy")
+    },
     isLoading: Boolean = false,
     statusMessage: String? = null,
     modifier: Modifier = Modifier
@@ -74,7 +78,7 @@ fun LoginScreen(
 
                 // Tagline
                 Text(
-                    text = "Your AI companion",
+                    text = "Ethical AI Assistant",
                     color = LoginColors.White.copy(alpha = 0.8f),
                     fontSize = 16.sp,
                     modifier = Modifier.padding(top = 4.dp)
@@ -109,6 +113,7 @@ fun LoginScreen(
                         modifier = Modifier
                             .width(280.dp)
                             .height(56.dp)
+                            .testTag("btn_google_signin")
                     ) {
                         Text(
                             text = "Sign in with Google",
@@ -132,6 +137,7 @@ fun LoginScreen(
                         modifier = Modifier
                             .width(280.dp)
                             .height(56.dp)
+                            .testTag("btn_local_login")
                     ) {
                         Text(
                             text = "Local Login",
@@ -184,7 +190,8 @@ fun LoginScreen(
                         color = LoginColors.Accent,
                         fontSize = 12.sp,
                         modifier = Modifier.clickable {
-                            // TODO: Open privacy policy
+                            println("[LoginScreen][INFO][PrivacyPolicy] Privacy policy link clicked")
+                            onPrivacyPolicy()
                         }
                     )
                 }

@@ -57,10 +57,14 @@ android {
         }
     }
 
-    // Include CIRIS Python source (reuse from ../android/app/src/main/python/)
+    // Include CIRIS Python sources - synced from main repo at build time
+    // This ensures mobile always uses the latest ciris_engine and ciris_adapters
     sourceSets {
         main {
-            python.srcDirs = ["../../android/app/src/main/python"]
+            python.srcDirs = [
+                "src/main/python",              // Mobile-specific files (mobile_main.py, etc.)
+                "${buildDir}/python-src"        // Synced ciris_engine and ciris_adapters
+            ]
         }
     }
 
@@ -108,6 +112,33 @@ android {
         jniLibs {
             useLegacyPackaging = true
         }
+    }
+}
+
+// Sync Python sources from main repo before building
+// This ensures mobile always uses the latest ciris_engine and ciris_adapters
+task syncPythonSources(type: Sync) {
+    description = "Sync ciris_engine and ciris_adapters from main repo"
+
+    from("../../ciris_engine") {
+        into "ciris_engine"
+    }
+    from("../../ciris_adapters") {
+        into "ciris_adapters"
+    }
+    into "${buildDir}/python-src"
+
+    // Exclude unnecessary files to speed up build
+    exclude "**/__pycache__/**"
+    exclude "**/*.pyc"
+    exclude "**/*.pyo"
+    exclude "**/.pytest_cache/**"
+}
+
+// Make Python tasks depend on sync
+tasks.whenTaskAdded { task ->
+    if (task.name.contains("Python") && !task.name.contains("sync")) {
+        task.dependsOn syncPythonSources
     }
 }
 
@@ -233,4 +264,7 @@ dependencies {
 
     // Google Sign-In (same as original android/ project)
     implementation "com.google.android.gms:play-services-auth:20.7.0"
+
+    // Google Play Billing for in-app purchases
+    implementation "com.android.billingclient:billing-ktx:7.0.0"
 }

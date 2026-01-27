@@ -1307,14 +1307,18 @@ async def get_current_config(request: Request) -> SuccessResponse[SetupConfigRes
     if not _is_setup_allowed_without_auth():
         # Manually get auth context from request
         try:
-            from ..dependencies.auth import get_auth_context
+            from ..dependencies.auth import get_auth_context, get_auth_service
 
-            auth = await get_auth_context(request)
+            # Extract authorization header and auth service manually since we're not using Depends()
+            authorization = request.headers.get("Authorization")
+            auth_service = get_auth_service(request)
+            auth = await get_auth_context(request, authorization, auth_service)
             if auth is None:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
         except HTTPException:
             raise
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Authentication failed for /setup/config: {e}")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
 
     # Read current config from environment

@@ -58,6 +58,10 @@ class ApiPlatform(Service):
         # Initialize and load configuration
         self.config = self._load_config(kwargs)
 
+        # Stable adapter_id for certificate reuse across restarts
+        # Using host:port ensures uniqueness while remaining stable
+        self.adapter_id = f"api_{self.config.host}_{self.config.port}"
+
         # Create FastAPI app - services will be injected later in start()
         self.app: FastAPI = create_app(runtime, self.config)
         self._server: Server | None = None

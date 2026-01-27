@@ -618,21 +618,35 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 }
 
             # Mark original deferred task as COMPLETED with outcome
+            # Use TaskOutcome schema: status, summary, actions_taken, memories_created, errors
             if response.approved:
-                outcome = f"Resolved by WA {response.wa_id}: Approved"
+                outcome_data = {
+                    "status": "success",
+                    "summary": f"Deferral approved by WA {response.wa_id}: {response.reason}",
+                    "actions_taken": ["Deferred to WA", f"Approved by {response.wa_id}"],
+                    "memories_created": [],
+                    "errors": [],
+                }
             else:
-                outcome = f"Rejected by WA {response.wa_id}: {response.reason}"
+                outcome_data = {
+                    "status": "failure",
+                    "summary": f"Deferral rejected by WA {response.wa_id}: {response.reason}",
+                    "actions_taken": ["Deferred to WA", f"Rejected by {response.wa_id}"],
+                    "memories_created": [],
+                    "errors": [f"Rejection reason: {response.reason}"],
+                }
 
+            outcome_json = json.dumps(outcome_data)
             cursor.execute(
                 f"""
                 UPDATE tasks
                 SET status = 'completed',
                     context_json = {placeholder},
-                    outcome = {placeholder},
+                    outcome_json = {placeholder},
                     updated_at = {placeholder}
                 WHERE task_id = {placeholder}
             """,
-                (json.dumps(context), outcome, self._now().isoformat(), task_id),
+                (json.dumps(context), outcome_json, self._now().isoformat(), task_id),
             )
 
             if cursor.rowcount == 0:
@@ -663,6 +677,9 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 # Store original correlation_id in context for linkage/tracing
                 if "correlation_id" in context:
                     guidance_context_dict["original_correlation_id"] = context["correlation_id"]
+
+                # Update context with new correlation_id to avoid UNIQUE constraint violation
+                guidance_context_dict["correlation_id"] = correlation_id
 
                 # Build TaskContext from the guidance context dict
                 task_context = TaskContext(

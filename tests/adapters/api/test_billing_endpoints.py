@@ -149,7 +149,8 @@ class TestGetCredits:
         assert response.total_uses == 1
         assert response.plan_name == "free"
         assert response.purchase_required is False
-        assert "Contact administrator" in response.purchase_options["message"]
+        # purchase_options is None for SDK compatibility
+        assert response.purchase_options is None
 
     @pytest.mark.asyncio
     async def test_get_credits_billing_provider_jwt_mode(self, mock_auth_context):

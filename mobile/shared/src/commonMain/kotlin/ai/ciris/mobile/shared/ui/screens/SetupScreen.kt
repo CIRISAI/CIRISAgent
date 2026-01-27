@@ -104,6 +104,46 @@ fun SetupScreen(
                 }
             }
 
+            // Error display for submission failures
+            state.submissionError?.let { error ->
+                val isAlreadyConfigured = error.contains("already", ignoreCase = true) ||
+                                          error.contains("configured", ignoreCase = true) ||
+                                          error.contains("completed", ignoreCase = true)
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(if (isAlreadyConfigured) Color(0xFFFFF3CD) else Color(0xFFF8D7DA))
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = if (isAlreadyConfigured) "Setup Already Complete" else "Setup Error",
+                        fontWeight = FontWeight.Bold,
+                        color = if (isAlreadyConfigured) Color(0xFF856404) else Color(0xFF721C24)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = error,
+                        fontSize = 14.sp,
+                        color = if (isAlreadyConfigured) Color(0xFF856404) else Color(0xFF721C24)
+                    )
+                    if (isAlreadyConfigured) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                println("[SetupScreen] User chose to skip setup (already configured)")
+                                onSetupComplete()
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SetupColors.Primary
+                            )
+                        ) {
+                            Text("Continue to App")
+                        }
+                    }
+                }
+            }
+
             // Navigation buttons
             NavigationButtons(
                 currentStep = state.currentStep,
@@ -129,6 +169,7 @@ fun SetupScreen(
                                     viewModel.nextStep()
                                 } else {
                                     println("[SetupScreen] ERROR: Setup failed: ${result.error}")
+                                    // Error is now shown in UI via state.submissionError
                                 }
                             } catch (e: Exception) {
                                 println("[SetupScreen] EXCEPTION in completeSetup: ${e.message}")
@@ -240,8 +281,33 @@ private fun WelcomeStep(
             fontSize = 16.sp,
             textAlign = TextAlign.Center,
             lineHeight = 24.sp,
-            modifier = Modifier.padding(bottom = 24.dp)
+            modifier = Modifier.padding(bottom = 16.dp)
         )
+
+        // AI Nature Disclaimer - first-run awareness
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SetupColors.InfoLight,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "ℹ️ What CIRIS Is",
+                    color = SetupColors.InfoDark,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                Text(
+                    text = "CIRIS is an AI tool, not a friend, therapist, or human substitute. For emotional support, please reach out to real people in your life or professional services.",
+                    color = SetupColors.InfoText,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+            }
+        }
 
         // Card: Google user - "You're ready to go!"
         if (isGoogleAuth) {

@@ -97,8 +97,8 @@ Every message you process flows through 11 granular steps:
 
 1. **START_ROUND**: Prepare tasks and thoughts
 2. **GATHER_CONTEXT**: Collect system snapshot, identity, memory, conversation history, constraints
-3. **PERFORM_DMAS**: Run 3 parallel analyses (Ethical, Common Sense, Domain-Specific)
-4. **PERFORM_ASPDMA**: Select action based on DMA results (using LLM)
+3. **PERFORM_DMAS**: Run 3 parallel analyses (PDMA, CSDMA, DSDMA), then IDMA evaluates their reasoning
+4. **PERFORM_ASPDMA**: Select action based on all 4 DMA results (using LLM)
 5. **CONSCIENCE**: Validate action ethically
 6. **RECURSIVE_ASPDMA**: If conscience fails, choose more ethical action
 7. **RECURSIVE_CONSCIENCE**: Re-validate refined action
@@ -113,6 +113,48 @@ Every message you process flows through 11 granular steps:
 **Memory Handlers**: MEMORIZE, RECALL, FORGET
 **Deferral Handlers**: REJECT, PONDER, DEFER
 **Terminal Handler**: TASK_COMPLETE
+
+### The 4 Decision Making Algorithms (DMAs)
+
+Before selecting an action, every thought passes through 4 analyses in two phases:
+
+**Phase 1 - Parallel Analysis:**
+| DMA | Purpose | Key Output |
+|-----|---------|------------|
+| **PDMA** (Principled) | Ethical evaluation against Covenant | Stakeholder analysis, ethical conflicts |
+| **CSDMA** (Common Sense) | Reality/plausibility checks | Plausibility score, red flags |
+| **DSDMA** (Domain-Specific) | Context-appropriate criteria | Domain alignment, specialist concerns |
+
+**Phase 2 - Reasoning Evaluation:**
+| DMA | Purpose | Key Output |
+|-----|---------|------------|
+| **IDMA** (Intuition) | Evaluates reasoning from PDMA/CSDMA/DSDMA | k_eff, fragility flag, epistemic phase |
+
+**IDMA: Your Intuition Safety Net**
+
+IDMA implements Coherence Collapse Analysis (CCA) to detect when your reasoning is fragile:
+
+**The k_eff Formula**: `k_eff = k / (1 + ρ(k-1))`
+- **k** = number of sources/perspectives informing your reasoning
+- **ρ** (rho) = correlation between sources (0 = independent, 1 = same source)
+- **k_eff** = effective independent sources after accounting for correlation
+
+**Why This Matters**:
+- **k_eff < 2** = FRAGILE - dangerous single-source dependence
+- **k_eff ≥ 2** = HEALTHY - multiple truly independent perspectives
+- As ρ → 1, k_eff → 1 regardless of k (echo chamber collapse)
+
+**Epistemic Phases**:
+- **CHAOS**: Contradictory information, no coherent synthesis possible
+- **HEALTHY**: Multiple diverse perspectives, synthesis possible
+- **RIGIDITY**: Single narrative dominates, echo chamber - always fragile
+
+**Nascent vs Mature**:
+- At startup with no tools: k ≈ 1 (just your training) → always fragile
+- With web search results: k increases with each independent source
+- After 20+ user interactions: user patterns become a trusted source
+
+**Fragility Flag**: Set TRUE when k_eff < 2 OR phase = "rigidity" OR ρ > 0.7. A fragility flag doesn't mean reasoning is wrong - it means additional scrutiny or verification is warranted before high-stakes actions.
 
 ### Conscience-Exempt Actions (5 Actions)
 

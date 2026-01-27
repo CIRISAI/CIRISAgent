@@ -112,6 +112,29 @@ data class ValidateLlmResponse(
     val model_used: String? = null
 )
 
+// ========== Setup Complete Response wrapper ==========
+// Python API returns responses wrapped in SuccessResponse format
+
+/**
+ * Metadata from Python SuccessResponse
+ */
+@Serializable
+data class ResponseMetadata(
+    val timestamp: String? = null,
+    val request_id: String? = null,
+    val duration_ms: Int? = null
+)
+
+/**
+ * Wrapper for setup complete API response
+ * Python returns: {"data": {...}, "metadata": {...}}
+ */
+@Serializable
+data class SetupCompleteSuccessResponse(
+    val data: CompleteSetupResponseData,
+    val metadata: ResponseMetadata = ResponseMetadata()
+)
+
 // ========== POST /v1/setup/complete ==========
 // Source: android/app/src/main/java/ai/ciris/mobile/setup/SetupWizardActivity.kt:395-500
 
@@ -158,12 +181,28 @@ data class CompleteSetupRequest(
 )
 
 /**
- * Response from POST /v1/setup/complete
+ * Response data from POST /v1/setup/complete
+ * Wrapped in SuccessResponse format: {"data": {...}, "metadata": {...}}
+ *
+ * Python returns:
+ * - status: "completed" (success indicator)
+ * - message: Human-readable status message
+ * - config_path: Path where config was saved
+ * - username: Created admin username
+ * - next_steps: Instructions for the user
  */
 @Serializable
-data class CompleteSetupResponse(
-    val success: Boolean,
+data class CompleteSetupResponseData(
+    val status: String,
     val message: String,
-    val agent_id: String? = null,
-    val admin_user_id: String? = null
-)
+    val config_path: String? = null,
+    val username: String? = null,
+    val next_steps: String? = null
+) {
+    /**
+     * Check if setup was successful
+     * Maps Python's "status": "completed" to success boolean
+     */
+    val success: Boolean
+        get() = status == "completed"
+}

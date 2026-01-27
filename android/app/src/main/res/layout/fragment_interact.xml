@@ -109,7 +109,7 @@
             android:id="@+id/debugModeToggle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Debug ▶"
+            android:text="Technical ▶"
             android:textSize="11sp"
             android:textColor="#6B7280"
             android:paddingHorizontal="8dp"

@@ -33,6 +33,9 @@ from .interface import ConscienceInterface
 
 
 # Simple conscience config
+# ARCHITECTURAL INVARIANT: These thresholds are config values, not learned weights.
+# They cannot be modified by accumulated experience or user behavior patterns.
+# This prevents ethical normalization through repeated exposure.
 class ConscienceConfig(BaseModel):
     enabled: bool = Field(default=True)
     optimization_veto_ratio: float = Field(default=10.0, description="Entropy reduction must be < this ratio")

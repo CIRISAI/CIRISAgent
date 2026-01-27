@@ -109,8 +109,8 @@ class CIRISBillingProvider(CreditGateProtocol):
             except Exception as exc:
                 logger.warning("[BILLING_TOKEN] Token refresh callback failed: %s", exc)
 
-        # Check environment for updated token (set by ResourceMonitor after .env reload)
-        env_token = os.environ.get("GOOGLE_ID_TOKEN", "")
+        # Check environment for updated token (set by auth route or ResourceMonitor after .env reload)
+        env_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get("GOOGLE_ID_TOKEN", "")
         if env_token and env_token != self._google_id_token:
             old_len = len(self._google_id_token) if self._google_id_token else 0
             new_len = len(env_token)

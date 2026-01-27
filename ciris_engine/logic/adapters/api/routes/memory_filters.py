@@ -227,4 +227,13 @@ def should_apply_user_filtering(user_role: UserRole) -> bool:
         True if filtering should be applied (OBSERVER), False for ADMIN+
     """
     # ADMIN and higher roles bypass filtering
-    return not user_role.has_permission(UserRole.ADMIN)
+    has_admin_perm = user_role.has_permission(UserRole.ADMIN)
+    should_filter = not has_admin_perm
+
+    logger.debug(
+        f"[MEMORY-FILTER] should_apply_user_filtering: "
+        f"role={user_role}, level={user_role.level}, "
+        f"has_admin_perm={has_admin_perm}, should_filter={should_filter}"
+    )
+
+    return should_filter

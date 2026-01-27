@@ -68,8 +68,12 @@ async def get_user_filter_ids_for_observer(request: Request, auth: AuthContext) 
     from ciris_engine.schemas.api.auth import UserRole
 
     user_role = auth.role
+    apply_filtering = should_apply_user_filtering(user_role)
 
-    if not should_apply_user_filtering(user_role):
+    logger.info(f"[MEMORY-FILTER] User: {auth.user_id}, Role: {user_role}, Apply Filtering: {apply_filtering}")
+
+    if not apply_filtering:
+        logger.info(f"[MEMORY-FILTER] ADMIN+ user {auth.user_id} bypasses user filtering")
         return None
 
     auth_service = getattr(request.app.state, "authentication_service", None)
@@ -459,6 +463,11 @@ async def get_timeline(
         # Determine user filtering before queries (for OBSERVER users)
         user_filter_ids = await get_user_filter_ids_for_observer(request, auth)
 
+        logger.info(
+            f"[TIMELINE] Request: hours={hours}, scope={scope}, type={type}, "
+            f"user={auth.user_id}, role={auth.role}, filter_ids={user_filter_ids}"
+        )
+
         # Query timeline nodes (with SQL Layer 1 filtering if OBSERVER)
         nodes = await query_timeline_nodes(
             memory_service=memory_service,
@@ -469,9 +478,16 @@ async def get_timeline(
             user_filter_ids=user_filter_ids,  # SECURITY LAYER 1: SQL-level filtering
         )
 
+        logger.info(f"[TIMELINE] Query returned {len(nodes)} nodes before Layer 2 filter")
+
         # SECURITY LAYER 2: Double-check with result filtering for defense in depth
         if user_filter_ids:
+            pre_filter_count = len(nodes)
             nodes = filter_nodes_by_user_attribution(nodes, set(user_filter_ids))
+            logger.info(
+                f"[TIMELINE] Layer 2 filter: {pre_filter_count} -> {len(nodes)} nodes "
+                f"(allowed_ids: {len(user_filter_ids)})"
+            )
 
         # Calculate time buckets
         now = datetime.now(timezone.utc)

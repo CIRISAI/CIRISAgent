@@ -252,47 +252,59 @@ def _check_send_messages_permission(auth: AuthContext, request: Request) -> None
     raise HTTPException(status_code=403, detail=error_detail)
 
 
-async def _create_interaction_message(
-    auth: AuthContext, body: Union[InteractRequest, MessageRequest]
-) -> Tuple[str, str, IncomingMessage]:
-    """Create message ID, channel ID, and IncomingMessage for interaction."""
-    from ciris_engine.logic.adapters.api.api_document import get_api_document_helper
+def _process_request_images(body: InteractRequest | MessageRequest) -> List[Any]:
+    """Process images from InteractRequest if present."""
+    if not isinstance(body, InteractRequest) or not body.images:
+        return []
+
     from ciris_engine.logic.adapters.api.api_vision import get_api_vision_helper
 
+    vision_helper = get_api_vision_helper()
+    images = []
+    for img_payload in body.images:
+        image_content = vision_helper.process_image_payload(
+            img_payload.data,
+            img_payload.media_type,
+            img_payload.filename,
+        )
+        if image_content:
+            images.append(image_content)
+    if images:
+        logger.info(f"Processed {len(images)} images for multimodal interaction")
+    return images
+
+
+async def _process_request_documents(body: InteractRequest | MessageRequest) -> str:
+    """Process documents from InteractRequest if present, return additional content string."""
+    if not isinstance(body, InteractRequest) or not body.documents:
+        return ""
+
+    from ciris_engine.logic.adapters.api.api_document import get_api_document_helper
+
+    document_helper = get_api_document_helper()
+    if not document_helper.is_available():
+        logger.warning("Document processing requested but not available (missing libraries)")
+        return ""
+
+    doc_payloads = [
+        {"data": doc.data, "media_type": doc.media_type, "filename": doc.filename} for doc in body.documents
+    ]
+    document_text = await document_helper.process_document_list(doc_payloads)
+    if document_text:
+        logger.info(f"Processed {len(body.documents)} documents for interaction")
+        return "\n\n[Document Analysis]\n" + document_text
+    return ""
+
+
+async def _create_interaction_message(
+    auth: AuthContext, body: InteractRequest | MessageRequest
+) -> Tuple[str, str, IncomingMessage]:
+    """Create message ID, channel ID, and IncomingMessage for interaction."""
     message_id = str(uuid.uuid4())
     channel_id = f"api_{auth.user_id}"  # User-specific channel
 
-    # Process images if provided (InteractRequest only)
-    images = []
-    if isinstance(body, InteractRequest) and body.images:
-        vision_helper = get_api_vision_helper()
-        for img_payload in body.images:
-            image_content = vision_helper.process_image_payload(
-                img_payload.data,
-                img_payload.media_type,
-                img_payload.filename,
-            )
-            if image_content:
-                images.append(image_content)
-        if images:
-            logger.info(f"Processed {len(images)} images for multimodal interaction")
-
-    # Process documents if provided (InteractRequest only)
-    additional_content = ""
-    if isinstance(body, InteractRequest) and body.documents:
-        document_helper = get_api_document_helper()
-        if document_helper.is_available():
-            doc_payloads = [
-                {"data": doc.data, "media_type": doc.media_type, "filename": doc.filename} for doc in body.documents
-            ]
-            document_text = await document_helper.process_document_list(doc_payloads)
-            if document_text:
-                additional_content = "\n\n[Document Analysis]\n" + document_text
-                logger.info(f"Processed {len(body.documents)} documents for interaction")
-        else:
-            logger.warning("Document processing requested but not available (missing libraries)")
-
-    # Combine message content with any extracted document text
+    images = _process_request_images(body)
+    additional_content = await _process_request_documents(body)
     final_content = body.message + additional_content
 
     msg = IncomingMessage(
@@ -326,7 +338,7 @@ async def _handle_consent_for_user(auth: AuthContext, channel_id: str, request: 
 
         # Check if user has consent
         try:
-            consent_status = await consent_manager.get_consent(auth.user_id)
+            await consent_manager.get_consent(auth.user_id)
             return ""  # User already has consent
         except ConsentNotFoundError:
             # First interaction - create default TEMPORARY consent
@@ -336,7 +348,7 @@ async def _handle_consent_for_user(auth: AuthContext, channel_id: str, request: 
                 categories=[],
                 reason="Default TEMPORARY consent on first interaction",
             )
-            consent_status = await consent_manager.grant_consent(consent_req, channel_id=channel_id)
+            await consent_manager.grant_consent(consent_req, channel_id=channel_id)
 
             # Return notice to add to response
             return "\n\n📝 Privacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
@@ -382,12 +394,41 @@ async def _track_air_interaction(
         return None
 
 
+def _derive_provider_from_user(user: Any, auth: AuthContext) -> Tuple[str, str]:
+    """Derive provider and account_id from authenticated user."""
+    oauth_provider = getattr(user, "oauth_provider", None)
+    oauth_external_id = getattr(user, "oauth_external_id", None)
+    if oauth_provider and oauth_external_id:
+        return f"oauth:{oauth_provider}", oauth_external_id
+    return "wa", getattr(user, "wa_id", None) or auth.user_id
+
+
+def _derive_provider_from_auth(auth: AuthContext) -> Tuple[str, str]:
+    """Derive provider and account_id from auth context (no user)."""
+    if auth.api_key_id:
+        return "api-key", auth.api_key_id
+    if auth.role == UserRole.SERVICE_ACCOUNT:
+        return "service-account", auth.user_id
+    return "api", auth.user_id
+
+
+def _build_credit_metadata(auth: AuthContext, user: Any) -> Dict[str, str]:
+    """Build metadata dictionary for credit tracking."""
+    metadata: Dict[str, str] = {"role": auth.role.value}
+    if user and hasattr(user, "oauth_email") and user.oauth_email:
+        metadata["email"] = user.oauth_email
+    if user and hasattr(user, "marketing_opt_in"):
+        metadata["marketing_opt_in"] = str(user.marketing_opt_in).lower()
+    if auth.api_key_id:
+        metadata["api_key_id"] = auth.api_key_id
+    return metadata
+
+
 def _derive_credit_account(
     auth: AuthContext,
     request: Request,
 ) -> Tuple[CreditAccount, Dict[str, str]]:
     """Build credit account metadata for the current request."""
-
     auth_service = getattr(request.app.state, "auth_service", None)
     user = None
     if auth_service and hasattr(auth_service, "get_user"):
@@ -396,30 +437,13 @@ def _derive_credit_account(
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.debug("Unable to load user for credit gating: %s", exc)
 
-    provider = "api"
-    account_id = auth.user_id
-    authority_id = None
-    tenant_id = None
-
     if user:
         authority_id = getattr(user, "wa_id", None) or auth.user_id
         tenant_id = getattr(user, "wa_parent_id", None)
-
-        oauth_provider = getattr(user, "oauth_provider", None)
-        oauth_external_id = getattr(user, "oauth_external_id", None)
-        if oauth_provider and oauth_external_id:
-            provider = f"oauth:{oauth_provider}"
-            account_id = oauth_external_id
-        else:
-            provider = "wa"
-            account_id = getattr(user, "wa_id", None) or auth.user_id
+        provider, account_id = _derive_provider_from_user(user, auth)
     else:
-        if auth.api_key_id:
-            provider = "api-key"
-            account_id = auth.api_key_id
-        elif auth.role == UserRole.SERVICE_ACCOUNT:
-            provider = "service-account"
-            account_id = auth.user_id
+        authority_id, tenant_id = None, None
+        provider, account_id = _derive_provider_from_auth(auth)
 
     account = CreditAccount(
         provider=provider,
@@ -428,22 +452,7 @@ def _derive_credit_account(
         tenant_id=tenant_id,
     )
 
-    metadata: Dict[str, str] = {
-        "role": auth.role.value,
-    }
-
-    # Extract email address for billing backend user management
-    if user and hasattr(user, "oauth_email") and user.oauth_email:
-        metadata["email"] = user.oauth_email
-
-    # Extract marketing opt-in preference if available
-    if user and hasattr(user, "marketing_opt_in"):
-        metadata["marketing_opt_in"] = str(user.marketing_opt_in).lower()
-
-    if auth.api_key_id:
-        metadata["api_key_id"] = auth.api_key_id
-
-    return account, metadata
+    return account, _build_credit_metadata(auth, user)
 
 
 def _attach_credit_metadata(
@@ -1396,6 +1405,68 @@ async def get_status(request: Request, auth: AuthContext = Depends(require_obser
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _get_identity_data_from_runtime(runtime: Any) -> Dict[str, Any]:
+    """Build identity data dict from runtime agent_identity."""
+    identity = runtime.agent_identity
+    return {
+        "agent_id": identity.agent_id,
+        "name": getattr(identity, "name", identity.core_profile.description.split(".")[0]),
+        "purpose": getattr(identity, "purpose", identity.core_profile.description),
+        "created_at": identity.identity_metadata.created_at.isoformat(),
+        "lineage": {
+            "model": identity.identity_metadata.model,
+            "version": identity.identity_metadata.version,
+            "parent_id": getattr(identity.identity_metadata, "parent_id", None),
+            "creation_context": getattr(identity.identity_metadata, "creation_context", "default"),
+            "adaptations": getattr(identity.identity_metadata, "adaptations", []),
+        },
+        "variance_threshold": 0.2,
+    }
+
+
+def _categorize_service_type(service_type_value: str) -> str:
+    """Return the category for a service type value."""
+    if "graph" in service_type_value.lower() or service_type_value == "MEMORY":
+        return "graph"
+    if service_type_value in ["LLM", "SECRETS"]:
+        return "core"
+    if service_type_value in [
+        "TIME",
+        "SHUTDOWN",
+        "INITIALIZATION",
+        "VISIBILITY",
+        "AUTHENTICATION",
+        "RESOURCE_MONITOR",
+        "RUNTIME_CONTROL",
+    ]:
+        return "infrastructure"
+    if service_type_value == "WISE_AUTHORITY":
+        return "governance"
+    return "special"
+
+
+def _build_service_availability(service_registry: Any) -> ServiceAvailability:
+    """Build ServiceAvailability from service registry."""
+    from ciris_engine.schemas.runtime.enums import ServiceType
+
+    services = ServiceAvailability()
+    for service_type in ServiceType:
+        providers = service_registry.get_services_by_type(service_type)
+        count = len(providers)
+        category = _categorize_service_type(service_type.value)
+        if category == "graph":
+            services.graph += count
+        elif category == "core":
+            services.core += count
+        elif category == "infrastructure":
+            services.infrastructure += count
+        elif category == "governance":
+            services.governance += count
+        else:
+            services.special += count
+    return services
+
+
 @router.get("/identity", response_model=SuccessResponse[AgentIdentity])
 async def get_identity(
     request: Request, auth: AuthContext = Depends(require_observer)
@@ -1405,54 +1476,31 @@ async def get_identity(
 
     Get comprehensive agent identity including capabilities, tools, and permissions.
     """
-    # Get memory service to query identity
     memory_service = getattr(request.app.state, "memory_service", None)
     if not memory_service:
         raise HTTPException(status_code=503, detail=ERROR_MEMORY_SERVICE_NOT_AVAILABLE)
 
     try:
-        # Query identity from graph
         from ciris_engine.schemas.services.graph_core import GraphScope
         from ciris_engine.schemas.services.operations import MemoryQuery
 
         query = MemoryQuery(node_id="agent/identity", scope=GraphScope.IDENTITY, include_edges=False)
-
         nodes = await memory_service.recall(query)
 
-        # Get identity data
-        identity_data = {}
+        # Get identity data from graph or runtime fallback
+        identity_data: Dict[str, Any] = {}
         if nodes:
-            identity_node = nodes[0]
-            identity_data = identity_node.attributes
+            identity_data = nodes[0].attributes
         else:
-            # Fallback to runtime identity
             runtime = getattr(request.app.state, "runtime", None)
             if runtime and hasattr(runtime, "agent_identity"):
-                identity = runtime.agent_identity
-                identity_data = {
-                    "agent_id": identity.agent_id,
-                    "name": getattr(identity, "name", identity.core_profile.description.split(".")[0]),
-                    "purpose": getattr(identity, "purpose", identity.core_profile.description),
-                    "created_at": identity.identity_metadata.created_at.isoformat(),
-                    "lineage": {
-                        "model": identity.identity_metadata.model,
-                        "version": identity.identity_metadata.version,
-                        "parent_id": getattr(identity.identity_metadata, "parent_id", None),
-                        "creation_context": getattr(identity.identity_metadata, "creation_context", "default"),
-                        "adaptations": getattr(identity.identity_metadata, "adaptations", []),
-                    },
-                    "variance_threshold": 0.2,
-                }
+                identity_data = _get_identity_data_from_runtime(runtime)
 
-        # Get capabilities
-
-        # Get tool service for available tools
+        # Get available tools
         tool_service = getattr(request.app.state, "tool_service", None)
-        tools = []
-        if tool_service:
-            tools = await tool_service.list_tools()
+        tools = await tool_service.list_tools() if tool_service else []
 
-        # Get handlers (these are the core action handlers)
+        # Core action handlers
         handlers = [
             "observe",
             "speak",
@@ -1466,36 +1514,11 @@ async def get_identity(
             "task_complete",
         ]
 
-        # Get service availability
-        services = ServiceAvailability()
+        # Build service availability
         service_registry = getattr(request.app.state, "service_registry", None)
-        if service_registry:
-            from ciris_engine.schemas.runtime.enums import ServiceType
+        services = _build_service_availability(service_registry) if service_registry else ServiceAvailability()
 
-            for service_type in ServiceType:
-                providers = service_registry.get_services_by_type(service_type)
-                count = len(providers)
-                # Map to service categories
-                if "graph" in service_type.value.lower() or service_type.value == "MEMORY":
-                    services.graph += count
-                elif service_type.value in ["LLM", "SECRETS"]:
-                    services.core += count
-                elif service_type.value in [
-                    "TIME",
-                    "SHUTDOWN",
-                    "INITIALIZATION",
-                    "VISIBILITY",
-                    "AUTHENTICATION",
-                    "RESOURCE_MONITOR",
-                    "RUNTIME_CONTROL",
-                ]:
-                    services.infrastructure += count
-                elif service_type.value == "WISE_AUTHORITY":
-                    services.governance += count
-                else:
-                    services.special += count
-
-        # Get permissions (agent's core capabilities)
+        # Agent's core capabilities
         permissions = ["communicate", "use_tools", "access_memory", "observe_environment", "learn", "adapt"]
 
         # Build response
@@ -1818,7 +1841,7 @@ async def websocket_stream(
     # Register websocket client
     _register_websocket_client(websocket, client_id)
 
-    subscribed_channels = set(["messages"])  # Default subscription
+    subscribed_channels = {"messages"}  # Default subscription
 
     try:
         while True:

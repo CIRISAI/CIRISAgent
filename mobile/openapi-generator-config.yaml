@@ -1,0 +1,13 @@
+generatorName: kotlin
+outputDir: ./generated-api
+inputSpec: ./openapi.json
+packageName: ai.ciris.api
+apiPackage: ai.ciris.api.apis
+modelPackage: ai.ciris.api.models
+library: multiplatform
+additionalProperties:
+  serializationLibrary: kotlinx_serialization
+  useCoroutines: true
+  dateLibrary: kotlinx-datetime
+  enumPropertyNaming: UPPERCASE
+  sourceFolder: src/commonMain/kotlin

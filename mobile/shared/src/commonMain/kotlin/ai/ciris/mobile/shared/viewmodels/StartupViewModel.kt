@@ -137,7 +137,7 @@ class StartupViewModel(
             if (healthResult.isSuccess && healthResult.getOrNull() == true) {
                 healthyCount++
 
-                // Get service count
+                // Get service count from logcat parsing (low overhead)
                 val statusResult = pythonRuntime.getServicesStatus()
                 if (statusResult.isSuccess) {
                     val (online, total) = statusResult.getOrNull() ?: (0 to 22)

@@ -10,12 +10,14 @@ package ai.ciris.mobile.shared.platform
  * - PyRun_SimpleString()
  * - Py_Finalize()
  */
-actual class PythonRuntime {
+actual class PythonRuntime : PythonRuntimeProtocol {
 
     private var initialized = false
     private var serverStarted = false
 
-    actual suspend fun initialize(pythonHome: String): Result<Unit> {
+    actual override val serverUrl: String = "http://localhost:8080"
+
+    actual override suspend fun initialize(pythonHome: String): Result<Unit> {
         // TODO: Implement Python C API initialization
         // Py_SetPythonHome(pythonHome.cstr)
         // Py_Initialize()
@@ -24,7 +26,7 @@ actual class PythonRuntime {
         return Result.failure(Exception("iOS Python runtime not yet implemented"))
     }
 
-    actual suspend fun startServer(): Result<String> {
+    actual override suspend fun startServer(): Result<String> {
         // TODO: Call mobile_main.py via Python C API
         // PyRun_SimpleFile("mobile_main.py")
         // Or import and call function:
@@ -34,29 +36,40 @@ actual class PythonRuntime {
         return Result.failure(Exception("iOS Python runtime not yet implemented"))
     }
 
-    actual suspend fun checkHealth(): Result<Boolean> {
+    actual override suspend fun startPythonServer(onStatus: ((String) -> Unit)?): Result<String> {
+        // TODO: Implement full lifecycle management for iOS
+        onStatus?.invoke("iOS Python runtime not yet implemented")
+        return Result.failure(Exception("iOS Python runtime not yet implemented"))
+    }
+
+    actual override fun injectPythonConfig(config: Map<String, String>) {
+        // TODO: Set environment variables for Python on iOS
+        // For now, no-op
+    }
+
+    actual override suspend fun checkHealth(): Result<Boolean> {
         // TODO: HTTP request to localhost:8080/v1/system/health
         // Use NSURLSession or native HTTP client
 
         return Result.success(false)
     }
 
-    actual suspend fun getServicesStatus(): Result<Pair<Int, Int>> {
+    actual override suspend fun getServicesStatus(): Result<Pair<Int, Int>> {
         // TODO: HTTP request to localhost:8080/v1/telemetry/unified
         // Parse JSON response
 
         return Result.success(0 to 22)
     }
 
-    actual fun shutdown() {
+    actual override fun shutdown() {
         // TODO: Call Py_Finalize()
         serverStarted = false
         initialized = false
     }
 
-    actual fun isInitialized(): Boolean = initialized
+    actual override fun isInitialized(): Boolean = initialized
 
-    actual fun isServerStarted(): Boolean = serverStarted
+    actual override fun isServerStarted(): Boolean = serverStarted
 }
 
 /**

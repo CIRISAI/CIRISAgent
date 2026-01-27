@@ -618,13 +618,25 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 }
 
             # Mark original deferred task as COMPLETED with outcome
+            # Use TaskOutcome schema: status, summary, actions_taken, memories_created, errors
             if response.approved:
-                outcome = f"Resolved by WA {response.wa_id}: Approved"
+                outcome_data = {
+                    "status": "success",
+                    "summary": f"Deferral approved by WA {response.wa_id}: {response.reason}",
+                    "actions_taken": [f"Deferred to WA", f"Approved by {response.wa_id}"],
+                    "memories_created": [],
+                    "errors": [],
+                }
             else:
-                outcome = f"Rejected by WA {response.wa_id}: {response.reason}"
+                outcome_data = {
+                    "status": "failure",
+                    "summary": f"Deferral rejected by WA {response.wa_id}: {response.reason}",
+                    "actions_taken": [f"Deferred to WA", f"Rejected by {response.wa_id}"],
+                    "memories_created": [],
+                    "errors": [f"Rejection reason: {response.reason}"],
+                }
 
-            # outcome_json expects JSON, wrap the outcome string
-            outcome_json = json.dumps({"status": "resolved", "message": outcome})
+            outcome_json = json.dumps(outcome_data)
             cursor.execute(
                 f"""
                 UPDATE tasks

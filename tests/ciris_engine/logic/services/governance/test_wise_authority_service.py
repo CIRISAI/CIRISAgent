@@ -367,12 +367,16 @@ async def test_resolve_deferral(wise_authority_service, time_service, temp_db):
     assert row is not None
     status, outcome_json = row
     assert status == "completed"
-    # outcome_json is JSON with {"status": "resolved", "message": "..."}
+    # outcome_json follows TaskOutcome schema: status, summary, actions_taken, memories_created, errors
     import json
 
     outcome_data = json.loads(outcome_json)
-    assert "Approved" in outcome_data["message"]
-    assert "wa-2025-06-24-AUTH01" in outcome_data["message"]
+    assert outcome_data["status"] == "success"
+    assert "approved" in outcome_data["summary"].lower()
+    assert "wa-2025-06-24-AUTH01" in outcome_data["summary"]
+    assert "actions_taken" in outcome_data
+    assert "memories_created" in outcome_data
+    assert "errors" in outcome_data
 
     # Check new guidance task was created
     cursor.execute(

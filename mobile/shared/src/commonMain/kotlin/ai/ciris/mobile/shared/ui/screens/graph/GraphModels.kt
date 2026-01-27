@@ -122,9 +122,11 @@ data class GraphDisplayState(
 
 /**
  * Filter options for graph data.
+ * Note: scope is non-nullable because cross-scope edges are not supported,
+ * so we always display one scope at a time.
  */
 data class GraphFilter(
-    val scope: GraphScope? = null,
+    val scope: GraphScope = GraphScope.LOCAL,
     val nodeTypes: Set<NodeType> = emptySet(),
     val hours: Int = 24,
     val searchQuery: String = ""

@@ -76,9 +76,10 @@ class GraphMemoryViewModel(
             _displayState.value = _displayState.value.copy(isLoading = true, error = null)
 
             try {
+                // Always pass a scope - cross-scope edges are not supported
                 val graphData = apiClient.getGraphData(
                     hours = _filter.value.hours,
-                    scope = _filter.value.scope?.value,
+                    scope = _filter.value.scope.value,
                     nodeType = null,
                     limit = 100
                 )

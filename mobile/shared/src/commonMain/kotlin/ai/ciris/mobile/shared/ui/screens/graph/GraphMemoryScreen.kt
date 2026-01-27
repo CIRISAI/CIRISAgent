@@ -365,7 +365,7 @@ private fun GraphFiltersPanel(
             }
         }
 
-        // Scope filter
+        // Scope filter (one scope at a time - cross-scope edges not supported)
         Text(
             text = "Scope",
             style = MaterialTheme.typography.labelMedium,
@@ -375,11 +375,6 @@ private fun GraphFiltersPanel(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            FilterChip(
-                selected = filter.scope == null,
-                onClick = { onFilterChange(filter.copy(scope = null)) },
-                label = { Text("All") }
-            )
             GraphScope.entries.forEach { scope ->
                 FilterChip(
                     selected = filter.scope == scope,

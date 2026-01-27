@@ -149,6 +149,90 @@ actual class EnvFileUpdater {
             Log.e(TAG, "Failed to write config reload signal: ${e.message}")
         }
     }
+
+    actual suspend fun readLlmConfig(): EnvLlmConfig? = withContext(Dispatchers.IO) {
+        val envFile = cirisHome?.let { File(it, ENV_FILE_NAME) } ?: run {
+            Log.w(TAG, "Cannot read .env - CIRIS_HOME not found")
+            return@withContext null
+        }
+
+        if (!envFile.exists()) {
+            Log.w(TAG, ".env file not found at: ${envFile.absolutePath}")
+            return@withContext null
+        }
+
+        try {
+            val content = envFile.readText()
+            Log.i(TAG, "Read .env file for config (${content.length} bytes)")
+
+            // Parse key values
+            val values = mutableMapOf<String, String>()
+            content.lines().forEach { line ->
+                val trimmed = line.trim()
+                if (trimmed.isNotEmpty() && !trimmed.startsWith("#") && trimmed.contains("=")) {
+                    val (key, value) = trimmed.split("=", limit = 2)
+                    // Remove quotes from value
+                    values[key.trim()] = value.trim().removeSurrounding("\"").removeSurrounding("'")
+                }
+            }
+
+            val baseUrl = values["OPENAI_API_BASE"]
+            val model = values["OPENAI_MODEL"]
+            val apiKey = values["OPENAI_API_KEY"]
+
+            // Detect provider from base URL
+            val provider = when {
+                baseUrl == null -> "openai"
+                baseUrl.contains("localhost") || baseUrl.contains("127.0.0.1") -> "local"
+                CIRISConfig.isCirisProxyUrl(baseUrl) -> "other"  // CIRIS proxy uses "other"
+                baseUrl.contains("anthropic") -> "anthropic"
+                else -> "other"
+            }
+
+            // Check if CIRIS proxy
+            val isCirisProxy = baseUrl != null && CIRISConfig.isCirisProxyUrl(baseUrl)
+
+            Log.i(TAG, "Parsed LLM config: provider=$provider, baseUrl=$baseUrl, model=$model, " +
+                    "apiKeySet=${!apiKey.isNullOrEmpty()}, isCirisProxy=$isCirisProxy")
+
+            EnvLlmConfig(
+                provider = provider,
+                baseUrl = baseUrl,
+                model = model,
+                apiKeySet = !apiKey.isNullOrEmpty(),
+                isCirisProxy = isCirisProxy
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read .env file: ${e.message}", e)
+            null
+        }
+    }
+
+    actual suspend fun deleteEnvFile(): Result<Boolean> = withContext(Dispatchers.IO) {
+        val envFile = cirisHome?.let { File(it, ENV_FILE_NAME) } ?: run {
+            Log.w(TAG, "Cannot delete .env - CIRIS_HOME not found")
+            return@withContext Result.failure(Exception("CIRIS_HOME not found"))
+        }
+
+        if (!envFile.exists()) {
+            Log.i(TAG, ".env file doesn't exist, nothing to delete")
+            return@withContext Result.success(true)
+        }
+
+        try {
+            val deleted = envFile.delete()
+            if (deleted) {
+                Log.i(TAG, ".env file deleted successfully at: ${envFile.absolutePath}")
+                Result.success(true)
+            } else {
+                Log.e(TAG, "Failed to delete .env file")
+                Result.failure(Exception("Failed to delete .env file"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception deleting .env file: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
 }
 
 /**

@@ -11,6 +11,7 @@ import ai.ciris.mobile.shared.PurchaseResultCallback
 import ai.ciris.mobile.shared.PurchaseResultType
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.config.CIRISConfig
+import ai.ciris.mobile.shared.platform.AppRestarter
 import ai.ciris.mobile.shared.platform.PythonRuntime
 import android.content.Intent
 import android.os.Bundle
@@ -69,6 +70,9 @@ class MainActivity : ComponentActivity() {
 
         // Enable edge-to-edge display (fixes Samsung nav bar cutoff)
         enableEdgeToEdge()
+
+        // Initialize AppRestarter for app restart functionality (used by Settings reset)
+        AppRestarter.init(this, MainActivity::class.java)
 
         // Initialize Python runtime (Chaquopy)
         if (!Python.isStarted()) {

@@ -19,6 +19,18 @@ actual class EnvFileUpdater {
         // iOS doesn't have the same Python runtime setup
         println("[EnvFileUpdater.ios] triggerConfigReload not implemented for iOS")
     }
+
+    actual suspend fun readLlmConfig(): EnvLlmConfig? {
+        // iOS doesn't use .env files
+        println("[EnvFileUpdater.ios] readLlmConfig not implemented for iOS")
+        return null
+    }
+
+    actual suspend fun deleteEnvFile(): Result<Boolean> {
+        // iOS doesn't use .env files
+        println("[EnvFileUpdater.ios] deleteEnvFile not implemented for iOS")
+        return Result.success(false)
+    }
 }
 
 /**

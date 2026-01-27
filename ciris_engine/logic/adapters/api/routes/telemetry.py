@@ -281,8 +281,12 @@ def _update_uptime(overview: SystemOverview, time_service: Any) -> None:
 def _update_cognitive_state(overview: SystemOverview, request: Request) -> None:
     """Update overview with cognitive state from runtime."""
     runtime = getattr(request.app.state, "runtime", None)
-    if runtime and hasattr(runtime, "state_manager"):
-        overview.cognitive_state = runtime.state_manager.current_state
+    if runtime and hasattr(runtime, "agent_processor"):
+        agent_processor = runtime.agent_processor
+        if agent_processor and hasattr(agent_processor, "state_manager"):
+            state = agent_processor.state_manager.get_state()
+            # Convert AgentState enum to string (e.g., AgentState.WORK -> "WORK")
+            overview.cognitive_state = state.value if hasattr(state, "value") else str(state)
 
 
 def _update_resource_usage(overview: SystemOverview, resource_monitor: Any) -> None:

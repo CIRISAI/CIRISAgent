@@ -15,12 +15,17 @@ import ai.ciris.api.models.StateTransitionRequest as SdkStateTransitionRequest
 import ai.ciris.api.models.ConfigUpdate as SdkConfigUpdate
 import ai.ciris.api.models.ConsentRequest as SdkConsentRequest
 import io.ktor.client.*
+import io.ktor.client.call.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
+import io.ktor.client.request.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.datetime.Instant
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
@@ -591,6 +596,87 @@ class CIRISApiClient(
         }
     }
 
+    /**
+     * Get current LLM configuration from the backend.
+     * Used by Settings screen to show actual configuration.
+     */
+    override suspend fun getLlmConfig(): LlmConfigData {
+        val method = "getLlmConfig"
+        logInfo(method, "Fetching current LLM configuration")
+        logDebug(method, "Auth header: ${authHeader()}")
+
+        return try {
+            // Use manual HTTP request since generated SDK doesn't include auth for this endpoint
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+
+            val response = client.get("$baseUrl/v1/setup/config") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (response.status.value !in 200..299) {
+                logError(method, "API returned error status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status.value}")
+            }
+
+            val body = response.body<SetupConfigApiResponse>()
+            val data = body.data ?: throw RuntimeException("API returned null data")
+
+            // Detect if using CIRIS proxy by checking base URL
+            val llmBaseUrl = data.llmBaseUrl ?: ""
+            val isCirisProxy = llmBaseUrl.contains("ciris", ignoreCase = true) ||
+                    llmBaseUrl.contains("llm.ciris", ignoreCase = true) ||
+                    llmBaseUrl.contains("proxy", ignoreCase = true)
+
+            logInfo(method, "LLM Config: provider=${data.llmProvider}, model=${data.llmModel}, " +
+                    "baseUrl=$llmBaseUrl, isCirisProxy=$isCirisProxy, apiKeySet=${data.llmApiKeySet}")
+
+            client.close()
+
+            LlmConfigData(
+                provider = data.llmProvider ?: "unknown",
+                baseUrl = data.llmBaseUrl,
+                model = data.llmModel ?: "default",
+                apiKeySet = data.llmApiKeySet ?: false,
+                isCirisProxy = isCirisProxy,
+                backupBaseUrl = data.backupLlmBaseUrl,
+                backupModel = data.backupLlmModel,
+                backupApiKeySet = data.backupLlmApiKeySet ?: false
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Response wrapper for /v1/setup/config endpoint
+     */
+    @Serializable
+    private data class SetupConfigApiResponse(
+        val status: String? = null,
+        val data: SetupConfigData? = null
+    )
+
+    @Serializable
+    private data class SetupConfigData(
+        @SerialName("llm_provider") val llmProvider: String? = null,
+        @SerialName("llm_base_url") val llmBaseUrl: String? = null,
+        @SerialName("llm_model") val llmModel: String? = null,
+        @SerialName("llm_api_key_set") val llmApiKeySet: Boolean? = null,
+        @SerialName("backup_llm_base_url") val backupLlmBaseUrl: String? = null,
+        @SerialName("backup_llm_model") val backupLlmModel: String? = null,
+        @SerialName("backup_llm_api_key_set") val backupLlmApiKeySet: Boolean? = null
+    )
+
     // ===== Billing API =====
 
     override suspend fun getCredits(): CreditStatusData {
@@ -769,6 +855,203 @@ class CIRISApiClient(
             )
         } catch (e: Exception) {
             logException(method, e, "adapterId=$adapterId")
+            throw e
+        }
+    }
+
+    /**
+     * Get available module/adapter types for adding new adapters.
+     */
+    suspend fun getModuleTypes(): ModuleTypesData {
+        val method = "getModuleTypes"
+        logInfo(method, "Fetching available module types")
+
+        return try {
+            val response = systemApi.listModuleTypesV1SystemAdaptersTypesGet(authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Module types: ${data.totalCore} core, ${data.totalAdapters} adapters")
+
+            ModuleTypesData(
+                coreModules = data.coreModules.map { module ->
+                    ModuleTypeData(
+                        moduleId = module.moduleId,
+                        name = module.name,
+                        version = module.version,
+                        description = module.description,
+                        moduleSource = module.moduleSource,
+                        serviceTypes = module.serviceTypes ?: emptyList(),
+                        capabilities = module.capabilities ?: emptyList(),
+                        platformAvailable = module.platformAvailable ?: true
+                    )
+                },
+                adapters = data.adapters.map { module ->
+                    ModuleTypeData(
+                        moduleId = module.moduleId,
+                        name = module.name,
+                        version = module.version,
+                        description = module.description,
+                        moduleSource = module.moduleSource,
+                        serviceTypes = module.serviceTypes ?: emptyList(),
+                        capabilities = module.capabilities ?: emptyList(),
+                        platformAvailable = module.platformAvailable ?: true
+                    )
+                },
+                totalCore = data.totalCore,
+                totalAdapters = data.totalAdapters
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Start an adapter configuration wizard session.
+     */
+    suspend fun startAdapterConfiguration(adapterType: String): ConfigSessionData {
+        val method = "startAdapterConfiguration"
+        logInfo(method, "Starting configuration for adapter type: $adapterType")
+
+        return try {
+            val response = systemApi.startAdapterConfigurationV1SystemAdaptersAdapterTypeConfigureStartPost(
+                adapterType = adapterType,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Config session started: sessionId=${data.sessionId}, " +
+                    "step=${data.currentStepIndex}/${data.totalSteps}")
+
+            ConfigSessionData(
+                sessionId = data.sessionId,
+                adapterType = data.adapterType,
+                status = data.status,
+                currentStepIndex = data.currentStepIndex,
+                totalSteps = data.totalSteps,
+                currentStep = data.currentStep?.let { step ->
+                    ConfigStepData(
+                        stepId = step.stepId,
+                        stepType = step.stepType,
+                        title = step.title,
+                        description = step.description,
+                        required = step.required,
+                        fields = step.fields?.map { field ->
+                            ConfigFieldData(
+                                name = field.name,
+                                label = field.label,
+                                fieldType = field.fieldType,
+                                required = field.required,
+                                defaultValue = field.defaultValue,
+                                helpText = field.helpText
+                            )
+                        } ?: emptyList()
+                    )
+                }
+            )
+        } catch (e: Exception) {
+            logException(method, e, "adapterType=$adapterType")
+            throw e
+        }
+    }
+
+    /**
+     * Execute a step in the adapter configuration wizard.
+     */
+    suspend fun executeConfigurationStep(
+        sessionId: String,
+        stepData: Map<String, String>
+    ): ConfigStepResultData {
+        val method = "executeConfigurationStep"
+        logInfo(method, "Executing config step for session: $sessionId")
+
+        return try {
+            val request = ai.ciris.api.models.StepExecutionRequest(
+                stepData = stepData.mapValues { (_, v) ->
+                    kotlinx.serialization.json.JsonPrimitive(v)
+                }
+            )
+            val response = systemApi.executeConfigurationStepV1SystemAdaptersConfigureSessionIdStepPost(
+                sessionId = sessionId,
+                stepExecutionRequest = request,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            // Determine if complete: no next step and not awaiting callback
+            val isComplete = data.nextStepIndex == null && data.awaitingCallback != true
+            logInfo(method, "Step result: success=${data.success}, nextStep=${data.nextStepIndex}, isComplete=$isComplete")
+
+            ConfigStepResultData(
+                success = data.success,
+                message = data.error, // error message is the only message from this endpoint
+                nextStepIndex = data.nextStepIndex,
+                isComplete = isComplete,
+                nextStep = null // Next step needs to be fetched from session status
+            )
+        } catch (e: Exception) {
+            logException(method, e, "sessionId=$sessionId")
+            throw e
+        }
+    }
+
+    /**
+     * Complete an adapter configuration wizard and load the adapter.
+     */
+    suspend fun completeAdapterConfiguration(
+        sessionId: String,
+        persist: Boolean = true
+    ): ConfigCompleteData {
+        val method = "completeAdapterConfiguration"
+        logInfo(method, "Completing configuration for session: $sessionId, persist=$persist")
+
+        return try {
+            val request = ai.ciris.api.models.ConfigurationCompleteRequest(persist = persist)
+            val response = systemApi.completeConfigurationV1SystemAdaptersConfigureSessionIdCompletePost(
+                sessionId = sessionId,
+                configurationCompleteRequest = request,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Config complete: success=${data.success}, adapterType=${data.adapterType}")
+
+            ConfigCompleteData(
+                success = data.success,
+                adapterId = data.adapterType, // API returns adapterType, we use it as adapterId
+                message = data.message,
+                persisted = data.persisted ?: false
+            )
+        } catch (e: Exception) {
+            logException(method, e, "sessionId=$sessionId")
             throw e
         }
     }
@@ -1294,13 +1577,13 @@ class CIRISApiClient(
             val cpuPercent = data.cpuPercent ?: 0.0
             val memoryMb = data.memoryMb ?: 0.0
 
-            logInfo(method, "Telemetry: state=${data.cognitiveState}, " +
+            logInfo(method, "Telemetry: uptime=${data.uptimeSeconds}s, state=${data.cognitiveState}, " +
                     "services=$healthyServices/$healthyServices, " +
                     "cpu=$cpuPercent%, memory=${memoryMb}MB")
 
             UnifiedTelemetryData(
                 health = if (degradedServices == 0) "healthy" else "degraded",
-                uptime = "${data.uptimeSeconds / 3600}h ${(data.uptimeSeconds % 3600) / 60}m",
+                uptime = "${(data.uptimeSeconds / 3600).toInt()}h ${((data.uptimeSeconds % 3600) / 60).toInt()}m",
                 cognitiveState = data.cognitiveState,
                 memoryMb = memoryMb.toInt(),
                 memoryPercent = 0, // Not available from overview
@@ -1431,11 +1714,18 @@ class CIRISApiClient(
                             timestamp = entry.timestamp ?: "",
                             context = entry.context.let { ctx ->
                                 AuditContextApiData(
-                                    outcome = ctx.result,
-                                    details = ctx.description,
                                     entityId = ctx.entityId,
-                                    service = ctx.entityType,
-                                    ipAddress = ctx.ipAddress
+                                    entityType = ctx.entityType,
+                                    operation = ctx.operation,
+                                    description = ctx.description,
+                                    requestId = ctx.requestId,
+                                    correlationId = ctx.correlationId,
+                                    userId = ctx.userId,
+                                    ipAddress = ctx.ipAddress,
+                                    userAgent = ctx.userAgent,
+                                    result = ctx.result,
+                                    error = ctx.error,
+                                    metadata = null // Skip metadata to avoid parsing issues
                                 )
                             },
                             signature = entry.signature,
@@ -1582,15 +1872,15 @@ class CIRISApiClient(
                         id = node.id,
                         type = node.type.value,
                         scope = node.scope.value,
-                        contentPreview = node.attributes.content.take(200),
+                        contentPreview = (node.attributes.content ?: "").take(200),
                         attributesJson = buildString {
-                            appendLine("content: ${node.attributes.content.take(500)}")
+                            appendLine("content: ${(node.attributes.content ?: "").take(500)}")
                             appendLine("description: ${node.attributes.description}")
                             appendLine("source: ${node.attributes.source}")
                             node.attributes.confidence?.let { c -> appendLine("confidence: $c") }
                         },
-                        createdAt = node.updatedAt?.toString(),
-                        updatedAt = node.updatedAt?.toString()
+                        createdAt = node.updatedAt,
+                        updatedAt = node.updatedAt
                     )
                 }
             } catch (e: Exception) {
@@ -1635,15 +1925,15 @@ class CIRISApiClient(
                         id = node.id,
                         type = node.type.value,
                         scope = node.scope.value,
-                        contentPreview = node.attributes.content.take(200),
+                        contentPreview = (node.attributes.content ?: "").take(200),
                         attributesJson = buildString {
-                            appendLine("content: ${node.attributes.content.take(500)}")
+                            appendLine("content: ${(node.attributes.content ?: "").take(500)}")
                             appendLine("description: ${node.attributes.description}")
                             appendLine("source: ${node.attributes.source}")
                             node.attributes.confidence?.let { c -> appendLine("confidence: $c") }
                         },
-                        createdAt = node.updatedAt?.toString(),
-                        updatedAt = node.updatedAt?.toString()
+                        createdAt = node.updatedAt,
+                        updatedAt = node.updatedAt
                     )
                 }
             } catch (e: Exception) {
@@ -1676,16 +1966,116 @@ class CIRISApiClient(
                     id = node.id,
                     type = node.type.value,
                     scope = node.scope.value,
-                    contentPreview = node.attributes.content.take(200),
+                    contentPreview = (node.attributes.content ?: "").take(200),
                     attributesJson = buildString {
-                        appendLine("content: ${node.attributes.content}")
+                        appendLine("content: ${node.attributes.content ?: ""}")
                         appendLine("description: ${node.attributes.description}")
                         appendLine("source: ${node.attributes.source}")
                         node.attributes.confidence?.let { c -> appendLine("confidence: $c") }
                         node.attributes.category.let { cat -> appendLine("category: $cat") }
                     },
-                    createdAt = node.updatedAt?.toString(),
-                    updatedAt = node.updatedAt?.toString()
+                    createdAt = node.updatedAt,
+                    updatedAt = node.updatedAt
+                )
+            } catch (e: Exception) {
+                logException(method, e)
+                throw e
+            }
+        }
+
+        /**
+         * Get edges connected to a specific memory node.
+         * Returns both incoming and outgoing edges.
+         */
+        suspend fun getNodeEdges(nodeId: String): List<ai.ciris.api.models.GraphEdge> {
+            val method = "getNodeEdges"
+            logInfo(method, "Fetching edges for node: $nodeId")
+
+            return try {
+                val response = memoryApi.getNodeEdgesV1MemoryNodeIdEdgesGet(nodeId, authHeader())
+                logDebug(method, "Response: status=${response.status}")
+
+                if (!response.success) {
+                    logError(method, "API returned non-success status: ${response.status}")
+                    throw RuntimeException("API error: HTTP ${response.status}")
+                }
+
+                val body = response.body()
+                val edges = body.`data` ?: emptyList()
+                logInfo(method, "Fetched ${edges.size} edges for node $nodeId")
+
+                edges
+            } catch (e: Exception) {
+                logException(method, e)
+                throw e
+            }
+        }
+
+        /**
+         * Get graph data for visualization: nodes and their edges.
+         * Fetches timeline nodes and then gets edges for all of them.
+         */
+        suspend fun getGraphData(
+            hours: Int = 24,
+            scope: String? = null,
+            nodeType: String? = null,
+            limit: Int = 100
+        ): GraphDataResponse {
+            val method = "getGraphData"
+            logInfo(method, "Fetching graph data: hours=$hours, scope=$scope, type=$nodeType, limit=$limit")
+
+            return try {
+                // First get the timeline nodes
+                val timelineResponse = memoryApi.getTimelineV1MemoryTimelineGet(
+                    hours = hours,
+                    scope = scope,
+                    type = nodeType,
+                    authorization = authHeader()
+                )
+
+                if (!timelineResponse.success) {
+                    logError(method, "API returned non-success status: ${timelineResponse.status}")
+                    throw RuntimeException("API error: HTTP ${timelineResponse.status}")
+                }
+
+                val timelineBody = timelineResponse.body()
+                val timelineData = timelineBody.`data` ?: throw RuntimeException("API returned null data")
+                val nodes = timelineData.memories.take(limit)
+
+                logInfo(method, "Fetched ${nodes.size} nodes")
+
+                // Now get edges for all nodes
+                // Note: This could be optimized with a batch endpoint
+                val allEdges = mutableListOf<ai.ciris.api.models.GraphEdge>()
+                val nodeIds = nodes.map { it.id }.toSet()
+
+                // Fetch edges for each node (limit to avoid too many requests)
+                val nodesToFetchEdges = nodes.take(50)
+                nodesToFetchEdges.forEach { node ->
+                    try {
+                        val edgesResponse = memoryApi.getNodeEdgesV1MemoryNodeIdEdgesGet(node.id, authHeader())
+                        if (edgesResponse.success) {
+                            val edges = edgesResponse.body().`data` ?: emptyList()
+                            // Only include edges where both nodes are in our node set
+                            edges.filter { edge ->
+                                nodeIds.contains(edge.source) && nodeIds.contains(edge.target)
+                            }.forEach { edge ->
+                                // Avoid duplicates
+                                if (allEdges.none { it.source == edge.source && it.target == edge.target && it.relationship == edge.relationship }) {
+                                    allEdges.add(edge)
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        logWarn(method, "Failed to get edges for node ${node.id}: ${e.message}")
+                    }
+                }
+
+                logInfo(method, "Graph data complete: ${nodes.size} nodes, ${allEdges.size} edges")
+
+                GraphDataResponse(
+                    nodes = nodes,
+                    edges = allEdges
                 )
             } catch (e: Exception) {
                 logException(method, e)
@@ -2059,12 +2449,20 @@ data class AuditEntryApiData(
     val storageSources: List<String>? = null
 )
 
+@Serializable
 data class AuditContextApiData(
-    val outcome: String?,
-    val details: String?,
-    val entityId: String?,
-    val service: String?,
-    val ipAddress: String?
+    @SerialName("entity_id") val entityId: String? = null,
+    @SerialName("entity_type") val entityType: String? = null,
+    val operation: String? = null,
+    val description: String? = null,
+    @SerialName("request_id") val requestId: String? = null,
+    @SerialName("correlation_id") val correlationId: String? = null,
+    @SerialName("user_id") val userId: String? = null,
+    @SerialName("ip_address") val ipAddress: String? = null,
+    @SerialName("user_agent") val userAgent: String? = null,
+    val result: String? = null,
+    val error: String? = null,
+    val metadata: JsonObject? = null  // Dynamic JSON object for additional metadata
 )
 
 // ===== Logs Data Models =====
@@ -2093,4 +2491,12 @@ data class MemoryStatsApiData(
     val recentNodes24h: Int,
     val oldestNodeDate: String? = null,
     val newestNodeDate: String? = null
+)
+
+/**
+ * Response containing graph visualization data (nodes and edges).
+ */
+data class GraphDataResponse(
+    val nodes: List<ai.ciris.api.models.GraphNode>,
+    val edges: List<ai.ciris.api.models.GraphEdge>
 )

@@ -29,6 +29,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
+ * View mode for memory exploration.
+ */
+enum class MemoryViewMode {
+    LIST,
+    GRAPH
+}
+
+/**
  * Memory/Graph database viewer screen.
  * Based on CIRISGUI-Standalone/apps/agui/app/memory/page.tsx
  *
@@ -39,6 +47,7 @@ import androidx.compose.ui.unit.sp
  * - Node details view with attributes
  * - Memory statistics overview
  * - Timeline-based browsing
+ * - Graph visualization mode
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,6 +59,7 @@ fun MemoryScreen(
     onNodeSelect: (String) -> Unit,
     onClearSelection: () -> Unit,
     onNavigateBack: () -> Unit,
+    onSwitchToGraph: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -68,8 +78,18 @@ fun MemoryScreen(
                     }
                 },
                 actions = {
+                    // Graph view toggle
+                    TextButton(onClick = onSwitchToGraph) {
+                        Text(
+                            "Graph",
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
                     TextButton(onClick = { showFilters = !showFilters }) {
-                        Text(if (showFilters) "Hide" else "Filter")
+                        Text(
+                            if (showFilters) "Hide" else "Filter",
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
                     }
                     IconButton(onClick = onRefresh, enabled = !memoryState.isLoading) {
                         Icon(
@@ -218,16 +238,27 @@ fun MemoryScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(32.dp)
+                    ) {
                         Text(
-                            text = "No memories found",
-                            style = MaterialTheme.typography.bodyLarge,
+                            text = "No Memories Yet",
+                            style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Try searching or adjusting filters",
+                            text = "Your memory graph begins forming after conversations with CIRIS. Memories are personal to your account.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Try the Graph view to visualize connections",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -613,7 +644,7 @@ data class MemoryScreenState(
  * Filter options for memory queries
  */
 data class MemoryFilter(
-    val scope: String = "local",
+    val scope: String? = null,  // null means all scopes
     val nodeType: String? = null,
     val hours: Int = 24
 )

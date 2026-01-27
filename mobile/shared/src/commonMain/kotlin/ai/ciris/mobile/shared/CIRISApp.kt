@@ -30,6 +30,7 @@ import ai.ciris.mobile.shared.viewmodels.StartupPhase
 import ai.ciris.mobile.shared.viewmodels.StartupViewModel
 import ai.ciris.mobile.shared.viewmodels.SystemViewModel
 import ai.ciris.mobile.shared.viewmodels.TelemetryViewModel
+import ai.ciris.mobile.shared.viewmodels.UsersViewModel
 import ai.ciris.mobile.shared.viewmodels.WiseAuthorityViewModel
 import ai.ciris.mobile.shared.ui.screens.graph.GraphMemoryScreen
 import androidx.compose.foundation.layout.*
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -296,6 +298,9 @@ fun CIRISApp(
     }
     val graphMemoryViewModel: GraphMemoryViewModel = viewModel {
         GraphMemoryViewModel(apiClient)
+    }
+    val usersViewModel: UsersViewModel = viewModel {
+        UsersViewModel(apiClient)
     }
 
     // Set up purchase result callback
@@ -596,7 +601,8 @@ fun CIRISApp(
                             onConfigClick = { currentScreen = Screen.Config },
                             onConsentClick = { currentScreen = Screen.Consent },
                             onSystemClick = { currentScreen = Screen.System },
-                            onRuntimeClick = { currentScreen = Screen.Runtime }
+                            onRuntimeClick = { currentScreen = Screen.Runtime },
+                            onUsersClick = { currentScreen = Screen.Users }
                         )
                     }
                 ) { paddingValues ->
@@ -1289,6 +1295,58 @@ fun CIRISApp(
                     onNavigateBack = { currentScreen = Screen.Interact }
                 )
             }
+
+            Screen.Users -> {
+                val usersState by usersViewModel.state.collectAsState()
+
+                LaunchedEffect(Unit) {
+                    println("[$TAG][INFO][Screen.Users] Loading users on screen entry")
+                    usersViewModel.refresh()
+                }
+
+                LaunchedEffect(usersState.error) {
+                    usersState.error?.let { error ->
+                        println("[$TAG][ERROR][Screen.Users] Users error: $error")
+                    }
+                }
+
+                println("[CIRISApp][DEBUG][Screen.Users] Rendering users screen: " +
+                        "users=${usersState.users.size}, total=${usersState.pagination.totalItems}, " +
+                        "isLoading=${usersState.isLoading}")
+
+                UsersScreen(
+                    state = usersState,
+                    onRefresh = {
+                        println("[CIRISApp][INFO][Screen.Users] User triggered refresh")
+                        usersViewModel.refresh()
+                    },
+                    onSearch = { query ->
+                        println("[CIRISApp][INFO][Screen.Users] Search: $query")
+                        usersViewModel.updateSearch(query)
+                    },
+                    onFilterChange = { filter ->
+                        println("[CIRISApp][INFO][Screen.Users] Filter changed")
+                        usersViewModel.updateFilter(filter)
+                    },
+                    onSelectUser = { userId ->
+                        println("[CIRISApp][INFO][Screen.Users] User selected: $userId")
+                        usersViewModel.selectUser(userId)
+                    },
+                    onClearSelection = {
+                        println("[CIRISApp][INFO][Screen.Users] Clear selection")
+                        usersViewModel.clearSelection()
+                    },
+                    onNextPage = {
+                        println("[CIRISApp][INFO][Screen.Users] Next page")
+                        usersViewModel.nextPage()
+                    },
+                    onPreviousPage = {
+                        println("[CIRISApp][INFO][Screen.Users] Previous page")
+                        usersViewModel.previousPage()
+                    },
+                    onNavigateBack = { currentScreen = Screen.Interact }
+                )
+            }
         }
     }
 }
@@ -1338,7 +1396,8 @@ private fun CIRISTopBar(
     onConfigClick: () -> Unit = {},
     onConsentClick: () -> Unit = {},
     onSystemClick: () -> Unit = {},
-    onRuntimeClick: () -> Unit = {}
+    onRuntimeClick: () -> Unit = {},
+    onUsersClick: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -1535,6 +1594,19 @@ private fun CIRISTopBar(
                             )
                         }
                     )
+                    DropdownMenuItem(
+                        text = { Text("Users") },
+                        onClick = {
+                            showMenu = false
+                            onUsersClick()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null
+                            )
+                        }
+                    )
                 }
             }
         },
@@ -1568,4 +1640,5 @@ private sealed class Screen {
     object Consent : Screen()
     object System : Screen()
     object Runtime : Screen()
+    object Users : Screen()
 }

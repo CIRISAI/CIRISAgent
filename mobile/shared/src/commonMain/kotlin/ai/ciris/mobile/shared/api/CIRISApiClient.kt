@@ -175,6 +175,13 @@ class CIRISApiClient(
         jsonSerializer = jsonConfig
     )
 
+    private val usersApi = UsersApi(
+        baseUrl = baseUrl,
+        httpClientEngine = null,
+        httpClientConfig = httpClientConfig,
+        jsonSerializer = jsonConfig
+    )
+
     init {
         logInfo("init", "CIRISApiClient initialized with baseUrl=$baseUrl")
     }
@@ -196,7 +203,8 @@ class CIRISApiClient(
             consentApi.setBearerToken(token)
             auditApi.setBearerToken(token)
             memoryApi.setBearerToken(token)
-            logInfo(method, "Bearer token set on all API instances (11 APIs)")
+            usersApi.setBearerToken(token)
+            logInfo(method, "Bearer token set on all API instances (12 APIs)")
         } catch (e: Exception) {
             logException(method, e, "Failed to set bearer token on API instances")
         }
@@ -2263,6 +2271,77 @@ class CIRISApiClient(
                 processingTimeMs = null, // Not in API response
                 tokensUsed = null // Not in API response
             )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    // ===== Users API =====
+
+    /**
+     * List users with optional filtering and pagination.
+     */
+    suspend fun listUsers(
+        page: Int = 1,
+        pageSize: Int = 20,
+        search: String? = null,
+        authType: String? = null,
+        apiRole: ai.ciris.api.models.APIRole? = null,
+        waRole: ai.ciris.api.models.WARole? = null,
+        isActive: Boolean? = null
+    ): ai.ciris.api.models.PaginatedResponseUserSummary {
+        val method = "listUsers"
+        logInfo(method, "Listing users: page=$page, pageSize=$pageSize, search=$search, authType=$authType, apiRole=$apiRole")
+
+        return try {
+            val response = usersApi.listUsersV1UsersGet(
+                page = page,
+                pageSize = pageSize,
+                search = search,
+                authType = authType,
+                apiRole = apiRole,
+                waRole = waRole,
+                isActive = isActive,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            logInfo(method, "Users: total=${body.total}, page=${body.page}/${body.pages}")
+
+            body
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Get a specific user by ID.
+     */
+    suspend fun getUser(userId: String): ai.ciris.api.models.UserDetail {
+        val method = "getUser"
+        logInfo(method, "Fetching user: $userId")
+
+        return try {
+            val response = usersApi.getUserV1UsersUserIdGet(userId, authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            logInfo(method, "User fetched: userId=${body.userId}, username=${body.username}, role=${body.apiRole}")
+
+            body
         } catch (e: Exception) {
             logException(method, e)
             throw e

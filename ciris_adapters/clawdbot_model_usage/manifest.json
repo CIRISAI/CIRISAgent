@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_model_usage",
+    "version": "1.0.0",
+    "description": "Use CodexBar CLI local cost usage to summarize per-model usage for Codex or Claude, including the current (most recent) model or a full model breakdown. Trigger when asked for model-level usage/cost data from codexbar, or when you need a scriptable per-model summary from codexbar cost JSON.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": null
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_model_usage.service.ModelUsageToolService",
+      "capabilities": [
+        "tool:model_usage",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:model_usage",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_model_usage.service.ModelUsageToolService"
+  },
+  "configuration": {}
+}

@@ -25,7 +25,7 @@
   ],
   "dependencies": {
     "protocols": [
-      "ciris_engine.protocols.services.ToolServiceProtocol"
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
     ],
     "schemas": [
       "ciris_engine.schemas.adapters.tools"

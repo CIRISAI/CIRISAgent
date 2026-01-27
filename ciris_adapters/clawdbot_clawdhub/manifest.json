@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_clawdhub",
+    "version": "1.0.0",
+    "description": "Use the ClawdHub CLI to search, install, update, and publish agent skills from clawdhub.com. Use when you need to fetch new skills on the fly, sync installed skills to latest or a specific version, or publish new/updated skill folders with the npm-installed clawdhub CLI.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": null
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_clawdhub.service.ClawdhubToolService",
+      "capabilities": [
+        "tool:clawdhub",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:clawdhub",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_clawdhub.service.ClawdhubToolService"
+  },
+  "configuration": {}
+}

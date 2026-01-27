@@ -1,0 +1,34 @@
+{
+  "module": {
+    "name": "clawdbot_voice_call",
+    "version": "1.0.0",
+    "description": "Start voice calls via the Moltbot voice-call plugin.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": null
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_voice_call.service.VoiceCallToolService",
+      "capabilities": [
+        "tool:voice_call"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:voice_call"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_voice_call.service.VoiceCallToolService"
+  },
+  "configuration": {}
+}

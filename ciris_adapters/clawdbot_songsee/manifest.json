@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_songsee",
+    "version": "1.0.0",
+    "description": "Generate spectrograms and feature-panel visualizations from audio with the songsee CLI.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://github.com/steipete/songsee"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_songsee.service.SongseeToolService",
+      "capabilities": [
+        "tool:songsee",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:songsee",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_songsee.service.SongseeToolService"
+  },
+  "configuration": {}
+}

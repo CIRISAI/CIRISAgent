@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_openhue",
+    "version": "1.0.0",
+    "description": "Control Philips Hue lights/scenes via the OpenHue CLI.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://www.openhue.io/cli"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_openhue.service.OpenhueToolService",
+      "capabilities": [
+        "tool:openhue",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:openhue",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_openhue.service.OpenhueToolService"
+  },
+  "configuration": {}
+}

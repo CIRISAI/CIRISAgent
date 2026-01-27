@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_1password",
+    "version": "1.0.0",
+    "description": "Set up and use 1Password CLI (op). Use when installing the CLI, enabling desktop app integration, signing in (single or multi-account), or reading/injecting/running secrets via op.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://developer.1password.com/docs/cli/get-started/"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_1password.service.OnePasswordToolService",
+      "capabilities": [
+        "tool:1password",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:1password",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_1password.service.OnePasswordToolService"
+  },
+  "configuration": {}
+}

@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_wacli",
+    "version": "1.0.0",
+    "description": "Send WhatsApp messages to other people or search/sync WhatsApp history via the wacli CLI (not for normal user chats).",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://wacli.sh"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_wacli.service.WacliToolService",
+      "capabilities": [
+        "tool:wacli",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:wacli",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_wacli.service.WacliToolService"
+  },
+  "configuration": {}
+}

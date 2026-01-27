@@ -1,0 +1,34 @@
+{
+  "module": {
+    "name": "clawdbot_slack",
+    "version": "1.0.0",
+    "description": "Use when you need to control Slack from Moltbot via the slack tool, including reacting to messages or pinning/unpinning items in Slack channels or DMs.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": null
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_slack.service.SlackToolService",
+      "capabilities": [
+        "tool:slack"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:slack"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_slack.service.SlackToolService"
+  },
+  "configuration": {}
+}

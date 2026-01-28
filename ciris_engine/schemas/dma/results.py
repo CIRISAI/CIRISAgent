@@ -269,6 +269,13 @@ def _create_forget_params(llm_result: "ASPDMALLMResult", channel_id: Optional[st
     return ForgetParams(channel_id=channel_id, node=node, reason=llm_result.forget_reason or "No reason provided")
 
 
+def _create_task_complete_params(llm_result: "ASPDMALLMResult", channel_id: Optional[str]) -> TaskCompleteParams:
+    """Create TaskCompleteParams from LLM result."""
+    return TaskCompleteParams(
+        channel_id=channel_id, completion_reason=llm_result.completion_reason or "Task completed"
+    )
+
+
 # Type alias for action parameters
 ActionParams = (
     ObserveParams
@@ -315,9 +322,7 @@ def _create_params_for_action(
     if action == HandlerActionType.FORGET:
         return _create_forget_params(llm_result, channel_id)
     if action == HandlerActionType.TASK_COMPLETE:
-        return TaskCompleteParams(
-            channel_id=channel_id, completion_reason=llm_result.completion_reason or "Task completed"
-        )
+        return _create_task_complete_params(llm_result, channel_id)
     # Fallback to PONDER for unknown actions
     logger.warning(f"Unknown action type: {action}, falling back to PONDER")
     return PonderParams(channel_id=channel_id, questions=[f"Unknown action {action} - what should I do?"])

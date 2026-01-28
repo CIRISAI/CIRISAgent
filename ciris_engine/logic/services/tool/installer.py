@@ -15,7 +15,7 @@ import logging
 import shutil
 import sys
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Callable, Dict, List, Optional
 
 from ciris_engine.schemas.adapters.tools import InstallStep
 
@@ -149,7 +149,7 @@ class ToolInstaller:
         return builder(step)
 
     @property
-    def _command_builders(self) -> dict:
+    def _command_builders(self) -> Dict[str, Callable[[InstallStep], Optional[List[str]]]]:
         """Command builder dispatch table for each package manager."""
         return {
             "brew": self._build_brew_cmd,

@@ -540,6 +540,7 @@ class AdapterDiscoveryService:
         if not hasattr(service, "get_all_tool_info"):
             return []
         try:
-            return await service.get_all_tool_info()
+            tools: List[ToolInfo] = await service.get_all_tool_info()
+            return tools
         except Exception:
             return []

@@ -10,7 +10,7 @@ TSASPDMA returns ActionSelectionDMAResult (same as ASPDMA) for transparent integ
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -108,7 +108,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         """
         action = llm_result.selected_action
 
-        params: Union[ToolParams, SpeakParams, PonderParams]
+        params: ToolParams | SpeakParams | PonderParams
 
         if action == HandlerActionType.TOOL:
             # Parameters inferred from context using tool schema
@@ -138,66 +138,73 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             rationale=llm_result.rationale,
         )
 
+    def _format_parameter_schema(self, tool_info: ToolInfo) -> List[str]:
+        """Format parameter schema section."""
+        if not tool_info.parameters:
+            return []
+        sections = ["\n### Parameter Schema (FILL THESE IN)"]
+        param_schema = tool_info.parameters
+        sections.append(f"Type: {param_schema.type}")
+        if param_schema.required:
+            sections.append(f"Required: {', '.join(param_schema.required)}")
+        sections.append("Properties:")
+        for prop_name, prop_def in param_schema.properties.items():
+            prop_type = prop_def.get("type", "any") if isinstance(prop_def, dict) else "any"
+            prop_desc = prop_def.get("description", "") if isinstance(prop_def, dict) else ""
+            required_marker = "*" if prop_name in (param_schema.required or []) else ""
+            sections.append(f"  - {prop_name}{required_marker} ({prop_type}): {prop_desc}")
+        return sections
+
+    def _format_documentation_section(self, doc: ToolDocumentation) -> List[str]:
+        """Format tool documentation section."""
+        sections: List[str] = []
+        if doc.quick_start:
+            sections.append(f"\n### Quick Start\n{doc.quick_start}")
+        if doc.detailed_instructions:
+            sections.append(f"\n### Detailed Instructions\n{doc.detailed_instructions}")
+        if doc.examples:
+            sections.append("\n### Examples")
+            for ex in doc.examples:
+                sections.append(f"**{ex.title}**")
+                if ex.description:
+                    sections.append(ex.description)
+                sections.append(f"```{ex.language}\n{ex.code}\n```")
+        if doc.gotchas:
+            sections.append("\n### Gotchas (Watch Out!)")
+            for gotcha in doc.gotchas:
+                severity_icon = {"info": "ℹ️", "warning": "⚠️", "error": "🚫"}.get(gotcha.severity, "⚠️")
+                sections.append(f"{severity_icon} **{gotcha.title}**: {gotcha.description}")
+        return sections
+
+    def _format_dma_guidance(self, guidance: Any) -> List[str]:
+        """Format DMA guidance section."""
+        sections = ["\n### DMA Guidance"]
+        if guidance.when_not_to_use:
+            sections.append(f"**When NOT to use:** {guidance.when_not_to_use}")
+        if guidance.ethical_considerations:
+            sections.append(f"**Ethical considerations:** {guidance.ethical_considerations}")
+        if guidance.prerequisite_actions:
+            sections.append(f"**Prerequisites:** {', '.join(guidance.prerequisite_actions)}")
+        if guidance.requires_approval:
+            sections.append("**⚠️ Requires wise authority approval**")
+        return sections
+
     def _format_tool_documentation(self, tool_info: ToolInfo) -> str:
         """Format tool documentation for the prompt including parameter schema."""
-        import json
-
-        sections = []
-
-        sections.append(f"**Tool:** {tool_info.name}")
-        sections.append(f"**Description:** {tool_info.description}")
-
+        sections = [
+            f"**Tool:** {tool_info.name}",
+            f"**Description:** {tool_info.description}",
+        ]
         if tool_info.when_to_use:
             sections.append(f"**When to Use:** {tool_info.when_to_use}")
 
-        # Include parameter schema so LLM knows what parameters to fill in
-        if tool_info.parameters:
-            sections.append("\n### Parameter Schema (FILL THESE IN)")
-            param_schema = tool_info.parameters
-            sections.append(f"Type: {param_schema.type}")
-            if param_schema.required:
-                sections.append(f"Required: {', '.join(param_schema.required)}")
-            sections.append("Properties:")
-            for prop_name, prop_def in param_schema.properties.items():
-                prop_type = prop_def.get("type", "any") if isinstance(prop_def, dict) else "any"
-                prop_desc = prop_def.get("description", "") if isinstance(prop_def, dict) else ""
-                required_marker = "*" if prop_name in (param_schema.required or []) else ""
-                sections.append(f"  - {prop_name}{required_marker} ({prop_type}): {prop_desc}")
+        sections.extend(self._format_parameter_schema(tool_info))
 
-        doc = tool_info.documentation
-        if doc:
-            if doc.quick_start:
-                sections.append(f"\n### Quick Start\n{doc.quick_start}")
+        if tool_info.documentation:
+            sections.extend(self._format_documentation_section(tool_info.documentation))
 
-            if doc.detailed_instructions:
-                sections.append(f"\n### Detailed Instructions\n{doc.detailed_instructions}")
-
-            if doc.examples:
-                sections.append("\n### Examples")
-                for ex in doc.examples:
-                    sections.append(f"**{ex.title}**")
-                    if ex.description:
-                        sections.append(ex.description)
-                    sections.append(f"```{ex.language}\n{ex.code}\n```")
-
-            if doc.gotchas:
-                sections.append("\n### Gotchas (Watch Out!)")
-                for gotcha in doc.gotchas:
-                    severity_icon = {"info": "ℹ️", "warning": "⚠️", "error": "🚫"}.get(gotcha.severity, "⚠️")
-                    sections.append(f"{severity_icon} **{gotcha.title}**: {gotcha.description}")
-
-        # DMA guidance
-        guidance = tool_info.dma_guidance
-        if guidance:
-            sections.append("\n### DMA Guidance")
-            if guidance.when_not_to_use:
-                sections.append(f"**When NOT to use:** {guidance.when_not_to_use}")
-            if guidance.ethical_considerations:
-                sections.append(f"**Ethical considerations:** {guidance.ethical_considerations}")
-            if guidance.prerequisite_actions:
-                sections.append(f"**Prerequisites:** {', '.join(guidance.prerequisite_actions)}")
-            if guidance.requires_approval:
-                sections.append("**⚠️ Requires wise authority approval**")
+        if tool_info.dma_guidance:
+            sections.extend(self._format_dma_guidance(tool_info.dma_guidance))
 
         return "\n".join(sections)
 

@@ -261,6 +261,28 @@ Adhere strictly to the schema for your JSON output.
         # Return the permitted actions - they MUST be HandlerActionType enums
         return list(permitted_actions)
 
+    def _get_tool_summary(self, tool_key: str, tool_info: Any) -> Optional[str]:
+        """Extract a concise summary for a single tool."""
+        if not isinstance(tool_info, dict):
+            return None
+
+        tool_name = tool_info.get("name", tool_key)
+        when_to_use = tool_info.get("when_to_use", "")
+
+        if not when_to_use:
+            desc = tool_info.get("description", "")
+            when_to_use = f"{desc[:100]}..." if len(desc) > 100 else desc
+
+        return f"- **{tool_name}**: {when_to_use}" if when_to_use else None
+
+    def _get_cached_tools(self) -> Optional[Dict[str, Any]]:
+        """Get cached tools from instruction generator if available."""
+        if self._instruction_generator is None:
+            return None
+        if not hasattr(self._instruction_generator, "_cached_tools"):
+            return None
+        return getattr(self._instruction_generator, "_cached_tools", None)
+
     def _get_available_tools_str(self, permitted_actions: List[HandlerActionType]) -> str:
         """Get concise tool summaries if TOOL action is permitted.
 
@@ -270,32 +292,19 @@ Adhere strictly to the schema for your JSON output.
         if HandlerActionType.TOOL not in permitted_actions:
             return ""
 
-        # Use pre-cached tools from instruction generator
-        if self._instruction_generator is None or not hasattr(self._instruction_generator, "_cached_tools"):
-            logger.debug("[CONTEXT] No cached tools available for tool summaries")
-            return ""
-
-        cached_tools = getattr(self._instruction_generator, "_cached_tools", {})
+        cached_tools = self._get_cached_tools()
         if not cached_tools:
+            logger.debug("[CONTEXT] No cached tools available for tool summaries")
             return ""
 
         # Build concise summaries using when_to_use (not full parameters)
         summaries = ["\n\n## Quick Tool Guide (when to use each tool):"]
         for tool_key, tool_info in cached_tools.items():
-            if isinstance(tool_info, dict):
-                tool_name = tool_info.get("name", tool_key)
-                # Prefer when_to_use for concise guidance, fall back to truncated description
-                when_to_use = tool_info.get("when_to_use", "")
-                if not when_to_use:
-                    desc = tool_info.get("description", "")
-                    when_to_use = desc[:100] + "..." if len(desc) > 100 else desc
-                if when_to_use:
-                    summaries.append(f"- **{tool_name}**: {when_to_use}")
+            summary = self._get_tool_summary(tool_key, tool_info)
+            if summary:
+                summaries.append(summary)
 
-        if len(summaries) == 1:
-            return ""  # Only header, no tools
-
-        return "\n".join(summaries)
+        return "\n".join(summaries) if len(summaries) > 1 else ""
 
     def _build_ethical_summary(self, ethical_pdma_result: EthicalDMAResult) -> str:
         """Build ethical DMA summary."""

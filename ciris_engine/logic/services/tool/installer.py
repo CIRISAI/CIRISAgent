@@ -143,48 +143,56 @@ class ToolInstaller:
     def _build_command(self, step: InstallStep) -> Optional[List[str]]:
         """Build the shell command for an install step."""
         kind = step.kind.lower()
+        builder = self._command_builders.get(kind)
+        if not builder:
+            return None
+        return builder(step)
 
-        if kind == "brew":
-            if not step.formula:
-                return None
-            return ["brew", "install", step.formula]
+    @property
+    def _command_builders(self) -> dict:
+        """Command builder dispatch table for each package manager."""
+        return {
+            "brew": self._build_brew_cmd,
+            "apt": self._build_apt_cmd,
+            "pip": self._build_pip_cmd,
+            "uv": self._build_uv_cmd,
+            "npm": self._build_npm_cmd,
+            "winget": self._build_winget_cmd,
+            "choco": self._build_choco_cmd,
+            "manual": self._build_manual_cmd,
+        }
 
-        if kind == "apt":
-            if not step.package:
-                return None
-            return ["sudo", "apt-get", "install", "-y", step.package]
+    def _build_brew_cmd(self, step: InstallStep) -> Optional[List[str]]:
+        """Build brew install command."""
+        return ["brew", "install", step.formula] if step.formula else None
 
-        if kind == "pip":
-            if not step.package:
-                return None
-            return [sys.executable, "-m", "pip", "install", step.package]
+    def _build_apt_cmd(self, step: InstallStep) -> Optional[List[str]]:
+        """Build apt-get install command."""
+        return ["sudo", "apt-get", "install", "-y", step.package] if step.package else None
 
-        if kind == "uv":
-            if not step.package:
-                return None
-            return ["uv", "tool", "install", step.package]
+    def _build_pip_cmd(self, step: InstallStep) -> Optional[List[str]]:
+        """Build pip install command."""
+        return [sys.executable, "-m", "pip", "install", step.package] if step.package else None
 
-        if kind == "npm":
-            if not step.package:
-                return None
-            return ["npm", "install", "-g", step.package]
+    def _build_uv_cmd(self, step: InstallStep) -> Optional[List[str]]:
+        """Build uv tool install command."""
+        return ["uv", "tool", "install", step.package] if step.package else None
 
-        if kind == "winget":
-            if not step.package:
-                return None
-            return ["winget", "install", "--accept-package-agreements", step.package]
+    def _build_npm_cmd(self, step: InstallStep) -> Optional[List[str]]:
+        """Build npm global install command."""
+        return ["npm", "install", "-g", step.package] if step.package else None
 
-        if kind == "choco":
-            if not step.package:
-                return None
-            return ["choco", "install", "-y", step.package]
+    def _build_winget_cmd(self, step: InstallStep) -> Optional[List[str]]:
+        """Build winget install command."""
+        return ["winget", "install", "--accept-package-agreements", step.package] if step.package else None
 
-        if kind == "manual":
-            if not step.command:
-                return None
-            return ["sh", "-c", step.command]
+    def _build_choco_cmd(self, step: InstallStep) -> Optional[List[str]]:
+        """Build chocolatey install command."""
+        return ["choco", "install", "-y", step.package] if step.package else None
 
-        return None
+    def _build_manual_cmd(self, step: InstallStep) -> Optional[List[str]]:
+        """Build manual shell command."""
+        return ["sh", "-c", step.command] if step.command else None
 
     def _has_package_manager(self, kind: str) -> bool:
         """Check if a package manager is available."""

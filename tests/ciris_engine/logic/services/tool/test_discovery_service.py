@@ -389,3 +389,204 @@ class TestAdapterDiscoveryServiceAsync:
 
         # Should gracefully exclude erroring adapter
         assert "error_adapter" not in result
+
+
+class TestDiscoveryServiceHelpers:
+    """Tests for the extracted helper methods in AdapterDiscoveryService."""
+
+    def test_build_eligibility_reason_missing_binaries(self) -> None:
+        """Test _build_eligibility_reason with missing binaries."""
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService()
+
+        result = EligibilityResult(
+            eligible=False,
+            missing_binaries=["ffmpeg", "ffprobe"],
+        )
+        reason = service._build_eligibility_reason(result)
+        assert "missing binaries: ffmpeg, ffprobe" in reason or "missing binaries: ffprobe, ffmpeg" in reason
+
+    def test_build_eligibility_reason_missing_env_vars(self) -> None:
+        """Test _build_eligibility_reason with missing env vars."""
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService()
+
+        result = EligibilityResult(
+            eligible=False,
+            missing_env_vars=["API_KEY", "SECRET"],
+        )
+        reason = service._build_eligibility_reason(result)
+        assert "missing env vars" in reason
+
+    def test_build_eligibility_reason_platform_mismatch(self) -> None:
+        """Test _build_eligibility_reason with platform mismatch."""
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService()
+
+        result = EligibilityResult(
+            eligible=False,
+            platform_mismatch=True,
+        )
+        reason = service._build_eligibility_reason(result)
+        assert "platform not supported" in reason
+
+    def test_build_eligibility_reason_multiple_issues(self) -> None:
+        """Test _build_eligibility_reason with multiple issues."""
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService()
+
+        result = EligibilityResult(
+            eligible=False,
+            missing_binaries=["ffmpeg"],
+            missing_config=["some_config"],
+        )
+        reason = service._build_eligibility_reason(result)
+        assert "missing binaries" in reason
+        assert "missing config" in reason
+
+    def test_build_eligibility_reason_empty(self) -> None:
+        """Test _build_eligibility_reason with no issues returns unknown."""
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService()
+
+        result = EligibilityResult(eligible=False)
+        reason = service._build_eligibility_reason(result)
+        assert reason == "unknown"
+
+    def test_check_tools_eligibility_all_eligible(self) -> None:
+        """Test _check_tools_eligibility when all tools are eligible."""
+        mock_checker = MagicMock()
+        mock_checker.check_eligibility.return_value = EligibilityResult(eligible=True)
+
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService(eligibility_checker=mock_checker)
+
+        tools = [make_tool_info("tool1", "test"), make_tool_info("tool2", "test")]
+        result = service._check_tools_eligibility(tools)
+
+        assert result.eligible is True
+        assert result.missing_binaries == []
+
+    def test_check_tools_eligibility_some_ineligible(self) -> None:
+        """Test _check_tools_eligibility when some tools are ineligible."""
+        mock_checker = MagicMock()
+        mock_checker.check_eligibility.side_effect = [
+            EligibilityResult(eligible=True),
+            EligibilityResult(eligible=False, missing_binaries=["ffmpeg"]),
+        ]
+
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService(eligibility_checker=mock_checker)
+
+        tools = [make_tool_info("tool1", "test"), make_tool_info("tool2", "test")]
+        result = service._check_tools_eligibility(tools)
+
+        assert result.eligible is False
+        assert "ffmpeg" in result.missing_binaries
+
+    def test_get_adapter_source_info_with_loader(self) -> None:
+        """Test _get_adapter_source_info with cached loader."""
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService()
+
+        # Mock a cached loader
+        mock_loader = MagicMock()
+        mock_loader.services_dir = Path("/path/to/ciris_adapters/test")
+        service._manifest_loaders["test_adapter"] = mock_loader
+
+        source_path, is_builtin = service._get_adapter_source_info("test_adapter")
+
+        assert source_path == "/path/to/ciris_adapters/test"
+        assert is_builtin is True
+
+    def test_get_adapter_source_info_no_loader(self) -> None:
+        """Test _get_adapter_source_info without cached loader."""
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService()
+
+        source_path, is_builtin = service._get_adapter_source_info("unknown_adapter")
+
+        assert source_path is None
+        assert is_builtin is False
+
+    @pytest.mark.asyncio
+    async def test_get_service_tools_with_tool_info(self) -> None:
+        """Test _get_service_tools with service that has tool info."""
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService()
+
+        mock_service = MagicMock()
+        expected_tools = [make_tool_info("tool1", "test")]
+        mock_service.get_all_tool_info = AsyncMock(return_value=expected_tools)
+
+        tools = await service._get_service_tools(mock_service)
+
+        assert tools == expected_tools
+
+    @pytest.mark.asyncio
+    async def test_get_service_tools_no_method(self) -> None:
+        """Test _get_service_tools with service without get_all_tool_info."""
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService()
+
+        mock_service = MagicMock(spec=[])  # No methods
+
+        tools = await service._get_service_tools(mock_service)
+
+        assert tools == []
+
+    @pytest.mark.asyncio
+    async def test_get_service_tools_exception(self) -> None:
+        """Test _get_service_tools handles exceptions gracefully."""
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService()
+
+        mock_service = MagicMock()
+        mock_service.get_all_tool_info = AsyncMock(side_effect=RuntimeError("Failed"))
+
+        tools = await service._get_service_tools(mock_service)
+
+        assert tools == []
+
+    @patch("ciris_engine.logic.services.tool.discovery_service.AdapterLoader")
+    def test_find_manifest_by_name_found(self, mock_loader_class) -> None:
+        """Test _find_manifest_by_name when manifest exists."""
+        mock_loader = MagicMock()
+        manifest = create_mock_manifest("test_adapter")
+        mock_loader.discover_services.return_value = [manifest]
+        mock_loader_class.return_value = mock_loader
+
+        with patch.object(Path, "exists", return_value=True):
+            with patch.object(Path, "is_dir", return_value=True):
+                service = AdapterDiscoveryService()
+
+        result = service._find_manifest_by_name("test_adapter")
+
+        assert result == manifest
+
+    @patch("ciris_engine.logic.services.tool.discovery_service.AdapterLoader")
+    def test_find_manifest_by_name_not_found(self, mock_loader_class) -> None:
+        """Test _find_manifest_by_name when manifest does not exist."""
+        mock_loader = MagicMock()
+        mock_loader.discover_services.return_value = [create_mock_manifest("other")]
+        mock_loader_class.return_value = mock_loader
+
+        with patch.object(Path, "exists", return_value=True):
+            with patch.object(Path, "is_dir", return_value=True):
+                service = AdapterDiscoveryService()
+
+        result = service._find_manifest_by_name("nonexistent")
+
+        assert result is None

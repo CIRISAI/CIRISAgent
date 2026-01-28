@@ -58,6 +58,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Falls back to truncated description if no `when_to_use`
   - Helps ASPDMA make informed tool selection without full documentation
 
+- **Adapter Availability Discovery API** - Expose adapters with unmet requirements
+  - `GET /adapters/available` - List all adapters with eligibility status
+  - `POST /adapters/{name}/install` - Install missing dependencies (brew, apt, pip, etc.)
+  - `POST /adapters/{name}/check-eligibility` - Recheck after manual installation
+  - New schemas: `AdapterAvailabilityStatus`, `AdapterDiscoveryReport`, `InstallRequest/Response`
+  - Discovery service now tracks ineligible adapters with detailed reasons
+
+- **Tool Installer Service** - Execute installation steps for missing dependencies
+  - Supports: brew, apt, pip, uv, npm, winget, choco, manual commands
+  - Platform-aware installation (skips incompatible platforms)
+  - Dry-run mode for safe testing
+  - Binary verification after installation
+
+- **Installable Tools in ASPDMA Prompt** - Agent awareness of tools that can be installed
+  - ASPDMA prompt now lists tools available for installation
+  - Shows missing dependencies and install methods
+  - Guides agent to use SPEAK to ask user about installation
+
 ### Fixed
 
 - **TSASPDMA Execution Pipeline** - Fixed tool validation not triggering
@@ -90,6 +108,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed binary requirement format (no longer double-quoted)
 
 ### Changed
+
+- **Reduced Cognitive Complexity** - Refactored functions to meet SonarCloud limits (≤15)
+  - `discovery_service._instantiate_and_check_with_info`: 21→12 via helper extraction
+  - `discovery_service.get_adapter_eligibility`: 28→10 via helper extraction
+  - `installer._build_command`: 24→6 via dispatch table pattern
+  - Added 28 new tests for extracted helper methods (94 total in tool services)
 
 - **TSASPDMA Ethical Reasoning** - Enhanced prompt for ethical tool validation
   - Rationale must include: why tool is appropriate, why it's ethical, gotchas acknowledged

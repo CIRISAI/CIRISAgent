@@ -264,22 +264,7 @@ class AdapterDiscoveryService:
         loader = self._manifest_loaders.get(adapter_name)
         source_path = str(loader.services_dir) if loader else None
 
-        # Load service class
-        service_class = self.load_service_class(manifest, service_def.class_path)
-        if not service_class:
-            return None, None
-
-        # Try instantiation with dependencies, fall back to no-args
-        service: Optional[Any] = None
-        try:
-            service = service_class(**deps)
-        except TypeError:
-            try:
-                service = service_class()
-            except Exception as e:
-                logger.debug(f"Cannot instantiate {adapter_name}: {e}")
-                return None, None
-
+        service = self._try_instantiate_service(manifest, service_def, deps, adapter_name)
         if not service:
             return None, None
 
@@ -294,39 +279,9 @@ class AdapterDiscoveryService:
             if not tools:
                 return service, None
 
-            # Check eligibility of all tools, collect combined results
-            all_eligible = True
-            combined_result = EligibilityResult(eligible=True)
-            combined_install_hints: List[InstallStep] = []
-
-            for tool in tools:
-                result = self.checker.check_eligibility(tool)
-                if not result.eligible:
-                    all_eligible = False
-                    # Merge missing items
-                    combined_result.eligible = False
-                    combined_result.missing_binaries.extend(result.missing_binaries)
-                    combined_result.missing_env_vars.extend(result.missing_env_vars)
-                    combined_result.missing_config.extend(result.missing_config)
-                    if result.platform_mismatch:
-                        combined_result.platform_mismatch = True
-                    combined_install_hints.extend(result.install_hints)
-
-            if all_eligible:
+            combined_result = self._check_tools_eligibility(tools)
+            if combined_result.eligible:
                 return service, None
-
-            # Build combined reason
-            reasons = []
-            if combined_result.missing_binaries:
-                reasons.append(f"missing binaries: {', '.join(set(combined_result.missing_binaries))}")
-            if combined_result.missing_env_vars:
-                reasons.append(f"missing env vars: {', '.join(set(combined_result.missing_env_vars))}")
-            if combined_result.missing_config:
-                reasons.append(f"missing config: {', '.join(set(combined_result.missing_config))}")
-            if combined_result.platform_mismatch:
-                reasons.append("platform not supported")
-            combined_result.reason = "; ".join(reasons) if reasons else "unknown"
-            combined_result.install_hints = combined_install_hints
 
             ineligible_info = IneligibleAdapterInfo(
                 name=adapter_name,
@@ -340,6 +295,64 @@ class AdapterDiscoveryService:
         except Exception as e:
             logger.debug(f"Error checking eligibility for {adapter_name}: {e}")
             return None, None
+
+    def _try_instantiate_service(
+        self,
+        manifest: ServiceManifest,
+        service_def: ServiceDeclaration,
+        deps: Dict[str, Any],
+        adapter_name: str,
+    ) -> Optional[Any]:
+        """Try to instantiate a service with deps, falling back to no-args."""
+        service_class = self.load_service_class(manifest, service_def.class_path)
+        if not service_class:
+            return None
+
+        try:
+            return service_class(**deps)
+        except TypeError:
+            try:
+                return service_class()
+            except Exception as e:
+                logger.debug(f"Cannot instantiate {adapter_name}: {e}")
+                return None
+
+    def _check_tools_eligibility(self, tools: List[ToolInfo]) -> EligibilityResult:
+        """Check eligibility of all tools and return combined result."""
+        combined = EligibilityResult(eligible=True)
+        install_hints: List[InstallStep] = []
+
+        for tool in tools:
+            result = self.checker.check_eligibility(tool)
+            if result.eligible:
+                continue
+
+            combined.eligible = False
+            combined.missing_binaries.extend(result.missing_binaries)
+            combined.missing_env_vars.extend(result.missing_env_vars)
+            combined.missing_config.extend(result.missing_config)
+            if result.platform_mismatch:
+                combined.platform_mismatch = True
+            install_hints.extend(result.install_hints)
+
+        if not combined.eligible:
+            combined.reason = self._build_eligibility_reason(combined)
+            combined.install_hints = install_hints
+
+        return combined
+
+    def _build_eligibility_reason(self, result: EligibilityResult) -> str:
+        """Build a human-readable reason string from eligibility result."""
+        reasons = []
+        if result.missing_binaries:
+            reasons.append(f"missing binaries: {', '.join(set(result.missing_binaries))}")
+        if result.missing_env_vars:
+            reasons.append(f"missing env vars: {', '.join(set(result.missing_env_vars))}")
+        if result.missing_config:
+            reasons.append(f"missing config: {', '.join(set(result.missing_config))}")
+        if result.platform_mismatch:
+            reasons.append("platform not supported")
+        return "; ".join(reasons) if reasons else "unknown"
 
     def check_tool_eligibility(self, tool_info: ToolInfo) -> EligibilityResult:
         """Check if a single tool is eligible.
@@ -458,49 +471,75 @@ class AdapterDiscoveryService:
             AdapterAvailabilityStatus or None if adapter not found
         """
         deps = service_dependencies or {}
+        manifest = self._find_manifest_by_name(adapter_name)
+        if not manifest:
+            return None
 
-        for manifest in self.discover_adapters():
-            if manifest.module.name != adapter_name:
-                continue
+        source_path, is_builtin = self._get_adapter_source_info(adapter_name)
 
-            for service_def in manifest.services:
-                service, ineligible_info = await self._instantiate_and_check_with_info(manifest, service_def, deps)
+        for service_def in manifest.services:
+            service, ineligible_info = await self._instantiate_and_check_with_info(manifest, service_def, deps)
 
-                loader = self._manifest_loaders.get(adapter_name)
-                source_path = str(loader.services_dir) if loader else None
-                is_builtin = source_path and "ciris_adapters" in source_path if source_path else False
+            if service:
+                return await self._build_eligible_status(adapter_name, service, source_path, is_builtin)
 
-                if service:
-                    tools: List[ToolInfo] = []
-                    if hasattr(service, "get_all_tool_info"):
-                        try:
-                            tools = await service.get_all_tool_info()
-                        except Exception:
-                            pass
-
-                    return AdapterAvailabilityStatus(
-                        name=adapter_name,
-                        eligible=True,
-                        tools=tools,
-                        source_path=source_path,
-                        is_builtin=is_builtin,
-                    )
-
-                if ineligible_info:
-                    has_hints = len(ineligible_info.eligibility.install_hints) > 0
-                    return AdapterAvailabilityStatus(
-                        name=adapter_name,
-                        eligible=False,
-                        eligibility_reason=ineligible_info.eligibility.reason,
-                        missing_binaries=list(set(ineligible_info.eligibility.missing_binaries)),
-                        missing_env_vars=list(set(ineligible_info.eligibility.missing_env_vars)),
-                        missing_config=list(set(ineligible_info.eligibility.missing_config)),
-                        platform_supported=not ineligible_info.eligibility.platform_mismatch,
-                        can_install=has_hints,
-                        install_hints=ineligible_info.eligibility.install_hints,
-                        tools=ineligible_info.tools,
-                        source_path=source_path,
-                        is_builtin=is_builtin,
-                    )
+            if ineligible_info:
+                return self._build_ineligible_status(adapter_name, ineligible_info, source_path, is_builtin)
 
         return None
+
+    def _find_manifest_by_name(self, adapter_name: str) -> Optional[ServiceManifest]:
+        """Find a manifest by adapter name."""
+        for manifest in self.discover_adapters():
+            if manifest.module.name == adapter_name:
+                return manifest
+        return None
+
+    def _get_adapter_source_info(self, adapter_name: str) -> Tuple[Optional[str], bool]:
+        """Get source path and builtin flag for an adapter."""
+        loader = self._manifest_loaders.get(adapter_name)
+        source_path = str(loader.services_dir) if loader else None
+        is_builtin = bool(source_path and "ciris_adapters" in source_path)
+        return source_path, is_builtin
+
+    async def _build_eligible_status(
+        self, adapter_name: str, service: Any, source_path: Optional[str], is_builtin: bool
+    ) -> AdapterAvailabilityStatus:
+        """Build AdapterAvailabilityStatus for an eligible adapter."""
+        tools = await self._get_service_tools(service)
+        return AdapterAvailabilityStatus(
+            name=adapter_name,
+            eligible=True,
+            tools=tools,
+            source_path=source_path,
+            is_builtin=is_builtin,
+        )
+
+    def _build_ineligible_status(
+        self, adapter_name: str, info: IneligibleAdapterInfo, source_path: Optional[str], is_builtin: bool
+    ) -> AdapterAvailabilityStatus:
+        """Build AdapterAvailabilityStatus for an ineligible adapter."""
+        has_hints = len(info.eligibility.install_hints) > 0
+        return AdapterAvailabilityStatus(
+            name=adapter_name,
+            eligible=False,
+            eligibility_reason=info.eligibility.reason,
+            missing_binaries=list(set(info.eligibility.missing_binaries)),
+            missing_env_vars=list(set(info.eligibility.missing_env_vars)),
+            missing_config=list(set(info.eligibility.missing_config)),
+            platform_supported=not info.eligibility.platform_mismatch,
+            can_install=has_hints,
+            install_hints=info.eligibility.install_hints,
+            tools=info.tools,
+            source_path=source_path,
+            is_builtin=is_builtin,
+        )
+
+    async def _get_service_tools(self, service: Any) -> List[ToolInfo]:
+        """Get tools from a service if available."""
+        if not hasattr(service, "get_all_tool_info"):
+            return []
+        try:
+            return await service.get_all_tool_info()
+        except Exception:
+            return []

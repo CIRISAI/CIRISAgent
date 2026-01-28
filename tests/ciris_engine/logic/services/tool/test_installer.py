@@ -294,6 +294,118 @@ class TestToolInstaller:
         assert "nonexistent_binary_xyz" not in found
 
 
+class TestCommandBuilders:
+    """Tests for the command builder dispatch table and individual builders."""
+
+    def test_command_builders_contains_all_managers(self):
+        """Test that _command_builders has all expected package managers."""
+        installer = ToolInstaller()
+        builders = installer._command_builders
+
+        expected = ["brew", "apt", "pip", "uv", "npm", "winget", "choco", "manual"]
+        for manager in expected:
+            assert manager in builders, f"Missing builder for {manager}"
+
+    def test_build_brew_cmd_with_formula(self):
+        """Test _build_brew_cmd with valid formula."""
+        installer = ToolInstaller()
+        step = InstallStep(id="test", kind="brew", label="Test", formula="ffmpeg", provides_binaries=["ffmpeg"])
+        cmd = installer._build_brew_cmd(step)
+        assert cmd == ["brew", "install", "ffmpeg"]
+
+    def test_build_brew_cmd_without_formula(self):
+        """Test _build_brew_cmd without formula returns None."""
+        installer = ToolInstaller()
+        step = InstallStep(id="test", kind="brew", label="Test", provides_binaries=[])
+        cmd = installer._build_brew_cmd(step)
+        assert cmd is None
+
+    def test_build_apt_cmd_with_package(self):
+        """Test _build_apt_cmd with valid package."""
+        installer = ToolInstaller()
+        step = InstallStep(id="test", kind="apt", label="Test", package="git", provides_binaries=["git"])
+        cmd = installer._build_apt_cmd(step)
+        assert cmd == ["sudo", "apt-get", "install", "-y", "git"]
+
+    def test_build_apt_cmd_without_package(self):
+        """Test _build_apt_cmd without package returns None."""
+        installer = ToolInstaller()
+        step = InstallStep(id="test", kind="apt", label="Test", provides_binaries=[])
+        cmd = installer._build_apt_cmd(step)
+        assert cmd is None
+
+    def test_build_pip_cmd_with_package(self):
+        """Test _build_pip_cmd with valid package."""
+        import sys
+
+        installer = ToolInstaller()
+        step = InstallStep(id="test", kind="pip", label="Test", package="requests", provides_binaries=[])
+        cmd = installer._build_pip_cmd(step)
+        assert cmd == [sys.executable, "-m", "pip", "install", "requests"]
+
+    def test_build_uv_cmd_with_package(self):
+        """Test _build_uv_cmd with valid package."""
+        installer = ToolInstaller()
+        step = InstallStep(id="test", kind="uv", label="Test", package="ruff", provides_binaries=["ruff"])
+        cmd = installer._build_uv_cmd(step)
+        assert cmd == ["uv", "tool", "install", "ruff"]
+
+    def test_build_npm_cmd_with_package(self):
+        """Test _build_npm_cmd with valid package."""
+        installer = ToolInstaller()
+        step = InstallStep(id="test", kind="npm", label="Test", package="typescript", provides_binaries=["tsc"])
+        cmd = installer._build_npm_cmd(step)
+        assert cmd == ["npm", "install", "-g", "typescript"]
+
+    def test_build_winget_cmd_with_package(self):
+        """Test _build_winget_cmd with valid package."""
+        installer = ToolInstaller()
+        step = InstallStep(id="test", kind="winget", label="Test", package="Git.Git", provides_binaries=["git"])
+        cmd = installer._build_winget_cmd(step)
+        assert cmd == ["winget", "install", "--accept-package-agreements", "Git.Git"]
+
+    def test_build_choco_cmd_with_package(self):
+        """Test _build_choco_cmd with valid package."""
+        installer = ToolInstaller()
+        step = InstallStep(id="test", kind="choco", label="Test", package="git", provides_binaries=["git"])
+        cmd = installer._build_choco_cmd(step)
+        assert cmd == ["choco", "install", "-y", "git"]
+
+    def test_build_manual_cmd_with_command(self):
+        """Test _build_manual_cmd with valid command."""
+        installer = ToolInstaller()
+        step = InstallStep(id="test", kind="manual", label="Test", command="echo hello", provides_binaries=[])
+        cmd = installer._build_manual_cmd(step)
+        assert cmd == ["sh", "-c", "echo hello"]
+
+    def test_build_manual_cmd_without_command(self):
+        """Test _build_manual_cmd without command returns None."""
+        installer = ToolInstaller()
+        step = InstallStep(id="test", kind="manual", label="Test", provides_binaries=[])
+        cmd = installer._build_manual_cmd(step)
+        assert cmd is None
+
+    def test_build_command_uses_dispatch_table(self):
+        """Test that _build_command uses the dispatch table correctly."""
+        installer = ToolInstaller()
+
+        # Test each kind goes through dispatch table
+        brew_step = InstallStep(id="t", kind="brew", label="T", formula="f", provides_binaries=[])
+        assert installer._build_command(brew_step) == ["brew", "install", "f"]
+
+        pip_step = InstallStep(id="t", kind="pip", label="T", package="p", provides_binaries=[])
+        import sys
+
+        assert installer._build_command(pip_step) == [sys.executable, "-m", "pip", "install", "p"]
+
+    def test_build_command_case_insensitive(self):
+        """Test that _build_command handles case-insensitive kind."""
+        installer = ToolInstaller()
+        step = InstallStep(id="t", kind="BREW", label="T", formula="ffmpeg", provides_binaries=[])
+        cmd = installer._build_command(step)
+        assert cmd == ["brew", "install", "ffmpeg"]
+
+
 class TestEligibilityCheckerInstallIntegration:
     """Tests for install_and_recheck method on EligibilityChecker."""
 

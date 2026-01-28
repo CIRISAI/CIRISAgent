@@ -100,12 +100,14 @@ class TestAdapterDiscoveryService:
         assert Path("/custom") in paths
 
     def test_discover_adapters_empty_when_no_loaders(self) -> None:
-        """Test discover_adapters returns empty when no paths exist."""
+        """Test discover_adapters returns empty when no paths exist and importlib fails."""
         with patch.object(Path, "exists", return_value=False):
             with patch.object(Path, "is_dir", return_value=False):
                 service = AdapterDiscoveryService()
 
-        manifests = service.discover_adapters()
+        # Also mock importlib discovery to return empty (simulates no ciris_adapters package)
+        with patch.object(service, "_discover_via_importlib", return_value=[]):
+            manifests = service.discover_adapters()
 
         assert manifests == []
 

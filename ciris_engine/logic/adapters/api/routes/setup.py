@@ -427,7 +427,7 @@ def _get_available_adapters() -> List[AdapterConfig]:
     from ciris_engine.logic.services.tool.discovery_service import AdapterDiscoveryService
 
     adapters: List[AdapterConfig] = []
-    seen_ids: set = set()
+    seen_ids: set[str] = set()
 
     # Always include API adapter first (required, cannot be disabled)
     adapters.append(

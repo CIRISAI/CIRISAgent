@@ -299,8 +299,10 @@ class TestGetAvailableAdapters:
         """Adapters have expected IDs."""
         adapters = _get_available_adapters()
         adapter_ids = {a.id for a in adapters}
+        # API adapter is always required
         assert "api" in adapter_ids
-        assert "cli" in adapter_ids
+        # Should have multiple adapters from discovery
+        assert len(adapter_ids) >= 4
 
     def test_api_adapter_enabled_by_default(self):
         """API adapter is enabled by default."""

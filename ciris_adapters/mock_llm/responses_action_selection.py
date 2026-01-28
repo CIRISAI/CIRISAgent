@@ -1317,14 +1317,14 @@ def tsaspdma_llm_result(
         return TSASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
             rationale="TSASPDMA: Documentation review revealed ambiguity requiring user clarification.",
-            speak_content="TSASPDMA: I need clarification before proceeding with this tool.",
+            parameters={"content": "TSASPDMA: I need clarification before proceeding with this tool."},
         )
     elif "$tsaspdma_ponder" in user_input:
         logger.info("[MOCK_LLM] TSASPDMA: Switching to PONDER to reconsider (test mode)")
         return TSASPDMALLMResult(
             selected_action=HandlerActionType.PONDER,
             rationale="TSASPDMA: After reviewing documentation, reconsidering if this is the right approach.",
-            ponder_questions=["Would a different tool be more appropriate?", "What are the gotchas?"],
+            parameters={"questions": ["Would a different tool be more appropriate?", "What are the gotchas?"]},
         )
 
     # Extract tool name and parameters from the TSASPDMA prompt
@@ -1405,5 +1405,5 @@ def tsaspdma_llm_result(
     return TSASPDMALLMResult(
         selected_action=HandlerActionType.TOOL,
         rationale=f"TSASPDMA: Reviewed documentation for '{tool_name}'. Proceeding with tool execution.",
-        tool_parameters=tool_params,
+        parameters=tool_params,
     )

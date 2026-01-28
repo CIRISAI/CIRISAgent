@@ -13,7 +13,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type, cast
 
 from ciris_engine.logic.runtime.adapter_loader import AdapterLoader
 from ciris_engine.schemas.adapters.discovery import AdapterAvailabilityStatus, AdapterDiscoveryReport
@@ -254,7 +254,7 @@ class AdapterDiscoveryService:
             cls = getattr(module, class_name, None)
             if cls:
                 logger.debug(f"Loaded {class_name} from {full_module_path} via importlib")
-                return cls
+                return cast(Type[Any], cls)
 
         except ImportError as e:
             logger.debug(f"Failed to import {class_path} via importlib: {e}")

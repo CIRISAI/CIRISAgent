@@ -741,10 +741,18 @@ class TestWakeupProcessorMultiOccurrenceCoordination:
     async def test_create_wakeup_tasks_handles_non_claiming_occurrence(
         self, mock_persistence, mock_try_claim, mock_is_completed, wakeup_processor
     ):
-        """Test that non-claiming occurrence only stores root task."""
+        """Test that non-claiming occurrence only stores root task.
+
+        In multi-occurrence mode (occurrence_id != 'default'), when another
+        occurrence has already claimed the shared wakeup task (was_created=False),
+        this occurrence should only store the root task and not create step tasks.
+        """
+        # Set up multi-occurrence mode - this is critical for the early return path
+        wakeup_processor.occurrence_id = "occurrence-2"  # Not "default"
+
         mock_is_completed.return_value = False
 
-        # Another occurrence claimed the task
+        # Another occurrence claimed the task (was_created=False means task existed)
         root_task = Mock()
         root_task.task_id = "WAKEUP_SHARED_123"
         root_task.agent_occurrence_id = "__shared__"
@@ -752,7 +760,7 @@ class TestWakeupProcessorMultiOccurrenceCoordination:
 
         await wakeup_processor._create_wakeup_tasks()
 
-        # Should only have root task, no step tasks
+        # Should only have root task, no step tasks (multi-occurrence non-claiming path)
         assert len(wakeup_processor.wakeup_tasks) == 1
         assert wakeup_processor.wakeup_tasks[0] == root_task
 

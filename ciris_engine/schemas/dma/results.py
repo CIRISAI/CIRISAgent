@@ -12,6 +12,7 @@ using convert_llm_result_to_action_result().
 """
 
 import logging
+import uuid
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -31,7 +32,7 @@ from ..actions.parameters import (
     ToolParams,
 )
 from ..runtime.enums import HandlerActionType
-from ..services.graph_core import GraphNode, GraphScope, NodeType
+from ..services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
 
 logger = logging.getLogger(__name__)
 
@@ -310,9 +311,13 @@ def convert_llm_result_to_action_result(
                 logger.warning(f"Unknown scope: {llm_result.memorize_scope}, using LOCAL")
 
         node = GraphNode(
-            node_type=node_type,
-            content=llm_result.memorize_content or "",
+            id=str(uuid.uuid4()),
+            type=node_type,
             scope=scope,
+            attributes=GraphNodeAttributes(
+                created_by="agent",
+                content=llm_result.memorize_content or "",
+            ),
         )
         params = MemorizeParams(channel_id=channel_id, node=node)
 
@@ -336,17 +341,24 @@ def convert_llm_result_to_action_result(
         # FORGET requires a node - create minimal one if only ID provided
         if llm_result.forget_node_id:
             node = GraphNode(
-                node_id=llm_result.forget_node_id,
-                node_type=NodeType.OBSERVATION,
-                content="",
+                id=llm_result.forget_node_id,
+                type=NodeType.OBSERVATION,
                 scope=GraphScope.LOCAL,
+                attributes=GraphNodeAttributes(
+                    created_by="agent",
+                    content="",
+                ),
             )
         else:
             # Fallback - should not happen in practice
             node = GraphNode(
-                node_type=NodeType.OBSERVATION,
-                content="",
+                id=str(uuid.uuid4()),
+                type=NodeType.OBSERVATION,
                 scope=GraphScope.LOCAL,
+                attributes=GraphNodeAttributes(
+                    created_by="agent",
+                    content="",
+                ),
             )
         params = ForgetParams(
             channel_id=channel_id,

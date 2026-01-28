@@ -10,7 +10,7 @@ TSASPDMA returns ActionSelectionDMAResult (same as ASPDMA) for transparent integ
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -108,8 +108,10 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         """
         action = llm_result.selected_action
 
+        params: Union[ToolParams, SpeakParams, PonderParams]
+
         if action == HandlerActionType.TOOL:
-            # Parameters come from TSASPDMA's extraction based on tool schema
+            # Parameters inferred from context using tool schema
             params = ToolParams(
                 name=tool_name,
                 parameters=llm_result.tool_parameters or {},
@@ -261,11 +263,12 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
     ) -> ActionSelectionDMAResult:
         """Evaluate a TOOL action with full documentation.
 
-        TSASPDMA extracts parameters from the original_thought (user's request).
+        TSASPDMA reasons about and infers appropriate parameters from context
+        using the tool's schema, documentation, and examples.
         ASPDMA only provides the tool name, not parameters.
 
         Returns ActionSelectionDMAResult with:
-        - TOOL: Proceed with execution (with parameters extracted from thought)
+        - TOOL: Proceed with execution (parameters inferred from context)
         - SPEAK: Ask user for clarification
         - PONDER: Reconsider the approach
         """
@@ -335,14 +338,13 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             # NO FALLBACK - re-raise to trigger proper deferral/ponder behavior
             raise
 
-    async def evaluate(self, *args: Any, **kwargs: Any) -> ActionSelectionDMAResult:  # type: ignore[override]
+    async def evaluate(self, *args: Any, **kwargs: Any) -> ActionSelectionDMAResult:
         """Evaluate tool action (generic interface)."""
         # Extract required arguments
         tool_name = kwargs.get("tool_name") or (args[0] if len(args) > 0 else None)
         tool_info = kwargs.get("tool_info") or (args[1] if len(args) > 1 else None)
-        tool_parameters = kwargs.get("tool_parameters") or (args[2] if len(args) > 2 else {})
-        aspdma_rationale = kwargs.get("aspdma_rationale") or (args[3] if len(args) > 3 else "")
-        original_thought = kwargs.get("original_thought") or (args[4] if len(args) > 4 else None)
+        aspdma_rationale = kwargs.get("aspdma_rationale") or (args[2] if len(args) > 2 else "")
+        original_thought = kwargs.get("original_thought") or (args[3] if len(args) > 3 else None)
         context = kwargs.get("context")
 
         if not tool_name or not tool_info or not original_thought:
@@ -351,7 +353,6 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         return await self.evaluate_tool_action(
             tool_name=tool_name,
             tool_info=tool_info,
-            tool_parameters=tool_parameters,
             aspdma_rationale=aspdma_rationale,
             original_thought=original_thought,
             context=context,

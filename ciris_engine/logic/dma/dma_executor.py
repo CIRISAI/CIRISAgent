@@ -711,7 +711,6 @@ async def run_tsaspdma(
     evaluator: TSASPDMAEvaluator,
     tool_name: str,
     tool_info: "ToolInfo",
-    tool_parameters: JSONDict,
     aspdma_rationale: str,
     original_thought: ProcessingQueueItem,
     context: Optional[Any] = None,
@@ -720,10 +719,13 @@ async def run_tsaspdma(
     """Run the Tool-Specific Action Selection PDMA (TSASPDMA).
 
     TSASPDMA is invoked AFTER ASPDMA selects a TOOL action.
-    It reviews the selection with full tool documentation and can:
-    - Confirm TOOL action (with optionally refined parameters)
-    - Switch to SPEAK for user clarification
-    - Switch to PONDER to reconsider the approach
+    It reasons about and infers appropriate parameters from context
+    using the tool's schema and documentation.
+
+    Can return:
+    - TOOL: Proceed with execution (parameters inferred from context)
+    - SPEAK: Ask user for clarification
+    - PONDER: Reconsider the approach
     """
     if not time_service:
         raise RuntimeError("TimeService is required for DMA execution")
@@ -784,7 +786,6 @@ async def run_tsaspdma(
         result = await evaluator.evaluate_tool_action(
             tool_name=tool_name,
             tool_info=tool_info,
-            tool_parameters=tool_parameters,
             aspdma_rationale=aspdma_rationale,
             original_thought=original_thought,
             context=context,

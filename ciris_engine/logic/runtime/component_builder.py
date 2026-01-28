@@ -142,6 +142,7 @@ class ComponentBuilder:
             service_registry=self.runtime.service_registry,
             model_name=self.runtime.llm_service.model_name,
             max_retries=config.services.llm_max_retries,
+            sink=self.runtime.bus_manager,
         )
 
         # Get time service directly from service_initializer (not from registry)

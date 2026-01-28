@@ -1310,7 +1310,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                         await start_result
 
                 # Register with tool bus if it provides tools
-                if hasattr(service, "get_all_tool_info"):
+                if hasattr(service, "get_all_tool_info") and self.service_registry is not None:
                     self.service_registry.register_service(
                         service_type=ServiceType.TOOL,
                         provider=service,

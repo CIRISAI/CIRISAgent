@@ -432,6 +432,10 @@ StructuredCallFunc = Callable[
 class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
     """Client for interacting with OpenAI-compatible APIs with circuit breaker protection."""
 
+    # Type annotations for client attributes - actual type varies by provider
+    client: Any  # AsyncOpenAI, AsyncAnthropic, or genai module
+    instruct_client: Any  # Instructor-wrapped client
+
     def __init__(
         self,
         *,  # Force keyword-only arguments
@@ -531,6 +535,22 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             # OpenAI or OpenAI-compatible providers
             self._init_openai_client(api_key, base_url, model_name, timeout, instructor_mode)
 
+        # Initialize metrics tracking (once, after client is set up)
+        self._init_metrics()
+
+    def _init_metrics(self) -> None:
+        """Initialize metrics tracking attributes."""
+        self._response_times: List[float] = []
+        self._max_response_history = 100
+        self._total_api_calls = 0
+        self._successful_api_calls = 0
+        self._total_requests = 0
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
+        self._total_cost_cents = 0.0
+        self._total_errors = 0
+        self.pricing_calculator = LLMPricingCalculator()
+
     def _init_openai_client(
         self, api_key: str, base_url: Optional[str], model_name: str, timeout: int, instructor_mode: str
     ) -> None:
@@ -546,18 +566,6 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         selected_mode = mode_map.get(instructor_mode, instructor.Mode.JSON)
         self.instruct_client = instructor.from_openai(self.client, mode=selected_mode)
         logger.info(f"Initialized OpenAI client with model={model_name}, mode={selected_mode}")
-
-        # Initialize metrics tracking (shared with native clients)
-        self._response_times: List[float] = []
-        self._max_response_history = 100
-        self._total_api_calls = 0
-        self._successful_api_calls = 0
-        self._total_requests = 0
-        self._total_input_tokens = 0
-        self._total_output_tokens = 0
-        self._total_cost_cents = 0.0
-        self._total_errors = 0
-        self.pricing_calculator = LLMPricingCalculator()
 
     def _init_anthropic_client(self, api_key: str, model_name: str, timeout: int) -> None:
         """Initialize native Anthropic client for Claude models.
@@ -584,18 +592,6 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # Use instructor with Anthropic - ANTHROPIC_TOOLS mode for best results
         self.instruct_client = instructor.from_anthropic(self.client, mode=instructor.Mode.ANTHROPIC_TOOLS)
         logger.info(f"Initialized native Anthropic client with model={model_name}")
-
-        # Initialize metrics tracking (shared with other clients)
-        self._response_times: List[float] = []
-        self._max_response_history = 100
-        self._total_api_calls = 0
-        self._successful_api_calls = 0
-        self._total_requests = 0
-        self._total_input_tokens = 0
-        self._total_output_tokens = 0
-        self._total_cost_cents = 0.0
-        self._total_errors = 0
-        self.pricing_calculator = LLMPricingCalculator()
 
     def _init_google_client(self, api_key: str, model_name: str, timeout: int) -> None:
         """Initialize native Google client for Gemini models.
@@ -625,7 +621,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
             _original_update_genai_kwargs = instructor_gemini_utils.update_genai_kwargs
 
-            def _patched_update_genai_kwargs(kwargs: dict, base_config: dict) -> dict:
+            def _patched_update_genai_kwargs(kwargs: Dict[str, Any], base_config: Dict[str, Any]) -> Dict[str, Any]:
                 """Patched version that filters out unsupported harm categories."""
                 new_kwargs = kwargs.copy()
 
@@ -686,22 +682,6 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # Store a reference to the genai module for potential direct access
         self.client = genai
         logger.info(f"Initialized native Google Gemini client with model={model_name}")
-
-        # Metrics tracking (no caching - we never cache LLM responses)
-        self._response_times: List[float] = []  # List of response times in ms
-        self._max_response_history = 100  # Keep last 100 response times
-        self._total_api_calls = 0
-        self._successful_api_calls = 0
-
-        # LLM-specific metrics tracking for v1.4.3 telemetry
-        self._total_requests = 0
-        self._total_input_tokens = 0
-        self._total_output_tokens = 0
-        self._total_cost_cents = 0.0
-        self._total_errors = 0
-
-        # Initialize pricing calculator for accurate cost and impact calculation
-        self.pricing_calculator = LLMPricingCalculator()
 
     # Required BaseService abstract methods
 
@@ -807,8 +787,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         self.update_api_key(new_api_key)
         logger.info("[LLM_TOKEN] Token refresh complete - LLM service ready for requests")
 
-    def _get_client(self) -> AsyncOpenAI:
-        """Return the OpenAI client instance (private method)."""
+    def _get_client(self) -> Any:
+        """Return the LLM client instance (private method).
+
+        Return type is Any because client can be AsyncOpenAI, AsyncAnthropic, or genai module.
+        """
         return self.client
 
     async def is_healthy(self) -> bool:

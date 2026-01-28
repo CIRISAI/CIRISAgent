@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Type
 
 from ciris_engine.logic.runtime.adapter_loader import AdapterLoader
-from ciris_engine.protocols.infrastructure.base import ServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.runtime.manifest import ServiceDeclaration, ServiceManifest
 
@@ -102,7 +101,7 @@ class AdapterDiscoveryService:
         logger.info(f"AdapterDiscoveryService: discovered {len(all_manifests)} adapters")
         return all_manifests
 
-    def load_service_class(self, manifest: ServiceManifest, class_path: str) -> Optional[Type[ServiceProtocol]]:
+    def load_service_class(self, manifest: ServiceManifest, class_path: str) -> Optional[Type[Any]]:
         """Load a service class from a discovered manifest.
 
         Args:
@@ -159,7 +158,7 @@ class AdapterDiscoveryService:
         self,
         disabled_adapters: Optional[List[str]] = None,
         service_dependencies: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, ServiceProtocol]:
+    ) -> Dict[str, Any]:
         """Load adapters whose tool requirements are satisfied.
 
         Discovers adapters, instantiates services, checks eligibility via
@@ -175,7 +174,7 @@ class AdapterDiscoveryService:
         """
         disabled = set(disabled_adapters or [])
         deps = service_dependencies or {}
-        eligible_services: Dict[str, ServiceProtocol] = {}
+        eligible_services: Dict[str, Any] = {}
 
         for manifest in self.discover_adapters():
             adapter_name = manifest.module.name
@@ -205,7 +204,7 @@ class AdapterDiscoveryService:
         manifest: ServiceManifest,
         service_def: ServiceDeclaration,
         deps: Dict[str, Any],
-    ) -> Optional[ServiceProtocol]:
+    ) -> Optional[Any]:
         """Instantiate a service and check tool eligibility.
 
         Returns:
@@ -217,12 +216,12 @@ class AdapterDiscoveryService:
             return None
 
         # Try instantiation with dependencies, fall back to no-args
-        service: Optional[ServiceProtocol] = None
+        service: Optional[Any] = None
         try:
-            service = service_class(**deps)  # type: ignore[call-arg]
+            service = service_class(**deps)
         except TypeError:
             try:
-                service = service_class()  # type: ignore[call-arg]
+                service = service_class()
             except Exception as e:
                 logger.debug(f"Cannot instantiate {manifest.module.name}: {e}")
                 return None
@@ -239,7 +238,7 @@ class AdapterDiscoveryService:
 
         # Get tool info and check eligibility
         try:
-            tools = await service.get_all_tool_info()  # type: ignore[union-attr]
+            tools = await service.get_all_tool_info()
             if not tools:
                 # No tools = eligible (service provides other capabilities)
                 return service

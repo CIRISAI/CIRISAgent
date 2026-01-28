@@ -83,10 +83,10 @@ context_integration: |
   Tool: {tool_name}
   Rationale: {aspdma_rationale}
 
-  === ORIGINAL THOUGHT (contains user's request with parameters) ===
+  === ORIGINAL THOUGHT (user's intent - use to infer parameters) ===
   {original_thought_content}
 
-  === TOOL DOCUMENTATION ===
+  === TOOL DOCUMENTATION (with Parameter Schema) ===
   {tool_documentation}
 
 response_format: |
@@ -95,14 +95,17 @@ response_format: |
   - "rationale": Explain your decision including any gotchas acknowledged
 
   Additional fields based on action:
-  - If TOOL: "tool_parameters": object with the parameters extracted from the original thought
-    - Parse parameters from the user's request using the documentation as guide
-    - Example: if thought says "$tool curl url=http://example.com", return {"url": "http://example.com"}
+  - If TOOL: "tool_parameters": object with parameters inferred from context
+    - Use the Parameter Schema above to determine required/optional parameters
+    - Infer parameter values from the user's intent, conversation context, and examples
+    - Example: if user wants to "turn on the living room light", infer {{"entity_id": "light.living_room", "action": "on"}}
   - If SPEAK: "speak_content": string starting "I need the user to answer: ..."
   - If PONDER: "ponder_questions": array of strings
 
-  IMPORTANT: You must extract and return the tool parameters from the original thought.
-  The parameters are in the user's request, not provided by ASPDMA.
+  IMPORTANT: Reason about the appropriate parameters using:
+  1. The tool's Parameter Schema (required vs optional fields)
+  2. The user's intent from their original request
+  3. Context and examples from the documentation
 
   Do not include extra fields or wrap in markdown code blocks.
 

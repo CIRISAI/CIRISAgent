@@ -22,16 +22,19 @@ class TSASPDMAProtocol(Protocol):
     returning the same ActionSelectionDMAResult type as ASPDMA.
 
     This allows TSASPDMA to:
-    - Confirm TOOL action (optionally with refined parameters)
+    - Confirm TOOL action (with parameters reasoned/inferred from context)
     - Switch to SPEAK for user clarification
     - Switch to PONDER to reconsider the approach
+
+    Note: TSASPDMA reasons about and infers appropriate tool parameters from
+    context using the tool's schema and documentation. ASPDMA only provides
+    tool_name; parameters are determined by TSASPDMA.
     """
 
     async def evaluate_tool_action(
         self,
         tool_name: str,
         tool_info: "ToolInfo",
-        tool_parameters: Dict[str, Any],
         aspdma_rationale: str,
         original_thought: Any,
         context: Optional[Any] = None,
@@ -41,14 +44,13 @@ class TSASPDMAProtocol(Protocol):
         Args:
             tool_name: Name of the tool selected by ASPDMA
             tool_info: Full ToolInfo with documentation, examples, gotchas
-            tool_parameters: Parameters ASPDMA selected for the tool
             aspdma_rationale: ASPDMA's reasoning for selecting this tool
             original_thought: The ProcessingQueueItem being processed
             context: Optional additional processing context
 
         Returns:
             ActionSelectionDMAResult with one of:
-            - TOOL: Proceed with execution (may have refined parameters)
+            - TOOL: Proceed with execution (parameters inferred from context)
             - SPEAK: Ask user for clarification ("I need the user to answer...")
             - PONDER: Reconsider the approach (different tool may be better)
         """

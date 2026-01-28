@@ -1001,17 +1001,17 @@ class DMAResultsEvent(BaseModel):
     task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
     timestamp: str = Field(..., description=DESC_TIMESTAMP)
 
-    # All 4 DMA results - strongly typed
+    # 3 DMA results - strongly typed (IDMA is streamed separately as IDMA_RESULT event)
     csdma: CSDMAResult = Field(..., description="Common Sense DMA result")
     dsdma: DSDMAResult = Field(..., description="Domain Specific DMA result")
     pdma: EthicalDMAResult = Field(..., description="Ethical Perspective DMA result (PDMA)")
-    idma: Optional[IDMAResult] = Field(None, description="Intuition DMA result (CCA epistemic diversity)")
+    # Note: IDMA moved to separate IDMAResultEvent (v1.9.3) for independent streaming
 
     # User prompts passed to each DMA (for debugging/transparency)
     csdma_prompt: Optional[str] = Field(None, description="User prompt passed to CSDMA")
     dsdma_prompt: Optional[str] = Field(None, description="User prompt passed to DSDMA")
     pdma_prompt: Optional[str] = Field(None, description="User prompt passed to PDMA")
-    idma_prompt: Optional[str] = Field(None, description="User prompt passed to IDMA")
+    # Note: idma_prompt is in IDMAResultEvent
 
 
 class IDMAResultEvent(BaseModel):
@@ -1032,7 +1032,9 @@ class IDMAResultEvent(BaseModel):
     phase: str = Field(..., description="Epistemic phase: 'chaos', 'healthy', or 'rigidity'")
     fragility_flag: bool = Field(..., description="True if reasoning may be brittle")
     sources_identified: List[str] = Field(default_factory=list, description="List of distinct sources identified")
-    correlation_factors: List[str] = Field(default_factory=list, description="Factors contributing to source correlation")
+    correlation_factors: List[str] = Field(
+        default_factory=list, description="Factors contributing to source correlation"
+    )
     reasoning: str = Field(..., description="Analysis of information diversity and epistemic health")
 
     # User prompt passed to IDMA (for debugging/transparency)

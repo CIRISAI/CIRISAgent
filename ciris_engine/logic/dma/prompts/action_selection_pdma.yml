@@ -12,7 +12,7 @@ action_parameter_schemas: "Schemas for 'action_parameters' based on the selected
   FORGET: {\"node\": GraphNode, \"reason\": string, \"no_audit\"?: boolean}\n\
   DEFER: {\"reason\": string, \"context\"?: {string: string}, \"defer_until\"?: string}\n\
   REJECT: {\"reason\": string, \"create_filter\"?: boolean, \"filter_pattern\"?: string, \"filter_type\"?: string, \"filter_priority\"?: string}\n\
-  TOOL: {\"name\": string, \"parameters\": object} - Parameters depend on the specific tool\n\
+  TOOL: {\"tool_name\": string} - ONLY specify the tool name; TSASPDMA will determine parameters from documentation\n\
   OBSERVE: {\"channel_context\"?: ChannelContext, \"active\"?: boolean, \"context\"?: {string: string}}\n\
   TASK_COMPLETE: {\"completion_reason\": string, \"context\"?: {string: string}, \"positive_moment\"?: string}"
 csdma_ambiguity_guidance: If CSDMA highlighted critical ambiguity, highly

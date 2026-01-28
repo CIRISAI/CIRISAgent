@@ -60,6 +60,9 @@ tool_documentation_section: |
 
   **When to Use:** {when_to_use}
 
+  ### Parameter Schema (YOU MUST FILL THESE IN)
+  {parameter_schema}
+
   ### Quick Start
   {quick_start}
 
@@ -78,27 +81,28 @@ tool_documentation_section: |
 context_integration: |
   === ASPDMA'S SELECTION ===
   Tool: {tool_name}
-  Parameters: {tool_parameters}
   Rationale: {aspdma_rationale}
 
-  === ORIGINAL THOUGHT ===
+  === ORIGINAL THOUGHT (contains user's request with parameters) ===
   {original_thought_content}
 
   === TOOL DOCUMENTATION ===
   {tool_documentation}
 
 response_format: |
-  Return an ActionSelectionDMAResult with:
+  Return JSON with these fields:
   - "selected_action": One of "TOOL", "SPEAK", "PONDER"
-  - "action_parameters": Parameters for the selected action
-    - If TOOL: ToolParams with tool_name and parameters (may be refined)
-    - If SPEAK: SpeakParams with content starting "I need the user to answer: ..."
-    - If PONDER: PonderParams with questions about the approach
-  - "rationale": Explain your decision, including:
-    - Any gotchas you're acknowledging
-    - Why you're refining parameters (if TOOL)
-    - What clarification you need (if SPEAK)
-    - Why this tool isn't right (if PONDER)
+  - "rationale": Explain your decision including any gotchas acknowledged
+
+  Additional fields based on action:
+  - If TOOL: "tool_parameters": object with the parameters extracted from the original thought
+    - Parse parameters from the user's request using the documentation as guide
+    - Example: if thought says "$tool curl url=http://example.com", return {"url": "http://example.com"}
+  - If SPEAK: "speak_content": string starting "I need the user to answer: ..."
+  - If PONDER: "ponder_questions": array of strings
+
+  IMPORTANT: You must extract and return the tool parameters from the original thought.
+  The parameters are in the user's request, not provided by ASPDMA.
 
   Do not include extra fields or wrap in markdown code blocks.
 

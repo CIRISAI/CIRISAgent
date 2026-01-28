@@ -510,8 +510,13 @@ class WakeupProcessor(BaseProcessor):
             time_service=self.time_service,
         )
 
-        if not was_created:
-            # Another occurrence claimed the wakeup task
+        # CRITICAL: Single-occurrence agents must always claim, even if task already exists
+        # Multi-occurrence agents use was_created to determine claiming vs monitoring
+        occurrence_id = getattr(self, "occurrence_id", "default")
+        is_single_occurrence = occurrence_id == "default"
+
+        if not was_created and not is_single_occurrence:
+            # Multi-occurrence: Another occurrence claimed it, we monitor
             logger.info(
                 f"Another occurrence claimed wakeup task {root_task.task_id}. "
                 "This occurrence will wait for wakeup completion."
@@ -521,13 +526,17 @@ class WakeupProcessor(BaseProcessor):
             # Don't create step tasks - we'll just monitor the shared task
             return
 
-        logger.info(
-            f"This occurrence claimed shared wakeup task {root_task.task_id}. "
-            "Processing wakeup ritual on behalf of all occurrences."
-        )
-
-        # Get occurrence ID for context
-        occurrence_id = getattr(self, "occurrence_id", "default")
+        # Single-occurrence OR first to claim: We process the task
+        if is_single_occurrence and not was_created:
+            logger.info(
+                f"Single-occurrence agent claiming existing wakeup task {root_task.task_id}. "
+                "(Task persisted from previous run, will process normally)"
+            )
+        else:
+            logger.info(
+                f"This occurrence claimed shared wakeup task {root_task.task_id}. "
+                "Processing wakeup ritual on behalf of all occurrences."
+            )
 
         # CRITICAL: Keep shared wakeup task in "__shared__" namespace for multi-occurrence coordination
         # All occurrences need to be able to query this task to monitor completion

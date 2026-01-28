@@ -16,6 +16,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Returns same `ActionSelectionDMAResult` as ASPDMA for transparent integration
   - Catches parameter ambiguities and gotchas that ASPDMA couldn't see
 
+- **Native LLM Provider Support** - Direct SDK integration for major LLM providers
+  - **Google Gemini**: Native `google-genai` SDK with instructor support
+    - Models: `gemini-2.5-flash` (1M tokens/min), `gemini-2.0-flash` (higher quotas)
+    - Automatic instructor mode: `GEMINI_TOOLS` for structured output
+  - **Anthropic Claude**: Native `anthropic` SDK with instructor support
+    - Models: `claude-sonnet-4-20250514`, `claude-opus-4-5-20251101`
+    - Automatic instructor mode: `ANTHROPIC_TOOLS` for structured output
+  - **Provider Auto-Detection**: Detects provider from API key environment variables
+    - Checks `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `GEMINI_API_KEY`
+    - Falls back to OpenAI-compatible mode if none found
+
+- **New Environment Variables** - LLM configuration with CIRIS_ prefix priority
+  - `CIRIS_LLM_PROVIDER`: Explicit provider selection (`openai`, `anthropic`, `google`)
+  - `CIRIS_LLM_MODEL_NAME`: Model name override (takes precedence over `OPENAI_MODEL`)
+  - `CIRIS_LLM_API_KEY`: API key override (takes precedence over provider-specific keys)
+  - Fallback support for `LLM_PROVIDER`, `LLM_MODEL`, `OPENAI_MODEL`
+
 - **Adapter Auto-Discovery Service** - Multi-path adapter scanning
   - Scans `ciris_adapters/`, `~/.ciris/adapters/`, `.ciris/adapters/`
   - `CIRIS_EXTRA_ADAPTERS` env var for additional paths (colon-separated)
@@ -53,6 +70,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added required `description` to confirm steps
   - Fixed protocol path to `ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol`
   - Fixed binary requirement format (no longer double-quoted)
+
+### Changed
+
+- **ASPDMA/TSASPDMA Schema Refactoring** - Removed Union types for Gemini compatibility
+  - Gemini's structured output doesn't support discriminated unions
+  - `ASPDMALLMResult`: Flat schema with `selected_action` + optional parameter fields
+  - `TSASPDMALLMResult`: Flat schema with `tool_parameters` as JSON dict
+  - `convert_llm_result_to_action_result()`: Converts flat result to typed `ActionSelectionDMAResult`
+  - All existing tests pass with new flat schema design
+
+- **New Dependencies** - Added native LLM provider SDKs
+  - `google-genai>=1.0.0,<2.0.0`: New Google GenAI SDK with instructor support
+  - `jsonref>=1.0.0,<2.0.0`: Required by google-genai for schema resolution
+  - `anthropic>=0.40.0,<1.0.0`: Already present, now actively used for native integration
 
 ## [1.9.2] - 2026-01-27
 

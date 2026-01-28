@@ -2,8 +2,16 @@
 DMA result schemas for typed decision outputs.
 
 Provides type-safe results from each Decision Making Algorithm.
+
+IMPORTANT: This module provides TWO schema patterns:
+1. ActionSelectionDMAResult - Full typed result with Union (internal use, OpenAI/Anthropic compatible)
+2. ASPDMALLMResult - Flat schema WITHOUT Union (Gemini compatible LLM output)
+
+Use ASPDMALLMResult as the response_model for LLM calls, then convert to ActionSelectionDMAResult
+using convert_llm_result_to_action_result().
 """
 
+import logging
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -23,6 +31,9 @@ from ..actions.parameters import (
     ToolParams,
 )
 from ..runtime.enums import HandlerActionType
+from ..services.graph_core import GraphNode, GraphScope, NodeType
+
+logger = logging.getLogger(__name__)
 
 
 class IDMAResult(BaseModel):
@@ -147,4 +158,233 @@ class ActionSelectionDMAResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-__all__ = ["IDMAResult", "EthicalDMAResult", "CSDMAResult", "DSDMAResult", "ActionSelectionDMAResult"]
+class ASPDMALLMResult(BaseModel):
+    """Gemini-compatible ASPDMA LLM output schema - NO Union types.
+
+    This flat schema is used as the response_model for LLM structured output
+    when using providers that don't support Union types (e.g., Google Gemini).
+
+    Only the fields relevant to the selected_action should be populated.
+    Use convert_llm_result_to_action_result() to convert to ActionSelectionDMAResult.
+    """
+
+    selected_action: HandlerActionType = Field(..., description="The chosen handler action")
+    rationale: str = Field(..., description="Reasoning for this action selection (REQUIRED)")
+
+    # === SPEAK parameters ===
+    speak_content: Optional[str] = Field(None, description="Content to speak (for SPEAK action)")
+
+    # === PONDER parameters ===
+    ponder_questions: Optional[List[str]] = Field(None, description="Questions to ponder (for PONDER action)")
+
+    # === REJECT parameters ===
+    reject_reason: Optional[str] = Field(None, description="Reason for rejection (for REJECT action)")
+    reject_create_filter: bool = Field(False, description="Whether to create adaptive filter (for REJECT)")
+
+    # === DEFER parameters ===
+    defer_reason: Optional[str] = Field(None, description="Reason for deferral (for DEFER action)")
+    defer_until: Optional[str] = Field(None, description="ISO timestamp to reactivate (for DEFER)")
+
+    # === TOOL parameters - ONLY the name! TSASPDMA handles actual parameters ===
+    tool_name: Optional[str] = Field(
+        None, description="Tool name to invoke (for TOOL action). TSASPDMA will determine parameters."
+    )
+
+    # === OBSERVE parameters ===
+    observe_active: bool = Field(True, description="Whether observation is active (for OBSERVE)")
+
+    # === MEMORIZE parameters (flattened GraphNode) ===
+    memorize_node_type: Optional[str] = Field(None, description="Type of node to memorize (for MEMORIZE)")
+    memorize_content: Optional[str] = Field(None, description="Content to memorize (for MEMORIZE)")
+    memorize_scope: Optional[str] = Field(None, description="Scope: local, identity, environment, community")
+
+    # === RECALL parameters ===
+    recall_query: Optional[str] = Field(None, description="Search query (for RECALL)")
+    recall_node_type: Optional[str] = Field(None, description="Type of nodes to recall (for RECALL)")
+    recall_scope: Optional[str] = Field(None, description="Scope to search in (for RECALL)")
+    recall_limit: int = Field(10, description="Max results (for RECALL)")
+
+    # === FORGET parameters ===
+    forget_node_id: Optional[str] = Field(None, description="ID of node to forget (for FORGET)")
+    forget_reason: Optional[str] = Field(None, description="Reason for forgetting (for FORGET)")
+
+    # === TASK_COMPLETE parameters ===
+    completion_reason: Optional[str] = Field(None, description="Reason for task completion (for TASK_COMPLETE)")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+def convert_llm_result_to_action_result(
+    llm_result: ASPDMALLMResult,
+    channel_id: Optional[str] = None,
+    raw_llm_response: Optional[str] = None,
+    evaluation_time_ms: Optional[float] = None,
+    resource_usage: Optional[JSONDict] = None,
+    user_prompt: Optional[str] = None,
+) -> ActionSelectionDMAResult:
+    """Convert flat LLM result to fully typed ActionSelectionDMAResult.
+
+    This handles the conversion from the Gemini-compatible flat schema
+    to the internal typed schema with proper *Params objects.
+
+    Args:
+        llm_result: The flat ASPDMALLMResult from LLM
+        channel_id: Optional channel ID to include in parameters
+        raw_llm_response: Optional raw LLM response for debugging
+        evaluation_time_ms: Optional evaluation time
+        resource_usage: Optional resource usage dict
+        user_prompt: Optional user prompt for debugging
+
+    Returns:
+        Fully typed ActionSelectionDMAResult
+    """
+    action = llm_result.selected_action
+    params: Union[
+        ObserveParams,
+        SpeakParams,
+        ToolParams,
+        PonderParams,
+        RejectParams,
+        DeferParams,
+        MemorizeParams,
+        RecallParams,
+        ForgetParams,
+        TaskCompleteParams,
+    ]
+
+    if action == HandlerActionType.SPEAK:
+        params = SpeakParams(
+            channel_id=channel_id,
+            content=llm_result.speak_content or "",
+        )
+
+    elif action == HandlerActionType.PONDER:
+        params = PonderParams(
+            channel_id=channel_id,
+            questions=llm_result.ponder_questions or ["What should I consider?"],
+        )
+
+    elif action == HandlerActionType.REJECT:
+        params = RejectParams(
+            channel_id=channel_id,
+            reason=llm_result.reject_reason or "Request rejected",
+            create_filter=llm_result.reject_create_filter,
+        )
+
+    elif action == HandlerActionType.DEFER:
+        params = DeferParams(
+            channel_id=channel_id,
+            reason=llm_result.defer_reason or "Deferring for later",
+            defer_until=llm_result.defer_until,
+        )
+
+    elif action == HandlerActionType.TOOL:
+        # ASPDMA only provides tool_name - TSASPDMA will fill in parameters
+        # Parameters are empty here; TSASPDMA handles parameter extraction
+        params = ToolParams(
+            channel_id=channel_id,
+            name=llm_result.tool_name or "unknown_tool",
+            parameters={},  # Empty - TSASPDMA fills this in
+        )
+
+    elif action == HandlerActionType.OBSERVE:
+        params = ObserveParams(
+            channel_id=channel_id,
+            active=llm_result.observe_active,
+        )
+
+    elif action == HandlerActionType.MEMORIZE:
+        # Create GraphNode from flattened fields
+        node_type = NodeType.OBSERVATION  # Default
+        if llm_result.memorize_node_type:
+            try:
+                node_type = NodeType(llm_result.memorize_node_type)
+            except ValueError:
+                logger.warning(f"Unknown node type: {llm_result.memorize_node_type}, using OBSERVATION")
+
+        scope = GraphScope.LOCAL  # Default
+        if llm_result.memorize_scope:
+            try:
+                scope = GraphScope(llm_result.memorize_scope)
+            except ValueError:
+                logger.warning(f"Unknown scope: {llm_result.memorize_scope}, using LOCAL")
+
+        node = GraphNode(
+            node_type=node_type,
+            content=llm_result.memorize_content or "",
+            scope=scope,
+        )
+        params = MemorizeParams(channel_id=channel_id, node=node)
+
+    elif action == HandlerActionType.RECALL:
+        scope = None
+        if llm_result.recall_scope:
+            try:
+                scope = GraphScope(llm_result.recall_scope)
+            except ValueError:
+                logger.warning(f"Unknown scope: {llm_result.recall_scope}, using None")
+
+        params = RecallParams(
+            channel_id=channel_id,
+            query=llm_result.recall_query,
+            node_type=llm_result.recall_node_type,
+            scope=scope,
+            limit=llm_result.recall_limit,
+        )
+
+    elif action == HandlerActionType.FORGET:
+        # FORGET requires a node - create minimal one if only ID provided
+        if llm_result.forget_node_id:
+            node = GraphNode(
+                node_id=llm_result.forget_node_id,
+                node_type=NodeType.OBSERVATION,
+                content="",
+                scope=GraphScope.LOCAL,
+            )
+        else:
+            # Fallback - should not happen in practice
+            node = GraphNode(
+                node_type=NodeType.OBSERVATION,
+                content="",
+                scope=GraphScope.LOCAL,
+            )
+        params = ForgetParams(
+            channel_id=channel_id,
+            node=node,
+            reason=llm_result.forget_reason or "No reason provided",
+        )
+
+    elif action == HandlerActionType.TASK_COMPLETE:
+        params = TaskCompleteParams(
+            channel_id=channel_id,
+            completion_reason=llm_result.completion_reason or "Task completed",
+        )
+
+    else:
+        # Fallback to PONDER for unknown actions
+        logger.warning(f"Unknown action type: {action}, falling back to PONDER")
+        params = PonderParams(
+            channel_id=channel_id,
+            questions=[f"Unknown action {action} - what should I do?"],
+        )
+
+    return ActionSelectionDMAResult(
+        selected_action=action,
+        action_parameters=params,
+        rationale=llm_result.rationale,
+        raw_llm_response=raw_llm_response,
+        evaluation_time_ms=evaluation_time_ms,
+        resource_usage=resource_usage,
+        user_prompt=user_prompt,
+    )
+
+
+__all__ = [
+    "IDMAResult",
+    "EthicalDMAResult",
+    "CSDMAResult",
+    "DSDMAResult",
+    "ActionSelectionDMAResult",
+    "ASPDMALLMResult",
+    "convert_llm_result_to_action_result",
+]

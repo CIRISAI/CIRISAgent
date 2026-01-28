@@ -3,7 +3,7 @@ OpenaiWhisper Adapter - Converted from Clawdbot skill: openai-whisper
 
 Local speech-to-text with the Whisper CLI (no API key).
 
-Original source: ../clawdbot/skills/openai-whisper/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/openai-whisper/SKILL.md
 """
 
 from .adapter import OpenaiWhisperAdapter

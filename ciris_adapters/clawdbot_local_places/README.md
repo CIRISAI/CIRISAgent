@@ -108,4 +108,4 @@ Use `next_page_token` as `page_token` in next request for more results.
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/local-places/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/local-places/SKILL.md*

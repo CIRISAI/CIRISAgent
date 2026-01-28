@@ -84,4 +84,4 @@ Notes
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/apple-reminders/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/apple-reminders/SKILL.md*

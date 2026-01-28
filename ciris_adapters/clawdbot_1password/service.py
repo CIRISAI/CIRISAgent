@@ -1,5 +1,5 @@
 """
-1password Tool Service for CIRIS.
+Onepassword Tool Service for CIRIS.
 
 Converted from Clawdbot skill: 1password
 Set up and use 1Password CLI (op). Use when installing the CLI, enabling desktop app integration, signing in (single or multi-account), or reading/injecting/running secrets via op.
@@ -12,7 +12,6 @@ ToolInfo.documentation field for DMA-aware tool selection.
 import logging
 import os
 import shutil
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -35,9 +34,9 @@ from ciris_engine.schemas.adapters.tools import (
 logger = logging.getLogger(__name__)
 
 
-class OnePasswordToolService:
+class OnepasswordToolService:
     """
-    1password tool service providing skill-based guidance.
+    Onepassword tool service providing skill-based guidance.
 
     Original skill: 1password
     Description: Set up and use 1Password CLI (op). Use when installing the CLI, enabling desktop app integration, signing in (single or multi-account), or reading/injecting/running secrets via op.
@@ -47,15 +46,15 @@ class OnePasswordToolService:
         """Initialize the tool service."""
         self.config = config or {}
         self._call_count = 0
-        logger.info("OnePasswordToolService initialized")
+        logger.info("OnepasswordToolService initialized")
 
     async def start(self) -> None:
         """Start the service."""
-        logger.info("OnePasswordToolService started")
+        logger.info("OnepasswordToolService started")
 
     async def stop(self) -> None:
         """Stop the service."""
-        logger.info("OnePasswordToolService stopped")
+        logger.info("OnepasswordToolService stopped")
 
     def _build_tool_info(self) -> ToolInfo:
         """Build the ToolInfo with all skill documentation."""
@@ -182,8 +181,9 @@ class OnePasswordToolService:
         try:
             command = parameters.get("command", "")
 
-            # Check requirements
-            requirements_met, missing = self._check_requirements()
+            # Check requirements using ToolInfo
+            tool_info = self._build_tool_info()
+            requirements_met, missing = self._check_requirements(tool_info)
             if not requirements_met:
                 return ToolExecutionResult(
                     tool_name=tool_name,
@@ -195,7 +195,6 @@ class OnePasswordToolService:
                 )
 
             # Return guidance for executing the command
-            tool_info = self._build_tool_info()
             return ToolExecutionResult(
                 tool_name=tool_name,
                 status=ToolExecutionStatus.COMPLETED,
@@ -221,27 +220,34 @@ class OnePasswordToolService:
                 correlation_id=correlation_id,
             )
 
-    def _check_requirements(self) -> tuple[bool, List[str]]:
-        """Check if all requirements are met."""
+    def _check_requirements(self, tool_info: ToolInfo) -> tuple[bool, List[str]]:
+        """Check if all requirements are met using ToolInfo.requirements."""
         missing = []
 
+        if not tool_info.requirements:
+            return True, []
+
+        req = tool_info.requirements
+
         # Check binaries
-        binaries = ["'op'"]
-        for binary in binaries:
-            if not shutil.which(binary):
-                missing.append(f"binary:{binary}")
+        for bin_req in req.binaries:
+            if not shutil.which(bin_req.name):
+                missing.append(f"binary:{bin_req.name}")
 
         # Check any_binaries (at least one)
-        any_binaries = []
-        if any_binaries:
-            found = any(shutil.which(b) for b in any_binaries)
+        if req.any_binaries:
+            found = any(shutil.which(b.name) for b in req.any_binaries)
             if not found:
-                missing.append(f"any_binary:{','.join(any_binaries)}")
+                names = [b.name for b in req.any_binaries]
+                missing.append(f"any_binary:{','.join(names)}")
 
         # Check env vars
-        env_vars = []
-        for env_var in env_vars:
-            if not os.environ.get(env_var):
-                missing.append(f"env:{env_var}")
+        for env_req in req.env_vars:
+            if not os.environ.get(env_req.name):
+                missing.append(f"env:{env_req.name}")
+
+        # Check config keys (skip for now - would need config service)
+        # for config_req in req.config_keys:
+        #     ...
 
         return len(missing) == 0, missing

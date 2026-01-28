@@ -101,4 +101,4 @@ curl -s "https://api.trello.com/1/boards/{boardId}/cards?key=$TRELLO_API_KEY&tok
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/trello/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/trello/SKILL.md*

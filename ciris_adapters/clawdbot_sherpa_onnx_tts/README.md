@@ -67,4 +67,4 @@ Notes:
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/sherpa-onnx-tts/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/sherpa-onnx-tts/SKILL.md*

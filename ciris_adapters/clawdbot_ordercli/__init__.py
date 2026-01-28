@@ -3,7 +3,7 @@ Ordercli Adapter - Converted from Clawdbot skill: ordercli
 
 Foodora-only CLI for checking past orders and active order status (Deliveroo WIP).
 
-Original source: ../clawdbot/skills/ordercli/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/ordercli/SKILL.md
 """
 
 from .adapter import OrdercliAdapter

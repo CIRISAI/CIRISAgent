@@ -3,7 +3,7 @@ Eightctl Adapter - Converted from Clawdbot skill: eightctl
 
 Control Eight Sleep pods (status, temperature, alarms, schedules).
 
-Original source: ../clawdbot/skills/eightctl/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/eightctl/SKILL.md
 """
 
 from .adapter import EightctlAdapter

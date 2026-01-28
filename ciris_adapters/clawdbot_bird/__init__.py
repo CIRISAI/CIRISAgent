@@ -3,7 +3,7 @@ Bird Adapter - Converted from Clawdbot skill: bird
 
 X/Twitter CLI for reading, searching, posting, and engagement via cookies.
 
-Original source: ../clawdbot/skills/bird/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/bird/SKILL.md
 """
 
 from .adapter import BirdAdapter

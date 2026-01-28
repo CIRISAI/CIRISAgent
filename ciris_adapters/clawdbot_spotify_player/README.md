@@ -50,4 +50,4 @@ Notes
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/spotify-player/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/spotify-player/SKILL.md*

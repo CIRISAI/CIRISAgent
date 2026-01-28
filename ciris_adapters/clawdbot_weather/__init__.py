@@ -3,7 +3,7 @@ Weather Adapter - Converted from Clawdbot skill: weather
 
 Get current weather and forecasts (no API key required).
 
-Original source: ../clawdbot/skills/weather/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/weather/SKILL.md
 """
 
 from .adapter import WeatherAdapter

@@ -71,4 +71,4 @@ Prefer direct edits when appropriate: open the `.md` file and change it; Obsidia
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/obsidian/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/obsidian/SKILL.md*

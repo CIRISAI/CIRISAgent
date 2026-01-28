@@ -65,4 +65,4 @@ gh issue list --repo owner/repo --json number,title --jq '.[] | "\(.number): \(.
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/github/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/github/SKILL.md*

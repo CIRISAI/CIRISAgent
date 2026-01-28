@@ -161,4 +161,4 @@ Message context lines include `slack message id` and `channel` fields you can re
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/slack/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/slack/SKILL.md*

@@ -42,4 +42,4 @@ Notes
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/imsg/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/imsg/SKILL.md*

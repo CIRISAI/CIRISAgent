@@ -295,4 +295,4 @@ This triggers an immediate wake event — Skippy gets pinged in seconds, not 10 
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/coding-agent/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/coding-agent/SKILL.md*

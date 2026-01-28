@@ -78,4 +78,4 @@ Notes
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/things-mac/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/things-mac/SKILL.md*

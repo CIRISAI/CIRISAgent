@@ -83,4 +83,4 @@ Optional services:
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/summarize/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/summarize/SKILL.md*

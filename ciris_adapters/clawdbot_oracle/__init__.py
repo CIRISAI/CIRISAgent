@@ -3,7 +3,7 @@ Oracle Adapter - Converted from Clawdbot skill: oracle
 
 Best practices for using the oracle CLI (prompt + file bundling, engines, sessions, and file attachment patterns).
 
-Original source: ../clawdbot/skills/oracle/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/oracle/SKILL.md
 """
 
 from .adapter import OracleAdapter

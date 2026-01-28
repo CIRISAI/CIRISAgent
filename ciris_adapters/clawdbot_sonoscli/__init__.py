@@ -3,7 +3,7 @@ Sonoscli Adapter - Converted from Clawdbot skill: sonoscli
 
 Control Sonos speakers (discover/status/play/volume/group).
 
-Original source: ../clawdbot/skills/sonoscli/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/sonoscli/SKILL.md
 """
 
 from .adapter import SonoscliAdapter

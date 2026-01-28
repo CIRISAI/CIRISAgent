@@ -63,4 +63,4 @@ Environment tweaks
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/gifgrep/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/gifgrep/SKILL.md*

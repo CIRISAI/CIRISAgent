@@ -39,4 +39,4 @@ Notes
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/gemini/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/gemini/SKILL.md*

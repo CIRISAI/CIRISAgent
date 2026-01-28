@@ -3,7 +3,7 @@ Camsnap Adapter - Converted from Clawdbot skill: camsnap
 
 Capture frames or clips from RTSP/ONVIF cameras.
 
-Original source: ../clawdbot/skills/camsnap/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/camsnap/SKILL.md
 """
 
 from .adapter import CamsnapAdapter

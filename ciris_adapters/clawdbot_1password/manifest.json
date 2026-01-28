@@ -10,7 +10,7 @@
     {
       "type": "TOOL",
       "priority": "NORMAL",
-      "class": "clawdbot_1password.service.OnePasswordToolService",
+      "class": "clawdbot_1password.service.OnepasswordToolService",
       "capabilities": [
         "tool:1password",
         "requires:binaries"
@@ -30,7 +30,7 @@
     ]
   },
   "exports": {
-    "service_class": "clawdbot_1password.service.OnePasswordToolService"
+    "service_class": "clawdbot_1password.service.OnepasswordToolService"
   },
   "configuration": {}
 }

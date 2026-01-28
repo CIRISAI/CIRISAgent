@@ -213,4 +213,4 @@ bird query-ids --fresh
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/bird/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/bird/SKILL.md*

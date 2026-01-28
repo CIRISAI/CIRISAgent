@@ -65,4 +65,4 @@ Docs: https://open-meteo.com/en/docs
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/weather/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/weather/SKILL.md*

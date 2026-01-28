@@ -3,7 +3,7 @@ Sag Adapter - Converted from Clawdbot skill: sag
 
 ElevenLabs text-to-speech with mac-style say UX.
 
-Original source: ../clawdbot/skills/sag/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/sag/SKILL.md
 """
 
 from .adapter import SagAdapter

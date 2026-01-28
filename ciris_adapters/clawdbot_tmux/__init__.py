@@ -3,7 +3,7 @@ Tmux Adapter - Converted from Clawdbot skill: tmux
 
 Remote-control tmux sessions for interactive CLIs by sending keystrokes and scraping pane output.
 
-Original source: ../clawdbot/skills/tmux/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/tmux/SKILL.md
 """
 
 from .adapter import TmuxAdapter

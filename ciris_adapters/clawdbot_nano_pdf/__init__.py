@@ -3,7 +3,7 @@ NanoPdf Adapter - Converted from Clawdbot skill: nano-pdf
 
 Edit PDFs with natural-language instructions using the nano-pdf CLI.
 
-Original source: ../clawdbot/skills/nano-pdf/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/nano-pdf/SKILL.md
 """
 
 from .adapter import NanoPdfAdapter

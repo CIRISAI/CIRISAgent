@@ -35,4 +35,4 @@ Notes
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/openai-whisper/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/openai-whisper/SKILL.md*

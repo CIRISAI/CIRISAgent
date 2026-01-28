@@ -233,4 +233,4 @@ RUST_LOG=trace RUST_BACKTRACE=1 himalaya envelope list
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/himalaya/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/himalaya/SKILL.md*

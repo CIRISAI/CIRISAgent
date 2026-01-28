@@ -122,4 +122,4 @@ jq -r 'select(.type=="message") | .message.content[]? | select(.type=="text") | 
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/session-logs/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/session-logs/SKILL.md*

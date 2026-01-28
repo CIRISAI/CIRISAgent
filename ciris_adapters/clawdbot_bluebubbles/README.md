@@ -57,4 +57,4 @@ Use this skill when working on the BlueBubbles channel plugin.
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/bluebubbles/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/bluebubbles/SKILL.md*

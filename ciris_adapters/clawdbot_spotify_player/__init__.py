@@ -3,7 +3,7 @@ SpotifyPlayer Adapter - Converted from Clawdbot skill: spotify-player
 
 Terminal Spotify playback/search via spogo (preferred) or spotify_player.
 
-Original source: ../clawdbot/skills/spotify-player/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/spotify-player/SKILL.md
 """
 
 from .adapter import SpotifyPlayerAdapter

@@ -12,7 +12,6 @@ ToolInfo.documentation field for DMA-aware tool selection.
 import logging
 import os
 import shutil
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -80,8 +79,8 @@ class SherpaOnnxTtsToolService:
             when_to_use="""When you need to local text-to-speech via sherpa-onnx (offline, no cloud)""",
             requirements=ToolRequirements(
                 env_vars=[
-                    EnvVarRequirement(name="SHERPA_ONNX_RUNTIME_DIR", secret=False),
-                    EnvVarRequirement(name="SHERPA_ONNX_MODEL_DIR", secret=False),
+                    EnvVarRequirement(name="SHERPA_ONNX_RUNTIME_DIR"),
+                    EnvVarRequirement(name="SHERPA_ONNX_MODEL_DIR"),
                 ],
                 platforms=["darwin", "linux", "win32"],
             ),
@@ -185,8 +184,9 @@ class SherpaOnnxTtsToolService:
         try:
             command = parameters.get("command", "")
 
-            # Check requirements
-            requirements_met, missing = self._check_requirements()
+            # Check requirements using ToolInfo
+            tool_info = self._build_tool_info()
+            requirements_met, missing = self._check_requirements(tool_info)
             if not requirements_met:
                 return ToolExecutionResult(
                     tool_name=tool_name,
@@ -198,7 +198,6 @@ class SherpaOnnxTtsToolService:
                 )
 
             # Return guidance for executing the command
-            tool_info = self._build_tool_info()
             return ToolExecutionResult(
                 tool_name=tool_name,
                 status=ToolExecutionStatus.COMPLETED,
@@ -224,27 +223,34 @@ class SherpaOnnxTtsToolService:
                 correlation_id=correlation_id,
             )
 
-    def _check_requirements(self) -> tuple[bool, List[str]]:
-        """Check if all requirements are met."""
+    def _check_requirements(self, tool_info: ToolInfo) -> tuple[bool, List[str]]:
+        """Check if all requirements are met using ToolInfo.requirements."""
         missing = []
 
+        if not tool_info.requirements:
+            return True, []
+
+        req = tool_info.requirements
+
         # Check binaries
-        binaries = []
-        for binary in binaries:
-            if not shutil.which(binary):
-                missing.append(f"binary:{binary}")
+        for bin_req in req.binaries:
+            if not shutil.which(bin_req.name):
+                missing.append(f"binary:{bin_req.name}")
 
         # Check any_binaries (at least one)
-        any_binaries = []
-        if any_binaries:
-            found = any(shutil.which(b) for b in any_binaries)
+        if req.any_binaries:
+            found = any(shutil.which(b.name) for b in req.any_binaries)
             if not found:
-                missing.append(f"any_binary:{','.join(any_binaries)}")
+                names = [b.name for b in req.any_binaries]
+                missing.append(f"any_binary:{','.join(names)}")
 
         # Check env vars
-        env_vars = ["'SHERPA_ONNX_RUNTIME_DIR'", "'SHERPA_ONNX_MODEL_DIR'"]
-        for env_var in env_vars:
-            if not os.environ.get(env_var):
-                missing.append(f"env:{env_var}")
+        for env_req in req.env_vars:
+            if not os.environ.get(env_req.name):
+                missing.append(f"env:{env_req.name}")
+
+        # Check config keys (skip for now - would need config service)
+        # for config_req in req.config_keys:
+        #     ...
 
         return len(missing) == 0, missing

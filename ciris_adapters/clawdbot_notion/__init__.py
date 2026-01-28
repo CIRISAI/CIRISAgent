@@ -3,7 +3,7 @@ Notion Adapter - Converted from Clawdbot skill: notion
 
 Notion API for creating and managing pages, databases, and blocks.
 
-Original source: ../clawdbot/skills/notion/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/notion/SKILL.md
 """
 
 from .adapter import NotionAdapter

@@ -3,7 +3,7 @@ Openhue Adapter - Converted from Clawdbot skill: openhue
 
 Control Philips Hue lights/scenes via the OpenHue CLI.
 
-Original source: ../clawdbot/skills/openhue/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/openhue/SKILL.md
 """
 
 from .adapter import OpenhueAdapter

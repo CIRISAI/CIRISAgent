@@ -3,7 +3,7 @@ Gemini Adapter - Converted from Clawdbot skill: gemini
 
 Gemini CLI for one-shot Q&A, summaries, and generation.
 
-Original source: ../clawdbot/skills/gemini/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/gemini/SKILL.md
 """
 
 from .adapter import GeminiAdapter

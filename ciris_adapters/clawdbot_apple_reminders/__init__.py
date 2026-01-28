@@ -3,7 +3,7 @@ AppleReminders Adapter - Converted from Clawdbot skill: apple-reminders
 
 Manage Apple Reminders via the `remindctl` CLI on macOS (list, add, edit, complete, delete). Supports lists, date filters, and JSON/plain output.
 
-Original source: ../clawdbot/skills/apple-reminders/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/apple-reminders/SKILL.md
 """
 
 from .adapter import AppleRemindersAdapter

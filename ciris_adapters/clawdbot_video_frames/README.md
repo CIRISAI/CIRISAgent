@@ -45,4 +45,4 @@ At a timestamp:
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/video-frames/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/video-frames/SKILL.md*

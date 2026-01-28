@@ -96,4 +96,4 @@ timeout = "5s"
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/bear-notes/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/bear-notes/SKILL.md*

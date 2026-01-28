@@ -3,7 +3,7 @@ OpenaiWhisperApi Adapter - Converted from Clawdbot skill: openai-whisper-api
 
 Transcribe audio via OpenAI Audio Transcriptions API (Whisper).
 
-Original source: ../clawdbot/skills/openai-whisper-api/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/openai-whisper-api/SKILL.md
 """
 
 from .adapter import OpenaiWhisperApiAdapter

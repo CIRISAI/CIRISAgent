@@ -3,7 +3,7 @@ BearNotes Adapter - Converted from Clawdbot skill: bear-notes
 
 Create, search, and manage Bear notes via grizzly CLI.
 
-Original source: ../clawdbot/skills/bear-notes/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/bear-notes/SKILL.md
 """
 
 from .adapter import BearNotesAdapter

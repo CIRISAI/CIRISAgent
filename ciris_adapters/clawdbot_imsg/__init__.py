@@ -3,7 +3,7 @@ Imsg Adapter - Converted from Clawdbot skill: imsg
 
 iMessage/SMS CLI for listing chats, history, watch, and sending.
 
-Original source: ../clawdbot/skills/imsg/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/imsg/SKILL.md
 """
 
 from .adapter import ImsgAdapter

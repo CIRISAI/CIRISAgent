@@ -3,7 +3,7 @@ Goplaces Adapter - Converted from Clawdbot skill: goplaces
 
 Query Google Places API (New) via the goplaces CLI for text search, place details, resolve, and reviews. Use for human-friendly place lookup or JSON output for scripts.
 
-Original source: ../clawdbot/skills/goplaces/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/goplaces/SKILL.md
 """
 
 from .adapter import GoplacesAdapter

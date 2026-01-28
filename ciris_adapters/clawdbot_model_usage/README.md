@@ -63,4 +63,4 @@ cat /tmp/cost.json | python {baseDir}/scripts/model_usage.py --input - --mode cu
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/model-usage/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/model-usage/SKILL.md*

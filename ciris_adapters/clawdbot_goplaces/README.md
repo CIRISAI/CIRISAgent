@@ -47,4 +47,4 @@ Notes
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/goplaces/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/goplaces/SKILL.md*

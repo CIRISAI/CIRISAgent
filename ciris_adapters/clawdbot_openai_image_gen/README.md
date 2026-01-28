@@ -88,4 +88,4 @@ Different models support different parameter values. The script automatically se
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/openai-image-gen/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/openai-image-gen/SKILL.md*

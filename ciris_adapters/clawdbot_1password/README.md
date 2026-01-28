@@ -1,4 +1,4 @@
-# 1password Adapter
+# Onepassword Adapter
 
 > Converted from Clawdbot skill: `1password`
 
@@ -69,4 +69,4 @@ tmux -S "$SOCKET" kill-session -t "$SESSION"
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/1password/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/1password/SKILL.md*

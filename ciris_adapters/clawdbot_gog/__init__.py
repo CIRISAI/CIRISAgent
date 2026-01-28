@@ -3,7 +3,7 @@ Gog Adapter - Converted from Clawdbot skill: gog
 
 Google Workspace CLI for Gmail, Calendar, Drive, Contacts, Sheets, and Docs.
 
-Original source: ../clawdbot/skills/gog/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/gog/SKILL.md
 """
 
 from .adapter import GogAdapter

@@ -54,4 +54,4 @@ Notes
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/mcporter/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/mcporter/SKILL.md*

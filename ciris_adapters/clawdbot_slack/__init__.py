@@ -3,7 +3,7 @@ Slack Adapter - Converted from Clawdbot skill: slack
 
 Use when you need to control Slack from Moltbot via the slack tool, including reacting to messages or pinning/unpinning items in Slack channels or DMs.
 
-Original source: ../clawdbot/skills/slack/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/slack/SKILL.md
 """
 
 from .adapter import SlackAdapter

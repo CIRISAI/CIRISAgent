@@ -3,7 +3,7 @@ Obsidian Adapter - Converted from Clawdbot skill: obsidian
 
 Work with Obsidian vaults (plain Markdown notes) and automate via obsidian-cli.
 
-Original source: ../clawdbot/skills/obsidian/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/obsidian/SKILL.md
 """
 
 from .adapter import ObsidianAdapter

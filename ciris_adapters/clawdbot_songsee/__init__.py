@@ -3,7 +3,7 @@ Songsee Adapter - Converted from Clawdbot skill: songsee
 
 Generate spectrograms and feature-panel visualizations from audio with the songsee CLI.
 
-Original source: ../clawdbot/skills/songsee/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/songsee/SKILL.md
 """
 
 from .adapter import SongseeAdapter

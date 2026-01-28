@@ -172,4 +172,4 @@ Common property formats for database items:
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/notion/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/notion/SKILL.md*

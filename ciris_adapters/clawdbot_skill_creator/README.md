@@ -389,4 +389,4 @@ After testing the skill, users may request improvements. Often this happens righ
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/skill-creator/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/skill-creator/SKILL.md*

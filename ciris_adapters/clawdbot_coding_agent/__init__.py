@@ -3,7 +3,7 @@ CodingAgent Adapter - Converted from Clawdbot skill: coding-agent
 
 Run Codex CLI, Claude Code, OpenCode, or Pi Coding Agent via background process for programmatic control.
 
-Original source: ../clawdbot/skills/coding-agent/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/coding-agent/SKILL.md
 """
 
 from .adapter import CodingAgentAdapter

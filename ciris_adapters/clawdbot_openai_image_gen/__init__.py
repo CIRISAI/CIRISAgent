@@ -3,7 +3,7 @@ OpenaiImageGen Adapter - Converted from Clawdbot skill: openai-image-gen
 
 Batch-generate images via OpenAI Images API. Random prompt sampler + `index.html` gallery.
 
-Original source: ../clawdbot/skills/openai-image-gen/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/openai-image-gen/SKILL.md
 """
 
 from .adapter import OpenaiImageGenAdapter

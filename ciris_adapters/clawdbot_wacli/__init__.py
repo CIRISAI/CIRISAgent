@@ -3,7 +3,7 @@ Wacli Adapter - Converted from Clawdbot skill: wacli
 
 Send WhatsApp messages to other people or search/sync WhatsApp history via the wacli CLI (not for normal user chats).
 
-Original source: ../clawdbot/skills/wacli/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/wacli/SKILL.md
 """
 
 from .adapter import WacliAdapter

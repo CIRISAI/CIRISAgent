@@ -121,4 +121,4 @@ Oracle runs are one-shot; the model doesn’t remember prior runs. “Restoring 
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/oracle/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/oracle/SKILL.md*

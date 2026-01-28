@@ -52,4 +52,4 @@ Notes:
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/voice-call/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/voice-call/SKILL.md*

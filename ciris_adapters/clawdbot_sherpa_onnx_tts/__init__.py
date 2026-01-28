@@ -3,7 +3,7 @@ SherpaOnnxTts Adapter - Converted from Clawdbot skill: sherpa-onnx-tts
 
 Local text-to-speech via sherpa-onnx (offline, no cloud)
 
-Original source: ../clawdbot/skills/sherpa-onnx-tts/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/sherpa-onnx-tts/SKILL.md
 """
 
 from .adapter import SherpaOnnxTtsAdapter

@@ -3,7 +3,7 @@ VoiceCall Adapter - Converted from Clawdbot skill: voice-call
 
 Start voice calls via the Moltbot voice-call plugin.
 
-Original source: ../clawdbot/skills/voice-call/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/voice-call/SKILL.md
 """
 
 from .adapter import VoiceCallAdapter

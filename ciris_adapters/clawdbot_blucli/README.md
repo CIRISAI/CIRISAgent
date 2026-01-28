@@ -43,4 +43,4 @@ Prefer `--json` for scripts. Confirm the target device before changing playback.
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/blucli/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/blucli/SKILL.md*

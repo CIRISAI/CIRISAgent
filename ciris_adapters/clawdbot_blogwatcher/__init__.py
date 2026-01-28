@@ -3,7 +3,7 @@ Blogwatcher Adapter - Converted from Clawdbot skill: blogwatcher
 
 Monitor blogs and RSS/Atom feeds for updates using the blogwatcher CLI.
 
-Original source: ../clawdbot/skills/blogwatcher/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/blogwatcher/SKILL.md
 """
 
 from .adapter import BlogwatcherAdapter

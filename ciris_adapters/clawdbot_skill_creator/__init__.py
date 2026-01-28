@@ -3,7 +3,7 @@ SkillCreator Adapter - Converted from Clawdbot skill: skill-creator
 
 Create or update AgentSkills. Use when designing, structuring, or packaging skills with scripts, references, and assets.
 
-Original source: ../clawdbot/skills/skill-creator/SKILL.md
+Original source: /home/emoore/clawdbot_lessons/clawdbot/skills/skill-creator/SKILL.md
 """
 
 from .adapter import SkillCreatorAdapter

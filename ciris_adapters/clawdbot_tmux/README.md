@@ -139,4 +139,4 @@ tmux -S "$SOCKET" capture-pane -p -t agent-1 -S -500
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/tmux/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/tmux/SKILL.md*

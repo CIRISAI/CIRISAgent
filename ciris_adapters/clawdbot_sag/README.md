@@ -79,4 +79,4 @@ Default voice for Clawd: `lj2rcrvANS3gaWWnczSX` (or just `-v Clawd`)
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/sag/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/sag/SKILL.md*

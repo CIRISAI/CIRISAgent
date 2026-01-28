@@ -60,4 +60,4 @@ Set `OPENAI_API_KEY`, or configure it in `~/.clawdbot/moltbot.json`:
 ---
 
 *Converted by CIRIS Skill Converter*
-*Source: ../clawdbot/skills/openai-whisper-api/SKILL.md*
+*Source: /home/emoore/clawdbot_lessons/clawdbot/skills/openai-whisper-api/SKILL.md*

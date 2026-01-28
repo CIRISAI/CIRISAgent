@@ -327,14 +327,16 @@ class ThoughtProcessor(
             logger.error(
                 f"TSASPDMA-ERROR: Tool '{tool_name}' selected by ASPDMA but not registered! " f"Overriding to PONDER."
             )
+            from ciris_engine.schemas.actions.parameters import PonderParams
             from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
-            from ciris_engine.schemas.foundational.actions import PonderParams
 
             return ActionSelectionDMAResult(
                 selected_action=HandlerActionType.PONDER,
                 action_parameters=PonderParams(
-                    questions=[f"Tool '{tool_name}' is not available. What alternative approach should I take?"],
-                    context=f"ASPDMA selected tool '{tool_name}' but it is not registered in the system.",
+                    questions=[
+                        f"Tool '{tool_name}' is not available. What alternative approach should I take?",
+                        f"Context: ASPDMA selected tool '{tool_name}' but it is not registered in the system.",
+                    ],
                 ),
                 rationale=f"TSASPDMA-OVERRIDE: Tool '{tool_name}' not found - forcing reconsideration",
             )

@@ -47,11 +47,13 @@ system_guidance_header: |
   - This tool cannot accomplish the task
   - A different tool would be significantly better
   - The documentation reveals capability mismatch
+  - Using this tool would be inappropriate or unethical in context
 
   Choose TOOL if:
   - Documentation confirms this is appropriate
   - Parameters are clear (refine if examples suggest improvements)
   - You can acknowledge relevant gotchas
+  - Tool use is ethical and advances the user's goal appropriately
 
 tool_documentation_section: |
   === TOOL: {tool_name} ===
@@ -92,7 +94,10 @@ context_integration: |
 response_format: |
   Return JSON with these fields:
   - "selected_action": One of "TOOL", "SPEAK", "PONDER"
-  - "rationale": Explain your decision including any gotchas acknowledged
+  - "rationale": Explain your decision including:
+    1. Why this tool is appropriate for the task
+    2. Why using this tool is ethical in context
+    3. Any gotchas you are acknowledging
 
   Additional fields based on action:
   - If TOOL: "tool_parameters": object with parameters inferred from context

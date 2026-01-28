@@ -11,11 +11,14 @@ import logging
 import os
 import shutil
 import sys
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.adapters.tools import InstallStep, ToolInfo, ToolRequirements
+
+if TYPE_CHECKING:
+    from ciris_engine.logic.services.tool.installer import InstallResult
 
 logger = logging.getLogger(__name__)
 
@@ -192,3 +195,37 @@ class ToolEligibilityChecker:
             else:
                 logger.info(f"Tool '{tool.name}' not eligible: {result.reason}")
         return eligible
+
+    async def install_and_recheck(
+        self, tool_info: ToolInfo, dry_run: bool = False
+    ) -> tuple["EligibilityResult", Optional["InstallResult"]]:
+        """Attempt to install missing dependencies and re-check eligibility.
+
+        Args:
+            tool_info: Tool to install dependencies for
+            dry_run: If True, don't actually install, just report what would happen
+
+        Returns:
+            Tuple of (new_eligibility_result, install_result or None)
+        """
+        from ciris_engine.logic.services.tool.installer import InstallResult, ToolInstaller
+
+        initial = self.check_eligibility(tool_info)
+        if initial.eligible:
+            return initial, None
+
+        if not initial.install_hints:
+            return initial, InstallResult(
+                success=False,
+                step_id="none",
+                message="No install hints available for missing dependencies",
+            )
+
+        installer = ToolInstaller(dry_run=dry_run)
+        install_result = await installer.install_first_applicable(initial.install_hints)
+
+        if install_result.success:
+            new_result = self.check_eligibility(tool_info)
+            return new_result, install_result
+
+        return initial, install_result

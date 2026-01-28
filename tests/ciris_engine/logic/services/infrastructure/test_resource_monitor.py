@@ -842,10 +842,11 @@ async def test_billing_provider_jwt_auth_mode():
         account = CreditAccount(provider="oauth:google", account_id="user-jwt-test")
         await provider.check_credit(account)
 
-        # Verify JWT auth header was used
+        # Verify JWT auth header was used (case-insensitive check)
         assert captured_headers is not None
-        assert "authorization" in captured_headers
-        assert captured_headers["authorization"] == "Bearer test_google_id_token_abc123"
+        headers_lower = {k.lower(): v for k, v in captured_headers.items()}
+        assert "authorization" in headers_lower
+        assert headers_lower["authorization"] == "Bearer test_google_id_token_abc123"
     finally:
         await provider.stop()
 

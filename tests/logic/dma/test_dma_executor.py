@@ -380,3 +380,207 @@ class TestDMAIntegration:
             assert result.conflicts == "none"
             assert result.reasoning == "Success after retry"
             assert ethical_evaluator.evaluate.call_count == 2
+
+
+class TestTSASPDMA:
+    """Tests for the Tool-Specific Action Selection PDMA (TSASPDMA) execution."""
+
+    @pytest.fixture
+    def tsaspdma_evaluator(self, service_registry):
+        """Create a mock TSASPDMAEvaluator."""
+        from ciris_engine.logic.dma.tsaspdma import TSASPDMAEvaluator
+        from ciris_engine.schemas.actions.parameters import ToolParams
+
+        evaluator = Mock(spec=TSASPDMAEvaluator)
+        evaluator.evaluate_tool_action = AsyncMock(
+            return_value=ActionSelectionDMAResult(
+                selected_action=HandlerActionType.TOOL,
+                action_parameters=ToolParams(name="test_tool", parameters={"path": "/tmp/test.txt"}),
+                rationale="TSASPDMA: Proceeding with tool execution",
+            )
+        )
+        return evaluator
+
+    @pytest.fixture
+    def tool_info(self):
+        """Create a mock ToolInfo."""
+        from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
+
+        return ToolInfo(
+            name="test_tool",
+            description="A test tool for unit testing",
+            when_to_use="Use this for testing purposes",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={"path": {"type": "string", "description": "File path"}},
+                required=["path"],
+            ),
+        )
+
+    @pytest.mark.asyncio
+    async def test_run_tsaspdma_success(self, tsaspdma_evaluator, tool_info, processing_queue_item, time_service):
+        """Test running TSASPDMA with successful tool execution."""
+        from ciris_engine.logic.dma.dma_executor import run_tsaspdma
+
+        with patch("ciris_engine.logic.dma.dma_executor.persistence"):
+            result = await run_tsaspdma(
+                evaluator=tsaspdma_evaluator,
+                tool_name="test_tool",
+                tool_info=tool_info,
+                aspdma_rationale="ASPDMA selected this tool for file operations",
+                original_thought=processing_queue_item,
+                context=None,
+                time_service=time_service,
+            )
+
+            assert result.selected_action == HandlerActionType.TOOL
+            assert result.rationale.startswith("TSASPDMA:")
+            tsaspdma_evaluator.evaluate_tool_action.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_run_tsaspdma_returns_speak(self, tsaspdma_evaluator, tool_info, processing_queue_item, time_service):
+        """Test TSASPDMA returning SPEAK for clarification."""
+        from ciris_engine.logic.dma.dma_executor import run_tsaspdma
+        from ciris_engine.schemas.actions.parameters import SpeakParams
+
+        # Configure evaluator to return SPEAK
+        tsaspdma_evaluator.evaluate_tool_action.return_value = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.SPEAK,
+            action_parameters=SpeakParams(content="Which file would you like me to read?"),
+            rationale="TSASPDMA: Need clarification on target file",
+        )
+
+        with patch("ciris_engine.logic.dma.dma_executor.persistence"):
+            result = await run_tsaspdma(
+                evaluator=tsaspdma_evaluator,
+                tool_name="test_tool",
+                tool_info=tool_info,
+                aspdma_rationale="ASPDMA selected file reader",
+                original_thought=processing_queue_item,
+                context=None,
+                time_service=time_service,
+            )
+
+            assert result.selected_action == HandlerActionType.SPEAK
+            assert "clarification" in result.rationale.lower()
+
+    @pytest.mark.asyncio
+    async def test_run_tsaspdma_returns_ponder(
+        self, tsaspdma_evaluator, tool_info, processing_queue_item, time_service
+    ):
+        """Test TSASPDMA returning PONDER to reconsider approach."""
+        from ciris_engine.logic.dma.dma_executor import run_tsaspdma
+        from ciris_engine.schemas.actions.parameters import PonderParams
+
+        # Configure evaluator to return PONDER
+        tsaspdma_evaluator.evaluate_tool_action.return_value = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.PONDER,
+            action_parameters=PonderParams(questions=["Is this the right tool for the task?"]),
+            rationale="TSASPDMA: Reconsidering tool selection",
+        )
+
+        with patch("ciris_engine.logic.dma.dma_executor.persistence"):
+            result = await run_tsaspdma(
+                evaluator=tsaspdma_evaluator,
+                tool_name="test_tool",
+                tool_info=tool_info,
+                aspdma_rationale="ASPDMA selected this tool",
+                original_thought=processing_queue_item,
+                context=None,
+                time_service=time_service,
+            )
+
+            assert result.selected_action == HandlerActionType.PONDER
+            assert isinstance(result.action_parameters, PonderParams)
+
+    @pytest.mark.asyncio
+    async def test_run_tsaspdma_without_time_service_fails(self, tsaspdma_evaluator, tool_info, processing_queue_item):
+        """Test that TSASPDMA requires time service."""
+        from ciris_engine.logic.dma.dma_executor import run_tsaspdma
+
+        with pytest.raises(RuntimeError) as exc_info:
+            await run_tsaspdma(
+                evaluator=tsaspdma_evaluator,
+                tool_name="test_tool",
+                tool_info=tool_info,
+                aspdma_rationale="Test rationale",
+                original_thought=processing_queue_item,
+                context=None,
+                time_service=None,
+            )
+
+        assert "TimeService is required" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_run_tsaspdma_handles_evaluator_error(
+        self, tsaspdma_evaluator, tool_info, processing_queue_item, time_service
+    ):
+        """Test TSASPDMA handling evaluator errors."""
+        from ciris_engine.logic.dma.dma_executor import run_tsaspdma
+
+        # Configure evaluator to raise error
+        tsaspdma_evaluator.evaluate_tool_action.side_effect = ValueError("LLM evaluation failed")
+
+        with patch("ciris_engine.logic.dma.dma_executor.persistence"):
+            with pytest.raises(ValueError) as exc_info:
+                await run_tsaspdma(
+                    evaluator=tsaspdma_evaluator,
+                    tool_name="test_tool",
+                    tool_info=tool_info,
+                    aspdma_rationale="Test rationale",
+                    original_thought=processing_queue_item,
+                    context=None,
+                    time_service=time_service,
+                )
+
+            assert "LLM evaluation failed" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_run_tsaspdma_creates_correlation(
+        self, tsaspdma_evaluator, tool_info, processing_queue_item, time_service
+    ):
+        """Test that TSASPDMA creates proper correlation tracking."""
+        from ciris_engine.logic.dma.dma_executor import run_tsaspdma
+
+        with patch("ciris_engine.logic.dma.dma_executor.persistence") as mock_persistence:
+            await run_tsaspdma(
+                evaluator=tsaspdma_evaluator,
+                tool_name="test_tool",
+                tool_info=tool_info,
+                aspdma_rationale="Test rationale",
+                original_thought=processing_queue_item,
+                context=None,
+                time_service=time_service,
+            )
+
+            # Verify correlation was created and updated
+            assert mock_persistence.add_correlation.called
+            assert mock_persistence.update_correlation.called
+
+            # Verify the correlation has TSASPDMA-specific tags
+            add_call = mock_persistence.add_correlation.call_args
+            correlation = add_call[0][0]  # First positional argument
+            assert correlation.tags["dma_type"] == "tsaspdma"
+            assert correlation.tags["tool_name"] == "test_tool"
+
+    @pytest.mark.asyncio
+    async def test_run_tsaspdma_with_context(self, tsaspdma_evaluator, tool_info, processing_queue_item, time_service):
+        """Test TSASPDMA with additional context."""
+        from ciris_engine.logic.dma.dma_executor import run_tsaspdma
+
+        context = {"user_preference": "verbose", "session_id": "test_session"}
+
+        with patch("ciris_engine.logic.dma.dma_executor.persistence"):
+            result = await run_tsaspdma(
+                evaluator=tsaspdma_evaluator,
+                tool_name="test_tool",
+                tool_info=tool_info,
+                aspdma_rationale="Test with context",
+                original_thought=processing_queue_item,
+                context=context,
+                time_service=time_service,
+            )
+
+            # Verify context was passed to evaluator
+            call_args = tsaspdma_evaluator.evaluate_tool_action.call_args
+            assert call_args.kwargs.get("context") == context

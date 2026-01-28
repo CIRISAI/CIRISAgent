@@ -624,3 +624,403 @@ class TestThoughtProcessor:
         assert result is not None
         # Verify context builder was called
         thought_processor.context_builder.build_thought_context.assert_called_once()
+
+
+class TestTSASPDMAIntegration:
+    """Test cases for TSASPDMA integration in ThoughtProcessor."""
+
+    @pytest.fixture
+    def mock_time_service_tsaspdma(self) -> Mock:
+        """Create mock time service."""
+        import itertools
+
+        counter = itertools.count()
+
+        def get_time() -> datetime:
+            base_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+            return base_time.replace(microsecond=next(counter) * 1000)
+
+        mock_service = Mock()
+        mock_service.now = Mock(side_effect=get_time)
+        mock_service.now_iso = Mock(side_effect=lambda: mock_service.now().isoformat())
+        return mock_service
+
+    @pytest.fixture
+    def mock_tool_bus(self):
+        """Create mock tool bus."""
+        from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
+
+        tool_bus = Mock()
+        tool_bus.get_tool_info = AsyncMock(
+            return_value=ToolInfo(
+                name="test_tool",
+                description="A test tool",
+                when_to_use="Use for testing",
+                parameters=ToolParameterSchema(
+                    type="object",
+                    properties={"path": {"type": "string", "description": "File path"}},
+                    required=["path"],
+                ),
+            )
+        )
+        return tool_bus
+
+    @pytest.fixture
+    def mock_bus_manager(self, mock_tool_bus):
+        """Create mock bus manager with tool bus."""
+        bus_manager = Mock()
+        bus_manager.tool = mock_tool_bus
+        return bus_manager
+
+    @pytest.fixture
+    def mock_dependencies(self, mock_bus_manager):
+        """Create mock dependencies with bus manager."""
+        deps = Mock(spec=ActionHandlerDependencies)
+        deps.bus_manager = mock_bus_manager
+        return deps
+
+    @pytest.fixture
+    def mock_tsaspdma_evaluator(self):
+        """Create mock TSASPDMA evaluator."""
+        from ciris_engine.schemas.actions.parameters import ToolParams
+
+        evaluator = Mock()
+        evaluator.evaluate_tool_action = AsyncMock(
+            return_value=ActionSelectionDMAResult(
+                selected_action=HandlerActionType.TOOL,
+                action_parameters=ToolParams(name="test_tool", parameters={"path": "/tmp/test.txt"}),
+                rationale="TSASPDMA: Proceeding with tool execution",
+            )
+        )
+        return evaluator
+
+    @pytest.fixture
+    def thought_processor_with_tsaspdma(
+        self, mock_time_service_tsaspdma, mock_dependencies, mock_tsaspdma_evaluator
+    ) -> ThoughtProcessor:
+        """Create ThoughtProcessor with TSASPDMA evaluator."""
+        from ciris_engine.schemas.conscience.core import EpistemicData
+
+        mock_dma_orchestrator = Mock()
+        mock_dma_orchestrator.tsaspdma_evaluator = mock_tsaspdma_evaluator
+
+        mock_context_builder = Mock()
+        mock_context_builder.build_thought_context = AsyncMock(return_value=Mock())
+
+        mock_conscience_registry = Mock()
+        mock_conscience_registry.get_consciences = Mock(return_value=[])
+        mock_conscience_registry.get_bypass_consciences = Mock(return_value=[])
+        mock_conscience_registry.get_normal_consciences = Mock(return_value=[])
+
+        mock_config = Mock(spec=ConfigAccessor)
+
+        processor = ThoughtProcessor(
+            dma_orchestrator=mock_dma_orchestrator,
+            context_builder=mock_context_builder,
+            conscience_registry=mock_conscience_registry,
+            app_config=mock_config,
+            dependencies=mock_dependencies,
+            time_service=mock_time_service_tsaspdma,
+            telemetry_service=None,
+            auth_service=None,
+        )
+        return processor
+
+    @pytest.fixture
+    def thought_content(self):
+        """Create a ThoughtContent for tests."""
+        from ciris_engine.logic.processors.support.processing_queue import ThoughtContent
+
+        return ThoughtContent(text="Test content")
+
+    @pytest.mark.asyncio
+    async def test_maybe_run_tsaspdma_skips_non_tool_action(
+        self, thought_processor_with_tsaspdma, thought_content
+    ) -> None:
+        """Test that _maybe_run_tsaspdma skips non-TOOL actions."""
+        from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+
+        thought_item = ProcessingQueueItem(
+            thought_id="test_thought",
+            source_task_id="test_task",
+            thought_type=ThoughtType.STANDARD,
+            content=thought_content,
+            raw_input_string="test",
+            initial_context={},
+            thought_depth=0,
+        )
+
+        # SPEAK action should be skipped
+        speak_result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.SPEAK,
+            action_parameters=SpeakParams(content="Hello"),
+            rationale="Test speak",
+        )
+
+        result = await thought_processor_with_tsaspdma._maybe_run_tsaspdma(thought_item, speak_result)
+
+        # Should return original result unchanged
+        assert result.selected_action == HandlerActionType.SPEAK
+        assert result == speak_result
+
+    @pytest.mark.asyncio
+    async def test_maybe_run_tsaspdma_handles_tool_action(
+        self, thought_processor_with_tsaspdma, mock_tsaspdma_evaluator, thought_content
+    ) -> None:
+        """Test that _maybe_run_tsaspdma processes TOOL actions."""
+        from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+        from ciris_engine.schemas.actions.parameters import ToolParams
+
+        thought_item = ProcessingQueueItem(
+            thought_id="test_thought",
+            source_task_id="test_task",
+            thought_type=ThoughtType.STANDARD,
+            content=thought_content,
+            raw_input_string="test",
+            initial_context={},
+            thought_depth=0,
+        )
+
+        # TOOL action should trigger TSASPDMA
+        tool_result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.TOOL,
+            action_parameters=ToolParams(name="test_tool", parameters={}),
+            rationale="Test tool",
+        )
+
+        # Patch at source module where run_tsaspdma is defined
+        with patch("ciris_engine.logic.dma.dma_executor.run_tsaspdma") as mock_run_tsaspdma:
+            mock_run_tsaspdma.return_value = ActionSelectionDMAResult(
+                selected_action=HandlerActionType.TOOL,
+                action_parameters=ToolParams(name="test_tool", parameters={"path": "/tmp/test.txt"}),
+                rationale="TSASPDMA: Confirmed tool execution",
+            )
+
+            result = await thought_processor_with_tsaspdma._maybe_run_tsaspdma(thought_item, tool_result)
+
+            # Should return TSASPDMA result
+            assert result.selected_action == HandlerActionType.TOOL
+            assert "TSASPDMA" in result.rationale
+
+    @pytest.mark.asyncio
+    async def test_maybe_run_tsaspdma_handles_invalid_params(
+        self, thought_processor_with_tsaspdma, thought_content
+    ) -> None:
+        """Test that _maybe_run_tsaspdma handles invalid action parameters."""
+        from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+
+        thought_item = ProcessingQueueItem(
+            thought_id="test_thought",
+            source_task_id="test_task",
+            thought_type=ThoughtType.STANDARD,
+            content=thought_content,
+            raw_input_string="test",
+            initial_context={},
+            thought_depth=0,
+        )
+
+        # TOOL action with non-ToolParams should be skipped
+        tool_result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.TOOL,
+            action_parameters=SpeakParams(content="Invalid"),  # Wrong params type
+            rationale="Test tool with wrong params",
+        )
+
+        result = await thought_processor_with_tsaspdma._maybe_run_tsaspdma(thought_item, tool_result)
+
+        # Should return original result unchanged
+        assert result == tool_result
+
+    @pytest.mark.asyncio
+    async def test_maybe_run_tsaspdma_missing_tool_ponders(
+        self, thought_processor_with_tsaspdma, thought_content
+    ) -> None:
+        """Test that _maybe_run_tsaspdma returns PONDER when tool is not found."""
+        from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+        from ciris_engine.schemas.actions.parameters import ToolParams
+
+        # Mock tool bus to return None (tool not found)
+        thought_processor_with_tsaspdma.dependencies.bus_manager.tool.get_tool_info = AsyncMock(return_value=None)
+
+        thought_item = ProcessingQueueItem(
+            thought_id="test_thought",
+            source_task_id="test_task",
+            thought_type=ThoughtType.STANDARD,
+            content=thought_content,
+            raw_input_string="test",
+            initial_context={},
+            thought_depth=0,
+        )
+
+        tool_result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.TOOL,
+            action_parameters=ToolParams(name="nonexistent_tool", parameters={}),
+            rationale="Test tool",
+        )
+
+        result = await thought_processor_with_tsaspdma._maybe_run_tsaspdma(thought_item, tool_result)
+
+        # Should return PONDER when tool not found
+        assert result.selected_action == HandlerActionType.PONDER
+        assert "not available" in result.rationale or "not found" in result.rationale
+
+    @pytest.mark.asyncio
+    async def test_maybe_run_tsaspdma_handles_evaluator_error(
+        self, thought_processor_with_tsaspdma, thought_content
+    ) -> None:
+        """Test that _maybe_run_tsaspdma handles evaluator errors gracefully."""
+        from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+        from ciris_engine.schemas.actions.parameters import ToolParams
+
+        thought_item = ProcessingQueueItem(
+            thought_id="test_thought",
+            source_task_id="test_task",
+            thought_type=ThoughtType.STANDARD,
+            content=thought_content,
+            raw_input_string="test",
+            initial_context={},
+            thought_depth=0,
+        )
+
+        tool_result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.TOOL,
+            action_parameters=ToolParams(name="test_tool", parameters={}),
+            rationale="Test tool",
+        )
+
+        # Patch at source module where run_tsaspdma is defined
+        with patch("ciris_engine.logic.dma.dma_executor.run_tsaspdma") as mock_run_tsaspdma:
+            mock_run_tsaspdma.side_effect = Exception("TSASPDMA evaluation failed")
+
+            result = await thought_processor_with_tsaspdma._maybe_run_tsaspdma(thought_item, tool_result)
+
+            # Should return original result on error
+            assert result == tool_result
+
+    @pytest.mark.asyncio
+    async def test_emit_tsaspdma_result_event_no_subscribers(
+        self, thought_processor_with_tsaspdma, thought_content
+    ) -> None:
+        """Test that _emit_tsaspdma_result_event handles no subscribers gracefully."""
+        from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+        from ciris_engine.schemas.actions.parameters import ToolParams
+
+        thought_item = ProcessingQueueItem(
+            thought_id="test_thought",
+            source_task_id="test_task",
+            thought_type=ThoughtType.STANDARD,
+            content=thought_content,
+            raw_input_string="test",
+            initial_context={},
+            thought_depth=0,
+        )
+
+        tsaspdma_result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.TOOL,
+            action_parameters=ToolParams(name="test_tool", parameters={"path": "/tmp/test.txt"}),
+            rationale="TSASPDMA: Proceeding with tool execution",
+        )
+
+        # Patch at source module where reasoning_event_stream is defined
+        with patch("ciris_engine.logic.infrastructure.step_streaming.reasoning_event_stream", None):
+            # Should not raise even with no subscribers
+            await thought_processor_with_tsaspdma._emit_tsaspdma_result_event(
+                thought_item=thought_item,
+                tool_name="test_tool",
+                tsaspdma_result=tsaspdma_result,
+                aspdma_rationale="Test rationale",
+            )
+
+    @pytest.mark.asyncio
+    async def test_emit_tsaspdma_result_event_with_subscribers(
+        self, thought_processor_with_tsaspdma, thought_content
+    ) -> None:
+        """Test that _emit_tsaspdma_result_event broadcasts events when subscribers exist."""
+        from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+        from ciris_engine.schemas.actions.parameters import ToolParams
+
+        thought_item = ProcessingQueueItem(
+            thought_id="test_thought",
+            source_task_id="test_task",
+            thought_type=ThoughtType.STANDARD,
+            content=thought_content,
+            raw_input_string="test",
+            initial_context={},
+            thought_depth=0,
+        )
+
+        tsaspdma_result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.TOOL,
+            action_parameters=ToolParams(name="test_tool", parameters={"path": "/tmp/test.txt"}),
+            rationale="TSASPDMA: Proceeding with tool execution",
+        )
+
+        mock_stream = Mock()
+        mock_stream._subscribers = [Mock()]  # Has subscribers
+        mock_stream.broadcast_reasoning_event = AsyncMock()
+
+        # Patch at source module where reasoning_event_stream is defined
+        with patch(
+            "ciris_engine.logic.infrastructure.step_streaming.reasoning_event_stream",
+            mock_stream,
+        ), patch("ciris_engine.schemas.streaming.reasoning_stream.create_reasoning_event") as mock_create:
+            mock_create.return_value = {"event_type": "TSASPDMA_RESULT"}
+
+            await thought_processor_with_tsaspdma._emit_tsaspdma_result_event(
+                thought_item=thought_item,
+                tool_name="test_tool",
+                tsaspdma_result=tsaspdma_result,
+                aspdma_rationale="Test rationale",
+            )
+
+            # Should have broadcast the event
+            mock_stream.broadcast_reasoning_event.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_emit_tsaspdma_result_event_speak_action(
+        self, thought_processor_with_tsaspdma, thought_content
+    ) -> None:
+        """Test event emission for SPEAK action from TSASPDMA."""
+        from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+
+        thought_item = ProcessingQueueItem(
+            thought_id="test_thought",
+            source_task_id="test_task",
+            thought_type=ThoughtType.STANDARD,
+            content=thought_content,
+            raw_input_string="test",
+            initial_context={},
+            thought_depth=0,
+        )
+
+        # TSASPDMA returned SPEAK for clarification
+        tsaspdma_result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.SPEAK,
+            action_parameters=SpeakParams(content="Which file do you want me to read?"),
+            rationale="TSASPDMA: Need clarification on target file",
+        )
+
+        mock_stream = Mock()
+        mock_stream._subscribers = [Mock()]
+        mock_stream.broadcast_reasoning_event = AsyncMock()
+
+        # Patch at source module where reasoning_event_stream is defined
+        with patch(
+            "ciris_engine.logic.infrastructure.step_streaming.reasoning_event_stream",
+            mock_stream,
+        ), patch("ciris_engine.schemas.streaming.reasoning_stream.create_reasoning_event") as mock_create:
+            mock_create.return_value = {"event_type": "TSASPDMA_RESULT", "final_action": "SPEAK"}
+
+            await thought_processor_with_tsaspdma._emit_tsaspdma_result_event(
+                thought_item=thought_item,
+                tool_name="test_tool",
+                tsaspdma_result=tsaspdma_result,
+                aspdma_rationale="Test rationale",
+            )
+
+            # Verify event was created with correct parameters
+            mock_create.assert_called_once()
+            call_kwargs = mock_create.call_args[1]
+            # Action value comes from enum.value which is lowercase
+            assert call_kwargs["final_action"] == "speak"
+            assert call_kwargs["final_tool_name"] is None  # Not a TOOL action

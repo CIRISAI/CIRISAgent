@@ -30,12 +30,14 @@ from .prompt_loader import get_prompt_loader
 
 
 class TSASPDMALLMResult(BaseModel):
-    """Gemini-compatible TSASPDMA LLM output - NO Union types.
+    """Gemini-compatible TSASPDMA LLM output - flat structure, NO Union types.
 
     TSASPDMA only returns 3 action types:
-    - TOOL: Proceed with execution (may refine parameters)
-    - SPEAK: Ask user for clarification
-    - PONDER: Reconsider the approach
+    - TOOL: Proceed with execution (parameters dict contains tool args)
+    - SPEAK: Ask user for clarification (parameters dict contains 'content' key)
+    - PONDER: Reconsider the approach (parameters dict contains 'questions' key)
+
+    All actions use the same 'parameters' field - the meaning depends on selected_action.
     """
 
     selected_action: HandlerActionType = Field(
@@ -43,14 +45,14 @@ class TSASPDMALLMResult(BaseModel):
     )
     rationale: str = Field(..., description="Reasoning for this decision, including any gotchas acknowledged")
 
-    # TOOL parameters (when selected_action == TOOL)
-    tool_parameters: Optional[Dict[str, Any]] = Field(None, description="Refined tool parameters (for TOOL action)")
-
-    # SPEAK parameters (when selected_action == SPEAK)
-    speak_content: Optional[str] = Field(None, description="Clarifying question to ask user (for SPEAK action)")
-
-    # PONDER parameters (when selected_action == PONDER)
-    ponder_questions: Optional[List[str]] = Field(None, description="Questions to reconsider (for PONDER action)")
+    # Unified parameters field - interpretation depends on selected_action:
+    # - TOOL: dict of tool parameters (e.g., {"path": "/tmp/file.txt"})
+    # - SPEAK: dict with 'content' key (e.g., {"content": "What file?"})
+    # - PONDER: dict with 'questions' key (e.g., {"questions": ["Is this right?"]})
+    parameters: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Action parameters. For TOOL: tool args. For SPEAK: {'content': '...'}. For PONDER: {'questions': [...]}",
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -103,27 +105,32 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
     ) -> ActionSelectionDMAResult:
         """Convert flat TSASPDMA LLM result to typed ActionSelectionDMAResult.
 
-        TSASPDMA extracts parameters from the user's request using the tool schema.
-        It only returns TOOL, SPEAK, or PONDER actions.
+        TSASPDMA uses a unified 'parameters' field - interpretation depends on action:
+        - TOOL: parameters are the tool arguments
+        - SPEAK: parameters['content'] is the clarification question
+        - PONDER: parameters['questions'] is the list of questions to reconsider
         """
         action = llm_result.selected_action
+        raw_params = llm_result.parameters
 
         params: ToolParams | SpeakParams | PonderParams
 
         if action == HandlerActionType.TOOL:
-            # Parameters inferred from context using tool schema
+            # For TOOL, parameters are passed directly as tool args
             params = ToolParams(
                 name=tool_name,
-                parameters=llm_result.tool_parameters or {},
+                parameters=raw_params,
             )
         elif action == HandlerActionType.SPEAK:
-            params = SpeakParams(
-                content=llm_result.speak_content or "I need clarification before proceeding.",
-            )
+            # For SPEAK, extract 'content' from parameters
+            content = raw_params.get("content", "I need clarification before proceeding.")
+            params = SpeakParams(content=str(content))
         elif action == HandlerActionType.PONDER:
-            params = PonderParams(
-                questions=llm_result.ponder_questions or ["Should I reconsider this approach?"],
-            )
+            # For PONDER, extract 'questions' from parameters
+            questions = raw_params.get("questions", ["Should I reconsider this approach?"])
+            if isinstance(questions, str):
+                questions = [questions]
+            params = PonderParams(questions=questions)
         else:
             # Fallback - TSASPDMA should only return TOOL/SPEAK/PONDER
             logger.warning(f"TSASPDMA returned unexpected action: {action}, falling back to PONDER")

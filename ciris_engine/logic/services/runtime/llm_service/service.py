@@ -396,7 +396,7 @@ def _detect_provider_from_env() -> LLMProvider:
     # Auto-detect based on which API key is set
     if os.environ.get("ANTHROPIC_API_KEY"):
         return LLMProvider.ANTHROPIC
-    if os.environ.get("GOOGLE_API_KEY"):
+    if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"):
         return LLMProvider.GOOGLE
 
     # Default to OpenAI (or OpenAI-compatible if base_url is set)
@@ -410,7 +410,8 @@ def _get_api_key_for_provider(provider: LLMProvider) -> str:
     if provider == LLMProvider.ANTHROPIC:
         return os.environ.get("ANTHROPIC_API_KEY", "")
     elif provider == LLMProvider.GOOGLE:
-        return os.environ.get("GOOGLE_API_KEY", "")
+        # Support both GOOGLE_API_KEY and GEMINI_API_KEY
+        return os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
     else:
         # OpenAI and OpenAI-compatible use OPENAI_API_KEY
         return os.environ.get("OPENAI_API_KEY", "")

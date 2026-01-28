@@ -60,6 +60,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **TSASPDMA Execution Pipeline** - Fixed tool validation not triggering
+  - Added `sink` parameter to TSASPDMAEvaluator initialization (required for LLM calls)
+  - Fixed ToolBus.get_tool_info() to search ALL tool services (not just default handler)
+  - Fixed escaped braces in tsaspdma.yml prompt (`{entity_id}` → `{{entity_id}}`)
+  - Override to PONDER when ASPDMA selects a non-existent tool
+  - TSASPDMA now mandatory for all TOOL actions (never skipped)
+
+- **Event Streaming** - Fixed IDMA/TSASPDMA event structure
+  - Separated IDMA from dma_results event (IDMA now streams independently)
+  - TSASPDMA_RESULT event includes `final_action` field ("tool", "speak", "ponder")
+  - 8-component traces: THOUGHT_START → SNAPSHOT_AND_CONTEXT → DMA_RESULTS → IDMA_RESULT → TSASPDMA_RESULT → ASPDMA_RESULT → CONSCIENCE_RESULT → ACTION_RESULT
+  - Added INFO logging for TSASPDMA event emission with final_action visibility
+
+- **Schema Fixes** - Fixed various mypy errors from 1.9.3 changes
+  - Fixed GraphNode instantiation with correct fields (id, type, attributes)
+  - Fixed PonderParams import path (schemas.actions.parameters)
+  - Fixed discovery_service, llm_service, service_initializer type annotations
+
 - **Adapter Eligibility Checking** - Services now properly check requirements
   - `_check_requirements()` now uses `ToolInfo.requirements` instead of hardcoded empty lists
   - Adapters requiring missing binaries/env vars are no longer incorrectly loaded
@@ -72,6 +90,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed binary requirement format (no longer double-quoted)
 
 ### Changed
+
+- **TSASPDMA Ethical Reasoning** - Enhanced prompt for ethical tool validation
+  - Rationale must include: why tool is appropriate, why it's ethical, gotchas acknowledged
+  - Added ethical check to PONDER criteria (inappropriate/unethical tool use)
+  - Added ethical appropriateness to TOOL criteria
 
 - **ASPDMA/TSASPDMA Schema Refactoring** - Removed Union types for Gemini compatibility
   - Gemini's structured output doesn't support discriminated unions

@@ -455,9 +455,11 @@ class ThoughtProcessor(
             )
 
             await reasoning_event_stream.broadcast_reasoning_event(event)
-            logger.debug(
-                f"TSASPDMA: Emitted TSASPDMA_RESULT event for thought {thought_item.thought_id}, "
-                f"tool={tool_name}, action={tsaspdma_result.selected_action}"
+            logger.info(
+                f"TSASPDMA-EVENT: Emitted TSASPDMA_RESULT for thought {thought_item.thought_id}: "
+                f"final_action={tsaspdma_result.selected_action.value}, "
+                f"final_tool_name={final_tool_name}, "
+                f"tsaspdma_rationale={tsaspdma_result.rationale[:100] if tsaspdma_result.rationale else 'None'}..."
             )
 
         except Exception as e:

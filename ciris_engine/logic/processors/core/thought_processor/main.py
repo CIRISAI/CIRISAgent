@@ -293,7 +293,7 @@ class ThoughtProcessor(
             The action result (possibly modified by TSASPDMA)
         """
         logger.info(
-            f"TSASPDMA-CHECK: Evaluating thought {thought_item.thought_id}, " f"action={action_result.selected_action}"
+            f"TSASPDMA-CHECK: Evaluating thought {thought_item.thought_id}, action={action_result.selected_action}"
         )
 
         # Only run for TOOL actions
@@ -305,7 +305,7 @@ class ThoughtProcessor(
         tool_params = action_result.action_parameters
         if not isinstance(tool_params, ToolParams):
             logger.warning(
-                f"TSASPDMA-SKIP: TOOL action has invalid parameters type: {type(tool_params)} " f"(expected ToolParams)"
+                f"TSASPDMA-SKIP: TOOL action has invalid parameters type: {type(tool_params)} (expected ToolParams)"
             )
             return action_result
 
@@ -325,7 +325,7 @@ class ThoughtProcessor(
         if not tool_info:
             # ASPDMA selected a tool that doesn't exist - this is an error, override to PONDER
             logger.error(
-                f"TSASPDMA-ERROR: Tool '{tool_name}' selected by ASPDMA but not registered! " f"Overriding to PONDER."
+                f"TSASPDMA-ERROR: Tool '{tool_name}' selected by ASPDMA but not registered! Overriding to PONDER."
             )
             from ciris_engine.schemas.actions.parameters import PonderParams
             from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
@@ -342,7 +342,7 @@ class ThoughtProcessor(
             )
 
         logger.info(
-            f"TSASPDMA-CHECK: Got tool info for '{tool_name}', " f"has_documentation={bool(tool_info.documentation)}"
+            f"TSASPDMA-CHECK: Got tool info for '{tool_name}', has_documentation={bool(tool_info.documentation)}"
         )
 
         # TSASPDMA is MANDATORY for all TOOL actions - never skip

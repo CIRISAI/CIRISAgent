@@ -57,6 +57,68 @@ class ToolEligibilityChecker:
         self.config_service = config_service
         self._platform = sys.platform  # darwin, linux, win32
 
+    def _check_required_binaries(self, req: ToolRequirements, result: EligibilityResult) -> None:
+        """Check required binaries and update result."""
+        for bin_req in req.binaries:
+            if not self._check_binary(bin_req.name, bin_req.verify_command):
+                result.eligible = False
+                result.missing_binaries.append(bin_req.name)
+
+    def _check_any_binaries(self, req: ToolRequirements, result: EligibilityResult) -> None:
+        """Check alternative binaries (at least one must be present)."""
+        if not req.any_binaries:
+            return
+        has_any = any(self._check_binary(b.name, b.verify_command) for b in req.any_binaries)
+        if not has_any:
+            result.eligible = False
+            result.missing_binaries.extend([b.name for b in req.any_binaries])
+
+    def _check_env_vars(self, req: ToolRequirements, result: EligibilityResult) -> None:
+        """Check environment variables."""
+        for env_req in req.env_vars:
+            if os.environ.get(env_req.name) is None:
+                result.eligible = False
+                result.missing_env_vars.append(env_req.name)
+
+    def _check_platform(self, req: ToolRequirements, result: EligibilityResult) -> None:
+        """Check platform compatibility."""
+        if req.platforms and self._platform not in req.platforms:
+            result.eligible = False
+            result.platform_mismatch = True
+
+    def _check_config_keys(self, req: ToolRequirements, result: EligibilityResult) -> None:
+        """Check config keys if config service available."""
+        if not req.config_keys or not self.config_service:
+            return
+        for config_req in req.config_keys:
+            if not self._check_config_key(config_req.key):
+                result.eligible = False
+                result.missing_config.append(config_req.key)
+
+    def _add_install_hints(self, tool_info: ToolInfo, result: EligibilityResult) -> None:
+        """Add install hints for missing dependencies."""
+        if result.eligible or not tool_info.install_steps:
+            return
+        for step in tool_info.install_steps:
+            if not step.platforms or self._platform in step.platforms:
+                if any(b in result.missing_binaries for b in step.provides_binaries):
+                    result.install_hints.append(step)
+
+    def _build_reason(self, result: EligibilityResult) -> None:
+        """Build summary reason for ineligibility."""
+        if result.eligible:
+            return
+        reasons = []
+        if result.missing_binaries:
+            reasons.append(f"missing binaries: {', '.join(result.missing_binaries)}")
+        if result.missing_env_vars:
+            reasons.append(f"missing env vars: {', '.join(result.missing_env_vars)}")
+        if result.missing_config:
+            reasons.append(f"missing config: {', '.join(result.missing_config)}")
+        if result.platform_mismatch:
+            reasons.append(f"platform {self._platform} not supported")
+        result.reason = "; ".join(reasons)
+
     def check_eligibility(self, tool_info: ToolInfo) -> EligibilityResult:
         """Check if a tool's requirements are satisfied.
 
@@ -67,90 +129,38 @@ class ToolEligibilityChecker:
             EligibilityResult with eligibility status and details
         """
         if not tool_info.requirements:
-            # No requirements = always eligible
             return EligibilityResult(eligible=True)
 
         result = EligibilityResult(eligible=True)
         req = tool_info.requirements
 
-        # Check required binaries (all must be present)
-        for bin_req in req.binaries:
-            if not self._check_binary(bin_req.name, bin_req.verify_command):
-                result.eligible = False
-                result.missing_binaries.append(bin_req.name)
-
-        # Check alternative binaries (at least one must be present)
-        if req.any_binaries:
-            has_any = any(self._check_binary(b.name, b.verify_command) for b in req.any_binaries)
-            if not has_any:
-                result.eligible = False
-                result.missing_binaries.extend([b.name for b in req.any_binaries])
-
-        # Check environment variables
-        for env_req in req.env_vars:
-            value = os.environ.get(env_req.name)
-            if value is None:
-                result.eligible = False
-                result.missing_env_vars.append(env_req.name)
-            # Note: We don't require non-empty - just set
-
-        # Check platform
-        if req.platforms:
-            if self._platform not in req.platforms:
-                result.eligible = False
-                result.platform_mismatch = True
-
-        # Check config keys (if config service available)
-        if req.config_keys and self.config_service:
-            for config_req in req.config_keys:
-                if not self._check_config_key(config_req.key):
-                    result.eligible = False
-                    result.missing_config.append(config_req.key)
-
-        # Add install hints for missing dependencies
-        if not result.eligible and tool_info.install_steps:
-            # Filter install steps to current platform
-            for step in tool_info.install_steps:
-                if not step.platforms or self._platform in step.platforms:
-                    # Check if this step provides any missing binaries
-                    if any(b in result.missing_binaries for b in step.provides_binaries):
-                        result.install_hints.append(step)
-
-        # Build summary reason
-        if not result.eligible:
-            reasons = []
-            if result.missing_binaries:
-                reasons.append(f"missing binaries: {', '.join(result.missing_binaries)}")
-            if result.missing_env_vars:
-                reasons.append(f"missing env vars: {', '.join(result.missing_env_vars)}")
-            if result.missing_config:
-                reasons.append(f"missing config: {', '.join(result.missing_config)}")
-            if result.platform_mismatch:
-                reasons.append(f"platform {self._platform} not supported")
-            result.reason = "; ".join(reasons)
+        self._check_required_binaries(req, result)
+        self._check_any_binaries(req, result)
+        self._check_env_vars(req, result)
+        self._check_platform(req, result)
+        self._check_config_keys(req, result)
+        self._add_install_hints(tool_info, result)
+        self._build_reason(result)
 
         return result
 
-    def _check_binary(self, name: str, verify_command: Optional[str] = None) -> bool:
+    def _check_binary(self, name: str, _verify_command: Optional[str] = None) -> bool:
         """Check if a binary is available in PATH.
 
         Args:
             name: Binary name (e.g., 'git', 'ffmpeg')
-            verify_command: Optional command to verify installation
+            _verify_command: Reserved for future verification (not yet implemented)
 
         Returns:
             True if binary is available
         """
-        path = shutil.which(name)
-        if path is None:
-            return False
-
-        # If verify command provided, run it (TODO: implement verification)
-        # For now, just check that binary exists
-        return True
+        return shutil.which(name) is not None
 
     def _check_config_key(self, key: str) -> bool:
         """Check if a config key is available.
+
+        Uses environment variable fallback when config service doesn't provide
+        a direct lookup method. Converts dot-notation keys to ENV_VAR format.
 
         Args:
             key: Config key path (e.g., 'adapters.home_assistant.token')
@@ -161,8 +171,7 @@ class ToolEligibilityChecker:
         if not self.config_service:
             return True  # Skip check if no config service
 
-        # TODO: Integrate with actual config service
-        # For now, check environment variable as fallback
+        # Check environment variable as fallback (config.key.path -> CONFIG_KEY_PATH)
         env_key = key.upper().replace(".", "_")
         return os.environ.get(env_key) is not None
 

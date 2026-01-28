@@ -215,170 +215,129 @@ class ASPDMALLMResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+def _create_memorize_params(llm_result: "ASPDMALLMResult", channel_id: Optional[str]) -> MemorizeParams:
+    """Create MemorizeParams from LLM result."""
+    node_type = NodeType.OBSERVATION
+    if llm_result.memorize_node_type:
+        try:
+            node_type = NodeType(llm_result.memorize_node_type)
+        except ValueError:
+            logger.warning(f"Unknown node type: {llm_result.memorize_node_type}, using OBSERVATION")
+
+    scope = GraphScope.LOCAL
+    if llm_result.memorize_scope:
+        try:
+            scope = GraphScope(llm_result.memorize_scope)
+        except ValueError:
+            logger.warning(f"Unknown scope: {llm_result.memorize_scope}, using LOCAL")
+
+    node = GraphNode(
+        id=str(uuid.uuid4()),
+        type=node_type,
+        scope=scope,
+        attributes=GraphNodeAttributes(created_by="agent", content=llm_result.memorize_content or ""),
+    )
+    return MemorizeParams(channel_id=channel_id, node=node)
+
+
+def _create_recall_params(llm_result: "ASPDMALLMResult", channel_id: Optional[str]) -> RecallParams:
+    """Create RecallParams from LLM result."""
+    scope = None
+    if llm_result.recall_scope:
+        try:
+            scope = GraphScope(llm_result.recall_scope)
+        except ValueError:
+            logger.warning(f"Unknown scope: {llm_result.recall_scope}, using None")
+    return RecallParams(
+        channel_id=channel_id,
+        query=llm_result.recall_query,
+        node_type=llm_result.recall_node_type,
+        scope=scope,
+        limit=llm_result.recall_limit,
+    )
+
+
+def _create_forget_params(llm_result: "ASPDMALLMResult", channel_id: Optional[str]) -> ForgetParams:
+    """Create ForgetParams from LLM result."""
+    node_id = llm_result.forget_node_id or str(uuid.uuid4())
+    node = GraphNode(
+        id=node_id,
+        type=NodeType.OBSERVATION,
+        scope=GraphScope.LOCAL,
+        attributes=GraphNodeAttributes(created_by="agent", content=""),
+    )
+    return ForgetParams(channel_id=channel_id, node=node, reason=llm_result.forget_reason or "No reason provided")
+
+
+# Type alias for action parameters
+ActionParams = (
+    ObserveParams
+    | SpeakParams
+    | ToolParams
+    | PonderParams
+    | RejectParams
+    | DeferParams
+    | MemorizeParams
+    | RecallParams
+    | ForgetParams
+    | TaskCompleteParams
+)
+
+
+def _create_params_for_action(
+    action: HandlerActionType, llm_result: "ASPDMALLMResult", channel_id: Optional[str]
+) -> ActionParams:
+    """Create the appropriate params object based on action type."""
+    if action == HandlerActionType.SPEAK:
+        return SpeakParams(channel_id=channel_id, content=llm_result.speak_content or "")
+    if action == HandlerActionType.PONDER:
+        return PonderParams(channel_id=channel_id, questions=llm_result.ponder_questions or ["What should I consider?"])
+    if action == HandlerActionType.REJECT:
+        return RejectParams(
+            channel_id=channel_id,
+            reason=llm_result.reject_reason or "Request rejected",
+            create_filter=llm_result.reject_create_filter,
+        )
+    if action == HandlerActionType.DEFER:
+        return DeferParams(
+            channel_id=channel_id,
+            reason=llm_result.defer_reason or "Deferring for later",
+            defer_until=llm_result.defer_until,
+        )
+    if action == HandlerActionType.TOOL:
+        return ToolParams(channel_id=channel_id, name=llm_result.tool_name or "unknown_tool", parameters={})
+    if action == HandlerActionType.OBSERVE:
+        return ObserveParams(channel_id=channel_id, active=llm_result.observe_active)
+    if action == HandlerActionType.MEMORIZE:
+        return _create_memorize_params(llm_result, channel_id)
+    if action == HandlerActionType.RECALL:
+        return _create_recall_params(llm_result, channel_id)
+    if action == HandlerActionType.FORGET:
+        return _create_forget_params(llm_result, channel_id)
+    if action == HandlerActionType.TASK_COMPLETE:
+        return TaskCompleteParams(
+            channel_id=channel_id, completion_reason=llm_result.completion_reason or "Task completed"
+        )
+    # Fallback to PONDER for unknown actions
+    logger.warning(f"Unknown action type: {action}, falling back to PONDER")
+    return PonderParams(channel_id=channel_id, questions=[f"Unknown action {action} - what should I do?"])
+
+
 def convert_llm_result_to_action_result(
-    llm_result: ASPDMALLMResult,
+    llm_result: "ASPDMALLMResult",
     channel_id: Optional[str] = None,
     raw_llm_response: Optional[str] = None,
     evaluation_time_ms: Optional[float] = None,
     resource_usage: Optional[JSONDict] = None,
     user_prompt: Optional[str] = None,
-) -> ActionSelectionDMAResult:
+) -> "ActionSelectionDMAResult":
     """Convert flat LLM result to fully typed ActionSelectionDMAResult.
 
     This handles the conversion from the Gemini-compatible flat schema
     to the internal typed schema with proper *Params objects.
-
-    Args:
-        llm_result: The flat ASPDMALLMResult from LLM
-        channel_id: Optional channel ID to include in parameters
-        raw_llm_response: Optional raw LLM response for debugging
-        evaluation_time_ms: Optional evaluation time
-        resource_usage: Optional resource usage dict
-        user_prompt: Optional user prompt for debugging
-
-    Returns:
-        Fully typed ActionSelectionDMAResult
     """
     action = llm_result.selected_action
-    params: Union[
-        ObserveParams,
-        SpeakParams,
-        ToolParams,
-        PonderParams,
-        RejectParams,
-        DeferParams,
-        MemorizeParams,
-        RecallParams,
-        ForgetParams,
-        TaskCompleteParams,
-    ]
-
-    if action == HandlerActionType.SPEAK:
-        params = SpeakParams(
-            channel_id=channel_id,
-            content=llm_result.speak_content or "",
-        )
-
-    elif action == HandlerActionType.PONDER:
-        params = PonderParams(
-            channel_id=channel_id,
-            questions=llm_result.ponder_questions or ["What should I consider?"],
-        )
-
-    elif action == HandlerActionType.REJECT:
-        params = RejectParams(
-            channel_id=channel_id,
-            reason=llm_result.reject_reason or "Request rejected",
-            create_filter=llm_result.reject_create_filter,
-        )
-
-    elif action == HandlerActionType.DEFER:
-        params = DeferParams(
-            channel_id=channel_id,
-            reason=llm_result.defer_reason or "Deferring for later",
-            defer_until=llm_result.defer_until,
-        )
-
-    elif action == HandlerActionType.TOOL:
-        # ASPDMA only provides tool_name - TSASPDMA will fill in parameters
-        # Parameters are empty here; TSASPDMA handles parameter extraction
-        params = ToolParams(
-            channel_id=channel_id,
-            name=llm_result.tool_name or "unknown_tool",
-            parameters={},  # Empty - TSASPDMA fills this in
-        )
-
-    elif action == HandlerActionType.OBSERVE:
-        params = ObserveParams(
-            channel_id=channel_id,
-            active=llm_result.observe_active,
-        )
-
-    elif action == HandlerActionType.MEMORIZE:
-        # Create GraphNode from flattened fields
-        node_type = NodeType.OBSERVATION  # Default
-        if llm_result.memorize_node_type:
-            try:
-                node_type = NodeType(llm_result.memorize_node_type)
-            except ValueError:
-                logger.warning(f"Unknown node type: {llm_result.memorize_node_type}, using OBSERVATION")
-
-        scope = GraphScope.LOCAL  # Default
-        if llm_result.memorize_scope:
-            try:
-                scope = GraphScope(llm_result.memorize_scope)
-            except ValueError:
-                logger.warning(f"Unknown scope: {llm_result.memorize_scope}, using LOCAL")
-
-        node = GraphNode(
-            id=str(uuid.uuid4()),
-            type=node_type,
-            scope=scope,
-            attributes=GraphNodeAttributes(
-                created_by="agent",
-                content=llm_result.memorize_content or "",
-            ),
-        )
-        params = MemorizeParams(channel_id=channel_id, node=node)
-
-    elif action == HandlerActionType.RECALL:
-        scope = None
-        if llm_result.recall_scope:
-            try:
-                scope = GraphScope(llm_result.recall_scope)
-            except ValueError:
-                logger.warning(f"Unknown scope: {llm_result.recall_scope}, using None")
-
-        params = RecallParams(
-            channel_id=channel_id,
-            query=llm_result.recall_query,
-            node_type=llm_result.recall_node_type,
-            scope=scope,
-            limit=llm_result.recall_limit,
-        )
-
-    elif action == HandlerActionType.FORGET:
-        # FORGET requires a node - create minimal one if only ID provided
-        if llm_result.forget_node_id:
-            node = GraphNode(
-                id=llm_result.forget_node_id,
-                type=NodeType.OBSERVATION,
-                scope=GraphScope.LOCAL,
-                attributes=GraphNodeAttributes(
-                    created_by="agent",
-                    content="",
-                ),
-            )
-        else:
-            # Fallback - should not happen in practice
-            node = GraphNode(
-                id=str(uuid.uuid4()),
-                type=NodeType.OBSERVATION,
-                scope=GraphScope.LOCAL,
-                attributes=GraphNodeAttributes(
-                    created_by="agent",
-                    content="",
-                ),
-            )
-        params = ForgetParams(
-            channel_id=channel_id,
-            node=node,
-            reason=llm_result.forget_reason or "No reason provided",
-        )
-
-    elif action == HandlerActionType.TASK_COMPLETE:
-        params = TaskCompleteParams(
-            channel_id=channel_id,
-            completion_reason=llm_result.completion_reason or "Task completed",
-        )
-
-    else:
-        # Fallback to PONDER for unknown actions
-        logger.warning(f"Unknown action type: {action}, falling back to PONDER")
-        params = PonderParams(
-            channel_id=channel_id,
-            questions=[f"Unknown action {action} - what should I do?"],
-        )
+    params = _create_params_for_action(action, llm_result, channel_id)
 
     return ActionSelectionDMAResult(
         selected_action=action,

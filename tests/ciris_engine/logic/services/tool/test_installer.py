@@ -1,9 +1,10 @@
 """Tests for the ToolInstaller service."""
 
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from ciris_engine.logic.services.tool.installer import ToolInstaller, InstallResult
+import pytest
+
+from ciris_engine.logic.services.tool.installer import InstallResult, ToolInstaller
 from ciris_engine.schemas.adapters.tools import InstallStep
 
 
@@ -316,10 +317,10 @@ class TestEligibilityCheckerInstallIntegration:
     async def test_install_and_recheck_no_hints(self):
         from ciris_engine.logic.services.tool.eligibility_checker import ToolEligibilityChecker
         from ciris_engine.schemas.adapters.tools import (
+            BinaryRequirement,
             ToolInfo,
             ToolParameterSchema,
             ToolRequirements,
-            BinaryRequirement,
         )
 
         checker = ToolEligibilityChecker()
@@ -327,9 +328,7 @@ class TestEligibilityCheckerInstallIntegration:
             name="missing_tool",
             description="Needs a missing binary",
             parameters=ToolParameterSchema(type="object", properties={}),
-            requirements=ToolRequirements(
-                binaries=[BinaryRequirement(name="nonexistent_binary_xyz123")]
-            ),
+            requirements=ToolRequirements(binaries=[BinaryRequirement(name="nonexistent_binary_xyz123")]),
             # No install_steps = no hints
         )
         result, install_result = await checker.install_and_recheck(tool)
@@ -342,11 +341,11 @@ class TestEligibilityCheckerInstallIntegration:
     async def test_install_and_recheck_dry_run(self):
         from ciris_engine.logic.services.tool.eligibility_checker import ToolEligibilityChecker
         from ciris_engine.schemas.adapters.tools import (
+            BinaryRequirement,
+            InstallStep,
             ToolInfo,
             ToolParameterSchema,
             ToolRequirements,
-            BinaryRequirement,
-            InstallStep,
         )
 
         checker = ToolEligibilityChecker()
@@ -354,9 +353,7 @@ class TestEligibilityCheckerInstallIntegration:
             name="installable_tool",
             description="Can be installed",
             parameters=ToolParameterSchema(type="object", properties={}),
-            requirements=ToolRequirements(
-                binaries=[BinaryRequirement(name="nonexistent_binary_xyz123")]
-            ),
+            requirements=ToolRequirements(binaries=[BinaryRequirement(name="nonexistent_binary_xyz123")]),
             install_steps=[
                 InstallStep(
                     id="brew-xyz",

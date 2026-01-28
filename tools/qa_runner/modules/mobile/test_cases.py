@@ -988,9 +988,7 @@ def _navigate_to_screen(adb: ADBHelper, ui: UIAutomator, menu_text: str) -> bool
     return False
 
 
-def test_screen_navigation(
-    adb: ADBHelper, ui: UIAutomator, config: dict, screen_name: str = None
-) -> TestReport:
+def test_screen_navigation(adb: ADBHelper, ui: UIAutomator, config: dict, screen_name: str = None) -> TestReport:
     """
     Test: Navigate to a specific screen and verify it loads.
 

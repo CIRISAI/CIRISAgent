@@ -1124,9 +1124,7 @@ def _create_event_for_step(
     return None
 
 
-async def _broadcast_reasoning_event(
-    step: StepPoint, step_data: StepDataUnion, thought_item: Any = None
-) -> None:
+async def _broadcast_reasoning_event(step: StepPoint, step_data: StepDataUnion, thought_item: Any = None) -> None:
     """
     Broadcast simplified reasoning event for one of the 6 key steps.
 

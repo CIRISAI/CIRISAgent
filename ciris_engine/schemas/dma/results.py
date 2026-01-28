@@ -271,9 +271,7 @@ def _create_forget_params(llm_result: "ASPDMALLMResult", channel_id: Optional[st
 
 def _create_task_complete_params(llm_result: "ASPDMALLMResult", channel_id: Optional[str]) -> TaskCompleteParams:
     """Create TaskCompleteParams from LLM result."""
-    return TaskCompleteParams(
-        channel_id=channel_id, completion_reason=llm_result.completion_reason or "Task completed"
-    )
+    return TaskCompleteParams(channel_id=channel_id, completion_reason=llm_result.completion_reason or "Task completed")
 
 
 # Type alias for action parameters

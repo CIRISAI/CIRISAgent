@@ -39,6 +39,7 @@ class QAModule(Enum):
     ADAPTER_CONFIG = "adapter_config"  # Adapter interactive configuration workflow testing
     ADAPTER_AUTOLOAD = "adapter_autoload"  # Adapter persistence and auto-load on restart testing
     ADAPTER_MANIFEST = "adapter_manifest"  # Adapter manifest validation (all adapters)
+    ADAPTER_AVAILABILITY = "adapter_availability"  # Adapter availability, eligibility & installation testing
     IDENTITY_UPDATE = "identity_update"  # Identity update from template testing (--identity-update flag)
     CONTEXT_ENRICHMENT = "context_enrichment"  # Context enrichment tool testing
     VISION = "vision"  # Native multimodal vision testing

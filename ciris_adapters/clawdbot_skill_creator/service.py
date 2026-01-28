@@ -77,7 +77,9 @@ class SkillCreatorToolService:
             ),
             category="skill",
             when_to_use="""When you need to create or update agentskills. use when designing, structuring, or packaging skills with scripts, ref...""",
-            requirements=None,
+            requirements=ToolRequirements(
+                platforms=["darwin", "linux", "win32"],  # Desktop OSes only
+            ),
             install_steps=[],
             documentation=ToolDocumentation(
                 quick_start="This skill provides guidance for creating effective skills.",

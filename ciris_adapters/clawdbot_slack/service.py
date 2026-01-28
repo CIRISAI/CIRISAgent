@@ -78,9 +78,13 @@ class SlackToolService:
             category="skill",
             when_to_use="""When you need to use when you need to control slack from moltbot via the slack tool, including reacting to messages o...""",
             requirements=ToolRequirements(
+                binaries=[
+                    BinaryRequirement(name="slack", description="Slack CLI tool"),
+                ],
                 config_keys=[
                     ConfigRequirement(key="channels.slack"),
                 ],
+                platforms=["darwin", "linux", "win32"],  # Desktop OSes only
             ),
             install_steps=[],
             documentation=ToolDocumentation(

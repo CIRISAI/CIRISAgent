@@ -77,7 +77,9 @@ class BluebubblesToolService:
             ),
             category="skill",
             when_to_use="""When you need to build or update the bluebubbles external channel plugin for moltbot (extension package, rest send/pr...""",
-            requirements=None,
+            requirements=ToolRequirements(
+                platforms=["darwin"],  # BlueBubbles is macOS-only (iMessage bridge)
+            ),
             install_steps=[],
             documentation=ToolDocumentation(
                 quick_start="Use this skill when working on the BlueBubbles channel plugin.",

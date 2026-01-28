@@ -81,6 +81,7 @@ class VoiceCallToolService:
                 config_keys=[
                     ConfigRequirement(key="plugins.entries.voice-call.enabled"),
                 ],
+                platforms=["darwin", "linux", "win32"],  # Desktop OSes only
             ),
             install_steps=[],
             documentation=ToolDocumentation(

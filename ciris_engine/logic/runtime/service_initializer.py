@@ -1278,6 +1278,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         from ciris_engine.logic.config.env_utils import get_env_var
         from ciris_engine.logic.services.tool import AdapterDiscoveryService
+        from ciris_engine.logic.services.tool.eligibility_checker import ToolEligibilityChecker
+
+        # Create eligibility checker with config service for config_keys validation
+        # This enables checking environment variables for config requirements
+        eligibility_checker = ToolEligibilityChecker(config_service=self.config_service)
 
         # Build service dependencies for adapter instantiation
         service_deps = {
@@ -1305,7 +1310,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 logger.info(f"[SKILL-ADAPTERS] Explicitly enabled adapters override disabled: {overridden}")
 
         # Create discovery service and load eligible adapters
-        discovery = AdapterDiscoveryService()
+        discovery = AdapterDiscoveryService(eligibility_checker=eligibility_checker)
         eligible = await discovery.load_eligible_adapters(
             disabled_adapters=effective_disabled,
             service_dependencies=service_deps,
@@ -1524,11 +1529,15 @@ This directory contains critical cryptographic keys for the CIRIS system.
             service_name: Name of the adapter to load (e.g. "reddit_adapter")
         """
         from ciris_engine.logic.services.tool import AdapterDiscoveryService
+        from ciris_engine.logic.services.tool.eligibility_checker import ToolEligibilityChecker
 
         logger.info(f"Loading adapter: {service_name}")
 
+        # Create eligibility checker with config service
+        eligibility_checker = ToolEligibilityChecker(config_service=self.config_service)
+
         # Use discovery service to scan all adapter paths (built-in, user, workspace)
-        discovery_service = AdapterDiscoveryService()
+        discovery_service = AdapterDiscoveryService(eligibility_checker=eligibility_checker)
         discovered_services = discovery_service.discover_adapters()
 
         manifest = self._find_service_manifest(service_name, discovered_services)

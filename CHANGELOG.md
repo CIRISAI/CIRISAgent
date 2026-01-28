@@ -5,6 +5,55 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.3] - 2026-01-27
+
+### Added
+
+- **TSASPDMA (Tool-Specific Action Selection PDMA)** - Documentation-aware tool validation
+  - Activated when ASPDMA selects a TOOL action
+  - Reviews full tool documentation before execution
+  - Can return TOOL (proceed), SPEAK (ask clarification), or PONDER (reconsider)
+  - Returns same `ActionSelectionDMAResult` as ASPDMA for transparent integration
+  - Catches parameter ambiguities and gotchas that ASPDMA couldn't see
+
+- **Adapter Auto-Discovery Service** - Multi-path adapter scanning
+  - Scans `ciris_adapters/`, `~/.ciris/adapters/`, `.ciris/adapters/`
+  - `CIRIS_EXTRA_ADAPTERS` env var for additional paths (colon-separated)
+  - First occurrence wins for duplicate adapter names
+  - Integrated with eligibility filtering
+
+- **Tool Eligibility Checker** - Runtime requirement validation
+  - Validates binaries in PATH (`shutil.which`)
+  - Validates environment variables are set
+  - Validates platform compatibility
+  - Validates config keys (when config service available)
+  - `EligibilityResult` with detailed missing requirements and install hints
+
+- **Clawdbot Skill Converter** - Tool to convert Clawdbot skills to CIRIS adapters
+  - `python -m tools.clawdbot_skill_converter <skills_dir> <output_dir>`
+  - Parses SKILL.md YAML frontmatter + markdown documentation
+  - Generates manifest.json, service.py, adapter.py, README.md
+  - Proper `ToolInfo.requirements` integration for eligibility checking
+  - 49 Clawdbot skills converted to CIRIS adapters
+
+- **Tool Summaries in ASPDMA Context** - Concise tool guidance for action selection
+  - Injects `when_to_use` field into ASPDMA context
+  - Falls back to truncated description if no `when_to_use`
+  - Helps ASPDMA make informed tool selection without full documentation
+
+### Fixed
+
+- **Adapter Eligibility Checking** - Services now properly check requirements
+  - `_check_requirements()` now uses `ToolInfo.requirements` instead of hardcoded empty lists
+  - Adapters requiring missing binaries/env vars are no longer incorrectly loaded
+
+- **Clawdbot Adapter Schema Compliance** - Fixed multiple manifest issues
+  - Changed `sensitive: true` to `sensitivity: "HIGH"` in configuration
+  - Removed invalid `source` field from module section
+  - Added required `description` to confirm steps
+  - Fixed protocol path to `ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol`
+  - Fixed binary requirement format (no longer double-quoted)
+
 ## [1.9.2] - 2026-01-27
 
 ### Added

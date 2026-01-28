@@ -298,6 +298,17 @@ def test_google_signin(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRep
 
         time.sleep(2)  # Wait for Google sign-in UI
 
+        # Check for and dismiss Google Lens if it was triggered accidentally
+        if ui.is_google_lens_open():
+            print("  [WARNING] Google Lens opened accidentally, dismissing...")
+            ui.dismiss_google_lens()
+            time.sleep(1)
+            # Re-click the sign-in button
+            clicked = ui.click_by_resource_id(CIRISAppConfig.TAG_BTN_GOOGLE_SIGNIN)
+            if not clicked:
+                clicked = ui.click_by_text(CIRISAppConfig.TEXT_SIGN_IN_GOOGLE)
+            time.sleep(2)
+
         print(f"  [2/5] Looking for Google account chooser...")
 
         # Take screenshot of Google sign-in screen
@@ -561,6 +572,16 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                     edit_fields = ui.find_by_class("EditText")
                     if edit_fields:
                         ui.set_text(edit_fields[0], api_key)
+                        time.sleep(0.5)
+
+            # Enable covenant metrics consent if the checkbox is visible
+            # The checkbox text is "I agree to share anonymous alignment metrics"
+            if config.get("enable_covenant_metrics", True):
+                covenant_text = "I agree to share anonymous alignment metrics"
+                if ui.is_text_visible(covenant_text):
+                    # Find and click the checkbox or the text row
+                    if ui.click_by_text(covenant_text):
+                        print(f"  Step {step + 1}: Enabled covenant metrics consent")
                         time.sleep(0.5)
 
             # Try clicking navigation buttons in priority order

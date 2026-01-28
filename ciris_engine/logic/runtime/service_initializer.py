@@ -1276,6 +1276,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         logger.info("[SKILL-ADAPTERS] Starting auto-discovery...")
 
+        from ciris_engine.logic.config.env_utils import get_env_var
         from ciris_engine.logic.services.tool import AdapterDiscoveryService
 
         # Build service dependencies for adapter instantiation
@@ -1289,10 +1290,24 @@ This directory contains critical cryptographic keys for the CIRIS system.
             "agent_occurrence_id": self.essential_config.agent_occurrence_id,
         }
 
+        # Get explicitly enabled adapters from CIRIS_ADAPTER env var
+        # These should NOT be skipped even if in the default disabled list
+        env_adapter = get_env_var("CIRIS_ADAPTER")
+        explicitly_enabled = set(a.strip() for a in env_adapter.split(",")) if env_adapter else set()
+
+        # Compute effective disabled list by removing explicitly enabled adapters
+        # This allows users to override the default disabled list via CIRIS_ADAPTER
+        effective_disabled = [a for a in adapters_config.disabled_adapters if a not in explicitly_enabled]
+
+        if explicitly_enabled:
+            overridden = set(adapters_config.disabled_adapters) & explicitly_enabled
+            if overridden:
+                logger.info(f"[SKILL-ADAPTERS] Explicitly enabled adapters override disabled: {overridden}")
+
         # Create discovery service and load eligible adapters
         discovery = AdapterDiscoveryService()
         eligible = await discovery.load_eligible_adapters(
-            disabled_adapters=adapters_config.disabled_adapters,
+            disabled_adapters=effective_disabled,
             service_dependencies=service_deps,
         )
 
@@ -1309,16 +1324,27 @@ This directory contains critical cryptographic keys for the CIRIS system.
                     if hasattr(start_result, "__await__"):
                         await start_result
 
-                # Register with tool bus if it provides tools
-                if hasattr(service, "get_all_tool_info") and self.service_registry is not None:
-                    self.service_registry.register_service(
-                        service_type=ServiceType.TOOL,
-                        provider=service,
-                        priority=Priority.NORMAL,
-                        capabilities=["execute_tool", "get_all_tool_info"],
-                        metadata={"adapter": adapter_name, "auto_loaded": True},
-                    )
-                    logger.info(f"[SKILL-ADAPTERS] Registered tool adapter: {adapter_name}")
+                if self.service_registry is not None:
+                    # Register with tool bus if it provides tools
+                    if hasattr(service, "get_all_tool_info"):
+                        self.service_registry.register_service(
+                            service_type=ServiceType.TOOL,
+                            provider=service,
+                            priority=Priority.NORMAL,
+                            capabilities=["execute_tool", "get_all_tool_info"],
+                            metadata={"adapter": adapter_name, "auto_loaded": True},
+                        )
+                        logger.info(f"[SKILL-ADAPTERS] Registered tool adapter: {adapter_name}")
+                    # Register WISE_AUTHORITY services (e.g., covenant_metrics)
+                    elif hasattr(service, "send_deferral") or hasattr(service, "handle_deferral"):
+                        self.service_registry.register_service(
+                            service_type=ServiceType.WISE_AUTHORITY,
+                            provider=service,
+                            priority=Priority.NORMAL,
+                            capabilities=["send_deferral", "covenant_metrics"],
+                            metadata={"adapter": adapter_name, "auto_loaded": True},
+                        )
+                        logger.info(f"[SKILL-ADAPTERS] Registered wisdom adapter: {adapter_name}")
 
             except Exception as e:
                 logger.warning(f"[SKILL-ADAPTERS] Failed to register {adapter_name}: {e}")

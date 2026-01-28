@@ -40,15 +40,19 @@ class AdapterDiscoveryService:
     """Auto-discovers adapters from multiple paths with eligibility filtering.
 
     Discovery paths (in priority order):
-    1. ciris_adapters/         - Built-in adapters
-    2. ~/.ciris/adapters/      - User-installed adapters
-    3. .ciris/adapters/        - Workspace-local adapters
-    4. CIRIS_EXTRA_ADAPTERS    - Colon-separated additional paths
+    1. ciris_adapters/ relative to ciris_engine (works on Android)
+    2. ciris_adapters/ relative to cwd (works on desktop)
+    3. ~/.ciris/adapters/      - User-installed adapters
+    4. .ciris/adapters/        - Workspace-local adapters
+    5. CIRIS_EXTRA_ADAPTERS    - Colon-separated additional paths
     """
 
     # Standard discovery paths
+    # On Android, ciris_adapters is bundled alongside ciris_engine, so we find it
+    # relative to this file's location (ciris_engine/logic/services/tool/)
     DISCOVERY_PATHS = [
-        Path("ciris_adapters"),  # Built-in
+        Path(__file__).parent.parent.parent.parent / "ciris_adapters",  # Relative to ciris_engine (Android)
+        Path("ciris_adapters"),  # Built-in (desktop)
         Path.home() / ".ciris" / "adapters",  # User
         Path(".ciris") / "adapters",  # Workspace
     ]
@@ -92,12 +96,16 @@ class AdapterDiscoveryService:
     def discover_adapters(self) -> List[ServiceManifest]:
         """Discover all adapter manifests from all discovery paths.
 
+        Falls back to importlib-based discovery on Android where filesystem
+        paths don't exist (Chaquopy virtual filesystem).
+
         Returns:
             List of discovered ServiceManifest objects
         """
         all_manifests: List[ServiceManifest] = []
         seen_names: set[str] = set()
 
+        # Try filesystem-based discovery first
         for loader in self._loaders:
             manifests = loader.discover_services()
             for manifest in manifests:
@@ -111,8 +119,73 @@ class AdapterDiscoveryService:
                 # Track which loader handles this manifest
                 self._manifest_loaders[manifest.module.name] = loader
 
+        # If no loaders found adapters, try importlib-based discovery (Android/Chaquopy)
+        if not all_manifests:
+            importlib_manifests = self._discover_via_importlib()
+            for manifest in importlib_manifests:
+                if manifest.module.name not in seen_names:
+                    seen_names.add(manifest.module.name)
+                    all_manifests.append(manifest)
+
         logger.info(f"AdapterDiscoveryService: discovered {len(all_manifests)} adapters")
         return all_manifests
+
+    def _discover_via_importlib(self) -> List[ServiceManifest]:
+        """Discover adapters using importlib (for Android/Chaquopy virtual filesystem).
+
+        Returns:
+            List of discovered ServiceManifest objects
+        """
+        import importlib
+        import importlib.resources as pkg_resources
+        import json
+        import pkgutil
+
+        manifests: List[ServiceManifest] = []
+
+        try:
+            # Import the ciris_adapters package
+            ciris_adapters = importlib.import_module("ciris_adapters")
+        except ImportError:
+            logger.debug("ciris_adapters package not found for importlib discovery")
+            return manifests
+
+        # Enumerate subpackages
+        try:
+            # Get the package path for iteration
+            package_path = getattr(ciris_adapters, "__path__", None)
+            if not package_path:
+                logger.debug("ciris_adapters has no __path__, cannot enumerate")
+                return manifests
+
+            for importer, modname, ispkg in pkgutil.iter_modules(package_path):
+                if not ispkg:
+                    continue  # Only look at subpackages
+
+                # Try to read manifest.json from this subpackage
+                package_name = f"ciris_adapters.{modname}"
+                try:
+                    files = pkg_resources.files(package_name)
+                    manifest_path = files.joinpath("manifest.json")
+                    manifest_text = manifest_path.read_text()
+                    manifest_data = json.loads(manifest_text)
+
+                    # Parse into ServiceManifest
+                    manifest = ServiceManifest.model_validate(manifest_data)
+                    manifests.append(manifest)
+                    logger.debug(f"Discovered adapter via importlib: {modname}")
+                except (FileNotFoundError, TypeError, AttributeError, json.JSONDecodeError) as e:
+                    logger.debug(f"No valid manifest for {modname}: {e}")
+                    continue
+                except Exception as e:
+                    logger.warning(f"Error reading manifest for {modname}: {e}")
+                    continue
+
+        except Exception as e:
+            logger.warning(f"Error during importlib discovery: {e}")
+
+        logger.info(f"AdapterDiscoveryService: discovered {len(manifests)} adapters via importlib")
+        return manifests
 
     def load_service_class(self, manifest: ServiceManifest, class_path: str) -> Optional[Type[Any]]:
         """Load a service class from a discovered manifest.
@@ -139,9 +212,56 @@ class AdapterDiscoveryService:
                         return cls
                 except Exception:
                     continue
+
+            # Fallback: Try importlib-based loading (for Android/Chaquopy)
+            cls = self._load_class_via_importlib(manifest.module.name, class_path)
+            if cls:
+                logger.info(f"Loaded {class_path} via importlib for {manifest.module.name}")
+                return cls
+
             return None
 
         return loader.load_service_class(manifest, class_path)
+
+    def _load_class_via_importlib(self, adapter_name: str, class_path: str) -> Optional[Type[Any]]:
+        """Load a service class via importlib (for Android/Chaquopy).
+
+        Args:
+            adapter_name: The adapter name (e.g., 'ciris_covenant_metrics')
+            class_path: The class path (e.g., 'ciris_covenant_metrics.services.CovenantMetricsService')
+
+        Returns:
+            The service class or None if not found
+        """
+        import importlib
+
+        try:
+            # Parse the class path - it's relative to ciris_adapters
+            # e.g., "ciris_covenant_metrics.services.CovenantMetricsService"
+            parts = class_path.rsplit(".", 1)
+            if len(parts) != 2:
+                logger.debug(f"Invalid class path format: {class_path}")
+                return None
+
+            module_path, class_name = parts
+            # Prepend ciris_adapters if not already there
+            if not module_path.startswith("ciris_adapters."):
+                full_module_path = f"ciris_adapters.{module_path}"
+            else:
+                full_module_path = module_path
+
+            module = importlib.import_module(full_module_path)
+            cls = getattr(module, class_name, None)
+            if cls:
+                logger.debug(f"Loaded {class_name} from {full_module_path} via importlib")
+                return cls
+
+        except ImportError as e:
+            logger.debug(f"Failed to import {class_path} via importlib: {e}")
+        except Exception as e:
+            logger.debug(f"Error loading {class_path} via importlib: {e}")
+
+        return None
 
     def get_eligible_adapters(self, disabled_adapters: Optional[List[str]] = None) -> List[ServiceManifest]:
         """Get adapters whose tools all pass eligibility checks.

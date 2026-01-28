@@ -24,7 +24,7 @@ from ciris_engine.schemas.runtime.adapter_management import (
     ModuleTypesResponse,
 )
 from ciris_engine.schemas.runtime.adapter_management import RuntimeAdapterStatus as AdapterStatusSchema
-from ciris_engine.schemas.services.core.runtime import AdapterStatus
+from ciris_engine.schemas.services.core.runtime import AdapterInfo, AdapterStatus
 
 from ...constants import ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE
 from ...dependencies.auth import AuthContext, require_admin, require_observer
@@ -439,6 +439,41 @@ async def list_adapters(
     try:
         # Get adapter list from runtime control service
         adapters = await runtime_control.list_adapters()
+        seen_adapter_ids = {a.adapter_id for a in adapters}
+
+        # Also include auto-loaded adapters from ServiceRegistry
+        service_registry = getattr(request.app.state, "service_registry", None)
+        if service_registry:
+            from ciris_engine.schemas.runtime.enums import ServiceType
+
+            for service_type in [ServiceType.TOOL, ServiceType.WISE_AUTHORITY]:
+                try:
+                    providers = service_registry.get_providers_by_type(service_type)
+                    for provider_info in providers:
+                        metadata = provider_info.get("metadata", {})
+                        if metadata.get("auto_loaded"):
+                            adapter_name = metadata.get("adapter", "unknown")
+                            adapter_id = f"{adapter_name}_auto"
+                            if adapter_id not in seen_adapter_ids:
+                                seen_adapter_ids.add(adapter_id)
+                                adapters.append(
+                                    AdapterInfo(
+                                        adapter_id=adapter_id,
+                                        adapter_type=adapter_name.upper(),
+                                        status=AdapterStatus.RUNNING,
+                                        started_at=datetime.now(timezone.utc),
+                                        config_params=AdapterConfig(
+                                            adapter_type=adapter_name, enabled=True, settings={}
+                                        ),
+                                        services_registered=[service_type.value],
+                                        messages_processed=0,
+                                        error_count=0,
+                                        last_error=None,
+                                        tools=[],
+                                    )
+                                )
+                except Exception as e:
+                    logger.debug(f"Error getting {service_type} providers: {e}")
 
         # Convert to response format
         adapter_statuses = []

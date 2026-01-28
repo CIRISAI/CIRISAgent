@@ -70,7 +70,11 @@ class AgentTemplate(BaseModel):
 
 
 class AdapterConfig(BaseModel):
-    """Adapter configuration."""
+    """Adapter configuration with platform requirements for KMP filtering.
+
+    The server returns all adapters with their requirements.
+    KMP clients filter locally based on platform capabilities.
+    """
 
     id: str = Field(..., description="Adapter ID (api, cli, discord, reddit)")
     name: str = Field(..., description=FIELD_DESC_DISPLAY_NAME)
@@ -82,6 +86,14 @@ class AdapterConfig(BaseModel):
         default_factory=list, description="Platform requirements (e.g., 'android_play_integrity')"
     )
     platform_available: bool = Field(True, description="Whether available on current platform")
+    # Fields for KMP-side filtering
+    requires_binaries: bool = Field(False, description="Requires external CLI tools (not available on mobile)")
+    required_binaries: List[str] = Field(default_factory=list, description="Specific binary names needed")
+    supported_platforms: List[str] = Field(
+        default_factory=list,
+        description="Platforms supported - empty means all, otherwise ['android', 'ios', 'desktop']",
+    )
+    requires_ciris_services: bool = Field(False, description="Requires CIRIS AI services (Google sign-in)")
 
 
 class SetupStatusResponse(BaseModel):
@@ -403,8 +415,22 @@ def _get_agent_templates() -> List[AgentTemplate]:
 
 
 def _get_available_adapters() -> List[AdapterConfig]:
-    """Get list of available adapters."""
-    return [
+    """Get all adapters with platform requirements for KMP-side filtering.
+
+    Returns ALL adapters with their requirements metadata.
+    KMP clients filter locally based on platform capabilities.
+
+    Filters out only:
+    - ciris_covenant_metrics (handled by separate consent checkbox)
+    - Mock/library/reference modules
+    """
+    from ciris_engine.logic.services.tool.discovery_service import AdapterDiscoveryService
+
+    adapters: List[AdapterConfig] = []
+    seen_ids: set = set()
+
+    # Always include API adapter first (required, cannot be disabled)
+    adapters.append(
         AdapterConfig(
             id="api",
             name="Web API",
@@ -412,37 +438,103 @@ def _get_available_adapters() -> List[AdapterConfig]:
             enabled_by_default=True,
             required_env_vars=[],
             optional_env_vars=["CIRIS_API_PORT", "NEXT_PUBLIC_API_BASE_URL"],
-        ),
-        AdapterConfig(
-            id="cli",
-            name="Command Line",
-            description="Interactive command-line interface",
-            enabled_by_default=False,
-            required_env_vars=[],
-            optional_env_vars=[],
-        ),
-        AdapterConfig(
-            id="discord",
-            name="Discord Bot",
-            description="Discord bot integration for server moderation and interaction",
-            enabled_by_default=False,
-            required_env_vars=["DISCORD_BOT_TOKEN"],
-            optional_env_vars=["DISCORD_CHANNEL_ID", "DISCORD_GUILD_ID"],
-        ),
-        AdapterConfig(
-            id="reddit",
-            name="Reddit Integration",
-            description="Reddit bot for r/ciris monitoring and interaction",
-            enabled_by_default=False,
-            required_env_vars=[
-                "CIRIS_REDDIT_CLIENT_ID",
-                "CIRIS_REDDIT_CLIENT_SECRET",
-                "CIRIS_REDDIT_USERNAME",
-                "CIRIS_REDDIT_PASSWORD",
-            ],
-            optional_env_vars=["CIRIS_REDDIT_SUBREDDIT"],
-        ),
-    ]
+            platform_available=True,
+            requires_binaries=False,
+            required_binaries=[],
+            supported_platforms=[],  # All platforms
+            requires_ciris_services=False,
+        )
+    )
+    seen_ids.add("api")
+
+    # Adapters to skip entirely (handled separately)
+    SKIP_ADAPTERS = {
+        "ciris_covenant_metrics",  # Handled by consent checkbox, not adapter list
+    }
+
+    # Adapters that require CIRIS AI services (Google sign-in)
+    CIRIS_SERVICES_ADAPTERS = {
+        "ciris_hosted_tools",
+    }
+
+    # Discover all adapters
+    try:
+        discovery = AdapterDiscoveryService()
+        manifests = discovery.discover_adapters()
+
+        for manifest in manifests:
+            module_id = manifest.module.name
+
+            # Skip if already added
+            if module_id in seen_ids:
+                continue
+
+            # Skip adapters handled separately
+            if module_id in SKIP_ADAPTERS:
+                logger.debug(f"[SETUP ADAPTERS] Skipping {module_id} (handled separately)")
+                continue
+
+            # Skip mock modules
+            if manifest.module.is_mock:
+                continue
+
+            # Skip reference/QA modules
+            if manifest.module.reference or manifest.module.for_qa:
+                continue
+
+            # Skip library-type modules (no services)
+            if not manifest.services:
+                continue
+
+            # Skip modules with metadata type = library
+            if manifest.metadata and manifest.metadata.get("type") == "library":
+                continue
+
+            # Skip common/shared modules
+            if module_id.endswith("_common") or "_common_" in module_id:
+                continue
+
+            # Extract platform requirements from manifest
+            capabilities = manifest.capabilities or []
+            requires_binaries = "requires:binaries" in capabilities
+
+            # Get supported platforms from metadata
+            supported_platforms: List[str] = []
+            if manifest.metadata:
+                platforms = manifest.metadata.get("supported_platforms")
+                if platforms and isinstance(platforms, list):
+                    supported_platforms = platforms
+
+            # Check if requires CIRIS services
+            requires_ciris_services = module_id in CIRIS_SERVICES_ADAPTERS
+
+            # Create adapter config with all requirements
+            adapter_config = AdapterConfig(
+                id=module_id,
+                name=manifest.module.name.replace("_", " ").title(),
+                description=manifest.module.description or f"{module_id} adapter",
+                enabled_by_default=requires_ciris_services,  # CIRIS services adapters enabled by default
+                required_env_vars=[],
+                optional_env_vars=[],
+                platform_requirements=manifest.platform_requirements or [],
+                platform_available=True,  # KMP will determine this
+                requires_binaries=requires_binaries,
+                required_binaries=[],  # Could extract from manifest if needed
+                supported_platforms=supported_platforms,
+                requires_ciris_services=requires_ciris_services,
+            )
+
+            adapters.append(adapter_config)
+            seen_ids.add(module_id)
+            logger.debug(
+                f"[SETUP ADAPTERS] Discovered adapter: {module_id} (requires_binaries={requires_binaries}, supported_platforms={supported_platforms})"
+            )
+
+    except Exception as e:
+        logger.warning(f"[SETUP ADAPTERS] Failed to discover adapters: {e}")
+
+    logger.info(f"[SETUP ADAPTERS] Total adapters available: {len(adapters)}")
+    return adapters
 
 
 def _validate_api_key_for_provider(config: LLMValidationRequest) -> Optional[LLMValidationResponse]:
@@ -1037,9 +1129,10 @@ async def list_templates() -> SuccessResponse[List[AgentTemplate]]:
 
 @router.get("/adapters", response_model=SuccessResponse[List[AdapterConfig]])
 async def list_adapters() -> SuccessResponse[List[AdapterConfig]]:
-    """List available adapters.
+    """List available adapters with platform requirements.
 
-    Returns configuration for available communication adapters.
+    Returns ALL adapters with their requirements metadata.
+    KMP clients filter locally based on platform capabilities (iOS, Android, desktop).
     This endpoint is always accessible without authentication.
     """
     adapters = _get_available_adapters()

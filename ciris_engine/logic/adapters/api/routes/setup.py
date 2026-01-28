@@ -618,7 +618,15 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
 
         logger.info("[VALIDATE_LLM] API key format validation passed")
 
-        # Import OpenAI client
+        # Handle Anthropic separately - uses its own SDK
+        if config.provider == "anthropic":
+            return await _validate_anthropic_connection(config)
+
+        # Handle Google separately - uses OpenAI-compatible endpoint
+        if config.provider == "google":
+            return await _validate_google_connection(config)
+
+        # For OpenAI-compatible providers, use OpenAI client
         from openai import AsyncOpenAI
 
         # Build client configuration
@@ -632,14 +640,19 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
         client = AsyncOpenAI(**client_kwargs)
 
         try:
-            logger.info("[VALIDATE_LLM] Attempting to list models from API...")
-            models = await client.models.list()
-            model_count = len(models.data) if hasattr(models, "data") else 0
-
-            logger.info(f"[VALIDATE_LLM] SUCCESS! Found {model_count} models")
+            # Try a minimal completion instead of models.list() - more reliable across providers
+            # Some providers (Together AI) return non-standard model list responses
+            logger.info("[VALIDATE_LLM] Attempting test completion...")
+            model_to_test = config.model or "gpt-3.5-turbo"
+            response = await client.chat.completions.create(
+                model=model_to_test,
+                messages=[{"role": "user", "content": "Hi"}],
+                max_tokens=1,
+            )
+            logger.info(f"[VALIDATE_LLM] SUCCESS! Test completion worked with model: {model_to_test}")
             return LLMValidationResponse(
                 valid=True,
-                message=f"Connection successful! Found {model_count} available models.",
+                message=f"Connection successful! Model '{model_to_test}' is available.",
                 error=None,
             )
         except Exception as e:
@@ -651,6 +664,68 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
     except Exception as e:
         logger.error(f"[VALIDATE_LLM] Unexpected error: {type(e).__name__}: {e}")
         return LLMValidationResponse(valid=False, message="Validation error", error=str(e))
+
+
+async def _validate_anthropic_connection(config: LLMValidationRequest) -> LLMValidationResponse:
+    """Validate Anthropic API connection using native SDK."""
+    try:
+        import anthropic
+
+        logger.info("[VALIDATE_LLM] Using Anthropic SDK for validation")
+        client = anthropic.AsyncAnthropic(api_key=config.api_key)
+
+        # Try a minimal completion
+        model_to_test = config.model or "claude-3-haiku-20240307"
+        response = await client.messages.create(
+            model=model_to_test,
+            max_tokens=1,
+            messages=[{"role": "user", "content": "Hi"}],
+        )
+        logger.info(f"[VALIDATE_LLM] SUCCESS! Anthropic test completion worked with model: {model_to_test}")
+        return LLMValidationResponse(
+            valid=True,
+            message=f"Connection successful! Model '{model_to_test}' is available.",
+            error=None,
+        )
+    except ImportError:
+        logger.error("[VALIDATE_LLM] Anthropic SDK not installed")
+        return LLMValidationResponse(
+            valid=False,
+            message="SDK not installed",
+            error="Anthropic SDK not installed. Run: pip install anthropic",
+        )
+    except Exception as e:
+        logger.error(f"[VALIDATE_LLM] Anthropic API call FAILED: {type(e).__name__}: {e}")
+        return _classify_llm_connection_error(e, None)
+
+
+async def _validate_google_connection(config: LLMValidationRequest) -> LLMValidationResponse:
+    """Validate Google AI (Gemini) connection using OpenAI-compatible endpoint."""
+    try:
+        from openai import AsyncOpenAI
+
+        # Google's OpenAI-compatible endpoint
+        base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+        logger.info(f"[VALIDATE_LLM] Using Google OpenAI-compatible endpoint: {base_url}")
+
+        client = AsyncOpenAI(api_key=config.api_key, base_url=base_url)
+
+        # Try a minimal completion
+        model_to_test = config.model or "gemini-2.0-flash"
+        response = await client.chat.completions.create(
+            model=model_to_test,
+            messages=[{"role": "user", "content": "Hi"}],
+            max_tokens=1,
+        )
+        logger.info(f"[VALIDATE_LLM] SUCCESS! Google test completion worked with model: {model_to_test}")
+        return LLMValidationResponse(
+            valid=True,
+            message=f"Connection successful! Model '{model_to_test}' is available.",
+            error=None,
+        )
+    except Exception as e:
+        logger.error(f"[VALIDATE_LLM] Google API call FAILED: {type(e).__name__}: {e}")
+        return _classify_llm_connection_error(e, "https://generativelanguage.googleapis.com")
 
 
 # =============================================================================

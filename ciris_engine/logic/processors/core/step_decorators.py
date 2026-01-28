@@ -1118,6 +1118,25 @@ async def _broadcast_reasoning_event(
             dma_results_for_event = getattr(step_data, "dma_results_obj", None)
             if dma_results_for_event:
                 event = _create_dma_results_event(step_data, timestamp, dma_results_for_event, create_reasoning_event)
+                # Broadcast DMA_RESULTS event
+                if event:
+                    await reasoning_event_stream.broadcast_reasoning_event(event)
+                    logger.debug(
+                        f"Broadcast {event.event_type} to {len(reasoning_event_stream._subscribers)} subscribers"
+                    )
+
+                # Event 3: IDMA_RESULT - separate event for Identity DMA fragility check (v1.9.3)
+                idma_event = _create_idma_result_event(
+                    step_data, timestamp, dma_results_for_event, create_reasoning_event
+                )
+                if idma_event:
+                    await reasoning_event_stream.broadcast_reasoning_event(idma_event)
+                    logger.debug(
+                        f"Broadcast {idma_event.event_type} to {len(reasoning_event_stream._subscribers)} subscribers"
+                    )
+
+                # Clear event so we don't broadcast again below
+                event = None
             else:
                 logger.warning(f"No dma_results_obj found in step_data for PERFORM_ASPDMA step {step_data.thought_id}")
 
@@ -1459,6 +1478,39 @@ def _create_dma_results_event(
         dsdma_prompt=dsdma_prompt,  # User prompt passed to DSDMA
         pdma_prompt=pdma_prompt,  # User prompt passed to PDMA
         idma_prompt=idma_prompt,  # User prompt passed to IDMA
+    )
+
+
+def _create_idma_result_event(
+    step_data: StepDataUnion, timestamp: str, dma_results: Any, create_reasoning_event: Any
+) -> Any:
+    """Create IDMA_RESULT reasoning event from InitialDMAResults.
+
+    IDMA (Identity DMA) evaluates epistemic diversity using CCA principles.
+    This event is always emitted after DMA_RESULTS (v1.9.3).
+    """
+    from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+
+    idma = getattr(dma_results, "idma", None)
+    if not idma:
+        # Return None if no IDMA result - caller should check
+        return None
+
+    idma_prompt = getattr(dma_results, "idma_prompt", None)
+
+    return create_reasoning_event(
+        event_type=ReasoningEvent.IDMA_RESULT,
+        thought_id=step_data.thought_id,
+        task_id=step_data.task_id,
+        timestamp=timestamp,
+        k_eff=idma.k_eff,
+        correlation_risk=idma.correlation_risk,
+        phase=idma.phase,
+        fragility_flag=idma.fragility_flag,
+        sources_identified=idma.sources_identified,
+        correlation_factors=idma.correlation_factors,
+        reasoning=idma.reasoning,
+        idma_prompt=idma_prompt,
     )
 
 

@@ -88,14 +88,29 @@ class StepPoint(str, Enum):
 
 
 class ReasoningEvent(str, Enum):
-    """Simplified reasoning stream events - 6 clear result events."""
+    """Reasoning stream events - 8 result events.
+
+    Core events (always emitted):
+    - THOUGHT_START: Thought begins processing
+    - SNAPSHOT_AND_CONTEXT: System snapshot + gathered context
+    - DMA_RESULTS: 3 DMA results (CSDMA, DSDMA, PDMA)
+    - IDMA_RESULT: Identity DMA fragility check
+    - ASPDMA_RESULT: Selected action + rationale
+    - CONSCIENCE_RESULT: Conscience evaluation + final action
+    - ACTION_RESULT: Action execution outcome + audit trail
+
+    Optional events (emitted when applicable):
+    - TSASPDMA_RESULT: Tool-Specific ASPDMA (emitted when TOOL action selected)
+    """
 
     THOUGHT_START = "thought_start"  # 0) Thought begins processing - metadata and content
     SNAPSHOT_AND_CONTEXT = "snapshot_and_context"  # 1) System snapshot + gathered context
-    DMA_RESULTS = "dma_results"  # 2) All 3 DMA results (csdma, dsdma, aspdma)
-    ASPDMA_RESULT = "aspdma_result"  # 3) Selected action + rationale
-    CONSCIENCE_RESULT = "conscience_result"  # 4) Conscience evaluation + final action
-    ACTION_RESULT = "action_result"  # 5) Action execution outcome + audit trail
+    DMA_RESULTS = "dma_results"  # 2) 3 DMA results (CSDMA, DSDMA, PDMA)
+    IDMA_RESULT = "idma_result"  # 3) Identity DMA fragility check (always emitted)
+    ASPDMA_RESULT = "aspdma_result"  # 4) Selected action + rationale
+    TSASPDMA_RESULT = "tsaspdma_result"  # 4.5) Tool-Specific ASPDMA (optional, when TOOL)
+    CONSCIENCE_RESULT = "conscience_result"  # 5) Conscience evaluation + final action
+    ACTION_RESULT = "action_result"  # 6) Action execution outcome + audit trail
 
 
 class StepDuration(str, Enum):
@@ -999,6 +1014,31 @@ class DMAResultsEvent(BaseModel):
     idma_prompt: Optional[str] = Field(None, description="User prompt passed to IDMA")
 
 
+class IDMAResultEvent(BaseModel):
+    """Event 3: Identity DMA fragility check (always emitted after DMA_RESULTS).
+
+    IDMA evaluates epistemic diversity using CCA (Coherent Collective Action) principles.
+    Emitted separately from DMA_RESULTS to allow fine-grained tracing of identity/fragility checks.
+    """
+
+    event_type: ReasoningEvent = Field(ReasoningEvent.IDMA_RESULT)
+    thought_id: str = Field(..., description=DESC_THOUGHT_ID)
+    task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
+    timestamp: str = Field(..., description=DESC_TIMESTAMP)
+
+    # IDMA results - CCA epistemic diversity check
+    k_eff: float = Field(..., description="Effective independent source count (need >= 2 for healthy reasoning)")
+    correlation_risk: float = Field(..., description="Estimated correlation between sources (0-1)")
+    phase: str = Field(..., description="Epistemic phase: 'chaos', 'healthy', or 'rigidity'")
+    fragility_flag: bool = Field(..., description="True if reasoning may be brittle")
+    sources_identified: List[str] = Field(default_factory=list, description="List of distinct sources identified")
+    correlation_factors: List[str] = Field(default_factory=list, description="Factors contributing to source correlation")
+    reasoning: str = Field(..., description="Analysis of information diversity and epistemic health")
+
+    # User prompt passed to IDMA (for debugging/transparency)
+    idma_prompt: Optional[str] = Field(None, description="User prompt passed to IDMA")
+
+
 class ASPDMAResultEvent(BaseModel):
     """Event 3: Selected action and rationale (PERFORM_ASPDMA + RECURSIVE_ASPDMA steps)."""
 
@@ -1014,6 +1054,38 @@ class ASPDMAResultEvent(BaseModel):
 
     # User prompt passed to ASPDMA (for debugging/transparency)
     aspdma_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA")
+
+
+class TSASPDMAResultEvent(BaseModel):
+    """Event 3.5: Tool-Specific ASPDMA result (optional, when TOOL action selected).
+
+    TSASPDMA is activated when ASPDMA selects a TOOL action. It reviews full tool
+    documentation and can refine parameters, request clarification (SPEAK), or
+    reconsider (PONDER).
+    """
+
+    event_type: ReasoningEvent = Field(ReasoningEvent.TSASPDMA_RESULT)
+    thought_id: str = Field(..., description=DESC_THOUGHT_ID)
+    task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
+    timestamp: str = Field(..., description=DESC_TIMESTAMP)
+
+    # TSASPDMA input - what ASPDMA selected
+    original_tool_name: str = Field(..., description="Tool name selected by ASPDMA")
+    original_parameters: JSONDict = Field(default_factory=dict, description="Original parameters from ASPDMA")
+    aspdma_rationale: str = Field(..., description="Rationale from ASPDMA for tool selection")
+
+    # TSASPDMA output - refined decision
+    final_action: str = Field(..., description="Final action: TOOL (proceed), SPEAK (clarify), or PONDER (reconsider)")
+    final_tool_name: Optional[str] = Field(None, description="Tool name if action is TOOL")
+    final_parameters: JSONDict = Field(default_factory=dict, description="Refined parameters if action is TOOL")
+    tsaspdma_rationale: str = Field(..., description="TSASPDMA reasoning with gotchas acknowledged")
+
+    # Tool documentation context
+    tool_description: Optional[str] = Field(None, description="Tool description from documentation")
+    gotchas_acknowledged: List[str] = Field(default_factory=list, description="Tool gotchas acknowledged in reasoning")
+
+    # User prompt passed to TSASPDMA (for debugging/transparency)
+    tsaspdma_prompt: Optional[str] = Field(None, description="User prompt passed to TSASPDMA")
 
 
 class ConscienceResultEvent(BaseModel):

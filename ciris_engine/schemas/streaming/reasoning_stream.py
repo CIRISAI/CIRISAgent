@@ -1,8 +1,11 @@
 """
-Simplified reasoning stream for H3ERE pipeline.
+Reasoning stream for H3ERE pipeline.
 
-6 clear result events, no UI metadata (SVG locations, etc).
-Pure data events for monitoring pipeline execution.
+8 event types for monitoring pipeline execution:
+- 6 core events (always emitted)
+- 2 optional events (IDMA_RESULT, TSASPDMA_RESULT)
+
+Pure data events, no UI metadata (SVG locations, etc).
 """
 
 from datetime import datetime
@@ -15,17 +18,21 @@ from ciris_engine.schemas.services.runtime_control import (
     ASPDMAResultEvent,
     ConscienceResultEvent,
     DMAResultsEvent,
+    IDMAResultEvent,
     ReasoningEvent,
     SnapshotAndContextResult,
     ThoughtStartEvent,
+    TSASPDMAResultEvent,
 )
 
-# Union of all 6 reasoning event types
+# Union of all 8 reasoning event types (7 core + 1 optional)
 ReasoningEventUnion = Union[
     ThoughtStartEvent,
     SnapshotAndContextResult,
     DMAResultsEvent,
+    IDMAResultEvent,  # IDMA fragility check (always emitted after DMAs)
     ASPDMAResultEvent,
+    TSASPDMAResultEvent,  # Optional: Tool-specific ASPDMA when TOOL selected
     ConscienceResultEvent,
     ActionResultEvent,
 ]
@@ -71,8 +78,12 @@ def create_reasoning_event(
         return SnapshotAndContextResult(**base_data, **event_data)
     elif event_type == ReasoningEvent.DMA_RESULTS:
         return DMAResultsEvent(**base_data, **event_data)
+    elif event_type == ReasoningEvent.IDMA_RESULT:
+        return IDMAResultEvent(**base_data, **event_data)
     elif event_type == ReasoningEvent.ASPDMA_RESULT:
         return ASPDMAResultEvent(**base_data, **event_data)
+    elif event_type == ReasoningEvent.TSASPDMA_RESULT:
+        return TSASPDMAResultEvent(**base_data, **event_data)
     elif event_type == ReasoningEvent.CONSCIENCE_RESULT:
         return ConscienceResultEvent(**base_data, **event_data)
     elif event_type == ReasoningEvent.ACTION_RESULT:
@@ -88,7 +99,9 @@ __all__ = [
     "ThoughtStartEvent",
     "SnapshotAndContextResult",
     "DMAResultsEvent",
+    "IDMAResultEvent",
     "ASPDMAResultEvent",
+    "TSASPDMAResultEvent",
     "ConscienceResultEvent",
     "ActionResultEvent",
     "create_reasoning_event",

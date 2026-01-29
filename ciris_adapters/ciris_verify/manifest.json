@@ -1,0 +1,57 @@
+{
+  "module": {
+    "name": "ciris_verify",
+    "version": "0.1.0",
+    "description": "Hardware-rooted license verification for CIRIS agents",
+    "author": "CIRIS Engineering"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "ciris_verify.service.CIRISVerifyService",
+      "capabilities": [
+        "license:verify",
+        "license:check_capability",
+        "license:get_disclosure"
+      ]
+    }
+  ],
+  "capabilities": [
+    "license:verify",
+    "license:check_capability",
+    "license:get_disclosure"
+  ],
+  "dependencies": {
+    "protocols": [],
+    "schemas": [],
+    "external": {
+      "ciris-verify": ">=0.1.0"
+    }
+  },
+  "exports": {
+    "service_class": "ciris_verify.service.CIRISVerifyService"
+  },
+  "configuration": {
+    "binary_path": {
+      "type": "string",
+      "default": null,
+      "description": "Path to CIRISVerify binary (optional, auto-detected)"
+    },
+    "cache_ttl_seconds": {
+      "type": "integer",
+      "default": 300,
+      "description": "Cache TTL for license status"
+    },
+    "timeout_seconds": {
+      "type": "float",
+      "default": 10.0,
+      "description": "Verification timeout"
+    },
+    "require_hardware": {
+      "type": "boolean",
+      "default": false,
+      "description": "Require hardware security module for professional licenses"
+    }
+  }
+}

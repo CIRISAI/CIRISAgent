@@ -309,3 +309,62 @@ class UIAutomator:
             "content_descs": [e.content_desc for e in elements if e.content_desc],
             "resource_ids": [e.resource_id for e in elements if e.resource_id],
         }
+
+    def is_google_lens_open(self) -> bool:
+        """Check if Google Lens is currently open.
+
+        Google Lens can be triggered accidentally by gestures or long-presses.
+        This checks for common Lens UI elements.
+        """
+        elements = self.get_elements(refresh=True)
+
+        # Check for Lens-specific packages or UI elements
+        lens_indicators = [
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.apps.lens",
+            "Search with your camera",
+            "Google Lens",
+            "Translate",  # Lens translate mode
+            "Search",  # Lens search bar
+        ]
+
+        for element in elements:
+            # Check package
+            if "lens" in element.package.lower() or "googlequicksearchbox" in element.package.lower():
+                return True
+            # Check text
+            if element.text and any(indicator.lower() in element.text.lower() for indicator in lens_indicators):
+                return True
+            # Check content description
+            if element.content_desc and "lens" in element.content_desc.lower():
+                return True
+
+        return False
+
+    def dismiss_google_lens(self) -> bool:
+        """Dismiss Google Lens if it's open.
+
+        Returns True if Lens was dismissed, False if it wasn't open or couldn't be dismissed.
+        """
+        if not self.is_google_lens_open():
+            return False
+
+        print("  [DEBUG] Google Lens detected, dismissing...")
+
+        # Try pressing back button to dismiss
+        self.adb.press_back()
+        time.sleep(0.5)
+
+        # Check if it's still open
+        if self.is_google_lens_open():
+            # Try pressing back again
+            self.adb.press_back()
+            time.sleep(0.5)
+
+        # Final check
+        if self.is_google_lens_open():
+            # Force stop the Lens/Google app
+            self.adb._run_adb(["shell", "am", "force-stop", "com.google.android.googlequicksearchbox"])
+            time.sleep(0.5)
+
+        return not self.is_google_lens_open()

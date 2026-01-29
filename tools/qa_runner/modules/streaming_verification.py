@@ -21,16 +21,23 @@ logger = logging.getLogger(__name__)
 
 
 class StreamingVerificationModule:
-    """Verify all 6 reasoning events are streaming correctly."""
+    """Verify reasoning events are streaming correctly."""
 
-    # All 6 reasoning events expected (with 60s timeout for wakeup to complete)
+    # Core reasoning events expected (with 60s timeout for wakeup to complete)
+    # Note: tsaspdma_result is optional (only emitted for TOOL actions)
     EXPECTED_EVENTS = {
         "thought_start",
         "snapshot_and_context",
         "dma_results",
+        "idma_result",  # v1.9.3: IDMA epistemic diversity evaluation
         "aspdma_result",
         "conscience_result",
         "action_result",
+    }
+
+    # Optional events that may be emitted depending on action type
+    OPTIONAL_EVENTS = {
+        "tsaspdma_result",  # v1.9.3: Only emitted when ASPDMA selects TOOL action
     }
 
     @staticmethod
@@ -117,20 +124,34 @@ class StreamingVerificationModule:
                                 # Track this event type
                                 received_events.add(event_type)
 
-                                # Check if this is an unexpected event (not one of the 6)
-                                if event_type not in StreamingVerificationModule.EXPECTED_EVENTS:
+                                # Check if this is an unexpected event (not expected or optional)
+                                all_valid_events = (
+                                    StreamingVerificationModule.EXPECTED_EVENTS
+                                    | StreamingVerificationModule.OPTIONAL_EVENTS
+                                )
+                                if event_type not in all_valid_events:
                                     unexpected_events.add(event_type)
 
                                 # Track duplicates: (thought_id, event_type)
+                                # Allow duplicates if is_recursive=True (legitimate recursive processing)
                                 thought_id = event.get("thought_id")
+                                is_recursive = event.get("is_recursive", False)
                                 if thought_id:
                                     key = (thought_id, event_type)
                                     event_occurrences[key] = event_occurrences.get(key, 0) + 1
                                     if event_occurrences[key] > 1:
-                                        dup_msg = f"Duplicate {event_type} for thought {thought_id} (occurrence #{event_occurrences[key]})"
-                                        if dup_msg not in duplicates_found:
-                                            duplicates_found.append(dup_msg)
-                                            errors.append(dup_msg)
+                                        # Only flag as duplicate error if NOT recursive
+                                        # Recursive processing legitimately re-emits events for the same thought
+                                        if not is_recursive:
+                                            dup_msg = f"Duplicate {event_type} for thought {thought_id} (occurrence #{event_occurrences[key]})"
+                                            if dup_msg not in duplicates_found:
+                                                duplicates_found.append(dup_msg)
+                                                errors.append(dup_msg)
+                                        else:
+                                            logger.debug(
+                                                f"Allowed recursive duplicate: {event_type} for thought {thought_id} "
+                                                f"(occurrence #{event_occurrences[key]}, is_recursive=True)"
+                                            )
 
                                 # Validate event structure
                                 event_detail = {
@@ -523,6 +544,44 @@ class StreamingVerificationModule:
                                         elif not isinstance(event["pdma"]["alignment_check"], str):
                                             event_detail["issues"].append("pdma.alignment_check should be string")
 
+                                elif event_type == "idma_result":
+                                    # IDMA (Intuition DMA) result - epistemic diversity evaluation
+                                    # Added in v1.9.3 for CCA (Coherent Collective Action) source analysis
+                                    required_fields = {
+                                        "thought_id": str,
+                                        "task_id": str,
+                                        "timestamp": str,
+                                    }
+                                    for field, field_type in required_fields.items():
+                                        if field not in event:
+                                            event_detail["issues"].append(f"Missing required field: {field}")
+                                        elif not isinstance(event[field], field_type):
+                                            event_detail["issues"].append(
+                                                f"Field {field} has wrong type: {type(event[field]).__name__} (expected {field_type.__name__})"
+                                            )
+
+                                    # IDMA-specific fields (epistemic evaluation)
+                                    idma_fields = {
+                                        "k_eff": (int, float),  # Effective source count
+                                        "correlation_risk": (int, float),  # Correlation risk score
+                                        "fragility_flag": bool,  # Whether reasoning is fragile
+                                        "phase": str,  # Epistemic phase
+                                        "reasoning": str,  # IDMA reasoning
+                                        "sources_identified": list,  # List of identified sources
+                                        "correlation_factors": list,  # Correlation factors
+                                    }
+                                    for field, field_type in idma_fields.items():
+                                        if field in event:
+                                            if isinstance(field_type, tuple):
+                                                if not isinstance(event[field], field_type):
+                                                    event_detail["issues"].append(
+                                                        f"IDMA field {field} has wrong type: {type(event[field]).__name__}"
+                                                    )
+                                            elif not isinstance(event[field], field_type):
+                                                event_detail["issues"].append(
+                                                    f"IDMA field {field} has wrong type: {type(event[field]).__name__} (expected {field_type.__name__})"
+                                                )
+
                                 elif event_type == "aspdma_result":
                                     # Required fields per schema
                                     required_fields = {
@@ -695,12 +754,37 @@ class StreamingVerificationModule:
                                         "csdma",
                                         "dsdma",
                                         "pdma",
-                                        "idma",  # IDMA: Intuition DMA (CCA epistemic diversity) - optional
+                                        # IDMA is streamed separately as idma_result event (v1.9.3)
                                         "csdma_prompt",
                                         "dsdma_prompt",
                                         "pdma_prompt",
-                                        "idma_prompt",  # Optional IDMA prompt
                                     },  # DMA results + optional prompt fields
+                                    "idma_result": {
+                                        # IDMA epistemic evaluation fields (v1.9.3)
+                                        "k_eff",
+                                        "correlation_risk",
+                                        "fragility_flag",
+                                        "phase",
+                                        "reasoning",
+                                        "sources_identified",
+                                        "correlation_factors",
+                                        "idma_prompt",  # Optional prompt
+                                    },
+                                    "tsaspdma_result": {
+                                        # TSASPDMA tool-specific evaluation (v1.9.3)
+                                        # Input from ASPDMA
+                                        "original_tool_name",
+                                        "original_parameters",
+                                        "aspdma_rationale",
+                                        # Output (refined decision)
+                                        "final_action",
+                                        "final_tool_name",
+                                        "final_parameters",
+                                        "tsaspdma_rationale",
+                                        # Optional tool documentation context
+                                        "tool_description",
+                                        "gotchas_acknowledged",
+                                    },
                                     "aspdma_result": {
                                         "selected_action",
                                         "action_rationale",
@@ -941,7 +1025,7 @@ class StreamingVerificationModule:
 
         # Build status message
         if result["success"]:
-            message = f"✅ All 6 reasoning events received with valid schemas (no duplicates, no unexpected events)"
+            message = f"✅ All 7 reasoning events received with valid schemas (no duplicates, no unexpected events)"
             if events_with_audit_data > 0:
                 message += f"\n✅ Audit trail data present in {events_with_audit_data} ACTION_RESULT events"
             if recursive_aspdma_count > 0 or recursive_conscience_count > 0:

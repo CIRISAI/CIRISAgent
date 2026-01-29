@@ -168,6 +168,22 @@ OPENAI_API_KEY="{llm_api_key}"
 # OPENAI_API_BASE="https://api.openai.com/v1"
 
 """
+    elif llm_provider == "google":
+        content += f"""# Google (Gemini) Configuration
+GOOGLE_API_KEY="{llm_api_key}"
+LLM_PROVIDER="google"
+"""
+        if llm_model:
+            content += f'OPENAI_MODEL="{llm_model}"\n'
+        content += "\n"
+    elif llm_provider == "anthropic":
+        content += f"""# Anthropic (Claude) Configuration
+ANTHROPIC_API_KEY="{llm_api_key}"
+LLM_PROVIDER="anthropic"
+"""
+        if llm_model:
+            content += f'OPENAI_MODEL="{llm_model}"\n'
+        content += "\n"
     else:
         content += f"""# OpenAI-Compatible LLM Configuration
 OPENAI_API_KEY="{llm_api_key}"

@@ -78,6 +78,7 @@ setup(
         # Each entry point maps adapter_name -> module path for manifest loading
         "ciris.adapters": [
             "ciris_hosted_tools=ciris_adapters.ciris_hosted_tools",
+            "ciris_verify=ciris_adapters.ciris_verify",
             "external_data_sql=ciris_adapters.external_data_sql",
             "home_assistant=ciris_adapters.home_assistant",
             "mcp_client=ciris_adapters.mcp_client",

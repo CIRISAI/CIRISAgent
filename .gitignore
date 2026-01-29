@@ -116,3 +116,4 @@ ios/pyo3-ios-config.txt
 
 # Main engine GUI static assets (regenerated from CIRISGUI)
 ciris_engine/gui_static/
+mobile_qa_reports/

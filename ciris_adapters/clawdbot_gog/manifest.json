@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_gog",
+    "version": "1.0.0",
+    "description": "Google Workspace CLI for Gmail, Calendar, Drive, Contacts, Sheets, and Docs.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://gogcli.sh"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_gog.service.GogToolService",
+      "capabilities": [
+        "tool:gog",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:gog",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_gog.service.GogToolService"
+  },
+  "configuration": {}
+}

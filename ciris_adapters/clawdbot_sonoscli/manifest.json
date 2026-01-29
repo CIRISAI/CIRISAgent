@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_sonoscli",
+    "version": "1.0.0",
+    "description": "Control Sonos speakers (discover/status/play/volume/group).",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://sonoscli.sh"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_sonoscli.service.SonoscliToolService",
+      "capabilities": [
+        "tool:sonoscli",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:sonoscli",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_sonoscli.service.SonoscliToolService"
+  },
+  "configuration": {}
+}

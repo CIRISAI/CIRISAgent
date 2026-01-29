@@ -548,6 +548,38 @@ class ServiceRegistry(_Base):
         logger.debug(f"Found {len(all_services)} total registered services")
         return all_services
 
+    def get_providers_by_type(self, service_type: Union[str, ServiceType]) -> List[Dict[str, Any]]:
+        """Get all providers of a given type with their metadata.
+
+        Args:
+            service_type: Type of service as string or ServiceType enum
+
+        Returns:
+            List of dicts with provider info: name, capabilities, metadata, priority
+        """
+        if isinstance(service_type, str):
+            try:
+                resolved_type = ServiceType(service_type)
+            except ValueError:
+                logger.warning(f"Unknown service type: {service_type}")
+                return []
+        else:
+            resolved_type = cast(ServiceType, service_type)
+
+        providers_info = []
+        if resolved_type in self._services:
+            for provider in self._services[resolved_type]:
+                providers_info.append(
+                    {
+                        "name": provider.name,
+                        "capabilities": list(provider.capabilities),
+                        "metadata": provider.metadata or {},
+                        "priority": provider.priority.name if provider.priority else "NORMAL",
+                    }
+                )
+
+        return providers_info
+
     def clear_all(self) -> None:
         """Clear all registered services and circuit breakers"""
         self._services.clear()

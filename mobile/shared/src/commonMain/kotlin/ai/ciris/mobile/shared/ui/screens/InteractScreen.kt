@@ -757,7 +757,7 @@ private fun formatTimestamp(timestamp: Instant): String {
     val minutes = ((epochMillis / 60000) % 60).toInt()
     val amPm = if (hours < 12) "AM" else "PM"
     val displayHours = if (hours == 0) 12 else if (hours > 12) hours - 12 else hours
-    return String.format("%d:%02d %s", displayHours, minutes, amPm)
+    return "$displayHours:${minutes.toString().padStart(2, '0')} $amPm"
 }
 
 /**
@@ -1124,7 +1124,7 @@ private fun formatTimelineTimestamp(epochMillis: Long): String {
     val minutes = ((epochMillis / 60000) % 60).toInt()
     val seconds = ((epochMillis / 1000) % 60).toInt()
     val displayHours = if (hours == 0) 12 else if (hours > 12) hours - 12 else hours
-    return String.format("%d:%02d:%02d", displayHours, minutes, seconds)
+    return "$displayHours:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
 }
 
 /**

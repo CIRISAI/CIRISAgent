@@ -141,7 +141,8 @@ class SetupViewModel {
 
         val nextStep = when (currentState.currentStep) {
             SetupStep.WELCOME -> SetupStep.LLM_CONFIGURATION
-            SetupStep.LLM_CONFIGURATION -> SetupStep.ACCOUNT_AND_CONFIRMATION
+            SetupStep.LLM_CONFIGURATION -> SetupStep.OPTIONAL_FEATURES
+            SetupStep.OPTIONAL_FEATURES -> SetupStep.ACCOUNT_AND_CONFIRMATION
             SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.COMPLETE
             SetupStep.COMPLETE -> SetupStep.COMPLETE // Stay at complete
         }
@@ -159,11 +160,83 @@ class SetupViewModel {
         val prevStep = when (currentState.currentStep) {
             SetupStep.WELCOME -> SetupStep.WELCOME // Stay at welcome
             SetupStep.LLM_CONFIGURATION -> SetupStep.WELCOME
-            SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.LLM_CONFIGURATION
+            SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
+            SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.OPTIONAL_FEATURES
             SetupStep.COMPLETE -> SetupStep.ACCOUNT_AND_CONFIRMATION
         }
 
         _state.value = currentState.copy(currentStep = prevStep)
+    }
+
+    // ========== Covenant Metrics Opt-In ==========
+
+    /**
+     * Set covenant metrics consent for AI alignment research.
+     * When enabled, anonymous metrics (reasoning scores, decision patterns,
+     * LLM provider/API base URL) are shared with CIRIS L3C.
+     * No message content or PII is ever sent.
+     */
+    fun setCovenantMetricsConsent(consent: Boolean) {
+        _state.value = _state.value.copy(covenantMetricsConsent = consent)
+    }
+
+    // ========== Adapter Configuration ==========
+
+    /**
+     * Load available adapters from the setup API.
+     * Call this when entering the OPTIONAL_FEATURES step.
+     *
+     * Adapters with enabled_by_default=true are automatically selected.
+     * This includes ciris_hosted_tools when user has CIRIS AI services.
+     */
+    suspend fun loadAvailableAdapters(
+        fetchFunc: suspend () -> List<ai.ciris.mobile.shared.models.CommunicationAdapter>
+    ) {
+        _state.value = _state.value.copy(adaptersLoading = true)
+        try {
+            val adapters = fetchFunc()
+
+            // Auto-select adapters that have enabled_by_default=true
+            // This includes ciris_hosted_tools for CIRIS AI services users
+            val autoEnabled = adapters
+                .filter { it.enabled_by_default }
+                .map { it.id }
+                .toSet()
+
+            // Merge with existing enabled adapters (api is always in the set)
+            val newEnabled = _state.value.enabledAdapterIds + autoEnabled
+
+            _state.value = _state.value.copy(
+                availableAdapters = adapters,
+                enabledAdapterIds = newEnabled,
+                adaptersLoading = false
+            )
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(adaptersLoading = false)
+        }
+    }
+
+    /**
+     * Toggle an adapter's enabled state.
+     * Note: "api" adapter cannot be disabled.
+     */
+    fun toggleAdapter(adapterId: String, enabled: Boolean) {
+        if (adapterId == "api") return // API adapter is always enabled
+
+        val currentEnabled = _state.value.enabledAdapterIds.toMutableSet()
+        if (enabled) {
+            currentEnabled.add(adapterId)
+        } else {
+            currentEnabled.remove(adapterId)
+        }
+        _state.value = _state.value.copy(enabledAdapterIds = currentEnabled)
+    }
+
+    /**
+     * Check if an adapter is enabled.
+     */
+    fun isAdapterEnabled(adapterId: String): Boolean {
+        return _state.value.enabledAdapterIds.contains(adapterId)
     }
 
     /**
@@ -240,6 +313,26 @@ class SetupViewModel {
         // Source: SetupViewModel.kt:141-146
         val adminPassword = generateAdminPassword()
 
+        // Build enabled adapters list from user selections + covenant metrics
+        val enabledAdapters = buildList {
+            // Add all user-selected adapters (api is always in the set)
+            addAll(currentState.enabledAdapterIds)
+            // Add covenant metrics adapter if consented
+            if (currentState.covenantMetricsConsent) {
+                add("ciris_covenant_metrics")
+            }
+        }
+
+        // Build adapter config with covenant metrics settings if consented
+        val adapterConfig = if (currentState.covenantMetricsConsent) {
+            mapOf(
+                "CIRIS_COVENANT_METRICS_CONSENT" to "true",
+                "CIRIS_COVENANT_METRICS_TRACE_LEVEL" to "detailed"
+            )
+        } else {
+            emptyMap()
+        }
+
         return if (useCirisProxy) {
             // CIRIS Proxy mode - use Google ID token with CIRIS hosted proxy
             CompleteSetupRequest(
@@ -255,7 +348,8 @@ class SetupViewModel {
 
                 // Agent configuration
                 template_id = "ally",  // Force Ally template for mobile
-                enabled_adapters = listOf("api"),
+                enabled_adapters = enabledAdapters,
+                adapter_config = adapterConfig,
                 agent_port = 8080,
 
                 // Admin account (auto-generated)
@@ -291,7 +385,8 @@ class SetupViewModel {
 
                 // Agent configuration
                 template_id = "ally",  // Force Ally template for mobile
-                enabled_adapters = listOf("api"),
+                enabled_adapters = enabledAdapters,
+                adapter_config = adapterConfig,
                 agent_port = 8080,
 
                 // Admin account (auto-generated)

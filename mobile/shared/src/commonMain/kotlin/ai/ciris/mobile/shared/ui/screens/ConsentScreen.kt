@@ -507,7 +507,7 @@ private fun ImpactDashboardCard(
                     color = Color(0xFF3B82F6)
                 )
                 ImpactMetric(
-                    value = "%.1f".format(impact.impactScore),
+                    value = "${((impact.impactScore * 10).toInt() / 10.0)}",
                     label = "Score",
                     color = Color(0xFF8B5CF6)
                 )

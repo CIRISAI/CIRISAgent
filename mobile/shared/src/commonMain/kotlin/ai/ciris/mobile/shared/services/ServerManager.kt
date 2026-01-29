@@ -1,8 +1,6 @@
 package ai.ciris.mobile.shared.services
 
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Dispatchers
 
 /**
  * Server health management for CIRIS mobile
@@ -37,10 +35,9 @@ class ServerManager(
      *
      * @return true if server responds with 200 OK
      */
-    suspend fun isExistingServerRunning(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val healthy = checkServerHealth()
-            healthy
+    suspend fun isExistingServerRunning(): Boolean {
+        return try {
+            checkServerHealth()
         } catch (e: Exception) {
             false
         }
@@ -52,8 +49,8 @@ class ServerManager(
      *
      * @return true if server responds with 200 OK
      */
-    suspend fun checkServerHealth(): Boolean = withContext(Dispatchers.IO) {
-        try {
+    suspend fun checkServerHealth(): Boolean {
+        return try {
             // Platform-specific HTTP implementation will be injected via expect/actual
             performHealthCheck(serverUrl)
         } catch (e: Exception) {

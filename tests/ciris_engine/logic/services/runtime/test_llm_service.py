@@ -283,8 +283,8 @@ async def test_llm_service_error_handling(llm_service):
         with pytest.raises(RuntimeError) as exc_info:
             config = OpenAIConfig(api_key="")  # Empty API key
             service = OpenAICompatibleClient(config=config)
-        # The error message changed in newer versions
-        assert "No OpenAI API key found" in str(exc_info.value)
+        # The error message format is "No API key found for {provider}"
+        assert "No API key found" in str(exc_info.value)
 
     # Test network error
     from pydantic import BaseModel

@@ -44,9 +44,7 @@ class BinaryRequirement(BaseModel):
 
     name: str = Field(..., description="Binary name (e.g., 'ffmpeg', 'git')")
     min_version: Optional[str] = Field(None, description="Minimum version (semver)")
-    verify_command: Optional[str] = Field(
-        None, description="Command to verify installation (e.g., 'ffmpeg -version')"
-    )
+    verify_command: Optional[str] = Field(None, description="Command to verify installation (e.g., 'ffmpeg -version')")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -79,12 +77,8 @@ class ToolRequirements(BaseModel):
     any_binaries: List[BinaryRequirement] = Field(
         default_factory=list, description="Alternative binaries (at least one required)"
     )
-    env_vars: List[EnvVarRequirement] = Field(
-        default_factory=list, description="Required environment variables"
-    )
-    config_keys: List[ConfigRequirement] = Field(
-        default_factory=list, description="Required CIRIS config keys"
-    )
+    env_vars: List[EnvVarRequirement] = Field(default_factory=list, description="Required environment variables")
+    config_keys: List[ConfigRequirement] = Field(default_factory=list, description="Required CIRIS config keys")
     platforms: List[str] = Field(
         default_factory=list, description="Supported platforms (darwin, linux, win32). Empty = all"
     )
@@ -107,13 +101,9 @@ class InstallStep(BaseModel):
     package: Optional[str] = Field(None, description="Package name for apt/pip/npm")
     command: Optional[str] = Field(None, description="Command for manual installation")
     url: Optional[str] = Field(None, description="URL for manual download/documentation")
-    provides_binaries: List[str] = Field(
-        default_factory=list, description="Binary names this step provides"
-    )
+    provides_binaries: List[str] = Field(default_factory=list, description="Binary names this step provides")
     verify_command: Optional[str] = Field(None, description="Command to verify success")
-    platforms: List[str] = Field(
-        default_factory=list, description="Platforms this step applies to. Empty = all"
-    )
+    platforms: List[str] = Field(default_factory=list, description="Platforms this step applies to. Empty = all")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -166,24 +156,16 @@ class ToolDocumentation(BaseModel):
 class ToolDMAGuidance(BaseModel):
     """Guidance for the Decision-Making Architecture when selecting this tool."""
 
-    when_not_to_use: Optional[str] = Field(
-        None, description="Conditions when this tool should NOT be used"
-    )
-    ethical_considerations: Optional[str] = Field(
-        None, description="Ethical considerations for using this tool"
-    )
+    when_not_to_use: Optional[str] = Field(None, description="Conditions when this tool should NOT be used")
+    ethical_considerations: Optional[str] = Field(None, description="Ethical considerations for using this tool")
     prerequisite_actions: List[str] = Field(
         default_factory=list, description="Actions that should be taken before this tool"
     )
     followup_actions: List[str] = Field(
         default_factory=list, description="Actions to consider after this tool completes"
     )
-    min_confidence: float = Field(
-        0.0, ge=0.0, le=1.0, description="Minimum confidence score to use this tool"
-    )
-    requires_approval: bool = Field(
-        False, description="Whether this tool requires wise authority approval"
-    )
+    min_confidence: float = Field(0.0, ge=0.0, le=1.0, description="Minimum confidence score to use this tool")
+    requires_approval: bool = Field(False, description="Whether this tool requires wise authority approval")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -244,9 +226,7 @@ class ToolInfo(BaseModel):
     )
 
     # DMA guidance for tool selection
-    dma_guidance: Optional[ToolDMAGuidance] = Field(
-        None, description="Guidance for DMA tool selection decisions"
-    )
+    dma_guidance: Optional[ToolDMAGuidance] = Field(None, description="Guidance for DMA tool selection decisions")
 
     # Categorization tags
     tags: List[str] = Field(

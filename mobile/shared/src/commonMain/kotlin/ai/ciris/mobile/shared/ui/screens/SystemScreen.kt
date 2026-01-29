@@ -325,7 +325,7 @@ private fun ResourceUsageCard(
 
             // Disk
             val diskGb = diskUsedMb / 1024.0
-            val diskDisplay = if (diskGb >= 1.0) "%.1f GB".format(diskGb) else "%.0f MB".format(diskUsedMb)
+            val diskDisplay = if (diskGb >= 1.0) "${((diskGb * 10).toInt() / 10.0)} GB" else "${diskUsedMb.toInt()} MB"
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -417,7 +417,7 @@ private fun EnvironmentalImpactCard(
                 // CO2
                 ImpactCard(
                     icon = "\uD83C\uDF0D", // Earth
-                    value = "%.3f kg".format(carbonGrams / 1000),
+                    value = "${formatDecimal(carbonGrams / 1000, 3)} kg",
                     label = "CO2 Last Hour",
                     color = Color(0xFF10B981)
                 )
@@ -425,7 +425,7 @@ private fun EnvironmentalImpactCard(
                 // Energy
                 ImpactCard(
                     icon = "\u26A1", // Lightning
-                    value = "%.4f kWh".format(energyKwh),
+                    value = "${formatDecimal(energyKwh, 4)} kWh",
                     label = "Energy Last Hour",
                     color = Color(0xFF3B82F6)
                 )
@@ -433,7 +433,7 @@ private fun EnvironmentalImpactCard(
                 // Cost
                 ImpactCard(
                     icon = "\uD83D\uDCB2", // Dollar
-                    value = "$%.2f".format(costCents / 100),
+                    value = "$${formatDecimal(costCents / 100, 2)}",
                     label = "Cost Last Hour",
                     color = Color(0xFF8B5CF6)
                 )
@@ -857,3 +857,32 @@ data class SystemChannelInfo(
     val messageCount: Int = 0,
     val lastActivity: String? = null
 )
+
+/**
+ * Format a double value with the specified number of decimal places.
+ * KMP-compatible replacement for String.format("%.Xf", value)
+ */
+private fun formatDecimal(value: Double, decimals: Int): String {
+    val multiplier = when (decimals) {
+        1 -> 10.0
+        2 -> 100.0
+        3 -> 1000.0
+        4 -> 10000.0
+        5 -> 100000.0
+        else -> 10.0.let { base -> (1..decimals).fold(1.0) { acc, _ -> acc * base } }
+    }
+    val rounded = (value * multiplier).toLong() / multiplier
+    val str = rounded.toString()
+    // Ensure we have enough decimal places
+    val dotIndex = str.indexOf('.')
+    return if (dotIndex < 0) {
+        "$str.${"0".repeat(decimals)}"
+    } else {
+        val currentDecimals = str.length - dotIndex - 1
+        if (currentDecimals < decimals) {
+            str + "0".repeat(decimals - currentDecimals)
+        } else {
+            str
+        }
+    }
+}

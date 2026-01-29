@@ -1,6 +1,8 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.models.ConfigSessionData
+import ai.ciris.mobile.shared.models.ModuleTypesData
 import ai.ciris.mobile.shared.ui.screens.AdapterItem
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -63,6 +65,22 @@ class AdaptersViewModel(
 
     private val _operationInProgress = MutableStateFlow(false)
     val operationInProgress: StateFlow<Boolean> = _operationInProgress.asStateFlow()
+
+    // Wizard state flows
+    private val _showWizardDialog = MutableStateFlow(false)
+    val showWizardDialog: StateFlow<Boolean> = _showWizardDialog.asStateFlow()
+
+    private val _moduleTypes = MutableStateFlow<ModuleTypesData?>(null)
+    val moduleTypes: StateFlow<ModuleTypesData?> = _moduleTypes.asStateFlow()
+
+    private val _wizardSession = MutableStateFlow<ConfigSessionData?>(null)
+    val wizardSession: StateFlow<ConfigSessionData?> = _wizardSession.asStateFlow()
+
+    private val _wizardError = MutableStateFlow<String?>(null)
+    val wizardError: StateFlow<String?> = _wizardError.asStateFlow()
+
+    private val _wizardLoading = MutableStateFlow(false)
+    val wizardLoading: StateFlow<Boolean> = _wizardLoading.asStateFlow()
 
     // Polling job
     private var pollingJob: Job? = null
@@ -268,17 +286,100 @@ class AdaptersViewModel(
 
     /**
      * Add a new adapter (triggers add adapter flow)
-     * For now, this is a placeholder - the actual add flow requires
-     * module types and configuration wizard which is complex.
-     * The UI should handle this by showing a dialog or navigation.
+     * Opens the wizard dialog and fetches available module types.
      */
     fun addAdapter() {
         val method = "addAdapter"
-        logInfo(method, "Add adapter requested - UI should handle this")
-        _statusMessage.value = "Add adapter feature requires UI dialog"
+        logInfo(method, "Opening adapter wizard dialog")
         viewModelScope.launch {
-            clearStatusMessageAfterDelay()
+            _wizardLoading.value = true
+            _wizardError.value = null
+            try {
+                val types = apiClient.getModuleTypes()
+                _moduleTypes.value = types
+                _showWizardDialog.value = true
+            } catch (e: Exception) {
+                logException(method, e)
+                _wizardError.value = "Failed to load adapter types: ${e.message}"
+            } finally {
+                _wizardLoading.value = false
+            }
         }
+    }
+
+    /**
+     * Start the wizard for a specific adapter type.
+     */
+    fun startWizard(adapterType: String) {
+        val method = "startWizard"
+        logInfo(method, "Starting wizard for adapter type: $adapterType")
+        viewModelScope.launch {
+            _wizardLoading.value = true
+            _wizardError.value = null
+            try {
+                val session = apiClient.startAdapterConfiguration(adapterType)
+                _wizardSession.value = session
+            } catch (e: Exception) {
+                logException(method, e)
+                _wizardError.value = "Failed to start wizard: ${e.message}"
+            } finally {
+                _wizardLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Submit the current wizard step with field values.
+     */
+    fun submitWizardStep(stepData: Map<String, String>) {
+        val method = "submitWizardStep"
+        val session = _wizardSession.value ?: return
+        logInfo(method, "Submitting step for session: ${session.sessionId}")
+        viewModelScope.launch {
+            _wizardLoading.value = true
+            _wizardError.value = null
+            try {
+                val result = apiClient.executeConfigurationStep(session.sessionId, stepData)
+                if (result.isComplete) {
+                    logInfo(method, "Wizard completed!")
+                    closeWizard()
+                    fetchAdaptersInternal() // Refresh adapters list
+                } else if (result.nextStep != null) {
+                    _wizardSession.value = session.copy(
+                        currentStepIndex = result.nextStepIndex ?: (session.currentStepIndex + 1),
+                        currentStep = result.nextStep
+                    )
+                }
+            } catch (e: Exception) {
+                logException(method, e)
+                _wizardError.value = "Failed to submit step: ${e.message}"
+            } finally {
+                _wizardLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Go back to the previous wizard step.
+     */
+    fun wizardBack() {
+        val method = "wizardBack"
+        logInfo(method, "Going back in wizard")
+        // For now, just close the session and start fresh
+        _wizardSession.value = null
+        _wizardError.value = null
+    }
+
+    /**
+     * Close the wizard dialog.
+     */
+    fun closeWizard() {
+        val method = "closeWizard"
+        logInfo(method, "Closing wizard dialog")
+        _showWizardDialog.value = false
+        _wizardSession.value = null
+        _moduleTypes.value = null
+        _wizardError.value = null
     }
 
     /**

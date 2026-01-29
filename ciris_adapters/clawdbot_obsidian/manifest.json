@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_obsidian",
+    "version": "1.0.0",
+    "description": "Work with Obsidian vaults (plain Markdown notes) and automate via obsidian-cli.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://help.obsidian.md"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_obsidian.service.ObsidianToolService",
+      "capabilities": [
+        "tool:obsidian",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:obsidian",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_obsidian.service.ObsidianToolService"
+  },
+  "configuration": {}
+}

@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_nano_pdf",
+    "version": "1.0.0",
+    "description": "Edit PDFs with natural-language instructions using the nano-pdf CLI.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://pypi.org/project/nano-pdf/"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_nano_pdf.service.NanoPdfToolService",
+      "capabilities": [
+        "tool:nano_pdf",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:nano_pdf",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_nano_pdf.service.NanoPdfToolService"
+  },
+  "configuration": {}
+}

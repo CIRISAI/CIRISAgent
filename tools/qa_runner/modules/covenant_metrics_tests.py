@@ -1,13 +1,23 @@
 """
 Covenant Metrics Trace Capture Tests.
 
-Tests REAL 6-component trace capture and Ed25519 signing functionality
+Tests REAL 8-event-type trace capture and Ed25519 signing functionality
 for the ciris_covenant_metrics adapter.
+
+Event Types (8 total - 7 core + 1 optional):
+- THOUGHT_START: Thought begins processing
+- SNAPSHOT_AND_CONTEXT: System snapshot + gathered context
+- DMA_RESULTS: 3 DMA results (CSDMA, DSDMA, PDMA)
+- IDMA_RESULT: Identity DMA fragility check (always emitted)
+- ASPDMA_RESULT: Selected action + rationale
+- TSASPDMA_RESULT: Tool-Specific ASPDMA (optional, when TOOL selected)
+- CONSCIENCE_RESULT: Conscience evaluation + final action
+- ACTION_RESULT: Action execution outcome + audit trail
 
 This module:
 1. Triggers agent interactions to generate reasoning events
 2. Captures REAL traces via the adapter's reasoning_event_stream subscription
-3. Verifies trace structure matches the 6-component model
+3. Verifies trace structure contains all expected event types
 4. Validates Ed25519 signatures using the root public key from seed/
 5. Validates GENERIC trace level contains all fields needed for CIRIS scoring
 6. Exports REAL signed traces for website display
@@ -36,13 +46,25 @@ class CovenantMetricsTests:
     Follows the SDK test module interface pattern used by the QA runner.
     """
 
-    # Expected trace components
+    # Expected trace components (mapped from event types)
     EXPECTED_COMPONENTS = [
         "observation",  # THOUGHT_START
         "context",  # SNAPSHOT_AND_CONTEXT
-        "rationale",  # DMA_RESULTS + ASPDMA_RESULT
+        "rationale",  # DMA_RESULTS, IDMA_RESULT, ASPDMA_RESULT, (optional: TSASPDMA_RESULT)
         "conscience",  # CONSCIENCE_RESULT
         "action",  # ACTION_RESULT
+    ]
+
+    # Expected event types (8 total - 7 core + 1 optional)
+    EXPECTED_EVENT_TYPES = [
+        "THOUGHT_START",
+        "SNAPSHOT_AND_CONTEXT",
+        "DMA_RESULTS",
+        "IDMA_RESULT",  # Identity DMA fragility check (always emitted)
+        "ASPDMA_RESULT",
+        # "TSASPDMA_RESULT",  # Optional: only when TOOL action is selected
+        "CONSCIENCE_RESULT",
+        "ACTION_RESULT",
     ]
 
     # Root public key from seed/root_pub.json
@@ -55,7 +77,7 @@ class CovenantMetricsTests:
     # - R (Resilience): csdma.plausibility_score, coherence_level, idma.fragility_flag
     # - I_inc (Incompleteness): csdma.plausibility_score (confidence proxy), entropy_level, execution_success
     # - S (Sustained Coherence): coherence_passed, has_positive_moment
-    # Updated 2026-01-25 with CIRIS scoring factor alignment (v1.9.1)
+    # Updated 2026-01-27 with IDMA/TSASPDMA split (v1.9.3)
     GENERIC_REQUIRED_FIELDS = {
         "THOUGHT_START": [
             "round_number",
@@ -69,14 +91,22 @@ class CovenantMetricsTests:
         "DMA_RESULTS": {
             "csdma": ["plausibility_score"],
             "dsdma": ["domain_alignment"],
-            "idma": ["k_eff", "correlation_risk", "fragility_flag", "phase"],  # phase moved to GENERIC in v1.9.1
             "pdma": ["has_conflicts"],  # boolean indicator added in v1.9.1
         },
+        # IDMA_RESULT is now a separate event type (v1.9.3)
+        "IDMA_RESULT": [
+            "k_eff",
+            "correlation_risk",
+            "phase",
+            "fragility_flag",
+        ],
         "ASPDMA_RESULT": [
             "selected_action",
             # Note: selection_confidence removed - CIRIS scoring uses csdma.plausibility_score as confidence proxy
             "is_recursive",
         ],
+        # TSASPDMA_RESULT is optional (only when TOOL action selected)
+        # Not validated as required, but checked when present
         "CONSCIENCE_RESULT": [
             "conscience_passed",
             "action_was_overridden",
@@ -109,7 +139,7 @@ class CovenantMetricsTests:
     }
 
     # Additional fields at DETAILED level (actionable identifiers)
-    # Updated 2026-01-25 with CIRIS scoring factor alignment (v1.9.1)
+    # Updated 2026-01-27 with IDMA/TSASPDMA split (v1.9.3)
     DETAILED_REQUIRED_FIELDS = {
         "THOUGHT_START": [
             "thought_type",
@@ -128,11 +158,22 @@ class CovenantMetricsTests:
             "csdma": ["flags"],
             "dsdma": ["domain", "flags"],
             "pdma": ["stakeholders", "conflicts", "alignment_check"],
-            "idma": ["sources_identified", "correlation_factors"],  # phase moved to GENERIC
         },
+        # IDMA_RESULT detailed fields (v1.9.3)
+        "IDMA_RESULT": [
+            "sources_identified",
+            "correlation_factors",
+        ],
         "ASPDMA_RESULT": [
             "alternatives_considered",
             "evaluation_time_ms",  # added in v1.9.1
+        ],
+        # TSASPDMA_RESULT detailed fields (optional, v1.9.3)
+        "TSASPDMA_RESULT": [
+            "original_parameters",
+            "final_parameters",
+            "gotchas_acknowledged",
+            "tool_description",
         ],
         "CONSCIENCE_RESULT": [
             "final_action",
@@ -153,7 +194,7 @@ class CovenantMetricsTests:
     }
 
     # Additional fields at FULL level (complete reasoning corpus)
-    # Updated 2026-01-24 with comprehensive trace field coverage (v1.9.1)
+    # Updated 2026-01-27 with IDMA/TSASPDMA split (v1.9.3)
     FULL_REQUIRED_FIELDS = {
         "THOUGHT_START": [
             "task_description",
@@ -170,14 +211,24 @@ class CovenantMetricsTests:
             "csdma": ["reasoning"],
             "dsdma": ["reasoning"],
             "pdma": ["reasoning"],
-            "idma": ["reasoning"],
         },
+        # IDMA_RESULT full fields (v1.9.3)
+        "IDMA_RESULT": [
+            "reasoning",
+            "idma_prompt",
+        ],
         "ASPDMA_RESULT": [
             "action_rationale",
             "reasoning_summary",
             "action_parameters",
             "aspdma_prompt",
             "raw_llm_response",  # added in v1.9.1 (truncated to 1000 chars)
+        ],
+        # TSASPDMA_RESULT full fields (optional, v1.9.3)
+        "TSASPDMA_RESULT": [
+            "aspdma_rationale",
+            "tsaspdma_rationale",
+            "tsaspdma_prompt",
         ],
         "CONSCIENCE_RESULT": [
             "epistemic_data",

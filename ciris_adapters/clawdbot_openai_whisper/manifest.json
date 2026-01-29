@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_openai_whisper",
+    "version": "1.0.0",
+    "description": "Local speech-to-text with the Whisper CLI (no API key).",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://openai.com/research/whisper"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_openai_whisper.service.OpenaiWhisperToolService",
+      "capabilities": [
+        "tool:openai_whisper",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:openai_whisper",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_openai_whisper.service.OpenaiWhisperToolService"
+  },
+  "configuration": {}
+}

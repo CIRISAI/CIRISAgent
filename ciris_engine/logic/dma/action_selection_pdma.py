@@ -13,7 +13,11 @@ from ciris_engine.protocols.faculties import EpistemicFaculty
 from ciris_engine.schemas.actions.parameters import PonderParams
 from ciris_engine.schemas.dma.faculty import ConscienceFailureContext, EnhancedDMAInputs
 from ciris_engine.schemas.dma.prompts import PromptCollection
-from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+from ciris_engine.schemas.dma.results import (
+    ActionSelectionDMAResult,
+    ASPDMALLMResult,
+    convert_llm_result_to_action_result,
+)
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.types import JSONDict
@@ -217,28 +221,35 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         # Store user prompt for streaming/debugging
         self.last_user_prompt = main_user_content
 
+        # Use Gemini-compatible flat schema (no Union types)
+        # This enables compatibility with providers that don't support Union (Google Gemini)
         result_tuple = await self.call_llm_structured(
             messages=messages,
-            response_model=ActionSelectionDMAResult,
+            response_model=ASPDMALLMResult,
             max_tokens=4096,
             temperature=0.0,
             thought_id=input_data.original_thought.thought_id,
             task_id=input_data.original_thought.source_task_id,
         )
 
-        # Extract the result from the tuple and cast to the correct type
-        final_result = cast(ActionSelectionDMAResult, result_tuple[0])
+        # Extract the LLM result and convert to typed ActionSelectionDMAResult
+        llm_result = cast(ASPDMALLMResult, result_tuple[0])
 
-        # Add user prompt to result for debugging/transparency
-        # Create new instance with user_prompt set (model is frozen)
-        final_result = ActionSelectionDMAResult(
-            selected_action=final_result.selected_action,
-            action_parameters=final_result.action_parameters,
-            rationale=final_result.rationale,
-            raw_llm_response=final_result.raw_llm_response,
-            reasoning=final_result.reasoning,
-            evaluation_time_ms=final_result.evaluation_time_ms,
-            resource_usage=final_result.resource_usage,
+        # Get channel_id from context if available
+        channel_id = None
+        if input_data.processing_context:
+            if isinstance(input_data.processing_context, dict):
+                channel_id = input_data.processing_context.get("channel_id")
+            elif hasattr(input_data.processing_context, "channel_id"):
+                channel_id = getattr(input_data.processing_context, "channel_id", None)
+
+        # Convert flat LLM result to typed ActionSelectionDMAResult
+        final_result = convert_llm_result_to_action_result(
+            llm_result=llm_result,
+            channel_id=channel_id,
+            raw_llm_response=None,  # Set if needed for debugging
+            evaluation_time_ms=None,  # Set from metrics if available
+            resource_usage=None,  # Set from metrics if available
             user_prompt=self.last_user_prompt,
         )
 

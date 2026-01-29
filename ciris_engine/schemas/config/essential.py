@@ -126,6 +126,29 @@ class GraphConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class AdaptersConfig(BaseModel):
+    """Configuration for adapter auto-discovery and loading."""
+
+    auto_discovery: bool = Field(
+        True,
+        description="Enable auto-discovery and loading of eligible adapters at startup",
+    )
+    discovery_paths: list[str] = Field(
+        default_factory=lambda: ["ciris_adapters", "~/.ciris/adapters", ".ciris/adapters"],
+        description="Paths to scan for adapter manifests (in priority order)",
+    )
+    disabled_adapters: list[str] = Field(
+        default_factory=lambda: [
+            "sample_adapter",  # Example adapter, not for production use
+            "ciris_covenant_metrics",  # Requires explicit opt-in
+            "external_data_sql",  # Database adapter requires explicit configuration
+        ],
+        description="List of adapter names to exclude from auto-loading",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class EssentialConfig(BaseModel):
     """
     Mission-critical configuration for CIRIS bootstrap.
@@ -141,6 +164,7 @@ class EssentialConfig(BaseModel):
     telemetry: TelemetryConfig = Field(default_factory=lambda: TelemetryConfig())
     workflow: WorkflowConfig = Field(default_factory=lambda: WorkflowConfig())
     graph: GraphConfig = Field(default_factory=lambda: GraphConfig())
+    adapters: AdaptersConfig = Field(default_factory=lambda: AdaptersConfig())
 
     # Runtime settings
     log_level: str = Field("INFO", description="Logging level")

@@ -8,7 +8,13 @@ import pytest
 from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
 from ciris_engine.schemas.actions.parameters import ObserveParams, SpeakParams
 from ciris_engine.schemas.dma.faculty import EnhancedDMAInputs
-from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
+from ciris_engine.schemas.dma.results import (
+    ActionSelectionDMAResult,
+    ASPDMALLMResult,
+    CSDMAResult,
+    DSDMAResult,
+    EthicalDMAResult,
+)
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.models import Thought, ThoughtContext
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
@@ -91,12 +97,11 @@ class TestActionSelectionPDMAEvaluator:
         # Create evaluator
         evaluator = ActionSelectionPDMAEvaluator(service_registry=mock_service_registry)
 
-        # Mock the LLM call to return a proper ActionSelectionDMAResult
-        mock_result = ActionSelectionDMAResult(
+        # Mock the LLM call to return ASPDMALLMResult (flat schema, Gemini-compatible)
+        mock_result = ASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
-            action_parameters=SpeakParams(content="Here is my response to your question"),
             rationale="User asked a question that needs a response",
-            reasoning="Based on ethical approval and common sense validation",
+            speak_content="Here is my response to your question",
         )
 
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_result, None))
@@ -126,10 +131,11 @@ class TestActionSelectionPDMAEvaluator:
         """Test that ASPDMA properly validates identity when present in context."""
         evaluator = ActionSelectionPDMAEvaluator(service_registry=mock_service_registry)
 
-        mock_result = ActionSelectionDMAResult(
+        # Mock the LLM call to return ASPDMALLMResult (flat schema, Gemini-compatible)
+        mock_result = ASPDMALLMResult(
             selected_action=HandlerActionType.OBSERVE,
-            action_parameters=ObserveParams(),
             rationale="Need more information",
+            observe_active=True,
         )
 
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_result, None))
@@ -230,10 +236,11 @@ class TestActionSelectionPDMAEvaluator:
         """Test that ASPDMA properly uses faculty evaluation results."""
         evaluator = ActionSelectionPDMAEvaluator(service_registry=mock_service_registry)
 
-        mock_result = ActionSelectionDMAResult(
+        # Mock the LLM call to return ASPDMALLMResult (flat schema, Gemini-compatible)
+        mock_result = ASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
-            action_parameters=SpeakParams(content="Response based on faculty evaluations"),
             rationale="All faculties approve",
+            speak_content="Response based on faculty evaluations",
         )
 
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_result, None))

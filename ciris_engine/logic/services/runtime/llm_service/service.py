@@ -1,11 +1,18 @@
-"""OpenAI Compatible LLM Service with Circuit Breaker Integration."""
+"""Multi-Provider LLM Service with Circuit Breaker Integration.
+
+Supports native SDKs for:
+- OpenAI (GPT models)
+- Anthropic (Claude models)
+- Google (Gemini models)
+"""
 
 import json
 import logging
 import os
 import re
 import time
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, cast
+from enum import Enum
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, Union, cast
 
 import instructor
 from openai import (
@@ -17,6 +24,16 @@ from openai import (
     RateLimitError,
 )
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class LLMProvider(str, Enum):
+    """Supported LLM providers."""
+
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    GOOGLE = "google"
+    OPENAI_COMPATIBLE = "openai_compatible"  # For OpenRouter, Groq, Together, etc.
+
 
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError
 from ciris_engine.logic.services.base_service import BaseService
@@ -342,16 +359,67 @@ def _handle_generic_llm_exception(
     raise RuntimeError(f"LLM call failed ({type(error).__name__}): {error_msg[:300]}") from error
 
 
-# Configuration class for OpenAI-compatible LLM services
+# Configuration class for LLM services (supports multiple providers)
 class OpenAIConfig(BaseModel):
+    """Configuration for LLM services. Supports OpenAI, Anthropic, and Google."""
+
     api_key: str = Field(default="")
     model_name: str = Field(default="gpt-4o-mini")
     base_url: Optional[str] = Field(default=None)
     instructor_mode: str = Field(default="JSON")
     max_retries: int = Field(default=3)
     timeout_seconds: int = Field(default=5)
+    # Provider selection - defaults to openai for backward compatibility
+    provider: LLMProvider = Field(default=LLMProvider.OPENAI)
 
     model_config = ConfigDict(protected_namespaces=())
+
+
+def _detect_provider_from_env() -> LLMProvider:
+    """Detect LLM provider from environment variables.
+
+    Checks CIRIS_LLM_PROVIDER (preferred) or LLM_PROVIDER first,
+    then falls back to detecting based on which API key is set.
+    """
+    # Explicit provider setting takes precedence (CIRIS_ prefix preferred)
+    provider_env = (os.environ.get("CIRIS_LLM_PROVIDER") or os.environ.get("LLM_PROVIDER") or "").lower()
+    if provider_env:
+        if provider_env in ("anthropic", "claude"):
+            return LLMProvider.ANTHROPIC
+        elif provider_env in ("google", "gemini"):
+            return LLMProvider.GOOGLE
+        elif provider_env == "openai":
+            return LLMProvider.OPENAI
+        elif provider_env in ("openai_compatible", "openrouter", "groq", "together"):
+            return LLMProvider.OPENAI_COMPATIBLE
+
+    # Auto-detect based on which API key is set
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return LLMProvider.ANTHROPIC
+    if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"):
+        return LLMProvider.GOOGLE
+
+    # Default to OpenAI (or OpenAI-compatible if base_url is set)
+    if os.environ.get("OPENAI_API_BASE"):
+        return LLMProvider.OPENAI_COMPATIBLE
+    return LLMProvider.OPENAI
+
+
+def _get_api_key_for_provider(provider: LLMProvider) -> str:
+    """Get the appropriate API key for the given provider."""
+    # Check CIRIS_LLM_API_KEY first as override (takes precedence over provider-specific keys)
+    ciris_key = os.environ.get("CIRIS_LLM_API_KEY", "")
+    if ciris_key:
+        return ciris_key
+
+    if provider == LLMProvider.ANTHROPIC:
+        return os.environ.get("ANTHROPIC_API_KEY", "")
+    elif provider == LLMProvider.GOOGLE:
+        # Support both GOOGLE_API_KEY and GEMINI_API_KEY
+        return os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
+    else:
+        # OpenAI and OpenAI-compatible use OPENAI_API_KEY
+        return os.environ.get("OPENAI_API_KEY", "")
 
 
 logger = logging.getLogger(__name__)
@@ -369,6 +437,10 @@ StructuredCallFunc = Callable[
 
 class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
     """Client for interacting with OpenAI-compatible APIs with circuit breaker protection."""
+
+    # Type annotations for client attributes - actual type varies by provider
+    client: Any  # AsyncOpenAI, AsyncAnthropic, or genai module
+    instruct_client: Any  # Instructor-wrapped client
 
     def __init__(
         self,
@@ -426,45 +498,196 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         api_key = self.openai_config.api_key
         base_url = self.openai_config.base_url
         model_name = self.openai_config.model_name or "gpt-4o-mini"
+        provider = getattr(self.openai_config, "provider", LLMProvider.OPENAI)
+
+        # Store provider for later use
+        self.provider = provider
 
         # Require API key - no automatic fallback to mock
         if not api_key:
-            raise RuntimeError("No OpenAI API key found. Please set OPENAI_API_KEY environment variable.")
+            provider_name = provider.value if hasattr(provider, "value") else str(provider)
+            raise RuntimeError(
+                f"No API key found for {provider_name}. Please set the appropriate API key environment variable."
+            )
 
-        # Initialize OpenAI client
+        # Initialize client based on provider
         self.model_name = model_name
-        timeout = self.openai_config.timeout_seconds  # Use the configured timeout value
-        max_retries = 0  # Disable OpenAI client retries - we handle our own
+        timeout = self.openai_config.timeout_seconds
 
         try:
-            self.client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries)
-
-            instructor_mode = getattr(self.openai_config, "instructor_mode", "json").lower()
-            mode_map = {
-                "json": instructor.Mode.JSON,
-                "tools": instructor.Mode.TOOLS,
-                "md_json": instructor.Mode.MD_JSON,
-            }
-            selected_mode = mode_map.get(instructor_mode, instructor.Mode.JSON)
-            self.instruct_client = instructor.from_openai(self.client, mode=selected_mode)
+            self._initialize_provider_client(provider, api_key, base_url, model_name, timeout)
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize OpenAI client: {e}")
+            raise RuntimeError(f"Failed to initialize {provider.value} client: {e}")
 
-        # Metrics tracking (no caching - we never cache LLM responses)
-        self._response_times: List[float] = []  # List of response times in ms
-        self._max_response_history = 100  # Keep last 100 response times
+    def _initialize_provider_client(
+        self, provider: LLMProvider, api_key: str, base_url: Optional[str], model_name: str, timeout: int
+    ) -> None:
+        """Initialize the appropriate client based on provider.
+
+        Args:
+            provider: The LLM provider to use
+            api_key: API key for authentication
+            base_url: Optional base URL override
+            model_name: Model name/identifier
+            timeout: Request timeout in seconds
+        """
+        instructor_mode = getattr(self.openai_config, "instructor_mode", "json").lower()
+
+        if provider == LLMProvider.ANTHROPIC:
+            self._init_anthropic_client(api_key, model_name, timeout)
+        elif provider == LLMProvider.GOOGLE:
+            self._init_google_client(api_key, model_name, timeout)
+        else:
+            # OpenAI or OpenAI-compatible providers
+            self._init_openai_client(api_key, base_url, model_name, timeout, instructor_mode)
+
+        # Initialize metrics tracking (once, after client is set up)
+        self._init_metrics()
+
+    def _init_metrics(self) -> None:
+        """Initialize metrics tracking attributes."""
+        self._response_times: List[float] = []
+        self._max_response_history = 100
         self._total_api_calls = 0
         self._successful_api_calls = 0
-
-        # LLM-specific metrics tracking for v1.4.3 telemetry
         self._total_requests = 0
         self._total_input_tokens = 0
         self._total_output_tokens = 0
         self._total_cost_cents = 0.0
         self._total_errors = 0
-
-        # Initialize pricing calculator for accurate cost and impact calculation
         self.pricing_calculator = LLMPricingCalculator()
+
+    def _init_openai_client(
+        self, api_key: str, base_url: Optional[str], model_name: str, timeout: int, instructor_mode: str
+    ) -> None:
+        """Initialize OpenAI or OpenAI-compatible client."""
+        max_retries = 0  # Disable OpenAI client retries - we handle our own
+        self.client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries)
+
+        mode_map = {
+            "json": instructor.Mode.JSON,
+            "tools": instructor.Mode.TOOLS,
+            "md_json": instructor.Mode.MD_JSON,
+        }
+        selected_mode = mode_map.get(instructor_mode, instructor.Mode.JSON)
+        self.instruct_client = instructor.from_openai(self.client, mode=selected_mode)
+        logger.info(f"Initialized OpenAI client with model={model_name}, mode={selected_mode}")
+
+    def _init_anthropic_client(self, api_key: str, model_name: str, timeout: int) -> None:
+        """Initialize native Anthropic client for Claude models.
+
+        Falls back to OpenAI-compatible mode if SDK not available (e.g., on mobile).
+        """
+        try:
+            import anthropic
+        except ImportError:
+            # Fall back to OpenAI-compatible mode (e.g., via OpenRouter)
+            # This happens on mobile where native SDK has unsupported dependencies
+            logger.warning(
+                "Anthropic SDK not available - falling back to OpenAI-compatible mode. "
+                "For native Anthropic support, install: pip install anthropic"
+            )
+            # Use OpenAI client with OpenRouter base URL for Claude access
+            base_url = os.environ.get("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+            self._init_openai_client(api_key, base_url, model_name, timeout, "json")
+            return
+
+        # Create async Anthropic client
+        self.client = anthropic.AsyncAnthropic(api_key=api_key, timeout=timeout)
+
+        # Use instructor with Anthropic - ANTHROPIC_TOOLS mode for best results
+        self.instruct_client = instructor.from_anthropic(self.client, mode=instructor.Mode.ANTHROPIC_TOOLS)
+        logger.info(f"Initialized native Anthropic client with model={model_name}")
+
+    def _init_google_client(self, api_key: str, model_name: str, timeout: int) -> None:
+        """Initialize native Google client for Gemini models.
+
+        Falls back to OpenAI-compatible mode if SDK not available (e.g., on mobile).
+        Uses the new google-genai SDK (not the deprecated google-generativeai).
+        """
+        try:
+            from google import genai
+        except ImportError:
+            # Fall back to OpenAI-compatible mode (e.g., via OpenRouter)
+            # This happens on mobile where native SDK may have unsupported dependencies
+            logger.warning(
+                "Google GenAI SDK not available - falling back to OpenAI-compatible mode. "
+                "For native Google support, install: pip install google-genai"
+            )
+            # Use OpenAI client with OpenRouter base URL for Gemini access
+            base_url = os.environ.get("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+            self._init_openai_client(api_key, base_url, model_name, timeout, "json")
+            return
+
+        # Monkey-patch instructor's update_genai_kwargs to filter unsupported harm categories
+        # The SDK includes HARM_CATEGORY_JAILBREAK but the API doesn't support it for all models
+        try:
+            from google.genai.types import HarmBlockThreshold, HarmCategory
+            from instructor.providers.gemini import utils as instructor_gemini_utils
+
+            _original_update_genai_kwargs = instructor_gemini_utils.update_genai_kwargs
+
+            def _patched_update_genai_kwargs(kwargs: Dict[str, Any], base_config: Dict[str, Any]) -> Dict[str, Any]:
+                """Patched version that filters out unsupported harm categories."""
+                new_kwargs = kwargs.copy()
+
+                OPENAI_TO_GEMINI_MAP = {
+                    "max_tokens": "max_output_tokens",
+                    "temperature": "temperature",
+                    "n": "candidate_count",
+                    "top_p": "top_p",
+                    "stop": "stop_sequences",
+                    "seed": "seed",
+                    "presence_penalty": "presence_penalty",
+                    "frequency_penalty": "frequency_penalty",
+                }
+
+                generation_config = new_kwargs.pop("generation_config", {})
+
+                for openai_key, gemini_key in OPENAI_TO_GEMINI_MAP.items():
+                    if openai_key in generation_config:
+                        val = generation_config.pop(openai_key)
+                        if val is not None:
+                            base_config[gemini_key] = val
+
+                safety_settings = new_kwargs.pop("safety_settings", {})
+                base_config["safety_settings"] = []
+
+                # Only use the 4 core harm categories that are universally supported
+                supported_categories = [
+                    HarmCategory.HARM_CATEGORY_HARASSMENT,
+                    HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                ]
+
+                for category in supported_categories:
+                    threshold = safety_settings.get(category, HarmBlockThreshold.OFF)
+                    base_config["safety_settings"].append({"category": category, "threshold": threshold})
+
+                thinking_config = new_kwargs.pop("thinking_config", None)
+                if thinking_config is not None:
+                    base_config["thinking_config"] = thinking_config
+
+                return base_config
+
+            instructor_gemini_utils.update_genai_kwargs = _patched_update_genai_kwargs
+            logger.info("Patched instructor's update_genai_kwargs to filter unsupported harm categories")
+        except Exception as e:
+            logger.warning(f"Could not patch instructor for harm categories: {e}")
+
+        # Use instructor's from_provider for Google with async support
+        # Pass api_key directly to instructor (it creates the genai.Client internally)
+        # Format: "google/model-name"
+        provider_string = f"google/{model_name}"
+        self.instruct_client = instructor.from_provider(
+            provider_string,
+            async_client=True,
+            api_key=api_key,
+        )
+        # Store a reference to the genai module for potential direct access
+        self.client = genai
+        logger.info(f"Initialized native Google Gemini client with model={model_name}")
 
     # Required BaseService abstract methods
 
@@ -570,8 +793,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         self.update_api_key(new_api_key)
         logger.info("[LLM_TOKEN] Token refresh complete - LLM service ready for requests")
 
-    def _get_client(self) -> AsyncOpenAI:
-        """Return the OpenAI client instance (private method)."""
+    def _get_client(self) -> Any:
+        """Return the LLM client instance (private method).
+
+        Return type is Any because client can be AsyncOpenAI, AsyncAnthropic, or genai module.
+        """
         return self.client
 
     async def is_healthy(self) -> bool:
@@ -728,13 +954,33 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 extra_kwargs = self._build_extra_kwargs(task_id, thought_id, resp_model.__name__, retry_state)
                 image_count = _log_multimodal_content(msg_list, self.model_name, thought_id, resp_model.__name__)
 
+                # Google/Gemini uses generation_config dict instead of direct params
+                if self.provider == LLMProvider.GOOGLE:
+                    extra_kwargs["generation_config"] = {
+                        "temperature": temp,
+                        "max_output_tokens": max_toks,
+                    }
+                    # Override safety settings to avoid HARM_CATEGORY_JAILBREAK which
+                    # is in the SDK but not supported by all API versions
+                    extra_kwargs["safety_settings"] = {
+                        "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+                        "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+                        "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+                        "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
+                    }
+                    token_param = {}
+                    temp_param = {}
+                else:
+                    token_param = {"max_tokens": max_toks}
+                    temp_param = {"temperature": temp}
+
                 response, completion = await self.instruct_client.chat.completions.create_with_completion(
                     model=self.model_name,
                     messages=cast(Any, msg_list),
                     response_model=resp_model,
                     max_retries=0,
-                    max_tokens=max_toks,
-                    temperature=temp,
+                    **temp_param,
+                    **token_param,
                     **extra_kwargs,
                 )
 
@@ -803,11 +1049,23 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         self, response: BaseModel, completion: Any
     ) -> Tuple[BaseModel, ResourceUsage]:
         """Process a successful LLM response and return usage data."""
-        usage = completion.usage
         self.circuit_breaker.record_success()
 
-        prompt_tokens = getattr(usage, "prompt_tokens", 0)
-        completion_tokens = getattr(usage, "completion_tokens", 0)
+        # Handle different response formats - Google uses usage_metadata, OpenAI uses usage
+        if hasattr(completion, "usage_metadata"):
+            # Google genai format
+            usage = completion.usage_metadata
+            prompt_tokens = getattr(usage, "prompt_token_count", 0) or 0
+            completion_tokens = getattr(usage, "candidates_token_count", 0) or 0
+        elif hasattr(completion, "usage"):
+            # OpenAI format
+            usage = completion.usage
+            prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+            completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+        else:
+            # No usage info available
+            prompt_tokens = 0
+            completion_tokens = 0
 
         usage_obj = self.pricing_calculator.calculate_cost_and_impact(
             model_name=self.model_name,

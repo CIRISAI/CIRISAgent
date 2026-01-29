@@ -1,0 +1,34 @@
+{
+  "module": {
+    "name": "clawdbot_coding_agent",
+    "version": "1.0.0",
+    "description": "Run Codex CLI, Claude Code, OpenCode, or Pi Coding Agent via background process for programmatic control.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": null
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_coding_agent.service.CodingAgentToolService",
+      "capabilities": [
+        "tool:coding_agent"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:coding_agent"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_coding_agent.service.CodingAgentToolService"
+  },
+  "configuration": {}
+}

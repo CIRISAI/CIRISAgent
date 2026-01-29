@@ -6,9 +6,10 @@ try:
 
     from dotenv import load_dotenv
 
-    # Priority order: ./env (highest), ~/ciris/.env, /etc/ciris/.env (lowest)
+    # Priority order: ./ciris/.env, ./env (highest), ~/ciris/.env, /etc/ciris/.env (lowest)
     # Note: ~/.ciris/ is for keys/secrets only, NOT config!
     config_paths = [
+        Path.cwd() / "ciris" / ".env",
         Path.cwd() / ".env",
         Path.home() / "ciris" / ".env",
         Path("/etc/ciris/.env"),

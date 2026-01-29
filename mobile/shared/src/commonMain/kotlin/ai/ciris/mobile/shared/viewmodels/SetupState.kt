@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.viewmodels
 
+import ai.ciris.mobile.shared.models.CommunicationAdapter
 import ai.ciris.mobile.shared.models.SetupMode
 import kotlinx.serialization.Serializable
 
@@ -31,7 +32,12 @@ enum class SetupStep {
     LLM_CONFIGURATION,
 
     /**
-     * Step 3: Account creation (for non-Google users) and confirmation.
+     * Step 3: Optional features - Covenant Metrics opt-in for AI alignment research.
+     */
+    OPTIONAL_FEATURES,
+
+    /**
+     * Step 4: Account creation (for non-Google users) and confirmation.
      */
     ACCOUNT_AND_CONFIRMATION,
 
@@ -71,6 +77,19 @@ data class SetupFormState(
     val username: String = "",
     val email: String = "",
     val userPassword: String = "",
+
+    // Covenant Metrics opt-in (for AI alignment research)
+    // Data shared: reasoning scores, decision patterns, LLM provider/API base URL
+    // No message content or PII is ever sent
+    val covenantMetricsConsent: Boolean = false,
+
+    // Adapter configuration
+    // Available adapters from /v1/setup/adapters
+    val availableAdapters: List<CommunicationAdapter> = emptyList(),
+    // IDs of adapters that will be enabled (api is always included)
+    val enabledAdapterIds: Set<String> = setOf("api"),
+    // Loading state for adapter list
+    val adaptersLoading: Boolean = false,
 
     // Validation state
     val isValidating: Boolean = false,
@@ -120,6 +139,11 @@ data class SetupFormState(
                 }
             }
 
+            SetupStep.OPTIONAL_FEATURES -> {
+                // Optional features step - always valid (consent is optional)
+                true
+            }
+
             SetupStep.ACCOUNT_AND_CONFIRMATION -> {
                 if (isGoogleAuth) {
                     // Google user - no account creation needed
@@ -151,6 +175,11 @@ data class SetupFormState(
                         "API Key is required"
                     else -> null
                 }
+            }
+
+            SetupStep.OPTIONAL_FEATURES -> {
+                // Optional features - no validation required (consent is optional)
+                null
             }
 
             SetupStep.ACCOUNT_AND_CONFIRMATION -> {

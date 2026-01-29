@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_himalaya",
+    "version": "1.0.0",
+    "description": "CLI to manage emails via IMAP/SMTP. Use `himalaya` to list, read, write, reply, forward, search, and organize emails from the terminal. Supports multiple accounts and message composition with MML (MIME Meta Language).",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://github.com/pimalaya/himalaya"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_himalaya.service.HimalayaToolService",
+      "capabilities": [
+        "tool:himalaya",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:himalaya",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_himalaya.service.HimalayaToolService"
+  },
+  "configuration": {}
+}

@@ -224,22 +224,73 @@ class ToolBus(BaseBus[ToolService]):
             logger.error(f"Failed to check health: {e}")
             return False
 
-    async def get_tool_info(self, tool_name: str, handler_name: str = "default") -> Optional[ToolInfo]:
-        """Get detailed information about a specific tool"""
+    def _collect_tool_services(self) -> List[Any]:
+        """Collect all tool services that support get_tool_info."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        services: List[Any] = []
+        if not hasattr(self.service_registry, "_services"):
+            return services
+
+        tool_providers = self.service_registry._services.get(ServiceType.TOOL, [])
+        for provider in tool_providers:
+            if hasattr(provider, "instance") and hasattr(provider.instance, "get_tool_info"):
+                services.append(provider.instance)
+        return services
+
+    async def _search_services_for_tool(self, services: List[Any], tool_name: str) -> Optional[ToolInfo]:
+        """Search through services to find tool info."""
+        for service in services:
+            try:
+                result: Optional[ToolInfo] = await service.get_tool_info(tool_name)
+                if result:
+                    logger.debug(f"get_tool_info: Found '{tool_name}' in {type(service).__name__}")
+                    return result
+            except Exception as e:
+                logger.debug(f"get_tool_info: Service {type(service).__name__} failed: {e}")
+        return None
+
+    async def _fallback_get_tool_info(self, tool_name: str, handler_name: str) -> Optional[ToolInfo]:
+        """Fallback to single handler for tool info."""
         service = await self.get_service(handler_name=handler_name, required_capabilities=["get_tool_info"])
-
         if not service:
-            logger.error(f"No tool service available for {handler_name}")
+            return None
+        try:
+            result = await cast(Any, service).get_tool_info(tool_name)
+            if result is not None:
+                return cast(ToolInfo, result)
+            return None
+        except Exception as e:
+            logger.error(f"get_tool_info: Error from fallback handler: {e}", exc_info=True)
             return None
 
+    async def get_tool_info(self, tool_name: str, handler_name: str = "default") -> Optional[ToolInfo]:
+        """Get detailed information about a specific tool.
+
+        Searches ALL registered tool services to find the tool info,
+        similar to how execute_tool searches for tools.
+        """
+        # Collect all tool services
         try:
-            # Cast to Any to handle dynamic method access
-            service_any = cast(Any, service)
-            result: Optional[ToolInfo] = await service_any.get_tool_info(tool_name)
-            return result
+            all_services = self._collect_tool_services()
+            logger.debug(f"get_tool_info: Found {len(all_services)} tool services to search")
         except Exception as e:
-            logger.error(f"Error getting tool info: {e}", exc_info=True)
-            return None
+            logger.error(f"get_tool_info: Failed to get all tool services: {e}")
+            all_services = []
+
+        # Search all services for this tool
+        result = await self._search_services_for_tool(all_services, tool_name)
+        if result:
+            return result
+
+        # Fallback to single handler if no services found
+        if not all_services:
+            result = await self._fallback_get_tool_info(tool_name, handler_name)
+            if result:
+                return result
+
+        logger.warning(f"get_tool_info: Tool '{tool_name}' not found in any service")
+        return None
 
     async def get_all_tool_info(self, handler_name: str = "default") -> List[ToolInfo]:
         """Get detailed information about all available tools"""

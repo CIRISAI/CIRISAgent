@@ -4,6 +4,16 @@
 # Use this file to prevent files from being overwritten by the generator.
 # The patterns follow closely to .gitignore or .dockerignore.
 
+# IMPORTANT: Keep build files - they have project-specific version pinning
+build.gradle.kts
+settings.gradle.kts
+gradlew
+gradlew.bat
+gradle/**
+
+# Customized model files - we manually added platform filtering fields
+src/commonMain/kotlin/ai/ciris/api/models/AdapterConfig.kt
+
 # As an example, the C# client generator defines ApiClient.cs.
 # You can make changes and tell OpenAPI Generator to ignore just this file by uncommenting the following line:
 #ApiClient.cs

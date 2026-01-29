@@ -1,6 +1,7 @@
 import re
 from typing import Any, Dict, List, Optional, Union
 
+from ciris_engine.logic.dma.tsaspdma import TSASPDMALLMResult
 from ciris_engine.schemas.actions import (
     DeferParams,
     ForgetParams,
@@ -13,7 +14,7 @@ from ciris_engine.schemas.actions import (
     TaskCompleteParams,
     ToolParams,
 )
-from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, ASPDMALLMResult
 
 # Union type for all action parameters - 100% schema compliant
 ActionParams = Union[
@@ -46,6 +47,114 @@ def action_selection(
     import logging
 
     logger = logging.getLogger(__name__)
+
+    # === TSASPDMA Detection ===
+    # TSASPDMA (Tool-Specific Action Selection) is called when ASPDMA selects TOOL action.
+    # Detect by looking for TSASPDMA-specific patterns in system messages.
+    is_tsaspdma = False
+    tsaspdma_tool_name = None
+    for msg in messages:
+        if isinstance(msg, dict) and msg.get("role") == "system":
+            content = msg.get("content", "")
+            if "reviewing a TOOL action" in content or "TSASPDMA" in content:
+                is_tsaspdma = True
+                logger.info("[MOCK_LLM] *** DETECTED TSASPDMA CONTEXT ***")
+                # Try to extract the tool name from the context
+                # (re is imported at top of file)
+
+                # Match various patterns: **Tool:** name, Tool: name, tool_name, etc.
+                tool_patterns = [
+                    r"\*\*Tool:\*\*\s*(\S+)",
+                    r"Tool:\s*(\S+)",
+                    r'tool[_\s]?name[=:\s]+["\']?(\S+)["\']?',
+                    r"Evaluating tool:\s*(\S+)",
+                ]
+                for pattern in tool_patterns:
+                    tool_match = re.search(pattern, content, re.IGNORECASE)
+                    if tool_match:
+                        tsaspdma_tool_name = tool_match.group(1).strip("*\"',")
+                        logger.info(f"[MOCK_LLM] TSASPDMA for tool: {tsaspdma_tool_name}")
+                        break
+                break
+
+    # === TSASPDMA Early Return ===
+    # By default, TSASPDMA confirms the TOOL action (proceeds with execution).
+    # This simulates the agent reviewing documentation and deciding to proceed.
+    if is_tsaspdma:
+        # Also check user message for tool name if not found in system message
+        if not tsaspdma_tool_name:
+            for msg in messages:
+                if isinstance(msg, dict) and msg.get("role") == "user":
+                    content = msg.get("content", "")
+                    for pattern in [
+                        r"\*\*Tool:\*\*\s*(\S+)",
+                        r"Tool:\s*(\S+)",
+                        r'tool[_\s]?name[=:\s]+["\']?(\S+)["\']?',
+                    ]:
+                        tool_match = re.search(pattern, content, re.IGNORECASE)
+                        if tool_match:
+                            tsaspdma_tool_name = tool_match.group(1).strip("*\"',")
+                            logger.info(f"[MOCK_LLM] TSASPDMA tool from user msg: {tsaspdma_tool_name}")
+                            break
+                    if tsaspdma_tool_name:
+                        break
+        # Check user input for testing overrides ($tsaspdma_speak, $tsaspdma_ponder)
+        user_input = ""
+        for item in context:
+            if item.startswith("user_input:") or item.startswith("task:"):
+                user_input = item.split(":", 1)[1].strip()
+                break
+
+        if "$tsaspdma_speak" in user_input:
+            # Testing: TSASPDMA decides to ask for clarification
+            logger.info("[MOCK_LLM] TSASPDMA: Switching to SPEAK for clarification (test mode)")
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.SPEAK,
+                action_parameters=SpeakParams(
+                    content="TSASPDMA: I need clarification before proceeding with this tool."
+                ).model_dump(),
+                rationale="TSASPDMA: Documentation review revealed ambiguity requiring user clarification.",
+            )
+        elif "$tsaspdma_ponder" in user_input:
+            # Testing: TSASPDMA decides a different tool would be better
+            logger.info("[MOCK_LLM] TSASPDMA: Switching to PONDER to reconsider (test mode)")
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.PONDER,
+                action_parameters=PonderParams(
+                    questions=["Would a different tool be more appropriate?", "What are the gotchas?"]
+                ).model_dump(),
+                rationale="TSASPDMA: After reviewing documentation, reconsidering if this is the right approach.",
+            )
+        else:
+            # Default: Confirm TOOL action (proceed with execution)
+            # Extract tool parameters from the TSASPDMA message
+            tool_params: Dict[str, Any] = {}
+            for msg in messages:
+                if isinstance(msg, dict) and msg.get("role") == "user":
+                    content = msg.get("content", "")
+                    if "Tool Parameters:" in content or "parameters:" in content:
+                        # (re is imported at top of file)
+
+                        # Try to extract JSON parameters
+                        json_match = re.search(r"```(?:json)?\s*(\{[^}]+\})\s*```", content, re.DOTALL)
+                        if json_match:
+                            try:
+                                import json
+
+                                tool_params = json.loads(json_match.group(1))
+                            except json.JSONDecodeError:
+                                pass
+                        break
+
+            logger.info(f"[MOCK_LLM] TSASPDMA: Confirming TOOL action for '{tsaspdma_tool_name or 'unknown'}'")
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.TOOL,
+                action_parameters=ToolParams(
+                    name=tsaspdma_tool_name or "unknown_tool",
+                    parameters=tool_params,
+                ).model_dump(),
+                rationale=f"TSASPDMA: Reviewed documentation for '{tsaspdma_tool_name}'. Proceeding with tool execution.",
+            )
 
     # === CRITICAL: Early follow-up detection ===
     # Check the FIRST system message for THOUGHT_TYPE=follow_up
@@ -1050,3 +1159,251 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
 
     # Return structured result directly - instructor will handle it
     return result
+
+
+def aspdma_llm_result(
+    context: Optional[List[Any]] = None, messages: Optional[List[Dict[str, Any]]] = None
+) -> ASPDMALLMResult:
+    """Mock ASPDMALLMResult with flat schema (Gemini-compatible, no Union types).
+
+    ASPDMA selects the ACTION TYPE and for TOOL actions, just the TOOL NAME.
+    Parameters are NOT determined here - TSASPDMA handles that.
+    """
+    context = context or []
+    messages = messages or []
+
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("[MOCK_LLM] aspdma_llm_result handler called (flat schema)")
+
+    # Reuse the existing action_selection logic to determine the action
+    full_result = action_selection(context=context, messages=messages)
+
+    action = full_result.selected_action
+    rationale = full_result.rationale
+    params = full_result.action_parameters
+
+    # Handle dict or Pydantic model
+    if params:
+        if hasattr(params, "model_dump"):
+            params_dict = params.model_dump()
+        elif isinstance(params, dict):
+            params_dict = params
+        else:
+            params_dict = {}
+    else:
+        params_dict = {}
+
+    # Map to flat schema based on action type
+    # CRITICAL: For TOOL, only return tool_name - NO parameters!
+    # TSASPDMA will determine parameters from the prompt.
+    if action == HandlerActionType.SPEAK:
+        flat_result = ASPDMALLMResult(
+            selected_action=action,
+            rationale=rationale,
+            speak_content=params_dict.get("content", ""),
+        )
+    elif action == HandlerActionType.PONDER:
+        flat_result = ASPDMALLMResult(
+            selected_action=action,
+            rationale=rationale,
+            ponder_questions=params_dict.get("questions", ["What should I do?"]),
+        )
+    elif action == HandlerActionType.TOOL:
+        # ONLY the tool name - TSASPDMA handles parameters
+        flat_result = ASPDMALLMResult(
+            selected_action=action,
+            rationale=rationale,
+            tool_name=params_dict.get("name", "unknown_tool"),
+            # NO tool_parameters here - TSASPDMA will extract them
+        )
+    elif action == HandlerActionType.REJECT:
+        flat_result = ASPDMALLMResult(
+            selected_action=action,
+            rationale=rationale,
+            reject_reason=params_dict.get("reason", "Request rejected"),
+            reject_create_filter=params_dict.get("create_filter", False),
+        )
+    elif action == HandlerActionType.DEFER:
+        flat_result = ASPDMALLMResult(
+            selected_action=action,
+            rationale=rationale,
+            defer_reason=params_dict.get("reason", "Deferring"),
+            defer_until=params_dict.get("defer_until"),
+        )
+    elif action == HandlerActionType.RECALL:
+        flat_result = ASPDMALLMResult(
+            selected_action=action,
+            rationale=rationale,
+            recall_query=params_dict.get("query"),
+            recall_node_type=params_dict.get("node_type"),
+            recall_scope=str(params_dict.get("scope")) if params_dict.get("scope") else None,
+            recall_limit=params_dict.get("limit", 10),
+        )
+    elif action == HandlerActionType.MEMORIZE:
+        node = params_dict.get("node", {})
+        if hasattr(node, "model_dump"):
+            node = node.model_dump()
+        flat_result = ASPDMALLMResult(
+            selected_action=action,
+            rationale=rationale,
+            memorize_node_type=str(node.get("node_type", "observation")),
+            memorize_content=node.get("content", ""),
+            memorize_scope=str(node.get("scope", "local")),
+        )
+    elif action == HandlerActionType.FORGET:
+        node = params_dict.get("node", {})
+        if hasattr(node, "model_dump"):
+            node = node.model_dump()
+        flat_result = ASPDMALLMResult(
+            selected_action=action,
+            rationale=rationale,
+            forget_node_id=node.get("node_id") or node.get("id"),
+            forget_reason=params_dict.get("reason", "Forgetting"),
+        )
+    elif action == HandlerActionType.TASK_COMPLETE:
+        flat_result = ASPDMALLMResult(
+            selected_action=action,
+            rationale=rationale,
+            completion_reason=params_dict.get("completion_reason", "Task completed"),
+        )
+    elif action == HandlerActionType.OBSERVE:
+        flat_result = ASPDMALLMResult(
+            selected_action=action,
+            rationale=rationale,
+            observe_active=params_dict.get("active", True),
+        )
+    else:
+        flat_result = ASPDMALLMResult(
+            selected_action=action,
+            rationale=rationale,
+        )
+
+    logger.info(f"[MOCK_LLM] aspdma_llm_result returning: {flat_result.selected_action}")
+    return flat_result
+
+
+def tsaspdma_llm_result(
+    context: Optional[List[Any]] = None, messages: Optional[List[Dict[str, Any]]] = None
+) -> TSASPDMALLMResult:
+    """Mock TSASPDMALLMResult - extracts tool parameters from prompt.
+
+    TSASPDMA is called when ASPDMA selects a TOOL action. It:
+    - Reads the tool documentation in the prompt
+    - Extracts actual parameters from the user's request
+    - Returns TOOL (proceed), SPEAK (clarify), or PONDER (reconsider)
+    """
+    context = context or []
+    messages = messages or []
+
+    import json
+    import logging
+    import shlex
+
+    logger = logging.getLogger(__name__)
+    logger.info("[MOCK_LLM] tsaspdma_llm_result handler called")
+
+    # Check for testing overrides in user input
+    user_input = ""
+    for item in context:
+        if item.startswith("user_input:") or item.startswith("task:"):
+            user_input = item.split(":", 1)[1].strip()
+            break
+
+    # Check for test overrides first
+    if "$tsaspdma_speak" in user_input:
+        logger.info("[MOCK_LLM] TSASPDMA: Switching to SPEAK for clarification (test mode)")
+        return TSASPDMALLMResult(
+            selected_action=HandlerActionType.SPEAK,
+            rationale="TSASPDMA: Documentation review revealed ambiguity requiring user clarification.",
+            parameters={"content": "TSASPDMA: I need clarification before proceeding with this tool."},
+        )
+    elif "$tsaspdma_ponder" in user_input:
+        logger.info("[MOCK_LLM] TSASPDMA: Switching to PONDER to reconsider (test mode)")
+        return TSASPDMALLMResult(
+            selected_action=HandlerActionType.PONDER,
+            rationale="TSASPDMA: After reviewing documentation, reconsidering if this is the right approach.",
+            parameters={"questions": ["Would a different tool be more appropriate?", "What are the gotchas?"]},
+        )
+
+    # Extract tool name and parameters from the TSASPDMA prompt
+    # The prompt contains the original user request with tool command
+    tool_name = "unknown_tool"
+    tool_params: Dict[str, Any] = {}
+
+    # Look in messages for the user's original request and tool info
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content", "")
+
+        # Extract tool name from patterns like "**Tool:** curl" or "Tool: curl"
+        for pattern in [
+            r"\*\*Tool:\*\*\s*(\S+)",
+            r"Tool:\s*(\S+)",
+            r'tool[_\s]?name[=:\s]+["\']?(\S+)["\']?',
+        ]:
+            tool_match = re.search(pattern, content, re.IGNORECASE)
+            if tool_match:
+                tool_name = tool_match.group(1).strip("*\"',")
+                logger.info(f"[MOCK_LLM] TSASPDMA found tool name: {tool_name}")
+                break
+
+        # Extract original thought content which has the $tool command
+        thought_match = re.search(r'(?:Original Thought|Thought):\s*"(.+?)"', content, re.DOTALL)
+        if thought_match:
+            thought_content = thought_match.group(1)
+            logger.info(f"[MOCK_LLM] TSASPDMA found thought: {thought_content[:100]}...")
+
+            # Parse $tool command from thought
+            tool_cmd_match = re.search(r"\$tool\s+(\S+)\s*(.*?)(?:\||$)", thought_content)
+            if tool_cmd_match:
+                tool_name = tool_cmd_match.group(1)
+                params_str = tool_cmd_match.group(2).strip()
+                logger.info(f"[MOCK_LLM] TSASPDMA parsed tool={tool_name}, params_str={params_str}")
+
+                if params_str:
+                    # Try JSON first
+                    try:
+                        tool_params = json.loads(params_str)
+                        logger.info(f"[MOCK_LLM] TSASPDMA parsed JSON params: {tool_params}")
+                    except json.JSONDecodeError:
+                        # Try key=value parsing
+                        try:
+                            tokens = shlex.split(params_str)
+                            for token in tokens:
+                                if "=" in token:
+                                    k, v = token.split("=", 1)
+                                    tool_params[k] = v
+                            logger.info(f"[MOCK_LLM] TSASPDMA parsed k=v params: {tool_params}")
+                        except ValueError:
+                            # Fallback: simple split
+                            for pair in params_str.split():
+                                if "=" in pair:
+                                    k, v = pair.split("=", 1)
+                                    tool_params[k] = v.strip('"').strip("'")
+                            logger.info(f"[MOCK_LLM] TSASPDMA fallback params: {tool_params}")
+
+    # Also check context for forced action params (from original mock LLM flow)
+    for item in context:
+        if item.startswith("action_params:"):
+            params_str = item.split(":", 1)[1].strip()
+            if params_str:
+                parts = params_str.split(None, 1)
+                if len(parts) > 1:
+                    # First part might be tool name, rest is params
+                    try:
+                        tool_params = json.loads(parts[1])
+                    except json.JSONDecodeError:
+                        for pair in parts[1].split():
+                            if "=" in pair:
+                                k, v = pair.split("=", 1)
+                                tool_params[k] = v
+
+    logger.info(f"[MOCK_LLM] TSASPDMA: Confirming TOOL '{tool_name}' with params: {tool_params}")
+    return TSASPDMALLMResult(
+        selected_action=HandlerActionType.TOOL,
+        rationale=f"TSASPDMA: Reviewed documentation for '{tool_name}'. Proceeding with tool execution.",
+        parameters=tool_params,
+    )

@@ -21,11 +21,15 @@ from ciris_engine.logic.utils.jsondict_helpers import get_str
 from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import (
+    ToolDMAGuidance,
+    ToolDocumentation,
     ToolExecutionResult,
     ToolExecutionStatus,
+    ToolGotcha,
     ToolInfo,
     ToolParameterSchema,
     ToolResult,
+    UsageExample,
 )
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities
@@ -695,6 +699,75 @@ class CoreToolService(BaseService, ToolService):
                 ),
                 category="workflow",
                 when_to_use="When processing a ticket task and need to record progress or results",
+                documentation=ToolDocumentation(
+                    quick_start="Use update_ticket to record progress on multi-stage tasks. "
+                    "Metadata is deep-merged so you can update just the fields you need.",
+                    detailed_instructions="""
+## Ticket Metadata Structure
+
+Tickets support structured metadata for tracking multi-stage workflows:
+
+```json
+{
+  "stages": {
+    "stage_name": {
+      "status": "in_progress|completed|failed",
+      "result": "any data from this stage",
+      "error": "error message if failed"
+    }
+  },
+  "custom_field": "any other data you need"
+}
+```
+
+## Deep Merge Behavior
+
+When you update metadata, it's deep-merged with existing metadata:
+- Top-level keys are merged (new keys added, existing preserved)
+- The `stages` object is specially handled: each stage is merged individually
+- This means you can update one stage without losing others
+
+## Status Transitions
+
+Valid status values and when to use them:
+- `in_progress`: Active work happening
+- `blocked`: Waiting on external dependency
+- `deferred`: Intentionally delayed (use defer_ticket instead)
+- `completed`: Successfully finished
+- `failed`: Unrecoverable error occurred
+""",
+                    examples=[
+                        UsageExample(
+                            title="Update stage progress",
+                            description="Record completion of a processing stage",
+                            code='{"ticket_id": "TKT-123", "metadata": {"stages": {"validation": {"status": "completed", "result": "all checks passed"}}}}',
+                        ),
+                        UsageExample(
+                            title="Mark ticket blocked",
+                            description="Indicate ticket is waiting on external input",
+                            code='{"ticket_id": "TKT-123", "status": "blocked", "notes": "Waiting for user to provide API key"}',
+                        ),
+                    ],
+                    gotchas=[
+                        ToolGotcha(
+                            title="Don't use for deferrals",
+                            description="Use defer_ticket instead of setting status='deferred' directly. "
+                            "defer_ticket properly sets up the deferral metadata and prevents task generation.",
+                            severity="warning",
+                        ),
+                        ToolGotcha(
+                            title="Metadata must be JSON",
+                            description="If passing metadata as a string (from CLI), it must be valid JSON. "
+                            "The tool will attempt to parse JSON strings automatically.",
+                            severity="info",
+                        ),
+                    ],
+                ),
+                dma_guidance=ToolDMAGuidance(
+                    when_not_to_use="Don't use to mark tickets as deferred - use defer_ticket instead",
+                    prerequisite_actions=["get_ticket to verify current state if unsure"],
+                    followup_actions=["get_ticket to verify update was applied if critical"],
+                ),
             )
         elif tool_name == "get_ticket":
             return ToolInfo(
@@ -728,6 +801,76 @@ class CoreToolService(BaseService, ToolService):
                 ),
                 category="workflow",
                 when_to_use="When ticket needs human input or must wait for external event/time",
+                documentation=ToolDocumentation(
+                    quick_start="Use defer_ticket when you cannot proceed without human input "
+                    "or need to wait for a specific time. Choose ONE of: await_human, defer_until, or defer_hours.",
+                    detailed_instructions="""
+## Deferral Types
+
+You must specify exactly ONE of these options:
+
+1. **await_human=true**: Use when you need human input to proceed
+   - Ticket stays deferred until human responds
+   - No automatic reactivation
+
+2. **defer_hours**: Use for relative time delays
+   - Specify hours as a number (can be decimal, e.g., 0.5 for 30 minutes)
+   - System will reactivate ticket after the time passes
+
+3. **defer_until**: Use for specific time targets
+   - Provide ISO8601 timestamp (e.g., "2024-01-15T09:00:00Z")
+   - Useful for scheduling at specific times
+
+## What Happens When You Defer
+
+1. Ticket status is automatically set to 'deferred'
+2. Metadata is updated with deferral details
+3. WorkProcessor stops generating new tasks for this ticket
+4. Ticket will be reactivated when condition is met
+
+## Reason Field
+
+Always provide a clear reason - this appears in audit logs and helps
+humans understand why the ticket was deferred.
+""",
+                    examples=[
+                        UsageExample(
+                            title="Wait for human input",
+                            description="Defer until user provides missing information",
+                            code='{"ticket_id": "TKT-123", "await_human": true, "reason": "Need user to specify which database to use"}',
+                        ),
+                        UsageExample(
+                            title="Delay for rate limiting",
+                            description="Wait 1 hour before retrying API call",
+                            code='{"ticket_id": "TKT-123", "defer_hours": 1, "reason": "API rate limit hit, waiting for quota reset"}',
+                        ),
+                        UsageExample(
+                            title="Schedule for business hours",
+                            description="Wait until specific time",
+                            code='{"ticket_id": "TKT-123", "defer_until": "2024-01-15T09:00:00Z", "reason": "Scheduling for business hours"}',
+                        ),
+                    ],
+                    gotchas=[
+                        ToolGotcha(
+                            title="Choose only one deferral type",
+                            description="Specify exactly ONE of: await_human, defer_until, or defer_hours. "
+                            "Providing none or multiple will cause an error.",
+                            severity="error",
+                        ),
+                        ToolGotcha(
+                            title="Reason is required",
+                            description="Always provide a reason for audit trail and human understanding. "
+                            "Vague reasons like 'waiting' are not helpful.",
+                            severity="warning",
+                        ),
+                    ],
+                ),
+                dma_guidance=ToolDMAGuidance(
+                    when_not_to_use="Don't defer just to avoid work - only defer when genuinely blocked",
+                    ethical_considerations="Be transparent about why you're deferring. "
+                    "Users should understand what's blocking progress.",
+                    prerequisite_actions=["Exhaust other options first - can you proceed without human input?"],
+                ),
             )
         return None
 

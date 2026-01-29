@@ -70,7 +70,11 @@ class AgentTemplate(BaseModel):
 
 
 class AdapterConfig(BaseModel):
-    """Adapter configuration."""
+    """Adapter configuration with platform requirements for KMP filtering.
+
+    The server returns all adapters with their requirements.
+    KMP clients filter locally based on platform capabilities.
+    """
 
     id: str = Field(..., description="Adapter ID (api, cli, discord, reddit)")
     name: str = Field(..., description=FIELD_DESC_DISPLAY_NAME)
@@ -82,6 +86,14 @@ class AdapterConfig(BaseModel):
         default_factory=list, description="Platform requirements (e.g., 'android_play_integrity')"
     )
     platform_available: bool = Field(True, description="Whether available on current platform")
+    # Fields for KMP-side filtering
+    requires_binaries: bool = Field(False, description="Requires external CLI tools (not available on mobile)")
+    required_binaries: List[str] = Field(default_factory=list, description="Specific binary names needed")
+    supported_platforms: List[str] = Field(
+        default_factory=list,
+        description="Platforms supported - empty means all, otherwise ['android', 'ios', 'desktop']",
+    )
+    requires_ciris_services: bool = Field(False, description="Requires CIRIS AI services (Google sign-in)")
 
 
 class SetupStatusResponse(BaseModel):
@@ -218,22 +230,23 @@ def _get_llm_providers() -> List[LLMProvider]:
             default_base_url=None,
             default_model="gpt-5.2",
             examples=[
-                "Standard OpenAI API",
-                "Azure OpenAI Service",
+                "GPT-5.2 Thinking",
+                "GPT-4o",
             ],
         ),
         LLMProvider(
             id="anthropic",
             name="Anthropic",
-            description="Claude models (Claude 3.5 Sonnet, Opus, Haiku)",
+            description="Claude models (Claude Sonnet 4.5, Opus 4.5, Haiku 4.5)",
             requires_api_key=True,
             requires_base_url=False,
             requires_model=True,
             default_base_url=None,
-            default_model="claude-3-5-sonnet-20241022",
+            default_model="claude-sonnet-4-5-20250929",
             examples=[
-                "Claude 3.5 Sonnet",
-                "Claude 3 Opus",
+                "Claude Sonnet 4.5",
+                "Claude Opus 4.5",
+                "Claude Haiku 4.5",
             ],
         ),
         LLMProvider(
@@ -403,8 +416,22 @@ def _get_agent_templates() -> List[AgentTemplate]:
 
 
 def _get_available_adapters() -> List[AdapterConfig]:
-    """Get list of available adapters."""
-    return [
+    """Get all adapters with platform requirements for KMP-side filtering.
+
+    Returns ALL adapters with their requirements metadata.
+    KMP clients filter locally based on platform capabilities.
+
+    Filters out only:
+    - ciris_covenant_metrics (handled by separate consent checkbox)
+    - Mock/library/reference modules
+    """
+    from ciris_engine.logic.services.tool.discovery_service import AdapterDiscoveryService
+
+    adapters: List[AdapterConfig] = []
+    seen_ids: set[str] = set()
+
+    # Always include API adapter first (required, cannot be disabled)
+    adapters.append(
         AdapterConfig(
             id="api",
             name="Web API",
@@ -412,37 +439,103 @@ def _get_available_adapters() -> List[AdapterConfig]:
             enabled_by_default=True,
             required_env_vars=[],
             optional_env_vars=["CIRIS_API_PORT", "NEXT_PUBLIC_API_BASE_URL"],
-        ),
-        AdapterConfig(
-            id="cli",
-            name="Command Line",
-            description="Interactive command-line interface",
-            enabled_by_default=False,
-            required_env_vars=[],
-            optional_env_vars=[],
-        ),
-        AdapterConfig(
-            id="discord",
-            name="Discord Bot",
-            description="Discord bot integration for server moderation and interaction",
-            enabled_by_default=False,
-            required_env_vars=["DISCORD_BOT_TOKEN"],
-            optional_env_vars=["DISCORD_CHANNEL_ID", "DISCORD_GUILD_ID"],
-        ),
-        AdapterConfig(
-            id="reddit",
-            name="Reddit Integration",
-            description="Reddit bot for r/ciris monitoring and interaction",
-            enabled_by_default=False,
-            required_env_vars=[
-                "CIRIS_REDDIT_CLIENT_ID",
-                "CIRIS_REDDIT_CLIENT_SECRET",
-                "CIRIS_REDDIT_USERNAME",
-                "CIRIS_REDDIT_PASSWORD",
-            ],
-            optional_env_vars=["CIRIS_REDDIT_SUBREDDIT"],
-        ),
-    ]
+            platform_available=True,
+            requires_binaries=False,
+            required_binaries=[],
+            supported_platforms=[],  # All platforms
+            requires_ciris_services=False,
+        )
+    )
+    seen_ids.add("api")
+
+    # Adapters to skip entirely (handled separately)
+    SKIP_ADAPTERS = {
+        "ciris_covenant_metrics",  # Handled by consent checkbox, not adapter list
+    }
+
+    # Adapters that require CIRIS AI services (Google sign-in)
+    CIRIS_SERVICES_ADAPTERS = {
+        "ciris_hosted_tools",
+    }
+
+    # Discover all adapters
+    try:
+        discovery = AdapterDiscoveryService()
+        manifests = discovery.discover_adapters()
+
+        for manifest in manifests:
+            module_id = manifest.module.name
+
+            # Skip if already added
+            if module_id in seen_ids:
+                continue
+
+            # Skip adapters handled separately
+            if module_id in SKIP_ADAPTERS:
+                logger.debug(f"[SETUP ADAPTERS] Skipping {module_id} (handled separately)")
+                continue
+
+            # Skip mock modules
+            if manifest.module.is_mock:
+                continue
+
+            # Skip reference/QA modules
+            if manifest.module.reference or manifest.module.for_qa:
+                continue
+
+            # Skip library-type modules (no services)
+            if not manifest.services:
+                continue
+
+            # Skip modules with metadata type = library
+            if manifest.metadata and manifest.metadata.get("type") == "library":
+                continue
+
+            # Skip common/shared modules
+            if module_id.endswith("_common") or "_common_" in module_id:
+                continue
+
+            # Extract platform requirements from manifest
+            capabilities = manifest.capabilities or []
+            requires_binaries = "requires:binaries" in capabilities
+
+            # Get supported platforms from metadata
+            supported_platforms: List[str] = []
+            if manifest.metadata:
+                platforms = manifest.metadata.get("supported_platforms")
+                if platforms and isinstance(platforms, list):
+                    supported_platforms = platforms
+
+            # Check if requires CIRIS services
+            requires_ciris_services = module_id in CIRIS_SERVICES_ADAPTERS
+
+            # Create adapter config with all requirements
+            adapter_config = AdapterConfig(
+                id=module_id,
+                name=manifest.module.name.replace("_", " ").title(),
+                description=manifest.module.description or f"{module_id} adapter",
+                enabled_by_default=requires_ciris_services,  # CIRIS services adapters enabled by default
+                required_env_vars=[],
+                optional_env_vars=[],
+                platform_requirements=manifest.platform_requirements or [],
+                platform_available=True,  # KMP will determine this
+                requires_binaries=requires_binaries,
+                required_binaries=[],  # Could extract from manifest if needed
+                supported_platforms=supported_platforms,
+                requires_ciris_services=requires_ciris_services,
+            )
+
+            adapters.append(adapter_config)
+            seen_ids.add(module_id)
+            logger.debug(
+                f"[SETUP ADAPTERS] Discovered adapter: {module_id} (requires_binaries={requires_binaries}, supported_platforms={supported_platforms})"
+            )
+
+    except Exception as e:
+        logger.warning(f"[SETUP ADAPTERS] Failed to discover adapters: {e}")
+
+    logger.info(f"[SETUP ADAPTERS] Total adapters available: {len(adapters)}")
+    return adapters
 
 
 def _validate_api_key_for_provider(config: LLMValidationRequest) -> Optional[LLMValidationResponse]:
@@ -469,30 +562,55 @@ def _classify_llm_connection_error(error: Exception, base_url: Optional[str]) ->
 
     Args:
         error: The exception that occurred
-        base_url: The base URL being connected to
+        base_url: The base URL being connected to (None for providers with fixed endpoints)
 
     Returns:
         Formatted error response
     """
     error_str = str(error)
 
-    if "401" in error_str or "Unauthorized" in error_str:
+    if "401" in error_str or "Unauthorized" in error_str or "authentication_error" in error_str.lower():
+        return LLMValidationResponse(
+            valid=False,
+            message="Authentication failed",
+            error="Invalid API key. Please check your credentials.",
+        )
+    if "invalid_api_key" in error_str.lower() or "invalid x-api-key" in error_str.lower():
         return LLMValidationResponse(
             valid=False,
             message="Authentication failed",
             error="Invalid API key. Please check your credentials.",
         )
     if "404" in error_str or "Not Found" in error_str:
+        # Check if it's a model not found error (common with Anthropic)
+        if "model:" in error_str.lower() or "not_found_error" in error_str.lower():
+            return LLMValidationResponse(
+                valid=False,
+                message="Model not found",
+                error="Model not found. Please check the model name (e.g., claude-3-5-sonnet-20241022).",
+            )
+        if base_url:
+            return LLMValidationResponse(
+                valid=False,
+                message="Endpoint not found",
+                error=f"Could not reach {base_url}. Please check the URL.",
+            )
         return LLMValidationResponse(
             valid=False,
             message="Endpoint not found",
-            error=f"Could not reach {base_url}. Please check the URL.",
+            error="Could not reach the API endpoint. Please check your configuration.",
         )
     if "timeout" in error_str.lower():
         return LLMValidationResponse(
             valid=False,
             message="Connection timeout",
             error="Could not connect to LLM server. Please check if it's running.",
+        )
+    if "connection" in error_str.lower() and "refused" in error_str.lower():
+        return LLMValidationResponse(
+            valid=False,
+            message="Connection refused",
+            error="Could not connect to the LLM server. Please check if it's running.",
         )
     return LLMValidationResponse(valid=False, message="Connection failed", error=f"Error: {error_str}")
 
@@ -526,7 +644,15 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
 
         logger.info("[VALIDATE_LLM] API key format validation passed")
 
-        # Import OpenAI client
+        # Handle Anthropic separately - uses its own SDK
+        if config.provider == "anthropic":
+            return await _validate_anthropic_connection(config)
+
+        # Handle Google separately - uses OpenAI-compatible endpoint
+        if config.provider == "google":
+            return await _validate_google_connection(config)
+
+        # For OpenAI-compatible providers, use OpenAI client
         from openai import AsyncOpenAI
 
         # Build client configuration
@@ -540,14 +666,19 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
         client = AsyncOpenAI(**client_kwargs)
 
         try:
-            logger.info("[VALIDATE_LLM] Attempting to list models from API...")
-            models = await client.models.list()
-            model_count = len(models.data) if hasattr(models, "data") else 0
-
-            logger.info(f"[VALIDATE_LLM] SUCCESS! Found {model_count} models")
+            # Try a minimal completion instead of models.list() - more reliable across providers
+            # Some providers (Together AI) return non-standard model list responses
+            logger.info("[VALIDATE_LLM] Attempting test completion...")
+            model_to_test = config.model or "gpt-3.5-turbo"
+            response = await client.chat.completions.create(
+                model=model_to_test,
+                messages=[{"role": "user", "content": "Hi"}],
+                max_tokens=1,
+            )
+            logger.info(f"[VALIDATE_LLM] SUCCESS! Test completion worked with model: {model_to_test}")
             return LLMValidationResponse(
                 valid=True,
-                message=f"Connection successful! Found {model_count} available models.",
+                message=f"Connection successful! Model '{model_to_test}' is available.",
                 error=None,
             )
         except Exception as e:
@@ -559,6 +690,68 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
     except Exception as e:
         logger.error(f"[VALIDATE_LLM] Unexpected error: {type(e).__name__}: {e}")
         return LLMValidationResponse(valid=False, message="Validation error", error=str(e))
+
+
+async def _validate_anthropic_connection(config: LLMValidationRequest) -> LLMValidationResponse:
+    """Validate Anthropic API connection using native SDK."""
+    try:
+        import anthropic
+
+        logger.info("[VALIDATE_LLM] Using Anthropic SDK for validation")
+        client = anthropic.AsyncAnthropic(api_key=config.api_key)
+
+        # Try a minimal completion
+        model_to_test = config.model or "claude-haiku-4-5-20251001"
+        response = await client.messages.create(
+            model=model_to_test,
+            max_tokens=1,
+            messages=[{"role": "user", "content": "Hi"}],
+        )
+        logger.info(f"[VALIDATE_LLM] SUCCESS! Anthropic test completion worked with model: {model_to_test}")
+        return LLMValidationResponse(
+            valid=True,
+            message=f"Connection successful! Model '{model_to_test}' is available.",
+            error=None,
+        )
+    except ImportError:
+        logger.error("[VALIDATE_LLM] Anthropic SDK not installed")
+        return LLMValidationResponse(
+            valid=False,
+            message="SDK not installed",
+            error="Anthropic SDK not installed. Run: pip install anthropic",
+        )
+    except Exception as e:
+        logger.error(f"[VALIDATE_LLM] Anthropic API call FAILED: {type(e).__name__}: {e}")
+        return _classify_llm_connection_error(e, "api.anthropic.com")
+
+
+async def _validate_google_connection(config: LLMValidationRequest) -> LLMValidationResponse:
+    """Validate Google AI (Gemini) connection using OpenAI-compatible endpoint."""
+    try:
+        from openai import AsyncOpenAI
+
+        # Google's OpenAI-compatible endpoint
+        base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+        logger.info(f"[VALIDATE_LLM] Using Google OpenAI-compatible endpoint: {base_url}")
+
+        client = AsyncOpenAI(api_key=config.api_key, base_url=base_url)
+
+        # Try a minimal completion
+        model_to_test = config.model or "gemini-2.0-flash"
+        response = await client.chat.completions.create(
+            model=model_to_test,
+            messages=[{"role": "user", "content": "Hi"}],
+            max_tokens=1,
+        )
+        logger.info(f"[VALIDATE_LLM] SUCCESS! Google test completion worked with model: {model_to_test}")
+        return LLMValidationResponse(
+            valid=True,
+            message=f"Connection successful! Model '{model_to_test}' is available.",
+            error=None,
+        )
+    except Exception as e:
+        logger.error(f"[VALIDATE_LLM] Google API call FAILED: {type(e).__name__}: {e}")
+        return _classify_llm_connection_error(e, "https://generativelanguage.googleapis.com")
 
 
 # =============================================================================
@@ -1037,13 +1230,33 @@ async def list_templates() -> SuccessResponse[List[AgentTemplate]]:
 
 @router.get("/adapters", response_model=SuccessResponse[List[AdapterConfig]])
 async def list_adapters() -> SuccessResponse[List[AdapterConfig]]:
-    """List available adapters.
+    """List available adapters with platform requirements.
 
-    Returns configuration for available communication adapters.
+    Returns ALL adapters with their requirements metadata.
+    KMP clients filter locally based on platform capabilities (iOS, Android, desktop).
     This endpoint is always accessible without authentication.
     """
     adapters = _get_available_adapters()
     return SuccessResponse(data=adapters)
+
+
+@router.get("/adapters/available", response_model=SuccessResponse[Dict[str, Any]])
+async def list_available_adapters_for_setup() -> SuccessResponse[Dict[str, Any]]:
+    """List discovered adapters with eligibility status (no auth required for setup).
+
+    Returns both eligible (ready to use) and ineligible (missing requirements)
+    adapters, including installation hints for ineligible adapters.
+    This endpoint is accessible without authentication during first-run setup.
+    """
+    from ciris_engine.logic.services.tool.discovery_service import AdapterDiscoveryService
+
+    try:
+        discovery = AdapterDiscoveryService()
+        report = await discovery.get_discovery_report()
+        return SuccessResponse(data=report.model_dump())
+    except Exception as e:
+        logger.error(f"Error getting adapter availability for setup: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/models")

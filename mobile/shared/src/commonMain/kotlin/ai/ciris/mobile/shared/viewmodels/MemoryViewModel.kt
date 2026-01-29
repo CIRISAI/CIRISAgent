@@ -235,10 +235,11 @@ class MemoryViewModel(
 
             logInfo(method, "Timeline returned ${timeline.size} nodes")
 
-            _state.update { it.copy(timelineNodes = timeline) }
+            _state.update { it.copy(timelineNodes = timeline, error = null) }
         } catch (e: Exception) {
             logError(method, "Failed to fetch timeline: ${e::class.simpleName}: ${e.message}")
-            throw e
+            // Don't re-throw - update state with error instead to avoid crashing app
+            _state.update { it.copy(error = "Failed to load timeline: ${e.message}") }
         }
     }
 

@@ -208,14 +208,26 @@ class InteractViewModel(
                 logError(method, "Failed to send message: ${e::class.simpleName}: ${e.message}")
                 logError(method, "Stack trace: ${e.stackTraceToString().take(500)}")
 
-                val errorMessage = ChatMessage(
-                    id = generateMessageId(),
-                    text = "Failed to send message: ${e.message}",
-                    type = MessageType.SYSTEM,
-                    timestamp = Clock.System.now()
-                )
-                _messages.value = (_messages.value + errorMessage).takeLast(20)
-                _processingStatus.value = ""
+                // Check if this is a timeout error - suppress it since responses come via SSE
+                val errorMsg = e.message ?: ""
+                val isTimeoutError = errorMsg.contains("timeout", ignoreCase = true) ||
+                                     errorMsg.contains("30000", ignoreCase = true) ||
+                                     e::class.simpleName?.contains("Timeout", ignoreCase = true) == true
+
+                if (isTimeoutError) {
+                    // Timeout is expected for async processing - message will arrive via SSE
+                    logInfo(method, "Timeout during send - response will arrive via SSE")
+                    _processingStatus.value = "Processing..."
+                } else {
+                    val errorMessage = ChatMessage(
+                        id = generateMessageId(),
+                        text = "Failed to send message: ${e.message}",
+                        type = MessageType.SYSTEM,
+                        timestamp = Clock.System.now()
+                    )
+                    _messages.value = (_messages.value + errorMessage).takeLast(20)
+                    _processingStatus.value = ""
+                }
             } finally {
                 _isSending.value = false
             }

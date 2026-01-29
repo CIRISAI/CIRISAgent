@@ -76,7 +76,8 @@ data class AgentTemplate(
 
 /**
  * Response from GET /v1/setup/adapters
- * Lists available communication adapters.
+ * Lists available communication adapters with platform requirements.
+ * KMP client filters these based on local platform capabilities.
  */
 @Serializable
 data class CommunicationAdapter(
@@ -84,7 +85,13 @@ data class CommunicationAdapter(
     val name: String,        // "REST API", "Command Line", "Discord", "Reddit"
     val description: String,
     val requires_config: Boolean = false,
-    val config_fields: List<String> = emptyList()
+    val config_fields: List<String> = emptyList(),
+    // Platform requirements for KMP-side filtering
+    val requires_binaries: Boolean = false,           // Requires external CLI tools (not available on mobile)
+    val required_binaries: List<String> = emptyList(), // Specific binary names if requires_binaries=true
+    val supported_platforms: List<String> = emptyList(), // Empty = all, otherwise ["android", "ios", "desktop"]
+    val requires_ciris_services: Boolean = false,     // Requires CIRIS AI services (Google sign-in)
+    val enabled_by_default: Boolean = false
 )
 
 // ========== POST /v1/setup/validate-llm ==========
@@ -205,4 +212,62 @@ data class CompleteSetupResponseData(
      */
     val success: Boolean
         get() = status == "completed"
+}
+
+// ========== KMP Adapter Filtering ==========
+
+/**
+ * Platform types for adapter filtering.
+ */
+enum class Platform {
+    ANDROID,
+    IOS,
+    DESKTOP
+}
+
+/**
+ * Filter adapters based on platform capabilities.
+ *
+ * This filtering is done on the KMP client side to support both iOS and Android.
+ * The server returns ALL adapters with their requirements; we filter locally.
+ *
+ * @param adapters List of all adapters from the server
+ * @param platform Current platform (android, ios, or desktop)
+ * @param useCirisServices Whether user is using CIRIS AI services (signed in with Google)
+ * @return Filtered list of adapters available on this platform
+ */
+fun filterAdaptersForPlatform(
+    adapters: List<CommunicationAdapter>,
+    platform: Platform,
+    useCirisServices: Boolean
+): List<CommunicationAdapter> {
+    val platformName = when (platform) {
+        Platform.ANDROID -> "android"
+        Platform.IOS -> "ios"
+        Platform.DESKTOP -> "desktop"
+    }
+    val isMobile = platform == Platform.ANDROID || platform == Platform.IOS
+
+    return adapters.filter { adapter ->
+        // Rule 1: If adapter requires binaries, exclude on mobile platforms
+        // Mobile can't run CLI tools like git, docker, etc.
+        if (adapter.requires_binaries && isMobile) {
+            return@filter false
+        }
+
+        // Rule 2: If adapter has supported_platforms specified, check if current platform is in list
+        // Empty list means all platforms are supported
+        if (adapter.supported_platforms.isNotEmpty()) {
+            if (platformName !in adapter.supported_platforms) {
+                return@filter false
+            }
+        }
+
+        // Rule 3: If adapter requires CIRIS AI services, only include if user has them
+        if (adapter.requires_ciris_services && !useCirisServices) {
+            return@filter false
+        }
+
+        true
+    }
 }

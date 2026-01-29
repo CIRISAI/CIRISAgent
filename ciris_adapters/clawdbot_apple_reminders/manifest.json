@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_apple_reminders",
+    "version": "1.0.0",
+    "description": "Manage Apple Reminders via the `remindctl` CLI on macOS (list, add, edit, complete, delete). Supports lists, date filters, and JSON/plain output.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://github.com/steipete/remindctl"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_apple_reminders.service.AppleRemindersToolService",
+      "capabilities": [
+        "tool:apple_reminders",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:apple_reminders",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_apple_reminders.service.AppleRemindersToolService"
+  },
+  "configuration": {}
+}

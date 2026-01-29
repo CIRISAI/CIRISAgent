@@ -45,9 +45,11 @@ LLM Service Architecture
 │   ├── Distribution Strategies
 │   └── Domain-Aware Filtering
 ├── Provider Implementations
-│   ├── OpenAICompatibleClient (Production)
+│   ├── OpenAICompatibleClient (OpenAI, Groq, Together.ai, OpenRouter)
+│   ├── Native Anthropic Client (Claude models via anthropic SDK)
+│   ├── Native Google Client (Gemini models via google-genai SDK)
 │   ├── MockLLMService (Offline)
-│   └── Future: Local Model Providers
+│   └── Future: Local Model Providers (Ollama, llama.cpp)
 └── Resource Management
     ├── Token Usage Tracking
     ├── Cost Calculation
@@ -86,7 +88,64 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 - **gpt-4-turbo**: $10.00/$30.00 per 1M tokens
 - **gpt-3.5-turbo**: $0.50/$1.50 per 1M tokens
 - **Llama models**: $0.10/$0.10 per 1M tokens (estimated)
-- **Claude models**: $3.00/$15.00 per 1M tokens
+
+### Native Anthropic Provider
+
+**File**: `ciris_engine/logic/services/runtime/llm_service/service.py`
+
+```python
+class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
+    """Native Anthropic client with instructor integration."""
+
+    # Initialization via _init_anthropic_client() when provider=ANTHROPIC
+    # Key Features:
+    # - Native anthropic SDK (not OpenAI-compatible mode)
+    # - Instructor mode: ANTHROPIC_TOOLS for structured output
+    # - Full metrics tracking (tokens, cost, errors)
+    # - Circuit breaker protection
+```
+
+**Supported Models & Pricing**:
+- **claude-sonnet-4-20250514**: $3.00/$15.00 per 1M tokens (input/output)
+- **claude-opus-4-5-20251101**: $15.00/$75.00 per 1M tokens
+- **claude-3-5-haiku-20241022**: $0.80/$4.00 per 1M tokens
+
+**Environment Variables**:
+- `ANTHROPIC_API_KEY`: API key for Anthropic
+- `CIRIS_LLM_PROVIDER=anthropic`: Force Anthropic provider
+- `CIRIS_LLM_MODEL_NAME`: Override default model
+
+### Native Google Gemini Provider
+
+**File**: `ciris_engine/logic/services/runtime/llm_service/service.py`
+
+```python
+class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
+    """Native Google Gemini client with instructor integration."""
+
+    # Initialization via _init_google_client() when provider=GOOGLE
+    # Key Features:
+    # - Native google-genai SDK with instructor support
+    # - Instructor mode: GEMINI_TOOLS for structured output
+    # - Full metrics tracking (tokens, cost, errors)
+    # - Circuit breaker protection
+```
+
+**Supported Models & Pricing**:
+- **gemini-2.5-flash**: Free tier (1M tokens/min), $0.075/$0.30 per 1M tokens
+- **gemini-2.0-flash**: Higher quotas, $0.10/$0.40 per 1M tokens
+- **gemini-2.0-pro**: Premium, $1.25/$5.00 per 1M tokens
+
+**Environment Variables**:
+- `GOOGLE_API_KEY` or `GEMINI_API_KEY`: API key for Google AI
+- `CIRIS_LLM_PROVIDER=google`: Force Google provider
+- `CIRIS_LLM_MODEL_NAME`: Override default model
+
+**Important Notes**:
+- Gemini does not support discriminated Union types in structured output
+- ASPDMA/TSASPDMA use flat schemas (optional fields instead of unions)
+- `gemini-2.5-flash` has 1M tokens/minute rate limit (sufficient for most use cases)
+- For high-volume production, use `gemini-2.0-flash` with higher quotas
 
 ### Mock LLM Provider
 
@@ -337,17 +396,38 @@ class OpenAIConfig(BaseModel):
 ```
 
 ### Environment Variables
-- `OPENAI_API_KEY`: Primary OpenAI API key
+
+**Provider Selection** (checked in order, first non-empty wins):
+- `CIRIS_LLM_PROVIDER`: Explicit provider (`openai`, `anthropic`, `google`)
+- `LLM_PROVIDER`: Fallback provider setting
+- Auto-detection from API keys if not specified
+
+**Model Selection** (checked in order):
+- `CIRIS_LLM_MODEL_NAME`: Preferred model override
+- `OPENAI_MODEL`: OpenAI-specific model
+- `LLM_MODEL`: Generic model fallback
+- Provider-specific defaults (`gpt-4o-mini`, `claude-sonnet-4-20250514`, `gemini-2.5-flash`)
+
+**API Keys**:
+- `OPENAI_API_KEY`: OpenAI API key
+- `ANTHROPIC_API_KEY`: Anthropic API key (triggers auto-detection)
+- `GOOGLE_API_KEY` / `GEMINI_API_KEY`: Google API key (triggers auto-detection)
+
+**Other Settings**:
 - `MOCK_LLM`: Enable mock mode for offline operation
-- `LLM_DEFAULT_MODEL`: Override default model selection
+- `CIRIS_LLM_TIMEOUT`: Request timeout in seconds (default: 20)
+- `CIRIS_DMA_TIMEOUT`: DMA evaluation timeout in seconds (default: 90)
 
 ## 🌱 Future Enhancements
 
 ### Planned Provider Additions
-1. **Anthropic Claude**: Direct API integration
-2. **Local Llama**: Ollama/llama.cpp integration
-3. **Hugging Face**: Transformers library integration
-4. **Together.ai**: Hosted open model access
+1. **Local Llama**: Ollama/llama.cpp integration
+2. **Hugging Face**: Transformers library integration
+
+### Completed Provider Integrations (v1.9.3)
+- ~~**Anthropic Claude**: Direct API integration~~ ✅ Native `anthropic` SDK
+- ~~**Google Gemini**: Direct API integration~~ ✅ Native `google-genai` SDK
+- **Together.ai**: Works via OpenAI-compatible mode
 
 ### Advanced Features
 - **Model Caching**: Local response caching for efficiency

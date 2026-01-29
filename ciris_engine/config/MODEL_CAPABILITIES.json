@@ -119,8 +119,23 @@
       "display_name": "Anthropic",
       "api_base": "https://api.anthropic.com/v1",
       "models": {
-        "claude-3-opus-20240229": {
-          "display_name": "Claude 3 Opus",
+        "claude-sonnet-4-5-20250929": {
+          "display_name": "Claude Sonnet 4.5",
+          "context_window": 200000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "default",
+          "ciris_compatible": true,
+          "ciris_recommended": true,
+          "notes": "Best balance of intelligence, speed, and cost - recommended for most use cases"
+        },
+        "claude-opus-4-5-20251101": {
+          "display_name": "Claude Opus 4.5",
           "context_window": 200000,
           "capabilities": {
             "tool_use": true,
@@ -132,25 +147,10 @@
           "tier": "premium",
           "ciris_compatible": true,
           "ciris_recommended": false,
-          "notes": "Highest quality Claude, single provider"
+          "notes": "Maximum intelligence, premium pricing"
         },
-        "claude-3-5-sonnet-20241022": {
-          "display_name": "Claude 3.5 Sonnet",
-          "context_window": 200000,
-          "capabilities": {
-            "tool_use": true,
-            "structured_output": true,
-            "vision": true,
-            "json_mode": true,
-            "streaming": true
-          },
-          "tier": "default",
-          "ciris_compatible": true,
-          "ciris_recommended": false,
-          "notes": "Excellent balance of quality and cost"
-        },
-        "claude-3-5-haiku-20241022": {
-          "display_name": "Claude 3.5 Haiku",
+        "claude-haiku-4-5-20251001": {
+          "display_name": "Claude Haiku 4.5",
           "context_window": 200000,
           "capabilities": {
             "tool_use": true,
@@ -162,7 +162,22 @@
           "tier": "fast",
           "ciris_compatible": true,
           "ciris_recommended": false,
-          "notes": "Fast and efficient"
+          "notes": "Fastest model with near-frontier intelligence"
+        },
+        "claude-3-haiku-20240307": {
+          "display_name": "Claude 3 Haiku (Legacy)",
+          "context_window": 200000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "legacy",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Legacy model - consider upgrading to Haiku 4.5"
         }
       }
     },

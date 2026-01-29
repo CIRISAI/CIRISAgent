@@ -50,6 +50,12 @@ class TestServiceInitializer:
         mock_graph.tsdb_raw_retention_hours = 24  # Default retention
         config.graph = mock_graph
 
+        # Add adapters attribute for skill adapter discovery
+        mock_adapters = Mock()
+        mock_adapters.auto_discovery = False  # Disable auto-discovery in tests
+        mock_adapters.disabled_adapters = []
+        config.adapters = mock_adapters
+
         # Add model_dump method that returns a dict for config migration
         config.model_dump = Mock(
             return_value={
@@ -590,10 +596,10 @@ class TestAdapterLoading:
     @pytest.mark.asyncio
     async def test_load_adapter_not_found(self, mock_service_initializer):
         """Test loading a adapter that doesn't exist."""
-        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
-            mock_loader = Mock()
-            mock_loader.discover_services.return_value = []
-            mock_loader_class.return_value = mock_loader
+        with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery_class:
+            mock_discovery = Mock()
+            mock_discovery.discover_adapters.return_value = []
+            mock_discovery_class.return_value = mock_discovery
 
             with pytest.raises(ValueError, match="Adapter 'nonexistent' not found"):
                 await mock_service_initializer._load_adapter("nonexistent")
@@ -608,11 +614,11 @@ class TestAdapterLoading:
         mock_service_instance = Mock()
         mock_service_class.return_value = mock_service_instance
 
-        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
-            mock_loader = Mock()
-            mock_loader.discover_services.return_value = [test_manifest]
-            mock_loader.load_service_class.return_value = mock_service_class
-            mock_loader_class.return_value = mock_loader
+        with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery_class:
+            mock_discovery = Mock()
+            mock_discovery.discover_adapters.return_value = [test_manifest]
+            mock_discovery.load_service_class.return_value = mock_service_class
+            mock_discovery_class.return_value = mock_discovery
 
             await mock_service_initializer._load_adapter("test_adapter")
 
@@ -661,11 +667,11 @@ class TestAdapterLoading:
         mock_service_instance = Mock()
         mock_service_class.return_value = mock_service_instance
 
-        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
-            mock_loader = Mock()
-            mock_loader.discover_services.return_value = [tool_manifest]
-            mock_loader.load_service_class.return_value = mock_service_class
-            mock_loader_class.return_value = mock_loader
+        with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery_class:
+            mock_discovery = Mock()
+            mock_discovery.discover_adapters.return_value = [tool_manifest]
+            mock_discovery.load_service_class.return_value = mock_service_class
+            mock_discovery_class.return_value = mock_discovery
 
             await mock_service_initializer._load_adapter("tool_service")
 
@@ -710,11 +716,11 @@ class TestAdapterLoading:
         mock_service_instance = Mock()
         mock_service_class.return_value = mock_service_instance
 
-        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
-            mock_loader = Mock()
-            mock_loader.discover_services.return_value = [llm_manifest]
-            mock_loader.load_service_class.return_value = mock_service_class
-            mock_loader_class.return_value = mock_loader
+        with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery_class:
+            mock_discovery = Mock()
+            mock_discovery.discover_adapters.return_value = [llm_manifest]
+            mock_discovery.load_service_class.return_value = mock_service_class
+            mock_discovery_class.return_value = mock_discovery
 
             await mock_service_initializer._load_adapter("llm_service")
 
@@ -732,11 +738,11 @@ class TestAdapterLoading:
         mock_service_instance = Mock()
         mock_service_class.return_value = mock_service_instance
 
-        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
-            mock_loader = Mock()
-            mock_loader.discover_services.return_value = [test_manifest]
-            mock_loader.load_service_class.return_value = mock_service_class
-            mock_loader_class.return_value = mock_loader
+        with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery_class:
+            mock_discovery = Mock()
+            mock_discovery.discover_adapters.return_value = [test_manifest]
+            mock_discovery.load_service_class.return_value = mock_service_class
+            mock_discovery_class.return_value = mock_discovery
 
             # Test with uppercase
             await mock_service_initializer._load_adapter("TEST_ADAPTER")
@@ -751,11 +757,11 @@ class TestAdapterLoading:
         mock_service_instance = Mock()
         mock_service_class.return_value = mock_service_instance
 
-        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
-            mock_loader = Mock()
-            mock_loader.discover_services.return_value = [test_manifest]
-            mock_loader.load_service_class.return_value = mock_service_class
-            mock_loader_class.return_value = mock_loader
+        with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery_class:
+            mock_discovery = Mock()
+            mock_discovery.discover_adapters.return_value = [test_manifest]
+            mock_discovery.load_service_class.return_value = mock_service_class
+            mock_discovery_class.return_value = mock_discovery
 
             # Should match "test" even though manifest is "test_adapter"
             await mock_service_initializer._load_adapter("test")
@@ -766,11 +772,11 @@ class TestAdapterLoading:
     @pytest.mark.asyncio
     async def test_load_adapter_load_failure(self, mock_service_initializer, test_manifest):
         """Test handling when service class fails to load."""
-        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
-            mock_loader = Mock()
-            mock_loader.discover_services.return_value = [test_manifest]
-            mock_loader.load_service_class.return_value = None  # Load failure
-            mock_loader_class.return_value = mock_loader
+        with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery_class:
+            mock_discovery = Mock()
+            mock_discovery.discover_adapters.return_value = [test_manifest]
+            mock_discovery.load_service_class.return_value = None  # Load failure
+            mock_discovery_class.return_value = mock_discovery
 
             # Should not raise, just log error
             await mock_service_initializer._load_adapter("test_adapter")
@@ -783,11 +789,11 @@ class TestAdapterLoading:
         """Test handling when service instantiation fails."""
         mock_service_class = Mock(side_effect=Exception("Instantiation failed"))
 
-        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
-            mock_loader = Mock()
-            mock_loader.discover_services.return_value = [test_manifest]
-            mock_loader.load_service_class.return_value = mock_service_class
-            mock_loader_class.return_value = mock_loader
+        with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery_class:
+            mock_discovery = Mock()
+            mock_discovery.discover_adapters.return_value = [test_manifest]
+            mock_discovery.load_service_class.return_value = mock_service_class
+            mock_discovery_class.return_value = mock_discovery
 
             # Should raise the exception
             with pytest.raises(Exception, match="Instantiation failed"):
@@ -800,11 +806,12 @@ class TestAdapterLoading:
         mock_service_instance = Mock()
         mock_service_class.return_value = mock_service_instance
 
-        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
-            mock_loader = Mock()
-            mock_loader.discover_services.return_value = [test_manifest]
-            mock_loader.load_service_class.return_value = mock_service_class
-            mock_loader_class.return_value = mock_loader
+        # Note: modular: prefix routes through _load_adapter which uses AdapterDiscoveryService
+        with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery_class:
+            mock_discovery = Mock()
+            mock_discovery.discover_adapters.return_value = [test_manifest]
+            mock_discovery.load_service_class.return_value = mock_service_class
+            mock_discovery_class.return_value = mock_discovery
 
             # Call load_modules with modular prefix
             await mock_service_initializer.load_modules(["modular:test_adapter"])
@@ -851,11 +858,12 @@ class TestAdapterLoading:
         mock_service_instance = Mock()
         mock_service_class.return_value = mock_service_instance
 
-        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
-            mock_loader = Mock()
-            mock_loader.discover_services.return_value = [mock_manifest]
-            mock_loader.load_service_class.return_value = mock_service_class
-            mock_loader_class.return_value = mock_loader
+        # Note: modular: prefix routes through _load_adapter which uses AdapterDiscoveryService
+        with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery_class:
+            mock_discovery = Mock()
+            mock_discovery.discover_adapters.return_value = [mock_manifest]
+            mock_discovery.load_service_class.return_value = mock_service_class
+            mock_discovery_class.return_value = mock_discovery
 
             # load_modules DOES load mock services (no filtering at this level)
             await mock_service_initializer.load_modules(["modular:mock_service"], disable_core_on_mock=True)
@@ -882,11 +890,11 @@ class TestAdapterLoading:
 
         mock_service_class = Mock(side_effect=mock_service_constructor)
 
-        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
-            mock_loader = Mock()
-            mock_loader.discover_services.return_value = [test_manifest]
-            mock_loader.load_service_class.return_value = mock_service_class
-            mock_loader_class.return_value = mock_loader
+        with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery_class:
+            mock_discovery = Mock()
+            mock_discovery.discover_adapters.return_value = [test_manifest]
+            mock_discovery.load_service_class.return_value = mock_service_class
+            mock_discovery_class.return_value = mock_discovery
 
             # Add required dependencies to initializer
             mock_service_initializer.memory_service = Mock()
@@ -923,11 +931,11 @@ class TestAdapterLoading:
 
         mock_service_class = Mock(side_effect=mock_service_constructor)
 
-        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
-            mock_loader = Mock()
-            mock_loader.discover_services.return_value = [test_manifest]
-            mock_loader.load_service_class.return_value = mock_service_class
-            mock_loader_class.return_value = mock_loader
+        with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery_class:
+            mock_discovery = Mock()
+            mock_discovery.discover_adapters.return_value = [test_manifest]
+            mock_discovery.load_service_class.return_value = mock_service_class
+            mock_discovery_class.return_value = mock_discovery
 
             # Add required dependencies to initializer
             mock_service_initializer.memory_service = Mock()
@@ -971,11 +979,11 @@ class TestAdapterLoading:
 
         mock_service_class = Mock(side_effect=mock_service_constructor)
 
-        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
-            mock_loader = Mock()
-            mock_loader.discover_services.return_value = [test_manifest]
-            mock_loader.load_service_class.return_value = mock_service_class
-            mock_loader_class.return_value = mock_loader
+        with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery_class:
+            mock_discovery = Mock()
+            mock_discovery.discover_adapters.return_value = [test_manifest]
+            mock_discovery.load_service_class.return_value = mock_service_class
+            mock_discovery_class.return_value = mock_discovery
 
             # Set some dependencies to None
             mock_service_initializer.memory_service = None

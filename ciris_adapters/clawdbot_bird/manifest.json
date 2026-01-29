@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_bird",
+    "version": "1.0.0",
+    "description": "X/Twitter CLI for reading, searching, posting, and engagement via cookies.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://bird.fast"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_bird.service.BirdToolService",
+      "capabilities": [
+        "tool:bird",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:bird",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_bird.service.BirdToolService"
+  },
+  "configuration": {}
+}

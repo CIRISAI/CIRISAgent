@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_blucli",
+    "version": "1.0.0",
+    "description": "BluOS CLI (blu) for discovery, playback, grouping, and volume.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://blucli.sh"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_blucli.service.BlucliToolService",
+      "capabilities": [
+        "tool:blucli",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:blucli",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_blucli.service.BlucliToolService"
+  },
+  "configuration": {}
+}

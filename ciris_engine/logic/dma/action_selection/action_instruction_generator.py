@@ -310,32 +310,34 @@ class ActionInstructionGenerator:
             all_tools[tool_key] = enhanced_info
 
     def _format_tools_for_prompt(self, all_tools: JSONDict) -> str:
-        """Format cached tools into prompt text."""
+        """Format cached tools into concise prompt text.
+
+        ASPDMA gets concise tool summaries - full documentation is provided
+        by TSASPDMA when a TOOL action is selected. This keeps the ASPDMA
+        prompt focused on action selection, not tool details.
+        """
         if not all_tools:
             return "\n\n⚠️ No tools registered. TOOL action is not available."
 
         tools_info = []
-        tools_info.append("\nAvailable tools and their parameters:")
+        tools_info.append("\nAvailable tools (full documentation provided if TOOL selected):")
 
         for tool_key, tool_info_raw in all_tools.items():
             tool_info = get_dict({"info": tool_info_raw}, "info", {})
             tool_name = get_str(tool_info, "name", "")
-            tool_desc_str = get_str(tool_info, "description", "")
             tool_service = get_str(tool_info, "service", "")
 
-            tool_desc = f"  - {tool_name}: {tool_desc_str}"
-            if tool_service != tool_name:
-                tool_desc += f" (from {tool_service})"
-            tools_info.append(tool_desc)
+            # Use when_to_use for concise guidance, fall back to truncated description
+            when_to_use = get_str(tool_info, "when_to_use", "")
+            if not when_to_use:
+                desc = get_str(tool_info, "description", "")
+                when_to_use = desc[:80] + "..." if len(desc) > 80 else desc
 
-            if "parameters" in tool_info:
-                params = get_dict(tool_info, "parameters", {})
-                param_text = f"    parameters: {json.dumps(params, indent=6)}"
-                tools_info.append(param_text)
-
-            if "when_to_use" in tool_info:
-                when_to_use = get_str(tool_info, "when_to_use", "")
-                tools_info.append(f"    Use when: {when_to_use}")
+            # Format: tool_name: concise guidance (from service)
+            tool_line = f"  - {tool_name}: {when_to_use}"
+            if tool_service and tool_service != tool_name:
+                tool_line += f" (from {tool_service})"
+            tools_info.append(tool_line)
 
         return "\n".join(tools_info)
 

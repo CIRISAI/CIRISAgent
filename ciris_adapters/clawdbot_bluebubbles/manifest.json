@@ -1,0 +1,34 @@
+{
+  "module": {
+    "name": "clawdbot_bluebubbles",
+    "version": "1.0.0",
+    "description": "Build or update the BlueBubbles external channel plugin for Moltbot (extension package, REST send/probe, webhook inbound).",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": null
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_bluebubbles.service.BluebubblesToolService",
+      "capabilities": [
+        "tool:bluebubbles"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:bluebubbles"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_bluebubbles.service.BluebubblesToolService"
+  },
+  "configuration": {}
+}

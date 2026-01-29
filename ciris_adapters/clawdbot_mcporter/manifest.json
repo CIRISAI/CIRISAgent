@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_mcporter",
+    "version": "1.0.0",
+    "description": "Use the mcporter CLI to list, configure, auth, and call MCP servers/tools directly (HTTP or stdio), including ad-hoc servers, config edits, and CLI/type generation.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "http://mcporter.dev"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_mcporter.service.McporterToolService",
+      "capabilities": [
+        "tool:mcporter",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:mcporter",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_mcporter.service.McporterToolService"
+  },
+  "configuration": {}
+}

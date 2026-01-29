@@ -15,7 +15,16 @@ from uuid import uuid4
 
 import aiohttp
 
-from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
+from ciris_engine.schemas.adapters.tools import (
+    ToolDMAGuidance,
+    ToolDocumentation,
+    ToolExecutionResult,
+    ToolExecutionStatus,
+    ToolGotcha,
+    ToolInfo,
+    ToolParameterSchema,
+    UsageExample,
+)
 from ciris_engine.schemas.services.core import ServiceCapabilities
 
 logger = logging.getLogger(__name__)
@@ -71,6 +80,58 @@ class NavigationToolService:
                 category="navigation",
                 cost=0.0,
                 when_to_use="When you need to find the coordinates of a location by name or address",
+                documentation=ToolDocumentation(
+                    quick_start="Pass an address or place name to get latitude/longitude coordinates. "
+                    "Use these coordinates with weather tools or for route planning.",
+                    detailed_instructions="""
+## Location Format
+
+Accepts various formats:
+- Full address: "123 Main St, San Francisco, CA 94105"
+- Place name: "Eiffel Tower"
+- City name: "Tokyo, Japan"
+- Landmark: "Central Park, New York"
+
+## Response Fields
+
+- latitude/longitude: Coordinates in decimal degrees
+- display_name: Full formatted address
+- type: Location type (city, building, etc.)
+- importance: Relevance score (0-1)
+
+## Rate Limiting
+
+This tool uses OpenStreetMap Nominatim which has a 1 request/second limit.
+Multiple rapid requests will be automatically throttled.
+""",
+                    examples=[
+                        UsageExample(
+                            title="Address lookup",
+                            code='{"location": "1600 Pennsylvania Avenue, Washington DC"}',
+                        ),
+                        UsageExample(
+                            title="Landmark lookup",
+                            code='{"location": "Golden Gate Bridge, San Francisco"}',
+                        ),
+                    ],
+                    gotchas=[
+                        ToolGotcha(
+                            title="Rate limited",
+                            description="OpenStreetMap allows max 1 request per second. "
+                            "Sequential geocoding requests will be delayed automatically.",
+                            severity="info",
+                        ),
+                        ToolGotcha(
+                            title="Ambiguous locations",
+                            description="Common place names may return unexpected results. "
+                            "Be specific (include city/country) for accurate results.",
+                            severity="warning",
+                        ),
+                    ],
+                ),
+                dma_guidance=ToolDMAGuidance(
+                    followup_actions=["weather:current if user wants weather at this location"],
+                ),
             ),
             "navigation:reverse_geocode": ToolInfo(
                 name="navigation:reverse_geocode",

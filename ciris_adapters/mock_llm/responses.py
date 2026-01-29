@@ -4,8 +4,10 @@ import re
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional
 
+from ciris_engine.logic.dma.tsaspdma import TSASPDMALLMResult
 from ciris_engine.schemas.dma.results import (
     ActionSelectionDMAResult,
+    ASPDMALLMResult,
     CSDMAResult,
     DSDMAResult,
     EthicalDMAResult,
@@ -550,7 +552,7 @@ def idma(context: Optional[List[str]] = None) -> IDMAResult:
 
 from typing import List, Optional
 
-from .responses_action_selection import action_selection
+from .responses_action_selection import action_selection, aspdma_llm_result, tsaspdma_llm_result
 from .responses_epistemic import coherence, entropy
 from .responses_feedback import epistemic_humility, optimization_veto
 
@@ -563,6 +565,8 @@ _RESPONSE_MAP: Dict[Any, Callable[..., Any]] = {
     OptimizationVetoResult: optimization_veto,
     EpistemicHumilityResult: epistemic_humility,
     ActionSelectionDMAResult: action_selection,
+    ASPDMALLMResult: aspdma_llm_result,  # Gemini-compatible flat schema
+    TSASPDMALLMResult: tsaspdma_llm_result,  # Gemini-compatible TSASPDMA schema
     EntropyCheckResult: entropy,
     CoherenceCheckResult: coherence,
 }

@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_blogwatcher",
+    "version": "1.0.0",
+    "description": "Monitor blogs and RSS/Atom feeds for updates using the blogwatcher CLI.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://github.com/Hyaxia/blogwatcher"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_blogwatcher.service.BlogwatcherToolService",
+      "capabilities": [
+        "tool:blogwatcher",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:blogwatcher",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_blogwatcher.service.BlogwatcherToolService"
+  },
+  "configuration": {}
+}

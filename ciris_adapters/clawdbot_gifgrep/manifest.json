@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_gifgrep",
+    "version": "1.0.0",
+    "description": "Search GIF providers with CLI/TUI, download results, and extract stills/sheets.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://gifgrep.com"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_gifgrep.service.GifgrepToolService",
+      "capabilities": [
+        "tool:gifgrep",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:gifgrep",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_gifgrep.service.GifgrepToolService"
+  },
+  "configuration": {}
+}

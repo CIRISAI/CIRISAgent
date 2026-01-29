@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_eightctl",
+    "version": "1.0.0",
+    "description": "Control Eight Sleep pods (status, temperature, alarms, schedules).",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://eightctl.sh"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_eightctl.service.EightctlToolService",
+      "capabilities": [
+        "tool:eightctl",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:eightctl",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_eightctl.service.EightctlToolService"
+  },
+  "configuration": {}
+}

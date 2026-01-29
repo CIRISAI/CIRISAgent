@@ -29,6 +29,7 @@ class ActionSelectionContextBuilder:
         self._instruction_generator: Optional[Any] = None
         self._tools_cached: bool = False
         self._cached_task: Optional[Task] = None
+        self._cached_installable_tools: Optional[str] = None
 
     async def pre_cache_context(self, thought: Thought) -> int:
         """Pre-cache tools and task context before building prompt.
@@ -50,7 +51,73 @@ class ActionSelectionContextBuilder:
         # Pre-cache the original task for this thought (sync operation)
         self._cache_original_task(thought)
 
+        # Pre-cache installable tools (async)
+        await self._cache_installable_tools()
+
         return tool_count
+
+    async def _cache_installable_tools(self) -> None:
+        """Pre-cache the installable tools string asynchronously."""
+        try:
+            from ciris_engine.logic.services.tool.discovery_service import AdapterDiscoveryService
+
+            discovery = AdapterDiscoveryService()
+            report = await discovery.get_discovery_report()
+
+            if not report.ineligible:
+                self._cached_installable_tools = ""
+                return
+
+            # Filter to only installable adapters (those with install hints)
+            installable = [a for a in report.ineligible if a.can_install and a.install_hints]
+
+            if not installable:
+                self._cached_installable_tools = ""
+                return
+
+            lines = [
+                "\n\n## Tools Available for Installation",
+                "The following tools are NOT currently available but CAN be installed.",
+                "If you need one of these tools, use SPEAK to ask the user to install it.",
+                "",
+            ]
+
+            for adapter in installable[:10]:  # Limit to 10 to avoid prompt bloat
+                # Get tool names from the adapter
+                tool_names = [t.name for t in adapter.tools] if adapter.tools else [adapter.name]
+                tools_str = ", ".join(tool_names[:3])  # Show up to 3 tool names
+                if len(tool_names) > 3:
+                    tools_str += f" (+{len(tool_names) - 3} more)"
+
+                # Get missing dependencies
+                missing = []
+                if adapter.missing_binaries:
+                    missing.append(f"binaries: {', '.join(adapter.missing_binaries[:3])}")
+                if adapter.missing_env_vars:
+                    missing.append(f"env vars: {', '.join(adapter.missing_env_vars[:2])}")
+                missing_str = "; ".join(missing) if missing else "dependencies"
+
+                # Get install method hints
+                install_methods = list({h.kind for h in adapter.install_hints[:3]})
+                methods_str = ", ".join(install_methods)
+
+                lines.append(f"- **{adapter.name}** (tools: {tools_str})")
+                lines.append(f"  Missing: {missing_str}")
+                lines.append(f"  Install via: {methods_str}")
+
+            lines.append("")
+            lines.append(
+                "💡 If the user's request would benefit from one of these tools, "
+                'use SPEAK to tell them: "I could help better with [tool] but it needs to be installed. '
+                'Would you like me to guide you through installing it?"'
+            )
+
+            self._cached_installable_tools = "\n".join(lines)
+            logger.info(f"[CONTEXT] Pre-cached {len(installable)} installable tools")
+
+        except Exception as e:
+            logger.debug(f"[CONTEXT] Could not cache installable tools: {e}")
+            self._cached_installable_tools = ""
 
     async def pre_cache_tools(self) -> int:
         """Legacy method - prefer pre_cache_context() which also caches task."""
@@ -113,6 +180,7 @@ class ActionSelectionContextBuilder:
         _action_options_str = ", ".join([a.value for a in permitted_actions])
 
         _available_tools_str = self._get_available_tools_str(permitted_actions)
+        _installable_tools_str = self._get_installable_tools_str()
 
         # Build DMA summaries
         _ethical_summary = self._build_ethical_summary(ethical_pdma_result)
@@ -165,6 +233,7 @@ Your task is to determine the single most appropriate HANDLER ACTION based on th
 You MUST execute the Principled Decision-Making Algorithm (PDMA) to choose this HANDLER ACTION and structure your response as a JSON object matching the provided schema.
 All fields specified in the schema for your response are MANDATORY unless explicitly marked as optional.
 Permitted Handler Actions: {action_options_str}{available_tools_str}
+{installable_tools_str}
 {startup_guidance}
 {conscience_guidance}
 {reject_thought_guidance}
@@ -209,6 +278,7 @@ Adhere strictly to the schema for your JSON output.
         formatted_content = main_user_content.format(
             action_options_str=_action_options_str,
             available_tools_str=_available_tools_str,
+            installable_tools_str=_installable_tools_str,
             startup_guidance=_startup_guidance,
             conscience_guidance=_conscience_guidance,
             reject_thought_guidance=_reject_thought_guidance,
@@ -261,28 +331,61 @@ Adhere strictly to the schema for your JSON output.
         # Return the permitted actions - they MUST be HandlerActionType enums
         return list(permitted_actions)
 
+    def _get_tool_summary(self, tool_key: str, tool_info: Any) -> Optional[str]:
+        """Extract a concise summary for a single tool."""
+        if not isinstance(tool_info, dict):
+            return None
+
+        tool_name = tool_info.get("name", tool_key)
+        when_to_use = tool_info.get("when_to_use", "")
+
+        if not when_to_use:
+            desc = tool_info.get("description", "")
+            when_to_use = f"{desc[:100]}..." if len(desc) > 100 else desc
+
+        return f"- **{tool_name}**: {when_to_use}" if when_to_use else None
+
+    def _get_cached_tools(self) -> Optional[Dict[str, Any]]:
+        """Get cached tools from instruction generator if available."""
+        if self._instruction_generator is None:
+            return None
+        if not hasattr(self._instruction_generator, "_cached_tools"):
+            return None
+        return getattr(self._instruction_generator, "_cached_tools", None)
+
     def _get_available_tools_str(self, permitted_actions: List[HandlerActionType]) -> str:
-        """Get available tools string if TOOL action is permitted."""
-        available_tools_str = ""
-        if HandlerActionType.TOOL in permitted_actions:
-            try:
-                # Get tools from service registry if available
-                if self.service_registry:
-                    from ciris_engine.schemas.runtime.enums import ServiceType
+        """Get concise tool summaries if TOOL action is permitted.
 
-                    tool_services = self.service_registry.get_services_by_type(ServiceType.TOOL)
-                    _all_tools: List[str] = []
-                    for service in tool_services:
-                        if hasattr(service, "get_available_tools"):
-                            # This is an async method, so we need to handle it properly
-                            # For now, we'll skip the async call since we're in a sync context
-                            # The dynamic instruction generator will handle this better
-                            pass
-                    # Fall back to empty string if we can't get tools synchronously
-            except Exception:
-                pass
+        Returns quick guidance on WHEN to use each tool (not full parameters).
+        Full parameter schemas are provided separately in action_parameter_schemas.
+        """
+        if HandlerActionType.TOOL not in permitted_actions:
+            return ""
 
-        return available_tools_str
+        cached_tools = self._get_cached_tools()
+        if not cached_tools:
+            logger.debug("[CONTEXT] No cached tools available for tool summaries")
+            return ""
+
+        # Build concise summaries using when_to_use (not full parameters)
+        summaries = ["\n\n## Quick Tool Guide (when to use each tool):"]
+        for tool_key, tool_info in cached_tools.items():
+            summary = self._get_tool_summary(tool_key, tool_info)
+            if summary:
+                summaries.append(summary)
+
+        return "\n".join(summaries) if len(summaries) > 1 else ""
+
+    def _get_installable_tools_str(self) -> str:
+        """Get list of tools that are available for installation but not currently usable.
+
+        Returns the pre-cached installable tools string. Must call pre_cache_context() first.
+        """
+        if self._cached_installable_tools is not None:
+            return self._cached_installable_tools
+
+        logger.debug("[CONTEXT] Installable tools not cached - call pre_cache_context() first")
+        return ""
 
     def _build_ethical_summary(self, ethical_pdma_result: EthicalDMAResult) -> str:
         """Build ethical DMA summary."""

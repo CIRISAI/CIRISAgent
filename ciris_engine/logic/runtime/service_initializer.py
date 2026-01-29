@@ -895,6 +895,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         _log_service_started(17, "RuntimeControl")
 
+        # Auto-load eligible skill adapters (if enabled)
+        await self._initialize_skill_adapters()
+
         # Mark end of startup process
         import time
 
@@ -930,22 +933,48 @@ This directory contains critical cryptographic keys for the CIRIS system.
         if not hasattr(config, "services"):
             raise ValueError("Configuration missing LLM service settings")
 
-        # Get API key
-        api_key = os.environ.get("OPENAI_API_KEY", "")
+        # Detect provider and get appropriate API key
+        from ciris_engine.logic.services.runtime.llm_service import (
+            LLMProvider,
+            OpenAIConfig,
+            _detect_provider_from_env,
+            _get_api_key_for_provider,
+        )
+
+        provider = _detect_provider_from_env()
+        api_key = _get_api_key_for_provider(provider)
+
+        # Fall back to OPENAI_API_KEY for backward compatibility
         if not api_key:
-            logger.warning("No OPENAI_API_KEY found - LLM service will not be initialized")
+            api_key = os.environ.get("OPENAI_API_KEY", "")
+
+        if not api_key:
+            logger.warning(f"No API key found for {provider.value} - LLM service will not be initialized")
             return
 
         # Initialize real LLM service
-        logger.info("Initializing real LLM service")
-        from ciris_engine.logic.services.runtime.llm_service import OpenAIConfig
+        logger.info(f"Initializing LLM service with provider={provider.value}")
 
         # Get config values using helper to reduce complexity
-        base_url = os.environ.get("OPENAI_API_BASE") or self._get_llm_service_config_value(
-            config, "llm_endpoint", "http://localhost:11434/v1"
-        )
-        model_name = os.environ.get("OPENAI_MODEL") or self._get_llm_service_config_value(
-            config, "llm_model", "gpt-4o-mini"
+        # Base URL only applies to OpenAI-compatible providers
+        base_url = None
+        if provider in (LLMProvider.OPENAI, LLMProvider.OPENAI_COMPATIBLE):
+            base_url = os.environ.get("OPENAI_API_BASE") or self._get_llm_service_config_value(
+                config, "llm_endpoint", None
+            )
+
+        # Get model name - provider-specific defaults
+        default_models = {
+            LLMProvider.OPENAI: "gpt-4o-mini",
+            LLMProvider.OPENAI_COMPATIBLE: "gpt-4o-mini",
+            LLMProvider.ANTHROPIC: "claude-sonnet-4-20250514",
+            LLMProvider.GOOGLE: "gemini-2.0-flash",
+        }
+        model_name = (
+            os.environ.get("CIRIS_LLM_MODEL_NAME")  # CIRIS_ prefix preferred
+            or os.environ.get("OPENAI_MODEL")
+            or os.environ.get("LLM_MODEL")
+            or self._get_llm_service_config_value(config, "llm_model", default_models.get(provider, "gpt-4o-mini"))
         )
 
         # LLM timeout - reduced default to 20s to allow failover within DMA timeout budget
@@ -955,14 +984,24 @@ This directory contains critical cryptographic keys for the CIRIS system.
             config, "llm_timeout", 20
         )
 
+        # Provider-specific instructor mode defaults
+        default_instructor_modes = {
+            LLMProvider.OPENAI: "JSON",
+            LLMProvider.OPENAI_COMPATIBLE: "JSON",
+            LLMProvider.ANTHROPIC: "ANTHROPIC_TOOLS",
+            LLMProvider.GOOGLE: "GENAI_TOOLS",
+        }
+        instructor_mode = os.environ.get("INSTRUCTOR_MODE") or default_instructor_modes.get(provider, "JSON")
+
         llm_config = OpenAIConfig(
             base_url=base_url,
             model_name=model_name,
             api_key=api_key,
-            instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),
+            instructor_mode=instructor_mode,
             timeout_seconds=llm_timeout,
             # Reduced from 3 to 2 to fit within DMA timeout budget
             max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 2),
+            provider=provider,
         )
 
         # Create and start service
@@ -978,7 +1017,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 provider=openai_service,
                 priority=Priority.HIGH,
                 capabilities=[LLMCapabilities.CALL_LLM_STRUCTURED],
-                metadata={"provider": "openai", "model": llm_config.model_name},
+                metadata={"provider": provider.value, "model": llm_config.model_name},
             )
 
         # Store reference
@@ -1222,6 +1261,101 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         _log_service_started(10, "IncidentManagement")
 
+    async def _initialize_skill_adapters(self) -> None:
+        """Auto-load eligible skill adapters based on config.
+
+        Discovers adapters from configured paths, checks eligibility
+        (binary presence, env vars, etc.), and registers eligible ones
+        with the tool bus.
+        """
+        # Check if auto-discovery is enabled
+        adapters_config = self.essential_config.adapters
+        if not adapters_config.auto_discovery:
+            logger.info("[SKILL-ADAPTERS] Auto-discovery disabled by config")
+            return
+
+        logger.info("[SKILL-ADAPTERS] Starting auto-discovery...")
+
+        from ciris_engine.logic.config.env_utils import get_env_var
+        from ciris_engine.logic.services.tool import AdapterDiscoveryService
+        from ciris_engine.logic.services.tool.eligibility_checker import ToolEligibilityChecker
+
+        # Create eligibility checker with config service for config_keys validation
+        # This enables checking environment variables for config requirements
+        eligibility_checker = ToolEligibilityChecker(config_service=self.config_service)
+
+        # Build service dependencies for adapter instantiation
+        service_deps = {
+            "bus_manager": self.bus_manager,
+            "memory_service": self.memory_service,
+            "time_service": self.time_service,
+            "filter_service": self.adaptive_filter_service,
+            "secrets_service": self.secrets_service,
+            "agent_id": self._get_runtime_agent_id(),
+            "agent_occurrence_id": self.essential_config.agent_occurrence_id,
+        }
+
+        # Get explicitly enabled adapters from CIRIS_ADAPTER env var
+        # These should NOT be skipped even if in the default disabled list
+        env_adapter = get_env_var("CIRIS_ADAPTER")
+        explicitly_enabled = set(a.strip() for a in env_adapter.split(",")) if env_adapter else set()
+
+        # Compute effective disabled list by removing explicitly enabled adapters
+        # This allows users to override the default disabled list via CIRIS_ADAPTER
+        effective_disabled = [a for a in adapters_config.disabled_adapters if a not in explicitly_enabled]
+
+        if explicitly_enabled:
+            overridden = set(adapters_config.disabled_adapters) & explicitly_enabled
+            if overridden:
+                logger.info(f"[SKILL-ADAPTERS] Explicitly enabled adapters override disabled: {overridden}")
+
+        # Create discovery service and load eligible adapters
+        discovery = AdapterDiscoveryService(eligibility_checker=eligibility_checker)
+        eligible = await discovery.load_eligible_adapters(
+            disabled_adapters=effective_disabled,
+            service_dependencies=service_deps,
+        )
+
+        # Register eligible adapters with tool bus
+        if not eligible:
+            logger.info("[SKILL-ADAPTERS] No eligible adapters found")
+            return
+
+        for adapter_name, service in eligible.items():
+            try:
+                # Start the service if it has a start method
+                if hasattr(service, "start"):
+                    start_result = service.start()
+                    if hasattr(start_result, "__await__"):
+                        await start_result
+
+                if self.service_registry is not None:
+                    # Register with tool bus if it provides tools
+                    if hasattr(service, "get_all_tool_info"):
+                        self.service_registry.register_service(
+                            service_type=ServiceType.TOOL,
+                            provider=service,
+                            priority=Priority.NORMAL,
+                            capabilities=["execute_tool", "get_all_tool_info"],
+                            metadata={"adapter": adapter_name, "auto_loaded": True},
+                        )
+                        logger.info(f"[SKILL-ADAPTERS] Registered tool adapter: {adapter_name}")
+                    # Register WISE_AUTHORITY services (e.g., covenant_metrics)
+                    elif hasattr(service, "send_deferral") or hasattr(service, "handle_deferral"):
+                        self.service_registry.register_service(
+                            service_type=ServiceType.WISE_AUTHORITY,
+                            provider=service,
+                            priority=Priority.NORMAL,
+                            capabilities=["send_deferral", "covenant_metrics"],
+                            metadata={"adapter": adapter_name, "auto_loaded": True},
+                        )
+                        logger.info(f"[SKILL-ADAPTERS] Registered wisdom adapter: {adapter_name}")
+
+            except Exception as e:
+                logger.warning(f"[SKILL-ADAPTERS] Failed to register {adapter_name}: {e}")
+
+        logger.info(f"[SKILL-ADAPTERS] Auto-loaded {len(eligible)} eligible adapters")
+
     def verify_core_services(self) -> bool:
         """Verify all core services are operational."""
         try:
@@ -1394,13 +1528,17 @@ This directory contains critical cryptographic keys for the CIRIS system.
         Args:
             service_name: Name of the adapter to load (e.g. "reddit_adapter")
         """
-        from ciris_engine.logic.runtime.adapter_loader import AdapterLoader
+        from ciris_engine.logic.services.tool import AdapterDiscoveryService
+        from ciris_engine.logic.services.tool.eligibility_checker import ToolEligibilityChecker
 
         logger.info(f"Loading adapter: {service_name}")
 
-        # Discover and find the service
-        adapter_loader = AdapterLoader()
-        discovered_services = adapter_loader.discover_services()
+        # Create eligibility checker with config service
+        eligibility_checker = ToolEligibilityChecker(config_service=self.config_service)
+
+        # Use discovery service to scan all adapter paths (built-in, user, workspace)
+        discovery_service = AdapterDiscoveryService(eligibility_checker=eligibility_checker)
+        discovered_services = discovery_service.discover_adapters()
 
         manifest = self._find_service_manifest(service_name, discovered_services)
         if not manifest:
@@ -1412,7 +1550,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         for service_def in manifest.services:
             try:
                 # Load the specific service class for this service definition
-                service_class = adapter_loader.load_service_class(manifest, service_def.class_path)
+                service_class = discovery_service.load_service_class(manifest, service_def.class_path)
                 if not service_class:
                     logger.error(f"Failed to load service class for {manifest.module.name}")
                     continue

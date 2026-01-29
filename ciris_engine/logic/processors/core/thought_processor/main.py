@@ -17,7 +17,8 @@ from ciris_engine.logic.utils.channel_utils import create_channel_context
 from ciris_engine.logic.utils.jsondict_helpers import get_bool, get_dict
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.actions.parameters import DeferParams, PonderParams
+from ciris_engine.schemas.actions.parameters import DeferParams, PonderParams, ToolParams
+from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import EpistemicData
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
@@ -240,6 +241,13 @@ class ThoughtProcessor(
 
         self._log_action_selection_result(action_result, thought)
 
+        # Phase 4.5: TSASPDMA - Tool-specific evaluation (if TOOL action selected)
+        # TSASPDMA provides full tool documentation and can:
+        # - Confirm TOOL action (possibly with refined parameters)
+        # - Switch to SPEAK for user clarification
+        # - Switch to PONDER to reconsider approach
+        action_result = await self._maybe_run_tsaspdma(thought_item, action_result)
+
         # Phase 5: CONSCIENCE_EXECUTION - Apply ethical safety validation
         conscience_result = await self._conscience_execution_step(
             thought_item, action_result, thought, dma_results, thought_context
@@ -267,6 +275,195 @@ class ThoughtProcessor(
                 )
         else:
             logger.error(f"ThoughtProcessor: No action result for thought {thought.thought_id}")
+
+    async def _maybe_run_tsaspdma(
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: ActionSelectionDMAResult,
+    ) -> ActionSelectionDMAResult:
+        """Run TSASPDMA if action is TOOL and tool has documentation.
+
+        TSASPDMA (Tool-Specific Action Selection PDMA) provides the agent with
+        full tool documentation and allows it to:
+        - Proceed with TOOL (optionally with refined parameters)
+        - Switch to SPEAK for user clarification
+        - Switch to PONDER to reconsider the approach
+
+        Returns:
+            The action result (possibly modified by TSASPDMA)
+        """
+        logger.info(
+            f"TSASPDMA-CHECK: Evaluating thought {thought_item.thought_id}, action={action_result.selected_action}"
+        )
+
+        # Only run for TOOL actions
+        if action_result.selected_action != HandlerActionType.TOOL:
+            logger.info(f"TSASPDMA-SKIP: Action is {action_result.selected_action}, not TOOL - skipping")
+            return action_result
+
+        # Extract tool name from parameters
+        tool_params = action_result.action_parameters
+        if not isinstance(tool_params, ToolParams):
+            logger.warning(
+                f"TSASPDMA-SKIP: TOOL action has invalid parameters type: {type(tool_params)} (expected ToolParams)"
+            )
+            return action_result
+
+        tool_name = tool_params.name
+        logger.info(f"TSASPDMA-CHECK: TOOL action detected for tool '{tool_name}'")
+
+        # Get tool info from tool bus
+        tool_info: Optional[ToolInfo] = None
+        try:
+            tool_bus = self.dependencies.bus_manager.tool
+            logger.info(f"TSASPDMA-CHECK: Fetching tool info for '{tool_name}' from ToolBus")
+            tool_info = await tool_bus.get_tool_info(tool_name)
+        except Exception as e:
+            logger.warning(f"TSASPDMA-SKIP: Failed to get tool info for '{tool_name}': {e}")
+            return action_result
+
+        if not tool_info:
+            # ASPDMA selected a tool that doesn't exist - this is an error, override to PONDER
+            logger.error(
+                f"TSASPDMA-ERROR: Tool '{tool_name}' selected by ASPDMA but not registered! Overriding to PONDER."
+            )
+            from ciris_engine.schemas.actions.parameters import PonderParams
+            from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.PONDER,
+                action_parameters=PonderParams(
+                    questions=[
+                        f"Tool '{tool_name}' is not available. What alternative approach should I take?",
+                        f"Context: ASPDMA selected tool '{tool_name}' but it is not registered in the system.",
+                    ],
+                ),
+                rationale=f"TSASPDMA-OVERRIDE: Tool '{tool_name}' not found - forcing reconsideration",
+            )
+
+        logger.info(
+            f"TSASPDMA-CHECK: Got tool info for '{tool_name}', has_documentation={bool(tool_info.documentation)}"
+        )
+
+        # TSASPDMA is MANDATORY for all TOOL actions - never skip
+        logger.info(
+            f"TSASPDMA-RUN: Running tool-specific evaluation for '{tool_name}' on thought {thought_item.thought_id}"
+        )
+
+        try:
+            from ciris_engine.logic.dma.dma_executor import run_tsaspdma
+
+            evaluator = self.dma_orchestrator.tsaspdma_evaluator
+            if not evaluator:
+                logger.error(
+                    f"TSASPDMA-ERROR: No evaluator available for thought {thought_item.thought_id} - "
+                    f"TSASPDMA is MANDATORY for TOOL actions! Check DMAOrchestrator initialization."
+                )
+                # Still proceed with original action, but this is a configuration error
+                return action_result
+
+            tsaspdma_result = await run_tsaspdma(
+                evaluator=evaluator,
+                tool_name=tool_name,
+                tool_info=tool_info,
+                aspdma_rationale=action_result.rationale or "",
+                original_thought=thought_item,
+                context=None,
+                time_service=self._time_service,
+            )
+
+            logger.info(
+                f"TSASPDMA: Result for thought {thought_item.thought_id}: "
+                f"{tsaspdma_result.selected_action} (was TOOL)"
+            )
+
+            # Emit TSASPDMA_RESULT event for reasoning trace
+            await self._emit_tsaspdma_result_event(
+                thought_item=thought_item,
+                tool_name=tool_name,
+                tsaspdma_result=tsaspdma_result,
+                aspdma_rationale=action_result.rationale or "",
+            )
+
+            # TSASPDMA can return TOOL (proceed), SPEAK (clarify), or PONDER (reconsider)
+            return tsaspdma_result
+
+        except AttributeError as e:
+            # tsaspdma_evaluator not available on dma_orchestrator
+            logger.error(
+                f"TSASPDMA-ERROR: Evaluator attribute missing on dma_orchestrator: {e} - "
+                f"TSASPDMA is MANDATORY for TOOL actions!"
+            )
+            return action_result
+        except Exception as e:
+            logger.error(f"TSASPDMA: Failed for thought {thought_item.thought_id}: {e}", exc_info=True)
+            # On failure, proceed with original TOOL action
+            return action_result
+
+    async def _emit_tsaspdma_result_event(
+        self,
+        thought_item: ProcessingQueueItem,
+        tool_name: str,
+        tsaspdma_result: ActionSelectionDMAResult,
+        aspdma_rationale: str = "",
+    ) -> None:
+        """Emit TSASPDMA_RESULT reasoning event for trace capture.
+
+        TSASPDMA (Tool-Specific Action Selection PDMA) evaluates TOOL actions
+        with full documentation before execution.
+        """
+        from datetime import datetime, timezone
+        from typing import Any, Dict
+
+        from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
+        from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+
+        if not reasoning_event_stream or not reasoning_event_stream._subscribers:
+            logger.debug("TSASPDMA: No reasoning event subscribers, skipping event emission")
+            return
+
+        try:
+            timestamp = datetime.now(timezone.utc).isoformat()
+
+            # Extract final tool parameters if TOOL action
+            final_params: Dict[str, Any] = {}
+            final_tool_name: Optional[str] = None
+            if tsaspdma_result.selected_action == HandlerActionType.TOOL:
+                final_tool_name = tool_name
+                if isinstance(tsaspdma_result.action_parameters, ToolParams):
+                    final_params = tsaspdma_result.action_parameters.parameters or {}
+                elif isinstance(tsaspdma_result.action_parameters, dict):
+                    final_params = tsaspdma_result.action_parameters.get("parameters", {})
+
+            # Create TSASPDMA_RESULT event
+            from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
+
+            event = create_reasoning_event(
+                event_type=ReasoningEvent.TSASPDMA_RESULT,
+                thought_id=thought_item.thought_id,
+                task_id=thought_item.source_task_id,
+                timestamp=timestamp,
+                # TSASPDMA input - what ASPDMA selected
+                original_tool_name=tool_name,
+                original_parameters={},  # ASPDMA doesn't provide params in v1.9.3
+                aspdma_rationale=aspdma_rationale,
+                # TSASPDMA output - refined decision
+                final_action=tsaspdma_result.selected_action.value,
+                final_tool_name=final_tool_name,
+                final_parameters=final_params,
+                tsaspdma_rationale=tsaspdma_result.rationale or "",
+            )
+
+            await reasoning_event_stream.broadcast_reasoning_event(event)
+            logger.info(
+                f"TSASPDMA-EVENT: Emitted TSASPDMA_RESULT for thought {thought_item.thought_id}: "
+                f"final_action={tsaspdma_result.selected_action.value}, "
+                f"final_tool_name={final_tool_name}, "
+                f"tsaspdma_rationale={tsaspdma_result.rationale[:100] if tsaspdma_result.rationale else 'None'}..."
+            )
+
+        except Exception as e:
+            logger.warning(f"TSASPDMA: Failed to emit reasoning event: {e}")
 
     def _should_retry_with_conscience_guidance(self, conscience_result: Optional[ConscienceApplicationResult]) -> bool:
         """Check if we should retry action selection with conscience guidance."""

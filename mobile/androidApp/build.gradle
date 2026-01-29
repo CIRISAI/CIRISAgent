@@ -13,8 +13,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 43
-        versionName "2.0.0"  // KMP version
+        versionCode 46
+        versionName "1.9.3"
 
         ndk {
             abiFilters "x86_64", "arm64-v8a", "armeabi-v7a"
@@ -24,7 +24,8 @@ android {
         python {
             version "3.10"
             buildPython "/usr/bin/python3.10"
-            extractPackages "pydantic_core"
+            // Extract packages to real filesystem so they can be scanned
+            extractPackages "pydantic_core", "ciris_adapters"
 
             pip {
                 options "--find-links", "../../android/app/wheels"  // Reuse existing wheels
@@ -46,6 +47,10 @@ android {
                 install "passlib==1.7.4"
                 install "python-multipart==0.0.9"
                 install "openai==1.12.0"
+                // NOTE: anthropic and google-generativeai SDKs are NOT included on mobile
+                // because they have native Rust dependencies (jiter, tokenizers) without Android wheels.
+                // Mobile uses OpenAI-compatible mode for all providers via OpenRouter/proxy services.
+                // The native SDKs are used on desktop/server only.
                 install "instructor==1.2.6"
                 install "pypdf==5.1.0"
                 install "docx2txt==0.9"
@@ -80,9 +85,11 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.release
-            minifyEnabled true
-            shrinkResources true
-            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            // Temporarily disabled due to R8 race condition bug (NoSuchFileException: base.jar)
+            // TODO: Re-enable when AGP is updated to fix this issue
+            minifyEnabled false
+            shrinkResources false
+            // proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
 
         debug {
@@ -128,11 +135,14 @@ task syncPythonSources(type: Sync) {
     }
     into "${buildDir}/python-src"
 
-    // Exclude unnecessary files to speed up build
+    // Exclude unnecessary files to speed up build and reduce APK size
     exclude "**/__pycache__/**"
     exclude "**/*.pyc"
     exclude "**/*.pyo"
     exclude "**/.pytest_cache/**"
+    // Exclude web GUI static files (React/Next.js) - not used in mobile KMP app
+    exclude "**/gui_static/**"
+    exclude "**/android_gui_static/**"
 }
 
 // Make Python tasks depend on sync

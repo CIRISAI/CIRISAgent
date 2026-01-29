@@ -2,7 +2,7 @@
 Covenant Metrics Services - Trace capture for CIRISLens scoring.
 
 This module implements the CovenantMetricsService which:
-1. Subscribes to reasoning_event_stream for trace capture (6 components)
+1. Subscribes to reasoning_event_stream for trace capture (8 event types)
 2. Receives WBD (Wisdom-Based Deferral) events via WiseBus broadcast
 3. Batches events and sends them to CIRISLens API
 4. Signs complete traces with Ed25519 for integrity verification
@@ -16,10 +16,20 @@ Trace Detail Levels:
 Trace Components (from coherence-ratchet):
 1. Observation - What triggered processing (THOUGHT_START)
 2. Context - System snapshot and environment (SNAPSHOT_AND_CONTEXT)
-3. Rationale - DMA reasoning analysis (DMA_RESULTS + ASPDMA_RESULT)
+3. Rationale - DMA reasoning analysis (DMA_RESULTS, IDMA_RESULT, ASPDMA_RESULT, TSASPDMA_RESULT)
 4. Conscience - Ethical validation (CONSCIENCE_RESULT)
 5. Action - Final action taken (ACTION_RESULT)
 6. Outcome - Execution results and audit (ACTION_RESULT audit data)
+
+Event Types (8 total - 7 core + 1 optional):
+- THOUGHT_START: Thought begins processing
+- SNAPSHOT_AND_CONTEXT: System snapshot + gathered context
+- DMA_RESULTS: 3 DMA results (CSDMA, DSDMA, PDMA)
+- IDMA_RESULT: Identity DMA fragility check (always emitted)
+- ASPDMA_RESULT: Selected action + rationale
+- TSASPDMA_RESULT: Tool-Specific ASPDMA (optional, when TOOL selected)
+- CONSCIENCE_RESULT: Conscience evaluation + final action
+- ACTION_RESULT: Action execution outcome + audit trail
 """
 
 import asyncio
@@ -300,14 +310,18 @@ class CovenantMetricsService:
         "THOUGHT_START": "observation",
         "SNAPSHOT_AND_CONTEXT": "context",
         "DMA_RESULTS": "rationale",
+        "IDMA_RESULT": "rationale",  # Identity DMA fragility check
         "ASPDMA_RESULT": "rationale",
+        "TSASPDMA_RESULT": "rationale",  # Tool-specific ASPDMA (optional)
         "CONSCIENCE_RESULT": "conscience",
         "ACTION_RESULT": "action",  # Also contains outcome data
         # Also handle full enum names from streaming
         "ReasoningEvent.THOUGHT_START": "observation",
         "ReasoningEvent.SNAPSHOT_AND_CONTEXT": "context",
         "ReasoningEvent.DMA_RESULTS": "rationale",
+        "ReasoningEvent.IDMA_RESULT": "rationale",
         "ReasoningEvent.ASPDMA_RESULT": "rationale",
+        "ReasoningEvent.TSASPDMA_RESULT": "rationale",
         "ReasoningEvent.CONSCIENCE_RESULT": "conscience",
         "ReasoningEvent.ACTION_RESULT": "action",
     }
@@ -1133,6 +1147,25 @@ class CovenantMetricsService:
                 data["combined_analysis"] = event.get("combined_analysis")
             return data
 
+        elif event_type == "IDMA_RESULT":
+            # RATIONALE (Part 1.5): Identity DMA fragility check
+            # GENERIC: Numeric scores only - k_eff is the key metric
+            data = {
+                "k_eff": event.get("k_eff"),
+                "correlation_risk": event.get("correlation_risk"),
+                "phase": event.get("phase"),
+                "fragility_flag": event.get("fragility_flag"),
+            }
+            # DETAILED: Add identified sources and correlation factors
+            if is_detailed:
+                data["sources_identified"] = event.get("sources_identified", [])
+                data["correlation_factors"] = event.get("correlation_factors", [])
+            # FULL: Add reasoning text and prompt
+            if is_full:
+                data["reasoning"] = event.get("reasoning")
+                data["idma_prompt"] = event.get("idma_prompt")
+            return data
+
         elif event_type == "ASPDMA_RESULT":
             # RATIONALE (Part 2): Action selection
             # GENERIC: Action type and confidence only
@@ -1155,6 +1188,27 @@ class CovenantMetricsService:
                 raw_response = event.get("raw_llm_response")
                 if raw_response:
                     data["raw_llm_response"] = str(raw_response)[:1000]
+            return data
+
+        elif event_type == "TSASPDMA_RESULT":
+            # RATIONALE (Part 2.5): Tool-Specific ASPDMA (optional, when TOOL selected)
+            # GENERIC: Final action and decision
+            data = {
+                "original_tool_name": event.get("original_tool_name"),
+                "final_action": event.get("final_action"),
+                "final_tool_name": event.get("final_tool_name"),
+            }
+            # DETAILED: Add parameter comparison and gotchas
+            if is_detailed:
+                data["original_parameters"] = _serialize(event.get("original_parameters", {}))
+                data["final_parameters"] = _serialize(event.get("final_parameters", {}))
+                data["gotchas_acknowledged"] = event.get("gotchas_acknowledged", [])
+                data["tool_description"] = event.get("tool_description")
+            # FULL: Add full reasoning and prompts
+            if is_full:
+                data["aspdma_rationale"] = event.get("aspdma_rationale")
+                data["tsaspdma_rationale"] = event.get("tsaspdma_rationale")
+                data["tsaspdma_prompt"] = event.get("tsaspdma_prompt")
             return data
 
         elif event_type == "CONSCIENCE_RESULT":

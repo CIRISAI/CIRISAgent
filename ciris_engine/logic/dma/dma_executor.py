@@ -67,9 +67,11 @@ from .dsdma_base import BaseDSDMA
 from .exceptions import DMAFailure
 from .idma import IDMAEvaluator
 from .pdma import EthicalPDMAEvaluator
+from .tsaspdma import TSASPDMAEvaluator
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+    from ciris_engine.schemas.adapters.tools import ToolInfo
 
 logger = logging.getLogger(__name__)
 
@@ -674,6 +676,129 @@ async def run_action_selection_pdma(
                 response_data={
                     "success": "true",
                     "result_summary": f"Action selected: {result.selected_action if result and hasattr(result, 'selected_action') else 'none'}",
+                    "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
+                    "response_timestamp": end_time.isoformat(),
+                },
+                status=ServiceCorrelationStatus.COMPLETED,
+                metric_value=None,
+                tags=None,
+            )
+            persistence.update_correlation(update_req, time_service)
+
+        return result
+
+    except Exception as e:
+        # Update correlation with failure
+        if time_service:
+            end_time = time_service.now()
+            update_req = CorrelationUpdateRequest(
+                correlation_id=correlation.correlation_id,
+                response_data={
+                    "success": "false",
+                    "error_message": str(e),
+                    "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
+                    "response_timestamp": end_time.isoformat(),
+                },
+                status=ServiceCorrelationStatus.FAILED,
+                metric_value=None,
+                tags=None,
+            )
+            persistence.update_correlation(update_req, time_service)
+        raise
+
+
+async def run_tsaspdma(
+    evaluator: TSASPDMAEvaluator,
+    tool_name: str,
+    tool_info: "ToolInfo",
+    aspdma_rationale: str,
+    original_thought: ProcessingQueueItem,
+    context: Optional[Any] = None,
+    time_service: Optional["TimeServiceProtocol"] = None,
+) -> ActionSelectionDMAResult:
+    """Run the Tool-Specific Action Selection PDMA (TSASPDMA).
+
+    TSASPDMA is invoked AFTER ASPDMA selects a TOOL action.
+    It reasons about and infers appropriate parameters from context
+    using the tool's schema and documentation.
+
+    Can return:
+    - TOOL: Proceed with execution (parameters inferred from context)
+    - SPEAK: Ask user for clarification
+    - PONDER: Reconsider the approach
+    """
+    if not time_service:
+        raise RuntimeError("TimeService is required for DMA execution")
+    start_time = time_service.now()
+
+    # Create trace for TSASPDMA execution
+    trace_id = f"task_{original_thought.source_task_id or 'unknown'}_{original_thought.thought_id}"
+    span_id = f"tsaspdma_{original_thought.thought_id}_{tool_name}"
+    parent_span_id = f"action_selection_pdma_{original_thought.thought_id}"
+
+    trace_context = TraceContext(
+        trace_id=trace_id,
+        span_id=span_id,
+        parent_span_id=parent_span_id,
+        span_name="run_tsaspdma",
+        span_kind="internal",
+        baggage={
+            "thought_id": original_thought.thought_id,
+            "task_id": original_thought.source_task_id or "",
+            "dma_type": "tsaspdma",
+            "tool_name": tool_name,
+        },
+    )
+
+    correlation = ServiceCorrelation(
+        correlation_id=f"trace_{span_id}_{start_time.timestamp()}",
+        correlation_type=CorrelationType.TRACE_SPAN,
+        service_type="dma",
+        handler_name="TSASPDMAEvaluator",
+        action_type="evaluate_tool_action",
+        created_at=start_time,
+        updated_at=start_time,
+        timestamp=start_time,
+        trace_context=trace_context,
+        tags={
+            "thought_id": original_thought.thought_id,
+            "task_id": original_thought.source_task_id or "",
+            "component_type": "dma",
+            "dma_type": "tsaspdma",
+            "tool_name": tool_name,
+            "trace_depth": "4",  # Nested under ASPDMA
+        },
+        request_data=None,
+        response_data=None,
+        status=ServiceCorrelationStatus.PENDING,
+        metric_data=None,
+        log_data=None,
+        retention_policy="raw",
+        ttl_seconds=None,
+        parent_correlation_id=None,
+    )
+
+    # Add correlation
+    if time_service:
+        persistence.add_correlation(correlation, time_service)
+
+    try:
+        result = await evaluator.evaluate_tool_action(
+            tool_name=tool_name,
+            tool_info=tool_info,
+            aspdma_rationale=aspdma_rationale,
+            original_thought=original_thought,
+            context=context,
+        )
+
+        # Update correlation with success
+        if time_service:
+            end_time = time_service.now()
+            update_req = CorrelationUpdateRequest(
+                correlation_id=correlation.correlation_id,
+                response_data={
+                    "success": "true",
+                    "result_summary": f"TSASPDMA completed: action={result.selected_action}",
                     "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
                     "response_timestamp": end_time.isoformat(),
                 },

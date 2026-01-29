@@ -1076,65 +1076,80 @@ async def _broadcast_step_result(step: StepPoint, step_data: StepDataUnion) -> N
     pass
 
 
-async def _broadcast_reasoning_event(
-    step: StepPoint, step_data: StepDataUnion, is_recursive: bool = False, thought_item: Any = None
+async def _broadcast_dma_and_idma_events(
+    step_data: StepDataUnion,
+    timestamp: str,
+    create_reasoning_event: Any,
+    reasoning_event_stream: Any,
 ) -> None:
+    """Handle broadcasting DMA_RESULTS and IDMA_RESULT events for PERFORM_ASPDMA step."""
+    dma_results_for_event = getattr(step_data, "dma_results_obj", None)
+    if not dma_results_for_event:
+        logger.warning(f"No dma_results_obj found in step_data for PERFORM_ASPDMA step {step_data.thought_id}")
+        return
+
+    # Broadcast DMA_RESULTS event
+    event = _create_dma_results_event(step_data, timestamp, dma_results_for_event, create_reasoning_event)
+    if event:
+        await reasoning_event_stream.broadcast_reasoning_event(event)
+        logger.debug(f"Broadcast {event.event_type} to {len(reasoning_event_stream._subscribers)} subscribers")
+
+    # Broadcast IDMA_RESULT event (v1.9.3)
+    idma_event = _create_idma_result_event(step_data, timestamp, dma_results_for_event, create_reasoning_event)
+    if idma_event:
+        await reasoning_event_stream.broadcast_reasoning_event(idma_event)
+        logger.debug(f"Broadcast {idma_event.event_type} to {len(reasoning_event_stream._subscribers)} subscribers")
+
+
+def _create_event_for_step(
+    step: StepPoint,
+    step_data: StepDataUnion,
+    timestamp: str,
+    create_reasoning_event: Any,
+    thought_item: Any,
+) -> Any:
+    """Create reasoning event based on step type. Returns None for steps handled separately."""
+    if step == StepPoint.START_ROUND:
+        return _create_thought_start_event(step_data, timestamp, create_reasoning_event, thought_item)
+    if step == StepPoint.PERFORM_DMAS:
+        logger.debug("[BROADCAST DEBUG] Creating SNAPSHOT_AND_CONTEXT event")
+        return _create_snapshot_and_context_event(step_data, timestamp, create_reasoning_event, thought_item)
+    if step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE):
+        is_recursive_step = step == StepPoint.RECURSIVE_CONSCIENCE
+        return _create_aspdma_result_event(step_data, timestamp, is_recursive_step, create_reasoning_event)
+    if step == StepPoint.FINALIZE_ACTION:
+        return _create_conscience_result_event(step_data, timestamp, create_reasoning_event)
+    if step == StepPoint.ACTION_COMPLETE:
+        return _create_action_result_event(step_data, timestamp, create_reasoning_event)
+    return None
+
+
+async def _broadcast_reasoning_event(step: StepPoint, step_data: StepDataUnion, thought_item: Any = None) -> None:
     """
     Broadcast simplified reasoning event for one of the 6 key steps.
 
-    CORRECT Step Point Mapping:
-    0. START_ROUND → THOUGHT_START (thought + task metadata)
-    1. GATHER_CONTEXT + PERFORM_DMAS → SNAPSHOT_AND_CONTEXT (snapshot + context)
-    2. PERFORM_DMAS → DMA_RESULTS (Results of the 3 DMAs: CSDMA, DSDMA, PDMA)
-    3. PERFORM_ASPDMA → ASPDMA_RESULT (result of ASPDMA action selection)
-    4. CONSCIENCE_EXECUTION (+ RECURSIVE_CONSCIENCE) → CONSCIENCE_RESULT (result of 5 consciences, with is_recursive flag)
-    5. ACTION_COMPLETE → ACTION_RESULT (execution + audit)
+    Step Point Mapping:
+    0. START_ROUND → THOUGHT_START
+    1. PERFORM_DMAS → SNAPSHOT_AND_CONTEXT
+    2. PERFORM_ASPDMA → DMA_RESULTS + IDMA_RESULT
+    3. CONSCIENCE_EXECUTION/RECURSIVE_CONSCIENCE → ASPDMA_RESULT
+    4. FINALIZE_ACTION → CONSCIENCE_RESULT
+    5. ACTION_COMPLETE → ACTION_RESULT
     """
     logger.debug(f"[BROADCAST DEBUG] _broadcast_reasoning_event called for step {step.value}")
     try:
         from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
         from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
 
-        logger.debug("[BROADCAST DEBUG] Imports successful")
-
-        event = None
         timestamp = step_data.timestamp or datetime.now().isoformat()
-        logger.debug(f"[BROADCAST DEBUG] timestamp={timestamp}, step={step.value}")
 
-        # Map step points to reasoning events using helper functions
-        if step == StepPoint.START_ROUND:
-            # Event 0: THOUGHT_START
-            event = _create_thought_start_event(step_data, timestamp, create_reasoning_event, thought_item)
+        # PERFORM_ASPDMA requires special handling (multiple events)
+        if step == StepPoint.PERFORM_ASPDMA:
+            await _broadcast_dma_and_idma_events(step_data, timestamp, create_reasoning_event, reasoning_event_stream)
+            return
 
-        elif step in (StepPoint.GATHER_CONTEXT, StepPoint.PERFORM_DMAS):
-            # Event 1: SNAPSHOT_AND_CONTEXT (emitted at PERFORM_DMAS only)
-            if step == StepPoint.PERFORM_DMAS:
-                logger.debug("[BROADCAST DEBUG] Creating SNAPSHOT_AND_CONTEXT event")
-                event = _create_snapshot_and_context_event(step_data, timestamp, create_reasoning_event, thought_item)
-
-        elif step == StepPoint.PERFORM_ASPDMA:
-            # Event 2: DMA_RESULTS - get InitialDMAResults from step_data.dma_results (extracted from args)
-            # step_data for PERFORM_ASPDMA contains dma_results from the previous PERFORM_DMAS step
-            dma_results_for_event = getattr(step_data, "dma_results_obj", None)
-            if dma_results_for_event:
-                event = _create_dma_results_event(step_data, timestamp, dma_results_for_event, create_reasoning_event)
-            else:
-                logger.warning(f"No dma_results_obj found in step_data for PERFORM_ASPDMA step {step_data.thought_id}")
-
-        elif step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE):
-            # Event 3: ASPDMA_RESULT
-            is_recursive_step = step == StepPoint.RECURSIVE_CONSCIENCE
-            event = _create_aspdma_result_event(step_data, timestamp, is_recursive_step, create_reasoning_event)
-
-        elif step == StepPoint.FINALIZE_ACTION:
-            # Event 4: CONSCIENCE_RESULT
-            event = _create_conscience_result_event(step_data, timestamp, create_reasoning_event)
-
-        elif step == StepPoint.ACTION_COMPLETE:
-            # Event 5: ACTION_RESULT
-            event = _create_action_result_event(step_data, timestamp, create_reasoning_event)
-
-        # Broadcast the event if we created one
+        # All other steps create a single event
+        event = _create_event_for_step(step, step_data, timestamp, create_reasoning_event, thought_item)
         if event:
             await reasoning_event_stream.broadcast_reasoning_event(event)
             logger.debug(f"Broadcast {event.event_type} to {len(reasoning_event_stream._subscribers)} subscribers")
@@ -1441,10 +1456,10 @@ def _create_dma_results_event(
         raise ValueError(f"Ethical PDMA result is None: {dma_results.ethical_pdma}")
 
     # Extract prompts if available (for debugging/transparency)
+    # Note: IDMA is emitted as a separate IDMA_RESULT event (v1.9.3), not in DMA_RESULTS
     csdma_prompt = getattr(dma_results, "csdma_prompt", None)
     dsdma_prompt = getattr(dma_results, "dsdma_prompt", None)
     pdma_prompt = getattr(dma_results, "ethical_pdma_prompt", None)
-    idma_prompt = getattr(dma_results, "idma_prompt", None)
 
     return create_reasoning_event(
         event_type=ReasoningEvent.DMA_RESULTS,
@@ -1454,11 +1469,43 @@ def _create_dma_results_event(
         csdma=dma_results.csdma,  # Pass CSDMAResult object directly
         dsdma=dma_results.dsdma,  # Pass DSDMAResult object directly
         pdma=dma_results.ethical_pdma,  # Pass EthicalDMAResult object directly
-        idma=getattr(dma_results, "idma", None),  # Pass IDMAResult object (optional, CCA diversity check)
+        # IDMA is streamed separately as IDMA_RESULT event (v1.9.3)
         csdma_prompt=csdma_prompt,  # User prompt passed to CSDMA
         dsdma_prompt=dsdma_prompt,  # User prompt passed to DSDMA
         pdma_prompt=pdma_prompt,  # User prompt passed to PDMA
-        idma_prompt=idma_prompt,  # User prompt passed to IDMA
+    )
+
+
+def _create_idma_result_event(
+    step_data: StepDataUnion, timestamp: str, dma_results: Any, create_reasoning_event: Any
+) -> Any:
+    """Create IDMA_RESULT reasoning event from InitialDMAResults.
+
+    IDMA (Identity DMA) evaluates epistemic diversity using CCA principles.
+    This event is always emitted after DMA_RESULTS (v1.9.3).
+    """
+    from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+
+    idma = getattr(dma_results, "idma", None)
+    if not idma:
+        # Return None if no IDMA result - caller should check
+        return None
+
+    idma_prompt = getattr(dma_results, "idma_prompt", None)
+
+    return create_reasoning_event(
+        event_type=ReasoningEvent.IDMA_RESULT,
+        thought_id=step_data.thought_id,
+        task_id=step_data.task_id,
+        timestamp=timestamp,
+        k_eff=idma.k_eff,
+        correlation_risk=idma.correlation_risk,
+        phase=idma.phase,
+        fragility_flag=idma.fragility_flag,
+        sources_identified=idma.sources_identified,
+        correlation_factors=idma.correlation_factors,
+        reasoning=idma.reasoning,
+        idma_prompt=idma_prompt,
     )
 
 

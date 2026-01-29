@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_github",
+    "version": "1.0.0",
+    "description": "Interact with GitHub using the `gh` CLI. Use `gh issue`, `gh pr`, `gh run`, and `gh api` for issues, PRs, CI runs, and advanced queries.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": null
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_github.service.GithubToolService",
+      "capabilities": [
+        "tool:github",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:github",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_github.service.GithubToolService"
+  },
+  "configuration": {}
+}

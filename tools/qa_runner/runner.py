@@ -249,6 +249,7 @@ class QARunner:
             QAModule.ADAPTER_CONFIG,
             QAModule.ADAPTER_AUTOLOAD,
             QAModule.ADAPTER_MANIFEST,
+            QAModule.ADAPTER_AVAILABILITY,
             QAModule.IDENTITY_UPDATE,
             QAModule.CONTEXT_ENRICHMENT,
             QAModule.VISION,
@@ -858,6 +859,7 @@ class QARunner:
             PartnershipTests,
         )
         from .modules.adapter_autoload_tests import AdapterAutoloadTests
+        from .modules.adapter_availability_tests import AdapterAvailabilityTests
         from .modules.adapter_config_tests import AdapterConfigTests
         from .modules.adapter_manifest_tests import AdapterManifestTests
         from .modules.billing_integration_tests import BillingIntegrationTests
@@ -896,6 +898,7 @@ class QARunner:
             QAModule.ADAPTER_CONFIG: AdapterConfigTests,
             QAModule.ADAPTER_AUTOLOAD: AdapterAutoloadTests,
             QAModule.ADAPTER_MANIFEST: AdapterManifestTests,
+            QAModule.ADAPTER_AVAILABILITY: AdapterAvailabilityTests,
             QAModule.IDENTITY_UPDATE: IdentityUpdateTests,
             QAModule.CONTEXT_ENRICHMENT: ContextEnrichmentTests,
             QAModule.VISION: VisionTests,

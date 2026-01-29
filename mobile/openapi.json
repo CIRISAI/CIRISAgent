@@ -78,7 +78,7 @@
           "setup"
         ],
         "summary": "List Adapters",
-        "description": "List available adapters.\n\nReturns configuration for available communication adapters.\nThis endpoint is always accessible without authentication.",
+        "description": "List available adapters with platform requirements.\n\nReturns ALL adapters with their requirements metadata.\nKMP clients filter locally based on platform capabilities (iOS, Android, desktop).\nThis endpoint is always accessible without authentication.",
         "operationId": "list_adapters_v1_setup_adapters_get",
         "responses": {
           "200": {
@@ -2945,6 +2945,186 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SuccessResponse_RemovePersistedResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/adapters/available": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "List Available Adapters",
+        "description": "List all discovered adapters with eligibility status.\n\nReturns both eligible (ready to use) and ineligible (missing requirements)\nadapters, including installation hints for ineligible adapters.",
+        "operationId": "list_available_adapters_v1_system_adapters_available_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_Dict_str__Any__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/adapters/{adapter_name}/install": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Install Adapter Dependencies",
+        "description": "Install missing dependencies for an adapter.\n\nAttempts to install missing binaries or packages using the adapter's\ninstall hints (brew, apt, pip, npm, etc.).\n\nRequires ADMIN role.",
+        "operationId": "install_adapter_dependencies_v1_system_adapters__adapter_name__install_post",
+        "parameters": [
+          {
+            "name": "adapter_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Adapter Name"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "default": {},
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_Dict_str__Any__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/adapters/{adapter_name}/check-eligibility": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Recheck Adapter Eligibility",
+        "description": "Recheck eligibility for an adapter.\n\nUseful after manual installation of dependencies to see if the\nadapter is now eligible.",
+        "operationId": "recheck_adapter_eligibility_v1_system_adapters__adapter_name__check_eligibility_post",
+        "parameters": [
+          {
+            "name": "adapter_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Adapter Name"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_Dict_str__Any__"
                 }
               }
             }
@@ -7432,7 +7612,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/APIKeyInfo"
+                    "$ref": "#/components/schemas/ciris_engine__logic__adapters__api__routes__users__APIKeyInfo"
                   },
                   "title": "Response List User Api Keys V1 Users  User Id  Api Keys Get"
                 }
@@ -10039,18 +10219,47 @@
           "key_id": {
             "type": "string",
             "title": "Key Id",
-            "description": "Unique key identifier"
+            "description": "Key identifier (partial)"
           },
-          "masked_key": {
-            "type": "string",
-            "title": "Masked Key",
-            "description": "Masked version of the key (e.g., 'ciris_****')"
+          "role": {
+            "$ref": "#/components/schemas/UserRole",
+            "description": "Role assigned to the key"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At",
+            "description": "When the key expires"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Key description"
           },
           "created_at": {
             "type": "string",
             "format": "date-time",
             "title": "Created At",
             "description": "When the key was created"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By",
+            "description": "User who created the key"
           },
           "last_used": {
             "anyOf": [
@@ -10063,41 +10272,30 @@
               }
             ],
             "title": "Last Used",
-            "description": "When the key was last used"
+            "description": "Last time the key was used"
           },
           "is_active": {
             "type": "boolean",
             "title": "Is Active",
-            "description": "Whether the key is currently active"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name",
-            "description": "Optional name for the key"
+            "description": "Whether the key is active"
           }
         },
         "type": "object",
         "required": [
           "key_id",
-          "masked_key",
+          "role",
           "created_at",
+          "created_by",
           "is_active"
         ],
         "title": "APIKeyInfo",
-        "description": "Information about an API key (masked for security)."
+        "description": "API key information (without the actual key)."
       },
       "APIKeyListResponse": {
         "properties": {
           "api_keys": {
             "items": {
-              "$ref": "#/components/schemas/ciris_engine__schemas__api__auth__APIKeyInfo"
+              "$ref": "#/components/schemas/APIKeyInfo"
             },
             "type": "array",
             "title": "Api Keys",
@@ -10498,6 +10696,34 @@
             "title": "Platform Available",
             "description": "Whether available on current platform",
             "default": true
+          },
+          "requires_binaries": {
+            "type": "boolean",
+            "title": "Requires Binaries",
+            "description": "Requires external CLI tools (not available on mobile)",
+            "default": false
+          },
+          "required_binaries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Binaries",
+            "description": "Specific binary names needed"
+          },
+          "supported_platforms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Supported Platforms",
+            "description": "Platforms supported - empty means all, otherwise ['android', 'ios', 'desktop']"
+          },
+          "requires_ciris_services": {
+            "type": "boolean",
+            "title": "Requires Ciris Services",
+            "description": "Requires CIRIS AI services (Google sign-in)",
+            "default": false
           }
         },
         "type": "object",
@@ -10507,7 +10733,7 @@
           "description"
         ],
         "title": "AdapterConfig",
-        "description": "Adapter configuration."
+        "description": "Adapter configuration with platform requirements for KMP filtering.\n\nThe server returns all adapters with their requirements.\nKMP clients filter locally based on platform capabilities."
       },
       "AdapterListResponse": {
         "properties": {
@@ -11503,6 +11729,46 @@
         "title": "AvailableToolsResponse",
         "description": "List of available tools."
       },
+      "BinaryRequirement": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Binary name (e.g., 'ffmpeg', 'git')"
+          },
+          "min_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Version",
+            "description": "Minimum version (semver)"
+          },
+          "verify_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verify Command",
+            "description": "Command to verify installation (e.g., 'ffmpeg -version')"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "BinaryRequirement",
+        "description": "A required CLI binary or executable."
+      },
       "CSDMAResult": {
         "properties": {
           "plausibility_score": {
@@ -12244,6 +12510,34 @@
         ],
         "title": "ConfigNodeAttributes",
         "description": "Specific attributes for configuration nodes.\n\nUsed by the config service for storing system and behavioral configuration."
+      },
+      "ConfigRequirement": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Config key path (e.g., 'adapters.home_assistant.token')"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "What this config is for"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "title": "ConfigRequirement",
+        "description": "A required CIRIS configuration key."
       },
       "ConfigStepInfo": {
         "properties": {
@@ -14780,6 +15074,40 @@
         "title": "EntryVerification",
         "description": "Audit entry verification details."
       },
+      "EnvVarRequirement": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Environment variable name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "What this variable is for"
+          },
+          "secret": {
+            "type": "boolean",
+            "title": "Secret",
+            "description": "Whether this is a secret (affects display)",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "EnvVarRequirement",
+        "description": "A required environment variable."
+      },
       "EthicalDMAResult": {
         "properties": {
           "stakeholders": {
@@ -15320,6 +15648,110 @@
         ],
         "title": "ImagePayload",
         "description": "Image payload for multimodal requests."
+      },
+      "InstallStep": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique step identifier"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "Install method: brew, apt, pip, npm, manual, winget, choco"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Human-readable step description"
+          },
+          "formula": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formula",
+            "description": "Package name for brew"
+          },
+          "package": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package",
+            "description": "Package name for apt/pip/npm"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command",
+            "description": "Command for manual installation"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url",
+            "description": "URL for manual download/documentation"
+          },
+          "provides_binaries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Provides Binaries",
+            "description": "Binary names this step provides"
+          },
+          "verify_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verify Command",
+            "description": "Command to verify success"
+          },
+          "platforms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Platforms",
+            "description": "Platforms this step applies to. Empty = all"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "label"
+        ],
+        "title": "InstallStep",
+        "description": "A single installation step for a tool dependency."
       },
       "InteractRequest": {
         "properties": {
@@ -23618,6 +24050,176 @@
         "title": "ToolCreditCheckResponse",
         "description": "Quick credit check for a tool."
       },
+      "ToolDMAGuidance": {
+        "properties": {
+          "when_not_to_use": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "When Not To Use",
+            "description": "Conditions when this tool should NOT be used"
+          },
+          "ethical_considerations": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ethical Considerations",
+            "description": "Ethical considerations for using this tool"
+          },
+          "prerequisite_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Prerequisite Actions",
+            "description": "Actions that should be taken before this tool"
+          },
+          "followup_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Followup Actions",
+            "description": "Actions to consider after this tool completes"
+          },
+          "min_confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Min Confidence",
+            "description": "Minimum confidence score to use this tool",
+            "default": 0.0
+          },
+          "requires_approval": {
+            "type": "boolean",
+            "title": "Requires Approval",
+            "description": "Whether this tool requires wise authority approval",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ToolDMAGuidance",
+        "description": "Guidance for the Decision-Making Architecture when selecting this tool."
+      },
+      "ToolDocumentation": {
+        "properties": {
+          "quick_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quick Start",
+            "description": "TL;DR quick start guide"
+          },
+          "detailed_instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detailed Instructions",
+            "description": "Full markdown documentation"
+          },
+          "examples": {
+            "items": {
+              "$ref": "#/components/schemas/UsageExample"
+            },
+            "type": "array",
+            "title": "Examples",
+            "description": "Usage examples"
+          },
+          "gotchas": {
+            "items": {
+              "$ref": "#/components/schemas/ToolGotcha"
+            },
+            "type": "array",
+            "title": "Gotchas",
+            "description": "Common pitfalls"
+          },
+          "related_tools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Related Tools",
+            "description": "Names of related tools"
+          },
+          "homepage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Homepage",
+            "description": "Tool homepage URL"
+          },
+          "docs_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Docs Url",
+            "description": "Documentation URL"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ToolDocumentation",
+        "description": "Rich documentation for a tool."
+      },
+      "ToolGotcha": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Short gotcha title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Detailed explanation of the pitfall"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity",
+            "description": "Severity: info, warning, error",
+            "default": "warning"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "description"
+        ],
+        "title": "ToolGotcha",
+        "description": "A common pitfall or gotcha when using a tool."
+      },
       "ToolInfo": {
         "properties": {
           "name": {
@@ -23722,6 +24324,67 @@
             ],
             "title": "Platform Requirements Rationale",
             "description": "Why these requirements exist (shown if requirements not met)"
+          },
+          "requirements": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolRequirements"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Runtime requirements (binaries, env vars, config keys)"
+          },
+          "install_steps": {
+            "items": {
+              "$ref": "#/components/schemas/InstallStep"
+            },
+            "type": "array",
+            "title": "Install Steps",
+            "description": "Installation steps for tool dependencies"
+          },
+          "documentation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolDocumentation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Rich documentation (quick start, examples, gotchas)"
+          },
+          "dma_guidance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolDMAGuidance"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Guidance for DMA tool selection decisions"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "Categorization tags for discovery (e.g., 'weather', 'api')"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version",
+            "description": "Tool version string"
           }
         },
         "additionalProperties": false,
@@ -23956,6 +24619,54 @@
         ],
         "title": "ToolPurchaseResponse",
         "description": "Response from purchase verification."
+      },
+      "ToolRequirements": {
+        "properties": {
+          "binaries": {
+            "items": {
+              "$ref": "#/components/schemas/BinaryRequirement"
+            },
+            "type": "array",
+            "title": "Binaries",
+            "description": "Required CLI binaries (all must be present)"
+          },
+          "any_binaries": {
+            "items": {
+              "$ref": "#/components/schemas/BinaryRequirement"
+            },
+            "type": "array",
+            "title": "Any Binaries",
+            "description": "Alternative binaries (at least one required)"
+          },
+          "env_vars": {
+            "items": {
+              "$ref": "#/components/schemas/EnvVarRequirement"
+            },
+            "type": "array",
+            "title": "Env Vars",
+            "description": "Required environment variables"
+          },
+          "config_keys": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigRequirement"
+            },
+            "type": "array",
+            "title": "Config Keys",
+            "description": "Required CIRIS config keys"
+          },
+          "platforms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Platforms",
+            "description": "Supported platforms (darwin, linux, win32). Empty = all"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ToolRequirements",
+        "description": "Runtime requirements for a tool to function."
       },
       "TraceComponent": {
         "properties": {
@@ -24506,6 +25217,46 @@
         ],
         "title": "UrgencyLevel",
         "description": "Urgency level for guidance requests."
+      },
+      "UsageExample": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Example title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "What this example demonstrates"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "The example code/parameters"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "description": "Code language for syntax highlighting",
+            "default": "json"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "code"
+        ],
+        "title": "UsageExample",
+        "description": "A code example showing how to use a tool."
       },
       "UserDetail": {
         "properties": {
@@ -25526,52 +26277,23 @@
         "title": "WAStatusResponse",
         "description": "WA service status response."
       },
-      "ciris_engine__schemas__api__auth__APIKeyInfo": {
+      "ciris_engine__logic__adapters__api__routes__users__APIKeyInfo": {
         "properties": {
           "key_id": {
             "type": "string",
             "title": "Key Id",
-            "description": "Key identifier (partial)"
+            "description": "Unique key identifier"
           },
-          "role": {
-            "$ref": "#/components/schemas/UserRole",
-            "description": "Role assigned to the key"
-          },
-          "expires_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expires At",
-            "description": "When the key expires"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description",
-            "description": "Key description"
+          "masked_key": {
+            "type": "string",
+            "title": "Masked Key",
+            "description": "Masked version of the key (e.g., 'ciris_****')"
           },
           "created_at": {
             "type": "string",
             "format": "date-time",
             "title": "Created At",
             "description": "When the key was created"
-          },
-          "created_by": {
-            "type": "string",
-            "title": "Created By",
-            "description": "User who created the key"
           },
           "last_used": {
             "anyOf": [
@@ -25584,24 +26306,35 @@
               }
             ],
             "title": "Last Used",
-            "description": "Last time the key was used"
+            "description": "When the key was last used"
           },
           "is_active": {
             "type": "boolean",
             "title": "Is Active",
-            "description": "Whether the key is active"
+            "description": "Whether the key is currently active"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Optional name for the key"
           }
         },
         "type": "object",
         "required": [
           "key_id",
-          "role",
+          "masked_key",
           "created_at",
-          "created_by",
           "is_active"
         ],
         "title": "APIKeyInfo",
-        "description": "API key information (without the actual key)."
+        "description": "Information about an API key (masked for security)."
       },
       "ciris_engine__schemas__runtime__adapter_management__AdapterConfig": {
         "properties": {

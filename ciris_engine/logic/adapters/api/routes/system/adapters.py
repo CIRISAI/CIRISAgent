@@ -24,7 +24,7 @@ from ciris_engine.schemas.runtime.adapter_management import (
     ModuleTypesResponse,
 )
 from ciris_engine.schemas.runtime.adapter_management import RuntimeAdapterStatus as AdapterStatusSchema
-from ciris_engine.schemas.services.core.runtime import AdapterStatus
+from ciris_engine.schemas.services.core.runtime import AdapterInfo, AdapterStatus
 
 from ...constants import ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE
 from ...dependencies.auth import AuthContext, require_admin, require_observer
@@ -439,6 +439,41 @@ async def list_adapters(
     try:
         # Get adapter list from runtime control service
         adapters = await runtime_control.list_adapters()
+        seen_adapter_ids = {a.adapter_id for a in adapters}
+
+        # Also include auto-loaded adapters from ServiceRegistry
+        service_registry = getattr(request.app.state, "service_registry", None)
+        if service_registry:
+            from ciris_engine.schemas.runtime.enums import ServiceType
+
+            for service_type in [ServiceType.TOOL, ServiceType.WISE_AUTHORITY]:
+                try:
+                    providers = service_registry.get_providers_by_type(service_type)
+                    for provider_info in providers:
+                        metadata = provider_info.get("metadata", {})
+                        if metadata.get("auto_loaded"):
+                            adapter_name = metadata.get("adapter", "unknown")
+                            adapter_id = f"{adapter_name}_auto"
+                            if adapter_id not in seen_adapter_ids:
+                                seen_adapter_ids.add(adapter_id)
+                                adapters.append(
+                                    AdapterInfo(
+                                        adapter_id=adapter_id,
+                                        adapter_type=adapter_name.upper(),
+                                        status=AdapterStatus.RUNNING,
+                                        started_at=datetime.now(timezone.utc),
+                                        config_params=AdapterConfig(
+                                            adapter_type=adapter_name, enabled=True, settings={}
+                                        ),
+                                        services_registered=[service_type.value],
+                                        messages_processed=0,
+                                        error_count=0,
+                                        last_error=None,
+                                        tools=[],
+                                    )
+                                )
+                except Exception as e:
+                    logger.debug(f"Error getting {service_type} providers: {e}")
 
         # Convert to response format
         adapter_statuses = []
@@ -619,6 +654,156 @@ async def remove_persisted_configuration(
         raise
     except Exception as e:
         logger.error(f"Error removing persisted configuration: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/adapters/available", response_model=SuccessResponse[Dict[str, Any]])
+async def list_available_adapters(
+    request: Request, auth: AuthContext = Depends(require_observer)
+) -> SuccessResponse[Dict[str, Any]]:
+    """
+    List all discovered adapters with eligibility status.
+
+    Returns both eligible (ready to use) and ineligible (missing requirements)
+    adapters, including installation hints for ineligible adapters.
+    """
+    from ciris_engine.logic.services.tool.discovery_service import AdapterDiscoveryService
+
+    try:
+        discovery = AdapterDiscoveryService()
+        report = await discovery.get_discovery_report()
+
+        return SuccessResponse(data=report.model_dump())
+
+    except Exception as e:
+        logger.error(f"Error getting adapter availability: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/adapters/{adapter_name}/install", response_model=SuccessResponse[Dict[str, Any]])
+async def install_adapter_dependencies(
+    adapter_name: str,
+    request: Request,
+    body: Dict[str, Any] = Body(default={}),
+    auth: AuthContext = Depends(require_admin),
+) -> SuccessResponse[Dict[str, Any]]:
+    """
+    Install missing dependencies for an adapter.
+
+    Attempts to install missing binaries or packages using the adapter's
+    install hints (brew, apt, pip, npm, etc.).
+
+    Requires ADMIN role.
+    """
+    from ciris_engine.logic.services.tool.discovery_service import AdapterDiscoveryService
+    from ciris_engine.logic.services.tool.installer import ToolInstaller
+    from ciris_engine.schemas.adapters.discovery import InstallResponse
+
+    try:
+        dry_run = body.get("dry_run", False)
+        install_step_id = body.get("install_step_id")
+
+        discovery = AdapterDiscoveryService()
+        status = await discovery.get_adapter_eligibility(adapter_name)
+
+        if not status:
+            raise HTTPException(status_code=404, detail=f"Adapter '{adapter_name}' not found")
+
+        if status.eligible:
+            return SuccessResponse(
+                data=InstallResponse(
+                    success=True,
+                    message=f"Adapter '{adapter_name}' is already eligible",
+                    now_eligible=True,
+                    eligibility=status,
+                ).model_dump()
+            )
+
+        if not status.can_install or not status.install_hints:
+            return SuccessResponse(
+                data=InstallResponse(
+                    success=False,
+                    message=f"No installation hints available for '{adapter_name}'",
+                    now_eligible=False,
+                    eligibility=status,
+                ).model_dump()
+            )
+
+        # Find specific step if requested, otherwise use all hints
+        hints = status.install_hints
+        if install_step_id:
+            hints = [h for h in hints if h.id == install_step_id]
+            if not hints:
+                return SuccessResponse(
+                    data=InstallResponse(
+                        success=False,
+                        message=f"Install step '{install_step_id}' not found",
+                        now_eligible=False,
+                    ).model_dump()
+                )
+
+        # Run installation
+        installer = ToolInstaller(dry_run=dry_run)
+        install_result = await installer.install_first_applicable(hints)
+
+        # Recheck eligibility after installation
+        new_status = await discovery.get_adapter_eligibility(adapter_name)
+
+        return SuccessResponse(
+            data=InstallResponse(
+                success=install_result.success,
+                message=install_result.message,
+                installed_binaries=install_result.binaries_installed or [],
+                now_eligible=new_status.eligible if new_status else False,
+                eligibility=new_status,
+            ).model_dump()
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error installing adapter dependencies: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/adapters/{adapter_name}/check-eligibility", response_model=SuccessResponse[Dict[str, Any]])
+async def recheck_adapter_eligibility(
+    adapter_name: str,
+    request: Request,
+    auth: AuthContext = Depends(require_observer),
+) -> SuccessResponse[Dict[str, Any]]:
+    """
+    Recheck eligibility for an adapter.
+
+    Useful after manual installation of dependencies to see if the
+    adapter is now eligible.
+    """
+    from ciris_engine.logic.services.tool.discovery_service import AdapterDiscoveryService
+    from ciris_engine.schemas.adapters.discovery import RecheckEligibilityResponse
+
+    try:
+        discovery = AdapterDiscoveryService()
+        status = await discovery.get_adapter_eligibility(adapter_name)
+
+        if not status:
+            raise HTTPException(status_code=404, detail=f"Adapter '{adapter_name}' not found")
+
+        return SuccessResponse(
+            data=RecheckEligibilityResponse(
+                name=adapter_name,
+                eligible=status.eligible,
+                eligibility_reason=status.eligibility_reason,
+                missing_binaries=status.missing_binaries,
+                missing_env_vars=status.missing_env_vars,
+                missing_config=status.missing_config,
+                can_install=status.can_install,
+            ).model_dump()
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking adapter eligibility: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

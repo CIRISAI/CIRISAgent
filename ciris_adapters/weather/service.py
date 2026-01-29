@@ -14,7 +14,16 @@ from uuid import uuid4
 
 import aiohttp
 
-from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
+from ciris_engine.schemas.adapters.tools import (
+    ToolDMAGuidance,
+    ToolDocumentation,
+    ToolExecutionResult,
+    ToolExecutionStatus,
+    ToolGotcha,
+    ToolInfo,
+    ToolParameterSchema,
+    UsageExample,
+)
 from ciris_engine.schemas.services.core import ServiceCapabilities
 
 logger = logging.getLogger(__name__)
@@ -78,6 +87,58 @@ class WeatherToolService:
                 category="weather",
                 cost=0.0,
                 when_to_use="When you need current weather conditions at a specific location",
+                documentation=ToolDocumentation(
+                    quick_start="Provide latitude and longitude coordinates to get current weather. "
+                    "Uses NOAA (US) with OpenWeatherMap fallback for international locations.",
+                    detailed_instructions="""
+## Coordinate Format
+
+- Latitude: decimal degrees (e.g., 40.7128 for NYC)
+- Longitude: decimal degrees, negative for West (e.g., -74.0060 for NYC)
+
+## Data Sources
+
+1. **NOAA** (primary): US National Weather Service - most accurate for US locations
+2. **OpenWeatherMap** (fallback): Global coverage, requires API key
+
+## Response Fields
+
+- temperature: Current temperature
+- wind_speed/wind_direction: Wind conditions
+- conditions: Short description (e.g., "Partly Cloudy")
+- detailed: Full forecast description
+- precipitation_chance: Percentage chance of precipitation
+""",
+                    examples=[
+                        UsageExample(
+                            title="New York City weather",
+                            code='{"latitude": 40.7128, "longitude": -74.0060}',
+                        ),
+                        UsageExample(
+                            title="Los Angeles weather",
+                            code='{"latitude": 34.0522, "longitude": -118.2437}',
+                        ),
+                    ],
+                    gotchas=[
+                        ToolGotcha(
+                            title="US-only for NOAA",
+                            description="NOAA only covers US locations. International locations "
+                            "require OpenWeatherMap API key (CIRIS_OPENWEATHERMAP_API_KEY).",
+                            severity="info",
+                        ),
+                        ToolGotcha(
+                            title="Coordinates required",
+                            description="You must provide coordinates, not city names. "
+                            "Use navigation:geocode to convert addresses to coordinates first.",
+                            severity="warning",
+                        ),
+                    ],
+                ),
+                dma_guidance=ToolDMAGuidance(
+                    when_not_to_use="Don't use for medical decisions based on weather. "
+                    "Weather data is informational, not for life-safety decisions.",
+                    prerequisite_actions=["navigation:geocode if you only have an address"],
+                ),
             ),
             "weather:forecast": ToolInfo(
                 name="weather:forecast",

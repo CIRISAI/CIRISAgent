@@ -246,7 +246,7 @@ private fun WAStatusCard(
             if (waStatus != null && waStatus.averageResolutionTimeMinutes > 0) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Avg resolution: ${String.format("%.1f", waStatus.averageResolutionTimeMinutes)} min",
+                    text = "Avg resolution: ${((waStatus.averageResolutionTimeMinutes * 10).toInt() / 10.0)} min",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                 )

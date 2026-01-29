@@ -21,7 +21,7 @@ import kotlinx.serialization.descriptors.*
 import kotlinx.serialization.encoding.*
 
 /**
- * Adapter configuration.
+ * Adapter configuration with platform requirements for KMP filtering.
  *
  * @param id Adapter ID (api, cli, discord, reddit)
  * @param name Display name
@@ -31,6 +31,10 @@ import kotlinx.serialization.encoding.*
  * @param optionalEnvVars Optional environment variables
  * @param platformRequirements Platform requirements (e.g., 'android_play_integrity')
  * @param platformAvailable Whether available on current platform
+ * @param requiresBinaries Requires external CLI tools (not available on mobile)
+ * @param requiredBinaries Specific binary names needed
+ * @param supportedPlatforms Platforms supported - empty means all, otherwise ['android', 'ios', 'desktop']
+ * @param requiresCirisServices Requires CIRIS AI services (Google sign-in)
  */
 @Serializable
 
@@ -58,7 +62,19 @@ data class AdapterConfig (
     @SerialName(value = "platform_requirements") val platformRequirements: kotlin.collections.List<kotlin.String>? = null,
 
     /* Whether available on current platform */
-    @SerialName(value = "platform_available") val platformAvailable: kotlin.Boolean? = true
+    @SerialName(value = "platform_available") val platformAvailable: kotlin.Boolean? = true,
+
+    /* Requires external CLI tools (not available on mobile) */
+    @SerialName(value = "requires_binaries") val requiresBinaries: kotlin.Boolean? = false,
+
+    /* Specific binary names needed */
+    @SerialName(value = "required_binaries") val requiredBinaries: kotlin.collections.List<kotlin.String>? = null,
+
+    /* Platforms supported - empty means all, otherwise ['android', 'ios', 'desktop'] */
+    @SerialName(value = "supported_platforms") val supportedPlatforms: kotlin.collections.List<kotlin.String>? = null,
+
+    /* Requires CIRIS AI services (Google sign-in) */
+    @SerialName(value = "requires_ciris_services") val requiresCirisServices: kotlin.Boolean? = false
 
 ) {
 

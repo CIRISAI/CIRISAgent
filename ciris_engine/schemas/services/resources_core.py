@@ -35,7 +35,7 @@ class ResourceLimit(BaseModel):
 
 
 def _memory_mb_limit() -> ResourceLimit:
-    return ResourceLimit(limit=4096, warning=3072, critical=3840)
+    return ResourceLimit(limit=1024, warning=768, critical=960)
 
 
 def _cpu_percent_limit() -> ResourceLimit:

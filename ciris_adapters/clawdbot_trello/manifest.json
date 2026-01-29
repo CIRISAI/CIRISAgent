@@ -1,0 +1,94 @@
+{
+  "module": {
+    "name": "clawdbot_trello",
+    "version": "1.0.0",
+    "description": "Manage Trello boards, lists, and cards via the Trello REST API.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://developer.atlassian.com/cloud/trello/rest/"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_trello.service.TrelloToolService",
+      "capabilities": [
+        "tool:trello",
+        "requires:binaries",
+        "requires:env"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:trello",
+    "requires:binaries",
+    "requires:env"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_trello.service.TrelloToolService"
+  },
+  "configuration": {
+    "trello_api_key": {
+      "type": "string",
+      "env": "TRELLO_API_KEY",
+      "description": "Environment variable TRELLO_API_KEY",
+      "sensitivity": "HIGH"
+    },
+    "trello_token": {
+      "type": "string",
+      "env": "TRELLO_TOKEN",
+      "description": "Environment variable TRELLO_TOKEN",
+      "sensitivity": "HIGH"
+    }
+  },
+  "interactive_config": {
+    "required": true,
+    "workflow_type": "simple_config",
+    "steps": [
+      {
+        "step_id": "env_0",
+        "step_type": "input",
+        "title": "Configure TRELLO_API_KEY",
+        "description": "Enter the value for TRELLO_API_KEY",
+        "fields": [
+          {
+            "name": "trello_api_key",
+            "type": "string",
+            "label": "TRELLO_API_KEY",
+            "required": true,
+            "sensitive": true
+          }
+        ]
+      },
+      {
+        "step_id": "env_1",
+        "step_type": "input",
+        "title": "Configure TRELLO_TOKEN",
+        "description": "Enter the value for TRELLO_TOKEN",
+        "fields": [
+          {
+            "name": "trello_token",
+            "type": "string",
+            "label": "TRELLO_TOKEN",
+            "required": true,
+            "sensitive": true
+          }
+        ]
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Confirm Configuration",
+        "description": "Review and confirm your configuration"
+      }
+    ],
+    "completion_method": "apply_config"
+  }
+}

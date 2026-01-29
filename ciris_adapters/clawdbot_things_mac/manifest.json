@@ -1,0 +1,36 @@
+{
+  "module": {
+    "name": "clawdbot_things_mac",
+    "version": "1.0.0",
+    "description": "Manage Things 3 via the `things` CLI on macOS (add/update projects+todos via URL scheme; read/search/list from the local Things database). Use when a user asks Moltbot to add a task to Things, list inbox/today/upcoming, search tasks, or inspect projects/areas/tags.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://github.com/ossianhempel/things3-cli"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_things_mac.service.ThingsMacToolService",
+      "capabilities": [
+        "tool:things_mac",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:things_mac",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_things_mac.service.ThingsMacToolService"
+  },
+  "configuration": {}
+}

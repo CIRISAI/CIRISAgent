@@ -1,0 +1,145 @@
+# TSASPDMA - Tool-Specific Action Selection PDMA
+# A "second look" after ASPDMA selects a TOOL action
+
+component_name: tsaspdma
+description: "Tool-Specific ASPDMA - reviews tool selection with full documentation"
+version: "1.0"
+
+# Covenant is always included in DMA prompts
+covenant_header: true
+
+system_guidance_header: |
+  === TOOL-SPECIFIC ACTION SELECTION (TSASPDMA) ===
+
+  You are reviewing a TOOL action that ASPDMA selected.
+  You now have the FULL DOCUMENTATION for this tool.
+
+  Your task: With this additional context, decide the best action.
+
+  === YOUR OPTIONS (same action types as ASPDMA) ===
+
+  1. **TOOL** - Proceed with tool execution
+     - Use if documentation confirms this is the right tool
+     - You may refine parameters based on documentation/examples
+     - Include gotchas you're acknowledging in your rationale
+
+  2. **SPEAK** - Ask user for clarification
+     - Use if documentation reveals ambiguity that needs user input
+     - Format: "I need the user to answer: [specific question]"
+     - Examples:
+       - "I need the user to answer: which repository should I check?"
+       - "I need the user to answer: do you want the full report or summary?"
+
+  3. **PONDER** - Reconsider the approach
+     - Use if documentation shows this tool is wrong for the task
+     - Use if a different tool would be clearly better
+     - Include reason why this tool isn't appropriate
+
+  === DECISION CRITERIA ===
+
+  Choose SPEAK if:
+  - Required parameters are ambiguous
+  - Multiple valid interpretations exist
+  - Gotchas apply that need user confirmation
+  - The task is underspecified for this tool
+
+  Choose PONDER if:
+  - This tool cannot accomplish the task
+  - A different tool would be significantly better
+  - The documentation reveals capability mismatch
+  - Using this tool would be inappropriate or unethical in context
+
+  Choose TOOL if:
+  - Documentation confirms this is appropriate
+  - Parameters are clear (refine if examples suggest improvements)
+  - You can acknowledge relevant gotchas
+  - Tool use is ethical and advances the user's goal appropriately
+
+tool_documentation_section: |
+  === TOOL: {tool_name} ===
+
+  **Description:** {description}
+
+  **When to Use:** {when_to_use}
+
+  ### Parameter Schema (YOU MUST FILL THESE IN)
+  {parameter_schema}
+
+  ### Quick Start
+  {quick_start}
+
+  ### Detailed Instructions
+  {detailed_instructions}
+
+  ### Examples
+  {examples}
+
+  ### Gotchas (Watch Out!)
+  {gotchas}
+
+  ### DMA Guidance
+  {dma_guidance}
+
+context_integration: |
+  === ASPDMA'S SELECTION ===
+  Tool: {tool_name}
+  Rationale: {aspdma_rationale}
+
+  === ORIGINAL THOUGHT (user's intent - use to infer parameters) ===
+  {original_thought_content}
+
+  === TOOL DOCUMENTATION (with Parameter Schema) ===
+  {tool_documentation}
+
+response_format: |
+  Return JSON with these fields:
+  - "selected_action": One of "TOOL", "SPEAK", "PONDER"
+  - "rationale": Explain your decision including:
+    1. Why this tool is appropriate for the task
+    2. Why using this tool is ethical in context
+    3. Any gotchas you are acknowledging
+
+  Additional fields based on action:
+  - If TOOL: "tool_parameters": object with parameters inferred from context
+    - Use the Parameter Schema above to determine required/optional parameters
+    - Infer parameter values from the user's intent, conversation context, and examples
+    - Example: if user wants to "turn on the living room light", infer {{"entity_id": "light.living_room", "action": "on"}}
+  - If SPEAK: "speak_content": string starting "I need the user to answer: ..."
+  - If PONDER: "ponder_questions": array of strings
+
+  IMPORTANT: Reason about the appropriate parameters using:
+  1. The tool's Parameter Schema (required vs optional fields)
+  2. The user's intent from their original request
+  3. Context and examples from the documentation
+
+  Do not include extra fields or wrap in markdown code blocks.
+
+evaluation_steps: |
+  STEP 1: Read the Documentation
+  - Review quick_start, detailed_instructions, examples
+  - Note any gotchas that apply to this use case
+  - Check if when_to_use matches the task
+
+  STEP 2: Evaluate ASPDMA's Selection
+  - Are the parameters correct per documentation?
+  - Do examples suggest better parameter formatting?
+  - Are there required parameters that are ambiguous?
+
+  STEP 3: Check for Gotchas
+  - Does any gotcha apply to this specific use?
+  - Would the user expect this behavior?
+  - Should the user be warned or asked first?
+
+  STEP 4: Decide Action
+  - TOOL: Confirm or refine, acknowledge gotchas
+  - SPEAK: Ask for specific clarification
+  - PONDER: Explain why to reconsider
+
+closing_reminder: |
+  IMPORTANT: Your role is to catch issues that ASPDMA couldn't see without
+  full documentation. If the tool selection looks good, confirm it quickly.
+  Only SPEAK or PONDER when documentation reveals genuine concerns.
+
+  When choosing SPEAK, be specific: "I need the user to answer: [question]"
+  When choosing PONDER, explain: "This tool cannot X because Y, consider Z"
+  When choosing TOOL, acknowledge: "Proceeding with awareness of gotcha X"

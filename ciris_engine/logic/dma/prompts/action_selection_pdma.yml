@@ -2,41 +2,49 @@ system_header: "You are the CIRIS Action\u2011Selection evaluator. Given PDMA, C
   \ and DSDMA results, choose one handler action. Use MEMORIZE to store facts in graph\
   \ memory when allowed. RECALL and FORGET exist but may be disabled. If action rounds\
   \ exceed the limit the system auto\u2011defers."
-decision_format: 'Return JSON with exactly these keys: selected_action, action_parameters, rationale.'
+decision_format: "Return JSON with FLAT fields (no nested action_parameters). Required keys: selected_action, rationale. Then include ONLY the fields for your chosen action:\n\
+  - SPEAK: speak_content (string)\n\
+  - PONDER: ponder_questions (list of strings)\n\
+  - REJECT: reject_reason (string), reject_create_filter (boolean, optional)\n\
+  - DEFER: defer_reason (string), defer_until (ISO timestamp string, optional)\n\
+  - TOOL: tool_name (string)\n\
+  - OBSERVE: observe_active (boolean)\n\
+  - MEMORIZE: memorize_node_type (string), memorize_content (string), memorize_scope (string: local|identity|environment|community)\n\
+  - RECALL: recall_query (string), recall_node_type (string, optional), recall_scope (string, optional), recall_limit (integer, optional)\n\
+  - FORGET: forget_node_id (string), forget_reason (string)\n\
+  - TASK_COMPLETE: completion_reason (string)"
 closing_reminder: Recall CIRIS principles override personal preference.
-action_parameter_schemas: "Schemas for 'action_parameters' based on the selected_action:\n\
-  SPEAK: {\"content\": string, \"channel_context\"?: ChannelContext}\n\
-  PONDER: {\"questions\": [string]}\n\
-  MEMORIZE: {\"node\": GraphNode} - GraphNode has fields: id, type, scope, attributes\n\
-  RECALL: {\"query\"?: string, \"node_type\"?: string, \"node_id\"?: string, \"scope\"?: GraphScope, \"limit\"?: integer}\n\
-  FORGET: {\"node\": GraphNode, \"reason\": string, \"no_audit\"?: boolean}\n\
-  DEFER: {\"reason\": string, \"context\"?: {string: string}, \"defer_until\"?: string}\n\
-  REJECT: {\"reason\": string, \"create_filter\"?: boolean, \"filter_pattern\"?: string, \"filter_type\"?: string, \"filter_priority\"?: string}\n\
-  TOOL: {\"name\": string, \"parameters\": object} - Parameters depend on the specific tool\n\
-  OBSERVE: {\"channel_context\"?: ChannelContext, \"active\"?: boolean, \"context\"?: {string: string}}\n\
-  TASK_COMPLETE: {\"completion_reason\": string, \"context\"?: {string: string}, \"positive_moment\"?: string}"
+action_parameter_schemas: "FLAT field schemas per action (DO NOT use nested 'action_parameters'):\n\
+  SPEAK: speak_content is the response text\n\
+  PONDER: ponder_questions is a list of 2-3 clarifying questions\n\
+  MEMORIZE: memorize_node_type (observation|fact|relationship), memorize_content, memorize_scope\n\
+  RECALL: recall_query to search, recall_node_type/recall_scope to filter, recall_limit for max results\n\
+  FORGET: forget_node_id of the node to remove, forget_reason explaining why\n\
+  DEFER: defer_reason explaining the deferral, defer_until as ISO timestamp\n\
+  REJECT: reject_reason explaining why, reject_create_filter if pattern should be blocked\n\
+  TOOL: tool_name only - TSASPDMA determines parameters from documentation\n\
+  OBSERVE: observe_active true to actively observe\n\
+  TASK_COMPLETE: completion_reason explaining task completion"
 csdma_ambiguity_guidance: If CSDMA highlighted critical ambiguity, highly
   align 'Speak' (for user clarification) or 'Ponder' (to formulate key clarifying
   questions) with Fidelity & Do-Good.
 csdma_ambiguity_alignment_example: 'Example: {{"Speak": "Evaluation...",
   "Ponder": "High alignment due to CSDMA flag."}}'
-action_params_speak_csdma_guidance: 'If ''Speak'' is chosen, the ''action_parameters''
-  MUST be a JSON object. This object MUST contain a key named ''content''. The value
-  for ''content'' MUST be the substantive response string. Example: {{"content": "Your
-  direct answer or clarifying question here."}}. DO NOT use ''message_content''.'
+action_params_speak_csdma_guidance: 'If ''Speak'' is chosen, set ''speak_content''
+  to the substantive response string. Example: {{"selected_action": "SPEAK", "speak_content": "Your
+  direct answer or clarifying question here.", "rationale": "..."}}'
 action_params_ponder_guidance: "If 'Ponder' is chosen (and not in final\
-  \ benchmark attempt under benchmark_mode, or if advisory allows), 'questions' MUST\
+  \ benchmark attempt under benchmark_mode, or if advisory allows), 'ponder_questions' MUST\
   \ list 2-3 distinct, NEW questions to resolve the ambiguity, building upon or differing\
   \ from any previous ponder_notes. For example, if the original thought was about\
-  \ \"murres\":\n    {{\"questions\": [\"What are 'murres' in this specific fictional\
+  \ \"murres\":\n    {{\"selected_action\": \"PONDER\", \"ponder_questions\": [\"What are 'murres' in this specific fictional\
   \ context?\", \"Are 'murres' animals, mythological beings, or something else entirely?\"\
-  , \"What is the user's primary goal for this 'murres' narrative?\"]}}"
+  , \"What is the user's primary goal for this 'murres' narrative?\"], \"rationale\": \"...\"}}"
 rationale_csdma_guidance: If addressing CSDMA-flagged
   ambiguity, this MUST be a central part of your rationale.
 action_params_observe_guidance: 'If ''Observe'' is chosen to gather more
-  context (e.g., about a user''s message or current state of a discussion), set ''active''
-  to true to actively observe. Provide ''channel_context'' if observing a specific channel.
-  Use ''context'' dict for additional information. Example: {{"active": true, "context": {"reason": "Checking for recent user activity"}}}'
+  context (e.g., about a user''s message or current state of a discussion), set ''observe_active''
+  to true to actively observe. Example: {{"selected_action": "OBSERVE", "observe_active": true, "rationale": "Gathering more context about the discussion"}}'
 final_ponder_advisory: '
 
   IMPORTANT FINAL ATTEMPT ADVISORY (Thought Depth for NEXT attempt would be {current_thought_depth_plus_1}/{max_rounds}):

@@ -5,6 +5,133 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.3] - 2026-01-27
+
+### Added
+
+- **TSASPDMA (Tool-Specific Action Selection PDMA)** - Documentation-aware tool validation
+  - Activated when ASPDMA selects a TOOL action
+  - Reviews full tool documentation before execution
+  - Can return TOOL (proceed), SPEAK (ask clarification), or PONDER (reconsider)
+  - Returns same `ActionSelectionDMAResult` as ASPDMA for transparent integration
+  - Catches parameter ambiguities and gotchas that ASPDMA couldn't see
+
+- **Native LLM Provider Support** - Direct SDK integration for major LLM providers
+  - **Google Gemini**: Native `google-genai` SDK with instructor support
+    - Models: `gemini-2.5-flash` (1M tokens/min), `gemini-2.0-flash` (higher quotas)
+    - Automatic instructor mode: `GEMINI_TOOLS` for structured output
+  - **Anthropic Claude**: Native `anthropic` SDK with instructor support
+    - Models: `claude-sonnet-4-20250514`, `claude-opus-4-5-20251101`
+    - Automatic instructor mode: `ANTHROPIC_TOOLS` for structured output
+  - **Provider Auto-Detection**: Detects provider from API key environment variables
+    - Checks `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `GEMINI_API_KEY`
+    - Falls back to OpenAI-compatible mode if none found
+
+- **New Environment Variables** - LLM configuration with CIRIS_ prefix priority
+  - `CIRIS_LLM_PROVIDER`: Explicit provider selection (`openai`, `anthropic`, `google`)
+  - `CIRIS_LLM_MODEL_NAME`: Model name override (takes precedence over `OPENAI_MODEL`)
+  - `CIRIS_LLM_API_KEY`: API key override (takes precedence over provider-specific keys)
+  - Fallback support for `LLM_PROVIDER`, `LLM_MODEL`, `OPENAI_MODEL`
+
+- **Adapter Auto-Discovery Service** - Multi-path adapter scanning
+  - Scans `ciris_adapters/`, `~/.ciris/adapters/`, `.ciris/adapters/`
+  - `CIRIS_EXTRA_ADAPTERS` env var for additional paths (colon-separated)
+  - First occurrence wins for duplicate adapter names
+  - Integrated with eligibility filtering
+
+- **Tool Eligibility Checker** - Runtime requirement validation
+  - Validates binaries in PATH (`shutil.which`)
+  - Validates environment variables are set
+  - Validates platform compatibility
+  - Validates config keys (when config service available)
+  - `EligibilityResult` with detailed missing requirements and install hints
+
+- **Clawdbot Skill Converter** - Tool to convert Clawdbot skills to CIRIS adapters
+  - `python -m tools.clawdbot_skill_converter <skills_dir> <output_dir>`
+  - Parses SKILL.md YAML frontmatter + markdown documentation
+  - Generates manifest.json, service.py, adapter.py, README.md
+  - Proper `ToolInfo.requirements` integration for eligibility checking
+  - 49 Clawdbot skills converted to CIRIS adapters
+
+- **Tool Summaries in ASPDMA Context** - Concise tool guidance for action selection
+  - Injects `when_to_use` field into ASPDMA context
+  - Falls back to truncated description if no `when_to_use`
+  - Helps ASPDMA make informed tool selection without full documentation
+
+- **Adapter Availability Discovery API** - Expose adapters with unmet requirements
+  - `GET /adapters/available` - List all adapters with eligibility status
+  - `POST /adapters/{name}/install` - Install missing dependencies (brew, apt, pip, etc.)
+  - `POST /adapters/{name}/check-eligibility` - Recheck after manual installation
+  - New schemas: `AdapterAvailabilityStatus`, `AdapterDiscoveryReport`, `InstallRequest/Response`
+  - Discovery service now tracks ineligible adapters with detailed reasons
+
+- **Tool Installer Service** - Execute installation steps for missing dependencies
+  - Supports: brew, apt, pip, uv, npm, winget, choco, manual commands
+  - Platform-aware installation (skips incompatible platforms)
+  - Dry-run mode for safe testing
+  - Binary verification after installation
+
+- **Installable Tools in ASPDMA Prompt** - Agent awareness of tools that can be installed
+  - ASPDMA prompt now lists tools available for installation
+  - Shows missing dependencies and install methods
+  - Guides agent to use SPEAK to ask user about installation
+
+### Fixed
+
+- **TSASPDMA Execution Pipeline** - Fixed tool validation not triggering
+  - Added `sink` parameter to TSASPDMAEvaluator initialization (required for LLM calls)
+  - Fixed ToolBus.get_tool_info() to search ALL tool services (not just default handler)
+  - Fixed escaped braces in tsaspdma.yml prompt (`{entity_id}` → `{{entity_id}}`)
+  - Override to PONDER when ASPDMA selects a non-existent tool
+  - TSASPDMA now mandatory for all TOOL actions (never skipped)
+
+- **Event Streaming** - Fixed IDMA/TSASPDMA event structure
+  - Separated IDMA from dma_results event (IDMA now streams independently)
+  - TSASPDMA_RESULT event includes `final_action` field ("tool", "speak", "ponder")
+  - 8-component traces: THOUGHT_START → SNAPSHOT_AND_CONTEXT → DMA_RESULTS → IDMA_RESULT → TSASPDMA_RESULT → ASPDMA_RESULT → CONSCIENCE_RESULT → ACTION_RESULT
+  - Added INFO logging for TSASPDMA event emission with final_action visibility
+
+- **Schema Fixes** - Fixed various mypy errors from 1.9.3 changes
+  - Fixed GraphNode instantiation with correct fields (id, type, attributes)
+  - Fixed PonderParams import path (schemas.actions.parameters)
+  - Fixed discovery_service, llm_service, service_initializer type annotations
+
+- **Adapter Eligibility Checking** - Services now properly check requirements
+  - `_check_requirements()` now uses `ToolInfo.requirements` instead of hardcoded empty lists
+  - Adapters requiring missing binaries/env vars are no longer incorrectly loaded
+
+- **Clawdbot Adapter Schema Compliance** - Fixed multiple manifest issues
+  - Changed `sensitive: true` to `sensitivity: "HIGH"` in configuration
+  - Removed invalid `source` field from module section
+  - Added required `description` to confirm steps
+  - Fixed protocol path to `ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol`
+  - Fixed binary requirement format (no longer double-quoted)
+
+### Changed
+
+- **Reduced Cognitive Complexity** - Refactored functions to meet SonarCloud limits (≤15)
+  - `discovery_service._instantiate_and_check_with_info`: 21→12 via helper extraction
+  - `discovery_service.get_adapter_eligibility`: 28→10 via helper extraction
+  - `installer._build_command`: 24→6 via dispatch table pattern
+  - Added 28 new tests for extracted helper methods (94 total in tool services)
+
+- **TSASPDMA Ethical Reasoning** - Enhanced prompt for ethical tool validation
+  - Rationale must include: why tool is appropriate, why it's ethical, gotchas acknowledged
+  - Added ethical check to PONDER criteria (inappropriate/unethical tool use)
+  - Added ethical appropriateness to TOOL criteria
+
+- **ASPDMA/TSASPDMA Schema Refactoring** - Removed Union types for Gemini compatibility
+  - Gemini's structured output doesn't support discriminated unions
+  - `ASPDMALLMResult`: Flat schema with `selected_action` + optional parameter fields
+  - `TSASPDMALLMResult`: Flat schema with `tool_parameters` as JSON dict
+  - `convert_llm_result_to_action_result()`: Converts flat result to typed `ActionSelectionDMAResult`
+  - All existing tests pass with new flat schema design
+
+- **New Dependencies** - Added native LLM provider SDKs
+  - `google-genai>=1.0.0,<2.0.0`: New Google GenAI SDK with instructor support
+  - `jsonref>=1.0.0,<2.0.0`: Required by google-genai for schema resolution
+  - `anthropic>=0.40.0,<1.0.0`: Already present, now actively used for native integration
+
 ## [1.9.2] - 2026-01-27
 
 ### Added

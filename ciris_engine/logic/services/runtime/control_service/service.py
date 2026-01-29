@@ -458,7 +458,9 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
             # Request global shutdown through the shutdown service
             if self.runtime and hasattr(self.runtime, "service_registry"):
-                shutdown_service = self.runtime.service_registry.get_service("ShutdownService")
+                shutdown_service = await self.runtime.service_registry.get_service(
+                    handler="default", service_type=ServiceType.SHUTDOWN
+                )
                 if shutdown_service:
                     shutdown_service.request_shutdown(f"Runtime control: {reason}")
                 else:
@@ -539,7 +541,6 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
             # Get shutdown service from registry if available
             if self.runtime and hasattr(self.runtime, "service_registry"):
-                # Fix: Provide both handler and service_type parameters
                 shutdown_service = await self.runtime.service_registry.get_service(
                     handler="default", service_type=ServiceType.SHUTDOWN
                 )

@@ -10,6 +10,7 @@ with direct LLM access and minimal overhead.
 
 import asyncio
 import logging
+import os
 from typing import Any, List, Optional
 
 import uvicorn
@@ -57,16 +58,28 @@ class A2AAdapter(Service):
         self.runtime = runtime
         self.context = context
 
-        # Extract config
+        # Extract config - environment variables take precedence
         adapter_config = kwargs.get("adapter_config", {})
+
+        # Default values
+        default_host = "0.0.0.0"
+        default_port = 8100
+        default_timeout = 60.0
+
+        # Get from adapter_config first
         if isinstance(adapter_config, dict):
-            self._host = adapter_config.get("host", "0.0.0.0")
-            self._port = adapter_config.get("port", 8100)
-            self._timeout = adapter_config.get("timeout", 60.0)
+            config_host = adapter_config.get("host", default_host)
+            config_port = adapter_config.get("port", default_port)
+            config_timeout = adapter_config.get("timeout", default_timeout)
         else:
-            self._host = getattr(adapter_config, "host", "0.0.0.0")
-            self._port = getattr(adapter_config, "port", 8100)
-            self._timeout = getattr(adapter_config, "timeout", 60.0)
+            config_host = getattr(adapter_config, "host", default_host)
+            config_port = getattr(adapter_config, "port", default_port)
+            config_timeout = getattr(adapter_config, "timeout", default_timeout)
+
+        # Environment variables override config (for AgentBeats/Docker)
+        self._host = os.environ.get("CIRIS_A2A_HOST", config_host)
+        self._port = int(os.environ.get("CIRIS_A2A_PORT", config_port))
+        self._timeout = float(os.environ.get("CIRIS_A2A_TIMEOUT", config_timeout))
 
         # Create A2A service with runtime for pipeline access
         self.a2a_service = A2AService(
@@ -199,6 +212,23 @@ class A2AAdapter(Service):
         async def metrics() -> dict[str, Any]:
             """Get A2A service metrics."""
             return self.a2a_service.get_metrics()
+
+        # AgentBeats agent manifest endpoint
+        @app.get("/.well-known/agent.json")
+        async def agent_manifest() -> dict[str, Any]:
+            """AgentBeats agent manifest for discovery."""
+            return {
+                "name": "CIRIS Agent",
+                "version": "1.9.4",
+                "description": "CIRIS ethical AI agent for HE-300 benchmarking",
+                "capabilities": ["ethics-evaluation", "a2a:tasks_send", "benchmark:he300"],
+                "protocols": ["a2a"],
+                "endpoints": {
+                    "a2a": "/a2a",
+                    "health": "/health",
+                    "metrics": "/metrics",
+                },
+            }
 
         return app
 

@@ -1214,6 +1214,25 @@ async def list_adapters() -> SuccessResponse[List[AdapterConfig]]:
     return SuccessResponse(data=adapters)
 
 
+@router.get("/adapters/available", response_model=SuccessResponse[Dict[str, Any]])
+async def list_available_adapters_for_setup() -> SuccessResponse[Dict[str, Any]]:
+    """List discovered adapters with eligibility status (no auth required for setup).
+
+    Returns both eligible (ready to use) and ineligible (missing requirements)
+    adapters, including installation hints for ineligible adapters.
+    This endpoint is accessible without authentication during first-run setup.
+    """
+    from ciris_engine.logic.services.tool.discovery_service import AdapterDiscoveryService
+
+    try:
+        discovery = AdapterDiscoveryService()
+        report = await discovery.get_discovery_report()
+        return SuccessResponse(data=report.model_dump())
+    except Exception as e:
+        logger.error(f"Error getting adapter availability for setup: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/models")
 async def get_model_capabilities_endpoint() -> SuccessResponse[Dict[str, Any]]:
     """Get CIRIS-compatible LLM model capabilities.

@@ -28,6 +28,7 @@ from ciris_engine.logic.utils.shutdown_manager import get_shutdown_manager
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
 from ciris_engine.schemas.processors.base import ProcessorServices
+from ciris_engine.schemas.processors.context import ProcessorContext
 from ciris_engine.schemas.processors.results import ShutdownResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
@@ -222,9 +223,27 @@ class ShutdownProcessor(BaseProcessor):
         try:
             # Evaluate consent requirement once per shutdown session
             if not self._consent_evaluated:
+                # Build context for consent evaluation
+                context = ProcessorContext(origin="shutdown_processor")
+
+                # Add current active task if available
+                # Note: We look for ACTIVE tasks, as PENDING/COMPLETED tasks don't block shutdown
+                active_tasks = persistence.get_tasks_by_status(
+                    TaskStatus.ACTIVE, self.agent_occurrence_id
+                )
+                if active_tasks:
+                    # Use the most recent active task as context
+                    # Sort by created_at desc just to be safe, though get_tasks_by_status sorts by created_at asc
+                    # We want the *current* focus, so usually the last created one
+                    context.current_task = active_tasks[-1]
+
+                # Add template for guardrails access
+                if self.runtime and hasattr(self.runtime, "agent_template"):
+                    context.template = self.runtime.agent_template
+
                 self._consent_required, self._consent_reason = await self.condition_evaluator.requires_consent(
                     self.cognitive_behaviors,
-                    context=None,  # TODO: Pass ProcessorContext when available
+                    context=context,
                 )
                 self._consent_evaluated = True
                 logger.info(

@@ -324,6 +324,11 @@ class AdapterDiscoveryService:
         """
         disabled = set(disabled_adapters or [])
         deps = service_dependencies or {}
+
+        # Inject config service into checker if available and needed
+        if self.checker and not self.checker.config_service and "config_service" in deps:
+            self.checker.config_service = deps["config_service"]
+
         eligible_services: Dict[str, Any] = {}
         ineligible_adapters: List[IneligibleAdapterInfo] = []
 

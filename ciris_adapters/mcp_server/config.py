@@ -40,6 +40,8 @@ class MCPServerConfig(BaseModel):
     # Authentication
     require_auth: bool = Field(True, description="Require authentication for message/history tools")
     api_key: Optional[str] = Field(None, description="API key for authentication (if set)")
+    jwt_secret: Optional[str] = Field(None, description="Secret key for JWT validation")
+    jwt_algorithm: str = Field("HS256", description="Algorithm for JWT validation")
 
     # Enable/disable
     enabled: bool = Field(True, description="Whether server is enabled")
@@ -71,6 +73,12 @@ class MCPServerConfig(BaseModel):
 
         if os.environ.get("MCP_API_KEY"):
             self.api_key = os.environ["MCP_API_KEY"]
+
+        if os.environ.get("MCP_JWT_SECRET"):
+            self.jwt_secret = os.environ["MCP_JWT_SECRET"]
+
+        if os.environ.get("MCP_JWT_ALGORITHM"):
+            self.jwt_algorithm = os.environ["MCP_JWT_ALGORITHM"]
 
         if os.environ.get("MCP_REQUIRE_AUTH"):
             self.require_auth = os.environ["MCP_REQUIRE_AUTH"].lower() == "true"

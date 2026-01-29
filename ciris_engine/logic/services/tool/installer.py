@@ -196,6 +196,25 @@ class ToolInstaller:
 
     def _has_package_manager(self, kind: str) -> bool:
         """Check if a package manager is available."""
+        kind_lower = kind.lower()
+
+        # Special handling for pip - check module availability via sys.executable
+        if kind_lower == "pip":
+            import subprocess
+
+            try:
+                # Check if python -m pip works
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "--version"],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return True
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                # Fallback to binary check if module check fails
+                pass
+
         manager_binaries = {
             "brew": "brew",
             "apt": "apt-get",
@@ -206,7 +225,7 @@ class ToolInstaller:
             "choco": "choco",
             "manual": "sh",
         }
-        binary = manager_binaries.get(kind.lower())
+        binary = manager_binaries.get(kind_lower)
         if not binary:
             return False
         return shutil.which(binary) is not None

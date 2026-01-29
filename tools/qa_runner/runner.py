@@ -60,6 +60,17 @@ class QARunner:
                     "[dim]Auto-configured adapter: api,external_data_sql for DSAR multi-source tests[/dim]"
                 )
 
+        # HE-300 benchmark uses in-process test client by default (no server needed)
+        if modules and modules == [QAModule.HE300_BENCHMARK]:
+            import os
+
+            use_live_a2a = os.environ.get("CIRIS_QA_LIVE_A2A", "").lower() in ("1", "true", "yes")
+            if not use_live_a2a:
+                self.config.auto_start_server = False
+                self.console.print(
+                    "[dim]HE-300 benchmark: using in-process test client (set CIRIS_QA_LIVE_A2A=1 for live server)[/dim]"
+                )
+
         # Determine database backends to test
         if self.config.database_backends is None:
             self.database_backends = ["sqlite"]  # Default to SQLite only
@@ -206,14 +217,18 @@ class QARunner:
                 return False
 
         # Get authentication token (skip for SETUP module - first-run has no users)
-        if QAModule.SETUP not in modules:
+        # Also skip for HE300_BENCHMARK in-process mode (no server running)
+        skip_auth_modules = {QAModule.SETUP, QAModule.HE300_BENCHMARK}
+        if not skip_auth_modules.intersection(set(modules)):
             if not self._authenticate():
                 self.console.print("[red]❌ Authentication failed[/red]")
                 if self.config.auto_start_server:
                     self.server_manager.stop()
                 return False
-        else:
+        elif QAModule.SETUP in modules:
             self.console.print("[dim]Skipping authentication for SETUP module (first-run mode)[/dim]")
+        elif QAModule.HE300_BENCHMARK in modules and not self.config.auto_start_server:
+            self.console.print("[dim]Skipping authentication for HE-300 in-process mode[/dim]")
 
         # Initialize SSE monitoring helper for HANDLERS and FILTERS tests
         # Both now use async /agent/message endpoint + SSE streaming
@@ -1292,9 +1307,16 @@ class QARunner:
                 elif test.method == "CUSTOM":
                     # Custom method handler for special tests like streaming verification
                     if test.custom_handler:
-                        from .modules.streaming_verification import StreamingVerificationModule
+                        # Dispatch to appropriate module based on test module
+                        if test.module == QAModule.HE300_BENCHMARK:
+                            from .modules.he300_benchmark_tests import HE300BenchmarkModule
 
-                        custom_result = StreamingVerificationModule.run_custom_test(test, self.config, self.token)
+                            custom_result = HE300BenchmarkModule.run_custom_test(test, self.config, self.token)
+                        else:
+                            # Default to streaming verification module
+                            from .modules.streaming_verification import StreamingVerificationModule
+
+                            custom_result = StreamingVerificationModule.run_custom_test(test, self.config, self.token)
                         if custom_result["success"]:
                             # Print validation details
                             if self.config.verbose:

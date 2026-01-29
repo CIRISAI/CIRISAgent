@@ -1004,6 +1004,189 @@ class TestAdapterLoading:
             assert call_kwargs["time_service"] is None
 
 
+class TestAutoLoadAdaptersFlag:
+    """Test cases for auto_load_adapters template flag."""
+
+    @pytest.fixture
+    def temp_data_dir(self):
+        """Create temporary data directory."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            yield temp_dir
+
+    @pytest.fixture
+    def mock_essential_config(self, temp_data_dir):
+        """Create mock essential config."""
+        config = Mock(spec=EssentialConfig)
+        config.data_dir = temp_data_dir
+        config.db_path = os.path.join(temp_data_dir, "test.db")
+        config.log_level = "INFO"
+
+        # Add database attribute
+        mock_database = Mock()
+        mock_database.main_db = Path(temp_data_dir) / "test.db"
+        mock_database.secrets_db = Path(temp_data_dir) / "secrets.db"
+        mock_database.audit_db = Path(temp_data_dir) / "audit.db"
+        mock_database.database_url = None
+        config.database = mock_database
+
+        # Add security attribute
+        mock_security = Mock()
+        mock_security.secrets_key_path = Path(temp_data_dir) / ".ciris_keys"
+        config.security = mock_security
+
+        # Add graph attribute
+        mock_graph = Mock()
+        mock_graph.tsdb_raw_retention_hours = 24
+        config.graph = mock_graph
+
+        # Add adapters attribute - enable auto_discovery by default for these tests
+        mock_adapters = Mock()
+        mock_adapters.auto_discovery = True
+        mock_adapters.disabled_adapters = []
+        config.adapters = mock_adapters
+
+        # Add agent_occurrence_id for adapter injection
+        config.agent_occurrence_id = "default"
+
+        return config
+
+    @pytest.fixture
+    def service_initializer(self, mock_essential_config):
+        """Create ServiceInitializer instance."""
+        initializer = ServiceInitializer(essential_config=mock_essential_config)
+        initializer._db_path = mock_essential_config.db_path
+        initializer._mock_llm = True
+        initializer.bus_manager = Mock()
+        initializer.config_service = Mock()
+        return initializer
+
+    @pytest.mark.asyncio
+    async def test_skill_adapters_disabled_when_template_flag_false(self, service_initializer):
+        """Test that skill adapters don't auto-load when auto_load_adapters is False."""
+        # Create mock identity with auto_load_adapters = False
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock()
+        mock_identity.core_profile.auto_load_adapters = False
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                # Mock AdapterDiscoveryService to track if it's called
+                with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery:
+                    await service_initializer._initialize_skill_adapters()
+
+                    # AdapterDiscoveryService should NOT be instantiated
+                    mock_discovery.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skill_adapters_disabled_when_no_identity(self, service_initializer):
+        """Test that skill adapters don't auto-load when no identity exists."""
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=None,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery:
+                    await service_initializer._initialize_skill_adapters()
+
+                    # AdapterDiscoveryService should NOT be instantiated
+                    mock_discovery.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skill_adapters_disabled_when_config_auto_discovery_false(
+        self, service_initializer, mock_essential_config
+    ):
+        """Test that skill adapters don't auto-load when config.adapters.auto_discovery is False."""
+        # Enable template flag but disable config flag
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock()
+        mock_identity.core_profile.auto_load_adapters = True
+
+        # Disable in config
+        mock_essential_config.adapters.auto_discovery = False
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery:
+                    await service_initializer._initialize_skill_adapters()
+
+                    # AdapterDiscoveryService should NOT be instantiated
+                    mock_discovery.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skill_adapters_enabled_when_both_flags_true(self, service_initializer, mock_essential_config):
+        """Test that skill adapters auto-load when both template and config flags are True."""
+        # Enable both flags
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock()
+        mock_identity.core_profile.auto_load_adapters = True
+        mock_essential_config.adapters.auto_discovery = True
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                # Mock the discovery service with AsyncMock for async methods
+                mock_discovery_instance = Mock()
+                mock_discovery_instance.discover_adapters.return_value = []
+                mock_discovery_instance.load_eligible_adapters = AsyncMock(return_value=[])
+
+                with patch(
+                    "ciris_engine.logic.services.tool.AdapterDiscoveryService",
+                    return_value=mock_discovery_instance,
+                ) as mock_discovery_class:
+                    with patch("ciris_engine.logic.services.tool.eligibility_checker.ToolEligibilityChecker"):
+                        with patch(
+                            "ciris_engine.logic.config.env_utils.get_env_var",
+                            return_value=None,
+                        ):
+                            await service_initializer._initialize_skill_adapters()
+
+                            # AdapterDiscoveryService SHOULD be instantiated
+                            mock_discovery_class.assert_called_once()
+                            # load_eligible_adapters should be called (the async method)
+                            mock_discovery_instance.load_eligible_adapters.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_skill_adapters_checks_core_profile_attribute(self, service_initializer):
+        """Test that we properly check core_profile.auto_load_adapters attribute."""
+        # Create identity without auto_load_adapters attribute on core_profile
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock(spec=[])  # No auto_load_adapters attr
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery:
+                    await service_initializer._initialize_skill_adapters()
+
+                    # Should not proceed since hasattr returns False
+                    mock_discovery.assert_not_called()
+
+
 class TestGetLLMServiceConfigValue:
     """Test cases for _get_llm_service_config_value helper method."""
 

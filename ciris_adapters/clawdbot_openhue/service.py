@@ -89,6 +89,7 @@ class OpenhueToolService:
                     label="Install OpenHue CLI (brew)",
                     formula="openhue/cli/openhue-cli",
                     provides_binaries=["openhue"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

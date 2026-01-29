@@ -89,6 +89,7 @@ class SongseeToolService:
                     label="Install songsee (brew)",
                     formula="steipete/tap/songsee",
                     provides_binaries=["songsee"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

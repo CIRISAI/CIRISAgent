@@ -89,6 +89,7 @@ class OnepasswordToolService:
                     label="Install 1Password CLI (brew)",
                     formula="1password-cli",
                     provides_binaries=["op"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

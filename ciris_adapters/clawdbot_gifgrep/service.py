@@ -89,6 +89,7 @@ class GifgrepToolService:
                     label="Install gifgrep (brew)",
                     formula="steipete/tap/gifgrep",
                     provides_binaries=["gifgrep"],
+                    platforms=["darwin"],
                 ),
                 InstallStep(id="go", kind="go", label="Install gifgrep (go)", provides_binaries=["gifgrep"]),
             ],

@@ -89,6 +89,7 @@ class OrdercliToolService:
                     label="Install ordercli (brew)",
                     formula="steipete/tap/ordercli",
                     provides_binaries=["ordercli"],
+                    platforms=["darwin"],
                 ),
                 InstallStep(id="go", kind="go", label="Install ordercli (go)", provides_binaries=["ordercli"]),
             ],

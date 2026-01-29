@@ -92,6 +92,7 @@ class GoplacesToolService:
                     label="Install goplaces (brew)",
                     formula="steipete/tap/goplaces",
                     provides_binaries=["goplaces"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

@@ -90,6 +90,7 @@ class AppleRemindersToolService:
                     label="Install remindctl via Homebrew",
                     formula="steipete/tap/remindctl",
                     provides_binaries=["remindctl"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

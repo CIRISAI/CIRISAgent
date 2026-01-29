@@ -92,6 +92,7 @@ class SagToolService:
                     label="Install sag (brew)",
                     formula="steipete/tap/sag",
                     provides_binaries=["sag"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

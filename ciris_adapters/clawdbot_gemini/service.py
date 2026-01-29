@@ -89,6 +89,7 @@ class GeminiToolService:
                     label="Install Gemini CLI (brew)",
                     formula="gemini-cli",
                     provides_binaries=["gemini"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

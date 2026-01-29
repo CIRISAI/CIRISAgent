@@ -215,9 +215,11 @@ class TestValidateLLMEndpoint:
         """Test successful OpenAI validation."""
         with patch("openai.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
-            mock_models = AsyncMock()
-            mock_models.data = ["gpt-4", "gpt-3.5-turbo"]
-            mock_client.models.list = AsyncMock(return_value=mock_models)
+            # Mock chat.completions.create since validation uses test completion
+            mock_chat = MagicMock()
+            mock_chat.completions = MagicMock()
+            mock_chat.completions.create = AsyncMock(return_value=MagicMock())
+            mock_client.chat = mock_chat
             mock_openai.return_value = mock_client
 
             response = client.post(
@@ -258,9 +260,11 @@ class TestValidateLLMEndpoint:
         """Test successful local LLM validation."""
         with patch("openai.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
-            mock_models = AsyncMock()
-            mock_models.data = ["llama3"]
-            mock_client.models.list = AsyncMock(return_value=mock_models)
+            # Mock chat.completions.create since validation uses test completion
+            mock_chat = MagicMock()
+            mock_chat.completions = MagicMock()
+            mock_chat.completions.create = AsyncMock(return_value=MagicMock())
+            mock_client.chat = mock_chat
             mock_openai.return_value = mock_client
 
             response = client.post(
@@ -282,7 +286,11 @@ class TestValidateLLMEndpoint:
         """Test LLM validation with connection timeout."""
         with patch("openai.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
-            mock_client.models.list = AsyncMock(side_effect=Exception("timeout"))
+            # Mock chat.completions.create since validation now uses test completion
+            mock_chat = MagicMock()
+            mock_chat.completions = MagicMock()
+            mock_chat.completions.create = AsyncMock(side_effect=Exception("timeout"))
+            mock_client.chat = mock_chat
             mock_openai.return_value = mock_client
 
             response = client.post(

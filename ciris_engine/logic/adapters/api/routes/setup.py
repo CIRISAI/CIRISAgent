@@ -230,22 +230,23 @@ def _get_llm_providers() -> List[LLMProvider]:
             default_base_url=None,
             default_model="gpt-5.2",
             examples=[
-                "Standard OpenAI API",
-                "Azure OpenAI Service",
+                "GPT-5.2 Thinking",
+                "GPT-4o",
             ],
         ),
         LLMProvider(
             id="anthropic",
             name="Anthropic",
-            description="Claude models (Claude 3.5 Sonnet, Opus, Haiku)",
+            description="Claude models (Claude Sonnet 4.5, Opus 4.5, Haiku 4.5)",
             requires_api_key=True,
             requires_base_url=False,
             requires_model=True,
             default_base_url=None,
-            default_model="claude-3-5-sonnet-20241022",
+            default_model="claude-sonnet-4-5-20250929",
             examples=[
-                "Claude 3.5 Sonnet",
-                "Claude 3 Opus",
+                "Claude Sonnet 4.5",
+                "Claude Opus 4.5",
+                "Claude Haiku 4.5",
             ],
         ),
         LLMProvider(
@@ -561,30 +562,55 @@ def _classify_llm_connection_error(error: Exception, base_url: Optional[str]) ->
 
     Args:
         error: The exception that occurred
-        base_url: The base URL being connected to
+        base_url: The base URL being connected to (None for providers with fixed endpoints)
 
     Returns:
         Formatted error response
     """
     error_str = str(error)
 
-    if "401" in error_str or "Unauthorized" in error_str:
+    if "401" in error_str or "Unauthorized" in error_str or "authentication_error" in error_str.lower():
+        return LLMValidationResponse(
+            valid=False,
+            message="Authentication failed",
+            error="Invalid API key. Please check your credentials.",
+        )
+    if "invalid_api_key" in error_str.lower() or "invalid x-api-key" in error_str.lower():
         return LLMValidationResponse(
             valid=False,
             message="Authentication failed",
             error="Invalid API key. Please check your credentials.",
         )
     if "404" in error_str or "Not Found" in error_str:
+        # Check if it's a model not found error (common with Anthropic)
+        if "model:" in error_str.lower() or "not_found_error" in error_str.lower():
+            return LLMValidationResponse(
+                valid=False,
+                message="Model not found",
+                error="Model not found. Please check the model name (e.g., claude-3-5-sonnet-20241022).",
+            )
+        if base_url:
+            return LLMValidationResponse(
+                valid=False,
+                message="Endpoint not found",
+                error=f"Could not reach {base_url}. Please check the URL.",
+            )
         return LLMValidationResponse(
             valid=False,
             message="Endpoint not found",
-            error=f"Could not reach {base_url}. Please check the URL.",
+            error="Could not reach the API endpoint. Please check your configuration.",
         )
     if "timeout" in error_str.lower():
         return LLMValidationResponse(
             valid=False,
             message="Connection timeout",
             error="Could not connect to LLM server. Please check if it's running.",
+        )
+    if "connection" in error_str.lower() and "refused" in error_str.lower():
+        return LLMValidationResponse(
+            valid=False,
+            message="Connection refused",
+            error="Could not connect to the LLM server. Please check if it's running.",
         )
     return LLMValidationResponse(valid=False, message="Connection failed", error=f"Error: {error_str}")
 
@@ -675,7 +701,7 @@ async def _validate_anthropic_connection(config: LLMValidationRequest) -> LLMVal
         client = anthropic.AsyncAnthropic(api_key=config.api_key)
 
         # Try a minimal completion
-        model_to_test = config.model or "claude-3-haiku-20240307"
+        model_to_test = config.model or "claude-haiku-4-5-20251001"
         response = await client.messages.create(
             model=model_to_test,
             max_tokens=1,
@@ -696,7 +722,7 @@ async def _validate_anthropic_connection(config: LLMValidationRequest) -> LLMVal
         )
     except Exception as e:
         logger.error(f"[VALIDATE_LLM] Anthropic API call FAILED: {type(e).__name__}: {e}")
-        return _classify_llm_connection_error(e, None)
+        return _classify_llm_connection_error(e, "api.anthropic.com")
 
 
 async def _validate_google_connection(config: LLMValidationRequest) -> LLMValidationResponse:

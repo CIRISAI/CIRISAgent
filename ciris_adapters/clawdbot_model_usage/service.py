@@ -81,11 +81,14 @@ class ModelUsageToolService:
                 binaries=[
                     BinaryRequirement(name="codexbar"),
                 ],
-                platforms=["darwin"],
             ),
             install_steps=[
                 InstallStep(
-                    id="brew-cask", kind="brew", label="Install CodexBar (brew cask)", provides_binaries=["codexbar"]
+                    id="brew-cask",
+                    kind="brew",
+                    label="Install CodexBar (brew cask)",
+                    provides_binaries=["codexbar"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

@@ -89,6 +89,7 @@ class OpenaiWhisperToolService:
                     label="Install OpenAI Whisper (brew)",
                     formula="openai-whisper",
                     provides_binaries=["whisper"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

@@ -89,6 +89,7 @@ class GogToolService:
                     label="Install gog (brew)",
                     formula="steipete/tap/gogcli",
                     provides_binaries=["gog"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

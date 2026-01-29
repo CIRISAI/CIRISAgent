@@ -89,6 +89,7 @@ class BirdToolService:
                     label="Install bird (brew)",
                     formula="steipete/tap/bird",
                     provides_binaries=["bird"],
+                    platforms=["darwin"],
                 ),
                 InstallStep(
                     id="npm",

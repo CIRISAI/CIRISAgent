@@ -90,6 +90,7 @@ class AppleNotesToolService:
                     label="Install memo via Homebrew",
                     formula="antoniorodr/memo/memo",
                     provides_binaries=["memo"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

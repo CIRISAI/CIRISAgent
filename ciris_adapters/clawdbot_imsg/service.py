@@ -90,6 +90,7 @@ class ImsgToolService:
                     label="Install imsg (brew)",
                     formula="steipete/tap/imsg",
                     provides_binaries=["imsg"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

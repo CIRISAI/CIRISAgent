@@ -85,7 +85,12 @@ class SpotifyPlayerToolService:
             ),
             install_steps=[
                 InstallStep(
-                    id="brew", kind="brew", label="Install spogo (brew)", formula="spogo", provides_binaries=["spogo"]
+                    id="brew",
+                    kind="brew",
+                    label="Install spogo (brew)",
+                    formula="spogo",
+                    provides_binaries=["spogo"],
+                    platforms=["darwin"],
                 ),
                 InstallStep(
                     id="brew",
@@ -93,6 +98,7 @@ class SpotifyPlayerToolService:
                     label="Install spotify_player (brew)",
                     formula="spotify_player",
                     provides_binaries=["spotify_player"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

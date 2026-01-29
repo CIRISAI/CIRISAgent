@@ -89,6 +89,7 @@ class SummarizeToolService:
                     label="Install summarize (brew)",
                     formula="steipete/tap/summarize",
                     provides_binaries=["summarize"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

@@ -89,6 +89,7 @@ class WacliToolService:
                     label="Install wacli (brew)",
                     formula="steipete/tap/wacli",
                     provides_binaries=["wacli"],
+                    platforms=["darwin"],
                 ),
                 InstallStep(id="go", kind="go", label="Install wacli (go)", provides_binaries=["wacli"]),
             ],

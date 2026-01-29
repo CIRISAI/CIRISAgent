@@ -89,6 +89,7 @@ class CamsnapToolService:
                     label="Install camsnap (brew)",
                     formula="steipete/tap/camsnap",
                     provides_binaries=["camsnap"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

@@ -87,7 +87,12 @@ class NanoBananaProToolService:
             ),
             install_steps=[
                 InstallStep(
-                    id="uv-brew", kind="brew", label="Install uv (brew)", formula="uv", provides_binaries=["uv"]
+                    id="uv-brew",
+                    kind="brew",
+                    label="Install uv (brew)",
+                    formula="uv",
+                    provides_binaries=["uv"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

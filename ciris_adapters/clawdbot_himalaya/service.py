@@ -89,6 +89,7 @@ class HimalayaToolService:
                     label="Install Himalaya (brew)",
                     formula="himalaya",
                     provides_binaries=["himalaya"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

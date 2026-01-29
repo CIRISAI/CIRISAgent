@@ -89,6 +89,7 @@ class ObsidianToolService:
                     label="Install obsidian-cli (brew)",
                     formula="yakitrak/yakitrak/obsidian-cli",
                     provides_binaries=["obsidian-cli"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

@@ -90,6 +90,7 @@ class PeekabooToolService:
                     label="Install Peekaboo (brew)",
                     formula="steipete/tap/peekaboo",
                     provides_binaries=["peekaboo"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

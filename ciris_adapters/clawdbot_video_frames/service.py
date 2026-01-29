@@ -89,6 +89,7 @@ class VideoFramesToolService:
                     label="Install ffmpeg (brew)",
                     formula="ffmpeg",
                     provides_binaries=["ffmpeg"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

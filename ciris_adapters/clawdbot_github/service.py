@@ -84,10 +84,20 @@ class GithubToolService:
             ),
             install_steps=[
                 InstallStep(
-                    id="brew", kind="brew", label="Install GitHub CLI (brew)", formula="gh", provides_binaries=["gh"]
+                    id="brew",
+                    kind="brew",
+                    label="Install GitHub CLI (brew)",
+                    formula="gh",
+                    provides_binaries=["gh"],
+                    platforms=["darwin"],
                 ),
                 InstallStep(
-                    id="apt", kind="apt", label="Install GitHub CLI (apt)", package="gh", provides_binaries=["gh"]
+                    id="apt",
+                    kind="apt",
+                    label="Install GitHub CLI (apt)",
+                    package="gh",
+                    provides_binaries=["gh"],
+                    platforms=["linux"],
                 ),
             ],
             documentation=ToolDocumentation(

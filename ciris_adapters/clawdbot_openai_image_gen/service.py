@@ -92,6 +92,7 @@ class OpenaiImageGenToolService:
                     label="Install Python (brew)",
                     formula="python",
                     provides_binaries=["python3"],
+                    platforms=["darwin"],
                 ),
             ],
             documentation=ToolDocumentation(

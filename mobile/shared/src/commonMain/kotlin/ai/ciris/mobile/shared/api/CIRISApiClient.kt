@@ -565,6 +565,44 @@ class CIRISApiClient(
         }
     }
 
+    /**
+     * Get available adapters for setup wizard.
+     * Returns ALL adapters with their platform requirements.
+     * Call filterAdaptersForPlatform() to filter based on current platform.
+     */
+    suspend fun getSetupAdapters(): List<CommunicationAdapter> {
+        val method = "getSetupAdapters"
+        logDebug(method, "Fetching setup adapters")
+
+        return try {
+            val response = setupApi.listAdaptersV1SetupAdaptersGet()
+            logDebug(method, "Response: status=${response.status}")
+
+            val body = response.body()
+            val adapters = body.`data` ?: emptyList()
+
+            logInfo(method, "Fetched ${adapters.size} adapters")
+
+            adapters.map { adapter ->
+                CommunicationAdapter(
+                    id = adapter.id,
+                    name = adapter.name,
+                    description = adapter.description,
+                    requires_config = !adapter.requiredEnvVars.isNullOrEmpty(),
+                    config_fields = adapter.requiredEnvVars ?: emptyList(),
+                    requires_binaries = adapter.requiresBinaries ?: false,
+                    required_binaries = adapter.requiredBinaries ?: emptyList(),
+                    supported_platforms = adapter.supportedPlatforms ?: emptyList(),
+                    requires_ciris_services = adapter.requiresCirisServices ?: false,
+                    enabled_by_default = adapter.enabledByDefault ?: false
+                )
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
     override suspend fun completeSetup(request: CompleteSetupRequest): SetupCompletionResult {
         val method = "completeSetup"
         logInfo(method, "Completing setup: provider=${request.llm_provider}, template=${request.template_id}, username=${request.admin_username}")

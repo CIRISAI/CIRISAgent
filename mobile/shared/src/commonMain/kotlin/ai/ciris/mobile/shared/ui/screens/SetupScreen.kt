@@ -1,7 +1,9 @@
 package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.models.Platform
 import ai.ciris.mobile.shared.models.SetupMode
+import ai.ciris.mobile.shared.models.filterAdaptersForPlatform
 import ai.ciris.mobile.shared.viewmodels.SetupStep
 import ai.ciris.mobile.shared.viewmodels.SetupFormState
 import ai.ciris.mobile.shared.viewmodels.SetupViewModel
@@ -75,6 +77,22 @@ fun SetupScreen(
     val state by viewModel.state.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
+    // Load adapters when entering OPTIONAL_FEATURES step
+    LaunchedEffect(state.currentStep) {
+        if (state.currentStep == SetupStep.OPTIONAL_FEATURES && state.availableAdapters.isEmpty()) {
+            // Fetch all adapters from server, then filter client-side based on platform
+            // This approach works for both iOS and Android (KMP)
+            viewModel.loadAvailableAdapters {
+                val allAdapters = apiClient.getSetupAdapters()
+                filterAdaptersForPlatform(
+                    adapters = allAdapters,
+                    platform = Platform.ANDROID,  // TODO: Use expect/actual for platform detection
+                    useCirisServices = state.isGoogleAuth
+                )
+            }
+        }
+    }
+
     Surface(
         modifier = modifier.fillMaxSize(),
         color = SetupColors.Background
@@ -99,6 +117,7 @@ fun SetupScreen(
                         isGoogleAuth = state.isGoogleAuth
                     )
                     SetupStep.LLM_CONFIGURATION -> LlmConfigurationStep(viewModel, state)
+                    SetupStep.OPTIONAL_FEATURES -> OptionalFeaturesStep(viewModel, state)
                     SetupStep.ACCOUNT_AND_CONFIRMATION -> AccountConfirmationStep(viewModel, state)
                     SetupStep.COMPLETE -> CompleteStep(onSetupComplete)
                 }
@@ -199,7 +218,8 @@ private fun StepIndicators(
     val steps = listOf(
         SetupStep.WELCOME to "1",
         SetupStep.LLM_CONFIGURATION to "2",
-        SetupStep.ACCOUNT_AND_CONFIRMATION to "3"
+        SetupStep.OPTIONAL_FEATURES to "3",
+        SetupStep.ACCOUNT_AND_CONFIRMATION to "4"
     )
 
     Row(
@@ -624,6 +644,265 @@ private fun LlmConfigurationStep(
             ) {
                 Text("Test Connection")
             }
+        }
+    }
+}
+
+// ========== Optional Features Step ==========
+@Composable
+private fun OptionalFeaturesStep(
+    viewModel: SetupViewModel,
+    state: SetupFormState,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Text(
+            text = "Optional Features",
+            color = SetupColors.TextPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        Text(
+            text = "Customize your CIRIS experience with these optional settings.",
+            color = SetupColors.TextSecondary,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 24.dp)
+        )
+
+        // Covenant Metrics Consent Card
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SetupColors.InfoLight,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Text(
+                        text = "📊",
+                        fontSize = 20.sp,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text(
+                        text = "Help Improve AI Alignment",
+                        color = SetupColors.InfoDark,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Text(
+                    text = "Share anonymous metrics with CIRIS L3C to advance AI alignment research. This includes your LLM provider and API base URL to help study alignment patterns across different providers and models.",
+                    color = SetupColors.InfoText,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+
+                Text(
+                    text = "Data shared:",
+                    color = SetupColors.InfoDark,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+
+                Column(modifier = Modifier.padding(start = 8.dp, bottom = 12.dp)) {
+                    DataPointRow("Reasoning quality scores", SetupColors.InfoText)
+                    DataPointRow("Decision patterns (no message content)", SetupColors.InfoText)
+                    DataPointRow("LLM provider and API base URL", SetupColors.InfoText)
+                    DataPointRow("Performance metrics", SetupColors.InfoText)
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable {
+                        viewModel.setCovenantMetricsConsent(!state.covenantMetricsConsent)
+                    }
+                ) {
+                    Checkbox(
+                        checked = state.covenantMetricsConsent,
+                        onCheckedChange = { viewModel.setCovenantMetricsConsent(it) },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = SetupColors.Primary,
+                            uncheckedColor = SetupColors.TextSecondary
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "I agree to share anonymous alignment metrics",
+                        color = SetupColors.InfoDark,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        }
+
+        // Adapters Section
+        Text(
+            text = "Communication Adapters",
+            color = SetupColors.TextPrimary,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
+        )
+
+        Text(
+            text = "Select which adapters to enable. You can configure additional adapters later in Settings.",
+            color = SetupColors.TextSecondary,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        if (state.adaptersLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = SetupColors.Primary)
+            }
+        } else if (state.availableAdapters.isEmpty()) {
+            // Show default adapters when API hasn't loaded them
+            AdapterToggleItem(
+                name = "REST API",
+                description = "RESTful API server with built-in web interface",
+                isEnabled = true,
+                isRequired = true,
+                requiresConfig = false,
+                onToggle = {}
+            )
+        } else {
+            state.availableAdapters.forEach { adapter ->
+                val isEnabled = state.enabledAdapterIds.contains(adapter.id)
+                val isRequired = adapter.id == "api"
+
+                AdapterToggleItem(
+                    name = adapter.name,
+                    description = adapter.description,
+                    isEnabled = isEnabled,
+                    isRequired = isRequired,
+                    requiresConfig = adapter.requires_config,
+                    configFields = adapter.config_fields,
+                    onToggle = { enabled ->
+                        if (!isRequired) {
+                            viewModel.toggleAdapter(adapter.id, enabled)
+                        }
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DataPointRow(text: String, color: Color) {
+    Row(modifier = Modifier.padding(vertical = 2.dp)) {
+        Text("•", color = color, fontSize = 14.sp)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text, color = color, fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun AdapterToggleItem(
+    name: String,
+    description: String,
+    isEnabled: Boolean,
+    isRequired: Boolean,
+    requiresConfig: Boolean,
+    configFields: List<String> = emptyList(),
+    onToggle: (Boolean) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (isEnabled) SetupColors.SuccessLight else SetupColors.GrayLight,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = name,
+                        color = SetupColors.TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (isRequired) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = SetupColors.Primary.copy(alpha = 0.2f)
+                        ) {
+                            Text(
+                                text = "Required",
+                                color = SetupColors.Primary,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    if (requiresConfig && isEnabled) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color(0xFFFFF3CD)
+                        ) {
+                            Text(
+                                text = "Needs Config",
+                                color = Color(0xFF856404),
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = description,
+                    color = SetupColors.TextSecondary,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+                if (requiresConfig && configFields.isNotEmpty() && isEnabled) {
+                    Text(
+                        text = "Required: ${configFields.joinToString(", ")}",
+                        color = Color(0xFF856404),
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+
+            Switch(
+                checked = isEnabled,
+                onCheckedChange = onToggle,
+                enabled = !isRequired,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = SetupColors.Primary,
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = SetupColors.TextSecondary.copy(alpha = 0.5f)
+                )
+            )
         }
     }
 }

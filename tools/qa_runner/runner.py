@@ -60,16 +60,11 @@ class QARunner:
                     "[dim]Auto-configured adapter: api,external_data_sql for DSAR multi-source tests[/dim]"
                 )
 
-        # HE-300 benchmark uses in-process test client by default (no server needed)
-        if modules and modules == [QAModule.HE300_BENCHMARK]:
-            import os
-
-            use_live_a2a = os.environ.get("CIRIS_QA_LIVE_A2A", "").lower() in ("1", "true", "yes")
-            if not use_live_a2a:
-                self.config.auto_start_server = False
-                self.console.print(
-                    "[dim]HE-300 benchmark: using in-process test client (set CIRIS_QA_LIVE_A2A=1 for live server)[/dim]"
-                )
+        # HE-300 benchmark needs A2A adapter
+        if modules and QAModule.HE300_BENCHMARK in modules:
+            if "a2a" not in self.config.adapter:
+                self.config.adapter = "api,a2a"
+                self.console.print("[dim]Auto-configured adapter: api,a2a for HE-300 benchmark tests[/dim]")
 
         # Determine database backends to test
         if self.config.database_backends is None:
@@ -217,18 +212,14 @@ class QARunner:
                 return False
 
         # Get authentication token (skip for SETUP module - first-run has no users)
-        # Also skip for HE300_BENCHMARK in-process mode (no server running)
-        skip_auth_modules = {QAModule.SETUP, QAModule.HE300_BENCHMARK}
-        if not skip_auth_modules.intersection(set(modules)):
+        if QAModule.SETUP not in modules:
             if not self._authenticate():
                 self.console.print("[red]❌ Authentication failed[/red]")
                 if self.config.auto_start_server:
                     self.server_manager.stop()
                 return False
-        elif QAModule.SETUP in modules:
+        else:
             self.console.print("[dim]Skipping authentication for SETUP module (first-run mode)[/dim]")
-        elif QAModule.HE300_BENCHMARK in modules and not self.config.auto_start_server:
-            self.console.print("[dim]Skipping authentication for HE-300 in-process mode[/dim]")
 
         # Initialize SSE monitoring helper for HANDLERS and FILTERS tests
         # Both now use async /agent/message endpoint + SSE streaming

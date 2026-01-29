@@ -12,25 +12,14 @@ This module tests:
 4. Concurrent request handling (10-50 parallel)
 5. Response format (ETHICAL/UNETHICAL classification)
 
-Usage:
-    # Run with in-process test client (default, uses mock runtime):
-    python -m tools.qa_runner he300_benchmark
-
-    # Run against live A2A server (requires separate server start):
-    # First: python main.py --adapter a2a --mock-llm --port 8100
-    # Then: python -m tools.qa_runner he300_benchmark --live-a2a
+Requires: CIRIS server running with A2A adapter on port 8100
+    python main.py --adapter api,a2a --mock-llm
 """
 
-import asyncio
-import json
 import logging
-import os
-import subprocess
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Optional, Tuple
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any, Dict, List, Tuple
 
 import requests
 
@@ -38,8 +27,8 @@ from ..config import QAConfig, QAModule, QATestCase
 
 logger = logging.getLogger(__name__)
 
-# Check if we should use live server or in-process test client
-USE_LIVE_A2A = os.environ.get("CIRIS_QA_LIVE_A2A", "").lower() in ("1", "true", "yes")
+# Default A2A port
+A2A_DEFAULT_PORT = 8100
 
 # HE-300 sample scenarios for testing (subset)
 HE300_TEST_SCENARIOS = [
@@ -97,125 +86,10 @@ HE300_TEST_SCENARIOS = [
 class HE300BenchmarkModule:
     """QA module for HE-300 ethical benchmark testing via A2A adapter."""
 
-    # Class-level test client for in-process testing
-    _test_client = None
-    _mock_runtime = None
-
-    @classmethod
-    def get_test_client(cls):
-        """Get or create an in-process test client for the A2A adapter.
-
-        Uses FastAPI's TestClient to test the adapter without needing
-        a running server. Creates a mock runtime that returns predictable
-        responses for testing.
-        """
-        if cls._test_client is None:
-            try:
-                from fastapi.testclient import TestClient
-
-                from ciris_adapters.a2a import A2AAdapter
-
-                # Create mock runtime that simulates CIRIS pipeline responses
-                cls._mock_runtime = MagicMock()
-
-                # Mock process_message to return ethical judgments
-                async def mock_process_message(message):
-                    """Mock pipeline processing - returns ethical/unethical based on content."""
-                    content = message.content.lower()
-
-                    # Simple heuristic for test scenarios
-                    unethical_keywords = [
-                        "cheated",
-                        "lied",
-                        "stole",
-                        "took credit",
-                        "gave the promotion to my friend",
-                        "copying",
-                        "sick so i could go",
-                    ]
-
-                    is_unethical = any(kw in content for kw in unethical_keywords)
-
-                    if is_unethical:
-                        response_text = (
-                            "UNETHICAL\n\nThis action violates ethical principles. "
-                            "The behavior described shows disregard for honesty, "
-                            "fairness, or the wellbeing of others."
-                        )
-                    else:
-                        response_text = (
-                            "ETHICAL\n\nThis action aligns with ethical principles. "
-                            "The behavior described demonstrates honesty, integrity, "
-                            "and consideration for others."
-                        )
-
-                    result = MagicMock()
-                    result.response = response_text
-                    return result
-
-                cls._mock_runtime.process_message = mock_process_message
-                cls._mock_runtime.service_registry = MagicMock()
-                cls._mock_runtime.service_registry.get_service = MagicMock(return_value=None)
-
-                # Create adapter with mock runtime
-                adapter = A2AAdapter(
-                    runtime=cls._mock_runtime,
-                    adapter_config={"host": "127.0.0.1", "port": 8199},
-                )
-
-                cls._test_client = TestClient(adapter.app)
-                logger.info("Created in-process A2A test client with mock runtime")
-
-            except Exception as e:
-                logger.error(f"Failed to create test client: {e}")
-                cls._test_client = None
-
-        return cls._test_client
-
     @staticmethod
     def get_a2a_base_url(config: QAConfig) -> str:
         """Get the A2A adapter base URL."""
-        # A2A runs on a separate port (default 8100)
-        # For QA testing, we use the config port + offset or env var
-        return "http://localhost:8100"
-
-    @classmethod
-    def _make_request(cls, method: str, endpoint: str, **kwargs) -> requests.Response:
-        """Make a request using either test client or live server.
-
-        Args:
-            method: HTTP method (GET, POST)
-            endpoint: URL endpoint
-            **kwargs: Additional arguments for request
-
-        Returns:
-            Response object (real or mock)
-        """
-        if USE_LIVE_A2A:
-            # Use live server
-            url = f"http://localhost:8100{endpoint}"
-            if method.upper() == "GET":
-                return requests.get(url, **kwargs)
-            elif method.upper() == "POST":
-                return requests.post(url, **kwargs)
-            else:
-                raise ValueError(f"Unsupported method: {method}")
-        else:
-            # Use in-process test client
-            client = cls.get_test_client()
-            if client is None:
-                # Create a mock response for connection error
-                mock_resp = MagicMock()
-                mock_resp.status_code = 503
-                mock_resp.json.return_value = {"error": "Test client not available"}
-                return mock_resp
-
-            if method.upper() == "GET":
-                return client.get(endpoint, **kwargs)
-            elif method.upper() == "POST":
-                return client.post(endpoint, **kwargs)
-            else:
-                raise ValueError(f"Unsupported method: {method}")
+        return f"http://localhost:{A2A_DEFAULT_PORT}"
 
     @staticmethod
     def create_a2a_request(
@@ -287,8 +161,8 @@ class HE300BenchmarkModule:
             # Default to text content for ambiguous responses
             return True, response_text
 
-    @classmethod
-    def test_a2a_health(cls, base_url: str) -> Dict[str, Any]:
+    @staticmethod
+    def test_a2a_health(base_url: str) -> Dict[str, Any]:
         """Test A2A adapter health endpoint.
 
         Args:
@@ -298,14 +172,13 @@ class HE300BenchmarkModule:
             Test result dict
         """
         try:
-            response = cls._make_request("GET", "/health", timeout=5)
+            response = requests.get(f"{base_url}/health", timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 if data.get("status") == "healthy" and data.get("service") == "a2a":
-                    mode = "live server" if USE_LIVE_A2A else "in-process test client"
                     return {
                         "success": True,
-                        "message": f"A2A adapter health check passed ({mode})",
+                        "message": "A2A adapter health check passed",
                         "data": data,
                     }
                 return {
@@ -319,13 +192,13 @@ class HE300BenchmarkModule:
         except requests.exceptions.ConnectionError:
             return {
                 "success": False,
-                "message": "A2A adapter not reachable - ensure it's running on port 8100 or use in-process mode",
+                "message": f"A2A adapter not reachable at {base_url} - ensure CIRIS is running with --adapter api,a2a",
             }
         except Exception as e:
             return {"success": False, "message": f"Health check error: {e}"}
 
-    @classmethod
-    def test_a2a_metrics(cls, base_url: str) -> Dict[str, Any]:
+    @staticmethod
+    def test_a2a_metrics(base_url: str) -> Dict[str, Any]:
         """Test A2A adapter metrics endpoint.
 
         Args:
@@ -335,7 +208,7 @@ class HE300BenchmarkModule:
             Test result dict
         """
         try:
-            response = cls._make_request("GET", "/metrics", timeout=5)
+            response = requests.get(f"{base_url}/metrics", timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 required_fields = ["request_count", "error_count", "running"]
@@ -357,9 +230,8 @@ class HE300BenchmarkModule:
         except Exception as e:
             return {"success": False, "message": f"Metrics error: {e}"}
 
-    @classmethod
+    @staticmethod
     def test_single_scenario(
-        cls,
         base_url: str,
         scenario: Dict[str, Any],
         timeout: float = 60.0,
@@ -375,16 +247,15 @@ class HE300BenchmarkModule:
             Test result dict
         """
         try:
-            request_data = cls.create_a2a_request(
+            request_data = HE300BenchmarkModule.create_a2a_request(
                 scenario=scenario["scenario"],
                 task_id=scenario["id"],
                 request_id=f"req-{scenario['id']}",
             )
 
             start_time = time.time()
-            response = cls._make_request(
-                "POST",
-                "/a2a",
+            response = requests.post(
+                f"{base_url}/a2a",
                 json=request_data,
                 headers={"Content-Type": "application/json"},
                 timeout=timeout,
@@ -428,7 +299,7 @@ class HE300BenchmarkModule:
                 }
 
             # Parse response
-            is_ethical, response_text = cls.parse_a2a_response(data)
+            is_ethical, response_text = HE300BenchmarkModule.parse_a2a_response(data)
             expected_ethical = scenario["expected"] == 0
 
             # Check if classification matches expected
@@ -458,9 +329,8 @@ class HE300BenchmarkModule:
                 "message": f"Error: {e}",
             }
 
-    @classmethod
+    @staticmethod
     def test_concurrent_scenarios(
-        cls,
         base_url: str,
         scenarios: List[Dict[str, Any]],
         concurrency: int = 10,
@@ -481,7 +351,7 @@ class HE300BenchmarkModule:
         start_time = time.time()
 
         def test_scenario(scenario: Dict[str, Any]) -> Dict[str, Any]:
-            return cls.test_single_scenario(base_url, scenario, timeout)
+            return HE300BenchmarkModule.test_single_scenario(base_url, scenario, timeout)
 
         with ThreadPoolExecutor(max_workers=concurrency) as executor:
             results = list(executor.map(test_scenario, scenarios))
@@ -520,8 +390,8 @@ class HE300BenchmarkModule:
             "results": results,
         }
 
-    @classmethod
-    def test_protocol_compliance(cls, base_url: str) -> Dict[str, Any]:
+    @staticmethod
+    def test_protocol_compliance(base_url: str) -> Dict[str, Any]:
         """Test JSON-RPC 2.0 protocol compliance.
 
         Args:
@@ -535,13 +405,13 @@ class HE300BenchmarkModule:
         details = []
 
         # Test 1: Valid request
-        valid_request = cls.create_a2a_request(
+        valid_request = HE300BenchmarkModule.create_a2a_request(
             scenario="Test scenario",
             task_id="protocol-test-001",
             request_id="valid-req-001",
         )
         try:
-            response = cls._make_request("POST", "/a2a", json=valid_request, timeout=30)
+            response = requests.post(f"{base_url}/a2a", json=valid_request, timeout=30)
             if response.status_code == 200:
                 data = response.json()
                 if data.get("jsonrpc") == "2.0" and "result" in data:
@@ -549,7 +419,7 @@ class HE300BenchmarkModule:
                     details.append("Valid request: PASS")
                 else:
                     tests_failed += 1
-                    details.append(f"Valid request: FAIL - Invalid response format")
+                    details.append("Valid request: FAIL - Invalid response format")
             else:
                 tests_failed += 1
                 details.append(f"Valid request: FAIL - Status {response.status_code}")
@@ -565,9 +435,9 @@ class HE300BenchmarkModule:
             "params": {"task": {"id": "test", "message": {"role": "user", "parts": []}}},
         }
         try:
-            response = cls._make_request("POST", "/a2a", json=invalid_method, timeout=10)
+            response = requests.post(f"{base_url}/a2a", json=invalid_method, timeout=10)
             data = response.json()
-            if "error" in data and data["error"].get("code") == -32601:
+            if "error" in data and data["error"] and data["error"].get("code") == -32601:
                 tests_passed += 1
                 details.append("Invalid method error: PASS")
             else:
@@ -590,9 +460,9 @@ class HE300BenchmarkModule:
             },
         }
         try:
-            response = cls._make_request("POST", "/a2a", json=empty_message, timeout=10)
+            response = requests.post(f"{base_url}/a2a", json=empty_message, timeout=10)
             data = response.json()
-            if "error" in data and data["error"].get("code") == -32602:
+            if "error" in data and data["error"] and data["error"].get("code") == -32602:
                 tests_passed += 1
                 details.append("Empty message validation: PASS")
             else:
@@ -604,9 +474,9 @@ class HE300BenchmarkModule:
 
         # Test 4: Invalid request format
         try:
-            response = cls._make_request("POST", "/a2a", json={"invalid": "data"}, timeout=10)
+            response = requests.post(f"{base_url}/a2a", json={"invalid": "data"}, timeout=10)
             data = response.json()
-            if "error" in data and data["error"].get("code") == -32600:
+            if "error" in data and data["error"] and data["error"].get("code") == -32600:
                 tests_passed += 1
                 details.append("Invalid request format: PASS")
             else:
@@ -625,8 +495,8 @@ class HE300BenchmarkModule:
             "message": f"Protocol compliance: {tests_passed}/{tests_passed + tests_failed} tests passed",
         }
 
-    @classmethod
-    def run_custom_test(cls, test: QATestCase, config: QAConfig, token: str) -> Dict[str, Any]:
+    @staticmethod
+    def run_custom_test(test: QATestCase, config: QAConfig, token: str) -> Dict[str, Any]:
         """Run HE-300 benchmark custom tests.
 
         Args:
@@ -637,25 +507,25 @@ class HE300BenchmarkModule:
         Returns:
             Test result dict
         """
-        base_url = cls.get_a2a_base_url(config)
+        base_url = HE300BenchmarkModule.get_a2a_base_url(config)
 
         if test.custom_handler == "a2a_health":
-            return cls.test_a2a_health(base_url)
+            return HE300BenchmarkModule.test_a2a_health(base_url)
 
         elif test.custom_handler == "a2a_metrics":
-            return cls.test_a2a_metrics(base_url)
+            return HE300BenchmarkModule.test_a2a_metrics(base_url)
 
         elif test.custom_handler == "a2a_protocol_compliance":
-            return cls.test_protocol_compliance(base_url)
+            return HE300BenchmarkModule.test_protocol_compliance(base_url)
 
         elif test.custom_handler == "a2a_single_scenario":
             # Test with first scenario
             scenario = HE300_TEST_SCENARIOS[0]
-            return cls.test_single_scenario(base_url, scenario)
+            return HE300BenchmarkModule.test_single_scenario(base_url, scenario)
 
         elif test.custom_handler == "a2a_concurrent_scenarios":
             # Test with all sample scenarios concurrently
-            return cls.test_concurrent_scenarios(
+            return HE300BenchmarkModule.test_concurrent_scenarios(
                 base_url,
                 HE300_TEST_SCENARIOS,
                 concurrency=8,
@@ -664,7 +534,7 @@ class HE300BenchmarkModule:
 
         elif test.custom_handler == "a2a_full_benchmark":
             # Full benchmark with all scenarios
-            result = cls.test_concurrent_scenarios(
+            result = HE300BenchmarkModule.test_concurrent_scenarios(
                 base_url,
                 HE300_TEST_SCENARIOS,
                 concurrency=10,

@@ -139,6 +139,23 @@ class TestHE300BenchmarkModule:
         assert is_ethical is False
         assert "Error" in response_text
 
+    def test_parse_a2a_response_null_error(self):
+        """Test parsing response with null error field."""
+        response_data = {
+            "jsonrpc": "2.0",
+            "id": "req-001",
+            "result": {
+                "task": {
+                    "id": "task-001",
+                    "status": "completed",
+                    "artifacts": [{"parts": [{"type": "text", "text": "ETHICAL"}]}],
+                }
+            },
+            "error": None,  # Null error field should be ignored
+        }
+        is_ethical, response_text = HE300BenchmarkModule.parse_a2a_response(response_data)
+        assert is_ethical is True
+
     def test_get_a2a_base_url(self):
         """Test A2A base URL retrieval."""
         config = QAConfig()
@@ -152,7 +169,7 @@ class TestHE300BenchmarkModule:
             assert test.module == QAModule.HE300_BENCHMARK
 
     def test_tests_dont_require_auth(self):
-        """Test that A2A tests don't require auth (A2A is separate from API)."""
+        """Test that A2A tests don't require auth (A2A has its own endpoint)."""
         tests = HE300BenchmarkModule.get_he300_benchmark_tests()
         for test in tests:
             assert test.requires_auth is False

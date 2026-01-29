@@ -407,6 +407,11 @@ def _detect_provider_from_env() -> LLMProvider:
 
 def _get_api_key_for_provider(provider: LLMProvider) -> str:
     """Get the appropriate API key for the given provider."""
+    # Check CIRIS_LLM_API_KEY first as override (takes precedence over provider-specific keys)
+    ciris_key = os.environ.get("CIRIS_LLM_API_KEY", "")
+    if ciris_key:
+        return ciris_key
+
     if provider == LLMProvider.ANTHROPIC:
         return os.environ.get("ANTHROPIC_API_KEY", "")
     elif provider == LLMProvider.GOOGLE:

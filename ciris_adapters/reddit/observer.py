@@ -14,6 +14,7 @@ import httpx
 from ciris_engine.logic.adapters.base_observer import BaseObserver, detect_and_replace_spoofed_markers
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
+from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.types import JSONDict
 
@@ -42,6 +43,7 @@ class RedditObserver(BaseObserver[RedditMessage]):
         filter_service: Optional[object] = None,
         secrets_service: Optional[SecretsService] = None,
         time_service: Optional[TimeServiceProtocol] = None,
+        audit_service: Optional[AuditServiceProtocol] = None,
         agent_occurrence_id: str = "default",
     ) -> None:
         creds = credentials or RedditCredentials.from_env()
@@ -51,6 +53,7 @@ class RedditObserver(BaseObserver[RedditMessage]):
         self._subreddit = RedditChannelReference._normalize_subreddit(subreddit or creds.subreddit)
         self._poll_interval = max(poll_interval, 5.0)
         self._api_client = RedditAPIClient(creds, time_service=time_service)
+        self._audit_service = audit_service
 
         super().__init__(
             on_observe=lambda _: asyncio.sleep(0),
@@ -510,9 +513,8 @@ class RedditObserver(BaseObserver[RedditMessage]):
                 f"posts={purged_from_posts}, comments={purged_from_comments}"
             )
 
-            # TODO: Send audit event to audit service if available
-            # if self._audit_service:
-            #     await self._audit_service.log_event(audit_event)
+            if self._audit_service:
+                await self._audit_service.log_event(audit_event)
 
     async def check_and_purge_if_deleted(self, content_id: str) -> bool:
         """

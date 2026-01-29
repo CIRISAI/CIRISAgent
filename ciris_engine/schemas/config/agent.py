@@ -59,6 +59,7 @@ class AgentTemplate(BaseModel):
 
     # Permissions
     permitted_actions: List[str] = Field(default_factory=list, description="List of permitted handler actions")
+    auto_load_adapters: bool = Field(False, description="Whether to auto-load adapters")
 
     # DMA overrides
     dsdma_kwargs: Optional["DSDMAConfiguration"] = Field(None, description="Domain-specific DMA configuration")

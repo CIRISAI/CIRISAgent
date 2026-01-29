@@ -21,6 +21,7 @@ class CoreProfile(BaseModel):
     # Knowledge and expertise
     domain_specific_knowledge: Dict[str, str] = Field(default_factory=dict, description="Domain expertise mappings")
     areas_of_expertise: List[str] = Field(default_factory=list, description="Areas where agent has expertise")
+    auto_load_adapters: bool = Field(False, description="Whether to auto-load adapters")
 
     # Behavioral customization
     dsdma_prompt_template: Optional[str] = Field(None, description="Custom DSDMA prompt template")

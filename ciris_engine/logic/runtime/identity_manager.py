@@ -155,6 +155,7 @@ class IdentityManager:
                 description=template.description,
                 role_description=template.role_description,
                 domain_specific_knowledge=domain_knowledge,
+                auto_load_adapters=template.auto_load_adapters,
                 dsdma_prompt_template=dsdma_prompt_template,
                 csdma_overrides={
                     k: v
@@ -349,6 +350,7 @@ class IdentityManager:
                 description=template.description,
                 role_description=template.role_description,
                 domain_specific_knowledge=domain_knowledge,
+                auto_load_adapters=template.auto_load_adapters,
                 dsdma_prompt_template=dsdma_prompt_template,
                 csdma_overrides=csdma_overrides,
                 action_selection_pdma_overrides=action_pdma_overrides,

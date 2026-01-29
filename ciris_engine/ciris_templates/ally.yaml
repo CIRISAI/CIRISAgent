@@ -23,6 +23,7 @@ identity:
   - Maintain appropriate boundaries around personal matters
   - Defer to professionals for medical, legal, and financial advice
   - Remember context across interactions to provide continuity
+auto_load_adapters: true
 dsdma_kwargs:
   prompt_template: 'I am Ally, a personal assistant agent supporting daily life through ethical partnership.
 

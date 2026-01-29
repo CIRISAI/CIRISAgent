@@ -495,6 +495,7 @@ class IdentityNode(TypedGraphNode):
     domain_specific_knowledge: Dict[str, str] = Field(default_factory=dict, description="Domain expertise mappings")
     areas_of_expertise: List[str] = Field(default_factory=list, description="Areas where agent has expertise")
     startup_instructions: Optional[str] = Field(None, description="Instructions for startup")
+    auto_load_adapters: bool = Field(False, description="Whether to auto-load adapters")
 
     # Capabilities and permissions from AgentIdentityRoot
     permitted_actions: List[str] = Field(default_factory=list, description="Actions this agent can perform")
@@ -552,6 +553,7 @@ class IdentityNode(TypedGraphNode):
             "domain_specific_knowledge": self.domain_specific_knowledge,
             "areas_of_expertise": self.areas_of_expertise,
             "startup_instructions": self.startup_instructions,
+            "auto_load_adapters": self.auto_load_adapters,
             # Capabilities and permissions
             "permitted_actions": self.permitted_actions,
             "restricted_capabilities": self.restricted_capabilities,
@@ -613,6 +615,7 @@ class IdentityNode(TypedGraphNode):
             domain_specific_knowledge=attrs.get("domain_specific_knowledge", {}),
             areas_of_expertise=attrs.get("areas_of_expertise", []),
             startup_instructions=attrs.get("startup_instructions"),
+            auto_load_adapters=attrs.get("auto_load_adapters", False),
             # Capabilities and permissions
             permitted_actions=attrs.get("permitted_actions", []),
             restricted_capabilities=attrs.get("restricted_capabilities", []),
@@ -646,6 +649,7 @@ class IdentityNode(TypedGraphNode):
             domain_specific_knowledge=identity.core_profile.domain_specific_knowledge,
             areas_of_expertise=identity.core_profile.areas_of_expertise,
             startup_instructions=identity.core_profile.startup_instructions,
+            auto_load_adapters=identity.core_profile.auto_load_adapters,
             # Capabilities and permissions
             permitted_actions=identity.permitted_actions,
             restricted_capabilities=identity.restricted_capabilities,
@@ -677,6 +681,7 @@ class IdentityNode(TypedGraphNode):
                 domain_specific_knowledge=self.domain_specific_knowledge,
                 areas_of_expertise=self.areas_of_expertise,
                 startup_instructions=self.startup_instructions,
+                auto_load_adapters=self.auto_load_adapters,
                 dsdma_prompt_template=None,
                 csdma_overrides={},
                 action_selection_pdma_overrides={},

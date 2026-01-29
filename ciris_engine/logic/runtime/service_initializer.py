@@ -1268,7 +1268,23 @@ This directory contains critical cryptographic keys for the CIRIS system.
         (binary presence, env vars, etc.), and registers eligible ones
         with the tool bus.
         """
-        # Check if auto-discovery is enabled
+        # Check template configuration via identity first
+        # "Only enable auto loading of adapters for templates that specify it"
+        from ciris_engine.logic.persistence.models.identity import retrieve_agent_identity
+
+        # Get the correct db path from our essential config
+        db_path = get_sqlite_db_full_path(self.essential_config)
+        identity = retrieve_agent_identity(db_path=db_path)
+
+        template_enabled = False
+        if identity and hasattr(identity.core_profile, "auto_load_adapters"):
+            template_enabled = identity.core_profile.auto_load_adapters
+
+        if not template_enabled:
+            logger.info("[SKILL-ADAPTERS] Auto-discovery not enabled by current agent template")
+            return
+
+        # Check if auto-discovery is enabled globally
         adapters_config = self.essential_config.adapters
         if not adapters_config.auto_discovery:
             logger.info("[SKILL-ADAPTERS] Auto-discovery disabled by config")

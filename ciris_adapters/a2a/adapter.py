@@ -26,7 +26,15 @@ from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, RuntimeAdapterStatus
 from ciris_engine.schemas.runtime.enums import ServiceType
 
-from .schemas import A2ARequest, A2AResponse, create_error_response, create_success_response
+from .schemas import (
+    A2ARequest,
+    A2AResponse,
+    BenchmarkRequest,
+    create_benchmark_error_response,
+    create_benchmark_response,
+    create_error_response,
+    create_success_response,
+)
 from .services import A2AService
 
 logger = logging.getLogger(__name__)
@@ -125,67 +133,31 @@ class A2AAdapter(Service):
             return {"status": "healthy", "service": "a2a"}
 
         # A2A protocol endpoint
-        @app.post("/a2a", response_model=A2AResponse)
+        @app.post("/a2a")
         async def a2a_endpoint(request: Request) -> JSONResponse:
             """Handle A2A protocol requests.
 
             Accepts JSON-RPC 2.0 formatted requests and returns ethical
-            judgments.
+            judgments. Supports both tasks/send and benchmark.evaluate methods.
             """
             try:
                 # Parse request body
                 body = await request.json()
-                a2a_request = A2ARequest(**body)
+                method = body.get("method", "")
+                request_id = body.get("id", "unknown")
 
-                # Validate method
-                if a2a_request.method != "tasks/send":
+                # Route based on method
+                if method == "benchmark.evaluate":
+                    return await self._handle_benchmark_evaluate(body, request_id)
+                elif method == "tasks/send":
+                    return await self._handle_tasks_send(body, request_id)
+                else:
                     response = create_error_response(
-                        request_id=a2a_request.id,
+                        request_id=request_id,
                         code=-32601,
-                        message=f"Method not found: {a2a_request.method}",
+                        message=f"Method not found: {method}. Supported: tasks/send, benchmark.evaluate",
                     )
                     return JSONResponse(content=response.model_dump())
-
-                # Extract query text from message parts
-                query_text = ""
-                for part in a2a_request.params.task.message.parts:
-                    if part.type == "text":
-                        query_text += part.text
-
-                if not query_text.strip():
-                    response = create_error_response(
-                        request_id=a2a_request.id,
-                        code=-32602,
-                        message="Invalid params: empty message text",
-                    )
-                    return JSONResponse(content=response.model_dump())
-
-                # Process the ethical query
-                try:
-                    result_text = await self.a2a_service.process_ethical_query(query_text)
-                    response = create_success_response(
-                        request_id=a2a_request.id,
-                        task_id=a2a_request.params.task.id,
-                        response_text=result_text,
-                    )
-                    return JSONResponse(content=response.model_dump())
-
-                except asyncio.TimeoutError:
-                    response = create_error_response(
-                        request_id=a2a_request.id,
-                        code=-32000,
-                        message="Request timeout",
-                    )
-                    return JSONResponse(content=response.model_dump(), status_code=504)
-
-                except Exception as e:
-                    logger.error(f"A2A processing error: {e}")
-                    response = create_error_response(
-                        request_id=a2a_request.id,
-                        code=-32603,
-                        message=f"Internal error: {str(e)}",
-                    )
-                    return JSONResponse(content=response.model_dump(), status_code=500)
 
             except ValidationError as e:
                 # Invalid request format
@@ -220,9 +192,14 @@ class A2AAdapter(Service):
             return {
                 "name": "CIRIS Agent",
                 "version": "1.9.4",
-                "description": "CIRIS ethical AI agent for HE-300 benchmarking",
-                "capabilities": ["ethics-evaluation", "a2a:tasks_send", "benchmark:he300"],
+                "description": "CIRIS ethical AI agent for ethical evaluation",
+                "capabilities": [
+                    "ethics-evaluation",
+                    "a2a:tasks_send",
+                    "a2a:benchmark.evaluate",
+                ],
                 "protocols": ["a2a"],
+                "methods": ["tasks/send", "benchmark.evaluate"],
                 "endpoints": {
                     "a2a": "/a2a",
                     "health": "/health",
@@ -231,6 +208,142 @@ class A2AAdapter(Service):
             }
 
         return app
+
+    async def _handle_benchmark_evaluate(self, body: dict, request_id: str) -> JSONResponse:
+        """Handle benchmark.evaluate method (CIRISBench format).
+
+        Args:
+            body: The raw request body
+            request_id: The JSON-RPC request ID
+
+        Returns:
+            JSONResponse with the benchmark evaluation result
+        """
+        try:
+            benchmark_request = BenchmarkRequest(**body)
+            scenario_id = benchmark_request.params.scenario_id
+            scenario = benchmark_request.params.scenario
+
+            if not scenario.strip():
+                response = create_benchmark_error_response(
+                    request_id=request_id,
+                    code=-32602,
+                    message="Invalid params: empty scenario text",
+                )
+                return JSONResponse(content=response.model_dump())
+
+            # Process the ethical query
+            result_text = await self.a2a_service.process_ethical_query(scenario, task_id=scenario_id)
+
+            # Parse the result to extract evaluation and reasoning
+            # Expected format: "ETHICAL/UNETHICAL/TRUE/FALSE. <reasoning>"
+            evaluation, reasoning = self._parse_ethical_response(result_text)
+
+            response = create_benchmark_response(
+                request_id=request_id,
+                scenario_id=scenario_id,
+                evaluation=evaluation,
+                reasoning=reasoning,
+            )
+            return JSONResponse(content=response.model_dump())
+
+        except asyncio.TimeoutError:
+            response = create_benchmark_error_response(
+                request_id=request_id,
+                code=-32000,
+                message="Request timeout",
+            )
+            return JSONResponse(content=response.model_dump(), status_code=504)
+
+        except Exception as e:
+            logger.error(f"Benchmark evaluate error: {e}")
+            response = create_benchmark_error_response(
+                request_id=request_id,
+                code=-32603,
+                message=f"Internal error: {str(e)}",
+            )
+            return JSONResponse(content=response.model_dump(), status_code=500)
+
+    async def _handle_tasks_send(self, body: dict, request_id: str) -> JSONResponse:
+        """Handle tasks/send method (A2A format).
+
+        Args:
+            body: The raw request body
+            request_id: The JSON-RPC request ID
+
+        Returns:
+            JSONResponse with the task result
+        """
+        try:
+            a2a_request = A2ARequest(**body)
+
+            # Extract query text from message parts
+            query_text = ""
+            for part in a2a_request.params.task.message.parts:
+                if part.type == "text":
+                    query_text += part.text
+
+            if not query_text.strip():
+                response = create_error_response(
+                    request_id=request_id,
+                    code=-32602,
+                    message="Invalid params: empty message text",
+                )
+                return JSONResponse(content=response.model_dump())
+
+            # Process the ethical query
+            result_text = await self.a2a_service.process_ethical_query(query_text, task_id=a2a_request.params.task.id)
+            response = create_success_response(
+                request_id=request_id,
+                task_id=a2a_request.params.task.id,
+                response_text=result_text,
+            )
+            return JSONResponse(content=response.model_dump())
+
+        except asyncio.TimeoutError:
+            response = create_error_response(
+                request_id=request_id,
+                code=-32000,
+                message="Request timeout",
+            )
+            return JSONResponse(content=response.model_dump(), status_code=504)
+
+        except Exception as e:
+            logger.error(f"A2A tasks/send error: {e}")
+            response = create_error_response(
+                request_id=request_id,
+                code=-32603,
+                message=f"Internal error: {str(e)}",
+            )
+            return JSONResponse(content=response.model_dump(), status_code=500)
+
+    def _parse_ethical_response(self, response_text: str) -> tuple[str, str | None]:
+        """Parse an ethical response to extract evaluation and reasoning.
+
+        Args:
+            response_text: The full response text
+
+        Returns:
+            Tuple of (evaluation, reasoning)
+        """
+        response_upper = response_text.upper().strip()
+
+        # Check for standard ethical judgment formats
+        if response_upper.startswith("UNETHICAL"):
+            return "UNETHICAL", response_text[len("UNETHICAL"):].strip(". ") or None
+        elif response_upper.startswith("ETHICAL"):
+            return "ETHICAL", response_text[len("ETHICAL"):].strip(". ") or None
+        elif response_upper.startswith("TRUE"):
+            return "TRUE", response_text[len("TRUE"):].strip(". ") or None
+        elif response_upper.startswith("FALSE"):
+            return "FALSE", response_text[len("FALSE"):].strip(". ") or None
+        elif response_upper.startswith("YES"):
+            return "YES", response_text[len("YES"):].strip(". ") or None
+        elif response_upper.startswith("NO"):
+            return "NO", response_text[len("NO"):].strip(". ") or None
+        else:
+            # Return full response as reasoning if no clear judgment prefix
+            return "UNDETERMINED", response_text
 
     def get_services_to_register(self) -> List[AdapterServiceRegistration]:
         """Get services provided by this adapter.
@@ -245,8 +358,8 @@ class A2AAdapter(Service):
                 priority=Priority.NORMAL,
                 capabilities=[
                     "a2a:tasks_send",
+                    "a2a:benchmark.evaluate",
                     "a2a:ethical_reasoning",
-                    "benchmark:he300",
                 ],
             )
         ]

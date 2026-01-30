@@ -37,13 +37,29 @@ class TaskParams(BaseModel):
     task: Task
 
 
+class BenchmarkEvaluateParams(BaseModel):
+    """Parameters for benchmark.evaluate method (CIRISBench format)."""
+
+    scenario_id: str
+    scenario: str
+
+
 class A2ARequest(BaseModel):
-    """JSON-RPC 2.0 request for A2A protocol."""
+    """JSON-RPC 2.0 request for A2A protocol (tasks/send format)."""
 
     jsonrpc: Literal["2.0"] = "2.0"
     id: str
     method: str
     params: TaskParams
+
+
+class BenchmarkRequest(BaseModel):
+    """JSON-RPC 2.0 request for benchmark.evaluate method."""
+
+    jsonrpc: Literal["2.0"] = "2.0"
+    id: str
+    method: Literal["benchmark.evaluate"] = "benchmark.evaluate"
+    params: BenchmarkEvaluateParams
 
 
 class Artifact(BaseModel):
@@ -128,3 +144,60 @@ def create_error_response(request_id: str, code: int, message: str, data: Option
     if data is not None:
         error_dict["data"] = data
     return A2AResponse(id=request_id, error=error_dict)
+
+
+class BenchmarkEvaluateResult(BaseModel):
+    """Result for benchmark.evaluate method."""
+
+    scenario_id: str
+    evaluation: str  # The ethical judgment (ETHICAL/UNETHICAL, TRUE/FALSE, etc.)
+    reasoning: Optional[str] = None
+
+
+class BenchmarkResponse(BaseModel):
+    """JSON-RPC 2.0 response for benchmark.evaluate method."""
+
+    jsonrpc: Literal["2.0"] = "2.0"
+    id: str
+    result: Optional[BenchmarkEvaluateResult] = None
+    error: Optional[dict[str, Any]] = None
+
+
+def create_benchmark_response(request_id: str, scenario_id: str, evaluation: str, reasoning: Optional[str] = None) -> BenchmarkResponse:
+    """Create a successful benchmark.evaluate response.
+
+    Args:
+        request_id: The JSON-RPC request ID
+        scenario_id: The scenario ID from the request
+        evaluation: The ethical evaluation (ETHICAL/UNETHICAL, TRUE/FALSE, etc.)
+        reasoning: Optional reasoning explanation
+
+    Returns:
+        BenchmarkResponse with the result
+    """
+    return BenchmarkResponse(
+        id=request_id,
+        result=BenchmarkEvaluateResult(
+            scenario_id=scenario_id,
+            evaluation=evaluation,
+            reasoning=reasoning,
+        ),
+    )
+
+
+def create_benchmark_error_response(request_id: str, code: int, message: str, data: Optional[Any] = None) -> BenchmarkResponse:
+    """Create an error benchmark response.
+
+    Args:
+        request_id: The JSON-RPC request ID
+        code: Error code
+        message: Error message
+        data: Optional error data
+
+    Returns:
+        BenchmarkResponse with the error
+    """
+    error_dict: dict[str, Any] = {"code": code, "message": message}
+    if data is not None:
+        error_dict["data"] = data
+    return BenchmarkResponse(id=request_id, error=error_dict)

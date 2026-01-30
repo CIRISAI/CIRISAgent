@@ -14,6 +14,7 @@ import ai.ciris.api.models.NativeTokenRequest as SdkNativeTokenRequest
 import ai.ciris.api.models.StateTransitionRequest as SdkStateTransitionRequest
 import ai.ciris.api.models.ConfigUpdate as SdkConfigUpdate
 import ai.ciris.api.models.ConsentRequest as SdkConsentRequest
+import ai.ciris.api.models.ConfigValue
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*
@@ -43,6 +44,31 @@ data class LlmConfigData(
     val backupModel: String?,
     val backupApiKeySet: Boolean
 )
+
+/**
+ * Extract the actual display value from a ConfigValue union type.
+ * ConfigValue has multiple nullable fields (stringValue, intValue, etc.)
+ * but only one will be non-null at a time.
+ */
+private fun ConfigValue.toDisplayString(): String {
+    // Use local variables to enable smart cast (cross-module properties can't smart cast)
+    val strVal = stringValue
+    val intVal = intValue
+    val floatVal = floatValue
+    val boolVal = boolValue
+    val listVal = listValue
+    val dictVal = dictValue
+
+    return when {
+        strVal != null -> strVal
+        intVal != null -> intVal.toString()
+        floatVal != null -> floatVal.toString()
+        boolVal != null -> boolVal.toString()
+        listVal != null -> listVal.joinToString(", ") { it.toString() }
+        dictVal != null -> dictVal.entries.joinToString(", ") { "${it.key}: ${it.value}" }
+        else -> "(empty)"
+    }
+}
 
 /**
  * Unified API client for CIRIS backend using the generated OpenAPI SDK.
@@ -1030,8 +1056,8 @@ class CIRISApiClient(
                         version = module.version,
                         description = module.description,
                         moduleSource = module.moduleSource,
-                        serviceTypes = module.serviceTypes ?: emptyList(),
-                        capabilities = module.capabilities ?: emptyList(),
+                        serviceTypes = (module.serviceTypes ?: emptyList()).filter { it.isNotBlank() },
+                        capabilities = (module.capabilities ?: emptyList()).filter { it.isNotBlank() },
                         platformAvailable = module.platformAvailable ?: true
                     )
                 },
@@ -1042,8 +1068,8 @@ class CIRISApiClient(
                         version = module.version,
                         description = module.description,
                         moduleSource = module.moduleSource,
-                        serviceTypes = module.serviceTypes ?: emptyList(),
-                        capabilities = module.capabilities ?: emptyList(),
+                        serviceTypes = (module.serviceTypes ?: emptyList()).filter { it.isNotBlank() },
+                        capabilities = (module.capabilities ?: emptyList()).filter { it.isNotBlank() },
                         platformAvailable = module.platformAvailable ?: true
                     )
                 },
@@ -1336,7 +1362,7 @@ class CIRISApiClient(
                 configs = data.configs.map { config ->
                     ConfigItemData(
                         key = config.key,
-                        displayValue = config.`value`.toString(),
+                        displayValue = config.`value`.toDisplayString(),
                         updatedAt = config.updatedAt,
                         updatedBy = config.updatedBy,
                         isSensitive = config.isSensitive ?: false
@@ -1369,7 +1395,7 @@ class CIRISApiClient(
 
             ConfigItemData(
                 key = data.key,
-                displayValue = data.`value`.toString(),
+                displayValue = data.`value`.toDisplayString(),
                 updatedAt = data.updatedAt,
                 updatedBy = data.updatedBy,
                 isSensitive = data.isSensitive ?: false
@@ -1403,7 +1429,7 @@ class CIRISApiClient(
 
             ConfigItemData(
                 key = data.key,
-                displayValue = data.`value`.toString(),
+                displayValue = data.`value`.toDisplayString(),
                 updatedAt = data.updatedAt,
                 updatedBy = data.updatedBy,
                 isSensitive = data.isSensitive ?: false

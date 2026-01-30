@@ -101,54 +101,54 @@ import kotlinx.serialization.encoding.*
 data class Attributes (
 
     /* Who created this node */
-    @SerialName(value = "created_by") @Required val createdBy: kotlin.String,
+    @SerialName(value = "created_by") val createdBy: kotlin.String? = null,
 
-    @SerialName(value = "content") @Required val content: kotlin.String,
+    @SerialName(value = "content") val content: kotlin.String? = null,
 
     /* Type: fact, experience, learning, insight, observation */
-    @SerialName(value = "memory_type") @Required val memoryType: kotlin.String,
+    @SerialName(value = "memory_type") val memoryType: kotlin.String? = null,
 
     /* Where this memory originated */
-    @SerialName(value = "source") @Required val source: kotlin.String,
+    @SerialName(value = "source") val source: kotlin.String? = null,
 
     /* Configuration key (unique within scope) */
-    @SerialName(value = "key") @Required val key: kotlin.String,
+    @SerialName(value = "key") val key: kotlin.String? = null,
 
     /* Numeric value of the metric */
-    @SerialName(value = "value") @Required val `value`: kotlin.Double,
+    @SerialName(value = "value") val `value`: kotlin.Double? = null,
 
     /* What this configuration controls */
-    @SerialName(value = "description") @Required val description: kotlin.String,
+    @SerialName(value = "description") val description: kotlin.String? = null,
 
     /* Category: system, behavioral, ethical, operational */
-    @SerialName(value = "category") @Required val category: kotlin.String,
+    @SerialName(value = "category") val category: kotlin.String? = null,
 
     /* Expected type: string, integer, float, boolean, list, dict */
-    @SerialName(value = "value_type") @Required val valueType: kotlin.String,
+    @SerialName(value = "value_type") val valueType: kotlin.String? = null,
 
     /* Name of the metric */
-    @SerialName(value = "metric_name") @Required val metricName: kotlin.String,
+    @SerialName(value = "metric_name") val metricName: kotlin.String? = null,
 
     /* Type: counter, gauge, histogram, summary */
-    @SerialName(value = "metric_type") @Required val metricType: kotlin.String,
+    @SerialName(value = "metric_type") val metricType: kotlin.String? = null,
 
     /* Start of measurement period */
-    @SerialName(value = "start_time") @Required val startTime: kotlinx.datetime.Instant,
+    @SerialName(value = "start_time") val startTime: kotlinx.datetime.Instant? = null,
 
     /* End of measurement period */
-    @SerialName(value = "end_time") @Required val endTime: kotlinx.datetime.Instant,
+    @SerialName(value = "end_time") val endTime: kotlinx.datetime.Instant? = null,
 
     /* Duration of measurement period */
-    @SerialName(value = "duration_seconds") @Required val durationSeconds: kotlin.Double,
+    @SerialName(value = "duration_seconds") val durationSeconds: kotlin.Double? = null,
 
     /* Service that generated this metric */
-    @SerialName(value = "service_name") @Required val serviceName: kotlin.String,
+    @SerialName(value = "service_name") val serviceName: kotlin.String? = null,
 
     /* The log message content */
-    @SerialName(value = "log_message") @Required val logMessage: kotlin.String,
+    @SerialName(value = "log_message") val logMessage: kotlin.String? = null,
 
     /* Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL */
-    @SerialName(value = "log_level") @Required val logLevel: kotlin.String,
+    @SerialName(value = "log_level") val logLevel: kotlin.String? = null,
 
     @SerialName(value = "created_at") val createdAt: kotlinx.datetime.Instant? = null,
 

@@ -877,8 +877,8 @@ fun CIRISApp(
                     }
                 )
 
-                // Adapter wizard dialog
-                if (showWizardDialog) {
+                // Adapter wizard dialog - show when dialog is open OR when there's an error to display
+                if (showWizardDialog || wizardError != null) {
                     AdapterWizardDialog(
                         moduleTypes = moduleTypes,
                         wizardSession = wizardSession,

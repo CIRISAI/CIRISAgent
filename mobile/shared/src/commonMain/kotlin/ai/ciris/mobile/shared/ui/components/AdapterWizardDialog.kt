@@ -3,6 +3,8 @@ package ai.ciris.mobile.shared.ui.components
 import ai.ciris.mobile.shared.models.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -202,12 +204,14 @@ private fun AdapterTypeCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .wrapContentHeight()
             .clickable(onClick = onClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .wrapContentHeight()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -236,22 +240,27 @@ private fun AdapterTypeCard(
                 )
             }
 
-            if (adapter.capabilities.isNotEmpty()) {
+            val validCapabilities = adapter.capabilities.filter { it.isNotBlank() }
+            if (validCapabilities.isNotEmpty()) {
                 Row(
-                    modifier = Modifier.padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    adapter.capabilities.take(3).forEach { capability ->
+                    // Limit to 2 chips to avoid layout issues
+                    validCapabilities.take(2).forEach { capability ->
                         SuggestionChip(
                             onClick = {},
                             label = { Text(capability, style = MaterialTheme.typography.labelSmall) }
                         )
                     }
-                    if (adapter.capabilities.size > 3) {
+                    if (validCapabilities.size > 2) {
                         Text(
-                            text = "+${adapter.capabilities.size - 3}",
+                            text = "+${validCapabilities.size - 2}",
                             style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.align(Alignment.CenterVertically)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }

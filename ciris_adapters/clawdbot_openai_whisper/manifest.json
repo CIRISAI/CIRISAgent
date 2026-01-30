@@ -6,6 +6,10 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": "https://openai.com/research/whisper"
   },
+  "platform_requirements": [
+    "desktop_cli"
+  ],
+  "platform_requirements_rationale": "Requires CLI tools only available on desktop",
   "services": [
     {
       "type": "TOOL",

@@ -4,10 +4,23 @@ Data models for memory API endpoints.
 Extracted from memory.py to improve modularity and testability.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_serializer, model_validator
+
+
+def _serialize_datetime_iso(dt: datetime | None) -> str | None:
+    """Serialize datetime to ISO-8601 with Z suffix for UTC."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    iso = dt.isoformat()
+    if iso.endswith("+00:00"):
+        iso = iso[:-6] + "Z"
+    return iso
+
 
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.types import JSONDict
@@ -80,7 +93,7 @@ class QueryRequest(BaseModel):
 
     @field_serializer("since", "until")
     def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
-        return dt.isoformat() if dt else None
+        return _serialize_datetime_iso(dt)
 
 
 class TimelineResponse(BaseModel):
@@ -93,8 +106,8 @@ class TimelineResponse(BaseModel):
     total: int = Field(..., description="Total number of memories")
 
     @field_serializer("start_time", "end_time")
-    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
-        return dt.isoformat() if dt else None
+    def serialize_timeline_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
+        return _serialize_datetime_iso(dt)
 
 
 class MemoryStats(BaseModel):
@@ -108,5 +121,5 @@ class MemoryStats(BaseModel):
     newest_node_date: Optional[datetime] = Field(None, description="Newest node date")
 
     @field_serializer("oldest_node_date", "newest_node_date")
-    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
-        return dt.isoformat() if dt else None
+    def serialize_stats_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
+        return _serialize_datetime_iso(dt)

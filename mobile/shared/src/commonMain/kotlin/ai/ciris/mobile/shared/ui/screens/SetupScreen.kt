@@ -14,6 +14,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -164,7 +166,7 @@ fun SetupScreen(
                 }
             }
 
-            // Navigation buttons
+            // Navigation buttons - with navigation bar padding to avoid overlap
             NavigationButtons(
                 currentStep = state.currentStep,
                 canProceed = state.canProceedFromCurrentStep(),
@@ -204,7 +206,8 @@ fun SetupScreen(
                 onBack = { viewModel.previousStep() },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
             )
         }
     }

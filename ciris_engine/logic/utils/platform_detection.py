@@ -147,6 +147,9 @@ def _detect_desktop_capabilities() -> set[PlatformRequirement]:
     """
     capabilities: set[PlatformRequirement] = set()
 
+    # Desktop CLI tools are available on desktop but not mobile
+    capabilities.add(PlatformRequirement.DESKTOP_CLI)
+
     # Check for TPM (Trusted Platform Module)
     # On Linux, check for /dev/tpm0
     # On Windows, would check via WMI

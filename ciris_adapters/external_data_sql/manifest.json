@@ -23,6 +23,11 @@
       ]
     }
   ],
+  "capabilities": [
+    "tool:sql",
+    "tool:sql:query",
+    "tool:sql:dsar"
+  ],
   "dependencies": {
     "protocols": [
       "ciris_engine.protocols.services.ToolService"

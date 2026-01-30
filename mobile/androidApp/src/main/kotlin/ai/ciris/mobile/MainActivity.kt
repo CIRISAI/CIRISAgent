@@ -5,7 +5,7 @@ import ai.ciris.mobile.billing.PurchaseResult
 import ai.ciris.mobile.billing.VerifyResult
 import ai.ciris.mobile.shared.CIRISApp
 import ai.ciris.mobile.shared.GoogleSignInCallback
-import ai.ciris.mobile.shared.GoogleSignInResult
+import ai.ciris.mobile.shared.NativeSignInResult
 import ai.ciris.mobile.shared.PurchaseLauncher
 import ai.ciris.mobile.shared.PurchaseResultCallback
 import ai.ciris.mobile.shared.PurchaseResultType
@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
 
     // Google Sign-In
     private lateinit var googleSignInClient: GoogleSignInClient
-    private var pendingGoogleSignInCallback: ((GoogleSignInResult) -> Unit)? = null
+    private var pendingGoogleSignInCallback: ((NativeSignInResult) -> Unit)? = null
 
     // Google Play Billing
     private lateinit var billingManager: BillingManager
@@ -230,14 +230,14 @@ class MainActivity : ComponentActivity() {
      * GoogleSignInCallback implementation for CIRISApp
      */
     private val googleSignInCallback = object : GoogleSignInCallback {
-        override fun onGoogleSignInRequested(onResult: (GoogleSignInResult) -> Unit) {
+        override fun onGoogleSignInRequested(onResult: (NativeSignInResult) -> Unit) {
             Log.i(TAG, "Google Sign-In requested from CIRISApp (interactive)")
             pendingGoogleSignInCallback = onResult
             val signInIntent = googleSignInClient.signInIntent
             startActivityForResult(signInIntent, RC_SIGN_IN)
         }
 
-        override fun onSilentSignInRequested(onResult: (GoogleSignInResult) -> Unit) {
+        override fun onSilentSignInRequested(onResult: (NativeSignInResult) -> Unit) {
             Log.i(TAG, "Silent Sign-In requested from CIRISApp")
 
             // Check if we have a cached account first
@@ -252,15 +252,16 @@ class MainActivity : ComponentActivity() {
                     Log.i(TAG, "Silent Sign-In successful: ${account.email}")
                     val token = account.idToken
                     if (token != null) {
-                        onResult(GoogleSignInResult.Success(
+                        onResult(NativeSignInResult.Success(
                             idToken = token,
                             userId = account.id ?: "",
                             email = account.email,
-                            displayName = account.displayName
+                            displayName = account.displayName,
+                            provider = "google"
                         ))
                     } else {
                         Log.w(TAG, "Silent Sign-In returned null token")
-                        onResult(GoogleSignInResult.Error("4: SIGN_IN_REQUIRED - No token returned"))
+                        onResult(NativeSignInResult.Error("4: SIGN_IN_REQUIRED - No token returned"))
                     }
                 }
                 .addOnFailureListener { e ->
@@ -269,9 +270,9 @@ class MainActivity : ComponentActivity() {
 
                     // Error code 4 = SIGN_IN_REQUIRED - user needs to interactively sign in
                     if (errorCode == 4) {
-                        onResult(GoogleSignInResult.Error("4: SIGN_IN_REQUIRED"))
+                        onResult(NativeSignInResult.Error("4: SIGN_IN_REQUIRED"))
                     } else {
-                        onResult(GoogleSignInResult.Error("$errorCode: ${e.message}"))
+                        onResult(NativeSignInResult.Error("$errorCode: ${e.message}"))
                     }
                 }
         }
@@ -291,11 +292,12 @@ class MainActivity : ComponentActivity() {
 
                 Log.i(TAG, "Google Sign-In successful: ${account.email}")
 
-                val result = GoogleSignInResult.Success(
+                val result = NativeSignInResult.Success(
                     idToken = account.idToken ?: "",
                     userId = account.id ?: "",
                     email = account.email,
-                    displayName = account.displayName
+                    displayName = account.displayName,
+                    provider = "google"
                 )
 
                 callback?.invoke(result)
@@ -304,8 +306,8 @@ class MainActivity : ComponentActivity() {
                 Log.e(TAG, "Google Sign-In failed: ${e.statusCode} - ${e.message}")
 
                 val result = when (e.statusCode) {
-                    12501 -> GoogleSignInResult.Cancelled // SIGN_IN_CANCELLED
-                    else -> GoogleSignInResult.Error("Sign-in failed: ${e.statusCode}")
+                    12501 -> NativeSignInResult.Cancelled // SIGN_IN_CANCELLED
+                    else -> NativeSignInResult.Error("Sign-in failed: ${e.statusCode}")
                 }
 
                 callback?.invoke(result)

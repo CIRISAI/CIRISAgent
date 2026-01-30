@@ -15,6 +15,11 @@ enum class Platform {
 expect fun getPlatform(): Platform
 
 /**
+ * Platform-specific logging.
+ */
+expect fun platformLog(tag: String, message: String)
+
+/**
  * Check if running on iOS.
  */
 fun isIOS(): Boolean = getPlatform() == Platform.IOS

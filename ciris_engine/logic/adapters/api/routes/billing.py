@@ -854,9 +854,15 @@ async def verify_google_play_purchase(
     )  # NOSONAR - provider type not secret
 
     # Get Google ID token for JWT pass-through mode (Android/native)
-    # Android sends this in X-Google-ID-Token header for billing backend auth
+    # First check header, then fallback to environment (written by Kotlin EnvFileUpdater)
     google_id_token = request.headers.get("X-Google-ID-Token")
-    if google_id_token:
+    if not google_id_token:
+        import os
+
+        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN")
+        if google_id_token:
+            logger.info(f"[GOOGLE_PLAY_VERIFY] Using Google ID token from environment ({len(google_id_token)} chars)")
+    else:
         logger.info(f"[GOOGLE_PLAY_VERIFY] Using JWT pass-through with Google ID token ({len(google_id_token)} chars)")
     billing_client = _get_billing_client(request, google_id_token=google_id_token)
 

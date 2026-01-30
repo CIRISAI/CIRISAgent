@@ -132,7 +132,12 @@ class MainActivity : ComponentActivity() {
                     accessToken = "pending", // Will be set after auth
                     baseUrl = "http://localhost:8080",
                     googleSignInCallback = googleSignInCallback,
-                    purchaseLauncher = purchaseLauncher
+                    purchaseLauncher = purchaseLauncher,
+                    onTokenUpdated = { token ->
+                        // Update the billing API client with the new token
+                        Log.i(TAG, "Token updated, setting on billing apiClient")
+                        apiClient?.setAccessToken(token)
+                    }
                 )
             } else {
                 // Minimal splash while Python starts

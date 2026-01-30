@@ -172,7 +172,8 @@ fun CIRISApp(
     secureStorage: SecureStorage = createSecureStorage(),
     envFileUpdater: EnvFileUpdater = createEnvFileUpdater(),
     googleSignInCallback: GoogleSignInCallback? = null,
-    purchaseLauncher: PurchaseLauncher? = null
+    purchaseLauncher: PurchaseLauncher? = null,
+    onTokenUpdated: ((String) -> Unit)? = null
 ) {
     val TAG = "CIRISApp"
 
@@ -251,6 +252,7 @@ fun CIRISApp(
 
                         // Set the CIRIS token on the API client
                         apiClient.setAccessToken(cirisToken)
+                        onTokenUpdated?.invoke(cirisToken) // Notify MainActivity for BillingManager
                         currentAccessToken = cirisToken
                         apiClient.logTokenState() // Debug: confirm token was set
 
@@ -415,6 +417,7 @@ fun CIRISApp(
                                     // Token was valid without refresh - use the stored CIRIS token directly
                                     println("[$TAG][INFO] Stored token is valid, setting on API client")
                                     apiClient.setAccessToken(storedToken)
+                                    onTokenUpdated?.invoke(storedToken) // Notify MainActivity for BillingManager
                                     currentAccessToken = storedToken
                                     apiClient.logTokenState() // Debug: confirm token was set
                                 }
@@ -486,6 +489,7 @@ fun CIRISApp(
 
                                                     // Set the token on the API client
                                                     apiClient.setAccessToken(cirisToken)
+                                                    onTokenUpdated?.invoke(cirisToken) // Notify MainActivity for BillingManager
                                                     currentAccessToken = cirisToken
                                                     apiClient.logTokenState() // Debug: confirm token was set
 
@@ -590,6 +594,7 @@ fun CIRISApp(
 
                                     // Set the token on the API client
                                     apiClient.setAccessToken(cirisToken)
+                                    onTokenUpdated?.invoke(cirisToken) // Notify MainActivity for BillingManager
                                     currentAccessToken = cirisToken
                                     apiClient.logTokenState() // Debug: confirm token was set
 

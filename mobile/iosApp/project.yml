@@ -21,10 +21,9 @@ targets:
       - path: iosApp
         excludes:
           - "**/.DS_Store"
-      # Resources temporarily disabled - see prepare_python_bundle.sh
-      # - path: Resources
-      #   type: folder
-      #   buildPhase: resources
+      # Resources bundled as zip to avoid code signing issues with 5000+ files
+      - path: Resources.zip
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ai.ciris.mobile
@@ -48,6 +47,10 @@ targets:
         embed: true
       - framework: Frameworks/Python.xcframework
         embed: true
+    postCompileScripts:
+      - name: Embed Python Native Modules
+        script: "${PROJECT_DIR}/scripts/embed_native_frameworks.sh"
+        basedOnDependencyAnalysis: false
 
 schemes:
   iosApp:

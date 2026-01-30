@@ -67,6 +67,36 @@ cp -R "$BEEWARE_APP/app_packages" "$RESOURCES_DIR/"
 echo "Cleaning up __pycache__ directories..."
 find "$RESOURCES_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
+# Copy Python native module frameworks (C extensions compiled as frameworks)
+FRAMEWORKS_DIR="$IOS_APP_DIR/Frameworks"
+echo ""
+echo "Copying Python native module frameworks..."
+mkdir -p "$FRAMEWORKS_DIR"
+
+# Copy all native extension frameworks from BeeWare build
+NATIVE_MODULES_COUNT=0
+for framework in "$BEEWARE_APP/Frameworks/"*.framework; do
+    if [ -d "$framework" ]; then
+        framework_name=$(basename "$framework")
+        # Skip Python.framework - we handle that separately
+        if [ "$framework_name" != "Python.framework" ]; then
+            cp -R "$framework" "$FRAMEWORKS_DIR/"
+            NATIVE_MODULES_COUNT=$((NATIVE_MODULES_COUNT + 1))
+        fi
+    fi
+done
+echo "  Copied $NATIVE_MODULES_COUNT native module frameworks"
+
+# Also copy Python.xcframework if it exists and isn't already there
+if [ ! -d "$FRAMEWORKS_DIR/Python.xcframework" ]; then
+    # Look for Python.xcframework in support packages
+    PYTHON_XCF=$(find "$CIRIS_ROOT/ios" -name "Python.xcframework" -type d 2>/dev/null | head -1)
+    if [ -n "$PYTHON_XCF" ] && [ -d "$PYTHON_XCF" ]; then
+        echo "Copying Python.xcframework..."
+        cp -R "$PYTHON_XCF" "$FRAMEWORKS_DIR/"
+    fi
+fi
+
 # Calculate sizes
 PYTHON_SIZE=$(du -sh "$RESOURCES_DIR/python" 2>/dev/null | cut -f1)
 APP_SIZE=$(du -sh "$RESOURCES_DIR/app" 2>/dev/null | cut -f1)

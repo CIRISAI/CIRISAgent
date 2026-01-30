@@ -2,9 +2,137 @@ import SwiftUI
 import shared
 
 struct ContentView: View {
+    @State private var pythonReady = false
+    @State private var initError: String? = nil
+
     var body: some View {
-        ComposeView()
-            .ignoresSafeArea()
+        if pythonReady {
+            // Show the Compose UI once Python is ready
+            ComposeView()
+                .ignoresSafeArea()
+        } else if let error = initError {
+            // Show error state
+            ErrorView(message: error) {
+                // Retry
+                initError = nil
+                Task {
+                    await initializePython()
+                }
+            }
+        } else {
+            // Show loading while initializing Python
+            InitializingView()
+                .task {
+                    await initializePython()
+                }
+        }
+    }
+
+    private func initializePython() async {
+        NSLog("[ContentView] Starting Python initialization...")
+
+        // Initialize Python interpreter
+        let success = PythonBridge.initializePython()
+        if !success {
+            initError = "Failed to initialize Python interpreter"
+            return
+        }
+
+        // Start the CIRIS runtime
+        let started = PythonBridge.startRuntime()
+        if !started {
+            initError = "Failed to start CIRIS runtime"
+            return
+        }
+
+        // Wait for server to be ready (poll health endpoint)
+        var attempts = 0
+        let maxAttempts = 30  // 30 seconds max
+
+        while attempts < maxAttempts {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second
+            attempts += 1
+
+            if PythonBridge.checkHealth() {
+                NSLog("[ContentView] Server is healthy after \(attempts) seconds")
+                await MainActor.run {
+                    pythonReady = true
+                }
+                return
+            }
+
+            NSLog("[ContentView] Waiting for server... (\(attempts)/\(maxAttempts))")
+        }
+
+        initError = "Server did not become healthy within 30 seconds"
+    }
+}
+
+// MARK: - Initializing View
+
+struct InitializingView: View {
+    var body: some View {
+        ZStack {
+            Color(red: 0.1, green: 0.1, blue: 0.18)
+                .ignoresSafeArea()
+
+            VStack(spacing: 24) {
+                Image(systemName: "brain.head.profile")
+                    .font(.system(size: 80))
+                    .foregroundColor(Color(red: 0.255, green: 0.612, blue: 0.627))
+
+                Text("CIRIS")
+                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+
+                Text("Initializing Python runtime...")
+                    .font(.system(size: 14))
+                    .foregroundColor(.gray)
+
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0, green: 0.83, blue: 1)))
+                    .scaleEffect(1.5)
+            }
+        }
+    }
+}
+
+// MARK: - Error View
+
+struct ErrorView: View {
+    let message: String
+    let onRetry: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color(red: 0.1, green: 0.1, blue: 0.18)
+                .ignoresSafeArea()
+
+            VStack(spacing: 24) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 60))
+                    .foregroundColor(.red)
+
+                Text("Initialization Error")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.white)
+
+                Text(message)
+                    .font(.system(size: 14))
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                Button(action: onRetry) {
+                    Text("Retry")
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 32)
+                        .padding(.vertical, 12)
+                        .background(Color(red: 0.255, green: 0.612, blue: 0.627))
+                        .cornerRadius(8)
+                }
+            }
+        }
     }
 }
 

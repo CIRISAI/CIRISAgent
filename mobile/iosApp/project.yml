@@ -21,6 +21,9 @@ targets:
       - path: iosApp
         excludes:
           - "**/.DS_Store"
+      - path: Resources
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ai.ciris.mobile
@@ -33,8 +36,16 @@ targets:
         FRAMEWORK_SEARCH_PATHS:
           - $(inherited)
           - $(PROJECT_DIR)/../shared/build/bin/iosSimulatorArm64/debugFramework
+          - $(PROJECT_DIR)/Frameworks
+        HEADER_SEARCH_PATHS:
+          - $(inherited)
+          - $(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64_x86_64-simulator/Python.framework/Headers
+        SWIFT_OBJC_BRIDGING_HEADER: iosApp/iosApp-Bridging-Header.h
+        CLANG_ENABLE_MODULES: YES
     dependencies:
       - framework: ../shared/build/bin/iosSimulatorArm64/debugFramework/shared.framework
+        embed: true
+      - framework: Frameworks/Python.xcframework
         embed: true
 
 schemes:

@@ -4,11 +4,12 @@ import shared
 struct ContentView: View {
     @State private var pythonReady = false
     @State private var initError: String? = nil
+    @StateObject private var storeKitManager = StoreKitManager.shared
 
     var body: some View {
         if pythonReady {
-            // Show the Compose UI with Apple Sign-In support once Python is ready
-            ComposeViewWithAuth()
+            // Show the Compose UI with Apple Sign-In and StoreKit support once Python is ready
+            ComposeViewWithAuthAndStore(storeKitManager: storeKitManager)
                 .ignoresSafeArea()
         } else if let error = initError {
             // Show error state
@@ -147,7 +148,7 @@ struct ComposeView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
 }
 
-/// Compose view with Apple Sign-In integration
+/// Compose view with Apple Sign-In integration (legacy, use ComposeViewWithAuthAndStore)
 struct ComposeViewWithAuth: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
         NSLog("[ComposeViewWithAuth] makeUIViewController called - setting up Apple Sign-In callbacks")
@@ -216,6 +217,156 @@ struct ComposeViewWithAuth: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
         NSLog("[ComposeViewWithAuth] updateUIViewController called")
+    }
+}
+
+/// Compose view with Apple Sign-In and StoreKit integration
+struct ComposeViewWithAuthAndStore: UIViewControllerRepresentable {
+    @ObservedObject var storeKitManager: StoreKitManager
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        NSLog("[ComposeViewWithAuthAndStore] makeUIViewController called - setting up Apple Sign-In and StoreKit callbacks")
+
+        // Start StoreKit manager
+        storeKitManager.start()
+
+        // Get the key window for presenting the Apple Sign-In sheet
+        let scenes = UIApplication.shared.connectedScenes
+        let windowScene = scenes.first as? UIWindowScene
+        let keyWindow = windowScene?.windows.first { $0.isKeyWindow }
+
+        NSLog("[ComposeViewWithAuthAndStore] keyWindow: \(String(describing: keyWindow))")
+
+        let vc = Main_iosKt.MainViewControllerWithAuthAndStore(
+            // Apple Sign-In callbacks
+            onAppleSignInRequested: { callback in
+                NSLog("[ComposeViewWithAuthAndStore] onAppleSignInRequested LAMBDA INVOKED")
+
+                AppleSignInHelper.shared.signIn(presentingWindow: keyWindow) { result in
+                    switch result {
+                    case .success(let credential):
+                        NSLog("[ComposeViewWithAuthAndStore] Apple Sign-In success")
+                        let bridgeResult = AppleSignInResultBridge.companion.success(
+                            idToken: credential.idToken,
+                            userId: credential.userId,
+                            email: credential.email,
+                            displayName: credential.fullName
+                        )
+                        callback(bridgeResult)
+
+                    case .failure(let error):
+                        NSLog("[ComposeViewWithAuthAndStore] Apple Sign-In error: \(error.localizedDescription)")
+                        if let appleError = error as? AppleSignInHelper.AppleSignInError,
+                           appleError == .cancelled {
+                            callback(AppleSignInResultBridge.companion.cancelled())
+                        } else {
+                            callback(AppleSignInResultBridge.companion.error(message: error.localizedDescription))
+                        }
+                    }
+                }
+            },
+            onSilentSignInRequested: { callback in
+                NSLog("[ComposeViewWithAuthAndStore] onSilentSignInRequested LAMBDA INVOKED")
+
+                AppleSignInHelper.shared.silentSignIn { result in
+                    switch result {
+                    case .success(let credential):
+                        NSLog("[ComposeViewWithAuthAndStore] Silent sign-in success")
+                        let bridgeResult = AppleSignInResultBridge.companion.success(
+                            idToken: credential.idToken,
+                            userId: credential.userId,
+                            email: credential.email,
+                            displayName: credential.fullName
+                        )
+                        callback(bridgeResult)
+
+                    case .failure(let error):
+                        NSLog("[ComposeViewWithAuthAndStore] Silent sign-in not available: \(error.localizedDescription)")
+                        callback(AppleSignInResultBridge.companion.error(message: "4: SIGN_IN_REQUIRED"))
+                    }
+                }
+            },
+
+            // StoreKit callbacks
+            onLoadProducts: { callback in
+                NSLog("[ComposeViewWithAuthAndStore] onLoadProducts LAMBDA INVOKED")
+
+                Task { @MainActor in
+                    // Ensure products are loaded
+                    if self.storeKitManager.products.isEmpty {
+                        await self.storeKitManager.loadProducts()
+                    }
+
+                    // Convert to bridge products
+                    let bridgeProducts = self.storeKitManager.products.map { product in
+                        StoreKitProductBridge.companion.create(
+                            id: product.id,
+                            displayName: product.displayName,
+                            description: product.description,
+                            displayPrice: product.displayPrice,
+                            price: NSDecimalNumber(decimal: product.price).doubleValue
+                        )
+                    }
+
+                    NSLog("[ComposeViewWithAuthAndStore] Returning \(bridgeProducts.count) products to Kotlin")
+                    callback(bridgeProducts)
+                }
+            },
+            onPurchase: { productId, appleIDToken, callback in
+                NSLog("[ComposeViewWithAuthAndStore] onPurchase LAMBDA INVOKED for \(productId)")
+
+                Task { @MainActor in
+                    // Find the product
+                    guard let product = self.storeKitManager.products.first(where: { $0.id == productId }) else {
+                        NSLog("[ComposeViewWithAuthAndStore] Product not found: \(productId)")
+                        callback(StoreKitPurchaseResultBridge.companion.failed(error: "Product not found"))
+                        return
+                    }
+
+                    do {
+                        let result = try await self.storeKitManager.purchase(product, appleIDToken: appleIDToken)
+
+                        switch result {
+                        case .success(let creditsAdded, let newBalance):
+                            NSLog("[ComposeViewWithAuthAndStore] Purchase success: +\(creditsAdded) credits, balance: \(newBalance)")
+                            callback(StoreKitPurchaseResultBridge.companion.success(
+                                creditsAdded: Int32(creditsAdded),
+                                newBalance: Int32(newBalance)
+                            ))
+
+                        case .cancelled:
+                            NSLog("[ComposeViewWithAuthAndStore] Purchase cancelled")
+                            callback(StoreKitPurchaseResultBridge.companion.cancelled())
+
+                        case .pending:
+                            NSLog("[ComposeViewWithAuthAndStore] Purchase pending")
+                            callback(StoreKitPurchaseResultBridge.companion.pending())
+
+                        case .failed(let error):
+                            NSLog("[ComposeViewWithAuthAndStore] Purchase failed: \(error)")
+                            callback(StoreKitPurchaseResultBridge.companion.failed(error: error))
+                        }
+                    } catch {
+                        NSLog("[ComposeViewWithAuthAndStore] Purchase error: \(error)")
+                        callback(StoreKitPurchaseResultBridge.companion.failed(error: error.localizedDescription))
+                    }
+                }
+            },
+            isStoreLoading: {
+                // Kotlin expects KotlinBoolean, Swift Bool auto-bridges
+                return KotlinBoolean(bool: self.storeKitManager.isLoading)
+            },
+            getStoreError: {
+                return self.storeKitManager.errorMessage
+            }
+        )
+
+        NSLog("[ComposeViewWithAuthAndStore] MainViewControllerWithAuthAndStore returned VC: \(vc)")
+        return vc
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        NSLog("[ComposeViewWithAuthAndStore] updateUIViewController called")
     }
 }
 

@@ -60,6 +60,7 @@ import kotlinx.datetime.Instant
 fun InteractScreen(
     viewModel: InteractViewModel,
     onNavigateBack: () -> Unit,
+    onSessionExpired: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsState()
@@ -71,6 +72,14 @@ fun InteractScreen(
     val processingStatus by viewModel.processingStatus.collectAsState()
     val authError by viewModel.authError.collectAsState()
     val bubbleEmojis by viewModel.bubbleEmojis.collectAsState()
+
+    // When auth error occurs, navigate to login silently
+    LaunchedEffect(authError) {
+        if (authError != null) {
+            viewModel.clearAuthError()
+            onSessionExpired()
+        }
+    }
     val agentProcessingState by viewModel.agentProcessingState.collectAsState()
     val sseConnected by viewModel.sseConnected.collectAsState()
     val timelineEvents by viewModel.timelineEvents.collectAsState()
@@ -101,17 +110,7 @@ fun InteractScreen(
             onEmergencyStop = { viewModel.shutdown(emergency = true) }
         )
 
-        // Auth error banner - shown when session expires
-        AnimatedVisibility(
-            visible = authError != null,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            AuthErrorBanner(
-                message = authError ?: "",
-                onDismiss = { viewModel.clearAuthError() }
-            )
-        }
+        // Auth error is now handled by LaunchedEffect above - navigates to login silently
 
         // AI Warning banner (from fragment_interact.xml:65-76)
         AIWarningBanner()

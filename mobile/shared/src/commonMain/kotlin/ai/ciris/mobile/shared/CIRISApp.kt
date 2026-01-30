@@ -129,6 +129,17 @@ interface LegacyGoogleSignInCallback {
 }
 
 /**
+ * Product information for in-app purchases
+ */
+data class ProductInfo(
+    val id: String,
+    val displayName: String,
+    val description: String,
+    val displayPrice: String,
+    val price: Double
+)
+
+/**
  * Callback interface for launching in-app purchases
  * Platform implementations provide actual store integration (Google Play, App Store)
  */
@@ -138,6 +149,35 @@ interface PurchaseLauncher {
      * @param productId The product ID to purchase (e.g., "credits_100")
      */
     fun launchPurchase(productId: String)
+
+    /**
+     * Launch the native purchase flow with auth token (for iOS StoreKit).
+     * @param productId The product ID to purchase
+     * @param authToken The OAuth token for billing verification
+     */
+    fun launchPurchaseWithAuth(productId: String, authToken: String) {
+        // Default implementation falls back to launchPurchase
+        launchPurchase(productId)
+    }
+
+    /**
+     * Load available products from the store.
+     * @param onResult Callback with list of available products
+     */
+    fun loadProducts(onResult: (List<ProductInfo>) -> Unit) {
+        // Default: no products
+        onResult(emptyList())
+    }
+
+    /**
+     * Check if products are currently loading.
+     */
+    fun isLoading(): Boolean = false
+
+    /**
+     * Get current error message if any.
+     */
+    fun getErrorMessage(): String? = null
 
     /**
      * Set callback for purchase results.
@@ -672,6 +712,16 @@ fun CIRISApp(
                     InteractScreen(
                         viewModel = interactViewModel,
                         onNavigateBack = { /* Already at root */ },
+                        onSessionExpired = {
+                            // Navigate to login screen when session expires
+                            platformLog(TAG, "[INFO] Session expired - navigating to login")
+                            currentAccessToken = null
+                            // Clear stored tokens asynchronously
+                            coroutineScope.launch {
+                                secureStorage.deleteAccessToken()
+                            }
+                            currentScreen = Screen.Login
+                        },
                         modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
                     )
                 }

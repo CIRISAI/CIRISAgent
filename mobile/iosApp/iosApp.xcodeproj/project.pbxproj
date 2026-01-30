@@ -15,6 +15,7 @@
 		56B0305B5D3847FC6B326502 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE8509E5A49E4A5CAAEB3ADB /* ContentView.swift */; };
 		66A2AEEC40DC3948EEC2CEBA /* Python.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7F57CDEE4615E80E9C189DA6 /* Python.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6C480D7E5FB50456D1A53C94 /* shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6F014C83FDDBC68304D230E9 /* shared.framework */; };
+		D4EF14070E1BB23B1DAAFBCB /* StoreKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC688A47713DC269281F526D /* StoreKitManager.swift */; };
 		DBF2178339A7B6A37F096AF1 /* iosAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404608725152C3067E7030FA /* iosAppApp.swift */; };
 		E0491F1A134023B2903DF517 /* Python.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7F57CDEE4615E80E9C189DA6 /* Python.xcframework */; };
 		E3702892E761DFE128D48B0D /* AppleSignInHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3BBFBA91E6B290B4005C668 /* AppleSignInHelper.swift */; };
@@ -49,6 +50,7 @@
 		CE8509E5A49E4A5CAAEB3ADB /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		DAA9BDE339934CB14814355D /* PythonBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonBridge.swift; sourceTree = "<group>"; };
 		E805AC5C75138F5ACE082017 /* iosApp-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "iosApp-Bridging-Header.h"; sourceTree = "<group>"; };
+		EC688A47713DC269281F526D /* StoreKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitManager.swift; sourceTree = "<group>"; };
 		ECBEC7804965D6227702FBC1 /* PythonInit.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PythonInit.h; sourceTree = "<group>"; };
 		F543015C899423D4B01CEB2E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FE5DE9AED4DF76F07B0E1091 /* PythonInit.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PythonInit.m; sourceTree = "<group>"; };
@@ -81,6 +83,7 @@
 				DAA9BDE339934CB14814355D /* PythonBridge.swift */,
 				ECBEC7804965D6227702FBC1 /* PythonInit.h */,
 				FE5DE9AED4DF76F07B0E1091 /* PythonInit.m */,
+				EC688A47713DC269281F526D /* StoreKitManager.swift */,
 			);
 			path = iosApp;
 			sourceTree = "<group>";
@@ -214,6 +217,7 @@
 				56B0305B5D3847FC6B326502 /* ContentView.swift in Sources */,
 				49E475AB2B339B9760DED60C /* PythonBridge.swift in Sources */,
 				40ED78CC391B58FEED543A87 /* PythonInit.m in Sources */,
+				D4EF14070E1BB23B1DAAFBCB /* StoreKitManager.swift in Sources */,
 				DBF2178339A7B6A37F096AF1 /* iosAppApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

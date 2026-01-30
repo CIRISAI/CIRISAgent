@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+
 package ai.ciris.mobile.shared.platform
 
 import kotlinx.cinterop.*

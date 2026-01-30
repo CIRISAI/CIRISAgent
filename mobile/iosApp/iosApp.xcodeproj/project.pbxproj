@@ -10,13 +10,15 @@
 		22EA1CB33A17DCC6FC82406D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F543015C899423D4B01CEB2E /* Assets.xcassets */; };
 		40ED78CC391B58FEED543A87 /* PythonInit.m in Sources */ = {isa = PBXBuildFile; fileRef = FE5DE9AED4DF76F07B0E1091 /* PythonInit.m */; };
 		49E475AB2B339B9760DED60C /* PythonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA9BDE339934CB14814355D /* PythonBridge.swift */; };
+		4A23539E03B1795BF31CBF28 /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */; };
 		4AA1C0D5BECC7730D28675C0 /* shared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6F014C83FDDBC68304D230E9 /* shared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		56B0305B5D3847FC6B326502 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE8509E5A49E4A5CAAEB3ADB /* ContentView.swift */; };
 		66A2AEEC40DC3948EEC2CEBA /* Python.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7F57CDEE4615E80E9C189DA6 /* Python.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6C480D7E5FB50456D1A53C94 /* shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6F014C83FDDBC68304D230E9 /* shared.framework */; };
-		A711F1E01353E3BE1D03752D /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = 9818940858508DAD829585A3 /* Resources */; };
 		DBF2178339A7B6A37F096AF1 /* iosAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404608725152C3067E7030FA /* iosAppApp.swift */; };
 		E0491F1A134023B2903DF517 /* Python.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7F57CDEE4615E80E9C189DA6 /* Python.xcframework */; };
+		E3702892E761DFE128D48B0D /* AppleSignInHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3BBFBA91E6B290B4005C668 /* AppleSignInHelper.swift */; };
+		EE9564216B1ADCF041A3BB54 /* Resources.zip in Resources */ = {isa = PBXBuildFile; fileRef = 93BB47C3CC3B5531EA4EB340 /* Resources.zip */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -36,11 +38,14 @@
 
 /* Begin PBXFileReference section */
 		404608725152C3067E7030FA /* iosAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iosAppApp.swift; sourceTree = "<group>"; };
+		586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
 		6F014C83FDDBC68304D230E9 /* shared.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = shared.framework; path = ../shared/build/bin/iosSimulatorArm64/debugFramework/shared.framework; sourceTree = "<group>"; };
 		7F57CDEE4615E80E9C189DA6 /* Python.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Python.xcframework; path = Frameworks/Python.xcframework; sourceTree = "<group>"; };
 		86038AE1032E284E79B32AD6 /* iosApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		9818940858508DAD829585A3 /* Resources */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources; sourceTree = SOURCE_ROOT; };
+		93BB47C3CC3B5531EA4EB340 /* Resources.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = Resources.zip; sourceTree = "<group>"; };
+		A3BBFBA91E6B290B4005C668 /* AppleSignInHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInHelper.swift; sourceTree = "<group>"; };
 		C117AD187833E2513BD2F553 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		C49B0B02429FBBC9F867DDE1 /* iosApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iosApp.entitlements; sourceTree = "<group>"; };
 		CE8509E5A49E4A5CAAEB3ADB /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		DAA9BDE339934CB14814355D /* PythonBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonBridge.swift; sourceTree = "<group>"; };
 		E805AC5C75138F5ACE082017 /* iosApp-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "iosApp-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -56,6 +61,7 @@
 			files = (
 				6C480D7E5FB50456D1A53C94 /* shared.framework in Frameworks */,
 				E0491F1A134023B2903DF517 /* Python.xcframework in Frameworks */,
+				4A23539E03B1795BF31CBF28 /* AuthenticationServices.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,10 +71,12 @@
 		1DB4B685CAEE8BEFEBBAEF94 /* iosApp */ = {
 			isa = PBXGroup;
 			children = (
+				A3BBFBA91E6B290B4005C668 /* AppleSignInHelper.swift */,
 				F543015C899423D4B01CEB2E /* Assets.xcassets */,
 				CE8509E5A49E4A5CAAEB3ADB /* ContentView.swift */,
 				C117AD187833E2513BD2F553 /* Info.plist */,
 				E805AC5C75138F5ACE082017 /* iosApp-Bridging-Header.h */,
+				C49B0B02429FBBC9F867DDE1 /* iosApp.entitlements */,
 				404608725152C3067E7030FA /* iosAppApp.swift */,
 				DAA9BDE339934CB14814355D /* PythonBridge.swift */,
 				ECBEC7804965D6227702FBC1 /* PythonInit.h */,
@@ -80,6 +88,7 @@
 		3666012298E772D226418813 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */,
 				7F57CDEE4615E80E9C189DA6 /* Python.xcframework */,
 				6F014C83FDDBC68304D230E9 /* shared.framework */,
 			);
@@ -90,7 +99,7 @@
 			isa = PBXGroup;
 			children = (
 				1DB4B685CAEE8BEFEBBAEF94 /* iosApp */,
-				9818940858508DAD829585A3 /* Resources */,
+				93BB47C3CC3B5531EA4EB340 /* Resources.zip */,
 				3666012298E772D226418813 /* Frameworks */,
 				94C98B8B3A2BFC1966447269 /* Products */,
 			);
@@ -112,6 +121,7 @@
 			buildConfigurationList = 29DCA9F0B3A40325067EB163 /* Build configuration list for PBXNativeTarget "iosApp" */;
 			buildPhases = (
 				297B59D9CE634556D6007C40 /* Sources */,
+				3D4F1A18C954E39A6135F5F2 /* Embed Python Native Modules */,
 				1623B02D10928C8101C1F806 /* Resources */,
 				EF8A6E9BFD470986D9D5C9B5 /* Frameworks */,
 				DB76241340C08196BD9C492C /* Embed Frameworks */,
@@ -167,17 +177,40 @@
 			buildActionMask = 2147483647;
 			files = (
 				22EA1CB33A17DCC6FC82406D /* Assets.xcassets in Resources */,
-				A711F1E01353E3BE1D03752D /* Resources in Resources */,
+				EE9564216B1ADCF041A3BB54 /* Resources.zip in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		3D4F1A18C954E39A6135F5F2 /* Embed Python Native Modules */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Python Native Modules";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "${PROJECT_DIR}/scripts/embed_native_frameworks.sh";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		297B59D9CE634556D6007C40 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E3702892E761DFE128D48B0D /* AppleSignInHelper.swift in Sources */,
 				56B0305B5D3847FC6B326502 /* ContentView.swift in Sources */,
 				49E475AB2B339B9760DED60C /* PythonBridge.swift in Sources */,
 				40ED78CC391B58FEED543A87 /* PythonInit.m in Sources */,
@@ -316,6 +349,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -346,6 +380,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = (

@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+
 package ai.ciris.mobile.shared.auth
 
 import ai.ciris.mobile.shared.models.AuthState

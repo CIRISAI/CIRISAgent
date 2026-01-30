@@ -11,6 +11,8 @@ import ai.ciris.mobile.shared.platform.SecureStorage
 import ai.ciris.mobile.shared.platform.createEnvFileUpdater
 import ai.ciris.mobile.shared.platform.createPythonRuntime
 import ai.ciris.mobile.shared.platform.createSecureStorage
+import ai.ciris.mobile.shared.platform.getOAuthProviderName
+import ai.ciris.mobile.shared.platform.getOAuthProviderId
 import ai.ciris.mobile.shared.ui.components.AdapterWizardDialog
 import ai.ciris.mobile.shared.ui.screens.*
 import ai.ciris.mobile.shared.viewmodels.AdaptersViewModel
@@ -72,8 +74,9 @@ import kotlinx.coroutines.withContext
 interface NativeSignInCallback {
     /**
      * Request interactive sign-in (shows UI).
+     * Named onGoogleSignInRequested for backward compatibility with existing Android code.
      */
-    fun onSignInRequested(onResult: (NativeSignInResult) -> Unit)
+    fun onGoogleSignInRequested(onResult: (NativeSignInResult) -> Unit)
 
     /**
      * Attempt silent sign-in (no UI).
@@ -445,7 +448,7 @@ fun CIRISApp(
                         if (googleSignInCallback != null) {
                             // Use platform-specific Google sign-in
                             isLoginLoading = true
-                            loginStatusMessage = "Signing in with Google..."
+                            loginStatusMessage = "Signing in with ${getOAuthProviderName()}..."
 
                             googleSignInCallback.onGoogleSignInRequested { result ->
                                 isLoginLoading = false
@@ -528,7 +531,7 @@ fun CIRISApp(
                             }
                         } else {
                             // No callback provided - show error
-                            loginStatusMessage = "Google Sign-In not available"
+                            loginStatusMessage = "${getOAuthProviderName()} Sign-In not available"
                         }
                     },
                     onLocalLogin = {

@@ -30,6 +30,7 @@ targets:
         INFOPLIST_FILE: iosApp/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
+        CODE_SIGN_ENTITLEMENTS: iosApp/iosApp.entitlements
         LD_RUNPATH_SEARCH_PATHS:
           - $(inherited)
           - "@executable_path/Frameworks"
@@ -47,6 +48,7 @@ targets:
         embed: true
       - framework: Frameworks/Python.xcframework
         embed: true
+      - sdk: AuthenticationServices.framework
     postCompileScripts:
       - name: Embed Python Native Modules
         script: "${PROJECT_DIR}/scripts/embed_native_frameworks.sh"

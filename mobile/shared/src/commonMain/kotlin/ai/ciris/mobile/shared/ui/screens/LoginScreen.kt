@@ -15,12 +15,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.sp
+import ai.ciris.mobile.shared.platform.getOAuthProviderName
+import ai.ciris.mobile.shared.platform.isIOS
 
 /**
- * Login Screen - EXACTLY matches android/app/.../auth/LoginActivity.kt
+ * Login Screen - Cross-platform login for Android and iOS
  *
  * Shows two login options:
- * - Sign in with Google: Required for CIRIS hosted LLM services, also supports BYOK
+ * - Sign in with Google (Android) / Apple (iOS): Required for CIRIS hosted LLM services
  * - Local Login: Offline mode with user-provided API key (BYOK only)
  *
  * Uses dark branded background (#667eea) matching Android exactly.
@@ -102,7 +104,8 @@ fun LoginScreen(
                         )
                     }
                 } else {
-                    // Sign in with Google button (white, rounded)
+                    // Sign in with OAuth provider button (Google on Android, Apple on iOS)
+                    val providerName = getOAuthProviderName()
                     Button(
                         onClick = onGoogleSignIn,
                         colors = ButtonDefaults.buttonColors(
@@ -113,10 +116,10 @@ fun LoginScreen(
                         modifier = Modifier
                             .width(280.dp)
                             .height(56.dp)
-                            .testTag("btn_google_signin")
+                            .testTag(if (isIOS()) "btn_apple_signin" else "btn_google_signin")
                     ) {
                         Text(
-                            text = "Sign in with Google",
+                            text = "Sign in with $providerName",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Medium
                         )
@@ -150,7 +153,7 @@ fun LoginScreen(
 
                     // Info text
                     Text(
-                        text = "CIRIS hosted LLM services require Google login.\nBring your own API key works with either option.",
+                        text = "CIRIS hosted LLM services require $providerName login.\nBring your own API key works with either option.",
                         color = LoginColors.White.copy(alpha = 0.7f),
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center,

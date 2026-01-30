@@ -142,7 +142,11 @@ C extension frameworks missing. Ensure:
 
 ### "signal only works in main thread"
 
-Using `ciris_ios` module directly instead of `ciris_ios.kmp_main`. The latter bypasses Toga's signal handling.
+Two components can cause this:
+1. **Toga**: Using `ciris_ios` module directly instead of `ciris_ios.kmp_main`. The latter bypasses Toga's signal handling.
+2. **Uvicorn**: The API adapter has a fix that calls `_serve()` directly on iOS to bypass uvicorn's signal handling wrapper. This is in `ciris_engine/logic/adapters/api/adapter.py`.
+
+The uvicorn fix was added because Python runs on a background thread in KMP (the Compose UI owns the main thread), but the threading module incorrectly identifies this as the main thread.
 
 ### Service initialization failures
 
@@ -161,6 +165,17 @@ Incident log location: `Documents/ciris/logs/incidents_latest.log`
 | Python Entry | ciris_ios module | ciris_ios.kmp_main |
 | Resources | Loose files | Resources.zip |
 | Native Extensions | Auto-embedded | embed_native_frameworks.sh |
+| CIRIS Source | From BeeWare build | Overlaid from main repo |
+
+## Important: Source Overlay
+
+The `prepare_python_bundle.sh` script overlays the latest `ciris_engine/` and `ciris_adapters/` from the main CIRISAgent repo over the BeeWare build. This ensures any fixes in the main repo (like the uvicorn signal handler fix) are included without requiring a full BeeWare rebuild.
+
+If you make changes to the CIRIS engine:
+1. Changes in `/Users/macmini/CIRISAgent/ciris_engine/` will be included on next bundle preparation
+2. Run `./scripts/prepare_python_bundle.sh` to update the Resources/
+3. Regenerate Resources.zip: `cd Resources && zip -q -r ../Resources.zip . && cd ..`
+4. Rebuild the app
 
 ## Status
 
@@ -168,6 +183,8 @@ Incident log location: `Documents/ciris/logs/incidents_latest.log`
 - [x] Resource extraction from zip
 - [x] Native module frameworks
 - [x] Startup checks (6/6 pass)
-- [x] Service initialization starts
-- [ ] Full runtime startup (CIRIS engine issue)
-- [ ] Compose UI integration
+- [x] Service initialization completes
+- [x] Full runtime startup (CIRIS engine)
+- [x] API server running (setup wizard accessible)
+- [ ] Compose UI integration with API
+- [ ] Full setup wizard flow

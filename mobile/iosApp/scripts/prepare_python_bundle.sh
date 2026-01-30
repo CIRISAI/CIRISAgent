@@ -63,6 +63,13 @@ echo "Copying third-party packages..."
 rm -rf "$RESOURCES_DIR/app_packages"
 cp -R "$BEEWARE_APP/app_packages" "$RESOURCES_DIR/"
 
+# Overlay latest CIRIS source from main repo (includes any fixes not in BeeWare build)
+echo "Overlaying latest ciris_engine from main repo..."
+rsync -a --exclude='__pycache__' --exclude='gui_static' "$CIRIS_ROOT/ciris_engine/" "$RESOURCES_DIR/app/ciris_engine/"
+
+echo "Overlaying latest ciris_adapters from main repo..."
+rsync -a --exclude='__pycache__' "$CIRIS_ROOT/ciris_adapters/" "$RESOURCES_DIR/app/ciris_adapters/"
+
 # Remove any __pycache__ directories
 echo "Cleaning up __pycache__ directories..."
 find "$RESOURCES_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true

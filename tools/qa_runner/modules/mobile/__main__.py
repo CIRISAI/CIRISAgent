@@ -41,6 +41,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from tools.qa_runner.modules.mobile.adb_helper import ADBHelper
 from tools.qa_runner.modules.mobile.test_runner import MobileTestConfig, MobileTestRunner
 from tools.qa_runner.modules.mobile.ui_automator import UIAutomator
+from tools.qa_runner.modules.mobile.device_helper import (
+    DeviceHelper,
+    Platform,
+    create_device_helper,
+    detect_platform,
+)
 
 # ========== Screen Registry ==========
 # Extensible registry of app screens and how to navigate to them
@@ -96,42 +102,114 @@ def pull_logs_command(args) -> int:
     print("CIRIS Mobile Device Log Collector")
     print("=" * 60 + "\n")
 
-    try:
-        adb = ADBHelper(adb_path=args.adb_path, device_serial=args.device)
-    except Exception as e:
-        print(f"[ERROR] Failed to initialize ADB: {e}")
-        return 1
+    # Determine platform
+    platform = getattr(args, 'platform', 'auto')
+    if platform == 'auto':
+        # Try iOS first if on macOS
+        try:
+            from .ios.xcrun_helper import XCRunHelper
+            ios_helper = XCRunHelper()
+            ios_devices = ios_helper.get_devices()
+            booted_ios = [d for d in ios_devices if d.state == "booted"]
+            if booted_ios:
+                platform = 'ios'
+                print("[INFO] Auto-detected iOS simulator")
+        except Exception:
+            pass
 
-    # Check device connection
-    devices = adb.get_devices()
-    connected = [d for d in devices if d.state == "device"]
+        if platform == 'auto':
+            platform = 'android'
 
-    if not connected:
-        print("[ERROR] No devices connected")
-        return 1
+    bundle_id = args.package
 
-    if args.device:
-        device = next((d for d in connected if d.serial == args.device), None)
-        if not device:
-            print(f"[ERROR] Device {args.device} not found")
-            print(f"  Available: {[d.serial for d in connected]}")
+    if platform == 'ios':
+        try:
+            from .ios.xcrun_helper import XCRunHelper
+            helper = XCRunHelper(device_id=args.device)
+        except Exception as e:
+            print(f"[ERROR] Failed to initialize iOS helper: {e}")
             return 1
+
+        # Check device connection
+        devices = helper.get_devices()
+        booted = [d for d in devices if d.state == "booted"]
+
+        if not booted:
+            print("[ERROR] No iOS simulators booted")
+            print("  Boot a simulator: xcrun simctl boot 'iPhone 17 Pro'")
+            return 1
+
+        if args.device:
+            device = next((d for d in booted if d.identifier == args.device), None)
+            if not device:
+                print(f"[ERROR] Device {args.device} not found")
+                print(f"  Available: {[d.identifier for d in booted]}")
+                return 1
+        else:
+            device = booted[0]
+            if len(booted) > 1:
+                print(f"[INFO] Multiple simulators booted, using: {device.name}")
+                print(f"  Use -d to specify: {[(d.identifier, d.name) for d in booted]}")
+
+        print(f"[INFO] iOS Simulator: {device.name} ({device.identifier[:8]}...)")
+        print(f"[INFO] iOS Version: {device.os_version}")
+
+        # Pull logs using cross-platform helper
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = Path(args.output_dir) / timestamp
+        collection = helper.pull_logs(str(output_dir), bundle_id)
+
+        print(f"\n[SUCCESS] Logs saved to: {collection.output_dir}")
+        print(f"  App logs: {len(collection.app_logs)} files")
+        print(f"  System logs: {len(collection.system_logs)} files")
+        print(f"  Databases: {len(collection.databases)} files")
+        print(f"  Preferences: {len(collection.preferences)} files")
+
+        # Print quick analysis hints
+        print("\nQuick analysis:")
+        if collection.app_logs:
+            print(f"  cat {collection.app_logs[0]}")
+        if collection.system_logs:
+            print(f"  grep -i error {collection.system_logs[0]}")
+
     else:
-        device = connected[0]
-        if len(connected) > 1:
-            print(f"[INFO] Multiple devices found, using: {device.serial}")
-            print(f"  Use -d to specify: {[d.serial for d in connected]}")
+        # Android path (original behavior)
+        try:
+            adb = ADBHelper(adb_path=args.adb_path, device_serial=args.device)
+        except Exception as e:
+            print(f"[ERROR] Failed to initialize ADB: {e}")
+            return 1
 
-    print(f"[INFO] Device: {device.serial} ({device.model or 'unknown model'})")
+        # Check device connection
+        devices = adb.get_devices()
+        connected = [d for d in devices if d.state == "device"]
 
-    # Pull logs
-    results = adb.pull_device_logs(output_dir=args.output_dir, package=args.package, verbose=True)
+        if not connected:
+            print("[ERROR] No Android devices connected")
+            return 1
 
-    # Print quick analysis hints
-    print("\nQuick analysis:")
-    print(f"  grep -i error {results['output_dir']}/logs/incidents_latest.log")
-    print(f"  tail -100 {results['output_dir']}/logs/latest.log")
-    print(f"  cat {results['output_dir']}/logcat_app.txt | grep -i 'EnvFileUpdater\\|billing\\|token'")
+        if args.device:
+            device = next((d for d in connected if d.serial == args.device), None)
+            if not device:
+                print(f"[ERROR] Device {args.device} not found")
+                print(f"  Available: {[d.serial for d in connected]}")
+                return 1
+        else:
+            device = connected[0]
+            if len(connected) > 1:
+                print(f"[INFO] Multiple devices found, using: {device.serial}")
+                print(f"  Use -d to specify: {[d.serial for d in connected]}")
+
+        print(f"[INFO] Android Device: {device.serial} ({device.model or 'unknown model'})")
+
+        # Pull logs
+        results = adb.pull_device_logs(output_dir=args.output_dir, package=bundle_id, verbose=True)
+
+        # Print quick analysis hints
+        print("\nQuick analysis:")
+        print(f"  grep -i error {results['output_dir']}/logs/incidents_latest.log")
+        print(f"  tail -100 {results['output_dir']}/logs/latest.log")
+        print(f"  cat {results['output_dir']}/logcat_app.txt | grep -i 'EnvFileUpdater\\|billing\\|token'")
 
     return 0
 
@@ -427,8 +505,15 @@ Examples:
   python -m tools.qa_runner.modules.mobile pull-logs -o ./my_logs
 """,
     )
-    pull_parser.add_argument("--device", "-d", help="Device serial number (uses first device if not specified)")
-    pull_parser.add_argument("--adb-path", help="Path to adb binary")
+    pull_parser.add_argument("--device", "-d", help="Device serial/UDID (uses first device if not specified)")
+    pull_parser.add_argument("--adb-path", help="Path to adb binary (Android only)")
+    pull_parser.add_argument(
+        "--platform",
+        "-p",
+        choices=["android", "ios", "auto"],
+        default="auto",
+        help="Target platform (default: auto-detect)",
+    )
     pull_parser.add_argument(
         "--output-dir",
         "-o",
@@ -438,7 +523,7 @@ Examples:
     pull_parser.add_argument(
         "--package",
         default="ai.ciris.mobile",
-        help="Android package name (default: ai.ciris.mobile)",
+        help="Package/Bundle ID (default: ai.ciris.mobile)",
     )
 
     # ========== go-screen subcommand ==========

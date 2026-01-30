@@ -10,6 +10,3 @@
 | **isActive** | **kotlin.Boolean** | Whether the key is currently active |  |
 | **lastUsed** | [**kotlin.time.Instant**](kotlin.time.Instant.md) |  |  [optional] |
 | **name** | **kotlin.String** |  |  [optional] |
-
-
-

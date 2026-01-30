@@ -76,17 +76,22 @@ ENV CIRIS_LOG_LEVEL=WARNING
 ENV CIRIS_TELEMETRY_ENABLED=false
 ENV CIRIS_AUDIT_ENABLED=false
 
+# Covenant Metrics - Full traces for research corpus contribution
+ENV CIRIS_COVENANT_METRICS_CONSENT=true
+ENV CIRIS_COVENANT_METRICS_TRACE_LEVEL=full_traces
+
 # LLM configuration (override at runtime)
 # ENV LLM_PROVIDER=anthropic
 # ENV LLM_API_KEY=your_key
 # ENV LLM_MODEL=claude-sonnet-4-20250514
 
-# Expose AgentBeats standard port
-EXPOSE 9000
+# Expose ports: 8080 for API, 9000 for A2A (AgentBeats standard)
+EXPOSE 8080 9000
 
 # Health check for AgentBeats orchestration
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:9000/health || exit 1
 
-# Run CIRIS with A2A adapter
-CMD ["python", "main.py", "--adapter", "a2a"]
+# Run CIRIS with API + A2A + Covenant Metrics adapters and HE-300 benchmark template
+# API adapter provides base infrastructure, A2A provides benchmark endpoint
+CMD ["python", "main.py", "--adapter", "api", "--adapter", "a2a", "--adapter", "ciris_covenant_metrics", "--template", "he-300-benchmark"]

@@ -14,6 +14,3 @@
 | **providesBinaries** | **kotlin.collections.List&lt;kotlin.String&gt;** | Binary names this step provides |  [optional] |
 | **verifyCommand** | **kotlin.String** |  |  [optional] |
 | **platforms** | **kotlin.collections.List&lt;kotlin.String&gt;** | Platforms this step applies to. Empty &#x3D; all |  [optional] |
-
-
-

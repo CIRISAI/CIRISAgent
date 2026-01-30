@@ -702,12 +702,14 @@ def main(
             _handle_config_load_error(e)
             return  # Unreachable but makes type checker happy
 
-        # Build modules to load
+        # Build modules to load and add modular adapters to selected_adapter_types
         modules_to_load = ["mock_llm"] if mock_llm else []
         if mock_llm:
             logger.info("Mock LLM module will be loaded")
         for adapter_type, manifest in adapters_to_load:
             modules_to_load.append(f"modular:{manifest.module.name}")
+            # Add modular adapter to adapter_types so runtime loads it
+            selected_adapter_types.append(adapter_type)
             logger.info(f"Modular service '{manifest.module.name}' added to modules to load")
 
         # Configure adapters

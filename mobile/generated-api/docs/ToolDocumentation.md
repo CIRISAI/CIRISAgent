@@ -11,6 +11,3 @@
 | **relatedTools** | **kotlin.collections.List&lt;kotlin.String&gt;** | Names of related tools |  [optional] |
 | **homepage** | **kotlin.String** |  |  [optional] |
 | **docsUrl** | **kotlin.String** |  |  [optional] |
-
-
-

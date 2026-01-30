@@ -9,6 +9,3 @@
 | **envVars** | [**kotlin.collections.List&lt;EnvVarRequirement&gt;**](EnvVarRequirement.md) | Required environment variables |  [optional] |
 | **configKeys** | [**kotlin.collections.List&lt;ConfigRequirement&gt;**](ConfigRequirement.md) | Required CIRIS config keys |  [optional] |
 | **platforms** | **kotlin.collections.List&lt;kotlin.String&gt;** | Supported platforms (darwin, linux, win32). Empty &#x3D; all |  [optional] |
-
-
-

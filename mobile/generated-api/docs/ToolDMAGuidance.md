@@ -10,6 +10,3 @@
 | **followupActions** | **kotlin.collections.List&lt;kotlin.String&gt;** | Actions to consider after this tool completes |  [optional] |
 | **minConfidence** | **kotlin.Double** | Minimum confidence score to use this tool |  [optional] |
 | **requiresApproval** | **kotlin.Boolean** | Whether this tool requires wise authority approval |  [optional] |
-
-
-

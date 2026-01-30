@@ -21,9 +21,10 @@ targets:
       - path: iosApp
         excludes:
           - "**/.DS_Store"
-      - path: Resources
-        type: folder
-        buildPhase: resources
+      # Resources temporarily disabled - see prepare_python_bundle.sh
+      # - path: Resources
+      #   type: folder
+      #   buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ai.ciris.mobile

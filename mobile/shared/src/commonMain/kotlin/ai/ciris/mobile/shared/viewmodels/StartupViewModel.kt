@@ -168,6 +168,14 @@ class StartupViewModel(
                         _statusMessage.value = "CIRIS ready"
                         return
                     }
+
+                    // iOS fallback - telemetry requires auth so services count is 0
+                    // If health check passes 5 times, proceed to login
+                    if (healthyCount >= 5) {
+                        _phase.value = StartupPhase.READY
+                        _statusMessage.value = "Server ready"
+                        return
+                    }
                 }
             }
 

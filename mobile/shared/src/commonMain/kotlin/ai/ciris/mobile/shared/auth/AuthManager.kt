@@ -54,7 +54,7 @@ expect class AuthManager {
     ): Result<AuthResponse>
 
     /**
-     * Login with Google ID token (OAuth authentication)
+     * Login with Google ID token (OAuth authentication) - Android
      *
      * Source: MainActivity.kt lines 1903-1964 (exchangeGoogleIdToken)
      *
@@ -66,6 +66,40 @@ expect class AuthManager {
     suspend fun loginWithGoogle(
         idToken: String,
         userId: String?,
+        serverUrl: String
+    ): Result<AuthResponse>
+
+    /**
+     * Login with Apple ID token (OAuth authentication) - iOS
+     *
+     * Uses Sign in with Apple to authenticate with the CIRIS backend.
+     *
+     * @param idToken Apple identity token
+     * @param userId Apple user ID
+     * @param serverUrl The API server URL
+     * @return Result with AuthResponse on success
+     */
+    suspend fun loginWithApple(
+        idToken: String,
+        userId: String?,
+        serverUrl: String
+    ): Result<AuthResponse>
+
+    /**
+     * Login with native OAuth token (Google on Android, Apple on iOS)
+     *
+     * Platform-agnostic method that delegates to the appropriate provider.
+     *
+     * @param idToken OAuth ID token
+     * @param userId User ID
+     * @param provider OAuth provider ("google" or "apple")
+     * @param serverUrl The API server URL
+     * @return Result with AuthResponse on success
+     */
+    suspend fun loginWithNativeAuth(
+        idToken: String,
+        userId: String?,
+        provider: String,
         serverUrl: String
     ): Result<AuthResponse>
 

@@ -1,0 +1,24 @@
+# Python runtime resources (built from BeeWare)
+Resources/
+
+# Python framework (from BeeWare)
+Frameworks/
+
+# Xcode
+*.xcuserstate
+xcuserdata/
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# Swift Package Manager
+.build/
+.swiftpm/

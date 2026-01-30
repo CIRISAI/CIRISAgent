@@ -94,6 +94,11 @@ kotlin {
         val iosMain by creating {
             dependsOn(commonMain)
             dependencies {
+                // Compose dependencies as API for framework export
+                api(compose.runtime)
+                api(compose.foundation)
+                api(compose.material3)
+
                 // Ktor iOS engine
                 implementation("io.ktor:ktor-client-darwin:2.3.7")
             }

@@ -1,10 +1,22 @@
 """
 Mobile QA Runner Module
 
-Automated testing for the CIRIS mobile app using ADB and UI Automator.
-Supports live testing with real Google accounts.
+Automated testing for the CIRIS mobile app.
+Supports both Android (ADB) and iOS (xcrun simctl) platforms.
 """
 
+# Cross-platform device helper protocol
+from .device_helper import (
+    DeviceHelper,
+    DeviceInfo,
+    LogCollection,
+    Platform,
+    UIElement,
+    create_device_helper,
+    detect_platform,
+)
+
+# Legacy imports (backward compatibility)
 from .adb_helper import ADBHelper
 from .test_cases import (
     test_app_launch,
@@ -17,10 +29,34 @@ from .test_cases import (
 from .test_runner import MobileTestRunner
 from .ui_automator import UIAutomator
 
+# Platform-specific helpers
+try:
+    from .android.adb_helper import ADBDeviceHelper
+except ImportError:
+    ADBDeviceHelper = None  # type: ignore
+
+try:
+    from .ios.xcrun_helper import XCRunHelper
+except ImportError:
+    XCRunHelper = None  # type: ignore
+
 __all__ = [
+    # Cross-platform
+    "DeviceHelper",
+    "DeviceInfo",
+    "LogCollection",
+    "Platform",
+    "UIElement",
+    "create_device_helper",
+    "detect_platform",
+    # Platform-specific
+    "ADBDeviceHelper",
+    "XCRunHelper",
+    # Legacy (backward compatibility)
     "ADBHelper",
     "UIAutomator",
     "MobileTestRunner",
+    # Test functions
     "test_app_launch",
     "test_google_signin",
     "test_local_login",

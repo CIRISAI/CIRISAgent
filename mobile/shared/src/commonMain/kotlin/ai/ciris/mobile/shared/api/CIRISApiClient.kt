@@ -457,6 +457,40 @@ class CIRISApiClient(
         }
     }
 
+    override suspend fun appleAuth(idToken: String, userId: String?): AuthResponse {
+        val method = "appleAuth"
+        logInfo(method, "Attempting Apple auth: userId=$userId, idToken=${maskToken(idToken)}")
+
+        return try {
+            val request = SdkNativeTokenRequest(
+                idToken = idToken,
+                provider = "apple"
+            )
+            logDebug(method, "Calling nativeAppleTokenExchangeV1AuthNativeApplePost")
+
+            // TODO: Add native Apple endpoint to generated API
+            // For now, use a similar pattern to Google auth
+            // val response = authApi.nativeAppleTokenExchangeV1AuthNativeApplePost(request)
+
+            // Temporary: throw not implemented until backend supports Apple auth
+            throw NotImplementedError("Apple auth endpoint not yet implemented in backend")
+        } catch (e: Exception) {
+            logException(method, e, "userId=$userId")
+            throw e
+        }
+    }
+
+    override suspend fun nativeAuth(idToken: String, userId: String?, provider: String): AuthResponse {
+        val method = "nativeAuth"
+        logInfo(method, "Attempting native auth: provider=$provider, userId=$userId")
+
+        return when (provider.lowercase()) {
+            "google" -> googleAuth(idToken, userId)
+            "apple" -> appleAuth(idToken, userId)
+            else -> throw IllegalArgumentException("Unknown OAuth provider: $provider")
+        }
+    }
+
     override suspend fun logout() {
         val method = "logout"
         logInfo(method, "Logging out")

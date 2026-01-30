@@ -6,7 +6,8 @@ import ai.ciris.mobile.shared.config.CIRISConfig
  * Platform-specific utility to read and update the .env file.
  *
  * This is needed for:
- * - Billing authentication - the Python agent reads CIRIS_BILLING_GOOGLE_ID_TOKEN
+ * - Billing authentication - the Python agent reads CIRIS_BILLING_OAUTH_TOKEN
+ *   (CIRIS_BILLING_GOOGLE_ID_TOKEN on Android, CIRIS_BILLING_APPLE_ID_TOKEN on iOS)
  * - Settings screen - detecting CIRIS proxy vs BYOK mode
  *
  * Logic extracted from:
@@ -14,18 +15,19 @@ import ai.ciris.mobile.shared.config.CIRISConfig
  */
 expect class EnvFileUpdater {
     /**
-     * Update the .env file with a new Google ID token.
+     * Update the .env file with a new OAuth ID token (Google on Android, Apple on iOS).
      *
      * Updates:
-     * - CIRIS_BILLING_GOOGLE_ID_TOKEN (always, for billing)
+     * - Android: CIRIS_BILLING_GOOGLE_ID_TOKEN
+     * - iOS: CIRIS_BILLING_APPLE_ID_TOKEN
      * - OPENAI_API_KEY (only if in CIRIS proxy mode, not BYOK)
      *
      * Also triggers Python config reload by writing .config_reload file.
      *
-     * @param googleIdToken The fresh Google ID token
+     * @param oauthIdToken The fresh OAuth ID token (Google or Apple depending on platform)
      * @return Result with true on success, exception on failure
      */
-    suspend fun updateEnvWithToken(googleIdToken: String): Result<Boolean>
+    suspend fun updateEnvWithToken(oauthIdToken: String): Result<Boolean>
 
     /**
      * Trigger Python to reload its configuration.

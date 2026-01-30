@@ -66,20 +66,62 @@ import kotlinx.coroutines.withContext
  * 5. SettingsScreen (accessible from top bar)
  */
 /**
- * Callback interface for Google Sign-In
- * Platform implementations provide actual Google SDK integration
+ * Callback interface for native OAuth Sign-In (Google on Android, Apple on iOS)
+ * Platform implementations provide actual SDK integration
  */
-interface GoogleSignInCallback {
+interface NativeSignInCallback {
     /**
-     * Request interactive Google Sign-In (shows UI).
+     * Request interactive sign-in (shows UI).
      */
-    fun onGoogleSignInRequested(onResult: (GoogleSignInResult) -> Unit)
+    fun onSignInRequested(onResult: (NativeSignInResult) -> Unit)
 
     /**
      * Attempt silent sign-in (no UI).
      * Returns a fresh token if user is already signed in, or signals that interactive login is needed.
      */
-    fun onSilentSignInRequested(onResult: (GoogleSignInResult) -> Unit)
+    fun onSilentSignInRequested(onResult: (NativeSignInResult) -> Unit)
+}
+
+/**
+ * Result of native OAuth Sign-In attempt (Google on Android, Apple on iOS)
+ */
+sealed class NativeSignInResult {
+    data class Success(
+        val idToken: String,
+        val userId: String,
+        val email: String?,
+        val displayName: String?,
+        val provider: String  // "google" or "apple"
+    ) : NativeSignInResult()
+
+    data class Error(val message: String) : NativeSignInResult()
+    object Cancelled : NativeSignInResult()
+}
+
+// Backward compatibility aliases for Android
+typealias GoogleSignInCallback = NativeSignInCallback
+typealias GoogleSignInResult = NativeSignInResult
+
+// Apple Sign-In alias for iOS
+typealias AppleSignInCallback = NativeSignInCallback
+typealias AppleSignInResult = NativeSignInResult
+
+/**
+ * Legacy callback interface for Google Sign-In (deprecated, use NativeSignInCallback)
+ * Kept for backward compatibility with existing Android code
+ */
+@Deprecated("Use NativeSignInCallback instead", ReplaceWith("NativeSignInCallback"))
+interface LegacyGoogleSignInCallback {
+    /**
+     * Request interactive Google Sign-In (shows UI).
+     */
+    fun onGoogleSignInRequested(onResult: (NativeSignInResult) -> Unit)
+
+    /**
+     * Attempt silent sign-in (no UI).
+     * Returns a fresh token if user is already signed in, or signals that interactive login is needed.
+     */
+    fun onSilentSignInRequested(onResult: (NativeSignInResult) -> Unit)
 }
 
 /**
@@ -116,20 +158,7 @@ fun interface PurchaseResultCallback {
     fun onResult(result: PurchaseResultType)
 }
 
-/**
- * Result of Google Sign-In attempt
- */
-sealed class GoogleSignInResult {
-    data class Success(
-        val idToken: String,
-        val userId: String,
-        val email: String?,
-        val displayName: String?
-    ) : GoogleSignInResult()
-
-    data class Error(val message: String) : GoogleSignInResult()
-    object Cancelled : GoogleSignInResult()
-}
+// GoogleSignInResult is now a typealias for NativeSignInResult (defined above)
 
 @Composable
 fun CIRISApp(
@@ -178,10 +207,10 @@ fun CIRISApp(
                 kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
                     googleSignInCallback.onSilentSignInRequested { result ->
                         val silentResult = when (result) {
-                            is GoogleSignInResult.Success -> {
+                            is NativeSignInResult.Success -> {
                                 SilentSignInResult.Success(result.idToken, result.email)
                             }
-                            is GoogleSignInResult.Error -> {
+                            is NativeSignInResult.Error -> {
                                 // Error code 4 = SIGN_IN_REQUIRED
                                 if (result.message.contains("SIGN_IN_REQUIRED") || result.message.startsWith("4:")) {
                                     SilentSignInResult.NeedsInteractiveLogin(4)
@@ -189,7 +218,7 @@ fun CIRISApp(
                                     SilentSignInResult.Error(result.message)
                                 }
                             }
-                            GoogleSignInResult.Cancelled -> {
+                            NativeSignInResult.Cancelled -> {
                                 SilentSignInResult.NeedsInteractiveLogin(12500)
                             }
                         }
@@ -423,7 +452,7 @@ fun CIRISApp(
                                 loginStatusMessage = null
 
                                 when (result) {
-                                    is GoogleSignInResult.Success -> {
+                                    is NativeSignInResult.Success -> {
                                         println("[$TAG][INFO] Google sign-in success: userId=${result.userId}, email=${result.email}")
 
                                         // Check if setup is already complete
@@ -489,10 +518,10 @@ fun CIRISApp(
                                             }
                                         }
                                     }
-                                    is GoogleSignInResult.Error -> {
+                                    is NativeSignInResult.Error -> {
                                         loginStatusMessage = "Sign-in failed: ${result.message}"
                                     }
-                                    GoogleSignInResult.Cancelled -> {
+                                    NativeSignInResult.Cancelled -> {
                                         // User cancelled, stay on login screen
                                     }
                                 }

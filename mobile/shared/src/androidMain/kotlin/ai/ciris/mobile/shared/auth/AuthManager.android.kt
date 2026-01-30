@@ -319,6 +319,33 @@ actual class AuthManager {
     }
 
     /**
+     * Login with Apple ID token - Not supported on Android
+     */
+    actual suspend fun loginWithApple(
+        idToken: String,
+        userId: String?,
+        serverUrl: String
+    ): Result<AuthResponse> = withContext(Dispatchers.IO) {
+        Result.failure(Exception("Apple Sign-In is not supported on Android"))
+    }
+
+    /**
+     * Login with native OAuth token (delegates to Google on Android)
+     */
+    actual suspend fun loginWithNativeAuth(
+        idToken: String,
+        userId: String?,
+        provider: String,
+        serverUrl: String
+    ): Result<AuthResponse> = withContext(Dispatchers.IO) {
+        when (provider.lowercase()) {
+            "google" -> loginWithGoogle(idToken, userId, serverUrl)
+            "apple" -> Result.failure(Exception("Apple Sign-In is not supported on Android"))
+            else -> Result.failure(Exception("Unknown OAuth provider: $provider"))
+        }
+    }
+
+    /**
      * Refresh the current access token
      * Source: MainActivity.kt lines 1090-1109
      *

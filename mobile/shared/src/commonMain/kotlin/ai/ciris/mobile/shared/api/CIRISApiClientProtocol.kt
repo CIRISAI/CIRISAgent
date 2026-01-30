@@ -52,9 +52,20 @@ interface CIRISApiClientProtocol {
     suspend fun login(username: String, password: String): AuthResponse
 
     /**
-     * Authenticate with Google ID token
+     * Authenticate with Google ID token (Android)
      */
     suspend fun googleAuth(idToken: String, userId: String? = null): AuthResponse
+
+    /**
+     * Authenticate with Apple ID token (iOS)
+     */
+    suspend fun appleAuth(idToken: String, userId: String? = null): AuthResponse
+
+    /**
+     * Authenticate with native OAuth token (Google on Android, Apple on iOS)
+     * @param provider OAuth provider ("google" or "apple")
+     */
+    suspend fun nativeAuth(idToken: String, userId: String? = null, provider: String): AuthResponse
 
     /**
      * Logout current session

@@ -67,21 +67,25 @@ class RuntimeViewModel(
     private var pollingJob: Job? = null
     private var isFirstLoad = true
     private var updateCount = 0
+    private var pollingStarted = false
 
     init {
-        logInfo("init", "RuntimeViewModel initialized")
-        startPolling()
+        logInfo("init", "RuntimeViewModel initialized (polling deferred until startPolling() called)")
+        // NOTE: Don't auto-start polling here - wait for startPolling() to be called
+        // when the screen becomes visible and has a valid auth token
     }
 
     /**
-     * Start automatic runtime state polling
+     * Start automatic runtime state polling.
+     * Must be called explicitly when the screen becomes visible.
      */
     fun startPolling() {
         val method = "startPolling"
-        if (pollingJob?.isActive == true) {
-            logDebug(method, "Polling already active, skipping")
+        if (pollingStarted) {
+            logDebug(method, "Polling already started, skipping")
             return
         }
+        pollingStarted = true
 
         logInfo(method, "Starting runtime polling (interval=${POLL_INTERVAL_MS}ms)")
 
@@ -122,6 +126,7 @@ class RuntimeViewModel(
         logInfo(method, "Stopping runtime polling")
         pollingJob?.cancel()
         pollingJob = null
+        pollingStarted = false // Allow restart
     }
 
     /**

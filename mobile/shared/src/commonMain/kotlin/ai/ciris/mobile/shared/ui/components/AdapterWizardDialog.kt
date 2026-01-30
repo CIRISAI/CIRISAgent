@@ -71,7 +71,9 @@ fun AdapterWizardDialog(
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
+                        // On type selection (no session): X closes dialog
+                        // On wizard step (has session): Back arrow goes to previous step
+                        IconButton(onClick = if (wizardSession != null) onBack else onDismiss) {
                             Icon(
                                 imageVector = if (wizardSession != null) Icons.Default.ArrowBack else Icons.Default.Close,
                                 contentDescription = if (wizardSession != null) "Back" else "Close"

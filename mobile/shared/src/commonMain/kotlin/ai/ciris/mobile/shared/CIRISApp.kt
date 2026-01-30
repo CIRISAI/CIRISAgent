@@ -233,6 +233,9 @@ fun CIRISApp(
     var isFirstRun by remember { mutableStateOf<Boolean?>(null) }
     var checkingFirstRun by remember { mutableStateOf(false) }
 
+    // Flag to skip token re-validation after setup (we just authenticated)
+    var justCompletedSetup by remember { mutableStateOf(false) }
+
     // Login state
     var isLoginLoading by remember { mutableStateOf(false) }
     var loginStatusMessage by remember { mutableStateOf<String?>(null) }
@@ -414,6 +417,16 @@ fun CIRISApp(
             checkingFirstRun = true
             platformLog(TAG, "[INFO] Startup READY, checking first-run status...")
 
+            // If we just completed setup, skip token validation and go directly to Interact
+            // The token was literally just created during setup, so it's definitely valid
+            if (justCompletedSetup) {
+                platformLog(TAG, "[INFO] Just completed setup, skipping token validation")
+                justCompletedSetup = false
+                interactViewModel.startPolling() // Start polling now that token is set
+                currentScreen = Screen.Interact
+                return@LaunchedEffect
+            }
+
             // Check if this is first run via API
             isFirstRun = checkFirstRunStatus(baseUrl)
             platformLog(TAG, "[INFO] First run check result: $isFirstRun")
@@ -466,6 +479,7 @@ fun CIRISApp(
                                 println("[$TAG][INFO] Triggering data load for ViewModels after token set")
                                 billingViewModel.loadBalance()
                                 adaptersViewModel.fetchAdapters()
+                                interactViewModel.startPolling() // Start polling now that token is set
                                 currentScreen = Screen.Interact
                             } else {
                                 // Token invalid and couldn't refresh - need interactive login
@@ -558,6 +572,7 @@ fun CIRISApp(
                                                     println("[$TAG][INFO] Triggering billingViewModel.loadBalance()...")
                                                     billingViewModel.loadBalance()
                                                     adaptersViewModel.fetchAdapters()
+                                                    interactViewModel.startPolling() // Start polling now that token is set
 
                                                     platformLog(TAG, "[INFO] Navigating to Screen.Interact")
                                                     currentScreen = Screen.Interact
@@ -679,6 +694,7 @@ fun CIRISApp(
                             // Reset the startup phase so it re-polls for services
                             startupViewModel.resetForResume()
                             checkingFirstRun = false  // Allow re-check after startup completes
+                            justCompletedSetup = true  // Skip token re-validation since we just authenticated
                             currentScreen = Screen.Startup
                         }
                     }
@@ -813,6 +829,16 @@ fun CIRISApp(
                 val telemetryData by telemetryViewModel.telemetryData.collectAsState()
                 val isTelemetryLoading by telemetryViewModel.isLoading.collectAsState()
 
+                // Start/stop polling based on screen visibility
+                DisposableEffect(Unit) {
+                    println("[$TAG][INFO][Screen.Telemetry] Starting telemetry polling")
+                    telemetryViewModel.startPolling()
+                    onDispose {
+                        println("[$TAG][INFO][Screen.Telemetry] Stopping telemetry polling")
+                        telemetryViewModel.stopPolling()
+                    }
+                }
+
                 println("[CIRISApp][DEBUG][Screen.Telemetry] Rendering telemetry screen: " +
                         "services=${telemetryData.healthyServices}/${telemetryData.totalServices}, " +
                         "state=${telemetryData.cognitiveState}, isLoading=$isTelemetryLoading")
@@ -837,6 +863,16 @@ fun CIRISApp(
                 val isTransitioning by sessionsViewModel.isTransitioning.collectAsState()
                 val sessionStatusMessage by sessionsViewModel.statusMessage.collectAsState()
                 val sessionErrorMessage by sessionsViewModel.errorMessage.collectAsState()
+
+                // Start/stop polling based on screen visibility
+                DisposableEffect(Unit) {
+                    println("[$TAG][INFO][Screen.Sessions] Starting sessions polling")
+                    sessionsViewModel.startPolling()
+                    onDispose {
+                        println("[$TAG][INFO][Screen.Sessions] Stopping sessions polling")
+                        sessionsViewModel.stopPolling()
+                    }
+                }
 
                 println("[CIRISApp][DEBUG][Screen.Sessions] Rendering sessions screen: " +
                         "state=$currentCognitiveState, isLoading=$isSessionsLoading, " +
@@ -967,6 +1003,16 @@ fun CIRISApp(
                 val waError by wiseAuthorityViewModel.error.collectAsState()
                 val waSuccess by wiseAuthorityViewModel.successMessage.collectAsState()
 
+                // Start/stop polling based on screen visibility
+                DisposableEffect(Unit) {
+                    println("[$TAG][INFO][Screen.WiseAuthority] Starting WA polling")
+                    wiseAuthorityViewModel.startPolling()
+                    onDispose {
+                        println("[$TAG][INFO][Screen.WiseAuthority] Stopping WA polling")
+                        wiseAuthorityViewModel.stopPolling()
+                    }
+                }
+
                 println("[CIRISApp][DEBUG][Screen.WiseAuthority] Rendering WA screen: " +
                         "status=${waStatus?.serviceHealthy}, deferrals=${deferrals.size}, " +
                         "isLoading=$isWALoading, isResolving=$isResolving")
@@ -1009,9 +1055,14 @@ fun CIRISApp(
                 val isServicesLoading by servicesViewModel.isLoading.collectAsState()
                 val servicesError by servicesViewModel.error.collectAsState()
 
-                LaunchedEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Services] Loading services on screen entry")
-                    servicesViewModel.refresh()
+                // Start/stop polling based on screen visibility
+                DisposableEffect(Unit) {
+                    println("[$TAG][INFO][Screen.Services] Starting services polling")
+                    servicesViewModel.startPolling()
+                    onDispose {
+                        println("[$TAG][INFO][Screen.Services] Stopping services polling")
+                        servicesViewModel.stopPolling()
+                    }
                 }
 
                 LaunchedEffect(servicesError) {
@@ -1049,9 +1100,14 @@ fun CIRISApp(
             Screen.Audit -> {
                 val auditState by auditViewModel.state.collectAsState()
 
-                LaunchedEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Audit] Loading audit entries on screen entry")
-                    auditViewModel.refresh()
+                // Start/stop polling based on screen visibility
+                DisposableEffect(Unit) {
+                    println("[$TAG][INFO][Screen.Audit] Starting audit polling")
+                    auditViewModel.startPolling()
+                    onDispose {
+                        println("[$TAG][INFO][Screen.Audit] Stopping audit polling")
+                        auditViewModel.stopPolling()
+                    }
                 }
 
                 LaunchedEffect(auditState.error) {
@@ -1085,9 +1141,14 @@ fun CIRISApp(
             Screen.Logs -> {
                 val logsState by logsViewModel.state.collectAsState()
 
-                LaunchedEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Logs] Loading logs on screen entry")
-                    logsViewModel.refresh()
+                // Start/stop polling based on screen visibility
+                DisposableEffect(Unit) {
+                    println("[$TAG][INFO][Screen.Logs] Starting logs polling")
+                    logsViewModel.startPolling()
+                    onDispose {
+                        println("[$TAG][INFO][Screen.Logs] Stopping logs polling")
+                        logsViewModel.stopPolling()
+                    }
                 }
 
                 LaunchedEffect(logsState.error) {
@@ -1124,9 +1185,14 @@ fun CIRISApp(
             Screen.Memory -> {
                 val memoryState by memoryViewModel.state.collectAsState()
 
-                LaunchedEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Memory] Loading memory on screen entry")
-                    memoryViewModel.refresh()
+                // Start/stop polling based on screen visibility
+                DisposableEffect(Unit) {
+                    println("[$TAG][INFO][Screen.Memory] Starting memory polling")
+                    memoryViewModel.startPolling()
+                    onDispose {
+                        println("[$TAG][INFO][Screen.Memory] Stopping memory polling")
+                        memoryViewModel.stopPolling()
+                    }
                 }
 
                 LaunchedEffect(memoryState.error) {
@@ -1239,9 +1305,14 @@ fun CIRISApp(
                 val configExpandedSections by configViewModel.expandedSections.collectAsState()
                 val configError by configViewModel.error.collectAsState()
 
-                LaunchedEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Config] Loading config on screen entry")
-                    configViewModel.refresh()
+                // Start/stop polling based on screen visibility
+                DisposableEffect(Unit) {
+                    println("[$TAG][INFO][Screen.Config] Starting config polling")
+                    configViewModel.startPolling()
+                    onDispose {
+                        println("[$TAG][INFO][Screen.Config] Stopping config polling")
+                        configViewModel.stopPolling()
+                    }
                 }
 
                 LaunchedEffect(configError) {
@@ -1292,9 +1363,14 @@ fun CIRISApp(
                 val isConsentLoading by consentViewModel.isLoading.collectAsState()
                 val consentError by consentViewModel.error.collectAsState()
 
-                LaunchedEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Consent] Loading consent on screen entry")
-                    consentViewModel.refresh()
+                // Start/stop polling based on screen visibility
+                DisposableEffect(Unit) {
+                    println("[$TAG][INFO][Screen.Consent] Starting consent polling")
+                    consentViewModel.startPolling()
+                    onDispose {
+                        println("[$TAG][INFO][Screen.Consent] Stopping consent polling")
+                        consentViewModel.stopPolling()
+                    }
                 }
 
                 LaunchedEffect(consentError) {
@@ -1330,9 +1406,14 @@ fun CIRISApp(
                 val isSystemLoading by systemViewModel.isLoading.collectAsState()
                 val systemError by systemViewModel.error.collectAsState()
 
-                LaunchedEffect(Unit) {
-                    println("[$TAG][INFO][Screen.System] Loading system on screen entry")
-                    systemViewModel.refresh()
+                // Start/stop polling based on screen visibility
+                DisposableEffect(Unit) {
+                    println("[$TAG][INFO][Screen.System] Starting system polling")
+                    systemViewModel.startPolling()
+                    onDispose {
+                        println("[$TAG][INFO][Screen.System] Stopping system polling")
+                        systemViewModel.stopPolling()
+                    }
                 }
 
                 LaunchedEffect(systemError) {
@@ -1369,9 +1450,14 @@ fun CIRISApp(
                 val runtimeError by runtimeViewModel.error.collectAsState()
                 val isRuntimeAdmin by runtimeViewModel.isAdmin.collectAsState()
 
-                LaunchedEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Runtime] Loading runtime on screen entry")
-                    runtimeViewModel.refresh()
+                // Start/stop polling based on screen visibility
+                DisposableEffect(Unit) {
+                    println("[$TAG][INFO][Screen.Runtime] Starting runtime polling")
+                    runtimeViewModel.startPolling()
+                    onDispose {
+                        println("[$TAG][INFO][Screen.Runtime] Stopping runtime polling")
+                        runtimeViewModel.stopPolling()
+                    }
                 }
 
                 LaunchedEffect(runtimeError) {

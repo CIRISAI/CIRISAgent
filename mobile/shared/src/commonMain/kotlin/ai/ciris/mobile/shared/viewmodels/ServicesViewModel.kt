@@ -62,21 +62,25 @@ class ServicesViewModel(
     // Polling job
     private var pollingJob: Job? = null
     private var isFirstLoad = true
+    private var pollingStarted = false
 
     init {
-        logInfo("init", "ServicesViewModel initialized")
-        startPolling()
+        logInfo("init", "ServicesViewModel initialized (polling deferred until startPolling() called)")
+        // NOTE: Don't auto-start polling here - wait for startPolling() to be called
+        // when the screen becomes visible and has a valid auth token
     }
 
     /**
-     * Start automatic services polling
+     * Start automatic services polling.
+     * Must be called explicitly when the screen becomes visible.
      */
     fun startPolling() {
         val method = "startPolling"
-        if (pollingJob?.isActive == true) {
-            logDebug(method, "Polling already active, skipping")
+        if (pollingStarted) {
+            logDebug(method, "Polling already started, skipping")
             return
         }
+        pollingStarted = true
 
         logInfo(method, "Starting services polling (interval=${POLL_INTERVAL_MS}ms)")
 
@@ -117,6 +121,7 @@ class ServicesViewModel(
         logInfo(method, "Stopping services polling")
         pollingJob?.cancel()
         pollingJob = null
+        pollingStarted = false // Allow restart
     }
 
     /**

@@ -138,8 +138,26 @@ class InteractViewModel(
         getToken = { apiClient.getAccessToken() }
     )
 
+    // Track if polling has been started (to avoid duplicate starts)
+    private var pollingStarted = false
+
     init {
-        logInfo("init", "InteractViewModel initialized")
+        logInfo("init", "InteractViewModel initialized (polling deferred until token available)")
+        // NOTE: Don't auto-start polling here - wait for startPolling() to be called
+        // after auth token is set. This avoids 401 errors during startup.
+    }
+
+    /**
+     * Start all polling and SSE streams.
+     * Call this after the auth token has been set on the API client.
+     */
+    fun startPolling() {
+        if (pollingStarted) {
+            logDebug("startPolling", "Polling already started, skipping")
+            return
+        }
+        logInfo("startPolling", "Starting polling and SSE streams")
+        pollingStarted = true
         startStatusPolling()
         startMessagePolling()
         startSseStream()

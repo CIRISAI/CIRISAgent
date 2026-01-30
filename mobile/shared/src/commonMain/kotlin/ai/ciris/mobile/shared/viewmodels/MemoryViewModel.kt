@@ -44,10 +44,36 @@ class MemoryViewModel(
     // State
     private val _state = MutableStateFlow(MemoryScreenState())
     val state: StateFlow<MemoryScreenState> = _state.asStateFlow()
+    private var dataLoadStarted = false
 
     init {
-        logInfo("init", "MemoryViewModel initialized")
+        logInfo("init", "MemoryViewModel initialized (data load deferred until startPolling() called)")
+        // NOTE: Don't auto-load here - wait for startPolling() to be called
+        // when the screen becomes visible and has a valid auth token
+    }
+
+    /**
+     * Start memory data loading.
+     * Must be called explicitly when the screen becomes visible.
+     */
+    fun startPolling() {
+        val method = "startPolling"
+        if (dataLoadStarted) {
+            logDebug(method, "Data load already started, skipping")
+            return
+        }
+        dataLoadStarted = true
+        logInfo(method, "Starting memory data loading")
         loadInitialData()
+    }
+
+    /**
+     * Stop polling (for lifecycle management)
+     */
+    fun stopPolling() {
+        val method = "stopPolling"
+        logInfo(method, "Stopping memory polling")
+        dataLoadStarted = false // Allow restart
     }
 
     /**

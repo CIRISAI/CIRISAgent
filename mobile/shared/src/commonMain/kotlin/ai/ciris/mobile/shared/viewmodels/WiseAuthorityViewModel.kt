@@ -71,16 +71,24 @@ class WiseAuthorityViewModel(
     // Polling job
     private var pollingJob: Job? = null
     private var isFirstLoad = true
+    private var pollingStarted = false
 
     init {
-        logInfo("init", "WiseAuthorityViewModel initialized")
-        startPolling()
+        logInfo("init", "WiseAuthorityViewModel initialized (polling deferred until startPolling() called)")
+        // NOTE: Don't auto-start polling here - wait for startPolling() to be called
+        // when the screen becomes visible and has a valid auth token
     }
 
     /**
-     * Start automatic polling
+     * Start automatic polling.
+     * Must be called explicitly when the screen becomes visible.
      */
-    private fun startPolling() {
+    fun startPolling() {
+        if (pollingStarted) {
+            logDebug("startPolling", "Polling already started, skipping")
+            return
+        }
+        pollingStarted = true
         val method = "startPolling"
         logInfo(method, "Starting WA polling (interval=${POLL_INTERVAL_MS}ms)")
 
@@ -123,6 +131,7 @@ class WiseAuthorityViewModel(
         logInfo(method, "Stopping WA polling")
         pollingJob?.cancel()
         pollingJob = null
+        pollingStarted = false // Allow restart
     }
 
     /**

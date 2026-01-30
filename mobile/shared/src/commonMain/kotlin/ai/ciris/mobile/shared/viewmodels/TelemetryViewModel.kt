@@ -61,16 +61,24 @@ class TelemetryViewModel(
     // Polling job
     private var pollingJob: Job? = null
     private var isFirstLoad = true
+    private var pollingStarted = false
 
     init {
-        logInfo("init", "TelemetryViewModel initialized")
-        startPolling()
+        logInfo("init", "TelemetryViewModel initialized (polling deferred until startPolling() called)")
+        // NOTE: Don't auto-start polling here - wait for startPolling() to be called
+        // when the screen becomes visible and has a valid auth token
     }
 
     /**
-     * Start automatic telemetry polling
+     * Start automatic telemetry polling.
+     * Must be called explicitly when the screen becomes visible.
      */
-    private fun startPolling() {
+    fun startPolling() {
+        if (pollingStarted) {
+            logDebug("startPolling", "Polling already started, skipping")
+            return
+        }
+        pollingStarted = true
         val method = "startPolling"
         logInfo(method, "Starting telemetry polling (interval=${POLL_INTERVAL_MS}ms)")
 
@@ -113,6 +121,7 @@ class TelemetryViewModel(
         logInfo(method, "Stopping telemetry polling")
         pollingJob?.cancel()
         pollingJob = null
+        pollingStarted = false // Allow restart
     }
 
     /**

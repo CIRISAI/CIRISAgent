@@ -150,14 +150,18 @@ struct ComposeView: UIViewControllerRepresentable {
 /// Compose view with Apple Sign-In integration
 struct ComposeViewWithAuth: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
+        NSLog("[ComposeViewWithAuth] makeUIViewController called - setting up Apple Sign-In callbacks")
+
         // Get the key window for presenting the Apple Sign-In sheet
         let scenes = UIApplication.shared.connectedScenes
         let windowScene = scenes.first as? UIWindowScene
         let keyWindow = windowScene?.windows.first { $0.isKeyWindow }
 
-        return Main_iosKt.MainViewControllerWithAuth(
+        NSLog("[ComposeViewWithAuth] keyWindow: \(String(describing: keyWindow))")
+
+        let vc = Main_iosKt.MainViewControllerWithAuth(
             onAppleSignInRequested: { callback in
-                NSLog("[ComposeViewWithAuth] Apple Sign-In requested")
+                NSLog("[ComposeViewWithAuth] onAppleSignInRequested LAMBDA INVOKED - about to call AppleSignInHelper.signIn")
 
                 AppleSignInHelper.shared.signIn(presentingWindow: keyWindow) { result in
                     switch result {
@@ -183,7 +187,7 @@ struct ComposeViewWithAuth: UIViewControllerRepresentable {
                 }
             },
             onSilentSignInRequested: { callback in
-                NSLog("[ComposeViewWithAuth] Silent sign-in requested")
+                NSLog("[ComposeViewWithAuth] onSilentSignInRequested LAMBDA INVOKED")
 
                 AppleSignInHelper.shared.silentSignIn { result in
                     switch result {
@@ -205,9 +209,14 @@ struct ComposeViewWithAuth: UIViewControllerRepresentable {
                 }
             }
         )
+
+        NSLog("[ComposeViewWithAuth] MainViewControllerWithAuth returned VC: \(vc)")
+        return vc
     }
 
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        NSLog("[ComposeViewWithAuth] updateUIViewController called")
+    }
 }
 
 #Preview {

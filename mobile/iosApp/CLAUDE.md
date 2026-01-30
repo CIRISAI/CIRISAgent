@@ -9,7 +9,8 @@ This is the Kotlin Multiplatform (KMP) iOS app for CIRIS. It uses Compose Multip
 ```
 mobile/iosApp/
 ├── iosApp/                    # Swift/ObjC code
-│   ├── ContentView.swift      # SwiftUI shell that hosts Compose
+│   ├── ContentView.swift      # SwiftUI shell that hosts Compose + Apple Sign-In bridge
+│   ├── AppleSignInHelper.swift # Sign in with Apple implementation
 │   ├── PythonBridge.swift     # Swift Python manager (extraction, init)
 │   ├── PythonInit.h/m         # ObjC Python C API bridge
 │   └── Info.plist             # App configuration
@@ -177,14 +178,41 @@ If you make changes to the CIRIS engine:
 3. Regenerate Resources.zip: `cd Resources && zip -q -r ../Resources.zip . && cd ..`
 4. Rebuild the app
 
+## Authentication
+
+### Sign in with Apple
+
+The app uses Sign in with Apple for iOS authentication:
+
+1. **AppleSignInHelper.swift** - Handles ASAuthorizationController flow
+2. **ContentView.swift** - Bridges Apple credentials to Kotlin via `AppleSignInResultBridge`
+3. **Main.ios.kt** - Kotlin bridge that converts to `NativeSignInResult`
+4. **CIRISApp.kt** - Exchanges Apple ID token for CIRIS access token via `/v1/auth/native/apple`
+
+Token refresh is provider-aware - the `TokenManager` tracks whether the user signed in with Apple or Google and calls the correct endpoint on refresh.
+
+### Token Flow
+
+```
+Apple Sign-In → identityToken (JWT) → /v1/auth/native/apple → CIRIS access token → Keychain
+```
+
+The CIRIS access token is stored in iOS Keychain via `SecureStorage.ios.kt`.
+
 ## Status
 
 - [x] Python runtime initialization
 - [x] Resource extraction from zip
 - [x] Native module frameworks
 - [x] Startup checks (6/6 pass)
-- [x] Service initialization completes
+- [x] Service initialization completes (22/22 services)
 - [x] Full runtime startup (CIRIS engine)
 - [x] API server running (setup wizard accessible)
-- [ ] Compose UI integration with API
-- [ ] Full setup wizard flow
+- [x] Sign in with Apple integration
+- [x] Apple ID token → CIRIS token exchange
+- [x] Secure token storage (Keychain)
+- [x] Provider-aware token refresh
+- [x] Compose UI integration with API
+- [x] Navigation to Interact screen after auth
+- [ ] Full agent interaction flow
+- [ ] Billing/LLM integration (requires backend token configuration)

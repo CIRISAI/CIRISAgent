@@ -28,11 +28,21 @@ actual class SecureStorage {
     }
 
     actual suspend fun saveAccessToken(token: String): Result<Unit> {
-        return save("access_token", token)
+        platform.Foundation.NSLog("[SecureStorage] saveAccessToken called, token length: ${token.length}")
+        val result = save("access_token", token)
+        platform.Foundation.NSLog("[SecureStorage] saveAccessToken result: ${if (result.isSuccess) "SUCCESS" else "FAILURE: ${result.exceptionOrNull()?.message}"}")
+        return result
     }
 
     actual suspend fun getAccessToken(): Result<String?> {
-        return get("access_token")
+        platform.Foundation.NSLog("[SecureStorage] getAccessToken called")
+        val result = get("access_token")
+        result.onSuccess { token ->
+            platform.Foundation.NSLog("[SecureStorage] getAccessToken result: ${if (token != null) "found token (${token.length} chars)" else "NULL/not found"}")
+        }.onFailure { e ->
+            platform.Foundation.NSLog("[SecureStorage] getAccessToken FAILED: ${e.message}")
+        }
+        return result
     }
 
     actual suspend fun deleteAccessToken(): Result<Unit> {

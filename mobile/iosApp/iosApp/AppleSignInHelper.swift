@@ -7,6 +7,7 @@ class AppleSignInHelper: NSObject {
 
     private var currentCompletion: ((Result<AppleSignInCredential, Error>) -> Void)?
     private var presentingWindow: UIWindow?
+    private var currentController: ASAuthorizationController?  // Keep strong reference to prevent deallocation
 
     private override init() {
         super.init()
@@ -25,6 +26,8 @@ class AppleSignInHelper: NSObject {
         presentingWindow: UIWindow?,
         completion: @escaping (Result<AppleSignInCredential, Error>) -> Void
     ) {
+        NSLog("[AppleSignInHelper] signIn() CALLED - presentingWindow: \(String(describing: presentingWindow))")
+
         self.currentCompletion = completion
         self.presentingWindow = presentingWindow
 
@@ -32,12 +35,19 @@ class AppleSignInHelper: NSObject {
         let request = provider.createRequest()
         request.requestedScopes = [.fullName, .email]
 
+        NSLog("[AppleSignInHelper] Created ASAuthorizationAppleIDProvider request with scopes: [fullName, email]")
+
         let controller = ASAuthorizationController(authorizationRequests: [request])
         controller.delegate = self
         controller.presentationContextProvider = self
+
+        // Store strong reference to prevent deallocation before delegate callbacks
+        self.currentController = controller
+
+        NSLog("[AppleSignInHelper] ASAuthorizationController created and stored, calling performRequests()...")
         controller.performRequests()
 
-        NSLog("[AppleSignInHelper] Starting Apple Sign-In flow...")
+        NSLog("[AppleSignInHelper] performRequests() called - waiting for user interaction...")
     }
 
     /// Attempt silent sign-in (check for existing credential)
@@ -120,8 +130,10 @@ extension AppleSignInHelper: ASAuthorizationControllerDelegate {
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
+        NSLog("[AppleSignInHelper] didCompleteWithAuthorization CALLED - authorization type: \(type(of: authorization.credential))")
+
         guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
-            NSLog("[AppleSignInHelper] Unexpected credential type")
+            NSLog("[AppleSignInHelper] Unexpected credential type: \(type(of: authorization.credential))")
             currentCompletion?(.failure(AppleSignInError.unknown))
             currentCompletion = nil
             return
@@ -156,13 +168,16 @@ extension AppleSignInHelper: ASAuthorizationControllerDelegate {
 
         currentCompletion?(.success(result))
         currentCompletion = nil
+        currentController = nil  // Release the controller
     }
 
     func authorizationController(
         controller: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
-        NSLog("[AppleSignInHelper] Sign-in error: \(error.localizedDescription)")
+        NSLog("[AppleSignInHelper] didCompleteWithError CALLED - error: \(error)")
+        NSLog("[AppleSignInHelper] Error domain: \((error as NSError).domain), code: \((error as NSError).code)")
+        NSLog("[AppleSignInHelper] Sign-in error description: \(error.localizedDescription)")
 
         if let authError = error as? ASAuthorizationError {
             switch authError.code {
@@ -186,6 +201,7 @@ extension AppleSignInHelper: ASAuthorizationControllerDelegate {
         }
 
         currentCompletion = nil
+        currentController = nil  // Release the controller
     }
 }
 

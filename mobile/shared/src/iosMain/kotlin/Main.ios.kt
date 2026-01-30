@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared
 
 import androidx.compose.ui.window.ComposeUIViewController
+import platform.Foundation.NSLog
 import platform.UIKit.UIViewController
 
 /**
@@ -26,24 +27,37 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
 fun MainViewControllerWithAuth(
     onAppleSignInRequested: (callback: (AppleSignInResultBridge) -> Unit) -> Unit,
     onSilentSignInRequested: (callback: (AppleSignInResultBridge) -> Unit) -> Unit
-): UIViewController = ComposeUIViewController {
-    CIRISApp(
-        accessToken = "",
-        baseUrl = "http://localhost:8080",
-        googleSignInCallback = object : NativeSignInCallback {
-            override fun onGoogleSignInRequested(onResult: (NativeSignInResult) -> Unit) {
-                onAppleSignInRequested { bridgeResult ->
-                    onResult(bridgeResult.toNativeResult())
-                }
-            }
+): UIViewController {
+    NSLog("[Main.ios][INFO] MainViewControllerWithAuth called, creating NativeSignInCallback")
 
-            override fun onSilentSignInRequested(onResult: (NativeSignInResult) -> Unit) {
-                onSilentSignInRequested { bridgeResult ->
-                    onResult(bridgeResult.toNativeResult())
-                }
+    val callback = object : NativeSignInCallback {
+        override fun onGoogleSignInRequested(onResult: (NativeSignInResult) -> Unit) {
+            NSLog("[Main.ios][INFO] onGoogleSignInRequested called - invoking Swift onAppleSignInRequested")
+            onAppleSignInRequested { bridgeResult ->
+                NSLog("[Main.ios][INFO] Got bridgeResult from Swift: type=${bridgeResult.type}")
+                onResult(bridgeResult.toNativeResult())
             }
         }
-    )
+
+        override fun onSilentSignInRequested(onResult: (NativeSignInResult) -> Unit) {
+            NSLog("[Main.ios][INFO] onSilentSignInRequested called - invoking Swift onSilentSignInRequested")
+            onSilentSignInRequested { bridgeResult ->
+                NSLog("[Main.ios][INFO] Got silent bridgeResult from Swift: type=${bridgeResult.type}")
+                onResult(bridgeResult.toNativeResult())
+            }
+        }
+    }
+
+    NSLog("[Main.ios][INFO] NativeSignInCallback created successfully")
+
+    return ComposeUIViewController {
+        NSLog("[Main.ios][INFO] ComposeUIViewController content lambda executing, passing callback to CIRISApp")
+        CIRISApp(
+            accessToken = "",
+            baseUrl = "http://localhost:8080",
+            googleSignInCallback = callback
+        )
+    }
 }
 
 /**

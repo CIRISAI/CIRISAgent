@@ -20,6 +20,8 @@ import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
@@ -462,23 +464,70 @@ class CIRISApiClient(
         logInfo(method, "Attempting Apple auth: userId=$userId, idToken=${maskToken(idToken)}")
 
         return try {
-            val request = SdkNativeTokenRequest(
-                idToken = idToken,
-                provider = "apple"
+            // Use manual HTTP request since generated SDK doesn't include Apple auth endpoint
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(Logging) {
+                    level = LogLevel.INFO
+                }
+            }
+
+            val requestBody = mapOf(
+                "id_token" to idToken,
+                "provider" to "apple"
             )
-            logDebug(method, "Calling nativeAppleTokenExchangeV1AuthNativeApplePost")
 
-            // TODO: Add native Apple endpoint to generated API
-            // For now, use a similar pattern to Google auth
-            // val response = authApi.nativeAppleTokenExchangeV1AuthNativeApplePost(request)
+            logDebug(method, "POST $baseUrl/v1/auth/native/apple")
+            val response: HttpResponse = client.post("$baseUrl/v1/auth/native/apple") {
+                contentType(ContentType.Application.Json)
+                setBody(requestBody)
+            }
 
-            // Temporary: throw not implemented until backend supports Apple auth
-            throw NotImplementedError("Apple auth endpoint not yet implemented in backend")
+            logDebug(method, "Response status: ${response.status}")
+
+            if (response.status.value !in 200..299) {
+                val errorBody = response.body<String>()
+                logError(method, "Apple auth failed: ${response.status} - $errorBody")
+                throw Exception("Apple auth failed: ${response.status}")
+            }
+
+            val body: NativeTokenResponseBody = response.body()
+            logInfo(method, "Apple auth successful: userId=${body.userId}, role=${body.role}")
+
+            client.close()
+
+            AuthResponse(
+                access_token = body.accessToken,
+                token_type = "bearer",
+                user = UserInfo(
+                    user_id = body.userId,
+                    email = body.email ?: "",
+                    name = body.name,
+                    photo_url = null,
+                    role = body.role
+                )
+            )
         } catch (e: Exception) {
             logException(method, e, "userId=$userId")
             throw e
         }
     }
+
+    @Serializable
+    private data class NativeTokenResponseBody(
+        @SerialName("access_token") val accessToken: String,
+        @SerialName("token_type") val tokenType: String,
+        @SerialName("expires_in") val expiresIn: Int,
+        @SerialName("user_id") val userId: String,
+        val role: String,
+        val email: String? = null,
+        val name: String? = null
+    )
 
     override suspend fun nativeAuth(idToken: String, userId: String?, provider: String): AuthResponse {
         val method = "nativeAuth"

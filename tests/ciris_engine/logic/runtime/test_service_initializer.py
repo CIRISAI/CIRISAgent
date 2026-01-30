@@ -254,7 +254,7 @@ class TestServiceInitializer:
         service_initializer.service_registry.register_service.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_initialize_llm_service_real(self, service_initializer, mock_essential_config):
+    async def test_initialize_llm_service_real(self, service_initializer, mock_essential_config, monkeypatch):
         """Test LLM service initialization with real provider."""
         service_initializer._mock_llm = False
         service_initializer.service_registry = Mock()
@@ -265,9 +265,10 @@ class TestServiceInitializer:
         mock_essential_config.services.llm_model = "gpt-4"
         mock_essential_config.services.llm_timeout = 30
         mock_essential_config.services.llm_max_retries = 3
-        os.environ["OPENAI_API_KEY"] = "test-key"
+        # Use monkeypatch for thread-safe environment variable handling
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
         # Clear secondary LLM keys to ensure only primary is initialized in this test
-        os.environ.pop("CIRIS_OPENAI_API_KEY_2", None)
+        monkeypatch.delenv("CIRIS_OPENAI_API_KEY_2", raising=False)
 
         with patch("ciris_engine.logic.runtime.service_initializer.OpenAICompatibleClient") as mock_llm_class:
             mock_llm = AsyncMock()
@@ -277,13 +278,8 @@ class TestServiceInitializer:
             await service_initializer._initialize_llm_services(mock_essential_config)
 
             assert service_initializer.llm_service is not None
-            # Check if secondary LLM is configured
-            if os.environ.get("CIRIS_OPENAI_API_KEY_2"):
-                # Both primary and secondary LLM services initialized
-                assert mock_llm_class.call_count == 2
-            else:
-                # Only primary LLM service initialized
-                assert mock_llm_class.call_count == 1
+            # Only primary LLM service should be initialized (secondary key cleared)
+            assert mock_llm_class.call_count == 1
 
     @pytest.mark.asyncio
     async def test_service_cleanup(self, service_initializer):

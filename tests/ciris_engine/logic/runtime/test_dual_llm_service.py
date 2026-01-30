@@ -69,6 +69,13 @@ class TestDualLLMService:
     async def test_single_llm_service_without_second_key(self, service_initializer, mock_service_registry, monkeypatch):
         """Test that only one LLM service is created when CIRIS_OPENAI_API_KEY_2 is not set."""
         # Use monkeypatch for thread-safe environment variable handling
+        # Clear any env vars that could affect provider detection
+        monkeypatch.delenv("CIRIS_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_BASE", raising=False)
         monkeypatch.setenv("OPENAI_API_KEY", "test-api-key-1")
         monkeypatch.delenv("CIRIS_OPENAI_API_KEY_2", raising=False)
 
@@ -94,6 +101,13 @@ class TestDualLLMService:
     async def test_dual_llm_service_with_second_key(self, service_initializer, mock_service_registry, monkeypatch):
         """Test that two LLM services are created when CIRIS_OPENAI_API_KEY_2 is set."""
         # Use monkeypatch for thread-safe environment variable handling
+        # Clear any env vars that could affect provider detection
+        monkeypatch.delenv("CIRIS_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_BASE", raising=False)
         monkeypatch.setenv("OPENAI_API_KEY", "test-api-key-1")
         monkeypatch.setenv("CIRIS_OPENAI_API_KEY_2", "test-api-key-2")
         monkeypatch.setenv("CIRIS_OPENAI_API_BASE_2", "https://api.lambda.ai/v1")
@@ -129,6 +143,13 @@ class TestDualLLMService:
     async def test_second_llm_config_from_env(self, service_initializer, monkeypatch):
         """Test that second LLM configuration is correctly loaded from environment."""
         # Use monkeypatch for thread-safe environment variable handling
+        # Clear any env vars that could affect provider detection
+        monkeypatch.delenv("CIRIS_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_BASE", raising=False)
         monkeypatch.setenv("OPENAI_API_KEY", "test-api-key-1")
         monkeypatch.setenv("CIRIS_OPENAI_API_KEY_2", "test-api-key-2")
         monkeypatch.setenv("CIRIS_OPENAI_API_BASE_2", "https://custom.api.com/v1")
@@ -155,6 +176,13 @@ class TestDualLLMService:
     async def test_both_services_started(self, service_initializer, monkeypatch):
         """Test that both LLM services are properly started."""
         # Use monkeypatch for thread-safe environment variable handling
+        # Clear any env vars that could affect provider detection
+        monkeypatch.delenv("CIRIS_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_BASE", raising=False)
         monkeypatch.setenv("OPENAI_API_KEY", "test-api-key-1")
         monkeypatch.setenv("CIRIS_OPENAI_API_KEY_2", "test-api-key-2")
 

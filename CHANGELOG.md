@@ -5,7 +5,7 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.9.4] - 2026-01-29
+## [1.9.4] - 2026-01-30
 
 ### Added
 
@@ -63,6 +63,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **401 Auth on Mobile** - Fixed Google tokeninfo API timeout on-device
   - Python running on Android can't reach Google servers reliably
   - Local JWT decode fallback validates tokens without network call
+
+- **Mobile Billing Purchase Flow** - Fixed 401/500 errors on purchase verification
+  - Added `onTokenUpdated` callback to CIRISApp for billing apiClient sync
+  - Billing endpoint falls back to `CIRIS_BILLING_GOOGLE_ID_TOKEN` env var
+  - Kotlin EnvFileUpdater writes token, Python billing reads it
+
+- **Covenant Metrics Trace Levels** - Fixed per-adapter trace level configuration
+  - Config now overrides env var (was reversed)
+  - Added adapter instance ID to logging for multi-adapter debugging
+  - QA runner default changed from `full_traces` to `detailed`
+  - Covenant metrics tests load `generic` and `full_traces` adapters
+
+- **Default Template Changed** - Ally is now the default agent template
+  - Renamed `default.yaml` → `datum.yaml`, `ally.yaml` → `default.yaml`
+  - Ally provides personal assistant functionality with crisis response protocols
+
+- **Test Isolation Improvements** - Fixed parallel test pollution
+  - Added `isolate_test_env_vars` fixture for env var isolation
+  - Isolates LLM provider detection env vars (GOOGLE_API_KEY, ANTHROPIC_API_KEY, etc.)
+  - Fixed A2A adapter tests to use proper async mock for `on_message`
+  - Updated dual_llm tests to explicitly clear interfering env vars
+  - All 8867 tests now pass consistently with `pytest -n 16`
 
 ## [1.9.3] - 2026-01-27
 

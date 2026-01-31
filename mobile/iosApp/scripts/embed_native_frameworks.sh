@@ -1,15 +1,19 @@
 #!/bin/bash
 # Embed and code-sign Python native module frameworks
 # This script copies all .framework directories from the project's Frameworks directory
-# into the app bundle and code-signs them
+# into the app bundle, fixes their Info.plist for App Store compliance, and code-signs them
 #
-# For Release builds, also strips x86_64 (simulator) architecture for App Store
+# Fixes applied:
+# - CFBundlePackageType: APPL -> FMWK (framework, not application)
+# - MinimumOSVersion: matches app's deployment target
+# - Strips x86_64 simulator architecture for Release builds
 
 set -e
 
 # Only process if frameworks exist
 FRAMEWORKS_SRC="${PROJECT_DIR}/Frameworks"
 FRAMEWORKS_DST="${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}"
+MIN_IOS_VERSION="15.0"
 
 if [ ! -d "$FRAMEWORKS_SRC" ]; then
     echo "No Frameworks directory found at $FRAMEWORKS_SRC"
@@ -33,6 +37,29 @@ for framework in "$FRAMEWORKS_SRC"/*.framework; do
 done
 
 echo "Copied $count native module frameworks"
+
+# Fix Info.plist in each framework for App Store compliance
+echo "Fixing framework Info.plist files for App Store..."
+fixed=0
+for framework in "$FRAMEWORKS_DST"/*.framework; do
+    if [ -d "$framework" ]; then
+        plist="$framework/Info.plist"
+        if [ -f "$plist" ]; then
+            # Fix CFBundlePackageType: APPL -> FMWK
+            /usr/libexec/PlistBuddy -c "Set :CFBundlePackageType FMWK" "$plist" 2>/dev/null || true
+
+            # Fix MinimumOSVersion to match app
+            /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion $MIN_IOS_VERSION" "$plist" 2>/dev/null || \
+                /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string $MIN_IOS_VERSION" "$plist" 2>/dev/null || true
+
+            # Add CFBundleSupportedPlatforms if missing
+            /usr/libexec/PlistBuddy -c "Set :CFBundleSupportedPlatforms:0 iPhoneOS" "$plist" 2>/dev/null || true
+
+            fixed=$((fixed + 1))
+        fi
+    fi
+done
+echo "Fixed Info.plist in $fixed frameworks"
 
 # For Release builds targeting device, strip x86_64 (simulator) architecture
 if [ "$CONFIGURATION" = "Release" ] || [[ "$SDKROOT" == *"iphoneos"* ]]; then

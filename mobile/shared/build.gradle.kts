@@ -21,7 +21,7 @@ kotlin {
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "shared"
-            isStatic = true
+            isStatic = false  // Dynamic framework required for App Store
 
             // Export Compose runtime for iOS
             export(compose.runtime)

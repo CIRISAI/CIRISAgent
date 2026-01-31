@@ -86,6 +86,14 @@ targets:
           rm -rf "$DEST_PATH"
           cp -R "$FRAMEWORK_PATH" "$DEST_PATH"
 
+          # Fix shared.framework Info.plist for App Store compliance
+          PLIST="${DEST_PATH}/Info.plist"
+          if [ -f "$PLIST" ]; then
+            /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion 15.0" "$PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ai.ciris.mobile.shared" "$PLIST" 2>/dev/null || true
+            echo "Fixed shared.framework Info.plist"
+          fi
+
           echo "Embedded shared.framework from: $FRAMEWORK_PATH"
         basedOnDependencyAnalysis: false
     postCompileScripts:

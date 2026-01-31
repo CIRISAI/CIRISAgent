@@ -2,6 +2,8 @@
 # Embed and code-sign Python native module frameworks
 # This script copies all .framework directories from the project's Frameworks directory
 # into the app bundle and code-signs them
+#
+# For Release builds, also strips x86_64 (simulator) architecture for App Store
 
 set -e
 
@@ -31,6 +33,36 @@ for framework in "$FRAMEWORKS_SRC"/*.framework; do
 done
 
 echo "Copied $count native module frameworks"
+
+# For Release builds targeting device, strip x86_64 (simulator) architecture
+if [ "$CONFIGURATION" = "Release" ] || [[ "$SDKROOT" == *"iphoneos"* ]]; then
+    echo "Release/Device build - stripping x86_64 from frameworks..."
+    stripped=0
+    for framework in "$FRAMEWORKS_DST"/*.framework; do
+        if [ -d "$framework" ]; then
+            fname=$(basename "$framework" .framework)
+            binary="$framework/$fname"
+
+            if [ -f "$binary" ]; then
+                # Check if it's a fat binary with x86_64
+                if lipo -info "$binary" 2>/dev/null | grep -q "x86_64"; then
+                    echo "  Stripping x86_64: $fname"
+
+                    # Extract arm64 only
+                    lipo -extract arm64 "$binary" -output "${binary}.arm64" 2>/dev/null || \
+                        lipo -thin arm64 "$binary" -output "${binary}.arm64" 2>/dev/null || {
+                            echo "  Warning: Could not strip $fname"
+                            continue
+                        }
+
+                    mv "${binary}.arm64" "$binary"
+                    stripped=$((stripped + 1))
+                fi
+            fi
+        fi
+    done
+    echo "Stripped x86_64 from $stripped frameworks"
+fi
 
 # Code sign all frameworks
 if [ "$count" -gt 0 ]; then

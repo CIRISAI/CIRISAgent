@@ -11,10 +11,8 @@
 		40ED78CC391B58FEED543A87 /* PythonInit.m in Sources */ = {isa = PBXBuildFile; fileRef = FE5DE9AED4DF76F07B0E1091 /* PythonInit.m */; };
 		49E475AB2B339B9760DED60C /* PythonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA9BDE339934CB14814355D /* PythonBridge.swift */; };
 		4A23539E03B1795BF31CBF28 /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */; };
-		4AA1C0D5BECC7730D28675C0 /* shared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6F014C83FDDBC68304D230E9 /* shared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		56B0305B5D3847FC6B326502 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE8509E5A49E4A5CAAEB3ADB /* ContentView.swift */; };
 		66A2AEEC40DC3948EEC2CEBA /* Python.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7F57CDEE4615E80E9C189DA6 /* Python.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		6C480D7E5FB50456D1A53C94 /* shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6F014C83FDDBC68304D230E9 /* shared.framework */; };
 		D4EF14070E1BB23B1DAAFBCB /* StoreKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC688A47713DC269281F526D /* StoreKitManager.swift */; };
 		DBF2178339A7B6A37F096AF1 /* iosAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404608725152C3067E7030FA /* iosAppApp.swift */; };
 		E0491F1A134023B2903DF517 /* Python.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7F57CDEE4615E80E9C189DA6 /* Python.xcframework */; };
@@ -29,7 +27,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				4AA1C0D5BECC7730D28675C0 /* shared.framework in Embed Frameworks */,
 				66A2AEEC40DC3948EEC2CEBA /* Python.xcframework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
@@ -40,7 +37,6 @@
 /* Begin PBXFileReference section */
 		404608725152C3067E7030FA /* iosAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iosAppApp.swift; sourceTree = "<group>"; };
 		586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
-		6F014C83FDDBC68304D230E9 /* shared.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = shared.framework; path = ../shared/build/bin/iosSimulatorArm64/debugFramework/shared.framework; sourceTree = "<group>"; };
 		7F57CDEE4615E80E9C189DA6 /* Python.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Python.xcframework; path = Frameworks/Python.xcframework; sourceTree = "<group>"; };
 		86038AE1032E284E79B32AD6 /* iosApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		93BB47C3CC3B5531EA4EB340 /* Resources.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = Resources.zip; sourceTree = "<group>"; };
@@ -61,7 +57,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6C480D7E5FB50456D1A53C94 /* shared.framework in Frameworks */,
 				E0491F1A134023B2903DF517 /* Python.xcframework in Frameworks */,
 				4A23539E03B1795BF31CBF28 /* AuthenticationServices.framework in Frameworks */,
 			);
@@ -93,7 +88,6 @@
 			children = (
 				586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */,
 				7F57CDEE4615E80E9C189DA6 /* Python.xcframework */,
-				6F014C83FDDBC68304D230E9 /* shared.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -123,6 +117,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 29DCA9F0B3A40325067EB163 /* Build configuration list for PBXNativeTarget "iosApp" */;
 			buildPhases = (
+				FF5E9869DAEE8D326CA9527D /* Link KMP Shared Framework */,
 				297B59D9CE634556D6007C40 /* Sources */,
 				3D4F1A18C954E39A6135F5F2 /* Embed Python Native Modules */,
 				1623B02D10928C8101C1F806 /* Resources */,
@@ -150,7 +145,7 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					78B53CC79860CBFC2F5543C6 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = "${DEVELOPMENT_TEAM}";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -205,6 +200,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "${PROJECT_DIR}/scripts/embed_native_frameworks.sh";
+		};
+		FF5E9869DAEE8D326CA9527D /* Link KMP Shared Framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Link KMP Shared Framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Link the correct shared.framework based on configuration and SDK\nSHARED_FRAMEWORK_DIR=\"${PROJECT_DIR}/../shared/build/bin\"\n\nif [ \"$CONFIGURATION\" = \"Release\" ] || [[ \"$SDKROOT\" == *\"iphoneos\"* ]]; then\n  FRAMEWORK_PATH=\"${SHARED_FRAMEWORK_DIR}/iosArm64/releaseFramework/shared.framework\"\nelse\n  FRAMEWORK_PATH=\"${SHARED_FRAMEWORK_DIR}/iosSimulatorArm64/debugFramework/shared.framework\"\nfi\n\nif [ ! -d \"$FRAMEWORK_PATH\" ]; then\n  echo \"error: shared.framework not found at $FRAMEWORK_PATH\"\n  echo \"Run: cd mobile && ./gradlew :shared:linkReleaseFrameworkIosArm64\"\n  exit 1\nfi\n\n# Copy framework to build directory for embedding\nDEST_PATH=\"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/shared.framework\"\nrm -rf \"$DEST_PATH\"\ncp -R \"$FRAMEWORK_PATH\" \"$DEST_PATH\"\n\necho \"Embedded shared.framework from: $FRAMEWORK_PATH\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -261,7 +275,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = "${DEVELOPMENT_TEAM}";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -319,7 +333,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = "${DEVELOPMENT_TEAM}";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -360,7 +374,6 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)/../shared/build/bin/iosSimulatorArm64/debugFramework",
 					"$(PROJECT_DIR)/Frameworks",
-					"\"../shared/build/bin/iosSimulatorArm64/debugFramework\"",
 					"\"Frameworks\"",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -389,14 +402,13 @@
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/../shared/build/bin/iosSimulatorArm64/debugFramework",
+					"$(PROJECT_DIR)/../shared/build/bin/iosArm64/releaseFramework",
 					"$(PROJECT_DIR)/Frameworks",
-					"\"../shared/build/bin/iosSimulatorArm64/debugFramework\"",
 					"\"Frameworks\"",
 				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64_x86_64-simulator/Python.framework/Headers",
+					"$(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64/Python.framework/Headers",
 				);
 				INFOPLIST_FILE = iosApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

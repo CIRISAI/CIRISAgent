@@ -17,10 +17,12 @@ echo "Embed Native Frameworks script running..."
 echo "Configuration: $CONFIGURATION"
 echo "SDK: $SDKROOT"
 
-# For App Store (Release/Device), skip Python extension frameworks entirely
+# For App Store (Release) or any Device build, skip Python extension frameworks entirely
 # They're already in Python.xcframework with proper encryption info
-if [ "$CONFIGURATION" = "Release" ] || [[ "$SDKROOT" == *"iphoneos"* ]]; then
+# Use PLATFORM_NAME which is more reliable than SDKROOT for device detection
+if [ "$CONFIGURATION" = "Release" ] || [ "$PLATFORM_NAME" = "iphoneos" ] || [[ "$SDKROOT" == *"iphoneos"* ]]; then
     echo "Release/Device build - NOT embedding separate Python extension frameworks"
+    echo "PLATFORM_NAME=$PLATFORM_NAME, SDKROOT=$SDKROOT, CONFIGURATION=$CONFIGURATION"
     echo "Python extensions are loaded from Python.xcframework"
 
     # Only ensure shared.framework is properly set up (handled by Link KMP Shared Framework script)

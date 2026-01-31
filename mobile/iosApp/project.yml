@@ -46,9 +46,13 @@ targets:
         Debug:
           FRAMEWORK_SEARCH_PATHS:
             - $(inherited)
+            - $(PROJECT_DIR)/../shared/build/bin/iosArm64/debugFramework
             - $(PROJECT_DIR)/../shared/build/bin/iosSimulatorArm64/debugFramework
             - $(PROJECT_DIR)/Frameworks
-          HEADER_SEARCH_PATHS:
+          HEADER_SEARCH_PATHS[sdk=iphoneos*]:
+            - $(inherited)
+            - $(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64/Python.framework/Headers
+          HEADER_SEARCH_PATHS[sdk=iphonesimulator*]:
             - $(inherited)
             - $(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64_x86_64-simulator/Python.framework/Headers
         Release:
@@ -69,11 +73,29 @@ targets:
           # Link the correct shared.framework based on configuration and SDK
           SHARED_FRAMEWORK_DIR="${PROJECT_DIR}/../shared/build/bin"
 
-          if [ "$CONFIGURATION" = "Release" ] || [[ "$SDKROOT" == *"iphoneos"* ]]; then
-            FRAMEWORK_PATH="${SHARED_FRAMEWORK_DIR}/iosArm64/releaseFramework/shared.framework"
+          echo "DEBUG: SDKROOT=$SDKROOT"
+          echo "DEBUG: PLATFORM_NAME=$PLATFORM_NAME"
+          echo "DEBUG: EFFECTIVE_PLATFORM_NAME=$EFFECTIVE_PLATFORM_NAME"
+          echo "DEBUG: CONFIGURATION=$CONFIGURATION"
+
+          # Determine architecture (device vs simulator)
+          # Use PLATFORM_NAME which is more reliable for archive builds
+          if [ "$PLATFORM_NAME" = "iphoneos" ] || [[ "$SDKROOT" == *"iphoneos"* ]]; then
+            ARCH="iosArm64"
           else
-            FRAMEWORK_PATH="${SHARED_FRAMEWORK_DIR}/iosSimulatorArm64/debugFramework/shared.framework"
+            ARCH="iosSimulatorArm64"
           fi
+
+          # Determine build type
+          if [ "$CONFIGURATION" = "Release" ]; then
+            BUILD_TYPE="releaseFramework"
+          else
+            BUILD_TYPE="debugFramework"
+          fi
+
+          echo "DEBUG: Selected ARCH=$ARCH BUILD_TYPE=$BUILD_TYPE"
+
+          FRAMEWORK_PATH="${SHARED_FRAMEWORK_DIR}/${ARCH}/${BUILD_TYPE}/shared.framework"
 
           if [ ! -d "$FRAMEWORK_PATH" ]; then
             echo "error: shared.framework not found at $FRAMEWORK_PATH"

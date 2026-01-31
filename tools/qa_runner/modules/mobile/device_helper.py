@@ -320,9 +320,42 @@ def create_device_helper(
         if device_id and device_id.startswith('sim:'):
             from .ios.xcrun_helper import XCRunHelper
             return XCRunHelper(device_id=device_id[4:], **kwargs)
+        elif device_id and _is_physical_device(device_id):
+            from .ios.idevice_helper import IDeviceHelper
+            return IDeviceHelper(device_id=device_id, **kwargs)
         else:
+            # Try to detect if we should use physical device or simulator
             from .ios.xcrun_helper import XCRunHelper
-            # Default to simulator for now
+            from .ios.idevice_helper import IDeviceHelper
+
+            # Check for physical devices first
+            try:
+                helper = IDeviceHelper(device_id=device_id)
+                if helper.get_devices():
+                    return helper
+            except RuntimeError:
+                pass
+
+            # Fall back to simulator
             return XCRunHelper(device_id=device_id, **kwargs)
     else:
         raise ValueError(f"Unsupported platform: {platform}")
+
+
+def _is_physical_device(device_id: str) -> bool:
+    """
+    Check if device_id looks like a physical device UDID.
+
+    Physical device UDIDs are typically 40 hex chars or have a specific format
+    like "00008110-XXXX..." while simulator UUIDs are standard UUID format.
+    """
+    # Physical device UDIDs often start with "00008" or are 40 hex chars
+    if device_id.startswith("00008"):
+        return True
+    # Simulator UUIDs have the standard UUID format with dashes
+    if len(device_id) == 36 and device_id.count("-") == 4:
+        return False
+    # 40 char hex string is likely a physical device
+    if len(device_id) == 40 and all(c in "0123456789abcdefABCDEF" for c in device_id):
+        return True
+    return False

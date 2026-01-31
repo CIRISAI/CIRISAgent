@@ -112,7 +112,7 @@ def _execute_postgresql_migration(conn: Any, statements: list[str], name: str, a
 
 
 def _execute_sqlite_migration(conn: Any, sql: str, name: str) -> None:
-    """Execute migration SQL for SQLite.
+    """Execute migration SQL for SQLite (desktop).
 
     Args:
         conn: Database connection
@@ -120,6 +120,29 @@ def _execute_sqlite_migration(conn: Any, sql: str, name: str) -> None:
         name: Migration filename
     """
     conn.executescript(sql)
+    conn.execute("INSERT INTO schema_migrations (filename) VALUES (?)", (name,))
+    conn.commit()
+
+
+def _execute_ios_sqlite_migration(conn: Any, statements: list, name: str) -> None:
+    """Execute migration SQL for SQLite on iOS.
+
+    iOS requires individual statement execution because executescript
+    has issues in autocommit mode (isolation_level=None).
+
+    Args:
+        conn: Database connection
+        statements: List of SQL statements
+        name: Migration filename
+    """
+    cursor = conn.cursor()
+    try:
+        for statement in statements:
+            if statement.strip():
+                cursor.execute(statement)
+        conn.commit()
+    finally:
+        cursor.close()
     conn.execute("INSERT INTO schema_migrations (filename) VALUES (?)", (name,))
     conn.commit()
 
@@ -132,7 +155,16 @@ def _apply_migration(conn: Any, migration_file: Path, adapter: Any) -> None:
         migration_file: Path to migration file
         adapter: Database adapter
     """
+    import sys
+
     from .execution_helpers import split_sql_statements
+
+    # Detect iOS platform
+    is_ios = sys.platform == "ios" or (
+        sys.platform == "darwin"
+        and hasattr(sys, "implementation")
+        and "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
+    )
 
     name = migration_file.name
     logger.info(f"Applying migration {name}")
@@ -144,6 +176,8 @@ def _apply_migration(conn: Any, migration_file: Path, adapter: Any) -> None:
 
         if adapter.is_postgresql():
             _execute_postgresql_migration(conn, statements, name, adapter)
+        elif is_ios:
+            _execute_ios_sqlite_migration(conn, statements, name)
         else:
             _execute_sqlite_migration(conn, sql, name)
 

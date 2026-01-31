@@ -25,6 +25,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from ciris_engine.logic.persistence.stores import authentication_store
 from ciris_engine.logic.services.base_infrastructure_service import BaseInfrastructureService
 from ciris_engine.logic.services.lifecycle.time import TimeService
+from ciris_engine.logic.utils.path_resolution import get_secrets_home
 from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.authority.wise_authority import AuthenticationResult, TokenVerification, WAUpdate
@@ -58,12 +59,13 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         Args:
             db_path: Path to SQLite database
             time_service: TimeService instance for time operations (required)
-            key_dir: Directory for key storage (defaults to ~/.ciris/)
+            key_dir: Directory for key storage (defaults to platform-appropriate secrets dir)
         """
         super().__init__()  # Initialize BaseService
         self.db_path = db_path
-        self.key_dir = Path(key_dir or os.path.expanduser("~/.ciris"))
-        self.key_dir.mkdir(mode=0o700, exist_ok=True)
+        # Use platform-aware secrets directory (iOS: Documents/.secrets, desktop: ~/.ciris)
+        self.key_dir = Path(key_dir) if key_dir else get_secrets_home()
+        self.key_dir.mkdir(mode=0o700, exist_ok=True, parents=True)
 
         # Store injected time service
         self._time_service = time_service

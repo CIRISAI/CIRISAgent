@@ -123,36 +123,74 @@ def pull_logs_command(args) -> int:
     bundle_id = args.package
 
     if platform == 'ios':
+        # Try physical device first if device_id looks like physical, or auto-detect
+        helper = None
+        device = None
+        is_physical = False
+
+        # Check for physical devices first
         try:
-            from .ios.xcrun_helper import XCRunHelper
-            helper = XCRunHelper(device_id=args.device)
-        except Exception as e:
-            print(f"[ERROR] Failed to initialize iOS helper: {e}")
+            from .ios.idevice_helper import IDeviceHelper
+            phys_helper = IDeviceHelper(device_id=args.device)
+            phys_devices = phys_helper.get_devices()
+            connected = [d for d in phys_devices if d.state == "device"]
+
+            if connected:
+                if args.device:
+                    device = next((d for d in connected if d.identifier == args.device), None)
+                    if device:
+                        helper = phys_helper
+                        is_physical = True
+                else:
+                    device = connected[0]
+                    helper = phys_helper
+                    is_physical = True
+        except RuntimeError:
+            pass  # No physical device tools available
+
+        # Fall back to simulator
+        if not helper:
+            try:
+                from .ios.xcrun_helper import XCRunHelper
+                sim_helper = XCRunHelper(device_id=args.device)
+                sim_devices = sim_helper.get_devices()
+                booted = [d for d in sim_devices if d.state == "booted"]
+
+                if booted:
+                    if args.device:
+                        device = next((d for d in booted if d.identifier == args.device), None)
+                    else:
+                        device = booted[0]
+
+                    if device:
+                        helper = sim_helper
+            except Exception:
+                pass
+
+        if not helper or not device:
+            print("[ERROR] No iOS device or simulator found")
+            print("  Physical device: Connect via USB and trust the computer")
+            print("  Simulator: xcrun simctl boot 'iPhone 17 Pro'")
+            if args.device:
+                # List available devices
+                all_devices = []
+                try:
+                    from .ios.idevice_helper import IDeviceHelper
+                    all_devices.extend(IDeviceHelper().get_devices())
+                except Exception:
+                    pass
+                try:
+                    from .ios.xcrun_helper import XCRunHelper
+                    all_devices.extend([d for d in XCRunHelper().get_devices() if d.state == "booted"])
+                except Exception:
+                    pass
+                if all_devices:
+                    print(f"  Available: {[d.identifier for d in all_devices]}")
             return 1
 
-        # Check device connection
-        devices = helper.get_devices()
-        booted = [d for d in devices if d.state == "booted"]
-
-        if not booted:
-            print("[ERROR] No iOS simulators booted")
-            print("  Boot a simulator: xcrun simctl boot 'iPhone 17 Pro'")
-            return 1
-
-        if args.device:
-            device = next((d for d in booted if d.identifier == args.device), None)
-            if not device:
-                print(f"[ERROR] Device {args.device} not found")
-                print(f"  Available: {[d.identifier for d in booted]}")
-                return 1
-        else:
-            device = booted[0]
-            if len(booted) > 1:
-                print(f"[INFO] Multiple simulators booted, using: {device.name}")
-                print(f"  Use -d to specify: {[(d.identifier, d.name) for d in booted]}")
-
-        print(f"[INFO] iOS Simulator: {device.name} ({device.identifier[:8]}...)")
-        print(f"[INFO] iOS Version: {device.os_version}")
+        device_type = "Physical Device" if is_physical else "Simulator"
+        print(f"[INFO] iOS {device_type}: {device.name or 'Unknown'} ({device.identifier[:8]}...)")
+        print(f"[INFO] iOS Version: {device.os_version or 'Unknown'}")
 
         # Pull logs using cross-platform helper
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

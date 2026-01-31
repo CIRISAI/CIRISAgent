@@ -10,6 +10,12 @@ import Compression
     private static var serverPort: Int = 8080
     private static var extractedResourcesPath: String?
 
+    /// Extract resources only (for async UI updates)
+    /// Returns the path to extracted resources, or nil on failure
+    @objc public static func extractResources() -> String? {
+        return extractResourcesIfNeeded()
+    }
+
     /// Initialize the Python interpreter with the app bundle paths
     @objc public static func initializePython() -> Bool {
         if isInitialized {
@@ -51,11 +57,33 @@ import Compression
         NSLog("[PythonBridge] App path: \(appPath)")
         NSLog("[PythonBridge] Packages path: \(packagesPath)")
 
+        // Determine lib-dynload path
+        // On device: use app bundle (code-signed)
+        // On simulator: use extracted path (no code signing required)
+        var libDynloadPath: String
+        #if targetEnvironment(simulator)
+        libDynloadPath = "\(pythonHome)/lib/python3.10/lib-dynload"
+        NSLog("[PythonBridge] Simulator build - using extracted lib-dynload: \(libDynloadPath)")
+        #else
+        // On device, use the lib-dynload from the app bundle (code-signed)
+        let bundleLibPath = Bundle.main.resourcePath.map { "\($0)/python_lib/lib-dynload" }
+        if let bundlePath = bundleLibPath, fm.fileExists(atPath: bundlePath) {
+            libDynloadPath = bundlePath
+            NSLog("[PythonBridge] Device build - using app bundle lib-dynload: \(libDynloadPath)")
+        } else {
+            // Fallback to extracted path (will likely fail code signature check)
+            libDynloadPath = "\(pythonHome)/lib/python3.10/lib-dynload"
+            NSLog("[PythonBridge] WARNING: App bundle lib-dynload not found, falling back to extracted path")
+            NSLog("[PythonBridge] This will fail on device due to code signature requirements!")
+        }
+        #endif
+
         // Initialize using our Objective-C bridge (which calls Python C API)
         let success = PythonInit.initialize(
             withPythonHome: pythonHome,
             appPath: appPath,
-            packagesPath: packagesPath
+            packagesPath: packagesPath,
+            libDynloadPath: libDynloadPath
         )
 
         if success {
@@ -68,24 +96,77 @@ import Compression
         return success
     }
 
-    /// Extract Resources.zip if not already extracted
+    /// Extract Resources.zip if not already extracted or if version changed
     private static func extractResourcesIfNeeded() -> String? {
         let fm = FileManager.default
+        let startTime = CFAbsoluteTimeGetCurrent()
+
+        NSLog("[PythonBridge] extractResourcesIfNeeded() called")
 
         // Get the Documents directory for extraction
         guard let documentsPath = fm.urls(for: .documentDirectory, in: .userDomainMask).first?.path else {
             NSLog("[PythonBridge] ERROR: Could not get Documents directory")
             return nil
         }
+        NSLog("[PythonBridge] Documents path: \(documentsPath)")
 
         let extractedPath = "\(documentsPath)/PythonResources"
 
         // Check if already extracted
-        if fm.fileExists(atPath: "\(extractedPath)/python/lib") {
-            NSLog("[PythonBridge] Resources already extracted at \(extractedPath)")
+        let pythonLibPath = "\(extractedPath)/python/lib"
+        let kmpMainPath = "\(extractedPath)/app/ciris_ios/kmp_main.py"
+        let versionMarkerPath = "\(extractedPath)/.extraction_version"
+
+        // Get current bundle version to track if we need to re-extract
+        let currentVersion = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
+        let currentBuild = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let versionString = "\(currentBuild)-\(currentVersion)"
+
+        // Check for .fwork files as an indicator of new-style extraction
+        // Old extractions have .so files, new ones have .fwork files
+        let pydanticFworkPath = "\(extractedPath)/app_packages/pydantic_core/_pydantic_core.cpython-310-iphoneos.fwork"
+        let pydanticSoPath = "\(extractedPath)/app_packages/pydantic_core/_pydantic_core.cpython-310-iphoneos.so"
+
+        var needsReextract = false
+
+        if fm.fileExists(atPath: pythonLibPath) && fm.fileExists(atPath: kmpMainPath) {
+            // Check if this is an old-style extraction (has .so files instead of .fwork)
+            if fm.fileExists(atPath: pydanticSoPath) && !fm.fileExists(atPath: pydanticFworkPath) {
+                NSLog("[PythonBridge] Old-style extraction detected (.so files instead of .fwork)")
+                NSLog("[PythonBridge] Will re-extract to get .fwork files for code signing")
+                needsReextract = true
+            } else if let existingVersion = try? String(contentsOfFile: versionMarkerPath, encoding: .utf8),
+                      existingVersion.trimmingCharacters(in: .whitespacesAndNewlines) == versionString {
+                NSLog("[PythonBridge] Resources already extracted at \(extractedPath)")
+                NSLog("[PythonBridge] - python/lib exists: YES")
+                NSLog("[PythonBridge] - kmp_main.py exists: YES")
+                NSLog("[PythonBridge] - Version matches: \(versionString)")
+                extractedResourcesPath = extractedPath
+                return extractedPath
+            } else {
+                NSLog("[PythonBridge] Version mismatch or marker missing, will re-extract")
+                needsReextract = true
+            }
+        } else {
+            NSLog("[PythonBridge] Need to extract resources:")
+            NSLog("[PythonBridge] - python/lib exists: \(fm.fileExists(atPath: pythonLibPath))")
+            NSLog("[PythonBridge] - kmp_main.py exists: \(fm.fileExists(atPath: kmpMainPath))")
+            needsReextract = true
+        }
+
+        guard needsReextract else {
             extractedResourcesPath = extractedPath
             return extractedPath
         }
+
+        // Clear old status files before extraction
+        if let cirisDir = fm.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("ciris") {
+            try? fm.removeItem(at: cirisDir.appendingPathComponent("extraction_status.json"))
+            try? fm.removeItem(at: cirisDir.appendingPathComponent("startup_status.json"))
+        }
+
+        // Write initial extraction status
+        writeExtractionStatus(ExtractionStatus(phase: "extracting", filesExtracted: 0, totalFiles: nil, currentFile: "Starting..."))
 
         // Find Resources.zip in bundle
         guard let zipPath = Bundle.main.path(forResource: "Resources", ofType: "zip") else {
@@ -93,7 +174,14 @@ import Compression
             return nil
         }
 
+        // Get zip file size
+        if let attrs = try? fm.attributesOfItem(atPath: zipPath),
+           let fileSize = attrs[.size] as? Int64 {
+            NSLog("[PythonBridge] Resources.zip size: \(fileSize / 1024 / 1024) MB")
+        }
+
         NSLog("[PythonBridge] Extracting Resources.zip from \(zipPath)...")
+        NSLog("[PythonBridge] This may take 30-60 seconds on first launch...")
 
         // Clean up any partial extraction
         try? fm.removeItem(atPath: extractedPath)
@@ -112,8 +200,32 @@ import Compression
 
         do {
             try ZipExtractor.extract(zipURL: zipURL, to: destinationURL)
-            NSLog("[PythonBridge] Resources extracted successfully")
+            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+            NSLog("[PythonBridge] Resources extracted successfully in \(String(format: "%.1f", elapsed)) seconds")
             extractedResourcesPath = extractedPath
+
+            // Write version marker
+            try? versionString.write(toFile: versionMarkerPath, atomically: true, encoding: .utf8)
+            NSLog("[PythonBridge] Wrote version marker: \(versionString)")
+
+            // Verify kmp_main.py exists
+            if fm.fileExists(atPath: kmpMainPath) {
+                NSLog("[PythonBridge] Verified: kmp_main.py exists at \(kmpMainPath)")
+            } else {
+                NSLog("[PythonBridge] WARNING: kmp_main.py NOT found at \(kmpMainPath)")
+                // List what's in ciris_ios directory
+                if let contents = try? fm.contentsOfDirectory(atPath: "\(extractedPath)/app/ciris_ios") {
+                    NSLog("[PythonBridge] Contents of ciris_ios: \(contents)")
+                }
+            }
+
+            // Verify .fwork files exist (for device builds)
+            if fm.fileExists(atPath: pydanticFworkPath) {
+                NSLog("[PythonBridge] Verified: pydantic_core .fwork file exists")
+            } else if fm.fileExists(atPath: pydanticSoPath) {
+                NSLog("[PythonBridge] WARNING: pydantic_core has .so file instead of .fwork - native extensions may fail on device")
+            }
+
             return extractedPath
         } catch {
             NSLog("[PythonBridge] ERROR: Failed to extract zip: \(error)")
@@ -123,6 +235,8 @@ import Compression
 
     /// Start the CIRIS runtime in a background thread
     @objc public static func startRuntime() -> Bool {
+        NSLog("[PythonBridge] startRuntime() called")
+
         guard isInitialized else {
             NSLog("[PythonBridge] ERROR: Python not initialized")
             return false
@@ -133,15 +247,20 @@ import Compression
             return true
         }
 
-        NSLog("[PythonBridge] Starting CIRIS runtime...")
+        NSLog("[PythonBridge] Starting CIRIS runtime in background thread...")
+        NSLog("[PythonBridge] Module to run: ciris_ios.kmp_main")
 
         runtimeThread = Thread {
+            NSLog("[PythonBridge] [Thread] CIRIS Runtime thread started")
+            NSLog("[PythonBridge] [Thread] Calling PythonInit.runModule('ciris_ios.kmp_main')...")
             // Run KMP-specific entry point that bypasses Toga
             PythonInit.runModule("ciris_ios.kmp_main")
+            NSLog("[PythonBridge] [Thread] PythonInit.runModule() returned")
         }
         runtimeThread?.name = "CIRISRuntime"
         runtimeThread?.start()
 
+        NSLog("[PythonBridge] Background thread started, returning true")
         return true
     }
 
@@ -186,6 +305,29 @@ import Compression
         NSLog("[PythonBridge] Shutting down Python runtime...")
         isInitialized = false
         runtimeThread = nil
+    }
+}
+
+/// Extraction status for UI display
+struct ExtractionStatus: Codable {
+    var phase: String  // "extracting", "complete", "error"
+    var filesExtracted: Int
+    var totalFiles: Int?
+    var currentFile: String?
+    var error: String?
+}
+
+/// Write extraction status to file for UI to read
+func writeExtractionStatus(_ status: ExtractionStatus) {
+    let fm = FileManager.default
+    guard let documentsURL = fm.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+
+    let cirisDir = documentsURL.appendingPathComponent("ciris")
+    try? fm.createDirectory(at: cirisDir, withIntermediateDirectories: true)
+
+    let statusFile = cirisDir.appendingPathComponent("extraction_status.json")
+    if let data = try? JSONEncoder().encode(status) {
+        try? data.write(to: statusFile)
     }
 }
 
@@ -272,16 +414,27 @@ class ZipExtractor {
 
             extractedCount += 1
 
-            // Log progress every 500 files
-            if extractedCount % 500 == 0 {
-                NSLog("[ZipExtractor] Extracted \(extractedCount) files...")
+            // Log and write progress every 100 files
+            if extractedCount % 100 == 0 {
+                NSLog("[ZipExtractor] Progress: \(extractedCount) files extracted...")
+                writeExtractionStatus(ExtractionStatus(
+                    phase: "extracting",
+                    filesExtracted: extractedCount,
+                    totalFiles: nil,
+                    currentFile: fileName.components(separatedBy: "/").last
+                ))
             }
 
             // Move to next entry
             offset = dataEnd
         }
 
-        NSLog("[ZipExtractor] Extraction complete: \(extractedCount) files")
+        NSLog("[ZipExtractor] Extraction complete: \(extractedCount) total files")
+        writeExtractionStatus(ExtractionStatus(
+            phase: "complete",
+            filesExtracted: extractedCount,
+            totalFiles: extractedCount
+        ))
     }
 
     /// Decompress deflate-compressed data

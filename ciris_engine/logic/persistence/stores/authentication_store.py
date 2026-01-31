@@ -37,12 +37,21 @@ def init_auth_database(db_path: str) -> None:
     Args:
         db_path: Database connection string (SQLite path or PostgreSQL URL)
     """
+    import sys
+
     from ciris_engine.logic.persistence.db.dialect import DialectAdapter
 
     # Create adapter from db_path to determine database type
     # This avoids race conditions with global adapter in parallel tests
     adapter = DialectAdapter(db_path)
     is_postgres = adapter.is_postgresql()
+
+    # Detect iOS platform - iOS needs special handling for SQLite
+    is_ios = sys.platform == "ios" or (
+        sys.platform == "darwin"
+        and hasattr(sys, "implementation")
+        and "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
+    )
 
     # Import appropriate table definition based on database type
     if is_postgres:
@@ -58,8 +67,18 @@ def init_auth_database(db_path: str) -> None:
             for statement in statements:
                 cursor.execute(statement)
             cursor.close()
+        elif is_ios:
+            # iOS: Execute statements individually to avoid executescript issues
+            # in autocommit mode (isolation_level=None)
+            conn.execute("PRAGMA foreign_keys = ON")
+            statements = [s.strip() for s in WA_CERT_TABLE_V1.split(";") if s.strip()]
+            cursor = conn.cursor()
+            for statement in statements:
+                logger.debug(f"iOS auth init: executing {statement[:50]}...")
+                cursor.execute(statement)
+            cursor.close()
         else:
-            # SQLite: Use executescript and PRAGMA
+            # SQLite (non-iOS): Use executescript and PRAGMA
             conn.execute("PRAGMA foreign_keys = ON")
             conn.executescript(WA_CERT_TABLE_V1)
 
@@ -78,9 +97,17 @@ def init_auth_database(db_path: str) -> None:
             )
             existing_columns = {row[0] if isinstance(row, tuple) else row["column_name"] for row in cursor.fetchall()}
         else:
-            # SQLite: Use PRAGMA
+            # SQLite: Use PRAGMA - handle both tuple (desktop) and dict (iOS) row formats
             cursor.execute("PRAGMA table_info(wa_cert)")
-            existing_columns = {row[1] for row in cursor.fetchall()}
+            rows = cursor.fetchall()
+            existing_columns = set()
+            for row in rows:
+                # PRAGMA table_info returns: cid, name, type, notnull, dflt_value, pk
+                # On iOS, rows are dicts; on desktop, rows are tuples/Row objects
+                if isinstance(row, dict):
+                    existing_columns.add(row["name"])
+                else:
+                    existing_columns.add(row[1])
 
         # Column migrations for backward compatibility
         column_migrations = {

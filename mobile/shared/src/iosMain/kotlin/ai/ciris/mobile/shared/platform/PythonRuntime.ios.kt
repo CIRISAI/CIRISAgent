@@ -126,10 +126,21 @@ actual class PythonRuntime : PythonRuntimeProtocol {
     }
 
     /**
-     * Get services status from /v1/telemetry/unified endpoint.
+     * Get services status from local file (iOS) or telemetry endpoint.
      * Returns (online count, total count).
+     *
+     * On iOS, reads ~/Documents/ciris/service_status.json which is written
+     * by the Python service_initializer.py during startup. This avoids
+     * the authentication requirement of the telemetry API endpoint.
      */
     actual override suspend fun getServicesStatus(): Result<Pair<Int, Int>> {
+        // Try reading from file first (doesn't require auth)
+        val fileResult = readServiceStatusFile()
+        if (fileResult != null) {
+            return Result.success(fileResult)
+        }
+
+        // Fall back to API (requires auth, may not work during startup)
         return suspendCancellableCoroutine { continuation ->
             val nsUrl = NSURL.URLWithString("$serverUrl/v1/telemetry/unified")
             if (nsUrl == null) {
@@ -169,6 +180,38 @@ actual class PythonRuntime : PythonRuntimeProtocol {
                 }
             }
             task.resume()
+        }
+    }
+
+    /**
+     * Read service status from local file written by Python service_initializer.
+     * Returns (online, total) pair or null if file doesn't exist/can't be read.
+     */
+    private fun readServiceStatusFile(): Pair<Int, Int>? {
+        try {
+            val fileManager = NSFileManager.defaultManager
+            val homeDir = NSHomeDirectory()
+            val statusPath = "$homeDir/Documents/ciris/service_status.json"
+
+            if (!fileManager.fileExistsAtPath(statusPath)) {
+                return null
+            }
+
+            val data = fileManager.contentsAtPath(statusPath) ?: return null
+            val jsonString = NSString.create(data = data, encoding = NSUTF8StringEncoding)?.toString() ?: return null
+
+            // Parse JSON
+            val onlineMatch = Regex(""""services_online"\s*:\s*(\d+)""").find(jsonString)
+            val totalMatch = Regex(""""services_total"\s*:\s*(\d+)""").find(jsonString)
+
+            val online = onlineMatch?.groupValues?.get(1)?.toIntOrNull() ?: return null
+            val total = totalMatch?.groupValues?.get(1)?.toIntOrNull() ?: 22
+
+            println("[PythonRuntime.iOS] Read service status from file: $online/$total")
+            return online to total
+        } catch (e: Exception) {
+            println("[PythonRuntime.iOS] Error reading service status file: ${e.message}")
+            return null
         }
     }
 

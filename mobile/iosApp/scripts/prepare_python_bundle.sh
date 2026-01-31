@@ -63,6 +63,16 @@ if [ "$BUILD_TYPE" = "device" ]; then
     else
         echo "WARNING: Device lib-dynload not found at $DEVICE_DYNLOAD"
     fi
+
+    # Copy device-specific sysconfigdata (required for sysconfig/distutils)
+    DEVICE_SYSCONFIG="$PYTHON_XCF/ios-arm64/lib/python3.10/_sysconfigdata__ios_arm64-iphoneos.py"
+    if [ -f "$DEVICE_SYSCONFIG" ]; then
+        echo "Device build: Copying device sysconfigdata..."
+        cp "$DEVICE_SYSCONFIG" "$RESOURCES_DIR/python/lib/python3.10/"
+        echo "  Copied _sysconfigdata__ios_arm64-iphoneos.py"
+    else
+        echo "WARNING: Device sysconfigdata not found at $DEVICE_SYSCONFIG"
+    fi
 fi
 
 # Copy app code (CIRIS source) - EXCLUDING gui_static directories
@@ -93,12 +103,56 @@ done
 echo "Copying third-party packages..."
 rm -rf "$RESOURCES_DIR/app_packages"
 
+# Directory to store .so files for framework embedding (device builds only)
+NATIVE_MODULES_DIR="$IOS_APP_DIR/app_packages_native"
+rm -rf "$NATIVE_MODULES_DIR"
+
 if [ "$BUILD_TYPE" = "device" ]; then
-    # For device, use device-specific packages if available
+    # For device, use device-specific packages and replace .so with .fwork
     DEVICE_PACKAGES="$BEEWARE_APP/../../../CirisiOS/app_packages.iphoneos"
     if [ -d "$DEVICE_PACKAGES" ]; then
+        echo "  Processing device-specific app_packages..."
+        mkdir -p "$NATIVE_MODULES_DIR"
+
+        # Copy packages, but replace .so files with .fwork placeholders
         cp -R "$DEVICE_PACKAGES" "$RESOURCES_DIR/app_packages"
-        echo "  Using device-specific app_packages"
+
+        # Find all .so files and convert to .fwork
+        SO_COUNT=0
+        find "$RESOURCES_DIR/app_packages" -name "*.so" -type f | while read so_file; do
+            # Get the relative path from app_packages
+            rel_path="${so_file#$RESOURCES_DIR/app_packages/}"
+
+            # Create the framework name
+            # Remove ALL suffixes: .cpython-310-iphoneos.so, .abi3.so, etc.
+            # E.g., "pydantic_core/_pydantic_core.cpython-310-iphoneos.so" -> "pydantic_core/_pydantic_core"
+            # E.g., "cryptography/hazmat/bindings/_openssl.abi3.so" -> "cryptography/hazmat/bindings/_openssl"
+            module_path="$rel_path"
+            module_path="${module_path%.cpython-*}"    # Remove .cpython-310-iphoneos.so
+            module_path="${module_path%.abi3.so}"      # Remove .abi3.so
+            module_path="${module_path%.so}"           # Remove plain .so if any left
+            framework_name=$(echo "$module_path" | tr '/' '.')
+
+            # Create .fwork content pointing to the framework
+            fwork_path="${so_file%.so}.fwork"
+            echo "Frameworks/${framework_name}.framework/${framework_name}" > "$fwork_path"
+
+            # Copy .so to native modules directory for later framework embedding
+            # Preserve directory structure
+            so_dest_dir="$NATIVE_MODULES_DIR/$(dirname "$rel_path")"
+            mkdir -p "$so_dest_dir"
+            cp "$so_file" "$so_dest_dir/"
+
+            # Remove the original .so
+            rm "$so_file"
+
+            SO_COUNT=$((SO_COUNT + 1))
+        done
+
+        # Count results
+        FWORK_COUNT=$(find "$RESOURCES_DIR/app_packages" -name "*.fwork" | wc -l | tr -d ' ')
+        echo "  Created $FWORK_COUNT .fwork placeholders"
+        echo "  Native modules saved to: $NATIVE_MODULES_DIR"
     else
         cp -R "$BEEWARE_APP/app_packages" "$RESOURCES_DIR/"
     fi
@@ -112,6 +166,10 @@ rsync -a --exclude='__pycache__' --exclude='gui_static' "$CIRIS_ROOT/ciris_engin
 
 echo "Overlaying latest ciris_adapters from main repo..."
 rsync -a --exclude='__pycache__' "$CIRIS_ROOT/ciris_adapters/" "$RESOURCES_DIR/app/ciris_adapters/"
+
+# Overlay ciris_ios from source (includes kmp_main.py which is not in BeeWare build)
+echo "Overlaying ciris_ios from source (includes kmp_main.py)..."
+rsync -a --exclude='__pycache__' "$CIRIS_ROOT/ios/CirisiOS/src/ciris_ios/" "$RESOURCES_DIR/app/ciris_ios/"
 
 # Remove any __pycache__ directories
 echo "Cleaning up __pycache__ directories..."

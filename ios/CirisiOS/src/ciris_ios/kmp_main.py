@@ -25,8 +25,11 @@ def main():
     print("[KMP] Running without Toga (UI handled by Compose)")
     print("")
 
+    # CRITICAL: Set up iOS environment FIRST, before any checks
+    # This sets CIRIS_HOME which is needed for database path resolution
+    setup_ios_environment()
+
     if run_startup_checks():
-        setup_ios_environment()
         try:
             import asyncio
             asyncio.run(start_mobile_runtime())
@@ -37,6 +40,11 @@ def main():
             import traceback
             traceback.print_exc()
             raise
+    else:
+        # Startup checks failed - keep thread alive so Swift can read status
+        print("[KMP] Startup checks failed - runtime will not start")
+        print("[KMP] Check startup_status.json for details")
+        # Thread will exit, Swift will detect all_passed=false in status file
 
 
 if __name__ == "__main__":

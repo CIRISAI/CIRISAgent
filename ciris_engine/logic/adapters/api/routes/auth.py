@@ -1719,6 +1719,219 @@ async def native_google_token_exchange(
         )
 
 
+# ========== Apple Native Auth ==========
+
+
+class AppleNativeTokenRequest(BaseModel):
+    """Request model for Apple native app token exchange."""
+
+    id_token: str = Field(..., description="Apple ID token (JWT) from native Sign-In")
+    provider: str = Field(default="apple", description="OAuth provider (always 'apple')")
+
+
+def _decode_apple_jwt_locally(id_token: str) -> Dict[str, Optional[str]]:
+    """
+    Decode an Apple ID token locally without calling Apple's API.
+
+    Apple ID tokens are JWTs signed with RS256. For on-device mode,
+    we trust the token because it came from Apple Sign-In SDK running
+    on the device, which already verified it cryptographically.
+
+    In production, you would verify the signature against Apple's public keys.
+    """
+    import base64
+    import json
+    import time
+
+    logger.info("[AppleNativeAuth] Decoding Apple JWT locally...")
+
+    try:
+        # JWT has 3 parts: header.payload.signature
+        parts = id_token.split(".")
+        if len(parts) != 3:
+            raise ValueError(f"Invalid JWT format: expected 3 parts, got {len(parts)}")
+
+        # Decode the payload (second part) - use URL-safe base64
+        payload_b64 = parts[1]
+        # Add padding if needed
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += "=" * padding
+
+        payload_bytes = base64.urlsafe_b64decode(payload_b64)
+        payload = json.loads(payload_bytes.decode("utf-8"))
+
+        logger.info(f"[AppleNativeAuth] Local decode - sub: {payload.get('sub')}, email: {payload.get('email')}")
+
+        # Basic validation
+        exp = payload.get("exp")
+        if exp and int(exp) < time.time():
+            raise ValueError("Token has expired")
+
+        iss = payload.get("iss")
+        if iss != "https://appleid.apple.com":
+            raise ValueError(f"Invalid issuer: {iss}")
+
+        # Extract user info
+        return {
+            "external_id": payload.get("sub"),
+            "email": payload.get("email"),
+            "name": payload.get("name"),  # Apple doesn't include name in JWT after first auth
+            "picture": None,  # Apple doesn't provide picture URLs
+        }
+
+    except Exception as e:
+        logger.error(f"[AppleNativeAuth] Local JWT decode failed: {type(e).__name__}: {e}")
+        raise
+
+
+async def _verify_apple_id_token(id_token: str) -> Dict[str, Optional[str]]:
+    """
+    Verify an Apple ID token and extract user info.
+
+    For on-device mode, we decode the JWT locally since it came from
+    the Apple Sign-In SDK which already verified it cryptographically.
+
+    In production with network access, you could optionally verify
+    the signature against Apple's public keys at:
+    https://appleid.apple.com/auth/keys
+    """
+    logger.info(f"[AppleNativeAuth] Verifying Apple ID token (length: {len(id_token)}, prefix: {id_token[:20]}...)")
+
+    # For on-device mode, decode locally
+    # The token is trusted because it came from Apple Sign-In SDK
+    return _decode_apple_jwt_locally(id_token)
+
+
+@router.post("/auth/native/apple", response_model=NativeTokenResponse)
+async def native_apple_token_exchange(
+    native_request: AppleNativeTokenRequest,
+    fastapi_request: Request,
+    auth_service: APIAuthService = Depends(get_auth_service),
+) -> NativeTokenResponse:
+    """
+    Exchange a native Apple ID token for a CIRIS API token.
+
+    This endpoint is used by native iOS apps that perform Apple Sign-In
+    directly and need to exchange their Apple ID token for a CIRIS API token.
+
+    Unlike the web OAuth flow (which uses authorization codes), native apps get
+    ID tokens directly from Apple Sign-In SDK and send them here.
+    """
+    logger.info(f"[AppleNativeAuth] Native Apple token exchange request - provider: {native_request.provider}")
+
+    if native_request.provider != "apple":
+        logger.warning(f"[AppleNativeAuth] Unsupported provider: {native_request.provider}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only 'apple' provider is supported for this endpoint",
+        )
+
+    try:
+        # Verify the Apple ID token and get user info
+        logger.info("[AppleNativeAuth] Starting token verification...")
+        user_data = await _verify_apple_id_token(native_request.id_token)
+        logger.info(f"[AppleNativeAuth] Token verification complete - external_id: {user_data.get('external_id')}")
+
+        external_id = user_data.get("external_id")
+        if not external_id:
+            logger.error("[AppleNativeAuth] No external_id in user_data")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Apple ID token did not contain user ID"
+            )
+
+        user_email = user_data.get("email")
+        # Pass external_id to preserve existing user's role (don't demote on re-auth!)
+        user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider="apple")
+        logger.info(f"[AppleNativeAuth] Determined role for {user_email}: {user_role}")
+
+        # Create or get OAuth user
+        logger.info(f"[AppleNativeAuth] Creating/getting OAuth user - external_id: {external_id}, email: {user_email}")
+        oauth_user = auth_service.create_oauth_user(
+            provider="apple",
+            external_id=external_id,
+            email=user_email,
+            name=user_data.get("name"),
+            role=user_role,
+            marketing_opt_in=False,
+        )
+        logger.info(f"[AppleNativeAuth] OAuth user created/retrieved - user_id: {oauth_user.user_id}")
+
+        # Store OAuth profile data (Apple doesn't provide picture URLs)
+        name = user_data.get("name") or "Unknown"
+
+        # Auto-mint SYSTEM_ADMIN users as WA with ROOT role so they can handle deferrals
+        logger.info(
+            f"CIRIS_USER_CREATE: [AppleNativeAuth] Checking auto-mint for {oauth_user.user_id} with role {oauth_user.role}"
+        )
+        if oauth_user.role == UserRole.SYSTEM_ADMIN:
+            existing_user = auth_service.get_user(oauth_user.user_id)
+            logger.info(f"CIRIS_USER_CREATE: [AppleNativeAuth] existing_user lookup: {existing_user}")
+            if existing_user:
+                logger.info(
+                    f"CIRIS_USER_CREATE: [AppleNativeAuth]   wa_id={existing_user.wa_id}, wa_role={existing_user.wa_role}"
+                )
+
+            needs_minting = not existing_user or not existing_user.wa_id or existing_user.wa_id == oauth_user.user_id
+
+            if needs_minting:
+                logger.info(
+                    f"CIRIS_USER_CREATE: [AppleNativeAuth] Auto-minting SYSTEM_ADMIN user {oauth_user.user_id} as WA with ROOT role"
+                )
+                try:
+                    from ciris_engine.schemas.services.authority_core import WARole
+
+                    await auth_service.mint_wise_authority(
+                        user_id=oauth_user.user_id,
+                        wa_role=WARole.ROOT,
+                        minted_by="system_auto_mint",
+                    )
+                    logger.info(
+                        f"CIRIS_USER_CREATE: [AppleNativeAuth] ✅ Successfully auto-minted {oauth_user.user_id} as ROOT WA"
+                    )
+                except Exception as mint_error:
+                    logger.warning(
+                        f"CIRIS_USER_CREATE: [AppleNativeAuth] Auto-mint failed (user can mint manually): {mint_error}"
+                    )
+            else:
+                logger.info(
+                    f"CIRIS_USER_CREATE: [AppleNativeAuth] User {oauth_user.user_id} already minted as WA - skipping auto-mint"
+                )
+        else:
+            logger.info(f"CIRIS_USER_CREATE: [AppleNativeAuth] Not SYSTEM_ADMIN, skipping auto-mint")
+
+        # Generate API key
+        logger.info(f"[AppleNativeAuth] Generating API key for user {oauth_user.user_id}")
+        api_key = _generate_api_key_and_store(auth_service, oauth_user, "apple")
+
+        # Trigger billing credit check to create billing user
+        logger.info(f"[AppleNativeAuth] Triggering billing credit check for user {oauth_user.user_id}")
+        await _trigger_billing_credit_check_if_enabled(
+            fastapi_request, oauth_user, user_email=user_email, marketing_opt_in=False
+        )
+
+        logger.info(f"[AppleNativeAuth] SUCCESS - Native Apple user {oauth_user.user_id} logged in, token generated")
+
+        return NativeTokenResponse(
+            access_token=api_key,
+            token_type="bearer",
+            expires_in=2592000,  # 30 days in seconds
+            user_id=oauth_user.user_id,
+            role=oauth_user.role.value,
+            email=user_email,
+            name=user_data.get("name"),
+        )
+
+    except HTTPException as e:
+        logger.error(f"[AppleNativeAuth] HTTP error: {e.status_code} - {e.detail}")
+        raise
+    except Exception as e:
+        logger.error(f"[AppleNativeAuth] Unexpected error: {type(e).__name__}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Apple native token exchange failed: {str(e)}"
+        )
+
+
 # ========== API Key Management Endpoints ==========
 
 

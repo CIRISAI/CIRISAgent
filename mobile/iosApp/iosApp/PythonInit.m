@@ -12,7 +12,8 @@ static BOOL _isInitialized = NO;
 
 + (BOOL)initializeWithPythonHome:(NSString *)pythonHome
                          appPath:(NSString *)appPath
-                    packagesPath:(NSString *)packagesPath {
+                    packagesPath:(NSString *)packagesPath
+                   libDynloadPath:(NSString *)libDynloadPath {
 
     if (_isInitialized) {
         NSLog(@"[PythonInit] Already initialized");
@@ -46,7 +47,7 @@ static BOOL _isInitialized = NO;
     }
 
     // Set Python home
-    NSLog(@"[PythonInit] PythonHome: %@", pythonHome);
+    NSLog(@"[PythonInit] PythonHome: %{public}@", pythonHome);
     wtmp_str = Py_DecodeLocale([pythonHome UTF8String], NULL);
     status = PyConfig_SetString(&config, &config.home, wtmp_str);
     PyMem_RawFree(wtmp_str);
@@ -69,7 +70,7 @@ static BOOL _isInitialized = NO;
 
     // stdlib
     path = [NSString stringWithFormat:@"%@/lib/python%@", pythonHome, pythonTag];
-    NSLog(@"[PythonInit] - %@", path);
+    NSLog(@"[PythonInit] - %{public}@", path);
     wtmp_str = Py_DecodeLocale([path UTF8String], NULL);
     status = PyWideStringList_Append(&config.module_search_paths, wtmp_str);
     PyMem_RawFree(wtmp_str);
@@ -79,10 +80,10 @@ static BOOL _isInitialized = NO;
         return NO;
     }
 
-    // lib-dynload
-    path = [NSString stringWithFormat:@"%@/lib/python%@/lib-dynload", pythonHome, pythonTag];
-    NSLog(@"[PythonInit] - %@", path);
-    wtmp_str = Py_DecodeLocale([path UTF8String], NULL);
+    // lib-dynload - use the provided path (app bundle on device, extracted on simulator)
+    // CRITICAL: On device, this MUST be the app bundle path for code signature validation
+    NSLog(@"[PythonInit] - %{public}@ (lib-dynload)", libDynloadPath);
+    wtmp_str = Py_DecodeLocale([libDynloadPath UTF8String], NULL);
     status = PyWideStringList_Append(&config.module_search_paths, wtmp_str);
     PyMem_RawFree(wtmp_str);
     if (PyStatus_Exception(status)) {
@@ -92,7 +93,7 @@ static BOOL _isInitialized = NO;
     }
 
     // app path
-    NSLog(@"[PythonInit] - %@", appPath);
+    NSLog(@"[PythonInit] - %{public}@", appPath);
     wtmp_str = Py_DecodeLocale([appPath UTF8String], NULL);
     status = PyWideStringList_Append(&config.module_search_paths, wtmp_str);
     PyMem_RawFree(wtmp_str);
@@ -114,7 +115,7 @@ static BOOL _isInitialized = NO;
     PyConfig_Clear(&config);
 
     // Add app_packages as site directory
-    NSLog(@"[PythonInit] Adding app_packages as site directory: %@", packagesPath);
+    NSLog(@"[PythonInit] Adding app_packages as site directory: %{public}@", packagesPath);
 
     PyObject *site_module = PyImport_ImportModule("site");
     if (site_module == NULL) {
@@ -158,33 +159,38 @@ static BOOL _isInitialized = NO;
         return;
     }
 
-    NSLog(@"[PythonInit] Running module: %@", moduleName);
+    NSLog(@"[PythonInit] Running module: %{public}@", moduleName);
 
     PyObject *runpy_module = PyImport_ImportModule("runpy");
     if (runpy_module == NULL) {
         NSLog(@"[PythonInit] ERROR: Could not import runpy module");
-        PyErr_Print();
+        [self logPythonError];
         return;
     }
+    NSLog(@"[PythonInit] Imported runpy module");
 
     PyObject *run_module = PyObject_GetAttrString(runpy_module, "_run_module_as_main");
     if (run_module == NULL) {
         NSLog(@"[PythonInit] ERROR: Could not access runpy._run_module_as_main");
         Py_DECREF(runpy_module);
-        PyErr_Print();
+        [self logPythonError];
         return;
     }
+    NSLog(@"[PythonInit] Got _run_module_as_main function");
 
     PyObject *module_name_obj = PyUnicode_FromString([moduleName UTF8String]);
     PyObject *args = Py_BuildValue("(Oi)", module_name_obj, 0);
 
     NSLog(@"[PythonInit] ---------------------------------------------------------------------------");
+    NSLog(@"[PythonInit] Calling module: %{public}@", moduleName);
 
     PyObject *result = PyObject_Call(run_module, args, NULL);
 
     if (result == NULL) {
         NSLog(@"[PythonInit] ERROR: Module execution failed");
-        PyErr_Print();
+        [self logPythonError];
+    } else {
+        NSLog(@"[PythonInit] Module execution completed successfully");
     }
 
     Py_XDECREF(result);
@@ -192,6 +198,80 @@ static BOOL _isInitialized = NO;
     Py_DECREF(module_name_obj);
     Py_DECREF(run_module);
     Py_DECREF(runpy_module);
+}
+
++ (void)logPythonError {
+    // Get the error info
+    PyObject *ptype, *pvalue, *ptraceback;
+    PyErr_Fetch(&ptype, &pvalue, &ptraceback);
+
+    // Build error message for file output
+    NSMutableString *errorLog = [NSMutableString stringWithString:@"=== Python Error Log ===\n"];
+    [errorLog appendFormat:@"Time: %@\n\n", [NSDate date]];
+
+    if (pvalue != NULL) {
+        PyObject *pstr = PyObject_Str(pvalue);
+        if (pstr != NULL) {
+            const char *error_msg = PyUnicode_AsUTF8(pstr);
+            if (error_msg != NULL) {
+                // Use %{public}s to bypass iOS privacy filter
+                NSLog(@"[PythonInit] Python Error: %{public}s", error_msg);
+                [errorLog appendFormat:@"Error: %s\n\n", error_msg];
+            }
+            Py_DECREF(pstr);
+        }
+    }
+
+    // Also try to get the traceback
+    if (ptraceback != NULL) {
+        PyObject *tb_module = PyImport_ImportModule("traceback");
+        if (tb_module != NULL) {
+            PyObject *format_tb = PyObject_GetAttrString(tb_module, "format_exception");
+            if (format_tb != NULL && PyCallable_Check(format_tb)) {
+                PyObject *tb_args = Py_BuildValue("(OOO)",
+                    ptype ? ptype : Py_None,
+                    pvalue ? pvalue : Py_None,
+                    ptraceback ? ptraceback : Py_None);
+                PyObject *tb_list = PyObject_CallObject(format_tb, tb_args);
+                if (tb_list != NULL) {
+                    Py_ssize_t len = PyList_Size(tb_list);
+                    NSLog(@"[PythonInit] Traceback (%ld lines):", (long)len);
+                    [errorLog appendString:@"Traceback:\n"];
+                    for (Py_ssize_t i = 0; i < len; i++) {
+                        PyObject *line = PyList_GetItem(tb_list, i);
+                        const char *line_str = PyUnicode_AsUTF8(line);
+                        if (line_str != NULL) {
+                            // Use %{public}s to bypass iOS privacy filter
+                            NSLog(@"[PythonInit]   %{public}s", line_str);
+                            [errorLog appendFormat:@"%s", line_str];
+                        }
+                    }
+                    Py_DECREF(tb_list);
+                }
+                Py_DECREF(tb_args);
+                Py_DECREF(format_tb);
+            }
+            Py_DECREF(tb_module);
+        }
+    }
+
+    // Write error to file in Documents directory
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    if (paths.count > 0) {
+        NSString *documentsPath = paths[0];
+        NSString *errorFilePath = [documentsPath stringByAppendingPathComponent:@"python_error.log"];
+        NSError *writeError = nil;
+        [errorLog writeToFile:errorFilePath atomically:YES encoding:NSUTF8StringEncoding error:&writeError];
+        if (writeError) {
+            NSLog(@"[PythonInit] Failed to write error log: %@", writeError);
+        } else {
+            NSLog(@"[PythonInit] Error log written to: %@", errorFilePath);
+        }
+    }
+
+    // Restore and print the error
+    PyErr_Restore(ptype, pvalue, ptraceback);
+    PyErr_Print();
 }
 
 + (BOOL)isInitialized {

@@ -5,28 +5,113 @@ struct ContentView: View {
     @State private var pythonReady = false
     @State private var initError: String? = nil
     @State private var failedSteps: [StartupStep] = []
+    @State private var isReconnecting = false
+    @State private var reconnectFailed = false
+    @State private var reconnectAttempts = 0
     @StateObject private var storeKitManager = StoreKitManager.shared
+    @Environment(\.scenePhase) var scenePhase
 
     var body: some View {
-        if pythonReady {
-            // Show the Compose UI with Apple Sign-In and StoreKit support once Python is ready
-            ComposeViewWithAuthAndStore(storeKitManager: storeKitManager)
-                .ignoresSafeArea()
-        } else if let error = initError {
-            // Show error state with failed steps
-            StartupErrorView(message: error, failedSteps: failedSteps) {
-                // Retry
-                initError = nil
-                failedSteps = []
-                Task {
+        ZStack {
+            if pythonReady {
+                // Show the Compose UI with Apple Sign-In and StoreKit support once Python is ready
+                ComposeViewWithAuthAndStore(storeKitManager: storeKitManager)
+                    .ignoresSafeArea()
+
+                // Overlay while reconnecting or if reconnect failed
+                if isReconnecting {
+                    ReconnectingOverlay()
+                } else if reconnectFailed {
+                    RestartRequiredOverlay(
+                        retryCount: reconnectAttempts,
+                        onRetry: {
+                            Task {
+                                await checkAndRestartServerIfNeeded()
+                            }
+                        },
+                        onExit: {
+                            // Use KMP AppRestarter to terminate app
+                            AppRestarter.shared.restartApp()
+                        }
+                    )
+                }
+            } else if let error = initError {
+                // Show error state with failed steps
+                StartupErrorView(message: error, failedSteps: failedSteps) {
+                    // Retry
+                    initError = nil
+                    failedSteps = []
+                    Task {
+                        await initializePython()
+                    }
+                }
+            } else {
+                // Show loading while initializing Python
+                InitializingView(onInitialize: {
                     await initializePython()
+                })
+            }
+        }
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .active && pythonReady {
+                // App came to foreground - check if server is still alive
+                NSLog("[ContentView] App became active, checking server health...")
+                Task {
+                    await checkAndRestartServerIfNeeded()
                 }
             }
-        } else {
-            // Show loading while initializing Python
-            InitializingView(onInitialize: {
-                await initializePython()
-            })
+        }
+    }
+
+    /// Check if server is alive after app resume and restart if needed
+    private func checkAndRestartServerIfNeeded() async {
+        // Give iOS a moment to resume all threads before we start checking
+        try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5 seconds
+
+        // Quick initial check
+        let serverAlive = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let alive = PythonBridge.checkHealth()
+                continuation.resume(returning: alive)
+            }
+        }
+
+        if serverAlive {
+            NSLog("[ContentView] Server is healthy after resume")
+            await MainActor.run {
+                isReconnecting = false
+                reconnectFailed = false
+                reconnectAttempts = 0  // Reset on success
+            }
+            return
+        }
+
+        NSLog("[ContentView] Server not responding after resume, waiting for recovery...")
+
+        await MainActor.run {
+            isReconnecting = true
+            reconnectFailed = false
+        }
+
+        // Wait for the server to resume - this calls ensureServerRunning which waits up to 30s
+        let success = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let result = PythonBridge.ensureServerRunning()
+                continuation.resume(returning: result)
+            }
+        }
+
+        await MainActor.run {
+            isReconnecting = false
+            if success {
+                NSLog("[ContentView] Server recovered successfully")
+                reconnectFailed = false
+                reconnectAttempts = 0  // Reset on success
+            } else {
+                reconnectAttempts += 1
+                NSLog("[ContentView] Server did not recover (attempt \(reconnectAttempts))")
+                reconnectFailed = true
+            }
         }
     }
 
@@ -376,6 +461,126 @@ struct StartupStepRow: View {
         case "failed": return .red
         case "running": return cirisColor
         default: return .gray
+        }
+    }
+}
+
+// MARK: - Reconnecting Overlay
+
+struct ReconnectingOverlay: View {
+    let cirisColor = Color(red: 0.255, green: 0.612, blue: 0.627)
+    @State private var dots = ""
+    @State private var timer: Timer?
+
+    var body: some View {
+        ZStack {
+            // Semi-transparent background
+            Color.black.opacity(0.7)
+                .ignoresSafeArea()
+
+            VStack(spacing: 16) {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: cirisColor))
+                    .scaleEffect(1.5)
+
+                Text("Resuming\(dots)")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.white)
+                    .frame(width: 150)
+
+                Text("Please wait...")
+                    .font(.system(size: 14))
+                    .foregroundColor(.gray)
+            }
+            .padding(32)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(red: 0.12, green: 0.12, blue: 0.18))
+            )
+        }
+        .onAppear {
+            // Animate dots
+            timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+                if dots.count >= 3 {
+                    dots = ""
+                } else {
+                    dots += "."
+                }
+            }
+        }
+        .onDisappear {
+            timer?.invalidate()
+        }
+    }
+}
+
+// MARK: - Restart Required Overlay
+
+struct RestartRequiredOverlay: View {
+    let cirisColor = Color(red: 0.255, green: 0.612, blue: 0.627)
+    let retryCount: Int
+    let onRetry: () -> Void
+    let onExit: () -> Void
+
+    var body: some View {
+        ZStack {
+            // Semi-transparent background
+            Color.black.opacity(0.85)
+                .ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                Image(systemName: "wifi.exclamationmark")
+                    .font(.system(size: 48))
+                    .foregroundColor(.orange)
+
+                Text("Connection Lost")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.white)
+
+                Text("The server stopped while the app was sleeping.")
+                    .font(.system(size: 14))
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+
+                // Show both buttons - user can choose
+                HStack(spacing: 16) {
+                    Button(action: onRetry) {
+                        HStack {
+                            Image(systemName: "arrow.clockwise")
+                            Text("Try Again")
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(cirisColor)
+                        .cornerRadius(8)
+                    }
+
+                    Button(action: onExit) {
+                        HStack {
+                            Image(systemName: "arrow.uturn.left")
+                            Text("Restart App")
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(Color.orange)
+                        .cornerRadius(8)
+                    }
+                }
+                .padding(.top, 8)
+
+                if retryCount > 0 {
+                    Text("Retry attempts: \(retryCount)")
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray.opacity(0.6))
+                }
+            }
+            .padding(32)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(red: 0.12, green: 0.12, blue: 0.18))
+            )
         }
     }
 }

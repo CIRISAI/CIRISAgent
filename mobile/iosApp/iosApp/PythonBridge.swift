@@ -320,6 +320,103 @@ import Compression
         isInitialized = false
         runtimeThread = nil
     }
+
+    /// Check if the server is responsive (for lifecycle management)
+    @objc public static func isServerAlive() -> Bool {
+        // Quick health check - if thread died or server not responding, return false
+        if runtimeThread == nil || !(runtimeThread?.isExecuting ?? false) {
+            NSLog("[PythonBridge] Server check: runtime thread not running")
+            return false
+        }
+        return checkHealth()
+    }
+
+    /// Signal Python to restart the server by writing a signal file
+    @objc public static func writeRestartSignal() {
+        let fm = FileManager.default
+        guard let documentsPath = fm.urls(for: .documentDirectory, in: .userDomainMask).first?.path else {
+            NSLog("[PythonBridge] ERROR: Could not get Documents directory")
+            return
+        }
+
+        let signalPath = "\(documentsPath)/ciris/.restart_signal"
+        let cirisDir = "\(documentsPath)/ciris"
+
+        // Ensure directory exists
+        try? fm.createDirectory(atPath: cirisDir, withIntermediateDirectories: true)
+
+        // Write signal file
+        let timestamp = "\(Date().timeIntervalSince1970)"
+        try? timestamp.write(toFile: signalPath, atomically: true, encoding: .utf8)
+        NSLog("[PythonBridge] Wrote restart signal to \(signalPath)")
+    }
+
+    /// Check if server ready signal exists (indicates server restarted successfully)
+    @objc public static func checkServerReady() -> Bool {
+        let fm = FileManager.default
+        guard let documentsPath = fm.urls(for: .documentDirectory, in: .userDomainMask).first?.path else {
+            return false
+        }
+        let readyPath = "\(documentsPath)/ciris/.server_ready"
+        return fm.fileExists(atPath: readyPath)
+    }
+
+    /// Wait for the runtime to resume or restart after iOS suspended it
+    /// Returns true if server responds within timeout
+    /// Uses restart signaling to tell Python to restart the server
+    @objc public static func ensureServerRunning() -> Bool {
+        NSLog("[PythonBridge] ensureServerRunning() called")
+
+        // First quick check if server is responding
+        if checkHealth() {
+            NSLog("[PythonBridge] Server is healthy")
+            return true
+        }
+
+        NSLog("[PythonBridge] Server not responding, checking thread state...")
+
+        // Check if thread exists
+        if let thread = runtimeThread {
+            NSLog("[PythonBridge] Runtime thread exists:")
+            NSLog("[PythonBridge]   - isExecuting: \(thread.isExecuting)")
+            NSLog("[PythonBridge]   - isFinished: \(thread.isFinished)")
+
+            // Wait briefly for natural resume (2 seconds)
+            for i in 1...2 {
+                Thread.sleep(forTimeInterval: 1.0)
+                if checkHealth() {
+                    NSLog("[PythonBridge] Server resumed naturally after \(i)s")
+                    return true
+                }
+            }
+
+            // Server didn't resume naturally - write restart signal
+            NSLog("[PythonBridge] Server not responding, writing restart signal...")
+            writeRestartSignal()
+
+            // Wait for Python to restart the server (up to 10 seconds)
+            for i in 1...10 {
+                Thread.sleep(forTimeInterval: 1.0)
+
+                if checkHealth() {
+                    NSLog("[PythonBridge] Server restarted successfully after \(i)s")
+                    return true
+                }
+
+                // Log progress
+                if i % 3 == 0 {
+                    NSLog("[PythonBridge] Waiting for restart... (\(i)s)")
+                }
+            }
+
+            NSLog("[PythonBridge] Server did not restart within 10s")
+        } else {
+            NSLog("[PythonBridge] No runtime thread exists")
+        }
+
+        NSLog("[PythonBridge] Server recovery failed - app restart may be required")
+        return false
+    }
 }
 
 /// Extraction status for UI display

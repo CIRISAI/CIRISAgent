@@ -8,6 +8,7 @@ Commands:
     test [tests]      - Run UI automation tests (default)
     pull-logs         - Pull device logs and files for debugging
     go-screen         - Navigate to a specific app screen and take a screenshot
+    build             - Build and deploy iOS/Android app
 
 Examples:
     # Run full flow test with test account
@@ -26,6 +27,11 @@ Examples:
     # Navigate to a screen and take screenshot
     python -m tools.qa_runner.modules.mobile go-screen billing
     python -m tools.qa_runner.modules.mobile go-screen telemetry -o ./screenshots
+
+    # Build and deploy iOS app
+    python -m tools.qa_runner.modules.mobile build --platform ios
+    python -m tools.qa_runner.modules.mobile build --platform ios --device DEVICE_UDID
+    python -m tools.qa_runner.modules.mobile build --platform ios --simulator
 """
 
 import os
@@ -436,6 +442,121 @@ def go_screen_command(args) -> int:
     return 0
 
 
+def build_command(args) -> int:
+    """Handle the build subcommand."""
+    print("\n" + "=" * 60)
+    print("CIRIS Mobile Build & Deploy")
+    print("=" * 60 + "\n")
+
+    platform = args.platform
+
+    if platform == "ios":
+        try:
+            from .ios.build_helper import iOSBuildHelper, iOSBuildConfig
+        except ImportError as e:
+            print(f"[ERROR] Failed to import iOS build helper: {e}")
+            return 1
+
+        # Create config
+        config = iOSBuildConfig(
+            project_dir=Path(__file__).parent.parent.parent.parent.parent / "mobile" / "iosApp",
+            scheme=args.scheme,
+            configuration=args.configuration,
+            prepare_bundle=not args.no_prepare,
+            clean_build=args.clean,
+            verbose=args.verbose,
+        )
+
+        helper = iOSBuildHelper(config)
+
+        # Determine target preference
+        prefer_physical = not args.simulator
+
+        print(f"[INFO] Build configuration:")
+        print(f"  Scheme: {config.scheme}")
+        print(f"  Configuration: {config.configuration}")
+        print(f"  Prepare bundle: {config.prepare_bundle}")
+        print(f"  Clean build: {config.clean_build}")
+        print(f"  Prefer physical device: {prefer_physical}")
+        if args.device:
+            print(f"  Target device: {args.device}")
+        print()
+
+        # Build and run
+        success, device = helper.build_and_run(
+            device_id=args.device,
+            prefer_physical=prefer_physical,
+            prepare_bundle=config.prepare_bundle,
+        )
+
+        if success and device:
+            print(f"\n[SUCCESS] App deployed to {device.name or device.identifier}")
+            return 0
+        elif success:
+            print("\n[SUCCESS] Build completed")
+            return 0
+        else:
+            print("\n[ERROR] Build or deploy failed")
+            return 1
+
+    elif platform == "android":
+        print("[INFO] Building Android APK...")
+        import subprocess
+
+        mobile_dir = Path(__file__).parent.parent.parent.parent.parent / "mobile"
+
+        # Build APK
+        gradle_cmd = ["./gradlew", ":androidApp:assembleDebug"]
+        if args.clean:
+            gradle_cmd = ["./gradlew", "clean", ":androidApp:assembleDebug"]
+
+        result = subprocess.run(gradle_cmd, cwd=mobile_dir, capture_output=not args.verbose, text=True)
+
+        if result.returncode != 0:
+            print(f"[ERROR] Build failed")
+            if not args.verbose and result.stderr:
+                print(result.stderr[-2000:])  # Last 2000 chars
+            return 1
+
+        print("[SUCCESS] APK built successfully")
+        apk_path = mobile_dir / "androidApp/build/outputs/apk/debug/androidApp-debug.apk"
+
+        if not args.build_only:
+            # Install to device
+            try:
+                adb = ADBHelper(adb_path=args.adb_path, device_serial=args.device)
+                devices = adb.get_devices()
+                connected = [d for d in devices if d.state == "device"]
+
+                if not connected:
+                    print("[WARN] No Android devices connected, skipping install")
+                else:
+                    device = connected[0]
+                    if args.device:
+                        device = next((d for d in connected if d.serial == args.device), device)
+
+                    print(f"[INFO] Installing to {device.serial}...")
+                    adb._run_adb(["install", "-r", str(apk_path)])
+                    print("[SUCCESS] APK installed")
+
+                    if not args.no_launch:
+                        print("[INFO] Launching app...")
+                        adb._run_adb([
+                            "shell", "am", "start", "-n",
+                            "ai.ciris.mobile/.MainActivity"
+                        ])
+                        print("[SUCCESS] App launched")
+            except Exception as e:
+                print(f"[WARN] Install/launch failed: {e}")
+                return 1
+
+        return 0
+
+    else:
+        print(f"[ERROR] Unknown platform: {platform}")
+        return 1
+
+
 def test_command(args) -> int:
     """Handle the test subcommand."""
     print("\n" + "=" * 60)
@@ -598,6 +719,46 @@ Examples:
         help="Android package name (default: ai.ciris.mobile)",
     )
 
+    # ========== build subcommand ==========
+    build_parser = subparsers.add_parser(
+        "build",
+        help="Build and deploy iOS/Android app",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+iOS Build Examples:
+  python -m tools.qa_runner.modules.mobile build --platform ios
+  python -m tools.qa_runner.modules.mobile build --platform ios --device UDID
+  python -m tools.qa_runner.modules.mobile build --platform ios --simulator
+  python -m tools.qa_runner.modules.mobile build --platform ios --clean --verbose
+
+Android Build Examples:
+  python -m tools.qa_runner.modules.mobile build --platform android
+  python -m tools.qa_runner.modules.mobile build --platform android --device emulator-5554
+
+Notes:
+  iOS builds require Xcode and a valid development certificate.
+  For physical devices, ensure the device is connected and trusted.
+  For simulators, one will be auto-selected or booted if needed.
+""",
+    )
+    build_parser.add_argument(
+        "--platform",
+        "-p",
+        choices=["ios", "android"],
+        required=True,
+        help="Target platform (required)",
+    )
+    build_parser.add_argument("--device", "-d", help="Device UDID/serial (auto-selects if not specified)")
+    build_parser.add_argument("--simulator", "-s", action="store_true", help="Prefer iOS simulator over physical device")
+    build_parser.add_argument("--scheme", default="iosApp", help="Xcode scheme (default: iosApp)")
+    build_parser.add_argument("--configuration", "-c", default="Debug", help="Build configuration (default: Debug)")
+    build_parser.add_argument("--clean", action="store_true", help="Clean build before building")
+    build_parser.add_argument("--no-prepare", action="store_true", help="Skip Python bundle preparation (iOS)")
+    build_parser.add_argument("--build-only", action="store_true", help="Build only, don't install/launch")
+    build_parser.add_argument("--no-launch", action="store_true", help="Install but don't launch the app")
+    build_parser.add_argument("--adb-path", help="Path to adb binary (Android only)")
+    build_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+
     # ========== test subcommand ==========
     test_parser = subparsers.add_parser(
         "test",
@@ -689,6 +850,8 @@ Examples:
         return pull_logs_command(args)
     elif args.command == "go-screen":
         return go_screen_command(args)
+    elif args.command == "build":
+        return build_command(args)
     elif args.command == "test":
         return test_command(args)
     else:

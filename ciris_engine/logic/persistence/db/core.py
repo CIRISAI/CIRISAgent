@@ -243,6 +243,47 @@ class PostgreSQLConnectionWrapper:
         self._conn.close()
 
 
+class iOSDictRow(dict):
+    """A dict subclass that supports both string key and integer index access.
+
+    This mimics sqlite3.Row behavior for iOS compatibility:
+    - row["column_name"] works (string key access)
+    - row[0], row[1] works (integer index access)
+    - dict(row) and **row only yield string keys (for Pydantic model unpacking)
+
+    The integer index access is provided via __getitem__ override, but integers
+    are NOT stored as dict keys. This ensures Task(**row) works correctly.
+    """
+
+    def __init__(self, string_dict: dict, column_order: list):
+        """Initialize with string-keyed dict and column order for integer access.
+
+        Args:
+            string_dict: Dict with string keys only
+            column_order: List of column names in order, for integer indexing
+        """
+        super().__init__(string_dict)
+        self._column_order = column_order
+
+    def __getitem__(self, key):
+        """Support both string and integer key access."""
+        if isinstance(key, int):
+            # Integer access - look up column name by index
+            if 0 <= key < len(self._column_order):
+                col_name = self._column_order[key]
+                return super().__getitem__(col_name)
+            raise IndexError(f"Index {key} out of range (columns: {len(self._column_order)})")
+        # String access - normal dict behavior
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        """Support both string and integer key access with default."""
+        try:
+            return self.__getitem__(key)
+        except (KeyError, IndexError):
+            return default
+
+
 class iOSSerializedCursor:
     """Cursor wrapper that serializes all access for iOS compatibility.
 
@@ -288,25 +329,31 @@ class iOSSerializedCursor:
             return self
 
     def _row_to_dict(self, row: Any) -> dict:
-        """Convert sqlite3.Row to dict, preserving both column name AND integer key access.
+        """Convert sqlite3.Row to iOSDictRow for iOS compatibility.
 
-        This is critical for iOS compatibility - many parts of the codebase use
-        integer indexing (row[0], row[1]) while others use column names (row["name"]).
-        We provide both so existing code works without modification.
+        Returns an iOSDictRow that:
+        - Supports string key access: row["column_name"]
+        - Supports integer index access: row[0], row[1]
+        - Only yields string keys for dict() and ** unpacking
+
+        This ensures both `row[0]` and `Task(**row)` work correctly.
         """
         if row is None:
             return None
         # Get column names from cursor description
         if self._cursor.description:
             columns = [col[0] for col in self._cursor.description]
-            result = {}
-            # Add both column name keys AND integer keys
-            for i, (col_name, value) in enumerate(zip(columns, row)):
-                result[col_name] = value
-                result[i] = value  # Also support integer indexing
-            return result
-        # Fallback to integer keys only if no description
-        return dict(enumerate(row))
+            string_dict = {}
+            for col_name, value in zip(columns, row):
+                string_dict[col_name] = value
+            # Return iOSDictRow that supports both string and integer access
+            return iOSDictRow(string_dict, columns)
+        # Fallback: try to get keys from the row itself if it's dict-like
+        if hasattr(row, 'keys'):
+            return dict(row)
+        # Last resort: log warning and return empty dict
+        logger.warning("[iOS_CURSOR] _row_to_dict: no description and row has no keys()")
+        return {}
 
     def fetchone(self) -> Any:
         if self._closed:

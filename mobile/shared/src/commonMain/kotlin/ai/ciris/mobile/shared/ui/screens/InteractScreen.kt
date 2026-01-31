@@ -34,9 +34,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -102,7 +104,8 @@ fun InteractScreen(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFFFAFAFA))
-            .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
+            // Don't apply imePadding to entire screen - apply to input bar only
+            // This avoids iOS issues where keyboard insets don't reset properly
     ) {
         // Main content column
         Column(
@@ -178,8 +181,8 @@ fun InteractScreen(
         }
 
             // Input bar with agent state icon
-            // Note: Don't use windowInsetsPadding(navigationBars) here as it conflicts
-            // with imePadding() on parent, creating a gap when keyboard is open
+            // Apply imePadding and navigationBarsPadding here at the input bar level
+            // This ensures keyboard pushes the input up without leaving ghost gaps
             ChatInputBarWithBubbles(
                 text = inputText,
                 onTextChange = { viewModel.onInputTextChanged(it) },
@@ -191,7 +194,10 @@ fun InteractScreen(
                 bubbleEmojis = bubbleEmojis,
                 sseConnected = sseConnected,
                 onLegendToggle = { viewModel.toggleLegend() },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .navigationBarsPadding()
             )
         } // End of Column
 

@@ -124,8 +124,10 @@ import Compression
 
         // Check for .fwork files as an indicator of new-style extraction
         // Old extractions have .so files, new ones have .fwork files
+        // Also check for simulator vs device mismatch - simulator has "iphonesimulator" in filename
         let pydanticFworkPath = "\(extractedPath)/app_packages/pydantic_core/_pydantic_core.cpython-310-iphoneos.fwork"
         let pydanticSoPath = "\(extractedPath)/app_packages/pydantic_core/_pydantic_core.cpython-310-iphoneos.so"
+        let pydanticSimulatorFworkPath = "\(extractedPath)/app_packages/pydantic_core/_pydantic_core.cpython-310-iphonesimulator.fwork"
 
         var needsReextract = false
 
@@ -135,17 +137,29 @@ import Compression
                 NSLog("[PythonBridge] Old-style extraction detected (.so files instead of .fwork)")
                 NSLog("[PythonBridge] Will re-extract to get .fwork files for code signing")
                 needsReextract = true
-            } else if let existingVersion = try? String(contentsOfFile: versionMarkerPath, encoding: .utf8),
-                      existingVersion.trimmingCharacters(in: .whitespacesAndNewlines) == versionString {
-                NSLog("[PythonBridge] Resources already extracted at \(extractedPath)")
-                NSLog("[PythonBridge] - python/lib exists: YES")
-                NSLog("[PythonBridge] - kmp_main.py exists: YES")
-                NSLog("[PythonBridge] - Version matches: \(versionString)")
-                extractedResourcesPath = extractedPath
-                return extractedPath
-            } else {
-                NSLog("[PythonBridge] Version mismatch or marker missing, will re-extract")
+            }
+            // On device, check if we have simulator .fwork files (wrong platform)
+            #if !targetEnvironment(simulator)
+            if !needsReextract && fm.fileExists(atPath: pydanticSimulatorFworkPath) {
+                NSLog("[PythonBridge] Simulator extraction detected on device (iphonesimulator.fwork)")
+                NSLog("[PythonBridge] Will re-extract with device-specific resources")
                 needsReextract = true
+            }
+            #endif
+            // If no re-extract needed yet, check version
+            if !needsReextract {
+                if let existingVersion = try? String(contentsOfFile: versionMarkerPath, encoding: .utf8),
+                   existingVersion.trimmingCharacters(in: .whitespacesAndNewlines) == versionString {
+                    NSLog("[PythonBridge] Resources already extracted at \(extractedPath)")
+                    NSLog("[PythonBridge] - python/lib exists: YES")
+                    NSLog("[PythonBridge] - kmp_main.py exists: YES")
+                    NSLog("[PythonBridge] - Version matches: \(versionString)")
+                    extractedResourcesPath = extractedPath
+                    return extractedPath
+                } else {
+                    NSLog("[PythonBridge] Version mismatch or marker missing, will re-extract")
+                    needsReextract = true
+                }
             }
         } else {
             NSLog("[PythonBridge] Need to extract resources:")

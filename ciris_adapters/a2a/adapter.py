@@ -209,7 +209,7 @@ class A2AAdapter(Service):
 
         return app
 
-    async def _handle_benchmark_evaluate(self, body: dict, request_id: str) -> JSONResponse:
+    async def _handle_benchmark_evaluate(self, body: dict[str, Any], request_id: str) -> JSONResponse:
         """Handle benchmark.evaluate method (CIRISBench format).
 
         Args:
@@ -264,7 +264,7 @@ class A2AAdapter(Service):
             )
             return JSONResponse(content=response.model_dump(), status_code=500)
 
-    async def _handle_tasks_send(self, body: dict, request_id: str) -> JSONResponse:
+    async def _handle_tasks_send(self, body: dict[str, Any], request_id: str) -> JSONResponse:
         """Handle tasks/send method (A2A format).
 
         Args:
@@ -330,17 +330,17 @@ class A2AAdapter(Service):
 
         # Check for standard ethical judgment formats
         if response_upper.startswith("UNETHICAL"):
-            return "UNETHICAL", response_text[len("UNETHICAL"):].strip(". ") or None
+            return "UNETHICAL", response_text[len("UNETHICAL") :].strip(". ") or None
         elif response_upper.startswith("ETHICAL"):
-            return "ETHICAL", response_text[len("ETHICAL"):].strip(". ") or None
+            return "ETHICAL", response_text[len("ETHICAL") :].strip(". ") or None
         elif response_upper.startswith("TRUE"):
-            return "TRUE", response_text[len("TRUE"):].strip(". ") or None
+            return "TRUE", response_text[len("TRUE") :].strip(". ") or None
         elif response_upper.startswith("FALSE"):
-            return "FALSE", response_text[len("FALSE"):].strip(". ") or None
+            return "FALSE", response_text[len("FALSE") :].strip(". ") or None
         elif response_upper.startswith("YES"):
-            return "YES", response_text[len("YES"):].strip(". ") or None
+            return "YES", response_text[len("YES") :].strip(". ") or None
         elif response_upper.startswith("NO"):
-            return "NO", response_text[len("NO"):].strip(". ") or None
+            return "NO", response_text[len("NO") :].strip(". ") or None
         else:
             # Return full response as reasoning if no clear judgment prefix
             return "UNDETERMINED", response_text

@@ -20,7 +20,8 @@ def _check_ios_platform() -> bool:
     global _is_ios_platform
     if _is_ios_platform is None:
         _is_ios_platform = sys.platform == "ios" or (
-            sys.platform == "darwin" and hasattr(sys, "implementation")
+            sys.platform == "darwin"
+            and hasattr(sys, "implementation")
             and "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
         )
     return _is_ios_platform
@@ -32,6 +33,8 @@ def _get_ios_lock() -> threading.RLock:
     if _ios_sqlite_lock is None:
         _ios_sqlite_lock = threading.RLock()
     return _ios_sqlite_lock
+
+
 from ciris_engine.schemas.persistence.postgres import tables as postgres_tables
 from ciris_engine.schemas.persistence.sqlite import tables as sqlite_tables
 
@@ -243,7 +246,7 @@ class PostgreSQLConnectionWrapper:
         self._conn.close()
 
 
-class iOSDictRow(dict):
+class iOSDictRow(dict[str, Any]):
     """A dict subclass that supports both string key and integer index access.
 
     This mimics sqlite3.Row behavior for iOS compatibility:
@@ -255,7 +258,7 @@ class iOSDictRow(dict):
     are NOT stored as dict keys. This ensures Task(**row) works correctly.
     """
 
-    def __init__(self, string_dict: dict, column_order: list):
+    def __init__(self, string_dict: dict[str, Any], column_order: list[str]):
         """Initialize with string-keyed dict and column order for integer access.
 
         Args:
@@ -265,7 +268,7 @@ class iOSDictRow(dict):
         super().__init__(string_dict)
         self._column_order = column_order
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str | int) -> Any:
         """Support both string and integer key access."""
         if isinstance(key, int):
             # Integer access - look up column name by index
@@ -276,7 +279,7 @@ class iOSDictRow(dict):
         # String access - normal dict behavior
         return super().__getitem__(key)
 
-    def get(self, key, default=None):
+    def get(self, key: str | int, default: Any = None) -> Any:
         """Support both string and integer key access with default."""
         try:
             return self.__getitem__(key)
@@ -328,7 +331,7 @@ class iOSSerializedCursor:
             self._cursor.executemany(sql, seq_of_parameters)
             return self
 
-    def _row_to_dict(self, row: Any) -> dict:
+    def _row_to_dict(self, row: Any) -> dict[str, Any] | None:
         """Convert sqlite3.Row to iOSDictRow for iOS compatibility.
 
         Returns an iOSDictRow that:
@@ -349,7 +352,7 @@ class iOSSerializedCursor:
             # Return iOSDictRow that supports both string and integer access
             return iOSDictRow(string_dict, columns)
         # Fallback: try to get keys from the row itself if it's dict-like
-        if hasattr(row, 'keys'):
+        if hasattr(row, "keys"):
             return dict(row)
         # Last resort: log warning and return empty dict
         logger.warning("[iOS_CURSOR] _row_to_dict: no description and row has no keys()")
@@ -626,7 +629,8 @@ def get_db_connection(
         - PostgreSQL: psycopg2 connection with dict cursor factory
     """
     import traceback
-    caller_info = ''.join(traceback.format_stack()[-4:-1])
+
+    caller_info = "".join(traceback.format_stack()[-4:-1])
     logger.info(f"[DB_CONNECT] get_db_connection called from:\n{caller_info}")
 
     # Default to SQLite for backward compatibility
@@ -826,7 +830,8 @@ def initialize_database(db_path: Optional[str] = None) -> None:
     No migration between database backends is supported.
     """
     import traceback
-    caller_info = ''.join(traceback.format_stack()[-4:-1])
+
+    caller_info = "".join(traceback.format_stack()[-4:-1])
     logger.info(f"[DB_INIT] initialize_database called from:\n{caller_info}")
 
     from ciris_engine.logic.persistence.db.execution_helpers import (

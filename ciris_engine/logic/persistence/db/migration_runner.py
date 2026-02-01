@@ -124,7 +124,7 @@ def _execute_sqlite_migration(conn: Any, sql: str, name: str) -> None:
     conn.commit()
 
 
-def _execute_ios_sqlite_migration(conn: Any, statements: list, name: str) -> None:
+def _execute_ios_sqlite_migration(conn: Any, statements: list[str], name: str) -> None:
     """Execute migration SQL for SQLite on iOS.
 
     iOS requires individual statement execution because executescript

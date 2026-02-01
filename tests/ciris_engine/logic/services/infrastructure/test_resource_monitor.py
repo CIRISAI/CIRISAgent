@@ -850,9 +850,9 @@ async def test_billing_provider_jwt_auth_mode():
         assert "authorization" in headers_lower
         auth_header = headers_lower["authorization"]
         # Check structure: must start with "Bearer " OR be masked by CI ("***")
-        # CI secret masking may replace the entire auth header value
+        # CI secret masking may replace just the JWT value (Bearer ***) or entire header (***)
         is_bearer_auth = auth_header.startswith("Bearer ")
-        is_ci_masked = auth_header == "***"
+        is_ci_masked = "***" in auth_header  # CI masks secrets to ***
         assert is_bearer_auth or is_ci_masked, f"Expected Bearer auth or CI-masked '***', got: {auth_header[:20]}"
         # If not masked, verify it contains our test value
         if not is_ci_masked:

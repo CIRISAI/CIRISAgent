@@ -469,7 +469,7 @@ async def get_credits(
     # CIRISBillingProvider: mobile mode (no API key) or server mode
     if not os.getenv("CIRIS_BILLING_API_KEY"):
         logger.info(
-            "[BILLING_CREDITS] Using CreditCheckResult (no API key): " "free=%s, paid=%s, has_credit=%s",
+            "[BILLING_CREDITS] Using CreditCheckResult (no API key): free=%s, paid=%s, has_credit=%s",
             result.free_uses_remaining,
             result.credits_remaining,
             result.has_credit,

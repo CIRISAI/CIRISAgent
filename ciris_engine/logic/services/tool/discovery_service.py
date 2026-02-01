@@ -223,11 +223,11 @@ class AdapterDiscoveryService:
 
         return loader.load_service_class(manifest, class_path)
 
-    def _load_class_via_importlib(self, adapter_name: str, class_path: str) -> Optional[Type[Any]]:
+    def _load_class_via_importlib(self, _adapter_name: str, class_path: str) -> Optional[Type[Any]]:
         """Load a service class via importlib (for Android/Chaquopy).
 
         Args:
-            adapter_name: The adapter name (e.g., 'ciris_covenant_metrics')
+            _adapter_name: The adapter name (unused, kept for API compatibility)
             class_path: The class path (e.g., 'ciris_covenant_metrics.services.CovenantMetricsService')
 
         Returns:

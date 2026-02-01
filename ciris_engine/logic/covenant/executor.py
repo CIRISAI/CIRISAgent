@@ -223,7 +223,7 @@ async def execute_covenant(
     wa_id = verification.wa_id or "unknown"
     reason = f"Covenant invocation via {message.source_channel}"
 
-    logger.warning(f"Executing covenant: {command.name} from {wa_id} " f"(role: {verification.wa_role})")
+    logger.warning(f"Executing covenant: {command.name} from {wa_id} (role: {verification.wa_role})")
 
     if command == CovenantCommandType.SHUTDOWN_NOW:
         return await execute_shutdown(wa_id, reason, force=True)

@@ -419,6 +419,48 @@ def _run_runtime_iteration(restart_count: int) -> tuple[bool, bool]:
     return False, True  # don't continue, clean exit
 
 
+def _handle_runtime_error(e: Exception, restart_count: int) -> tuple[bool, int]:
+    """Handle runtime exception and determine if restart is needed.
+
+    Returns:
+        Tuple of (should_restart, new_restart_count)
+    """
+    _log.error(f"Server error: {e}", exc_info=True)
+    write_status_file({"phase": "ERROR", "status": "exception", "error": str(e)})
+
+    if _restart_requested or check_restart_signal():
+        new_count = restart_count + 1
+        clear_restart_signal()
+        _log.warning(f"Restart signal found after error, restarting... (count: {new_count})")
+        time.sleep(1.0)
+        return True, new_count
+    return False, restart_count
+
+
+def _run_main_loop(max_restarts: int) -> int:
+    """Run the main restart loop. Returns final restart count."""
+    restart_count = 0
+
+    while restart_count < max_restarts:
+        try:
+            should_continue, clean_exit = _run_runtime_iteration(restart_count)
+            if clean_exit:
+                break
+            if should_continue:
+                restart_count += 1
+                continue
+        except KeyboardInterrupt:
+            _log.info("Server stopped by user (KeyboardInterrupt)")
+            break
+        except Exception as e:
+            should_restart, restart_count = _handle_runtime_error(e, restart_count)
+            if should_restart:
+                continue
+            raise
+
+    return restart_count
+
+
 def main():
     """Main entrypoint for KMP iOS app - runs checks and starts runtime with restart support."""
     log_phase(_log, "KMP_MAIN", "START", "CIRIS iOS KMP Runtime")
@@ -434,35 +476,8 @@ def main():
     if not _run_checks():
         return
 
-    # Run with restart loop
-    global _restart_requested
-    restart_count = 0
     max_restarts = 10
-
-    while restart_count < max_restarts:
-        try:
-            should_continue, clean_exit = _run_runtime_iteration(restart_count)
-            if clean_exit:
-                break
-            if should_continue:
-                restart_count += 1
-                continue
-
-        except KeyboardInterrupt:
-            _log.info("Server stopped by user (KeyboardInterrupt)")
-            break
-
-        except Exception as e:
-            _log.error(f"Server error: {e}", exc_info=True)
-            write_status_file({"phase": "ERROR", "status": "exception", "error": str(e)})
-
-            if _restart_requested or check_restart_signal():
-                restart_count += 1
-                clear_restart_signal()
-                _log.warning(f"Restart signal found after error, restarting... (count: {restart_count})")
-                time.sleep(1.0)
-                continue
-            raise
+    restart_count = _run_main_loop(max_restarts)
 
     if restart_count >= max_restarts:
         _log.error(f"Max restarts ({max_restarts}) reached, giving up")

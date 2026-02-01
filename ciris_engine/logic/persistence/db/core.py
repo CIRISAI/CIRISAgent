@@ -736,7 +736,7 @@ def get_db_connection(
     # Wrap iOS connection before executing PRAGMAs
     if is_ios:
         logger.info("[DB_CONNECT] Wrapping connection with iOSSerializedConnection BEFORE PRAGMAs...")
-        conn = iOSSerializedConnection(conn)
+        conn = iOSSerializedConnection(conn)  # type: ignore[assignment]
         logger.info("[DB_CONNECT] iOS wrapper created, now executing PRAGMAs through wrapper")
 
     pragma_statements = _get_pragma_statements(is_ios, busy_timeout)

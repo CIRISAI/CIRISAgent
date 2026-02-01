@@ -1620,9 +1620,6 @@ async def native_google_token_exchange(
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider="google")
         logger.info(f"[NativeAuth] Determined role for {user_email}: {user_role}")
 
-        # Check if this is the first OAuth user (for auto-minting)
-        is_first_oauth_user = user_role == UserRole.SYSTEM_ADMIN
-
         # Create or get OAuth user
         logger.info(f"[NativeAuth] Creating/getting OAuth user - external_id: {external_id}, email: {user_email}")
         oauth_user = auth_service.create_oauth_user(

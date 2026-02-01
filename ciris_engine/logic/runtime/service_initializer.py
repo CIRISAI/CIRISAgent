@@ -1354,7 +1354,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Get explicitly enabled adapters from CIRIS_ADAPTER env var
         # These should NOT be skipped even if in the default disabled list
         env_adapter = get_env_var("CIRIS_ADAPTER")
-        explicitly_enabled = set(a.strip() for a in env_adapter.split(",")) if env_adapter else set()
+        explicitly_enabled = {a.strip() for a in env_adapter.split(",")} if env_adapter else set()
 
         # Compute effective disabled list by removing explicitly enabled adapters
         # This allows users to override the default disabled list via CIRIS_ADAPTER

@@ -670,11 +670,12 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
             # Some providers (Together AI) return non-standard model list responses
             logger.info("[VALIDATE_LLM] Attempting test completion...")
             model_to_test = config.model or "gpt-3.5-turbo"
-            response = await client.chat.completions.create(
+            _response = await client.chat.completions.create(
                 model=model_to_test,
                 messages=[{"role": "user", "content": "Hi"}],
                 max_tokens=1,
             )
+            del _response  # Validation only - response not needed
             logger.info(f"[VALIDATE_LLM] SUCCESS! Test completion worked with model: {model_to_test}")
             return LLMValidationResponse(
                 valid=True,
@@ -702,11 +703,12 @@ async def _validate_anthropic_connection(config: LLMValidationRequest) -> LLMVal
 
         # Try a minimal completion
         model_to_test = config.model or "claude-haiku-4-5-20251001"
-        response = await client.messages.create(
+        _response = await client.messages.create(
             model=model_to_test,
             max_tokens=1,
             messages=[{"role": "user", "content": "Hi"}],
         )
+        del _response  # Validation only - response not needed
         logger.info(f"[VALIDATE_LLM] SUCCESS! Anthropic test completion worked with model: {model_to_test}")
         return LLMValidationResponse(
             valid=True,
@@ -738,11 +740,12 @@ async def _validate_google_connection(config: LLMValidationRequest) -> LLMValida
 
         # Try a minimal completion
         model_to_test = config.model or "gemini-2.0-flash"
-        response = await client.chat.completions.create(
+        _response = await client.chat.completions.create(
             model=model_to_test,
             messages=[{"role": "user", "content": "Hi"}],
             max_tokens=1,
         )
+        del _response  # Validation only - response not needed
         logger.info(f"[VALIDATE_LLM] SUCCESS! Google test completion worked with model: {model_to_test}")
         return LLMValidationResponse(
             valid=True,

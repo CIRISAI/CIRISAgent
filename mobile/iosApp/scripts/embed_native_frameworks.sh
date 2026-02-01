@@ -111,28 +111,6 @@ PLIST_EOF
         echo "WARNING: lib-dynload not found at $LIB_DYNLOAD_SRC"
     fi
 
-    # CRITICAL: Add privacy manifests to OpenSSL-using frameworks
-    # Apple requires PrivacyInfo.xcprivacy for any SDK using OpenSSL/BoringSSL
-    PRIVACY_MANIFEST="${PROJECT_DIR}/PrivacyInfo.xcprivacy"
-    if [ -f "$PRIVACY_MANIFEST" ]; then
-        echo ""
-        echo "Adding privacy manifests to OpenSSL-using frameworks..."
-        OPENSSL_FRAMEWORKS=(
-            "_hashlib"
-            "_ssl"
-            "cryptography.hazmat.bindings._openssl"
-        )
-        for fw_name in "${OPENSSL_FRAMEWORKS[@]}"; do
-            fw_path="$FRAMEWORKS_DST/${fw_name}.framework"
-            if [ -d "$fw_path" ]; then
-                cp "$PRIVACY_MANIFEST" "$fw_path/PrivacyInfo.xcprivacy"
-                echo "  Added PrivacyInfo.xcprivacy to ${fw_name}.framework"
-            fi
-        done
-    else
-        echo "WARNING: PrivacyInfo.xcprivacy not found at $PRIVACY_MANIFEST"
-    fi
-
     # CRITICAL: Create .framework bundles for third-party native extensions
     # Python on iOS uses .fwork files to locate binaries in Frameworks/
     # The .fwork files point to Frameworks/<module>.framework/<module>
@@ -226,6 +204,38 @@ PLIST_EOF
         echo "Created $ACTUAL_COUNT app_packages native frameworks"
     else
         echo "No app_packages_native directory found (skipping)"
+    fi
+
+    # CRITICAL: Add privacy manifests to ALL OpenSSL-using frameworks
+    # This MUST run AFTER both lib-dynload and app_packages_native frameworks are created
+    # Apple requires PrivacyInfo.xcprivacy for any SDK using OpenSSL/BoringSSL
+    PRIVACY_MANIFEST="${PROJECT_DIR}/PrivacyInfo.xcprivacy"
+    if [ -f "$PRIVACY_MANIFEST" ]; then
+        echo ""
+        echo "Adding privacy manifests to ALL OpenSSL-using frameworks..."
+        OPENSSL_FRAMEWORKS=(
+            "_hashlib"
+            "_ssl"
+            "cryptography.hazmat.bindings._openssl"
+        )
+        for fw_name in "${OPENSSL_FRAMEWORKS[@]}"; do
+            fw_path="$FRAMEWORKS_DST/${fw_name}.framework"
+            if [ -d "$fw_path" ]; then
+                cp "$PRIVACY_MANIFEST" "$fw_path/PrivacyInfo.xcprivacy"
+                echo "  Added PrivacyInfo.xcprivacy to ${fw_name}.framework"
+                # Re-sign after adding privacy manifest
+                codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" \
+                    ${OTHER_CODE_SIGN_FLAGS:-} \
+                    -o runtime --timestamp=none \
+                    --preserve-metadata=identifier,entitlements,flags \
+                    --generate-entitlement-der \
+                    "$fw_path" 2>/dev/null || true
+            else
+                echo "  WARNING: ${fw_name}.framework not found at $fw_path"
+            fi
+        done
+    else
+        echo "WARNING: PrivacyInfo.xcprivacy not found at $PRIVACY_MANIFEST"
     fi
 
     echo ""

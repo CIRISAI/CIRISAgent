@@ -12,15 +12,22 @@ Supports restart signaling:
 Entry point: python -m ciris_ios.kmp_main
 """
 
-import sys
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Optional
 
 # =============================================================================
+# CONSTANTS
+# =============================================================================
+
+_MSG_IMPORTING_RUNTIME = "Importing runtime components"
+
+# =============================================================================
 # PHASE 1: EARLY INIT - Before any complex imports
 # =============================================================================
+
 
 def _early_log(msg: str):
     """Early logging before logging system is initialized."""
@@ -38,15 +45,11 @@ def _get_ciris_dir() -> Path:
 def _write_early_status(phase: str, status: str, error: Optional[str] = None):
     """Write early status for Swift to read."""
     import json
+
     status_file = _get_ciris_dir() / "runtime_status.json"
-    data = {
-        "phase": phase,
-        "status": status,
-        "timestamp": time.time(),
-        "error": error
-    }
+    data = {"phase": phase, "status": status, "timestamp": time.time(), "error": error}
     try:
-        with open(status_file, 'w') as f:
+        with open(status_file, "w") as f:
             json.dump(data, f)
     except Exception:
         pass
@@ -62,6 +65,7 @@ _write_early_status("EARLY_INIT", "starting")
 _early_log("Phase 2: Loading compatibility shims...")
 try:
     import ciris_ios.crypto_compat  # noqa: F401
+
     _early_log("  [OK] crypto_compat loaded")
 except Exception as e:
     _early_log(f"  [FAIL] crypto_compat: {e}")
@@ -74,10 +78,8 @@ except Exception as e:
 
 _early_log("Phase 3: Setting up iOS environment...")
 try:
-    from ciris_ios.ios_main import (
-        run_startup_checks,
-        setup_ios_environment,
-    )
+    from ciris_ios.ios_main import run_startup_checks, setup_ios_environment
+
     _early_log("  [OK] ios_main imports loaded")
 except Exception as e:
     _early_log(f"  [FAIL] ios_main imports: {e}")
@@ -90,19 +92,15 @@ except Exception as e:
 
 _early_log("Phase 4: Initializing logging system...")
 try:
-    from ciris_ios.ios_logger import (
-        init_logging,
-        log_phase,
-        log_step,
-        write_status_file,
-        get_log_dir,
-    )
+    from ciris_ios.ios_logger import get_log_dir, init_logging, log_phase, log_step, write_status_file
+
     _log = init_logging("kmp.main")
     _early_log("  [OK] Logging system initialized")
 except Exception as e:
     _early_log(f"  [FAIL] Logging system: {e}")
     # Fall back to simple logging
     import logging
+
     _log = logging.getLogger("ciris.kmp.main")
     _log.setLevel(logging.DEBUG)
     _log.addHandler(logging.StreamHandler(sys.stdout))
@@ -123,6 +121,7 @@ except Exception as e:
 # =============================================================================
 # SIGNAL FILE UTILITIES
 # =============================================================================
+
 
 def get_restart_signal_path() -> Path:
     """Get path to the restart signal file."""
@@ -222,6 +221,7 @@ def watchdog_thread_func():
 def start_watchdog_thread():
     """Start the watchdog thread as a daemon."""
     import threading
+
     thread = threading.Thread(target=watchdog_thread_func, daemon=True, name="KMPWatchdog")
     thread.start()
     _log.info(f"Started watchdog thread: {thread.name}")
@@ -231,6 +231,7 @@ def start_watchdog_thread():
 # =============================================================================
 # RUNTIME MANAGEMENT
 # =============================================================================
+
 
 async def start_mobile_runtime_with_watchdog():
     """
@@ -247,16 +248,17 @@ async def start_mobile_runtime_with_watchdog():
     write_status_file({"phase": "RUNTIME_INIT", "status": "importing"})
 
     # Import runtime components
-    log_step(runtime_log, "Importing runtime components", "...")
+    log_step(runtime_log, _MSG_IMPORTING_RUNTIME, "...")
     try:
         from ciris_engine.logic.adapters.api.config import APIAdapterConfig
         from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
-        from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
         from ciris_engine.logic.utils.path_resolution import get_ciris_home, get_data_dir
         from ciris_engine.schemas.config.essential import DatabaseConfig, EssentialConfig, SecurityConfig
-        log_step(runtime_log, "Importing runtime components", "OK")
+        from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+
+        log_step(runtime_log, _MSG_IMPORTING_RUNTIME, "OK")
     except Exception as e:
-        log_step(runtime_log, "Importing runtime components", "FAIL", str(e))
+        log_step(runtime_log, _MSG_IMPORTING_RUNTIME, "FAIL", str(e))
         write_status_file({"phase": "RUNTIME_INIT", "status": "failed", "error": str(e)})
         raise
 
@@ -352,6 +354,71 @@ async def start_mobile_runtime_with_watchdog():
 # MAIN ENTRY POINT
 # =============================================================================
 
+
+def _init_environment() -> bool:
+    """Initialize iOS environment. Returns True on success."""
+    log_phase(_log, "ENVIRONMENT", "START")
+    try:
+        setup_ios_environment()
+        log_phase(_log, "ENVIRONMENT", "OK")
+        return True
+    except Exception as e:
+        log_phase(_log, "ENVIRONMENT", "FAIL", str(e))
+        write_status_file({"phase": "ENVIRONMENT", "status": "failed", "error": str(e)})
+        return False
+
+
+def _run_checks() -> bool:
+    """Run startup checks. Returns True on success."""
+    log_phase(_log, "STARTUP_CHECKS", "START")
+    write_status_file({"phase": "STARTUP_CHECKS", "status": "running"})
+
+    if not run_startup_checks():
+        log_phase(_log, "STARTUP_CHECKS", "FAIL", "See startup_status.json for details")
+        write_status_file({"phase": "STARTUP_CHECKS", "status": "failed"})
+        _log.error("Startup checks failed - runtime will not start")
+        return False
+
+    log_phase(_log, "STARTUP_CHECKS", "OK")
+    return True
+
+
+def _reset_shutdown_service() -> None:
+    """Reset global shutdown service for new event loop."""
+    try:
+        from ciris_engine.logic.utils.shutdown_manager import reset_global_shutdown_service
+
+        reset_global_shutdown_service()
+        _log.info("Reset global shutdown service for new event loop")
+    except Exception as e:
+        _log.warning(f"Could not reset shutdown service: {e}")
+
+
+def _run_runtime_iteration(restart_count: int) -> tuple[bool, bool]:
+    """Run one runtime iteration. Returns (should_continue, clean_exit)."""
+    import asyncio
+
+    global _restart_requested
+
+    _restart_requested = False
+    _reset_shutdown_service()
+
+    _log.info(f"Starting runtime iteration {restart_count + 1}")
+    start_watchdog_thread()
+
+    write_status_file({"phase": "RUNTIME", "status": "starting", "restart_count": restart_count})
+    asyncio.run(start_mobile_runtime_with_watchdog())
+
+    if _restart_requested:
+        _log.warning(f"Restart requested by watchdog (count: {restart_count + 1})")
+        write_status_file({"phase": "RESTARTING", "status": "watchdog_triggered", "restart_count": restart_count + 1})
+        time.sleep(1.0)
+        return True, False  # continue, not clean exit
+
+    _log.info("Runtime exited normally")
+    return False, True  # don't continue, clean exit
+
+
 def main():
     """Main entrypoint for KMP iOS app - runs checks and starts runtime with restart support."""
     log_phase(_log, "KMP_MAIN", "START", "CIRIS iOS KMP Runtime")
@@ -361,67 +428,25 @@ def main():
 
     write_status_file({"phase": "STARTUP", "status": "environment_setup"})
 
-    # CRITICAL: Set up iOS environment FIRST, before any checks
-    # This sets CIRIS_HOME which is needed for database path resolution
-    log_phase(_log, "ENVIRONMENT", "START")
-    try:
-        setup_ios_environment()
-        log_phase(_log, "ENVIRONMENT", "OK")
-    except Exception as e:
-        log_phase(_log, "ENVIRONMENT", "FAIL", str(e))
-        write_status_file({"phase": "ENVIRONMENT", "status": "failed", "error": str(e)})
+    if not _init_environment():
         return
 
-    # Run startup checks
-    log_phase(_log, "STARTUP_CHECKS", "START")
-    write_status_file({"phase": "STARTUP_CHECKS", "status": "running"})
-
-    if not run_startup_checks():
-        log_phase(_log, "STARTUP_CHECKS", "FAIL", "See startup_status.json for details")
-        write_status_file({"phase": "STARTUP_CHECKS", "status": "failed"})
-        _log.error("Startup checks failed - runtime will not start")
+    if not _run_checks():
         return
-
-    log_phase(_log, "STARTUP_CHECKS", "OK")
 
     # Run with restart loop
     global _restart_requested
     restart_count = 0
-    max_restarts = 10  # Prevent infinite restart loops
+    max_restarts = 10
 
     while restart_count < max_restarts:
         try:
-            import asyncio
-
-            # Reset restart flag
-            _restart_requested = False
-
-            # CRITICAL: Reset global shutdown service to avoid event loop binding errors
-            # This must happen before each asyncio.run() creates a new event loop
-            try:
-                from ciris_engine.logic.utils.shutdown_manager import reset_global_shutdown_service
-                reset_global_shutdown_service()
-                _log.info("Reset global shutdown service for new event loop")
-            except Exception as e:
-                _log.warning(f"Could not reset shutdown service: {e}")
-
-            # Start external watchdog thread (runs outside asyncio)
-            _log.info(f"Starting runtime iteration {restart_count + 1}")
-            watchdog = start_watchdog_thread()
-
-            write_status_file({"phase": "RUNTIME", "status": "starting", "restart_count": restart_count})
-            asyncio.run(start_mobile_runtime_with_watchdog())
-
-            # Check if restart was requested by watchdog thread
-            if _restart_requested:
+            should_continue, clean_exit = _run_runtime_iteration(restart_count)
+            if clean_exit:
+                break
+            if should_continue:
                 restart_count += 1
-                _log.warning(f"Restart requested by watchdog (count: {restart_count})")
-                write_status_file({"phase": "RESTARTING", "status": "watchdog_triggered", "restart_count": restart_count})
-                time.sleep(1.0)
                 continue
-            else:
-                _log.info("Runtime exited normally")
-                break  # Clean exit, don't restart
 
         except KeyboardInterrupt:
             _log.info("Server stopped by user (KeyboardInterrupt)")
@@ -431,16 +456,13 @@ def main():
             _log.error(f"Server error: {e}", exc_info=True)
             write_status_file({"phase": "ERROR", "status": "exception", "error": str(e)})
 
-            # Check if restart was signaled during error
             if _restart_requested or check_restart_signal():
                 restart_count += 1
                 clear_restart_signal()
                 _log.warning(f"Restart signal found after error, restarting... (count: {restart_count})")
                 time.sleep(1.0)
                 continue
-            else:
-                # Real error, don't restart
-                raise
+            raise
 
     if restart_count >= max_restarts:
         _log.error(f"Max restarts ({max_restarts}) reached, giving up")

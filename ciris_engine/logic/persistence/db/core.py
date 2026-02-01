@@ -608,6 +608,83 @@ class RetryConnection:
         return self._conn.__exit__(exc_type, exc_val, exc_tb)
 
 
+def _resolve_db_path(db_path: Optional[str]) -> str:
+    """Resolve the database path, checking test overrides and defaults."""
+    if db_path is not None:
+        return db_path
+
+    logger.info("[DB_CONNECT] db_path is None, resolving...")
+    if _test_db_path is not None:
+        logger.info(f"[DB_CONNECT] Using test override path: {_test_db_path}")
+        return _test_db_path
+
+    logger.info("[DB_CONNECT] Calling get_sqlite_db_full_path()...")
+    resolved = get_sqlite_db_full_path()
+    logger.info(f"[DB_CONNECT] Resolved path: {resolved}")
+    return resolved
+
+
+def _create_postgres_connection(adapter: Any) -> Any:
+    """Create a PostgreSQL connection."""
+    if not POSTGRES_AVAILABLE:
+        raise RuntimeError(
+            "PostgreSQL connection requested but psycopg2 not installed. " "Install with: pip install psycopg2-binary"
+        )
+    conn = psycopg2.connect(adapter.db_url)
+    conn.cursor_factory = psycopg2.extras.RealDictCursor
+    return PostgreSQLConnectionWrapper(conn)
+
+
+def _create_sqlite_connection_ios(db_path: str) -> sqlite3.Connection:
+    """Create SQLite connection with iOS-specific settings."""
+    logger.info("[DB_CONNECT] iOS mode: using serialized connection settings")
+    try:
+        logger.info(f"[DB_CONNECT] Calling sqlite3.connect({db_path})...")
+        conn = sqlite3.connect(
+            db_path,
+            check_same_thread=False,
+            detect_types=sqlite3.PARSE_DECLTYPES,
+            isolation_level=None,  # Autocommit mode - avoids transaction state issues
+            timeout=30.0,  # Longer timeout for iOS
+        )
+        logger.info(f"[DB_CONNECT] sqlite3.connect succeeded, conn={conn}")
+        return conn
+    except Exception as e:
+        logger.error(f"[DB_CONNECT] sqlite3.connect FAILED: {e}")
+        raise
+
+
+def _get_pragma_statements(is_ios: bool, busy_timeout: Optional[int]) -> list[str]:
+    """Get the appropriate PRAGMA statements for the platform."""
+    if is_ios:
+        return [
+            "PRAGMA foreign_keys = ON;",
+            "PRAGMA journal_mode=WAL;",
+            f"PRAGMA busy_timeout = {busy_timeout if busy_timeout is not None else 30000};",
+            "PRAGMA synchronous=NORMAL;",
+        ]
+    return [
+        "PRAGMA foreign_keys = ON;",
+        "PRAGMA journal_mode=WAL;",
+        f"PRAGMA busy_timeout = {busy_timeout if busy_timeout is not None else 5000};",
+    ]
+
+
+def _execute_pragmas(conn: Any, adapter: Any, pragma_statements: list[str]) -> None:
+    """Execute PRAGMA statements on the connection."""
+    logger.info(f"[DB_CONNECT] Executing {len(pragma_statements)} PRAGMA statements...")
+    for pragma in pragma_statements:
+        result = adapter.pragma(pragma)
+        if result:
+            logger.info(f"[DB_CONNECT] Executing: {result}")
+            try:
+                conn.execute(result)
+                logger.info(f"[DB_CONNECT] PRAGMA succeeded: {result}")
+            except Exception as e:
+                logger.error(f"[DB_CONNECT] PRAGMA FAILED: {result} - {e}")
+                raise
+
+
 def get_db_connection(
     db_path: Optional[str] = None, busy_timeout: Optional[int] = None, enable_retry: bool = True
 ) -> Union[sqlite3.Connection, RetryConnection, Any]:
@@ -633,104 +710,40 @@ def get_db_connection(
     caller_info = "".join(traceback.format_stack()[-4:-1])
     logger.info(f"[DB_CONNECT] get_db_connection called from:\n{caller_info}")
 
-    # Default to SQLite for backward compatibility
-    if db_path is None:
-        logger.info("[DB_CONNECT] db_path is None, resolving...")
-        # Check for test override first
-        if _test_db_path is not None:
-            db_path = _test_db_path
-            logger.info(f"[DB_CONNECT] Using test override path: {db_path}")
-        else:
-            logger.info("[DB_CONNECT] Calling get_sqlite_db_full_path()...")
-            db_path = get_sqlite_db_full_path()
-            logger.info(f"[DB_CONNECT] Resolved path: {db_path}")
-
-    # Initialize dialect adapter based on connection string
+    db_path = _resolve_db_path(db_path)
     adapter = init_dialect(db_path)
 
     # PostgreSQL connection
     if adapter.is_postgresql():
-        if not POSTGRES_AVAILABLE:
-            raise RuntimeError(
-                "PostgreSQL connection requested but psycopg2 not installed. "
-                "Install with: pip install psycopg2-binary"
-            )
-
-        conn = psycopg2.connect(adapter.db_url)
-        # Use dict cursor for compatibility with SQLite Row factory
-        conn.cursor_factory = psycopg2.extras.RealDictCursor
-        # Wrap connection to provide SQLite-like execute() interface
-        return PostgreSQLConnectionWrapper(conn)
+        return _create_postgres_connection(adapter)
 
     # SQLite connection (default)
     logger.info(f"[DB_CONNECT] Creating SQLite connection to: {db_path}")
     _ensure_adapters_registered()
 
-    # Detect iOS platform for special handling
     is_ios = _check_ios_platform()
     logger.info(f"[DB_CONNECT] Platform detection: is_ios={is_ios}")
 
-    # iOS-specific connection settings to avoid SQLiteDatabaseTracking assertions
+    # Create connection based on platform
     if is_ios:
-        logger.info("[DB_CONNECT] iOS mode: using serialized connection settings")
-        # On iOS, use serialized mode and autocommit to avoid threading issues
-        # with iOS's internal SQLite debugging infrastructure
-        try:
-            logger.info(f"[DB_CONNECT] Calling sqlite3.connect({db_path})...")
-            conn = sqlite3.connect(
-                db_path,
-                check_same_thread=False,
-                detect_types=sqlite3.PARSE_DECLTYPES,
-                isolation_level=None,  # Autocommit mode - avoids transaction state issues
-                timeout=30.0,  # Longer timeout for iOS
-            )
-            logger.info(f"[DB_CONNECT] sqlite3.connect succeeded, conn={conn}")
-        except Exception as e:
-            logger.error(f"[DB_CONNECT] sqlite3.connect FAILED: {e}")
-            raise
+        conn = _create_sqlite_connection_ios(db_path)
     else:
         conn = sqlite3.connect(db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
 
     logger.info("[DB_CONNECT] Setting row_factory...")
     conn.row_factory = sqlite3.Row
 
-    # Apply SQLite PRAGMA directives
-    # On iOS, skip WAL mode as it can cause issues with iOS's SQLite debugging
-    if is_ios:
-        pragma_statements = [
-            "PRAGMA foreign_keys = ON;",
-            "PRAGMA journal_mode=WAL;",  # WAL mode for better concurrent access on iOS
-            f"PRAGMA busy_timeout = {busy_timeout if busy_timeout is not None else 30000};",  # 30s timeout for iOS
-            "PRAGMA synchronous=NORMAL;",  # Less strict sync for better iOS compatibility
-        ]
-    else:
-        pragma_statements = [
-            "PRAGMA foreign_keys = ON;",
-            "PRAGMA journal_mode=WAL;",
-            f"PRAGMA busy_timeout = {busy_timeout if busy_timeout is not None else 5000};",
-        ]
-
-    # On iOS, wrap with serialized connection BEFORE executing PRAGMAs
-    # This ensures all database access goes through the lock from the start
+    # Wrap iOS connection before executing PRAGMAs
     if is_ios:
         logger.info("[DB_CONNECT] Wrapping connection with iOSSerializedConnection BEFORE PRAGMAs...")
         conn = iOSSerializedConnection(conn)
         logger.info("[DB_CONNECT] iOS wrapper created, now executing PRAGMAs through wrapper")
 
-    logger.info(f"[DB_CONNECT] Executing {len(pragma_statements)} PRAGMA statements...")
-    for pragma in pragma_statements:
-        result = adapter.pragma(pragma)
-        if result:  # Only execute if dialect returns a statement
-            logger.info(f"[DB_CONNECT] Executing: {result}")
-            try:
-                conn.execute(result)
-                logger.info(f"[DB_CONNECT] PRAGMA succeeded: {result}")
-            except Exception as e:
-                logger.error(f"[DB_CONNECT] PRAGMA FAILED: {result} - {e}")
-                raise
+    pragma_statements = _get_pragma_statements(is_ios, busy_timeout)
+    _execute_pragmas(conn, adapter, pragma_statements)
 
     # Return wrapped connection with retry logic by default
-    if enable_retry and not is_ios:  # iOS already has serialization, skip retry wrapper
+    if enable_retry and not is_ios:
         logger.info("[DB_CONNECT] Returning RetryConnection wrapper")
         return RetryConnection(conn)
 

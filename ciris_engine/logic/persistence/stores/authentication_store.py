@@ -31,97 +31,99 @@ def _row_to_wa(row_dict: Dict[str, Any]) -> WACertificate:
     return WACertificate(**wa_dict)
 
 
+def _detect_ios_platform() -> bool:
+    """Detect if running on iOS platform."""
+    import sys
+
+    return sys.platform == "ios" or (
+        sys.platform == "darwin"
+        and hasattr(sys, "implementation")
+        and "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
+    )
+
+
+def _execute_table_creation(conn: Any, table_sql: str, is_postgres: bool, is_ios: bool) -> None:
+    """Execute table creation SQL based on platform."""
+    if is_postgres:
+        statements = [s.strip() for s in table_sql.split(";") if s.strip()]
+        cursor = conn.cursor()
+        for statement in statements:
+            cursor.execute(statement)
+        cursor.close()
+    elif is_ios:
+        conn.execute("PRAGMA foreign_keys = ON")
+        statements = [s.strip() for s in table_sql.split(";") if s.strip()]
+        cursor = conn.cursor()
+        for statement in statements:
+            logger.debug(f"iOS auth init: executing {statement[:50]}...")
+            cursor.execute(statement)
+        cursor.close()
+    else:
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.executescript(table_sql)
+
+
+def _get_existing_columns(conn: Any, is_postgres: bool) -> set[str]:
+    """Get existing column names from wa_cert table."""
+    cursor = conn.cursor()
+    if is_postgres:
+        cursor.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'wa_cert'
+        """
+        )
+        columns = {row[0] if isinstance(row, tuple) else row["column_name"] for row in cursor.fetchall()}
+    else:
+        cursor.execute("PRAGMA table_info(wa_cert)")
+        rows = cursor.fetchall()
+        columns = set()
+        for row in rows:
+            if isinstance(row, dict):
+                columns.add(row["name"])
+            else:
+                columns.add(row[1])
+    cursor.close()
+    return columns
+
+
+def _apply_column_migrations(conn: Any, existing_columns: set[str]) -> None:
+    """Apply column migrations for backward compatibility."""
+    column_migrations = {
+        "custom_permissions_json": "ALTER TABLE wa_cert ADD COLUMN custom_permissions_json TEXT",
+        "adapter_name": "ALTER TABLE wa_cert ADD COLUMN adapter_name TEXT",
+        "adapter_metadata_json": "ALTER TABLE wa_cert ADD COLUMN adapter_metadata_json TEXT",
+        "oauth_links_json": "ALTER TABLE wa_cert ADD COLUMN oauth_links_json TEXT",
+    }
+    cursor = conn.cursor()
+    for column_name, ddl in column_migrations.items():
+        if column_name not in existing_columns:
+            cursor.execute(ddl)
+    cursor.close()
+
+
 def init_auth_database(db_path: str) -> None:
     """Initialize authentication database tables if needed.
 
     Args:
         db_path: Database connection string (SQLite path or PostgreSQL URL)
     """
-    import sys
-
     from ciris_engine.logic.persistence.db.dialect import DialectAdapter
 
-    # Create adapter from db_path to determine database type
-    # This avoids race conditions with global adapter in parallel tests
     adapter = DialectAdapter(db_path)
     is_postgres = adapter.is_postgresql()
+    is_ios = _detect_ios_platform()
 
-    # Detect iOS platform - iOS needs special handling for SQLite
-    is_ios = sys.platform == "ios" or (
-        sys.platform == "darwin"
-        and hasattr(sys, "implementation")
-        and "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
-    )
-
-    # Import appropriate table definition based on database type
     if is_postgres:
         from ciris_engine.schemas.persistence.postgres.tables import WA_CERT_TABLE_V1
     else:
         from ciris_engine.schemas.persistence.sqlite.tables import WA_CERT_TABLE_V1
 
     with get_db_connection(db_path=db_path) as conn:
-        if is_postgres:
-            # PostgreSQL: Execute statements individually
-            statements = [s.strip() for s in WA_CERT_TABLE_V1.split(";") if s.strip()]
-            cursor = conn.cursor()
-            for statement in statements:
-                cursor.execute(statement)
-            cursor.close()
-        elif is_ios:
-            # iOS: Execute statements individually to avoid executescript issues
-            # in autocommit mode (isolation_level=None)
-            conn.execute("PRAGMA foreign_keys = ON")
-            statements = [s.strip() for s in WA_CERT_TABLE_V1.split(";") if s.strip()]
-            cursor = conn.cursor()
-            for statement in statements:
-                logger.debug(f"iOS auth init: executing {statement[:50]}...")
-                cursor.execute(statement)
-            cursor.close()
-        else:
-            # SQLite (non-iOS): Use executescript and PRAGMA
-            conn.execute("PRAGMA foreign_keys = ON")
-            conn.executescript(WA_CERT_TABLE_V1)
-
-        # Backfill newer columns when running against existing databases
-        # Get table info to check existing columns
-        cursor = conn.cursor()
-
-        if is_postgres:
-            # PostgreSQL: Query information_schema
-            cursor.execute(
-                """
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_name = 'wa_cert'
-            """
-            )
-            existing_columns = {row[0] if isinstance(row, tuple) else row["column_name"] for row in cursor.fetchall()}
-        else:
-            # SQLite: Use PRAGMA - handle both tuple (desktop) and dict (iOS) row formats
-            cursor.execute("PRAGMA table_info(wa_cert)")
-            rows = cursor.fetchall()
-            existing_columns = set()
-            for row in rows:
-                # PRAGMA table_info returns: cid, name, type, notnull, dflt_value, pk
-                # On iOS, rows are dicts; on desktop, rows are tuples/Row objects
-                if isinstance(row, dict):
-                    existing_columns.add(row["name"])
-                else:
-                    existing_columns.add(row[1])
-
-        # Column migrations for backward compatibility
-        column_migrations = {
-            "custom_permissions_json": "ALTER TABLE wa_cert ADD COLUMN custom_permissions_json TEXT",
-            "adapter_name": "ALTER TABLE wa_cert ADD COLUMN adapter_name TEXT",
-            "adapter_metadata_json": "ALTER TABLE wa_cert ADD COLUMN adapter_metadata_json TEXT",
-            "oauth_links_json": "ALTER TABLE wa_cert ADD COLUMN oauth_links_json TEXT",
-        }
-
-        for column_name, ddl in column_migrations.items():
-            if column_name not in existing_columns:
-                cursor.execute(ddl)
-
-        cursor.close()
+        _execute_table_creation(conn, WA_CERT_TABLE_V1, is_postgres, is_ios)
+        existing_columns = _get_existing_columns(conn, is_postgres)
+        _apply_column_migrations(conn, existing_columns)
         conn.commit()
 
 

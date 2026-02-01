@@ -1640,47 +1640,10 @@ async def native_google_token_exchange(
         _store_oauth_profile(auth_service, oauth_user.user_id, name, user_data.get("picture"))
 
         # Auto-mint SYSTEM_ADMIN users as WA with ROOT role so they can handle deferrals
-        # This handles both first-time users and existing users who weren't minted
         logger.info(
             f"CIRIS_USER_CREATE: [NativeAuth] Checking auto-mint for {oauth_user.user_id} with role {oauth_user.role}"
         )
-        if oauth_user.role == UserRole.SYSTEM_ADMIN:
-            # Check if user is already minted by looking up their user record
-            existing_user = auth_service.get_user(oauth_user.user_id)
-            logger.info(f"CIRIS_USER_CREATE: [NativeAuth] existing_user lookup: {existing_user}")
-            if existing_user:
-                logger.info(
-                    f"CIRIS_USER_CREATE: [NativeAuth]   wa_id={existing_user.wa_id}, wa_role={existing_user.wa_role}"
-                )
-
-            needs_minting = not existing_user or not existing_user.wa_id or existing_user.wa_id == oauth_user.user_id
-
-            if needs_minting:
-                logger.info(
-                    f"CIRIS_USER_CREATE: [NativeAuth] Auto-minting SYSTEM_ADMIN user {oauth_user.user_id} as WA with ROOT role"
-                )
-                try:
-                    from ciris_engine.schemas.services.authority_core import WARole
-
-                    await auth_service.mint_wise_authority(
-                        user_id=oauth_user.user_id,
-                        wa_role=WARole.ROOT,
-                        minted_by="system_auto_mint",
-                    )
-                    logger.info(
-                        f"CIRIS_USER_CREATE: [NativeAuth] ✅ Successfully auto-minted {oauth_user.user_id} as ROOT WA"
-                    )
-                except Exception as mint_error:
-                    # Don't fail login if minting fails - user can mint manually later
-                    logger.warning(
-                        f"CIRIS_USER_CREATE: [NativeAuth] Auto-mint failed (user can mint manually): {mint_error}"
-                    )
-            else:
-                logger.info(
-                    f"CIRIS_USER_CREATE: [NativeAuth] User {oauth_user.user_id} already minted as WA - skipping auto-mint"
-                )
-        else:
-            logger.info(f"CIRIS_USER_CREATE: [NativeAuth] Not SYSTEM_ADMIN, skipping auto-mint")
+        await _auto_mint_system_admin_if_needed(oauth_user, auth_service, "NativeAuth")
 
         # Generate API key
         logger.info(f"[NativeAuth] Generating API key for user {oauth_user.user_id}")
@@ -1803,6 +1766,48 @@ async def _verify_apple_id_token(id_token: str) -> Dict[str, Optional[str]]:
     return _decode_apple_jwt_locally(id_token)
 
 
+async def _auto_mint_system_admin_if_needed(
+    oauth_user: OAuthUser, auth_service: APIAuthService, log_prefix: str
+) -> None:
+    """Auto-mint SYSTEM_ADMIN users as WA with ROOT role for handling deferrals.
+
+    Args:
+        oauth_user: The OAuth user to potentially mint
+        auth_service: The auth service for minting
+        log_prefix: Logging prefix for trace context
+    """
+    if oauth_user.role != UserRole.SYSTEM_ADMIN:
+        logger.info(f"CIRIS_USER_CREATE: [{log_prefix}] Not SYSTEM_ADMIN, skipping auto-mint")
+        return
+
+    existing_user = auth_service.get_user(oauth_user.user_id)
+    logger.info(f"CIRIS_USER_CREATE: [{log_prefix}] existing_user lookup: {existing_user}")
+
+    if existing_user:
+        logger.info(f"CIRIS_USER_CREATE: [{log_prefix}]   wa_id={existing_user.wa_id}, wa_role={existing_user.wa_role}")
+
+    needs_minting = not existing_user or not existing_user.wa_id or existing_user.wa_id == oauth_user.user_id
+
+    if not needs_minting:
+        logger.info(f"CIRIS_USER_CREATE: [{log_prefix}] User {oauth_user.user_id} already minted as WA - skipping")
+        return
+
+    logger.info(
+        f"CIRIS_USER_CREATE: [{log_prefix}] Auto-minting SYSTEM_ADMIN user {oauth_user.user_id} as WA with ROOT role"
+    )
+    try:
+        from ciris_engine.schemas.services.authority_core import WARole
+
+        await auth_service.mint_wise_authority(
+            user_id=oauth_user.user_id,
+            wa_role=WARole.ROOT,
+            minted_by="system_auto_mint",
+        )
+        logger.info(f"CIRIS_USER_CREATE: [{log_prefix}] ✅ Successfully auto-minted {oauth_user.user_id} as ROOT WA")
+    except Exception as mint_error:
+        logger.warning(f"CIRIS_USER_CREATE: [{log_prefix}] Auto-mint failed (user can mint manually): {mint_error}")
+
+
 @router.post("/auth/native/apple", response_model=NativeTokenResponse)
 async def native_apple_token_exchange(
     native_request: AppleNativeTokenRequest,
@@ -1864,41 +1869,7 @@ async def native_apple_token_exchange(
         logger.info(
             f"CIRIS_USER_CREATE: [AppleNativeAuth] Checking auto-mint for {oauth_user.user_id} with role {oauth_user.role}"
         )
-        if oauth_user.role == UserRole.SYSTEM_ADMIN:
-            existing_user = auth_service.get_user(oauth_user.user_id)
-            logger.info(f"CIRIS_USER_CREATE: [AppleNativeAuth] existing_user lookup: {existing_user}")
-            if existing_user:
-                logger.info(
-                    f"CIRIS_USER_CREATE: [AppleNativeAuth]   wa_id={existing_user.wa_id}, wa_role={existing_user.wa_role}"
-                )
-
-            needs_minting = not existing_user or not existing_user.wa_id or existing_user.wa_id == oauth_user.user_id
-
-            if needs_minting:
-                logger.info(
-                    f"CIRIS_USER_CREATE: [AppleNativeAuth] Auto-minting SYSTEM_ADMIN user {oauth_user.user_id} as WA with ROOT role"
-                )
-                try:
-                    from ciris_engine.schemas.services.authority_core import WARole
-
-                    await auth_service.mint_wise_authority(
-                        user_id=oauth_user.user_id,
-                        wa_role=WARole.ROOT,
-                        minted_by="system_auto_mint",
-                    )
-                    logger.info(
-                        f"CIRIS_USER_CREATE: [AppleNativeAuth] ✅ Successfully auto-minted {oauth_user.user_id} as ROOT WA"
-                    )
-                except Exception as mint_error:
-                    logger.warning(
-                        f"CIRIS_USER_CREATE: [AppleNativeAuth] Auto-mint failed (user can mint manually): {mint_error}"
-                    )
-            else:
-                logger.info(
-                    f"CIRIS_USER_CREATE: [AppleNativeAuth] User {oauth_user.user_id} already minted as WA - skipping auto-mint"
-                )
-        else:
-            logger.info(f"CIRIS_USER_CREATE: [AppleNativeAuth] Not SYSTEM_ADMIN, skipping auto-mint")
+        await _auto_mint_system_admin_if_needed(oauth_user, auth_service, "AppleNativeAuth")
 
         # Generate API key
         logger.info(f"[AppleNativeAuth] Generating API key for user {oauth_user.user_id}")

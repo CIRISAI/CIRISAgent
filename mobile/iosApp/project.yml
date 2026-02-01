@@ -44,9 +44,12 @@ targets:
         CLANG_ENABLE_MODULES: YES
       configs:
         Debug:
-          FRAMEWORK_SEARCH_PATHS:
+          FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]:
             - $(inherited)
             - $(PROJECT_DIR)/../shared/build/bin/iosArm64/debugFramework
+            - $(PROJECT_DIR)/Frameworks
+          FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]:
+            - $(inherited)
             - $(PROJECT_DIR)/../shared/build/bin/iosSimulatorArm64/debugFramework
             - $(PROJECT_DIR)/Frameworks
           HEADER_SEARCH_PATHS[sdk=iphoneos*]:
@@ -56,13 +59,20 @@ targets:
             - $(inherited)
             - $(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64_x86_64-simulator/Python.framework/Headers
         Release:
-          FRAMEWORK_SEARCH_PATHS:
+          FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]:
             - $(inherited)
             - $(PROJECT_DIR)/../shared/build/bin/iosArm64/releaseFramework
             - $(PROJECT_DIR)/Frameworks
-          HEADER_SEARCH_PATHS:
+          FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]:
+            - $(inherited)
+            - $(PROJECT_DIR)/../shared/build/bin/iosSimulatorArm64/releaseFramework
+            - $(PROJECT_DIR)/Frameworks
+          HEADER_SEARCH_PATHS[sdk=iphoneos*]:
             - $(inherited)
             - $(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64/Python.framework/Headers
+          HEADER_SEARCH_PATHS[sdk=iphonesimulator*]:
+            - $(inherited)
+            - $(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64_x86_64-simulator/Python.framework/Headers
     dependencies:
       - framework: Frameworks/Python.xcframework
         embed: true

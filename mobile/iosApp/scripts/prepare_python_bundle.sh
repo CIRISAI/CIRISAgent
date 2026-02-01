@@ -40,26 +40,37 @@ echo "Copying Python stdlib..."
 rm -rf "$RESOURCES_DIR/python"
 cp -R "$BEEWARE_APP/python" "$RESOURCES_DIR/"
 
-# For device builds, replace lib-dynload with device-specific .so files
+# For device builds, convert lib-dynload .so files to .fwork redirects
+# This is REQUIRED for App Store - Apple rejects standalone .so files
 if [ "$BUILD_TYPE" = "device" ]; then
-    echo "Device build: Using device-specific lib-dynload..."
+    echo "Device build: Converting lib-dynload to .fwork redirects..."
     DEVICE_DYNLOAD="$PYTHON_XCF/ios-arm64/lib/python3.10/lib-dynload"
+    LIB_DYNLOAD_DST="$RESOURCES_DIR/python/lib/python3.10/lib-dynload"
 
     if [ -d "$DEVICE_DYNLOAD" ]; then
-        # Remove simulator .fwork stubs
-        rm -rf "$RESOURCES_DIR/python/lib/python3.10/lib-dynload"
-        mkdir -p "$RESOURCES_DIR/python/lib/python3.10/lib-dynload"
+        # Clear existing lib-dynload
+        rm -rf "$LIB_DYNLOAD_DST"
+        mkdir -p "$LIB_DYNLOAD_DST"
 
-        # Copy device .so files (these have proper encryption info for App Store)
+        # Convert each .so to a .fwork redirect pointing to Frameworks/
+        SO_COUNT=0
         for so_file in "$DEVICE_DYNLOAD"/*.so; do
             if [ -f "$so_file" ]; then
-                # Rename from -iphoneos.so to match what Python expects
-                base=$(basename "$so_file")
-                # Python on iOS looks for .cpython-310.so or the platform-specific name
-                cp "$so_file" "$RESOURCES_DIR/python/lib/python3.10/lib-dynload/"
+                so_basename=$(basename "$so_file")
+                # Get module name: _hashlib.cpython-310-iphoneos.so -> _hashlib
+                module_name="${so_basename%.cpython-*}"
+                module_name="${module_name%.so}"
+
+                # Create .fwork file with path to framework
+                # The .fwork content is the relative path from app bundle to framework binary
+                fwork_file="$LIB_DYNLOAD_DST/${so_basename%.so}.fwork"
+                echo "Frameworks/${module_name}.framework/${module_name}" > "$fwork_file"
+
+                SO_COUNT=$((SO_COUNT + 1))
             fi
         done
-        echo "  Copied $(ls "$RESOURCES_DIR/python/lib/python3.10/lib-dynload/" | wc -l | tr -d ' ') device extensions"
+        echo "  Created $SO_COUNT .fwork redirects for lib-dynload"
+        echo "  Note: Actual frameworks will be created by embed_native_frameworks.sh at build time"
     else
         echo "WARNING: Device lib-dynload not found at $DEVICE_DYNLOAD"
     fi

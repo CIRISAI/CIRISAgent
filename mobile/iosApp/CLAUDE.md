@@ -4,200 +4,274 @@
 
 This is the Kotlin Multiplatform (KMP) iOS app for CIRIS. It uses Compose Multiplatform for UI and embeds a Python runtime to run the CIRIS backend.
 
+## Device Debugging (IMPORTANT)
+
+### Connecting to Physical Device
+
+The iPhone must be connected via USB and trusted. Check connection:
+
+```bash
+# List connected devices
+idevice_id -l
+# Example output: 00008110-0016395C1ED9401E
+
+# Get device info
+ideviceinfo -u <DEVICE_ID> | head -20
+```
+
+### Pulling Logs from Device
+
+Use `xcrun devicectl` to access app files on physical devices:
+
+```bash
+DEVICE_ID="00008110-0016395C1ED9401E"  # Replace with actual device ID
+BUNDLE_ID="ai.ciris.mobile"
+
+# List all files in app container
+xcrun devicectl device info files \
+  --device $DEVICE_ID \
+  --domain-type appDataContainer \
+  --domain-identifier $BUNDLE_ID 2>&1 | head -50
+
+# Find log files
+xcrun devicectl device info files \
+  --device $DEVICE_ID \
+  --domain-type appDataContainer \
+  --domain-identifier $BUNDLE_ID 2>&1 | grep -E "\.log|runtime_status|python_error"
+
+# Pull a specific file
+mkdir -p /tmp/ios_logs
+xcrun devicectl device copy from \
+  --device $DEVICE_ID \
+  --domain-type appDataContainer \
+  --domain-identifier $BUNDLE_ID \
+  --source Documents/ciris/logs/kmp_runtime.log \
+  --destination /tmp/ios_logs/kmp_runtime.log
+
+# View pulled log
+tail -100 /tmp/ios_logs/kmp_runtime.log
+```
+
+### Key Log Files
+
+| File | Description |
+|------|-------------|
+| `Documents/ciris/runtime_status.json` | Current Python runtime phase and status |
+| `Documents/ciris/logs/kmp_runtime.log` | Main KMP/Python runtime log |
+| `Documents/ciris/logs/kmp_errors.log` | Errors only |
+| `Documents/ciris/logs/incidents_*.log` | CIRIS incident logs |
+| `Documents/python_error.log` | Python import/startup errors |
+| `Documents/ciris/.restart_signal` | Restart signal file (if pending) |
+| `Documents/ciris/.server_ready` | Server ready indicator |
+
+### Quick Debug Commands
+
+```bash
+# Check runtime status
+xcrun devicectl device copy from --device $DEVICE_ID \
+  --domain-type appDataContainer --domain-identifier $BUNDLE_ID \
+  --source Documents/ciris/runtime_status.json \
+  --destination /tmp/ios_logs/status.json && cat /tmp/ios_logs/status.json
+
+# Get recent runtime log
+xcrun devicectl device copy from --device $DEVICE_ID \
+  --domain-type appDataContainer --domain-identifier $BUNDLE_ID \
+  --source Documents/ciris/logs/kmp_runtime.log \
+  --destination /tmp/ios_logs/runtime.log && tail -100 /tmp/ios_logs/runtime.log
+
+# Check for Python errors
+xcrun devicectl device copy from --device $DEVICE_ID \
+  --domain-type appDataContainer --domain-identifier $BUNDLE_ID \
+  --source Documents/python_error.log \
+  --destination /tmp/ios_logs/python_error.log 2>/dev/null && cat /tmp/ios_logs/python_error.log
+
+# Check crash reports
+mkdir -p /tmp/ios_crashes
+idevicecrashreport -k -u $DEVICE_ID /tmp/ios_crashes
+find /tmp/ios_crashes -name "*.ips" -o -name "*.crash" 2>/dev/null
+```
+
+### System Log (Limited)
+
+iOS restricts syslog access. This may not show app logs:
+
+```bash
+# Try to get syslog (may be empty)
+idevicesyslog -u $DEVICE_ID 2>&1 | grep -i "iosApp\|ciris" | head -50
+```
+
+### Checking App Installation
+
+```bash
+# List installed apps
+ideviceinstaller list --user 2>&1 | grep -i ciris
+# Output: ai.ciris.mobile, "1.0", "CIRIS"
+```
+
 ## Architecture
 
 ```
 mobile/iosApp/
 ├── iosApp/                    # Swift/ObjC code
-│   ├── ContentView.swift      # SwiftUI shell that hosts Compose + Apple Sign-In bridge
+│   ├── ContentView.swift      # SwiftUI shell + debug log viewer
 │   ├── AppleSignInHelper.swift # Sign in with Apple implementation
-│   ├── PythonBridge.swift     # Swift Python manager (extraction, init)
+│   ├── PythonBridge.swift     # Swift Python manager
 │   ├── PythonInit.h/m         # ObjC Python C API bridge
 │   └── Info.plist             # App configuration
 ├── scripts/
 │   ├── prepare_python_bundle.sh    # Copy resources from BeeWare build
 │   └── embed_native_frameworks.sh  # Copy/sign Python C extensions
 ├── Frameworks/                # Python.xcframework + native extensions
-├── Resources/                 # Extracted Python stdlib, app, packages
-├── Resources.zip              # Compressed bundle (built from Resources/)
+├── Resources/                 # Python stdlib, app, packages
+├── Resources.zip              # Compressed bundle
 └── project.yml                # xcodegen configuration
 ```
 
 ## Build Process
 
-### Prerequisites
-
-1. BeeWare build of iOS Python runtime:
-   ```bash
-   cd /Users/macmini/CIRISAgent/ios
-   briefcase build iOS
-   ```
-
-2. KMP shared framework:
-   ```bash
-   cd /Users/macmini/CIRISAgent/mobile
-   ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64
-   ```
-
-### Building the iOS App
+### For Simulator
 
 ```bash
 cd mobile/iosApp
 
-# 1. Prepare Python bundle from BeeWare build
-./scripts/prepare_python_bundle.sh
+# 1. Build KMP shared framework for simulator
+cd ../.. && ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64 && cd mobile/iosApp
 
-# 2. Create Resources.zip (avoids code signing 5000+ files)
-rm -f Resources.zip && cd Resources && zip -q -r ../Resources.zip . && cd ..
-
-# 3. Regenerate Xcode project
+# 2. Regenerate Xcode project
 xcodegen generate
 
-# 4. Build
-xcodebuild -project iosApp.xcodeproj -scheme iosApp -sdk iphonesimulator \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+# 3. Build for simulator
+xcodebuild -project iosApp.xcodeproj -scheme iosApp \
+  -sdk iphonesimulator \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -quiet build
+
+# 4. Install and launch on simulator
+APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/iosApp-* \
+  -name "iosApp.app" -path "*Debug-iphonesimulator*" | head -1)
+xcrun simctl install booted "$APP_PATH"
+xcrun simctl launch booted ai.ciris.mobile
 ```
 
-### Running on Simulator
+### For Physical Device
+
+Build via Xcode (requires signing):
+
+1. Open `iosApp.xcodeproj` in Xcode
+2. Select your device as target
+3. Cmd+R to build and run
+
+Or via command line (if provisioning is set up):
 
 ```bash
-# Boot simulator (use ID from `xcrun simctl list devices`)
-xcrun simctl boot B5DF0392-A42D-4C86-BE28-CAA456D00665
-
-# Install
-xcrun simctl install booted \
-  ~/Library/Developer/Xcode/DerivedData/iosApp-*/Build/Products/Debug-iphonesimulator/iosApp.app
-
-# Launch
-xcrun simctl launch booted ai.ciris.mobile
-
-# View logs
-xcrun simctl spawn booted log show --last 30s --predicate 'process == "iosApp"'
+xcodebuild -project iosApp.xcodeproj -scheme iosApp \
+  -sdk iphoneos -configuration Debug \
+  -destination 'generic/platform=iOS' \
+  DEVELOPMENT_TEAM=T7HP5J7U87 \
+  -allowProvisioningUpdates \
+  -quiet build
 ```
 
-## Key Components
+### Updating Python Bundle
 
-### PythonBridge.swift
+After changes to Python code:
 
-Manages Python runtime lifecycle:
-- Extracts `Resources.zip` to Documents/PythonResources on first launch
-- Initializes Python via `PythonInit` (ObjC bridge)
-- Starts CIRIS runtime in background thread
-- Provides health check endpoint monitoring
+```bash
+# 1. Copy updated files to Resources
+cp /path/to/updated/*.py Resources/app/ciris_ios/
 
-### PythonInit.m
+# 2. Recreate zip
+rm -f Resources.zip && cd Resources && zip -q -r ../Resources.zip . && cd ..
 
-ObjC bridge to Python C API:
-- `PyPreConfig_InitIsolatedConfig` - Configure isolated Python
-- `Py_InitializeFromConfig` - Initialize with custom paths
-- `runpy._run_module_as_main` - Run entry point module
+# 3. Bump version in Info.plist
+# Edit CFBundleVersion
 
-### kmp_main.py
-
-KMP-specific entry point that bypasses Toga (which requires main thread):
-```python
-# ciris_ios/kmp_main.py
-from ciris_ios.ios_main import run_startup_checks, setup_ios_environment, start_mobile_runtime
-
-if run_startup_checks():
-    setup_ios_environment()
-    asyncio.run(start_mobile_runtime())
+# 4. Regenerate project and build
+xcodegen generate
 ```
 
-### Resources.zip Structure
+## Sleep/Wake Recovery
 
+The app implements automatic recovery from iOS background suspension:
+
+### How It Works
+
+1. **Swift side** (`ContentView.swift`):
+   - Detects `scenePhase` change to `.active`
+   - Checks if server is healthy via HTTP
+   - If dead, writes `.restart_signal` file
+   - Waits for Python to restart
+
+2. **Python side** (`kmp_main.py`):
+   - Watchdog thread runs OUTSIDE asyncio (won't freeze)
+   - Monitors `.restart_signal` file every second
+   - When detected: stops event loop via `call_soon_threadsafe`
+   - Main loop restarts runtime with new event loop
+
+3. **Signal files**:
+   - `.restart_signal` - Swift writes, Python reads and deletes
+   - `.server_ready` - Python writes when server is up
+
+### Known Issues
+
+**Event Loop Binding Bug**: After restart, asyncio.Event objects from previous loop cause:
 ```
-Resources.zip
-├── python/           # Python stdlib (43MB)
-│   └── lib/python3.10/
-├── app/              # CIRIS source (10MB)
-│   ├── ciris_engine/
-│   ├── ciris_ios/
-│   └── ciris_sdk/
-└── app_packages/     # Third-party packages (28MB)
+RuntimeError: ... is bound to a different event loop
 ```
 
-**Important**: Web GUI (ios_gui_static, gui_static) is excluded - it's not needed for mobile.
+This happens in ShutdownService. Fix: Reset global asyncio state between iterations.
 
-## Native Module Frameworks
+## Logging System
 
-Python C extensions are compiled as individual `.framework` files by BeeWare. These are copied to `Frameworks/` and embedded in the app bundle by `embed_native_frameworks.sh`.
+Python logs go to `~/Documents/ciris/logs/`:
 
-76 frameworks including: `_struct`, `_json`, `_ssl`, `_hashlib`, `_sqlite3`, etc.
+- `kmp_runtime.log` - All runtime logs with phases
+- `kmp_errors.log` - Errors only
+- `runtime_status.json` - Current phase/status for Swift to read
+
+### Log Phases
+
+| Phase | Description |
+|-------|-------------|
+| EARLY_INIT | Before any imports |
+| COMPAT_SHIMS | Loading crypto compatibility |
+| ENVIRONMENT | Setting up iOS paths |
+| STARTUP_CHECKS | Validating Python modules |
+| RUNTIME_INIT | Creating CIRISRuntime |
+| SERVICE_INIT | Initializing 22 services |
+| SERVER | API server running |
+| SHUTDOWN | Graceful shutdown |
+
+### In-App Log Viewer
+
+Tap "View Logs" button on startup screen to see logs on-device without needing Xcode connection.
 
 ## Troubleshooting
 
-### "Python stdlib not found"
+### "No module named X" on startup
 
-The zip extraction may have failed or extracted to wrong path. Check:
+Native Python module missing. Check:
+1. Module exists in `Frameworks/*.framework`
+2. `embed_native_frameworks.sh` ran during build
+3. Correct architecture (device vs simulator)
+
+### Server not responding after resume
+
+Check for event loop binding errors in logs:
 ```bash
-xcrun simctl spawn booted log show --last 30s --predicate 'process == "iosApp"' | grep PythonBridge
+grep "different event loop" /tmp/ios_logs/incidents.log
 ```
 
-### "Module not found" errors
+### App stuck on "Starting server..."
 
-C extension frameworks missing. Ensure:
-1. `./scripts/prepare_python_bundle.sh` ran successfully
-2. `Frameworks/` contains `*.framework` files
-3. Rebuild with `xcodegen generate && xcodebuild ...`
-
-### "signal only works in main thread"
-
-Two components can cause this:
-1. **Toga**: Using `ciris_ios` module directly instead of `ciris_ios.kmp_main`. The latter bypasses Toga's signal handling.
-2. **Uvicorn**: The API adapter has a fix that calls `_serve()` directly on iOS to bypass uvicorn's signal handling wrapper. This is in `ciris_engine/logic/adapters/api/adapter.py`.
-
-The uvicorn fix was added because Python runs on a background thread in KMP (the Compose UI owns the main thread), but the threading module incorrectly identifies this as the main thread.
-
-### Service initialization failures
-
-Check CIRIS runtime logs:
+Pull logs to check what phase failed:
 ```bash
-xcrun simctl spawn booted log show --last 1m --predicate 'process == "iosApp"' | grep SERVICE
+# Check runtime status
+xcrun devicectl device copy from --device $DEVICE_ID \
+  --domain-type appDataContainer --domain-identifier ai.ciris.mobile \
+  --source Documents/ciris/runtime_status.json \
+  --destination /tmp/status.json && cat /tmp/status.json
 ```
-
-Incident log location: `Documents/ciris/logs/incidents_latest.log`
-
-## Differences from BeeWare Build
-
-| Aspect | BeeWare | KMP |
-|--------|---------|-----|
-| UI Framework | Toga (Python) | Compose (Kotlin) |
-| Python Entry | ciris_ios module | ciris_ios.kmp_main |
-| Resources | Loose files | Resources.zip |
-| Native Extensions | Auto-embedded | embed_native_frameworks.sh |
-| CIRIS Source | From BeeWare build | Overlaid from main repo |
-
-## Important: Source Overlay
-
-The `prepare_python_bundle.sh` script overlays the latest `ciris_engine/` and `ciris_adapters/` from the main CIRISAgent repo over the BeeWare build. This ensures any fixes in the main repo (like the uvicorn signal handler fix) are included without requiring a full BeeWare rebuild.
-
-If you make changes to the CIRIS engine:
-1. Changes in `/Users/macmini/CIRISAgent/ciris_engine/` will be included on next bundle preparation
-2. Run `./scripts/prepare_python_bundle.sh` to update the Resources/
-3. Regenerate Resources.zip: `cd Resources && zip -q -r ../Resources.zip . && cd ..`
-4. Rebuild the app
-
-## Authentication
-
-### Sign in with Apple
-
-The app uses Sign in with Apple for iOS authentication:
-
-1. **AppleSignInHelper.swift** - Handles ASAuthorizationController flow
-2. **ContentView.swift** - Bridges Apple credentials to Kotlin via `AppleSignInResultBridge`
-3. **Main.ios.kt** - Kotlin bridge that converts to `NativeSignInResult`
-4. **CIRISApp.kt** - Exchanges Apple ID token for CIRIS access token via `/v1/auth/native/apple`
-
-Token refresh is provider-aware - the `TokenManager` tracks whether the user signed in with Apple or Google and calls the correct endpoint on refresh.
-
-### Token Flow
-
-```
-Apple Sign-In → identityToken (JWT) → /v1/auth/native/apple → CIRIS access token → Keychain
-```
-
-The CIRIS access token is stored in iOS Keychain via `SecureStorage.ios.kt`.
 
 ## Status
 
@@ -205,14 +279,9 @@ The CIRIS access token is stored in iOS Keychain via `SecureStorage.ios.kt`.
 - [x] Resource extraction from zip
 - [x] Native module frameworks
 - [x] Startup checks (6/6 pass)
-- [x] Service initialization completes (22/22 services)
-- [x] Full runtime startup (CIRIS engine)
-- [x] API server running (setup wizard accessible)
+- [x] Service initialization (22/22 services)
+- [x] API server running
 - [x] Sign in with Apple integration
-- [x] Apple ID token → CIRIS token exchange
-- [x] Secure token storage (Keychain)
-- [x] Provider-aware token refresh
-- [x] Compose UI integration with API
-- [x] Navigation to Interact screen after auth
-- [ ] Full agent interaction flow
-- [ ] Billing/LLM integration (requires backend token configuration)
+- [x] Restart signal mechanism (watchdog thread)
+- [ ] Event loop binding fix for restart
+- [ ] Full agent interaction after resume

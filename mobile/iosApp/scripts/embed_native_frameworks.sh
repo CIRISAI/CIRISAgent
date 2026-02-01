@@ -30,32 +30,107 @@ if [ "$CONFIGURATION" = "Release" ] || [ "$PLATFORM_NAME" = "iphoneos" ] || [[ "
         codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --timestamp=none "$FRAMEWORKS_DST/shared.framework" 2>/dev/null || true
     fi
 
-    # CRITICAL: Copy lib-dynload from Python.xcframework to app bundle
-    # These .so files must be in the app bundle to be code-signed; they cannot be
-    # extracted from a zip at runtime because iOS refuses to load unsigned code.
+    # CRITICAL: For App Store, convert lib-dynload .so files to .framework bundles
+    # Apple App Store rejects standalone .so files - they MUST be in framework format.
+    # The .fwork redirect files in lib-dynload point to Frameworks/<module>.framework/<module>
     PYTHON_XCFRAMEWORK="${PROJECT_DIR}/Frameworks/Python.xcframework/ios-arm64"
     LIB_DYNLOAD_SRC="${PYTHON_XCFRAMEWORK}/lib/python3.10/lib-dynload"
-    LIB_DYNLOAD_DST="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/python_lib/lib-dynload"
 
     if [ -d "$LIB_DYNLOAD_SRC" ]; then
-        echo "Copying lib-dynload to app bundle for code signing..."
-        mkdir -p "$LIB_DYNLOAD_DST"
-        cp -R "$LIB_DYNLOAD_SRC"/* "$LIB_DYNLOAD_DST/"
+        echo "Converting lib-dynload .so files to frameworks for App Store..."
 
-        # Count and log
-        so_count=$(ls -1 "$LIB_DYNLOAD_DST"/*.so 2>/dev/null | wc -l | tr -d ' ')
-        echo "Copied $so_count .so files to app bundle"
+        # Count source files
+        so_count=$(ls -1 "$LIB_DYNLOAD_SRC"/*.so 2>/dev/null | wc -l | tr -d ' ')
+        echo "Found $so_count .so files to convert"
 
-        # Code sign all .so files (they'll also be signed by the overall app signing)
-        echo "Pre-signing .so files..."
-        for so_file in "$LIB_DYNLOAD_DST"/*.so; do
+        # Create dylib-Info-template.plist if it doesn't exist
+        DYLIB_PLIST="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/dylib-Info-template.plist"
+        if [ ! -f "$DYLIB_PLIST" ]; then
+            mkdir -p "$(dirname "$DYLIB_PLIST")"
+            cat > "$DYLIB_PLIST" << 'PLIST_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>EXECUTABLE_NAME</string>
+    <key>CFBundleIdentifier</key>
+    <string>BUNDLE_IDENTIFIER</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundlePackageType</key>
+    <string>FMWK</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>MinimumOSVersion</key>
+    <string>15.0</string>
+</dict>
+</plist>
+PLIST_EOF
+        fi
+
+        # Convert each .so to a .framework
+        for so_file in "$LIB_DYNLOAD_SRC"/*.so; do
             if [ -f "$so_file" ]; then
-                codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --timestamp=none "$so_file" 2>/dev/null || true
+                # Get module name: _hashlib.cpython-310-iphoneos.so -> _hashlib
+                so_basename=$(basename "$so_file")
+                FRAMEWORK_NAME="${so_basename%.cpython-*}"
+                FRAMEWORK_NAME="${FRAMEWORK_NAME%.so}"
+                FRAMEWORK_DIR="$FRAMEWORKS_DST/${FRAMEWORK_NAME}.framework"
+                BUNDLE_ID=$(echo "${PRODUCT_BUNDLE_IDENTIFIER}.stdlib.${FRAMEWORK_NAME}" | tr '_' '-')
+
+                # Create framework structure
+                mkdir -p "$FRAMEWORK_DIR"
+
+                # Copy Info.plist and customize
+                cp "$DYLIB_PLIST" "$FRAMEWORK_DIR/Info.plist"
+                plutil -replace CFBundleExecutable -string "$FRAMEWORK_NAME" "$FRAMEWORK_DIR/Info.plist"
+                plutil -replace CFBundleIdentifier -string "$BUNDLE_ID" "$FRAMEWORK_DIR/Info.plist"
+
+                # Copy the binary as the framework executable
+                cp "$so_file" "$FRAMEWORK_DIR/$FRAMEWORK_NAME"
+
+                # Code sign the framework
+                codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" \
+                    ${OTHER_CODE_SIGN_FLAGS:-} \
+                    -o runtime --timestamp=none \
+                    --preserve-metadata=identifier,entitlements,flags \
+                    --generate-entitlement-der \
+                    "$FRAMEWORK_DIR" 2>/dev/null || true
             fi
         done
-        echo "lib-dynload signing complete"
+
+        # Count frameworks created
+        stdlib_count=$(ls -1d "$FRAMEWORKS_DST"/*.framework 2>/dev/null | wc -l | tr -d ' ')
+        echo "Created/updated stdlib frameworks (total frameworks: $stdlib_count)"
     else
         echo "WARNING: lib-dynload not found at $LIB_DYNLOAD_SRC"
+    fi
+
+    # CRITICAL: Add privacy manifests to OpenSSL-using frameworks
+    # Apple requires PrivacyInfo.xcprivacy for any SDK using OpenSSL/BoringSSL
+    PRIVACY_MANIFEST="${PROJECT_DIR}/PrivacyInfo.xcprivacy"
+    if [ -f "$PRIVACY_MANIFEST" ]; then
+        echo ""
+        echo "Adding privacy manifests to OpenSSL-using frameworks..."
+        OPENSSL_FRAMEWORKS=(
+            "_hashlib"
+            "_ssl"
+            "cryptography.hazmat.bindings._openssl"
+        )
+        for fw_name in "${OPENSSL_FRAMEWORKS[@]}"; do
+            fw_path="$FRAMEWORKS_DST/${fw_name}.framework"
+            if [ -d "$fw_path" ]; then
+                cp "$PRIVACY_MANIFEST" "$fw_path/PrivacyInfo.xcprivacy"
+                echo "  Added PrivacyInfo.xcprivacy to ${fw_name}.framework"
+            fi
+        done
+    else
+        echo "WARNING: PrivacyInfo.xcprivacy not found at $PRIVACY_MANIFEST"
     fi
 
     # CRITICAL: Create .framework bundles for third-party native extensions

@@ -104,13 +104,26 @@ struct ContentView: View {
         await MainActor.run {
             isReconnecting = false
             if success {
-                NSLog("[ContentView] Server recovered successfully")
+                NSLog("[ContentView] Server recovered successfully - refreshing UI")
                 reconnectFailed = false
                 reconnectAttempts = 0  // Reset on success
+
+                // Force Compose UI to refresh by recreating the view
+                // This clears any stale error state in the Kotlin side
+                pythonReady = false
             } else {
                 reconnectAttempts += 1
                 NSLog("[ContentView] Server did not recover (attempt \(reconnectAttempts))")
                 reconnectFailed = true
+            }
+        }
+
+        // If recovery succeeded, re-enable the UI after a brief moment
+        if success {
+            try? await Task.sleep(nanoseconds: 100_000_000)  // 0.1 seconds
+            await MainActor.run {
+                pythonReady = true
+                NSLog("[ContentView] UI refreshed")
             }
         }
     }
@@ -235,6 +248,34 @@ struct StartupStatus: Codable {
     var runtime_started: Bool
 }
 
+/// Runtime status from Python's runtime_status.json
+struct RuntimeStatus: Codable {
+    var phase: String
+    var status: String
+    var timestamp: Double?
+    var error: String?
+    var port: Int?
+    var restart_count: Int?
+
+    var phaseEmoji: String {
+        switch phase {
+        case "EARLY_INIT": return "🔄"
+        case "COMPAT_SHIMS": return "🔧"
+        case "IOS_MAIN_IMPORT": return "📦"
+        case "STARTUP": return "🚀"
+        case "ENVIRONMENT": return "🌍"
+        case "STARTUP_CHECKS": return "✅"
+        case "RUNTIME_INIT": return "⚙️"
+        case "SERVICE_INIT": return "🔌"
+        case "RUNNING": return "💚"
+        case "RESTARTING": return "🔁"
+        case "ERROR": return "❌"
+        case "STOPPED": return "⏹️"
+        default: return "❓"
+        }
+    }
+}
+
 // ExtractionStatus is defined in PythonBridge.swift
 
 // MARK: - Initializing View
@@ -244,8 +285,10 @@ struct InitializingView: View {
 
     @State private var startupStatus: StartupStatus? = nil
     @State private var extractionStatus: ExtractionStatus? = nil
+    @State private var runtimeStatus: RuntimeStatus? = nil
     @State private var statusTimer: Timer? = nil
     @State private var hasStartedInit = false
+    @State private var showDebugLog = false
 
     let cirisColor = Color(red: 0.255, green: 0.612, blue: 0.627)
 
@@ -335,9 +378,48 @@ struct InitializingView: View {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: cirisColor))
                     }
+
+                    // Runtime status from Python (debug info)
+                    if let rs = runtimeStatus {
+                        VStack(spacing: 4) {
+                            HStack {
+                                Text(rs.phaseEmoji)
+                                Text(rs.phase)
+                                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                Text("→")
+                                    .foregroundColor(.gray)
+                                Text(rs.status)
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundColor(rs.status == "failed" ? .red : .gray)
+                            }
+
+                            if let error = rs.error {
+                                Text(error)
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundColor(.red)
+                                    .lineLimit(2)
+                                    .padding(.horizontal, 16)
+                            }
+                        }
+                        .padding(.top, 12)
+                    }
+
+                    // Debug log button
+                    Button(action: { showDebugLog = true }) {
+                        HStack {
+                            Image(systemName: "doc.text.magnifyingglass")
+                            Text("View Logs")
+                        }
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray.opacity(0.6))
+                    }
+                    .padding(.top, 16)
                 }
             }
             .padding(.vertical, 40)
+        }
+        .sheet(isPresented: $showDebugLog) {
+            DebugLogView()
         }
         .onAppear {
             // Start polling FIRST, then start initialization
@@ -403,6 +485,165 @@ struct InitializingView: View {
             DispatchQueue.main.async {
                 self.startupStatus = status
             }
+        }
+
+        // Load runtime status from Python
+        let runtimeFile = cirisDir.appendingPathComponent("runtime_status.json")
+        if fileManager.fileExists(atPath: runtimeFile.path),
+           let data = try? Data(contentsOf: runtimeFile),
+           let status = try? JSONDecoder().decode(RuntimeStatus.self, from: data) {
+            DispatchQueue.main.async {
+                self.runtimeStatus = status
+            }
+        }
+    }
+}
+
+// MARK: - Debug Log View
+
+struct DebugLogView: View {
+    @Environment(\.dismiss) var dismiss
+    @State private var logContent: String = "Loading..."
+    @State private var selectedLog: String = "runtime"
+    @State private var autoRefresh = true
+    @State private var refreshTimer: Timer?
+
+    let logTypes = ["runtime", "errors", "swift"]
+    let cirisColor = Color(red: 0.255, green: 0.612, blue: 0.627)
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Log type picker
+                Picker("Log Type", selection: $selectedLog) {
+                    Text("Runtime").tag("runtime")
+                    Text("Errors").tag("errors")
+                    Text("Swift").tag("swift")
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .padding()
+                .onChange(of: selectedLog) { _ in
+                    loadLog()
+                }
+
+                // Log content
+                ScrollView {
+                    ScrollViewReader { proxy in
+                        Text(logContent)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(8)
+                            .id("logBottom")
+                    }
+                }
+                .background(Color.black)
+
+                // Auto-refresh toggle
+                HStack {
+                    Toggle("Auto-refresh", isOn: $autoRefresh)
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+
+                    Spacer()
+
+                    Button("Refresh") {
+                        loadLog()
+                    }
+                    .font(.system(size: 12))
+                    .foregroundColor(cirisColor)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(Color(red: 0.12, green: 0.12, blue: 0.18))
+            }
+            .background(Color(red: 0.1, green: 0.1, blue: 0.18))
+            .navigationTitle("Debug Logs")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .onAppear {
+            loadLog()
+            startAutoRefresh()
+        }
+        .onDisappear {
+            refreshTimer?.invalidate()
+        }
+        .onChange(of: autoRefresh) { enabled in
+            if enabled {
+                startAutoRefresh()
+            } else {
+                refreshTimer?.invalidate()
+            }
+        }
+    }
+
+    private func startAutoRefresh() {
+        refreshTimer?.invalidate()
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            if autoRefresh {
+                loadLog()
+            }
+        }
+    }
+
+    private func loadLog() {
+        let fileManager = FileManager.default
+        guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            logContent = "Could not access documents directory"
+            return
+        }
+
+        let logsDir = documentsURL.appendingPathComponent("ciris/logs")
+
+        let logFile: URL
+        switch selectedLog {
+        case "errors":
+            logFile = logsDir.appendingPathComponent("kmp_errors.log")
+        case "swift":
+            logFile = logsDir.appendingPathComponent("swift_bridge.log")
+        default:
+            logFile = logsDir.appendingPathComponent("kmp_runtime.log")
+        }
+
+        if !fileManager.fileExists(atPath: logFile.path) {
+            // Try python_error.log as fallback
+            let errorLog = documentsURL.appendingPathComponent("python_error.log")
+            if fileManager.fileExists(atPath: errorLog.path),
+               let content = try? String(contentsOf: errorLog, encoding: .utf8) {
+                logContent = "=== Python Error Log ===\n\n" + content
+                return
+            }
+
+            logContent = "No log file found at:\n\(logFile.path)\n\nLog directory contents:\n"
+
+            if fileManager.fileExists(atPath: logsDir.path),
+               let files = try? fileManager.contentsOfDirectory(atPath: logsDir.path) {
+                logContent += files.joined(separator: "\n")
+            } else {
+                logContent += "(logs directory does not exist)"
+
+                // Show ciris directory contents instead
+                let cirisDir = documentsURL.appendingPathComponent("ciris")
+                if let files = try? fileManager.contentsOfDirectory(atPath: cirisDir.path) {
+                    logContent += "\n\nciris/ directory:\n" + files.joined(separator: "\n")
+                }
+            }
+            return
+        }
+
+        do {
+            let content = try String(contentsOf: logFile, encoding: .utf8)
+            // Get last 200 lines
+            let lines = content.components(separatedBy: .newlines)
+            let lastLines = lines.suffix(200)
+            logContent = lastLines.joined(separator: "\n")
+        } catch {
+            logContent = "Error reading log: \(error.localizedDescription)"
         }
     }
 }

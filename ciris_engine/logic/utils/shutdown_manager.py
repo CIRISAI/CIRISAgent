@@ -17,6 +17,24 @@ logger = logging.getLogger(__name__)
 _global_shutdown_service: Optional[ShutdownService] = None
 
 
+def reset_global_shutdown_service() -> None:
+    """
+    Reset the global shutdown service.
+
+    This MUST be called before restarting the asyncio event loop (e.g., in iOS
+    app restart scenarios) to avoid "bound to a different event loop" errors.
+    """
+    global _global_shutdown_service
+    if _global_shutdown_service is not None:
+        # Clear any asyncio.Event that's bound to the old loop
+        _global_shutdown_service._shutdown_event = None
+        _global_shutdown_service._shutdown_requested = False
+        _global_shutdown_service._shutdown_reason = None
+        _global_shutdown_service._emergency_mode = False
+        logger.info("Global shutdown service reset for new event loop")
+    _global_shutdown_service = None
+
+
 # Keep original function definition for type hints
 def _get_shutdown_service() -> ShutdownService:
     """Get or create the global shutdown service instance."""
@@ -104,4 +122,5 @@ __all__ = [
     "wait_for_global_shutdown",
     "wait_for_global_shutdown_async",
     "execute_async_handlers",
+    "reset_global_shutdown_service",
 ]

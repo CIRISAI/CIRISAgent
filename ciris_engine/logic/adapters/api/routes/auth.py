@@ -860,16 +860,33 @@ def _check_stored_user_role(auth_service: "APIAuthService", provider: str, exter
 def _check_first_oauth_user_status(
     auth_service: "APIAuthService", oauth_users: Optional[Dict[str, Any]], provider: str, external_id: Optional[str]
 ) -> bool:
-    """Check if this is the first OAuth user (setup wizard scenario)."""
-    if not _is_first_oauth_user(oauth_users):
+    """Check if this is the first OAuth user (setup wizard scenario).
+
+    IMPORTANT: We must check the _users dict (loaded from database) not just
+    _oauth_users (in-memory only). After app restart, _oauth_users is empty
+    but _users contains all users loaded from the database.
+    """
+    # Get users loaded from database - this is the authoritative source
+    stored_users = getattr(auth_service, "_users", {})
+
+    # If ANY users exist in the database, this is not the first user
+    if stored_users:
+        logger.debug(f"[AUTH DEBUG] Database has {len(stored_users)} existing users - not first user")
         return False
 
-    # Only grant SYSTEM_ADMIN if BOTH oauth_users AND _users are empty for this OAuth identity
-    stored_users = getattr(auth_service, "_users", {})
-    user_id_check: Optional[str] = f"{provider}:{external_id}" if external_id else None
-    user_in_stored = user_id_check and user_id_check in stored_users
+    # Also check in-memory oauth_users cache
+    if oauth_users and len(oauth_users) > 0:
+        logger.debug(f"[AUTH DEBUG] OAuth cache has {len(oauth_users)} users - not first user")
+        return False
 
-    return not user_in_stored
+    # Check if this specific user already exists
+    user_id_check: Optional[str] = f"{provider}:{external_id}" if external_id else None
+    if user_id_check and user_id_check in stored_users:
+        logger.debug(f"[AUTH DEBUG] User {user_id_check} already exists - not first user")
+        return False
+
+    logger.info("[AUTH DEBUG] No existing users found - this is the first OAuth user")
+    return True
 
 
 def _determine_user_role(

@@ -648,11 +648,28 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
             # Some providers (Together AI) return non-standard model list responses
             logger.info("[VALIDATE_LLM] Attempting test completion...")
             model_to_test = config.model or "gpt-3.5-turbo"
-            await client.chat.completions.create(
-                model=model_to_test,
-                messages=[{"role": "user", "content": "Hi"}],
-                max_tokens=1,
-            )  # Validation only - response not needed
+
+            # OpenAI reasoning models (o1, o1-mini, o3-mini) use max_completion_tokens instead of max_tokens
+            # Try max_tokens first, fall back to max_completion_tokens if needed
+            try:
+                await client.chat.completions.create(
+                    model=model_to_test,
+                    messages=[{"role": "user", "content": "Hi"}],
+                    max_tokens=1,
+                )
+            except Exception as token_err:
+                error_str = str(token_err).lower()
+                if "max_tokens" in error_str and "max_completion_tokens" in error_str:
+                    # Reasoning model - retry with max_completion_tokens
+                    logger.info("[VALIDATE_LLM] Model requires max_completion_tokens, retrying...")
+                    await client.chat.completions.create(
+                        model=model_to_test,
+                        messages=[{"role": "user", "content": "Hi"}],
+                        max_completion_tokens=1,
+                    )
+                else:
+                    raise  # Re-raise if it's a different error
+
             logger.info(f"[VALIDATE_LLM] SUCCESS! Test completion worked with model: {model_to_test}")
             return LLMValidationResponse(
                 valid=True,

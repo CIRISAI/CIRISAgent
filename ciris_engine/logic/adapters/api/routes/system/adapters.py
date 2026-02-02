@@ -439,7 +439,7 @@ def _create_auto_adapter_info(adapter_name: str, service_type: Any) -> AdapterIn
 
 
 def _get_auto_loaded_adapters(
-    service_registry: Any, seen_adapter_ids: set
+    service_registry: Any, seen_adapter_ids: set[str]
 ) -> List[AdapterInfo]:
     """Get auto-loaded adapters from service registry."""
     from ciris_engine.schemas.runtime.enums import ServiceType

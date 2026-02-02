@@ -1183,6 +1183,238 @@ class TestAutoLoadAdaptersFlag:
                     mock_discovery.assert_not_called()
 
 
+class TestIsAutoDiscoveryEnabled:
+    """Tests for _is_auto_discovery_enabled helper method."""
+
+    @pytest.fixture
+    def temp_data_dir(self):
+        """Create temporary data directory."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            yield temp_dir
+
+    @pytest.fixture
+    def mock_essential_config(self, temp_data_dir):
+        """Create mock essential config."""
+        config = Mock(spec=EssentialConfig)
+        config.data_dir = temp_data_dir
+
+        mock_database = Mock()
+        mock_database.main_db = Path(temp_data_dir) / "test.db"
+        mock_database.secrets_db = Path(temp_data_dir) / "secrets.db"
+        mock_database.audit_db = Path(temp_data_dir) / "audit.db"
+        mock_database.database_url = None
+        config.database = mock_database
+
+        mock_security = Mock()
+        mock_security.secrets_key_path = Path(temp_data_dir) / ".ciris_keys"
+        config.security = mock_security
+
+        mock_graph = Mock()
+        mock_graph.tsdb_raw_retention_hours = 24
+        config.graph = mock_graph
+
+        mock_adapters = Mock()
+        mock_adapters.auto_discovery = True
+        mock_adapters.disabled_adapters = []
+        config.adapters = mock_adapters
+
+        return config
+
+    @pytest.fixture
+    def service_initializer(self, mock_essential_config):
+        """Create ServiceInitializer instance."""
+        initializer = ServiceInitializer(essential_config=mock_essential_config)
+        return initializer
+
+    def test_returns_false_when_no_identity(self, service_initializer):
+        """Returns False when no identity exists."""
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=None,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                assert service_initializer._is_auto_discovery_enabled() is False
+
+    def test_returns_false_when_no_auto_load_attr(self, service_initializer):
+        """Returns False when identity.core_profile lacks auto_load_adapters."""
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock(spec=[])
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                assert service_initializer._is_auto_discovery_enabled() is False
+
+    def test_returns_false_when_template_disabled(self, service_initializer):
+        """Returns False when template disables auto_load_adapters."""
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock()
+        mock_identity.core_profile.auto_load_adapters = False
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                assert service_initializer._is_auto_discovery_enabled() is False
+
+    def test_returns_false_when_config_disabled(self, service_initializer, mock_essential_config):
+        """Returns False when config.adapters.auto_discovery is False."""
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock()
+        mock_identity.core_profile.auto_load_adapters = True
+        mock_essential_config.adapters.auto_discovery = False
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                assert service_initializer._is_auto_discovery_enabled() is False
+
+    def test_returns_true_when_both_enabled(self, service_initializer, mock_essential_config):
+        """Returns True when both template and config enable auto-discovery."""
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock()
+        mock_identity.core_profile.auto_load_adapters = True
+        mock_essential_config.adapters.auto_discovery = True
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                assert service_initializer._is_auto_discovery_enabled() is True
+
+
+class TestStartAndRegisterAdapter:
+    """Tests for _start_and_register_adapter helper method."""
+
+    @pytest.fixture
+    def temp_data_dir(self):
+        """Create temporary data directory."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            yield temp_dir
+
+    @pytest.fixture
+    def mock_essential_config(self, temp_data_dir):
+        """Create mock essential config."""
+        config = Mock(spec=EssentialConfig)
+        config.data_dir = temp_data_dir
+
+        mock_database = Mock()
+        mock_database.main_db = Path(temp_data_dir) / "test.db"
+        config.database = mock_database
+
+        mock_security = Mock()
+        mock_security.secrets_key_path = Path(temp_data_dir) / ".ciris_keys"
+        config.security = mock_security
+
+        mock_graph = Mock()
+        mock_graph.tsdb_raw_retention_hours = 24
+        config.graph = mock_graph
+
+        return config
+
+    @pytest.fixture
+    def service_initializer(self, mock_essential_config):
+        """Create ServiceInitializer instance."""
+        initializer = ServiceInitializer(essential_config=mock_essential_config)
+        initializer.service_registry = Mock()
+        return initializer
+
+    @pytest.mark.asyncio
+    async def test_starts_service_with_start_method(self, service_initializer):
+        """Calls service.start() if available."""
+        mock_service = Mock()
+        mock_service.start = Mock(return_value=None)
+
+        await service_initializer._start_and_register_adapter("test", mock_service)
+
+        mock_service.start.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_awaits_async_start(self, service_initializer):
+        """Awaits start() if it returns awaitable."""
+        mock_service = Mock()
+        mock_service.start = AsyncMock()
+
+        await service_initializer._start_and_register_adapter("test", mock_service)
+
+        mock_service.start.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_registers_tool_service(self, service_initializer):
+        """Registers service with TOOL type if has get_all_tool_info."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        mock_service = Mock()
+        mock_service.get_all_tool_info = Mock()
+        del mock_service.start
+
+        await service_initializer._start_and_register_adapter("tool_adapter", mock_service)
+
+        service_initializer.service_registry.register_service.assert_called_once()
+        call_kwargs = service_initializer.service_registry.register_service.call_args.kwargs
+        assert call_kwargs["service_type"] == ServiceType.TOOL
+        assert "execute_tool" in call_kwargs["capabilities"]
+        assert call_kwargs["metadata"]["adapter"] == "tool_adapter"
+
+    @pytest.mark.asyncio
+    async def test_registers_wise_authority_service(self, service_initializer):
+        """Registers service with WISE_AUTHORITY type if has send_deferral."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        mock_service = Mock()
+        mock_service.send_deferral = Mock()
+        del mock_service.start
+        del mock_service.get_all_tool_info
+
+        await service_initializer._start_and_register_adapter("wa_adapter", mock_service)
+
+        service_initializer.service_registry.register_service.assert_called_once()
+        call_kwargs = service_initializer.service_registry.register_service.call_args.kwargs
+        assert call_kwargs["service_type"] == ServiceType.WISE_AUTHORITY
+        assert "send_deferral" in call_kwargs["capabilities"]
+
+    @pytest.mark.asyncio
+    async def test_skips_registration_when_no_registry(self, service_initializer):
+        """Skips registration when service_registry is None."""
+        service_initializer.service_registry = None
+        mock_service = Mock()
+        mock_service.get_all_tool_info = Mock()
+        del mock_service.start
+
+        # Should not raise
+        await service_initializer._start_and_register_adapter("test", mock_service)
+
+    @pytest.mark.asyncio
+    async def test_no_registration_for_unknown_type(self, service_initializer):
+        """Does not register service without recognized attributes."""
+        mock_service = Mock(spec=[])  # No get_all_tool_info or send_deferral
+
+        await service_initializer._start_and_register_adapter("unknown", mock_service)
+
+        service_initializer.service_registry.register_service.assert_not_called()
+
+
 class TestGetLLMServiceConfigValue:
     """Test cases for _get_llm_service_config_value helper method."""
 

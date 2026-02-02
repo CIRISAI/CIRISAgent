@@ -1876,9 +1876,6 @@ async def native_apple_token_exchange(
         )
         logger.info(f"[AppleNativeAuth] OAuth user created/retrieved - user_id: {oauth_user.user_id}")
 
-        # Store OAuth profile data (Apple doesn't provide picture URLs)
-        name = user_data.get("name") or "Unknown"
-
         # Auto-mint SYSTEM_ADMIN users as WA with ROOT role so they can handle deferrals
         logger.info(
             f"CIRIS_USER_CREATE: [AppleNativeAuth] Checking auto-mint for {oauth_user.user_id} with role {oauth_user.role}"

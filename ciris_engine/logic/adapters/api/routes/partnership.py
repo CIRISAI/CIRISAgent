@@ -39,6 +39,94 @@ from ciris_engine.schemas.runtime.enums import TaskStatus
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
 
+# ============================================================================
+# Consolidated Helpers
+# ============================================================================
+
+
+def get_consent_manager(req: Request) -> Any:
+    """Get consent manager from app state or create default instance.
+
+    Consolidates the repeated consent manager retrieval pattern.
+
+    Args:
+        req: FastAPI request object
+
+    Returns:
+        ConsentService instance (consent manager)
+    """
+    from ciris_engine.logic.services.governance.consent import ConsentService
+    from ciris_engine.logic.services.lifecycle.time.service import TimeService
+
+    if hasattr(req.app.state, "consent_manager") and req.app.state.consent_manager:
+        return req.app.state.consent_manager
+
+    time_service = TimeService()
+    return ConsentService(time_service=time_service)
+
+
+def get_partnership_manager(req: Request) -> Any:
+    """Get partnership manager from consent service.
+
+    Consolidates consent manager + partnership manager retrieval.
+
+    Args:
+        req: FastAPI request object
+
+    Returns:
+        Partnership manager instance
+    """
+    consent_manager = get_consent_manager(req)
+    return consent_manager._partnership_manager
+
+
+def require_admin(current_user: TokenData, action_description: str) -> None:
+    """Verify user has admin privileges or raise 403.
+
+    Consolidates the repeated admin role check pattern.
+
+    Args:
+        current_user: Authenticated user token data
+        action_description: Description of the action for error message
+
+    Raises:
+        HTTPException: 403 if user is not admin
+    """
+    if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Only administrators can {action_description}",
+        )
+
+
+def create_partnership_response(
+    data: dict[str, Any],
+    message: str,
+    extra_metadata: Optional[dict[str, Any]] = None,
+) -> StandardResponse:
+    """Create a standardized partnership response.
+
+    Consolidates the repeated StandardResponse pattern.
+
+    Args:
+        data: Response data dictionary
+        message: Response message
+        extra_metadata: Additional metadata to include
+
+    Returns:
+        StandardResponse with standard timestamp metadata
+    """
+    metadata = {"timestamp": datetime.now(timezone.utc).isoformat()}
+    if extra_metadata:
+        metadata.update(extra_metadata)
+
+    return StandardResponse(
+        success=True,
+        data=data,
+        message=message,
+        metadata=metadata,
+    )
+
 
 def _handle_partnership_accept(
     partnership_user_id: str,
@@ -308,36 +396,16 @@ async def list_pending_partnerships(
 
     Requires: ADMIN or SYSTEM_ADMIN role
     """
-    if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can view pending partnerships",
-        )
+    require_admin(current_user, "view pending partnerships")
 
-    # Get consent service from app state
-    from ciris_engine.logic.services.governance.consent import ConsentService
-    from ciris_engine.logic.services.lifecycle.time.service import TimeService
-
-    if hasattr(req.app.state, "consent_manager") and req.app.state.consent_manager:
-        consent_manager = req.app.state.consent_manager
-    else:
-        # Create default instance if not initialized
-        time_service = TimeService()
-        consent_manager = ConsentService(time_service=time_service)
-
-    # Get partnership manager
-    partnership_manager = consent_manager._partnership_manager
-
-    # Get typed pending partnerships
+    partnership_manager = get_partnership_manager(req)
     pending: list[PartnershipRequest] = partnership_manager.list_pending_partnerships_typed()
 
-    # Classify by aging status for dashboard summary
     normal = [p for p in pending if p.aging_status.value == "normal"]
     warning = [p for p in pending if p.aging_status.value == "warning"]
     critical = [p for p in pending if p.aging_status.value == "critical"]
 
-    return StandardResponse(
-        success=True,
+    return create_partnership_response(
         data={
             "requests": [p.model_dump() for p in pending],
             "total": len(pending),
@@ -348,10 +416,7 @@ async def list_pending_partnerships(
             },
         },
         message=f"Found {len(pending)} pending partnership requests",
-        metadata={
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "critical_count": len(critical),
-        },
+        extra_metadata={"critical_count": len(critical)},
     )
 
 
@@ -371,36 +436,14 @@ async def get_partnership_metrics(
 
     Requires: ADMIN or SYSTEM_ADMIN role
     """
-    if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can view partnership metrics",
-        )
+    require_admin(current_user, "view partnership metrics")
 
-    # Get consent service from app state
-    from ciris_engine.logic.services.governance.consent import ConsentService
-    from ciris_engine.logic.services.lifecycle.time.service import TimeService
-
-    if hasattr(req.app.state, "consent_manager") and req.app.state.consent_manager:
-        consent_manager = req.app.state.consent_manager
-    else:
-        # Create default instance if not initialized
-        time_service = TimeService()
-        consent_manager = ConsentService(time_service=time_service)
-
-    # Get partnership manager
-    partnership_manager = consent_manager._partnership_manager
-
-    # Get typed metrics
+    partnership_manager = get_partnership_manager(req)
     metrics: PartnershipMetrics = partnership_manager.get_partnership_metrics_typed()
 
-    return StandardResponse(
-        success=True,
+    return create_partnership_response(
         data=metrics.model_dump(),
         message="Partnership metrics retrieved",
-        metadata={
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
     )
 
 
@@ -418,37 +461,15 @@ async def get_partnership_history(
 
     Requires: ADMIN or SYSTEM_ADMIN role
     """
-    if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can view partnership history",
-        )
+    require_admin(current_user, "view partnership history")
 
-    # Get consent service from app state
-    from ciris_engine.logic.services.governance.consent import ConsentService
-    from ciris_engine.logic.services.lifecycle.time.service import TimeService
-
-    if hasattr(req.app.state, "consent_manager") and req.app.state.consent_manager:
-        consent_manager = req.app.state.consent_manager
-    else:
-        # Create default instance if not initialized
-        time_service = TimeService()
-        consent_manager = ConsentService(time_service=time_service)
-
-    # Get partnership manager
-    partnership_manager = consent_manager._partnership_manager
-
-    # Get history
+    partnership_manager = get_partnership_manager(req)
     history: PartnershipHistory = partnership_manager.get_partnership_history(user_id)
 
-    return StandardResponse(
-        success=True,
+    return create_partnership_response(
         data=history.model_dump(),
         message=f"Partnership history retrieved for {user_id}",
-        metadata={
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "total_requests": history.total_requests,
-        },
+        extra_metadata={"total_requests": history.total_requests},
     )
 
 
@@ -477,19 +498,10 @@ async def decide_partnership(
     Returns:
         StandardResponse with decision confirmation and updated consent status
     """
-    # Get consent service from app state
     from ciris_engine.logic import persistence
-    from ciris_engine.logic.services.governance.consent import ConsentService
-    from ciris_engine.logic.services.lifecycle.time.service import TimeService
 
-    if hasattr(req.app.state, "consent_manager") and req.app.state.consent_manager:
-        consent_manager = req.app.state.consent_manager
-    else:
-        # Create default instance if not initialized
-        time_service = TimeService()
-        consent_manager = ConsentService(time_service=time_service)
+    consent_manager = get_consent_manager(req)
 
-    # Extract decision parameters
     task_id = decision_data.get("task_id")
     decision = decision_data.get("decision")
     reason = decision_data.get("reason")
@@ -506,7 +518,6 @@ async def decide_partnership(
             detail="decision must be 'accept', 'reject', or 'defer'",
         )
 
-    # Get the task to verify it exists and extract user_id
     task = persistence.get_task_by_id(task_id)
     if not task:
         raise HTTPException(
@@ -514,7 +525,6 @@ async def decide_partnership(
             detail=f"Partnership task {task_id} not found",
         )
 
-    # Extract user_id from task context
     partnership_user_id = task.context.user_id if task.context else None
     if not partnership_user_id:
         raise HTTPException(
@@ -522,15 +532,12 @@ async def decide_partnership(
             detail="Task does not contain valid user context",
         )
 
-    # Verify the current user has permission to decide on this partnership
-    # Either the user involved in the partnership OR an admin can decide
     if current_user.username != partnership_user_id and current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only decide on your own partnership requests",
         )
 
-    # Handle the decision with extracted helper functions
     partnership_manager = consent_manager._partnership_manager
 
     if decision == "accept":

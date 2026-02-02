@@ -233,6 +233,37 @@ class TestValidateBillingUrl:
         result = _validate_billing_url(url)
         assert result == url
 
+    def test_accepts_ciris_services_pattern(self):
+        """Accepts billing*.ciris-services-N.ai pattern."""
+        # billing1.ciris-services-1.ai
+        url = "https://billing1.ciris-services-1.ai/v1"
+        assert _validate_billing_url(url) == url
+
+        # billing.ciris-services-99.ai (no number after billing)
+        url2 = "https://billing.ciris-services-99.ai/v1"
+        assert _validate_billing_url(url2) == url2
+
+        # billing2.ciris-services-42.ai
+        url3 = "https://billing2.ciris-services-42.ai/v1"
+        assert _validate_billing_url(url3) == url3
+
+    def test_rejects_invalid_ciris_services_pattern(self):
+        """Rejects hosts that look similar but don't match pattern."""
+        # Wrong TLD
+        url = "https://billing1.ciris-services-1.com/v1"
+        with pytest.raises(ValueError, match="Untrusted billing host"):
+            _validate_billing_url(url)
+
+        # Service number > 99
+        url2 = "https://billing1.ciris-services-100.ai/v1"
+        with pytest.raises(ValueError, match="Untrusted billing host"):
+            _validate_billing_url(url2)
+
+        # Missing ciris-services
+        url3 = "https://billing1.evil-services-1.ai/v1"
+        with pytest.raises(ValueError, match="Untrusted billing host"):
+            _validate_billing_url(url3)
+
     def test_rejects_untrusted_host(self):
         """Rejects URLs pointing to untrusted hosts."""
         url = "https://evil-attacker.com/v1"

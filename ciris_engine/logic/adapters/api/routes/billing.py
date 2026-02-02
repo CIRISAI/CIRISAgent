@@ -34,14 +34,28 @@ ERROR_INVALID_PAYMENT_ID = "Invalid payment ID format"
 # Regex pattern for valid payment IDs (Stripe format: pi_xxx or similar alphanumeric with underscores)
 PAYMENT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
 
-# Trusted billing service domains (prevents SSRF via env var manipulation)
-_TRUSTED_BILLING_HOSTS = frozenset(
-    {
-        "billing.ciris.ai",
-        "localhost",
-        "127.0.0.1",
-    }
-)
+# Trusted billing service hosts (prevents SSRF via env var manipulation)
+_TRUSTED_BILLING_HOSTS_EXACT = frozenset({"billing.ciris.ai", "localhost", "127.0.0.1"})
+
+# Pattern for CIRIS services hosts: billing*.ciris-services-N.ai where N is 1-99
+_CIRIS_SERVICES_PATTERN = re.compile(r"^billing\d*\.ciris-services-\d{1,2}\.ai$")
+
+
+def _is_trusted_billing_host(hostname: str | None) -> bool:
+    """Check if hostname is a trusted billing service host.
+
+    Trusted hosts:
+    - billing.ciris.ai
+    - localhost, 127.0.0.1
+    - billing*.ciris-services-N.ai (where N is 1-99)
+    """
+    if hostname is None:
+        return False
+    if hostname in _TRUSTED_BILLING_HOSTS_EXACT:
+        return True
+    if _CIRIS_SERVICES_PATTERN.match(hostname):
+        return True
+    return False
 
 
 def _validate_billing_url(url: str) -> str:
@@ -75,7 +89,7 @@ def _validate_billing_url(url: str) -> str:
         raise ValueError("Billing URL must use HTTPS for non-localhost hosts")
 
     # Validate against trusted hosts
-    if parsed.hostname not in _TRUSTED_BILLING_HOSTS:
+    if not _is_trusted_billing_host(parsed.hostname):
         raise ValueError(f"Untrusted billing host: {parsed.hostname}")
 
     return url

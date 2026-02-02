@@ -8,7 +8,7 @@ Frontend should NEVER call the billing backend directly.
 import logging
 import re
 from typing import Any, Dict, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -33,6 +33,52 @@ ERROR_INVALID_PAYMENT_ID = "Invalid payment ID format"
 
 # Regex pattern for valid payment IDs (Stripe format: pi_xxx or similar alphanumeric with underscores)
 PAYMENT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
+
+# Trusted billing service domains (prevents SSRF via env var manipulation)
+_TRUSTED_BILLING_HOSTS = frozenset(
+    {
+        "billing.ciris.ai",
+        "localhost",
+        "127.0.0.1",
+    }
+)
+
+
+def _validate_billing_url(url: str) -> str:
+    """Validate billing URL to prevent SSRF attacks.
+
+    Ensures the URL:
+    1. Is well-formed
+    2. Uses HTTPS (or HTTP for localhost only)
+    3. Points to a trusted billing host
+
+    Args:
+        url: The billing URL to validate
+
+    Returns:
+        The validated URL
+
+    Raises:
+        ValueError: If URL is invalid or points to untrusted host
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception as e:
+        raise ValueError(f"Invalid billing URL format: {e}") from e
+
+    # Require valid scheme
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Invalid billing URL scheme: {parsed.scheme}")
+
+    # Require HTTPS for non-localhost
+    if parsed.scheme == "http" and parsed.hostname not in ("localhost", "127.0.0.1"):
+        raise ValueError("Billing URL must use HTTPS for non-localhost hosts")
+
+    # Validate against trusted hosts
+    if parsed.hostname not in _TRUSTED_BILLING_HOSTS:
+        raise ValueError(f"Untrusted billing host: {parsed.hostname}")
+
+    return url
 
 
 # Request/Response schemas
@@ -122,7 +168,14 @@ def _get_billing_client(request: Request, google_id_token: Optional[str] = None)
         existing_client: httpx.AsyncClient = request.app.state.billing_client
         return existing_client
 
-    billing_url = get_billing_url()
+    # Get and validate billing URL to prevent SSRF
+    billing_url_raw = get_billing_url()
+    try:
+        billing_url = _validate_billing_url(billing_url_raw)
+    except ValueError as e:
+        logger.error(f"[BILLING] Invalid billing URL configuration: {e}")
+        raise HTTPException(status_code=500, detail="Billing service misconfigured") from e
+
     api_key = os.getenv("CIRIS_BILLING_API_KEY")
 
     # Determine authentication mode

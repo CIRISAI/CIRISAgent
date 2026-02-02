@@ -246,7 +246,7 @@ class PostgreSQLConnectionWrapper:
         self._conn.close()
 
 
-class iOSDictRow(dict[str, Any]):
+class IOSDictRow(dict[str, Any]):
     """A dict subclass that supports both string key and integer index access.
 
     This mimics sqlite3.Row behavior for iOS compatibility:
@@ -287,7 +287,7 @@ class iOSDictRow(dict[str, Any]):
             return default
 
 
-class iOSSerializedCursor:
+class IOSSerializedCursor:
     """Cursor wrapper that serializes all access for iOS compatibility.
 
     This ensures cursor.execute() and other cursor methods go through the global lock.
@@ -310,7 +310,7 @@ class iOSSerializedCursor:
                 self._closed = False
                 logger.info("[iOS_CURSOR] Recreated cursor after close")
 
-    def execute(self, sql: str, parameters: Any = None) -> "iOSSerializedCursor":
+    def execute(self, sql: str, parameters: Any = None) -> "IOSSerializedCursor":
         self._ensure_cursor()  # Recreate if needed on iOS
         logger.info(f"[iOS_CURSOR] execute: {sql[:80]}...")
         with self._lock:
@@ -325,16 +325,16 @@ class iOSSerializedCursor:
                 logger.error(f"[iOS_CURSOR] execute FAILED: {e}")
                 raise
 
-    def executemany(self, sql: str, seq_of_parameters: Any) -> "iOSSerializedCursor":
+    def executemany(self, sql: str, seq_of_parameters: Any) -> "IOSSerializedCursor":
         logger.info(f"[iOS_CURSOR] executemany: {sql[:80]}...")
         with self._lock:
             self._cursor.executemany(sql, seq_of_parameters)
             return self
 
     def _row_to_dict(self, row: Any) -> dict[str, Any] | None:
-        """Convert sqlite3.Row to iOSDictRow for iOS compatibility.
+        """Convert sqlite3.Row to IOSDictRow for iOS compatibility.
 
-        Returns an iOSDictRow that:
+        Returns an IOSDictRow that:
         - Supports string key access: row["column_name"]
         - Supports integer index access: row[0], row[1]
         - Only yields string keys for dict() and ** unpacking
@@ -349,8 +349,8 @@ class iOSSerializedCursor:
             string_dict = {}
             for col_name, value in zip(columns, row):
                 string_dict[col_name] = value
-            # Return iOSDictRow that supports both string and integer access
-            return iOSDictRow(string_dict, columns)
+            # Return IOSDictRow that supports both string and integer access
+            return IOSDictRow(string_dict, columns)
         # Fallback: try to get keys from the row itself if it's dict-like
         if hasattr(row, "keys"):
             return dict(row)
@@ -433,7 +433,7 @@ class iOSSerializedCursor:
         return getattr(self._cursor, name)
 
 
-class iOSSerializedConnection:
+class IOSSerializedConnection:
     """SQLite connection wrapper that serializes all access for iOS compatibility.
 
     iOS's debug SQLite has strict thread checking that causes assertion failures
@@ -446,7 +446,7 @@ class iOSSerializedConnection:
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
         self._lock = _get_ios_lock()
-        logger.info("[iOS_CONN] iOSSerializedConnection created")
+        logger.info("[iOS_CONN] IOSSerializedConnection created")
 
     def execute(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
         sql = args[0] if args else "unknown"
@@ -471,14 +471,14 @@ class iOSSerializedConnection:
         with self._lock:
             return self._conn.executescript(*args, **kwargs)
 
-    def cursor(self) -> iOSSerializedCursor:
+    def cursor(self) -> IOSSerializedCursor:
         """Return a WRAPPED cursor that serializes all operations."""
         logger.info("[iOS_CONN] cursor() called - creating wrapped cursor...")
         with self._lock:
             try:
                 raw_cursor = self._conn.cursor()
                 # Pass connection reference so cursor can be recreated on iOS
-                wrapped = iOSSerializedCursor(raw_cursor, self._lock, self._conn)
+                wrapped = IOSSerializedCursor(raw_cursor, self._lock, self._conn)
                 logger.info("[iOS_CONN] cursor() succeeded, returning wrapped cursor")
                 return wrapped
             except Exception as e:
@@ -503,7 +503,7 @@ class iOSSerializedConnection:
     def __getattr__(self, name: str) -> Any:
         return getattr(self._conn, name)
 
-    def __enter__(self) -> "iOSSerializedConnection":
+    def __enter__(self) -> "IOSSerializedConnection":
         logger.debug("[iOS_CONN] __enter__ called")
         self._lock.acquire()
         self._conn.__enter__()
@@ -628,7 +628,7 @@ def _create_postgres_connection(adapter: Any) -> Any:
     """Create a PostgreSQL connection."""
     if not POSTGRES_AVAILABLE:
         raise RuntimeError(
-            "PostgreSQL connection requested but psycopg2 not installed. " "Install with: pip install psycopg2-binary"
+            "PostgreSQL connection requested but psycopg2 not installed. Install with: pip install psycopg2-binary"
         )
     conn = psycopg2.connect(adapter.db_url)
     conn.cursor_factory = psycopg2.extras.RealDictCursor
@@ -735,8 +735,8 @@ def get_db_connection(
 
     # Wrap iOS connection before executing PRAGMAs
     if is_ios:
-        logger.info("[DB_CONNECT] Wrapping connection with iOSSerializedConnection BEFORE PRAGMAs...")
-        conn = iOSSerializedConnection(conn)  # type: ignore[assignment]
+        logger.info("[DB_CONNECT] Wrapping connection with IOSSerializedConnection BEFORE PRAGMAs...")
+        conn = IOSSerializedConnection(conn)  # type: ignore[assignment]
         logger.info("[DB_CONNECT] iOS wrapper created, now executing PRAGMAs through wrapper")
 
     pragma_statements = _get_pragma_statements(is_ios, busy_timeout)

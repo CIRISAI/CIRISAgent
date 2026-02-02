@@ -52,6 +52,9 @@ FIRST_RUN_SERVICES = 10
 # Services started during resume_from_first_run (remaining 12)
 RESUME_SERVICES = 12
 
+# Track services started for iOS file-based status
+_services_started: set[int] = set()
+
 # Service names in initialization order for UI display
 SERVICE_NAMES = [
     "TimeService",  # 1 - Infrastructure
@@ -90,8 +93,40 @@ def _set_service_phase(phase: str) -> None:
     print(f"[SERVICES] === {phase} PHASE ===")
 
 
+def _write_service_status_file() -> None:
+    """Write service status to a JSON file for iOS to read.
+
+    iOS cannot read logcat like Android, so we write to a file instead.
+    The file is written to ~/Documents/ciris/service_status.json
+    """
+    import sys
+
+    # Only write file on iOS/Darwin platforms (mobile)
+    if sys.platform not in ("ios", "darwin"):
+        return
+
+    try:
+        status_dir = Path.home() / "Documents" / "ciris"
+        status_dir.mkdir(parents=True, exist_ok=True)
+        status_file = status_dir / "service_status.json"
+
+        status_data = {
+            "services_online": len(_services_started),
+            "services_total": TOTAL_CORE_SERVICES,
+            "phase": _current_phase,
+        }
+
+        with open(status_file, "w") as f:
+            json.dump(status_data, f)
+    except Exception as e:
+        # Don't fail startup over status file issues
+        logger.debug(f"Could not write service status file: {e}")
+
+
 def _log_service_started(service_num: int, service_name: str, success: bool = True) -> None:
     """Log service startup status in a format parseable by the UI."""
+    global _services_started
+
     status = "STARTED" if success else "FAILED"
     phase_prefix = f"[{_current_phase}] " if _current_phase != "STARTUP" else ""
     msg = f"{phase_prefix}[SERVICE {service_num}/{TOTAL_CORE_SERVICES}] {service_name} {status}"
@@ -99,6 +134,11 @@ def _log_service_started(service_num: int, service_name: str, success: bool = Tr
     logger.warning(msg)
     # Also print to console/stdout for Android logcat visibility
     print(msg)
+
+    # Track service for iOS file-based status
+    if success:
+        _services_started.add(service_num)
+    _write_service_status_file()
 
 
 class ServiceInitializer:
@@ -1261,33 +1301,56 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         _log_service_started(10, "IncidentManagement")
 
-    async def _initialize_skill_adapters(self) -> None:
-        """Auto-load eligible skill adapters based on config.
-
-        Discovers adapters from configured paths, checks eligibility
-        (binary presence, env vars, etc.), and registers eligible ones
-        with the tool bus.
-        """
-        # Check template configuration via identity first
-        # "Only enable auto loading of adapters for templates that specify it"
+    def _is_auto_discovery_enabled(self) -> bool:
+        """Check if auto-discovery is enabled by template and config."""
         from ciris_engine.logic.persistence.models.identity import retrieve_agent_identity
 
-        # Get the correct db path from our essential config
         db_path = get_sqlite_db_full_path(self.essential_config)
         identity = retrieve_agent_identity(db_path=db_path)
 
-        template_enabled = False
-        if identity and hasattr(identity.core_profile, "auto_load_adapters"):
-            template_enabled = identity.core_profile.auto_load_adapters
-
-        if not template_enabled:
+        if not identity or not hasattr(identity.core_profile, "auto_load_adapters"):
             logger.info("[SKILL-ADAPTERS] Auto-discovery not enabled by current agent template")
+            return False
+        if not identity.core_profile.auto_load_adapters:
+            logger.info("[SKILL-ADAPTERS] Auto-discovery not enabled by current agent template")
+            return False
+        if not self.essential_config.adapters.auto_discovery:
+            logger.info("[SKILL-ADAPTERS] Auto-discovery disabled by config")
+            return False
+        return True
+
+    async def _start_and_register_adapter(self, adapter_name: str, service: Any) -> None:
+        """Start an adapter service and register it with the service registry."""
+        if hasattr(service, "start"):
+            start_result = service.start()
+            if hasattr(start_result, "__await__"):
+                await start_result
+
+        if self.service_registry is None:
             return
 
-        # Check if auto-discovery is enabled globally
-        adapters_config = self.essential_config.adapters
-        if not adapters_config.auto_discovery:
-            logger.info("[SKILL-ADAPTERS] Auto-discovery disabled by config")
+        if hasattr(service, "get_all_tool_info"):
+            self.service_registry.register_service(
+                service_type=ServiceType.TOOL,
+                provider=service,
+                priority=Priority.NORMAL,
+                capabilities=["execute_tool", "get_all_tool_info"],
+                metadata={"adapter": adapter_name, "auto_loaded": True},
+            )
+            logger.info(f"[SKILL-ADAPTERS] Registered tool adapter: {adapter_name}")
+        elif hasattr(service, "send_deferral") or hasattr(service, "handle_deferral"):
+            self.service_registry.register_service(
+                service_type=ServiceType.WISE_AUTHORITY,
+                provider=service,
+                priority=Priority.NORMAL,
+                capabilities=["send_deferral", "covenant_metrics"],
+                metadata={"adapter": adapter_name, "auto_loaded": True},
+            )
+            logger.info(f"[SKILL-ADAPTERS] Registered wisdom adapter: {adapter_name}")
+
+    async def _initialize_skill_adapters(self) -> None:
+        """Auto-load eligible skill adapters based on config."""
+        if not self._is_auto_discovery_enabled():
             return
 
         logger.info("[SKILL-ADAPTERS] Starting auto-discovery...")
@@ -1296,11 +1359,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         from ciris_engine.logic.services.tool import AdapterDiscoveryService
         from ciris_engine.logic.services.tool.eligibility_checker import ToolEligibilityChecker
 
-        # Create eligibility checker with config service for config_keys validation
-        # This enables checking environment variables for config requirements
         eligibility_checker = ToolEligibilityChecker(config_service=self.config_service)
-
-        # Build service dependencies for adapter instantiation
         service_deps = {
             "bus_manager": self.bus_manager,
             "memory_service": self.memory_service,
@@ -1311,13 +1370,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
             "agent_occurrence_id": self.essential_config.agent_occurrence_id,
         }
 
-        # Get explicitly enabled adapters from CIRIS_ADAPTER env var
-        # These should NOT be skipped even if in the default disabled list
         env_adapter = get_env_var("CIRIS_ADAPTER")
-        explicitly_enabled = set(a.strip() for a in env_adapter.split(",")) if env_adapter else set()
-
-        # Compute effective disabled list by removing explicitly enabled adapters
-        # This allows users to override the default disabled list via CIRIS_ADAPTER
+        explicitly_enabled = {a.strip() for a in env_adapter.split(",")} if env_adapter else set()
+        adapters_config = self.essential_config.adapters
         effective_disabled = [a for a in adapters_config.disabled_adapters if a not in explicitly_enabled]
 
         if explicitly_enabled:
@@ -1325,48 +1380,19 @@ This directory contains critical cryptographic keys for the CIRIS system.
             if overridden:
                 logger.info(f"[SKILL-ADAPTERS] Explicitly enabled adapters override disabled: {overridden}")
 
-        # Create discovery service and load eligible adapters
         discovery = AdapterDiscoveryService(eligibility_checker=eligibility_checker)
         eligible = await discovery.load_eligible_adapters(
             disabled_adapters=effective_disabled,
             service_dependencies=service_deps,
         )
 
-        # Register eligible adapters with tool bus
         if not eligible:
             logger.info("[SKILL-ADAPTERS] No eligible adapters found")
             return
 
         for adapter_name, service in eligible.items():
             try:
-                # Start the service if it has a start method
-                if hasattr(service, "start"):
-                    start_result = service.start()
-                    if hasattr(start_result, "__await__"):
-                        await start_result
-
-                if self.service_registry is not None:
-                    # Register with tool bus if it provides tools
-                    if hasattr(service, "get_all_tool_info"):
-                        self.service_registry.register_service(
-                            service_type=ServiceType.TOOL,
-                            provider=service,
-                            priority=Priority.NORMAL,
-                            capabilities=["execute_tool", "get_all_tool_info"],
-                            metadata={"adapter": adapter_name, "auto_loaded": True},
-                        )
-                        logger.info(f"[SKILL-ADAPTERS] Registered tool adapter: {adapter_name}")
-                    # Register WISE_AUTHORITY services (e.g., covenant_metrics)
-                    elif hasattr(service, "send_deferral") or hasattr(service, "handle_deferral"):
-                        self.service_registry.register_service(
-                            service_type=ServiceType.WISE_AUTHORITY,
-                            provider=service,
-                            priority=Priority.NORMAL,
-                            capabilities=["send_deferral", "covenant_metrics"],
-                            metadata={"adapter": adapter_name, "auto_loaded": True},
-                        )
-                        logger.info(f"[SKILL-ADAPTERS] Registered wisdom adapter: {adapter_name}")
-
+                await self._start_and_register_adapter(adapter_name, service)
             except Exception as e:
                 logger.warning(f"[SKILL-ADAPTERS] Failed to register {adapter_name}: {e}")
 

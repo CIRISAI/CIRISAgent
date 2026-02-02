@@ -62,10 +62,37 @@ class ConsentViewModel(
 
     // Partnership polling job
     private var partnershipPollJob: Job? = null
+    private var dataLoadStarted = false
 
     init {
-        logInfo("init", "ConsentViewModel initialized")
+        logInfo("init", "ConsentViewModel initialized (data load deferred until startPolling() called)")
+        // NOTE: Don't auto-load here - wait for startPolling() to be called
+        // when the screen becomes visible and has a valid auth token
+    }
+
+    /**
+     * Start consent data loading.
+     * Must be called explicitly when the screen becomes visible.
+     */
+    fun startPolling() {
+        val method = "startPolling"
+        if (dataLoadStarted) {
+            logDebug(method, "Data load already started, skipping")
+            return
+        }
+        dataLoadStarted = true
+        logInfo(method, "Starting consent data loading")
         loadConsentData()
+    }
+
+    /**
+     * Stop polling (for lifecycle management)
+     */
+    fun stopPolling() {
+        val method = "stopPolling"
+        logInfo(method, "Stopping consent polling")
+        stopPartnershipPolling()
+        dataLoadStarted = false // Allow restart
     }
 
     /**

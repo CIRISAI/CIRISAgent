@@ -8,7 +8,20 @@ These schemas ensure type safety across all graph node operations.
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Type, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
+
+
+def _serialize_datetime_iso(dt: datetime | None) -> str | None:
+    """Serialize datetime to ISO-8601 with Z suffix for UTC."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    iso = dt.isoformat()
+    if iso.endswith("+00:00"):
+        iso = iso[:-6] + "Z"
+    return iso
+
 
 from ciris_engine.schemas.types import JSONValue
 
@@ -45,6 +58,10 @@ class NodeAttributesBase(BaseModel):
         validate_assignment=True,  # Validate on attribute assignment
         str_strip_whitespace=True,  # Clean up string inputs
     )
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_datetime(self, dt: datetime) -> str | None:
+        return _serialize_datetime_iso(dt)
 
 
 class MemoryNodeAttributes(NodeAttributesBase):
@@ -85,6 +102,10 @@ class MemoryNodeAttributes(NodeAttributesBase):
     embedding_dimensions: Optional[int] = Field(None, description="Embedding vector dimensions")
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_serializer("last_accessed")
+    def serialize_last_accessed(self, dt: datetime | None) -> str | None:
+        return _serialize_datetime_iso(dt)
 
 
 class ConfigNodeAttributes(NodeAttributesBase):
@@ -128,6 +149,10 @@ class ConfigNodeAttributes(NodeAttributesBase):
     expires_at: Optional[datetime] = Field(None, description="When this config expires")
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_serializer("expires_at")
+    def serialize_expires_at(self, dt: datetime | None) -> str | None:
+        return _serialize_datetime_iso(dt)
 
 
 class TelemetryNodeAttributes(NodeAttributesBase):
@@ -180,6 +205,10 @@ class TelemetryNodeAttributes(NodeAttributesBase):
     resource_limit: Optional[float] = Field(None, description="Resource limit if applicable")
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_serializer("start_time", "end_time")
+    def serialize_times(self, dt: datetime) -> str | None:
+        return _serialize_datetime_iso(dt)
 
 
 class LogNodeAttributes(NodeAttributesBase):

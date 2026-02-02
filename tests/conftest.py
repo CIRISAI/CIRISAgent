@@ -113,6 +113,53 @@ def cleanup_after_test():
     time.sleep(0.1)
 
 
+@pytest.fixture(autouse=True, scope="function")
+def isolate_test_env_vars():
+    """
+    Isolate environment variables that can cause test pollution.
+
+    This fixture saves any existing env vars before the test and restores
+    them after, ensuring parallel test runs don't interfere with each other.
+    """
+    # Env vars that need isolation
+    env_vars = [
+        # Covenant metrics
+        "CIRIS_COVENANT_METRICS_CONSENT",
+        "CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP",
+        "CIRIS_COVENANT_METRICS_TRACE_LEVEL",
+        "CIRIS_COVENANT_METRICS_FLUSH_INTERVAL",
+        "CIRIS_COVENANT_METRICS_ENDPOINT",
+        # LLM provider detection (affects which provider is selected)
+        "CIRIS_LLM_PROVIDER",
+        "LLM_PROVIDER",
+        "OPENAI_API_KEY",
+        "OPENAI_API_BASE",
+        "ANTHROPIC_API_KEY",
+        "GOOGLE_API_KEY",
+        "GEMINI_API_KEY",
+        # Dual LLM service
+        "CIRIS_OPENAI_API_KEY_2",
+        "CIRIS_OPENAI_API_BASE_2",
+        "CIRIS_OPENAI_MODEL_NAME_2",
+    ]
+
+    # Save existing values
+    saved = {var: os.environ.get(var) for var in env_vars}
+
+    # Clear them before test
+    for var in env_vars:
+        os.environ.pop(var, None)
+
+    yield
+
+    # Restore original values after test
+    for var, value in saved.items():
+        if value is not None:
+            os.environ[var] = value
+        else:
+            os.environ.pop(var, None)
+
+
 # Import WA test harness fixtures (when available)
 try:
     from ciris_engine.logic.services.test_wa_auth_harness import wa_test_env, wa_test_harness, wa_test_keys

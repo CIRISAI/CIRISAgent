@@ -1496,6 +1496,7 @@ class TestFirstUserDetection:
         """Test that first OAuth user gets SYSTEM_ADMIN role."""
         mock_auth_service = Mock()
         mock_auth_service._oauth_users = {}  # Empty = first user
+        mock_auth_service._users = {}  # Empty database = truly first user
 
         role = _determine_user_role("user@example.com", mock_auth_service)
 
@@ -1505,9 +1506,21 @@ class TestFirstUserDetection:
         """Test that subsequent OAuth users get OBSERVER role."""
         mock_auth_service = Mock()
         mock_auth_service._oauth_users = {"existing:user": Mock()}  # Non-empty
+        mock_auth_service._users = {"existing:user": Mock()}  # User in database
 
         role = _determine_user_role("user@example.com", mock_auth_service)
 
+        assert role == UserRole.OBSERVER
+
+    def test_determine_user_role_db_user_exists(self):
+        """Test that users in database (after restart) get OBSERVER role, not SYSTEM_ADMIN."""
+        mock_auth_service = Mock()
+        mock_auth_service._oauth_users = {}  # Empty after restart
+        mock_auth_service._users = {"existing:user": Mock()}  # But users exist in DB
+
+        role = _determine_user_role("user@example.com", mock_auth_service)
+
+        # Should be OBSERVER because database has users, even though _oauth_users is empty
         assert role == UserRole.OBSERVER
 
 

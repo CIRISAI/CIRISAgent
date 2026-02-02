@@ -1101,8 +1101,9 @@ class CovenantMetricsTests:
                 return True, "Skipped (no auth token available for adapter loading)"
 
             # Define adapters to load with their trace levels
+            # Default QA adapter uses 'detailed', so we load generic and full here
             adapters_to_load = [
-                ("covenant_detailed", "detailed"),
+                ("covenant_generic", "generic"),
                 ("covenant_full", "full_traces"),
             ]
 
@@ -1115,6 +1116,7 @@ class CovenantMetricsTests:
                     url = f"{base_url}/v1/system/adapters/ciris_covenant_metrics?adapter_id={adapter_id}"
                     payload = {
                         "config": {
+                            "adapter_id": adapter_id,  # For logging which instance sends which level
                             "trace_level": trace_level,
                             "consent_given": True,
                             "consent_timestamp": "2025-01-01T00:00:00Z",

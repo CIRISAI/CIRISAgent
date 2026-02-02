@@ -46,7 +46,9 @@ actual class EnvFileUpdater {
 
     private val cirisHome: File? = findCirisHome()
 
-    actual suspend fun updateEnvWithToken(googleIdToken: String): Result<Boolean> = withContext(Dispatchers.IO) {
+    actual suspend fun updateEnvWithToken(oauthIdToken: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        // On Android, the OAuth token is a Google ID token
+        val googleIdToken = oauthIdToken
         val envFile = cirisHome?.let { File(it, ENV_FILE_NAME) } ?: run {
             Log.w(TAG, "Cannot update .env - CIRIS_HOME not found")
             return@withContext Result.failure(Exception("CIRIS_HOME not found"))

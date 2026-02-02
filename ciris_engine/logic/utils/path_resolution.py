@@ -139,6 +139,7 @@ def get_ciris_home() -> Path:
         Path to CIRIS home directory:
         - /app/ if managed by CIRIS Manager (highest priority)
         - Android app files/ciris/ if on Android
+        - iOS Documents/ciris/ if on iOS
         - Current directory if in git repo (development)
         - CIRIS_HOME env var if set
         - ~/ciris/ otherwise (installed mode)
@@ -157,6 +158,16 @@ def get_ciris_home() -> Path:
             return Path(env_home)
         # Fallback: use Path.home()/files/ciris (Android app files structure)
         return Path.home() / "files" / "ciris"
+
+    # Priority 2b: iOS mode - use app's Documents directory
+    # On iOS, Path.home() returns the app container root but only Documents/ is writable
+    if is_ios():
+        # CIRIS_HOME env var is set by ios_main.py to Documents/ciris
+        env_home = os.getenv("CIRIS_HOME")
+        if env_home:
+            return Path(env_home)
+        # Fallback: use Documents/ciris (iOS app sandbox structure)
+        return Path.home() / "Documents" / "ciris"
 
     # Priority 3: Development mode - use current directory
     if is_development_mode():
@@ -196,6 +207,24 @@ def get_config_dir() -> Path:
         Path to config directory (CIRIS_HOME/config/)
     """
     return get_ciris_home() / "config"
+
+
+def get_secrets_home() -> Path:
+    """Get the secrets/keys directory (traditionally ~/.ciris/).
+
+    On desktop: ~/.ciris/
+    On Android: CIRIS_HOME/.secrets/ (within app sandbox)
+    On iOS: CIRIS_HOME/.secrets/ (within Documents/)
+
+    Returns:
+        Path to secrets directory for keys, oauth config, etc.
+    """
+    if is_android() or is_ios():
+        # On mobile, use a hidden dir within CIRIS_HOME (which is in app sandbox)
+        return get_ciris_home() / ".secrets"
+
+    # Desktop: use ~/.ciris/
+    return Path.home() / ".ciris"
 
 
 def get_package_root() -> Path:

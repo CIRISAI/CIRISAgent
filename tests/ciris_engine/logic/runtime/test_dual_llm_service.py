@@ -2,7 +2,6 @@
 Test dual LLM service initialization with CIRIS_OPENAI_API_KEY_2.
 """
 
-import os
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -67,14 +66,18 @@ class TestDualLLMService:
     """Test dual LLM service initialization."""
 
     @pytest.mark.asyncio
-    async def test_single_llm_service_without_second_key(self, service_initializer, mock_service_registry):
+    async def test_single_llm_service_without_second_key(self, service_initializer, mock_service_registry, monkeypatch):
         """Test that only one LLM service is created when CIRIS_OPENAI_API_KEY_2 is not set."""
-        # Ensure second API key is not set
-        if "CIRIS_OPENAI_API_KEY_2" in os.environ:
-            del os.environ["CIRIS_OPENAI_API_KEY_2"]
-
-        # Set primary API key
-        os.environ["OPENAI_API_KEY"] = "test-api-key-1"
+        # Use monkeypatch for thread-safe environment variable handling
+        # Clear any env vars that could affect provider detection
+        monkeypatch.delenv("CIRIS_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+        monkeypatch.setenv("OPENAI_API_KEY", "test-api-key-1")
+        monkeypatch.delenv("CIRIS_OPENAI_API_KEY_2", raising=False)
 
         with patch("ciris_engine.logic.runtime.service_initializer.OpenAICompatibleClient") as MockLLMClient:
             mock_llm_instance = AsyncMock()
@@ -95,13 +98,20 @@ class TestDualLLMService:
             assert call_args.kwargs["metadata"]["provider"] == "openai"
 
     @pytest.mark.asyncio
-    async def test_dual_llm_service_with_second_key(self, service_initializer, mock_service_registry):
+    async def test_dual_llm_service_with_second_key(self, service_initializer, mock_service_registry, monkeypatch):
         """Test that two LLM services are created when CIRIS_OPENAI_API_KEY_2 is set."""
-        # Set both API keys
-        os.environ["OPENAI_API_KEY"] = "test-api-key-1"
-        os.environ["CIRIS_OPENAI_API_KEY_2"] = "test-api-key-2"
-        os.environ["CIRIS_OPENAI_API_BASE_2"] = "https://api.lambda.ai/v1"
-        os.environ["CIRIS_OPENAI_MODEL_NAME_2"] = "llama-model"
+        # Use monkeypatch for thread-safe environment variable handling
+        # Clear any env vars that could affect provider detection
+        monkeypatch.delenv("CIRIS_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+        monkeypatch.setenv("OPENAI_API_KEY", "test-api-key-1")
+        monkeypatch.setenv("CIRIS_OPENAI_API_KEY_2", "test-api-key-2")
+        monkeypatch.setenv("CIRIS_OPENAI_API_BASE_2", "https://api.lambda.ai/v1")
+        monkeypatch.setenv("CIRIS_OPENAI_MODEL_NAME_2", "llama-model")
 
         with patch("ciris_engine.logic.runtime.service_initializer.OpenAICompatibleClient") as MockLLMClient:
             mock_llm_instance = AsyncMock()
@@ -130,13 +140,20 @@ class TestDualLLMService:
             assert second_call.kwargs["metadata"]["base_url"] == "https://api.lambda.ai/v1"
 
     @pytest.mark.asyncio
-    async def test_second_llm_config_from_env(self, service_initializer):
+    async def test_second_llm_config_from_env(self, service_initializer, monkeypatch):
         """Test that second LLM configuration is correctly loaded from environment."""
-        # Set environment variables
-        os.environ["OPENAI_API_KEY"] = "test-api-key-1"
-        os.environ["CIRIS_OPENAI_API_KEY_2"] = "test-api-key-2"
-        os.environ["CIRIS_OPENAI_API_BASE_2"] = "https://custom.api.com/v1"
-        os.environ["CIRIS_OPENAI_MODEL_NAME_2"] = "custom-model"
+        # Use monkeypatch for thread-safe environment variable handling
+        # Clear any env vars that could affect provider detection
+        monkeypatch.delenv("CIRIS_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+        monkeypatch.setenv("OPENAI_API_KEY", "test-api-key-1")
+        monkeypatch.setenv("CIRIS_OPENAI_API_KEY_2", "test-api-key-2")
+        monkeypatch.setenv("CIRIS_OPENAI_API_BASE_2", "https://custom.api.com/v1")
+        monkeypatch.setenv("CIRIS_OPENAI_MODEL_NAME_2", "custom-model")
 
         with patch("ciris_engine.logic.runtime.service_initializer.OpenAICompatibleClient") as MockLLMClient:
             mock_llm_instance = AsyncMock()
@@ -156,11 +173,18 @@ class TestDualLLMService:
             assert second_config.max_retries == 3  # From primary config
 
     @pytest.mark.asyncio
-    async def test_both_services_started(self, service_initializer):
+    async def test_both_services_started(self, service_initializer, monkeypatch):
         """Test that both LLM services are properly started."""
-        # Set both API keys
-        os.environ["OPENAI_API_KEY"] = "test-api-key-1"
-        os.environ["CIRIS_OPENAI_API_KEY_2"] = "test-api-key-2"
+        # Use monkeypatch for thread-safe environment variable handling
+        # Clear any env vars that could affect provider detection
+        monkeypatch.delenv("CIRIS_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+        monkeypatch.setenv("OPENAI_API_KEY", "test-api-key-1")
+        monkeypatch.setenv("CIRIS_OPENAI_API_KEY_2", "test-api-key-2")
 
         with patch("ciris_engine.logic.runtime.service_initializer.OpenAICompatibleClient") as MockLLMClient:
             # Create two different mock instances
@@ -173,10 +197,3 @@ class TestDualLLMService:
             # Both services should be started
             mock_primary.start.assert_called_once()
             mock_secondary.start.assert_called_once()
-
-    def teardown_method(self):
-        """Clean up environment variables after each test."""
-        # Remove test environment variables
-        for key in ["OPENAI_API_KEY", "CIRIS_OPENAI_API_KEY_2", "CIRIS_OPENAI_API_BASE_2", "CIRIS_OPENAI_MODEL_NAME_2"]:
-            if key in os.environ:
-                del os.environ[key]

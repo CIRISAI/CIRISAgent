@@ -21,7 +21,7 @@ kotlin {
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "shared"
-            isStatic = true
+            isStatic = false  // Dynamic framework required for App Store
 
             // Export Compose runtime for iOS
             export(compose.runtime)
@@ -94,6 +94,11 @@ kotlin {
         val iosMain by creating {
             dependsOn(commonMain)
             dependencies {
+                // Compose dependencies as API for framework export
+                api(compose.runtime)
+                api(compose.foundation)
+                api(compose.material3)
+
                 // Ktor iOS engine
                 implementation("io.ktor:ktor-client-darwin:2.3.7")
             }

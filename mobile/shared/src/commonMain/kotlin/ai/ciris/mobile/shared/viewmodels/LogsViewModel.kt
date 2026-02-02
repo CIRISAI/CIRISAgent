@@ -51,11 +51,12 @@ class LogsViewModel(
 
     // Polling job
     private var pollingJob: Job? = null
+    private var pollingStarted = false
 
     init {
-        logInfo("init", "LogsViewModel initialized")
-        fetchLogs()
-        startPolling()
+        logInfo("init", "LogsViewModel initialized (polling deferred until startPolling() called)")
+        // NOTE: Don't auto-start polling here - wait for startPolling() to be called
+        // when the screen becomes visible and has a valid auth token
     }
 
     /**
@@ -101,11 +102,19 @@ class LogsViewModel(
     }
 
     /**
-     * Start automatic log polling
+     * Start automatic log polling.
+     * Must be called explicitly when the screen becomes visible.
      */
-    private fun startPolling() {
+    fun startPolling() {
         val method = "startPolling"
+        if (pollingStarted) {
+            logDebug(method, "Polling already started, skipping")
+            return
+        }
+        pollingStarted = true
         logInfo(method, "Starting log polling (interval=${DEFAULT_REFRESH_INTERVAL_MS}ms)")
+        // Fetch initial logs
+        fetchLogs()
 
         pollingJob = viewModelScope.launch {
             while (isActive) {
@@ -123,6 +132,7 @@ class LogsViewModel(
         logInfo(method, "Stopping log polling")
         pollingJob?.cancel()
         pollingJob = null
+        pollingStarted = false // Allow restart
     }
 
     /**

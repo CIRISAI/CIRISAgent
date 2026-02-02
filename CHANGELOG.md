@@ -5,6 +5,114 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.4] - 2026-02-01
+
+### Added
+
+- **iOS KMP Support** - Merged ios-kmp-refactor branch for Kotlin Multiplatform iOS support
+  - Cross-platform authentication with `NativeSignInResult` (Google on Android, Apple on iOS)
+  - Platform-specific logging via `platformLog()` expect/actual function
+  - iOS Python runtime bridge and Apple Sign-In helper
+  - Shared KMP modules for auth, platform detection, and secure storage
+
+- **Apple Native Auth** - iOS Sign-In with Apple support
+  - `POST /v1/auth/native/apple` endpoint for Apple ID token exchange
+  - Local JWT decode for Apple tokens (validates issuer, expiry)
+  - Auto-mint SYSTEM_ADMIN users as ROOT WA (same as Google flow)
+
+- **Platform Requirements System** - Filter adapters by platform capabilities
+  - `DESKTOP_CLI` requirement for CLI-only tools (40+ adapters marked)
+  - `platform_requirements` and `platform_requirements_rationale` in adapter manifests
+  - Automatic filtering in mobile adapter wizard (CLI tools hidden on Android/iOS)
+
+- **Local JWT Decode Fallback** - On-device auth resilience
+  - Falls back to local JWT decoding when Google tokeninfo API is unreachable
+  - Validates token expiry and issuer locally
+  - Enables authentication on devices with limited network access
+
+- **HE-300 Benchmark Template** - Ethical judgment agent for moral scenario evaluations
+  - Minimal permitted actions (speak, ponder, task_complete only)
+  - Direct ETHICAL/UNETHICAL or TRUE/FALSE judgments
+  - DSDMA configuration with ethical evaluation framework
+
+### Security
+
+- **Billing URL SSRF Protection** - Validates billing service URLs against allowlist
+  - Trusted hosts: `billing.ciris.ai`, `localhost`, `127.0.0.1`
+  - Pattern matching for `billing*.ciris-services-N.ai` (N=1-99)
+  - HTTPS required for non-localhost hosts
+
+### Fixed
+
+- **Mobile SDK JSON Parsing** - Fixed 16 empty union type classes in generated API
+  - `Default.kt`, `ModuleTypeInfoMetadataValue.kt`, `ResponseGetSystemStatusV1TransparencyStatusGetValue.kt`
+  - `AdapterOperationResultDetailsValue.kt`, `BodyValue.kt`, `ConscienceResultDetailsValue.kt`
+  - `DeferParamsContextValue.kt`, `DependsOn.kt`, `LocationInner.kt`, `Max.kt`, `Min.kt`
+  - `ParametersValue.kt`, `ResponseGetAvailableToolsV1SystemToolsGetValue.kt`
+  - `ServiceDetailsValueValue.kt`, `ServiceSelectionExplanationPrioritiesValueValue.kt`, `SettingsValue.kt`
+  - Each wrapped with `JsonElement` and custom `KSerializer` to handle dynamic JSON types
+
+- **Mobile Attributes Model** - Made all union type fields nullable in `Attributes.kt`
+  - Fixed `content`, `memoryType`, `source`, `key`, `value`, `description`, etc.
+  - Allows parsing of partial attribute objects from different node types
+
+- **DateTime Serialization** - ISO-8601 timestamps now include `Z` suffix
+  - Added `serialize_datetime_iso()` helper function
+  - Fixed `GraphNode`, `GraphNodeAttributes`, `GraphEdgeAttributes`
+  - Fixed `NodeAttributesBase`, `MemoryNodeAttributes`, `ConfigNodeAttributes`, `TelemetryNodeAttributes`
+  - Fixed `TimelineResponse`, `QueryRequest`, `MemoryStats` in memory_models.py
+  - Kotlin `kotlinx.datetime.Instant` can now parse server timestamps
+
+- **Configuration Display** - Fixed `ConfigValue` union type rendering
+  - Added `ConfigValue.toDisplayString()` extension to extract actual value
+  - Config page now shows `api` instead of `ConfigValue(stringValue=api, intValue=null, ...)`
+
+- **Mobile UI Fixes**
+  - Navigation bar padding on SetupScreen (Continue button no longer blocked)
+  - Adapter wizard error dialog now shows on error (not just when dialog open)
+  - Capability chips limited to 2 with "+N" overflow (prevents stretched empty chips)
+  - Filter blank capabilities at API client mapping layer
+
+- **Rate Limiting** - Added adapter endpoints to exempt paths
+  - `/v1/system/adapters` and `/v1/setup/adapter-types` no longer rate-limited
+  - Fixes "+" Add Adapter button returning 429 errors
+
+- **401 Auth on Mobile** - Fixed Google tokeninfo API timeout on-device
+  - Python running on Android can't reach Google servers reliably
+  - Local JWT decode fallback validates tokens without network call
+
+- **Mobile Billing Purchase Flow** - Fixed 401/500 errors on purchase verification
+  - Added `onTokenUpdated` callback to CIRISApp for billing apiClient sync
+  - Billing endpoint falls back to `CIRIS_BILLING_GOOGLE_ID_TOKEN` env var
+  - Kotlin EnvFileUpdater writes token, Python billing reads it
+
+- **Covenant Metrics Trace Levels** - Fixed per-adapter trace level configuration
+  - Config now overrides env var (was reversed)
+  - Added adapter instance ID to logging for multi-adapter debugging
+  - QA runner default changed from `full_traces` to `detailed`
+  - Covenant metrics tests load `generic` and `full_traces` adapters
+
+- **Default Template Changed** - Ally is now the default agent template
+  - Renamed `default.yaml` → `datum.yaml`, `ally.yaml` → `default.yaml`
+  - Ally provides personal assistant functionality with crisis response protocols
+
+- **Test Isolation Improvements** - Fixed parallel test pollution
+  - Added `isolate_test_env_vars` fixture for env var isolation
+  - Isolates LLM provider detection env vars (GOOGLE_API_KEY, ANTHROPIC_API_KEY, etc.)
+  - Fixed A2A adapter tests to use proper async mock for `on_message`
+  - Updated dual_llm tests to explicitly clear interfering env vars
+  - All 8867 tests now pass consistently with `pytest -n 16`
+
+- **Covenant Metrics Consent Timestamp** - Auto-set when adapter enabled
+  - Setup wizard now writes `CIRIS_COVENANT_METRICS_CONSENT=true` and timestamp
+  - Fixes `TRACE_REJECTED_NO_CONSENT` errors on mobile devices
+
+- **SonarCloud Code Quality** - Addressed code smells and cognitive complexity
+  - Extracted helper functions to reduce cognitive complexity in 6+ files
+  - Renamed iOS classes to match PascalCase convention (IOSDictRow, etc.)
+  - Removed unused variables and fixed implicit string concatenations
+  - Added mobile/iOS directory exclusions to sonar-project.properties
+
 ## [1.9.3] - 2026-01-27
 
 ### Added

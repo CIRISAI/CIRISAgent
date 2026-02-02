@@ -1,11 +1,40 @@
 import logging
 import sqlite3
+import sys
+import threading
 import time
 import types
 from datetime import datetime
 from typing import Any, Dict, Optional, TypedDict, Union
 
 from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
+
+# iOS-specific: Global lock for SQLite operations to avoid iOS's SQLiteDatabaseTracking assertions
+# iOS's debug SQLite has stricter thread checking that triggers assertions with check_same_thread=False
+_ios_sqlite_lock: Optional[threading.RLock] = None
+_is_ios_platform: Optional[bool] = None
+
+
+def _check_ios_platform() -> bool:
+    """Check if running on iOS."""
+    global _is_ios_platform
+    if _is_ios_platform is None:
+        _is_ios_platform = sys.platform == "ios" or (
+            sys.platform == "darwin"
+            and hasattr(sys, "implementation")
+            and "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
+        )
+    return _is_ios_platform
+
+
+def _get_ios_lock() -> threading.RLock:
+    """Get the iOS SQLite lock (created lazily)."""
+    global _ios_sqlite_lock
+    if _ios_sqlite_lock is None:
+        _ios_sqlite_lock = threading.RLock()
+    return _ios_sqlite_lock
+
+
 from ciris_engine.schemas.persistence.postgres import tables as postgres_tables
 from ciris_engine.schemas.persistence.sqlite import tables as sqlite_tables
 
@@ -217,6 +246,277 @@ class PostgreSQLConnectionWrapper:
         self._conn.close()
 
 
+class IOSDictRow(dict[str, Any]):
+    """A dict subclass that supports both string key and integer index access.
+
+    This mimics sqlite3.Row behavior for iOS compatibility:
+    - row["column_name"] works (string key access)
+    - row[0], row[1] works (integer index access)
+    - dict(row) and **row only yield string keys (for Pydantic model unpacking)
+
+    The integer index access is provided via __getitem__ override, but integers
+    are NOT stored as dict keys. This ensures Task(**row) works correctly.
+    """
+
+    def __init__(self, string_dict: dict[str, Any], column_order: list[str]):
+        """Initialize with string-keyed dict and column order for integer access.
+
+        Args:
+            string_dict: Dict with string keys only
+            column_order: List of column names in order, for integer indexing
+        """
+        super().__init__(string_dict)
+        self._column_order = column_order
+
+    def __getitem__(self, key: str | int) -> Any:
+        """Support both string and integer key access."""
+        if isinstance(key, int):
+            # Integer access - look up column name by index
+            if 0 <= key < len(self._column_order):
+                col_name = self._column_order[key]
+                return super().__getitem__(col_name)
+            raise IndexError(f"Index {key} out of range (columns: {len(self._column_order)})")
+        # String access - normal dict behavior
+        return super().__getitem__(key)
+
+    def get(self, key: str | int, default: Any = None) -> Any:
+        """Support both string and integer key access with default."""
+        try:
+            return self.__getitem__(key)
+        except (KeyError, IndexError):
+            return default
+
+
+class IOSSerializedCursor:
+    """Cursor wrapper that serializes all access for iOS compatibility.
+
+    This ensures cursor.execute() and other cursor methods go through the global lock.
+    On iOS, cursors are closed after fetch to prevent SQLiteDatabaseTracking assertions,
+    and automatically recreated on the next execute().
+    """
+
+    def __init__(self, cursor: sqlite3.Cursor, lock: threading.RLock, conn: sqlite3.Connection):
+        self._cursor = cursor
+        self._lock = lock
+        self._conn = conn  # Keep reference to recreate cursor if needed
+        self._closed = False
+        logger.info(f"[iOS_CURSOR] Created wrapper for {cursor}")
+
+    def _ensure_cursor(self) -> None:
+        """Recreate cursor if it was closed (iOS pattern)."""
+        if self._closed and _check_ios_platform():
+            with self._lock:
+                self._cursor = self._conn.cursor()
+                self._closed = False
+                logger.info("[iOS_CURSOR] Recreated cursor after close")
+
+    def execute(self, sql: str, parameters: Any = None) -> "IOSSerializedCursor":
+        self._ensure_cursor()  # Recreate if needed on iOS
+        logger.info(f"[iOS_CURSOR] execute: {sql[:80]}...")
+        with self._lock:
+            try:
+                if parameters is not None:
+                    self._cursor.execute(sql, parameters)
+                else:
+                    self._cursor.execute(sql)
+                logger.info("[iOS_CURSOR] execute succeeded")
+                return self
+            except Exception as e:
+                logger.error(f"[iOS_CURSOR] execute FAILED: {e}")
+                raise
+
+    def executemany(self, sql: str, seq_of_parameters: Any) -> "IOSSerializedCursor":
+        logger.info(f"[iOS_CURSOR] executemany: {sql[:80]}...")
+        with self._lock:
+            self._cursor.executemany(sql, seq_of_parameters)
+            return self
+
+    def _row_to_dict(self, row: Any) -> dict[str, Any] | None:
+        """Convert sqlite3.Row to IOSDictRow for iOS compatibility.
+
+        Returns an IOSDictRow that:
+        - Supports string key access: row["column_name"]
+        - Supports integer index access: row[0], row[1]
+        - Only yields string keys for dict() and ** unpacking
+
+        This ensures both `row[0]` and `Task(**row)` work correctly.
+        """
+        if row is None:
+            return None
+        # Get column names from cursor description
+        if self._cursor.description:
+            columns = [col[0] for col in self._cursor.description]
+            string_dict = {}
+            for col_name, value in zip(columns, row):
+                string_dict[col_name] = value
+            # Return IOSDictRow that supports both string and integer access
+            return IOSDictRow(string_dict, columns)
+        # Fallback: try to get keys from the row itself if it's dict-like
+        if hasattr(row, "keys"):
+            return dict(row)
+        # Last resort: log warning and return empty dict
+        logger.warning("[iOS_CURSOR] _row_to_dict: no description and row has no keys()")
+        return {}
+
+    def fetchone(self) -> Any:
+        if self._closed:
+            logger.warning("[iOS_CURSOR] fetchone() called on closed cursor, returning None")
+            return None
+        logger.info("[iOS_CURSOR] fetchone() called...")
+        with self._lock:
+            try:
+                result = self._cursor.fetchone()
+                # On iOS, convert Row to dict and close cursor immediately
+                if _check_ios_platform():
+                    if result is not None:
+                        result = self._row_to_dict(result)
+                    # Close cursor immediately to prevent iOS tracking assertions
+                    self._cursor.close()
+                    self._closed = True
+                    logger.info(f"[iOS_CURSOR] fetchone() result={result}, cursor closed")
+                else:
+                    logger.info(f"[iOS_CURSOR] fetchone() succeeded: {result}")
+                return result
+            except Exception as e:
+                logger.error(f"[iOS_CURSOR] fetchone() FAILED: {e}")
+                raise
+
+    def fetchall(self) -> Any:
+        if self._closed:
+            logger.warning("[iOS_CURSOR] fetchall() called on closed cursor, returning []")
+            return []
+        logger.info("[iOS_CURSOR] fetchall() called...")
+        with self._lock:
+            try:
+                result = self._cursor.fetchall()
+                # On iOS, convert Rows to dicts and close cursor immediately
+                if _check_ios_platform():
+                    if result:
+                        result = [self._row_to_dict(row) for row in result]
+                    # Close cursor immediately to prevent iOS tracking assertions
+                    self._cursor.close()
+                    self._closed = True
+                    logger.info(f"[iOS_CURSOR] fetchall() rows={len(result) if result else 0}, cursor closed")
+                else:
+                    logger.info(f"[iOS_CURSOR] fetchall() succeeded: {len(result) if result else 0} rows")
+                return result
+            except Exception as e:
+                logger.error(f"[iOS_CURSOR] fetchall() FAILED: {e}")
+                raise
+
+    def fetchmany(self, size: Optional[int] = None) -> Any:
+        with self._lock:
+            if size is None:
+                return self._cursor.fetchmany()
+            return self._cursor.fetchmany(size)
+
+    def close(self) -> None:
+        with self._lock:
+            self._cursor.close()
+
+    @property
+    def rowcount(self) -> int:
+        return self._cursor.rowcount
+
+    @property
+    def lastrowid(self) -> Optional[int]:
+        return self._cursor.lastrowid
+
+    @property
+    def description(self) -> Any:
+        return self._cursor.description
+
+    def __iter__(self) -> Any:
+        return iter(self._cursor)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._cursor, name)
+
+
+class IOSSerializedConnection:
+    """SQLite connection wrapper that serializes all access for iOS compatibility.
+
+    iOS's debug SQLite has strict thread checking that causes assertion failures
+    when connections are used from multiple threads, even with check_same_thread=False.
+    This wrapper uses a global lock to serialize all database access.
+
+    CRITICAL: cursor() returns a wrapped cursor so cursor.execute() also goes through lock.
+    """
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+        self._lock = _get_ios_lock()
+        logger.info("[iOS_CONN] IOSSerializedConnection created")
+
+    def execute(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+        sql = args[0] if args else "unknown"
+        logger.debug(f"[iOS_CONN] execute: {sql[:100]}...")
+        with self._lock:
+            try:
+                result = self._conn.execute(*args, **kwargs)
+                logger.debug("[iOS_CONN] execute succeeded")
+                return result
+            except Exception as e:
+                logger.error(f"[iOS_CONN] execute FAILED: {e}")
+                raise
+
+    def executemany(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+        sql = args[0] if args else "unknown"
+        logger.debug(f"[iOS_CONN] executemany: {sql[:100]}...")
+        with self._lock:
+            return self._conn.executemany(*args, **kwargs)
+
+    def executescript(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+        logger.debug("[iOS_CONN] executescript called")
+        with self._lock:
+            return self._conn.executescript(*args, **kwargs)
+
+    def cursor(self) -> IOSSerializedCursor:
+        """Return a WRAPPED cursor that serializes all operations."""
+        logger.info("[iOS_CONN] cursor() called - creating wrapped cursor...")
+        with self._lock:
+            try:
+                raw_cursor = self._conn.cursor()
+                # Pass connection reference so cursor can be recreated on iOS
+                wrapped = IOSSerializedCursor(raw_cursor, self._lock, self._conn)
+                logger.info("[iOS_CONN] cursor() succeeded, returning wrapped cursor")
+                return wrapped
+            except Exception as e:
+                logger.error(f"[iOS_CONN] cursor() FAILED: {e}")
+                raise
+
+    def commit(self) -> None:
+        logger.debug("[iOS_CONN] commit() called")
+        with self._lock:
+            self._conn.commit()
+
+    def rollback(self) -> None:
+        logger.debug("[iOS_CONN] rollback() called")
+        with self._lock:
+            self._conn.rollback()
+
+    def close(self) -> None:
+        logger.info("[iOS_CONN] close() called")
+        with self._lock:
+            self._conn.close()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._conn, name)
+
+    def __enter__(self) -> "IOSSerializedConnection":
+        logger.debug("[iOS_CONN] __enter__ called")
+        self._lock.acquire()
+        self._conn.__enter__()
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Any:
+        logger.debug(f"[iOS_CONN] __exit__ called, exc_type={exc_type}")
+        try:
+            return self._conn.__exit__(exc_type, exc_val, exc_tb)
+        finally:
+            self._lock.release()
+
+
 class RetryConnection:
     """SQLite connection wrapper with automatic retry on write operations."""
 
@@ -308,6 +608,83 @@ class RetryConnection:
         return self._conn.__exit__(exc_type, exc_val, exc_tb)
 
 
+def _resolve_db_path(db_path: Optional[str]) -> str:
+    """Resolve the database path, checking test overrides and defaults."""
+    if db_path is not None:
+        return db_path
+
+    logger.info("[DB_CONNECT] db_path is None, resolving...")
+    if _test_db_path is not None:
+        logger.info(f"[DB_CONNECT] Using test override path: {_test_db_path}")
+        return _test_db_path
+
+    logger.info("[DB_CONNECT] Calling get_sqlite_db_full_path()...")
+    resolved = get_sqlite_db_full_path()
+    logger.info(f"[DB_CONNECT] Resolved path: {resolved}")
+    return resolved
+
+
+def _create_postgres_connection(adapter: Any) -> Any:
+    """Create a PostgreSQL connection."""
+    if not POSTGRES_AVAILABLE:
+        raise RuntimeError(
+            "PostgreSQL connection requested but psycopg2 not installed. Install with: pip install psycopg2-binary"
+        )
+    conn = psycopg2.connect(adapter.db_url)
+    conn.cursor_factory = psycopg2.extras.RealDictCursor
+    return PostgreSQLConnectionWrapper(conn)
+
+
+def _create_sqlite_connection_ios(db_path: str) -> sqlite3.Connection:
+    """Create SQLite connection with iOS-specific settings."""
+    logger.info("[DB_CONNECT] iOS mode: using serialized connection settings")
+    try:
+        logger.info(f"[DB_CONNECT] Calling sqlite3.connect({db_path})...")
+        conn = sqlite3.connect(
+            db_path,
+            check_same_thread=False,
+            detect_types=sqlite3.PARSE_DECLTYPES,
+            isolation_level=None,  # Autocommit mode - avoids transaction state issues
+            timeout=30.0,  # Longer timeout for iOS
+        )
+        logger.info(f"[DB_CONNECT] sqlite3.connect succeeded, conn={conn}")
+        return conn
+    except Exception as e:
+        logger.error(f"[DB_CONNECT] sqlite3.connect FAILED: {e}")
+        raise
+
+
+def _get_pragma_statements(is_ios: bool, busy_timeout: Optional[int]) -> list[str]:
+    """Get the appropriate PRAGMA statements for the platform."""
+    if is_ios:
+        return [
+            "PRAGMA foreign_keys = ON;",
+            "PRAGMA journal_mode=WAL;",
+            f"PRAGMA busy_timeout = {busy_timeout if busy_timeout is not None else 30000};",
+            "PRAGMA synchronous=NORMAL;",
+        ]
+    return [
+        "PRAGMA foreign_keys = ON;",
+        "PRAGMA journal_mode=WAL;",
+        f"PRAGMA busy_timeout = {busy_timeout if busy_timeout is not None else 5000};",
+    ]
+
+
+def _execute_pragmas(conn: Any, adapter: Any, pragma_statements: list[str]) -> None:
+    """Execute PRAGMA statements on the connection."""
+    logger.info(f"[DB_CONNECT] Executing {len(pragma_statements)} PRAGMA statements...")
+    for pragma in pragma_statements:
+        result = adapter.pragma(pragma)
+        if result:
+            logger.info(f"[DB_CONNECT] Executing: {result}")
+            try:
+                conn.execute(result)
+                logger.info(f"[DB_CONNECT] PRAGMA succeeded: {result}")
+            except Exception as e:
+                logger.error(f"[DB_CONNECT] PRAGMA FAILED: {result} - {e}")
+                raise
+
+
 def get_db_connection(
     db_path: Optional[str] = None, busy_timeout: Optional[int] = None, enable_retry: bool = True
 ) -> Union[sqlite3.Connection, RetryConnection, Any]:
@@ -328,53 +705,49 @@ def get_db_connection(
         - SQLite: RetryConnection wrapper (if enable_retry=True) or raw Connection
         - PostgreSQL: psycopg2 connection with dict cursor factory
     """
-    # Default to SQLite for backward compatibility
-    if db_path is None:
-        # Check for test override first
-        if _test_db_path is not None:
-            db_path = _test_db_path
-        else:
-            db_path = get_sqlite_db_full_path()
+    import traceback
 
-    # Initialize dialect adapter based on connection string
+    caller_info = "".join(traceback.format_stack()[-4:-1])
+    logger.info(f"[DB_CONNECT] get_db_connection called from:\n{caller_info}")
+
+    db_path = _resolve_db_path(db_path)
     adapter = init_dialect(db_path)
 
     # PostgreSQL connection
     if adapter.is_postgresql():
-        if not POSTGRES_AVAILABLE:
-            raise RuntimeError(
-                "PostgreSQL connection requested but psycopg2 not installed. "
-                "Install with: pip install psycopg2-binary"
-            )
-
-        conn = psycopg2.connect(adapter.db_url)
-        # Use dict cursor for compatibility with SQLite Row factory
-        conn.cursor_factory = psycopg2.extras.RealDictCursor
-        # Wrap connection to provide SQLite-like execute() interface
-        return PostgreSQLConnectionWrapper(conn)
+        return _create_postgres_connection(adapter)
 
     # SQLite connection (default)
+    logger.info(f"[DB_CONNECT] Creating SQLite connection to: {db_path}")
     _ensure_adapters_registered()
 
-    conn = sqlite3.connect(db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
+    is_ios = _check_ios_platform()
+    logger.info(f"[DB_CONNECT] Platform detection: is_ios={is_ios}")
+
+    # Create connection based on platform
+    if is_ios:
+        conn = _create_sqlite_connection_ios(db_path)
+    else:
+        conn = sqlite3.connect(db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
+
+    logger.info("[DB_CONNECT] Setting row_factory...")
     conn.row_factory = sqlite3.Row
 
-    # Apply SQLite PRAGMA directives
-    pragma_statements = [
-        "PRAGMA foreign_keys = ON;",
-        "PRAGMA journal_mode=WAL;",
-        f"PRAGMA busy_timeout = {busy_timeout if busy_timeout is not None else 5000};",
-    ]
+    # Wrap iOS connection before executing PRAGMAs
+    if is_ios:
+        logger.info("[DB_CONNECT] Wrapping connection with IOSSerializedConnection BEFORE PRAGMAs...")
+        conn = IOSSerializedConnection(conn)  # type: ignore[assignment]
+        logger.info("[DB_CONNECT] iOS wrapper created, now executing PRAGMAs through wrapper")
 
-    for pragma in pragma_statements:
-        result = adapter.pragma(pragma)
-        if result:  # Only execute if dialect returns a statement
-            conn.execute(result)
+    pragma_statements = _get_pragma_statements(is_ios, busy_timeout)
+    _execute_pragmas(conn, adapter, pragma_statements)
 
     # Return wrapped connection with retry logic by default
-    if enable_retry:
+    if enable_retry and not is_ios:
+        logger.info("[DB_CONNECT] Returning RetryConnection wrapper")
         return RetryConnection(conn)
 
+    logger.info(f"[DB_CONNECT] Returning connection: {type(conn).__name__}")
     return conn
 
 
@@ -469,6 +842,11 @@ def initialize_database(db_path: Optional[str] = None) -> None:
     Note: Each deployment uses either SQLite or PostgreSQL exclusively.
     No migration between database backends is supported.
     """
+    import traceback
+
+    caller_info = "".join(traceback.format_stack()[-4:-1])
+    logger.info(f"[DB_INIT] initialize_database called from:\n{caller_info}")
+
     from ciris_engine.logic.persistence.db.execution_helpers import (
         execute_sql_statements,
         mask_password_in_url,

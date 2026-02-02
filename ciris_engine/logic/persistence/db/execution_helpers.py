@@ -22,10 +22,22 @@ def execute_sql_statements(conn: Any, sql_statements: List[str], adapter: Any) -
         sql_statements: List of SQL statements to execute
         adapter: Database adapter for dialect detection
 
-    PostgreSQL requires individual cursor.execute() calls,
-    SQLite can use executescript() for batch execution.
+    PostgreSQL requires individual cursor.execute() calls.
+    SQLite can use executescript() for batch execution on desktop,
+    but on iOS we must execute individually due to autocommit mode issues.
     """
-    if adapter.is_postgresql():
+    import sys
+
+    # Detect iOS platform
+    is_ios = sys.platform == "ios" or (
+        sys.platform == "darwin"
+        and hasattr(sys, "implementation")
+        and "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
+    )
+
+    if adapter.is_postgresql() or is_ios:
+        # PostgreSQL requires individual execute calls
+        # iOS SQLite also needs individual execute (executescript fails in autocommit mode)
         cursor = conn.cursor()
         try:
             for statement in sql_statements:
@@ -34,7 +46,7 @@ def execute_sql_statements(conn: Any, sql_statements: List[str], adapter: Any) -
         finally:
             cursor.close()
     else:
-        # SQLite uses executescript for batch execution
+        # SQLite (desktop) uses executescript for batch execution
         combined_sql = ";\n".join(sql_statements)
         conn.executescript(combined_sql)
 

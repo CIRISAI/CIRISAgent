@@ -160,16 +160,17 @@ class TestTemplatesEndpoint:
             # Stewardship tier should be 1-5
             assert 1 <= template["stewardship_tier"] <= 5
 
-            # All templates should have DSAR SOPs
-            assert "DSAR_ACCESS" in template["supported_sops"]
-            assert "DSAR_DELETE" in template["supported_sops"]
-            assert "DSAR_EXPORT" in template["supported_sops"]
-            assert "DSAR_RECTIFY" in template["supported_sops"]
+            # Templates with SOPs should have DSAR SOPs (skip benchmark templates)
+            if template["supported_sops"]:
+                assert "DSAR_ACCESS" in template["supported_sops"]
+                assert "DSAR_DELETE" in template["supported_sops"]
+                assert "DSAR_EXPORT" in template["supported_sops"]
+                assert "DSAR_RECTIFY" in template["supported_sops"]
 
-        # Check default template exists
+        # Check default template exists (ally is the default)
         default = next((t for t in templates if t["id"] == "default"), None)
         assert default is not None
-        assert default["name"] == "Datum"
+        assert default["name"] == "Ally"
 
     def test_templates_no_auth_required(self, client):
         """Test that templates list doesn't require authentication."""
@@ -533,9 +534,10 @@ class TestHelperFunctions:
         assert all(t.stewardship_tier >= 1 and t.stewardship_tier <= 5 for t in templates)
         assert all(t.creator_id is not None for t in templates)
         assert all(t.signature is not None for t in templates)
-        # All templates should have DSAR SOPs
-        assert all("DSAR_ACCESS" in t.supported_sops for t in templates)
-        assert all("DSAR_DELETE" in t.supported_sops for t in templates)
+        # Templates with SOPs should have DSAR SOPs (benchmark templates may have none)
+        templates_with_sops = [t for t in templates if t.supported_sops]
+        assert all("DSAR_ACCESS" in t.supported_sops for t in templates_with_sops)
+        assert all("DSAR_DELETE" in t.supported_sops for t in templates_with_sops)
 
     def test_get_available_adapters(self):
         """Test _get_available_adapters helper."""

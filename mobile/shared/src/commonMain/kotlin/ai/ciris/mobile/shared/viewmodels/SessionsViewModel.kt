@@ -65,11 +65,12 @@ class SessionsViewModel(
 
     // Polling job
     private var pollingJob: Job? = null
+    private var pollingStarted = false
 
     init {
-        logInfo("init", "SessionsViewModel initialized")
-        refresh()
-        startPolling()
+        logInfo("init", "SessionsViewModel initialized (polling deferred until startPolling() called)")
+        // NOTE: Don't auto-start polling here - wait for startPolling() to be called
+        // when the screen becomes visible and has a valid auth token
     }
 
     /**
@@ -106,10 +107,16 @@ class SessionsViewModel(
     }
 
     /**
-     * Start polling for state updates
+     * Start polling for state updates.
+     * Must be called explicitly when the screen becomes visible.
      */
-    private fun startPolling() {
+    fun startPolling() {
         val method = "startPolling"
+        if (pollingStarted) {
+            logDebug(method, "Polling already started, skipping")
+            return
+        }
+        pollingStarted = true
         logInfo(method, "Starting state polling (interval=${POLL_INTERVAL_MS}ms)")
 
         pollingJob = viewModelScope.launch {
@@ -140,11 +147,12 @@ class SessionsViewModel(
     /**
      * Stop polling
      */
-    private fun stopPolling() {
+    fun stopPolling() {
         val method = "stopPolling"
         logInfo(method, "Stopping state polling")
         pollingJob?.cancel()
         pollingJob = null
+        pollingStarted = false // Allow restart
     }
 
     /**

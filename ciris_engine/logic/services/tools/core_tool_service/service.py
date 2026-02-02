@@ -305,7 +305,7 @@ class CoreToolService(BaseService, ToolService):
         import time
 
         logger.debug(
-            f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s MERGING_STAGE " f"stage={stage_name} data={stage_data}"
+            f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s MERGING_STAGE stage={stage_name} data={stage_data}"
         )
 
         if not isinstance(stage_data, dict):
@@ -323,7 +323,7 @@ class CoreToolService(BaseService, ToolService):
             # New stage
             merged_stages[stage_name] = stage_data
             logger.debug(
-                f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s NEW_STAGE " f"stage={stage_name} data={stage_data}"
+                f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s NEW_STAGE stage={stage_name} data={stage_data}"
             )
 
     def _merge_stage_metadata(

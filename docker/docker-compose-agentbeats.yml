@@ -1,0 +1,71 @@
+# CIRIS AgentBeats Purple Agent
+# Docker Compose for HE-300 ethical benchmarking
+#
+# Usage:
+#   cp docker/.env.agentbeats.example docker/.env.agentbeats
+#   # Edit .env.agentbeats with your LLM credentials
+#   docker-compose -f docker/docker-compose-agentbeats.yml up --build
+#
+# For AgentBeats registration, push to GHCR:
+#   docker build -f docker/Dockerfile.agentbeats -t ghcr.io/cirisai/ciris-agent:purple .
+#   docker push ghcr.io/cirisai/ciris-agent:purple
+
+services:
+  ciris-purple:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agentbeats
+    image: ghcr.io/cirisai/ciris-agent:purple
+    container_name: ciris-purple-agent
+
+    # AgentBeats standard port
+    ports:
+      - "9000:9000"
+
+    # Environment configuration
+    env_file:
+      - .env.agentbeats
+
+    environment:
+      # A2A Configuration
+      - CIRIS_A2A_PORT=9000
+      - CIRIS_A2A_HOST=0.0.0.0
+      - CIRIS_A2A_TIMEOUT=60
+
+      # Adapter - A2A only for benchmarking
+      - CIRIS_ADAPTER=a2a
+
+      # Benchmarking optimizations
+      - CIRIS_LOG_LEVEL=WARNING
+      - CIRIS_TELEMETRY_ENABLED=false
+      - CIRIS_AUDIT_ENABLED=false
+
+    # Persistent storage (optional for benchmarking)
+    volumes:
+      - ciris-data:/app/data
+      - ciris-logs:/app/logs
+
+    # Resource limits for benchmarking
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    # Restart policy
+    restart: unless-stopped
+
+volumes:
+  ciris-data:
+  ciris-logs:

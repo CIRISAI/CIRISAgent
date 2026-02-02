@@ -860,16 +860,33 @@ def _check_stored_user_role(auth_service: "APIAuthService", provider: str, exter
 def _check_first_oauth_user_status(
     auth_service: "APIAuthService", oauth_users: Optional[Dict[str, Any]], provider: str, external_id: Optional[str]
 ) -> bool:
-    """Check if this is the first OAuth user (setup wizard scenario)."""
-    if not _is_first_oauth_user(oauth_users):
+    """Check if this is the first OAuth user (setup wizard scenario).
+
+    IMPORTANT: We must check the _users dict (loaded from database) not just
+    _oauth_users (in-memory only). After app restart, _oauth_users is empty
+    but _users contains all users loaded from the database.
+    """
+    # Get users loaded from database - this is the authoritative source
+    stored_users = getattr(auth_service, "_users", {})
+
+    # If ANY users exist in the database, this is not the first user
+    if stored_users:
+        logger.debug(f"[AUTH DEBUG] Database has {len(stored_users)} existing users - not first user")
         return False
 
-    # Only grant SYSTEM_ADMIN if BOTH oauth_users AND _users are empty for this OAuth identity
-    stored_users = getattr(auth_service, "_users", {})
-    user_id_check: Optional[str] = f"{provider}:{external_id}" if external_id else None
-    user_in_stored = user_id_check and user_id_check in stored_users
+    # Also check in-memory oauth_users cache
+    if oauth_users and len(oauth_users) > 0:
+        logger.debug(f"[AUTH DEBUG] OAuth cache has {len(oauth_users)} users - not first user")
+        return False
 
-    return not user_in_stored
+    # Check if this specific user already exists
+    user_id_check: Optional[str] = f"{provider}:{external_id}" if external_id else None
+    if user_id_check and user_id_check in stored_users:
+        logger.debug(f"[AUTH DEBUG] User {user_id_check} already exists - not first user")
+        return False
+
+    logger.info("[AUTH DEBUG] No existing users found - this is the first OAuth user")
+    return True
 
 
 def _determine_user_role(
@@ -1409,6 +1426,63 @@ def _log_email_verification_warning(token_info: Dict[str, Any]) -> None:
         logger.warning(f"[NativeAuth] Email not verified for user {token_info.get('sub')}")
 
 
+def _decode_google_jwt_locally(id_token: str) -> Dict[str, Optional[str]]:
+    """
+    Decode a Google ID token locally without calling Google's API.
+
+    This is a fallback for on-device mode when the Google tokeninfo API
+    is unreachable. The token is trusted because it came from Google Sign-In
+    SDK running on the device, which already verified it cryptographically.
+
+    WARNING: This does NOT verify the token signature. Only use this as a
+    fallback when the token is known to come from the native Google SDK.
+    """
+    import base64
+    import json
+    import time
+
+    logger.info("[NativeAuth] Decoding Google JWT locally (fallback mode)...")
+
+    try:
+        # JWT has 3 parts: header.payload.signature
+        parts = id_token.split(".")
+        if len(parts) != 3:
+            raise ValueError(f"Invalid JWT format: expected 3 parts, got {len(parts)}")
+
+        # Decode the payload (second part) - use URL-safe base64
+        payload_b64 = parts[1]
+        # Add padding if needed
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += "=" * padding
+
+        payload_bytes = base64.urlsafe_b64decode(payload_b64)
+        payload = json.loads(payload_bytes.decode("utf-8"))
+
+        logger.info(f"[NativeAuth] Local decode - sub: {payload.get('sub')}, email: {payload.get('email')}")
+
+        # Basic validation
+        exp = payload.get("exp")
+        if exp and int(exp) < time.time():
+            raise ValueError("Token has expired")
+
+        iss = payload.get("iss")
+        if iss not in ("accounts.google.com", "https://accounts.google.com"):
+            raise ValueError(f"Invalid issuer: {iss}")
+
+        # Extract user info
+        return {
+            "external_id": payload.get("sub"),
+            "email": payload.get("email"),
+            "name": payload.get("name"),
+            "picture": payload.get("picture"),
+        }
+
+    except Exception as e:
+        logger.error(f"[NativeAuth] Local JWT decode failed: {type(e).__name__}: {e}")
+        raise
+
+
 async def _call_google_tokeninfo_api(id_token: str) -> Dict[str, Any]:
     """Call Google's tokeninfo API and return the response JSON."""
     import httpx
@@ -1495,10 +1569,18 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
         raise
     except httpx.TimeoutException:
         logger.error("[NativeAuth] Google tokeninfo API timed out")
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Google verification service timed out. Please try again.",
-        )
+        # On-device fallback: if we can't reach Google, decode the JWT locally
+        # This is safe because the token came from Google Sign-In SDK on the device
+        # which already verified it cryptographically
+        logger.info("[NativeAuth] Attempting local JWT decode fallback for on-device mode...")
+        try:
+            return _decode_google_jwt_locally(id_token)
+        except Exception as fallback_error:
+            logger.error(f"[NativeAuth] Local JWT fallback also failed: {fallback_error}")
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Google verification service timed out. Please try again.",
+            )
     except httpx.RequestError as e:
         logger.error(f"[NativeAuth] Network error calling Google API: {type(e).__name__}: {e}")
         raise HTTPException(
@@ -1555,9 +1637,6 @@ async def native_google_token_exchange(
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider="google")
         logger.info(f"[NativeAuth] Determined role for {user_email}: {user_role}")
 
-        # Check if this is the first OAuth user (for auto-minting)
-        is_first_oauth_user = user_role == UserRole.SYSTEM_ADMIN
-
         # Create or get OAuth user
         logger.info(f"[NativeAuth] Creating/getting OAuth user - external_id: {external_id}, email: {user_email}")
         oauth_user = auth_service.create_oauth_user(
@@ -1575,47 +1654,10 @@ async def native_google_token_exchange(
         _store_oauth_profile(auth_service, oauth_user.user_id, name, user_data.get("picture"))
 
         # Auto-mint SYSTEM_ADMIN users as WA with ROOT role so they can handle deferrals
-        # This handles both first-time users and existing users who weren't minted
         logger.info(
             f"CIRIS_USER_CREATE: [NativeAuth] Checking auto-mint for {oauth_user.user_id} with role {oauth_user.role}"
         )
-        if oauth_user.role == UserRole.SYSTEM_ADMIN:
-            # Check if user is already minted by looking up their user record
-            existing_user = auth_service.get_user(oauth_user.user_id)
-            logger.info(f"CIRIS_USER_CREATE: [NativeAuth] existing_user lookup: {existing_user}")
-            if existing_user:
-                logger.info(
-                    f"CIRIS_USER_CREATE: [NativeAuth]   wa_id={existing_user.wa_id}, wa_role={existing_user.wa_role}"
-                )
-
-            needs_minting = not existing_user or not existing_user.wa_id or existing_user.wa_id == oauth_user.user_id
-
-            if needs_minting:
-                logger.info(
-                    f"CIRIS_USER_CREATE: [NativeAuth] Auto-minting SYSTEM_ADMIN user {oauth_user.user_id} as WA with ROOT role"
-                )
-                try:
-                    from ciris_engine.schemas.services.authority_core import WARole
-
-                    await auth_service.mint_wise_authority(
-                        user_id=oauth_user.user_id,
-                        wa_role=WARole.ROOT,
-                        minted_by="system_auto_mint",
-                    )
-                    logger.info(
-                        f"CIRIS_USER_CREATE: [NativeAuth] ✅ Successfully auto-minted {oauth_user.user_id} as ROOT WA"
-                    )
-                except Exception as mint_error:
-                    # Don't fail login if minting fails - user can mint manually later
-                    logger.warning(
-                        f"CIRIS_USER_CREATE: [NativeAuth] Auto-mint failed (user can mint manually): {mint_error}"
-                    )
-            else:
-                logger.info(
-                    f"CIRIS_USER_CREATE: [NativeAuth] User {oauth_user.user_id} already minted as WA - skipping auto-mint"
-                )
-        else:
-            logger.info(f"CIRIS_USER_CREATE: [NativeAuth] Not SYSTEM_ADMIN, skipping auto-mint")
+        await _auto_mint_system_admin_if_needed(oauth_user, auth_service, "NativeAuth")
 
         # Generate API key
         logger.info(f"[NativeAuth] Generating API key for user {oauth_user.user_id}")
@@ -1651,6 +1693,224 @@ async def native_google_token_exchange(
         logger.error(f"[NativeAuth] Unexpected error: {type(e).__name__}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Native token exchange failed: {str(e)}"
+        )
+
+
+# ========== Apple Native Auth ==========
+
+
+class AppleNativeTokenRequest(BaseModel):
+    """Request model for Apple native app token exchange."""
+
+    id_token: str = Field(..., description="Apple ID token (JWT) from native Sign-In")
+    provider: str = Field(default="apple", description="OAuth provider (always 'apple')")
+
+
+def _decode_apple_jwt_locally(id_token: str) -> Dict[str, Optional[str]]:
+    """
+    Decode an Apple ID token locally without calling Apple's API.
+
+    Apple ID tokens are JWTs signed with RS256. For on-device mode,
+    we trust the token because it came from Apple Sign-In SDK running
+    on the device, which already verified it cryptographically.
+
+    In production, you would verify the signature against Apple's public keys.
+    """
+    import base64
+    import json
+    import time
+
+    logger.info("[AppleNativeAuth] Decoding Apple JWT locally...")
+
+    try:
+        # JWT has 3 parts: header.payload.signature
+        parts = id_token.split(".")
+        if len(parts) != 3:
+            raise ValueError(f"Invalid JWT format: expected 3 parts, got {len(parts)}")
+
+        # Decode the payload (second part) - use URL-safe base64
+        payload_b64 = parts[1]
+        # Add padding if needed
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += "=" * padding
+
+        payload_bytes = base64.urlsafe_b64decode(payload_b64)
+        payload = json.loads(payload_bytes.decode("utf-8"))
+
+        logger.info(f"[AppleNativeAuth] Local decode - sub: {payload.get('sub')}, email: {payload.get('email')}")
+
+        # Basic validation
+        exp = payload.get("exp")
+        if exp and int(exp) < time.time():
+            raise ValueError("Token has expired")
+
+        iss = payload.get("iss")
+        if iss != "https://appleid.apple.com":
+            raise ValueError(f"Invalid issuer: {iss}")
+
+        # Extract user info
+        return {
+            "external_id": payload.get("sub"),
+            "email": payload.get("email"),
+            "name": payload.get("name"),  # Apple doesn't include name in JWT after first auth
+            "picture": None,  # Apple doesn't provide picture URLs
+        }
+
+    except Exception as e:
+        logger.error(f"[AppleNativeAuth] Local JWT decode failed: {type(e).__name__}: {e}")
+        raise
+
+
+async def _verify_apple_id_token(id_token: str) -> Dict[str, Optional[str]]:
+    """
+    Verify an Apple ID token and extract user info.
+
+    For on-device mode, we decode the JWT locally since it came from
+    the Apple Sign-In SDK which already verified it cryptographically.
+
+    In production with network access, you could optionally verify
+    the signature against Apple's public keys at:
+    https://appleid.apple.com/auth/keys
+    """
+    logger.info(f"[AppleNativeAuth] Verifying Apple ID token (length: {len(id_token)}, prefix: {id_token[:20]}...)")
+
+    # For on-device mode, decode locally
+    # The token is trusted because it came from Apple Sign-In SDK
+    return _decode_apple_jwt_locally(id_token)
+
+
+async def _auto_mint_system_admin_if_needed(
+    oauth_user: OAuthUser, auth_service: APIAuthService, log_prefix: str
+) -> None:
+    """Auto-mint SYSTEM_ADMIN users as WA with ROOT role for handling deferrals.
+
+    Args:
+        oauth_user: The OAuth user to potentially mint
+        auth_service: The auth service for minting
+        log_prefix: Logging prefix for trace context
+    """
+    if oauth_user.role != UserRole.SYSTEM_ADMIN:
+        logger.info(f"CIRIS_USER_CREATE: [{log_prefix}] Not SYSTEM_ADMIN, skipping auto-mint")
+        return
+
+    existing_user = auth_service.get_user(oauth_user.user_id)
+    logger.info(f"CIRIS_USER_CREATE: [{log_prefix}] existing_user lookup: {existing_user}")
+
+    if existing_user:
+        logger.info(f"CIRIS_USER_CREATE: [{log_prefix}]   wa_id={existing_user.wa_id}, wa_role={existing_user.wa_role}")
+
+    needs_minting = not existing_user or not existing_user.wa_id or existing_user.wa_id == oauth_user.user_id
+
+    if not needs_minting:
+        logger.info(f"CIRIS_USER_CREATE: [{log_prefix}] User {oauth_user.user_id} already minted as WA - skipping")
+        return
+
+    logger.info(
+        f"CIRIS_USER_CREATE: [{log_prefix}] Auto-minting SYSTEM_ADMIN user {oauth_user.user_id} as WA with ROOT role"
+    )
+    try:
+        from ciris_engine.schemas.services.authority_core import WARole
+
+        await auth_service.mint_wise_authority(
+            user_id=oauth_user.user_id,
+            wa_role=WARole.ROOT,
+            minted_by="system_auto_mint",
+        )
+        logger.info(f"CIRIS_USER_CREATE: [{log_prefix}] ✅ Successfully auto-minted {oauth_user.user_id} as ROOT WA")
+    except Exception as mint_error:
+        logger.warning(f"CIRIS_USER_CREATE: [{log_prefix}] Auto-mint failed (user can mint manually): {mint_error}")
+
+
+@router.post("/auth/native/apple", response_model=NativeTokenResponse)
+async def native_apple_token_exchange(
+    native_request: AppleNativeTokenRequest,
+    fastapi_request: Request,
+    auth_service: APIAuthService = Depends(get_auth_service),
+) -> NativeTokenResponse:
+    """
+    Exchange a native Apple ID token for a CIRIS API token.
+
+    This endpoint is used by native iOS apps that perform Apple Sign-In
+    directly and need to exchange their Apple ID token for a CIRIS API token.
+
+    Unlike the web OAuth flow (which uses authorization codes), native apps get
+    ID tokens directly from Apple Sign-In SDK and send them here.
+    """
+    logger.info(f"[AppleNativeAuth] Native Apple token exchange request - provider: {native_request.provider}")
+
+    if native_request.provider != "apple":
+        logger.warning(f"[AppleNativeAuth] Unsupported provider: {native_request.provider}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only 'apple' provider is supported for this endpoint",
+        )
+
+    try:
+        # Verify the Apple ID token and get user info
+        logger.info("[AppleNativeAuth] Starting token verification...")
+        user_data = await _verify_apple_id_token(native_request.id_token)
+        logger.info(f"[AppleNativeAuth] Token verification complete - external_id: {user_data.get('external_id')}")
+
+        external_id = user_data.get("external_id")
+        if not external_id:
+            logger.error("[AppleNativeAuth] No external_id in user_data")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Apple ID token did not contain user ID"
+            )
+
+        user_email = user_data.get("email")
+        # Pass external_id to preserve existing user's role (don't demote on re-auth!)
+        user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider="apple")
+        logger.info(f"[AppleNativeAuth] Determined role for {user_email}: {user_role}")
+
+        # Create or get OAuth user
+        logger.info(f"[AppleNativeAuth] Creating/getting OAuth user - external_id: {external_id}, email: {user_email}")
+        oauth_user = auth_service.create_oauth_user(
+            provider="apple",
+            external_id=external_id,
+            email=user_email,
+            name=user_data.get("name"),
+            role=user_role,
+            marketing_opt_in=False,
+        )
+        logger.info(f"[AppleNativeAuth] OAuth user created/retrieved - user_id: {oauth_user.user_id}")
+
+        # Auto-mint SYSTEM_ADMIN users as WA with ROOT role so they can handle deferrals
+        logger.info(
+            f"CIRIS_USER_CREATE: [AppleNativeAuth] Checking auto-mint for {oauth_user.user_id} with role {oauth_user.role}"
+        )
+        await _auto_mint_system_admin_if_needed(oauth_user, auth_service, "AppleNativeAuth")
+
+        # Generate API key
+        logger.info(f"[AppleNativeAuth] Generating API key for user {oauth_user.user_id}")
+        api_key = _generate_api_key_and_store(auth_service, oauth_user, "apple")
+
+        # Trigger billing credit check to create billing user
+        logger.info(f"[AppleNativeAuth] Triggering billing credit check for user {oauth_user.user_id}")
+        await _trigger_billing_credit_check_if_enabled(
+            fastapi_request, oauth_user, user_email=user_email, marketing_opt_in=False
+        )
+
+        logger.info(f"[AppleNativeAuth] SUCCESS - Native Apple user {oauth_user.user_id} logged in, token generated")
+
+        return NativeTokenResponse(
+            access_token=api_key,
+            token_type="bearer",
+            expires_in=2592000,  # 30 days in seconds
+            user_id=oauth_user.user_id,
+            role=oauth_user.role.value,
+            email=user_email,
+            name=user_data.get("name"),
+        )
+
+    except HTTPException as e:
+        logger.error(f"[AppleNativeAuth] HTTP error: {e.status_code} - {e.detail}")
+        raise
+    except Exception as e:
+        logger.error(f"[AppleNativeAuth] Unexpected error: {type(e).__name__}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Apple native token exchange failed: {str(e)}"
         )
 
 

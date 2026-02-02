@@ -58,8 +58,11 @@ class TokenManager(
     // Callback for silent sign-in
     private var silentSignInCallback: (suspend () -> SilentSignInResult)? = null
 
-    // Callback for when token is refreshed
-    private var onTokenRefreshed: ((String) -> Unit)? = null
+    // Callback for when token is refreshed - receives (idToken, provider)
+    private var onTokenRefreshed: ((String, String) -> Unit)? = null
+
+    // Current OAuth provider (google or apple)
+    private var currentProvider: String = "google"
 
     // Periodic refresh job
     private var refreshJob: Job? = null
@@ -74,9 +77,19 @@ class TokenManager(
 
     /**
      * Set the callback for when a token is successfully refreshed.
+     * Callback receives (idToken, provider) where provider is "google" or "apple".
      */
-    fun setOnTokenRefreshed(callback: (String) -> Unit) {
+    fun setOnTokenRefreshed(callback: (String, String) -> Unit) {
         onTokenRefreshed = callback
+    }
+
+    /**
+     * Set the current OAuth provider.
+     * Call this when user completes interactive sign-in.
+     */
+    fun setCurrentProvider(provider: String) {
+        currentProvider = provider
+        logInfo("setCurrentProvider", "Provider set to: $provider")
     }
 
     /**
@@ -152,8 +165,9 @@ class TokenManager(
         return try {
             when (val result = callback()) {
                 is SilentSignInResult.Success -> {
-                    logInfo(method, "Silent sign-in successful!")
-                    handleNewToken(result.idToken)
+                    logInfo(method, "Silent sign-in successful! provider=${result.provider}")
+                    currentProvider = result.provider
+                    handleNewToken(result.idToken, result.provider)
                     true
                 }
                 is SilentSignInResult.NeedsInteractiveLogin -> {
@@ -179,11 +193,14 @@ class TokenManager(
 
     /**
      * Handle a newly obtained token (from silent or interactive sign-in).
+     * @param idToken The OAuth ID token
+     * @param provider The OAuth provider ("google" or "apple")
      */
-    fun handleNewToken(idToken: String) {
+    fun handleNewToken(idToken: String, provider: String = currentProvider) {
         val method = "handleNewToken"
-        logInfo(method, "Processing new token (length: ${idToken.length})")
+        logInfo(method, "Processing new token (length: ${idToken.length}, provider: $provider)")
 
+        currentProvider = provider
         _currentToken.value = idToken
         _tokenState.value = TokenState.VALID
         _needsInteractiveLogin.value = false
@@ -193,8 +210,8 @@ class TokenManager(
         val remaining = expiry?.let { it - currentTimeSeconds() }
         logInfo(method, "New token expiry: $expiry (${remaining}s remaining)")
 
-        // Notify callback
-        onTokenRefreshed?.invoke(idToken)
+        // Notify callback with provider
+        onTokenRefreshed?.invoke(idToken, provider)
 
         // Start/restart periodic refresh
         startPeriodicRefresh()
@@ -338,7 +355,7 @@ enum class TokenState {
  * Result of silent sign-in attempt.
  */
 sealed class SilentSignInResult {
-    data class Success(val idToken: String, val email: String? = null) : SilentSignInResult()
+    data class Success(val idToken: String, val email: String? = null, val provider: String = "google") : SilentSignInResult()
     data class NeedsInteractiveLogin(val errorCode: Int) : SilentSignInResult()
     data class Error(val message: String, val errorCode: Int = -1) : SilentSignInResult()
 }

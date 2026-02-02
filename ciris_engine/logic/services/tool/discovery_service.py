@@ -223,11 +223,11 @@ class AdapterDiscoveryService:
 
         return loader.load_service_class(manifest, class_path)
 
-    def _load_class_via_importlib(self, adapter_name: str, class_path: str) -> Optional[Type[Any]]:
+    def _load_class_via_importlib(self, _adapter_name: str, class_path: str) -> Optional[Type[Any]]:
         """Load a service class via importlib (for Android/Chaquopy).
 
         Args:
-            adapter_name: The adapter name (e.g., 'ciris_covenant_metrics')
+            _adapter_name: The adapter name (unused, kept for API compatibility)
             class_path: The class path (e.g., 'ciris_covenant_metrics.services.CovenantMetricsService')
 
         Returns:
@@ -308,24 +308,36 @@ class AdapterDiscoveryService:
         eligible, _ = await self.load_adapters_with_status(disabled_adapters, service_dependencies)
         return eligible
 
+    async def _process_adapter_services(
+        self,
+        manifest: "ServiceManifest",
+        deps: Dict[str, Any],
+        eligible_services: Dict[str, Any],
+        ineligible_adapters: List[IneligibleAdapterInfo],
+    ) -> None:
+        """Process all services in an adapter manifest."""
+        adapter_name = manifest.module.name
+        for service_def in manifest.services:
+            try:
+                service, ineligible_info = await self._instantiate_and_check_with_info(manifest, service_def, deps)
+                if service:
+                    eligible_services[adapter_name] = service
+                    logger.info(f"[AUTO-LOAD] Eligible adapter: {adapter_name}")
+                elif ineligible_info:
+                    ineligible_adapters.append(ineligible_info)
+                    logger.info(f"[AUTO-LOAD] Adapter '{adapter_name}' not eligible: {ineligible_info.eligibility.reason}")
+            except Exception as e:
+                logger.debug(f"[AUTO-LOAD] Failed to check adapter '{adapter_name}': {e}")
+
     async def load_adapters_with_status(
         self,
         disabled_adapters: Optional[List[str]] = None,
         service_dependencies: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Dict[str, Any], List[IneligibleAdapterInfo]]:
-        """Load adapters and return both eligible services and ineligible info.
-
-        Args:
-            disabled_adapters: Adapter names to exclude from loading
-            service_dependencies: Dependencies to pass to service constructors
-
-        Returns:
-            Tuple of (eligible_services dict, list of IneligibleAdapterInfo)
-        """
+        """Load adapters and return both eligible services and ineligible info."""
         disabled = set(disabled_adapters or [])
         deps = service_dependencies or {}
 
-        # Inject config service into checker if available and needed
         if self.checker and not self.checker.config_service and "config_service" in deps:
             self.checker.config_service = deps["config_service"]
 
@@ -333,27 +345,10 @@ class AdapterDiscoveryService:
         ineligible_adapters: List[IneligibleAdapterInfo] = []
 
         for manifest in self.discover_adapters():
-            adapter_name = manifest.module.name
-
-            # Skip disabled adapters
-            if adapter_name in disabled:
-                logger.info(f"[AUTO-LOAD] Skipping disabled adapter: {adapter_name}")
+            if manifest.module.name in disabled:
+                logger.info(f"[AUTO-LOAD] Skipping disabled adapter: {manifest.module.name}")
                 continue
-
-            # Try to load and check eligibility for each service in manifest
-            for service_def in manifest.services:
-                try:
-                    service, ineligible_info = await self._instantiate_and_check_with_info(manifest, service_def, deps)
-                    if service:
-                        eligible_services[adapter_name] = service
-                        logger.info(f"[AUTO-LOAD] Eligible adapter: {adapter_name}")
-                    elif ineligible_info:
-                        ineligible_adapters.append(ineligible_info)
-                        logger.info(
-                            f"[AUTO-LOAD] Adapter '{adapter_name}' not eligible: {ineligible_info.eligibility.reason}"
-                        )
-                except Exception as e:
-                    logger.debug(f"[AUTO-LOAD] Failed to check adapter '{adapter_name}': {e}")
+            await self._process_adapter_services(manifest, deps, eligible_services, ineligible_adapters)
 
         logger.info(
             f"[AUTO-LOAD] Loaded {len(eligible_services)} eligible, {len(ineligible_adapters)} ineligible adapters"

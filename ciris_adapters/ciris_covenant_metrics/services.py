@@ -341,6 +341,9 @@ class CovenantMetricsService:
         """
         self._config = config or {}
 
+        # Adapter instance ID for logging (helps distinguish multiple instances)
+        self._adapter_instance_id = str(self._config.get("adapter_id", "default"))
+
         # Set agent_id if provided during construction
         self._initial_agent_id = agent_id
 
@@ -385,18 +388,25 @@ class CovenantMetricsService:
         else:
             self._flush_interval = 60.0
 
-        # Trace detail level - check env var first for QA testing
+        # Trace detail level - per-adapter config takes precedence over env var
+        # This allows loading multiple adapters with different trace levels
         # Default is GENERIC (numeric scores only) for ciris.ai/ciris-scoring
         env_level = os.environ.get("CIRIS_COVENANT_METRICS_TRACE_LEVEL", "").lower()
         config_level = str(self._config.get("trace_level", "")).lower()
-        level_str = env_level or config_level or "generic"
+        # Config takes precedence (allows per-adapter override), then env, then default
+        level_str = config_level or env_level or "generic"
+        level_source = "config" if config_level else ("env" if env_level else "default")
         try:
             self._trace_level = TraceDetailLevel(level_str)
         except ValueError:
             logger.warning(f"Invalid trace_level '{level_str}', defaulting to 'generic'")
             self._trace_level = TraceDetailLevel.GENERIC
+            level_source = "default (invalid)"
 
-        logger.info(f"📊 Trace detail level: {self._trace_level.value}")
+        logger.info(
+            f"📊 [{self._adapter_instance_id}] Trace detail level: {self._trace_level.value} "
+            f"(source={level_source}, config='{config_level}', env='{env_level}')"
+        )
 
         # Early warning correlation metadata (optional, anonymous)
         self._deployment_region: str = str(self._config.get("deployment_region", "") or "")
@@ -613,14 +623,16 @@ class CovenantMetricsService:
             events_to_send = self._event_queue.copy()
             self._event_queue.clear()
 
-        logger.info(f"📤 FLUSHING {len(events_to_send)} events to {self._endpoint_url}")
+        logger.info(
+            f"📤 [{self._adapter_instance_id}] FLUSHING {len(events_to_send)} events to {self._endpoint_url} (level={self._trace_level.value})"
+        )
 
         try:
             await self._send_events_batch(events_to_send)
             self._events_sent += len(events_to_send)
             self._last_send_time = datetime.now(timezone.utc)
             logger.info(
-                f"✅ FLUSH SUCCESS: {len(events_to_send)} events sent (total: {self._events_sent}, level={self._trace_level.value})"
+                f"✅ [{self._adapter_instance_id}] FLUSH SUCCESS: {len(events_to_send)} events sent (total: {self._events_sent}, level={self._trace_level.value})"
             )
         except Exception as e:
             self._events_failed += len(events_to_send)
@@ -662,7 +674,9 @@ class CovenantMetricsService:
             payload["correlation_metadata"] = correlation_metadata
 
         url = f"{self._endpoint_url}/covenant/events"
-        logger.info(f"📡 POST {url} ({len(events)} events, trace_level={self._trace_level.value})")
+        logger.info(
+            f"📡 [{self._adapter_instance_id}] POST {url} ({len(events)} events, trace_level={self._trace_level.value})"
+        )
 
         async with self._session.post(url, json=payload) as response:
             if response.status != 200:

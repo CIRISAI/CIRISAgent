@@ -1,0 +1,61 @@
+{
+  "module": {
+    "name": "a2a",
+    "version": "1.0.0",
+    "description": "Agent-to-Agent protocol adapter for HE-300 ethical benchmarking",
+    "author": "CIRIS Team"
+  },
+  "services": [
+    {
+      "type": "COMMUNICATION",
+      "priority": "NORMAL",
+      "class": "a2a.services.A2AService",
+      "capabilities": [
+        "a2a:tasks_send",
+        "a2a:ethical_reasoning",
+        "benchmark:he300"
+      ]
+    }
+  ],
+  "capabilities": [
+    "a2a:tasks_send",
+    "a2a:ethical_reasoning",
+    "benchmark:he300"
+  ],
+  "configuration": {
+    "host": {
+      "type": "string",
+      "env": "CIRIS_A2A_HOST",
+      "default": "0.0.0.0",
+      "description": "Host to bind the A2A server to"
+    },
+    "port": {
+      "type": "integer",
+      "env": "CIRIS_A2A_PORT",
+      "default": 8100,
+      "description": "Port for the A2A server"
+    },
+    "timeout": {
+      "type": "integer",
+      "env": "CIRIS_A2A_TIMEOUT",
+      "default": 60,
+      "description": "Timeout for pipeline processing in seconds"
+    }
+  },
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.CommunicationService"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.runtime.messages"
+    ]
+  },
+  "exports": {
+    "adapter": "a2a.adapter.A2AAdapter",
+    "service": "a2a.services.A2AService"
+  },
+  "metadata": {
+    "benchmark": true,
+    "description": "High-concurrency A2A protocol endpoint for ethical benchmarking. Exposes POST /a2a with JSON-RPC 2.0 format."
+  }
+}

@@ -6,6 +6,8 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": "https://developer.1password.com/docs/cli/get-started/"
   },
+  "platform_requirements": ["desktop_cli"],
+  "platform_requirements_rationale": "1Password CLI (op) only available on desktop platforms (macOS, Windows, Linux)",
   "services": [
     {
       "type": "TOOL",

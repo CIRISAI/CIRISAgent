@@ -8,6 +8,7 @@ Commands:
     test [tests]      - Run UI automation tests (default)
     pull-logs         - Pull device logs and files for debugging
     go-screen         - Navigate to a specific app screen and take a screenshot
+    build             - Build and deploy iOS/Android app
 
 Examples:
     # Run full flow test with test account
@@ -26,6 +27,11 @@ Examples:
     # Navigate to a screen and take screenshot
     python -m tools.qa_runner.modules.mobile go-screen billing
     python -m tools.qa_runner.modules.mobile go-screen telemetry -o ./screenshots
+
+    # Build and deploy iOS app
+    python -m tools.qa_runner.modules.mobile build --platform ios
+    python -m tools.qa_runner.modules.mobile build --platform ios --device DEVICE_UDID
+    python -m tools.qa_runner.modules.mobile build --platform ios --simulator
 """
 
 import os
@@ -41,6 +47,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from tools.qa_runner.modules.mobile.adb_helper import ADBHelper
 from tools.qa_runner.modules.mobile.test_runner import MobileTestConfig, MobileTestRunner
 from tools.qa_runner.modules.mobile.ui_automator import UIAutomator
+from tools.qa_runner.modules.mobile.device_helper import (
+    DeviceHelper,
+    Platform,
+    create_device_helper,
+    detect_platform,
+)
 
 # ========== Screen Registry ==========
 # Extensible registry of app screens and how to navigate to them
@@ -96,42 +108,152 @@ def pull_logs_command(args) -> int:
     print("CIRIS Mobile Device Log Collector")
     print("=" * 60 + "\n")
 
-    try:
-        adb = ADBHelper(adb_path=args.adb_path, device_serial=args.device)
-    except Exception as e:
-        print(f"[ERROR] Failed to initialize ADB: {e}")
-        return 1
+    # Determine platform
+    platform = getattr(args, 'platform', 'auto')
+    if platform == 'auto':
+        # Try iOS first if on macOS
+        try:
+            from .ios.xcrun_helper import XCRunHelper
+            ios_helper = XCRunHelper()
+            ios_devices = ios_helper.get_devices()
+            booted_ios = [d for d in ios_devices if d.state == "booted"]
+            if booted_ios:
+                platform = 'ios'
+                print("[INFO] Auto-detected iOS simulator")
+        except Exception:
+            pass
 
-    # Check device connection
-    devices = adb.get_devices()
-    connected = [d for d in devices if d.state == "device"]
+        if platform == 'auto':
+            platform = 'android'
 
-    if not connected:
-        print("[ERROR] No devices connected")
-        return 1
+    bundle_id = args.package
 
-    if args.device:
-        device = next((d for d in connected if d.serial == args.device), None)
-        if not device:
-            print(f"[ERROR] Device {args.device} not found")
-            print(f"  Available: {[d.serial for d in connected]}")
+    if platform == 'ios':
+        # Try physical device first if device_id looks like physical, or auto-detect
+        helper = None
+        device = None
+        is_physical = False
+
+        # Check for physical devices first
+        try:
+            from .ios.idevice_helper import IDeviceHelper
+            phys_helper = IDeviceHelper(device_id=args.device)
+            phys_devices = phys_helper.get_devices()
+            connected = [d for d in phys_devices if d.state == "device"]
+
+            if connected:
+                if args.device:
+                    device = next((d for d in connected if d.identifier == args.device), None)
+                    if device:
+                        helper = phys_helper
+                        is_physical = True
+                else:
+                    device = connected[0]
+                    helper = phys_helper
+                    is_physical = True
+        except RuntimeError:
+            pass  # No physical device tools available
+
+        # Fall back to simulator
+        if not helper:
+            try:
+                from .ios.xcrun_helper import XCRunHelper
+                sim_helper = XCRunHelper(device_id=args.device)
+                sim_devices = sim_helper.get_devices()
+                booted = [d for d in sim_devices if d.state == "booted"]
+
+                if booted:
+                    if args.device:
+                        device = next((d for d in booted if d.identifier == args.device), None)
+                    else:
+                        device = booted[0]
+
+                    if device:
+                        helper = sim_helper
+            except Exception:
+                pass
+
+        if not helper or not device:
+            print("[ERROR] No iOS device or simulator found")
+            print("  Physical device: Connect via USB and trust the computer")
+            print("  Simulator: xcrun simctl boot 'iPhone 17 Pro'")
+            if args.device:
+                # List available devices
+                all_devices = []
+                try:
+                    from .ios.idevice_helper import IDeviceHelper
+                    all_devices.extend(IDeviceHelper().get_devices())
+                except Exception:
+                    pass
+                try:
+                    from .ios.xcrun_helper import XCRunHelper
+                    all_devices.extend([d for d in XCRunHelper().get_devices() if d.state == "booted"])
+                except Exception:
+                    pass
+                if all_devices:
+                    print(f"  Available: {[d.identifier for d in all_devices]}")
             return 1
+
+        device_type = "Physical Device" if is_physical else "Simulator"
+        print(f"[INFO] iOS {device_type}: {device.name or 'Unknown'} ({device.identifier[:8]}...)")
+        print(f"[INFO] iOS Version: {device.os_version or 'Unknown'}")
+
+        # Pull logs using cross-platform helper
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = Path(args.output_dir) / timestamp
+        collection = helper.pull_logs(str(output_dir), bundle_id)
+
+        print(f"\n[SUCCESS] Logs saved to: {collection.output_dir}")
+        print(f"  App logs: {len(collection.app_logs)} files")
+        print(f"  System logs: {len(collection.system_logs)} files")
+        print(f"  Databases: {len(collection.databases)} files")
+        print(f"  Preferences: {len(collection.preferences)} files")
+
+        # Print quick analysis hints
+        print("\nQuick analysis:")
+        if collection.app_logs:
+            print(f"  cat {collection.app_logs[0]}")
+        if collection.system_logs:
+            print(f"  grep -i error {collection.system_logs[0]}")
+
     else:
-        device = connected[0]
-        if len(connected) > 1:
-            print(f"[INFO] Multiple devices found, using: {device.serial}")
-            print(f"  Use -d to specify: {[d.serial for d in connected]}")
+        # Android path (original behavior)
+        try:
+            adb = ADBHelper(adb_path=args.adb_path, device_serial=args.device)
+        except Exception as e:
+            print(f"[ERROR] Failed to initialize ADB: {e}")
+            return 1
 
-    print(f"[INFO] Device: {device.serial} ({device.model or 'unknown model'})")
+        # Check device connection
+        devices = adb.get_devices()
+        connected = [d for d in devices if d.state == "device"]
 
-    # Pull logs
-    results = adb.pull_device_logs(output_dir=args.output_dir, package=args.package, verbose=True)
+        if not connected:
+            print("[ERROR] No Android devices connected")
+            return 1
 
-    # Print quick analysis hints
-    print("\nQuick analysis:")
-    print(f"  grep -i error {results['output_dir']}/logs/incidents_latest.log")
-    print(f"  tail -100 {results['output_dir']}/logs/latest.log")
-    print(f"  cat {results['output_dir']}/logcat_app.txt | grep -i 'EnvFileUpdater\\|billing\\|token'")
+        if args.device:
+            device = next((d for d in connected if d.serial == args.device), None)
+            if not device:
+                print(f"[ERROR] Device {args.device} not found")
+                print(f"  Available: {[d.serial for d in connected]}")
+                return 1
+        else:
+            device = connected[0]
+            if len(connected) > 1:
+                print(f"[INFO] Multiple devices found, using: {device.serial}")
+                print(f"  Use -d to specify: {[d.serial for d in connected]}")
+
+        print(f"[INFO] Android Device: {device.serial} ({device.model or 'unknown model'})")
+
+        # Pull logs
+        results = adb.pull_device_logs(output_dir=args.output_dir, package=bundle_id, verbose=True)
+
+        # Print quick analysis hints
+        print("\nQuick analysis:")
+        print(f"  grep -i error {results['output_dir']}/logs/incidents_latest.log")
+        print(f"  tail -100 {results['output_dir']}/logs/latest.log")
+        print(f"  cat {results['output_dir']}/logcat_app.txt | grep -i 'EnvFileUpdater\\|billing\\|token'")
 
     return 0
 
@@ -320,6 +442,121 @@ def go_screen_command(args) -> int:
     return 0
 
 
+def build_command(args) -> int:
+    """Handle the build subcommand."""
+    print("\n" + "=" * 60)
+    print("CIRIS Mobile Build & Deploy")
+    print("=" * 60 + "\n")
+
+    platform = args.platform
+
+    if platform == "ios":
+        try:
+            from .ios.build_helper import iOSBuildHelper, iOSBuildConfig
+        except ImportError as e:
+            print(f"[ERROR] Failed to import iOS build helper: {e}")
+            return 1
+
+        # Create config
+        config = iOSBuildConfig(
+            project_dir=Path(__file__).parent.parent.parent.parent.parent / "mobile" / "iosApp",
+            scheme=args.scheme,
+            configuration=args.configuration,
+            prepare_bundle=not args.no_prepare,
+            clean_build=args.clean,
+            verbose=args.verbose,
+        )
+
+        helper = iOSBuildHelper(config)
+
+        # Determine target preference
+        prefer_physical = not args.simulator
+
+        print(f"[INFO] Build configuration:")
+        print(f"  Scheme: {config.scheme}")
+        print(f"  Configuration: {config.configuration}")
+        print(f"  Prepare bundle: {config.prepare_bundle}")
+        print(f"  Clean build: {config.clean_build}")
+        print(f"  Prefer physical device: {prefer_physical}")
+        if args.device:
+            print(f"  Target device: {args.device}")
+        print()
+
+        # Build and run
+        success, device = helper.build_and_run(
+            device_id=args.device,
+            prefer_physical=prefer_physical,
+            prepare_bundle=config.prepare_bundle,
+        )
+
+        if success and device:
+            print(f"\n[SUCCESS] App deployed to {device.name or device.identifier}")
+            return 0
+        elif success:
+            print("\n[SUCCESS] Build completed")
+            return 0
+        else:
+            print("\n[ERROR] Build or deploy failed")
+            return 1
+
+    elif platform == "android":
+        print("[INFO] Building Android APK...")
+        import subprocess
+
+        mobile_dir = Path(__file__).parent.parent.parent.parent.parent / "mobile"
+
+        # Build APK
+        gradle_cmd = ["./gradlew", ":androidApp:assembleDebug"]
+        if args.clean:
+            gradle_cmd = ["./gradlew", "clean", ":androidApp:assembleDebug"]
+
+        result = subprocess.run(gradle_cmd, cwd=mobile_dir, capture_output=not args.verbose, text=True)
+
+        if result.returncode != 0:
+            print(f"[ERROR] Build failed")
+            if not args.verbose and result.stderr:
+                print(result.stderr[-2000:])  # Last 2000 chars
+            return 1
+
+        print("[SUCCESS] APK built successfully")
+        apk_path = mobile_dir / "androidApp/build/outputs/apk/debug/androidApp-debug.apk"
+
+        if not args.build_only:
+            # Install to device
+            try:
+                adb = ADBHelper(adb_path=args.adb_path, device_serial=args.device)
+                devices = adb.get_devices()
+                connected = [d for d in devices if d.state == "device"]
+
+                if not connected:
+                    print("[WARN] No Android devices connected, skipping install")
+                else:
+                    device = connected[0]
+                    if args.device:
+                        device = next((d for d in connected if d.serial == args.device), device)
+
+                    print(f"[INFO] Installing to {device.serial}...")
+                    adb._run_adb(["install", "-r", str(apk_path)])
+                    print("[SUCCESS] APK installed")
+
+                    if not args.no_launch:
+                        print("[INFO] Launching app...")
+                        adb._run_adb([
+                            "shell", "am", "start", "-n",
+                            "ai.ciris.mobile/.MainActivity"
+                        ])
+                        print("[SUCCESS] App launched")
+            except Exception as e:
+                print(f"[WARN] Install/launch failed: {e}")
+                return 1
+
+        return 0
+
+    else:
+        print(f"[ERROR] Unknown platform: {platform}")
+        return 1
+
+
 def test_command(args) -> int:
     """Handle the test subcommand."""
     print("\n" + "=" * 60)
@@ -427,8 +664,15 @@ Examples:
   python -m tools.qa_runner.modules.mobile pull-logs -o ./my_logs
 """,
     )
-    pull_parser.add_argument("--device", "-d", help="Device serial number (uses first device if not specified)")
-    pull_parser.add_argument("--adb-path", help="Path to adb binary")
+    pull_parser.add_argument("--device", "-d", help="Device serial/UDID (uses first device if not specified)")
+    pull_parser.add_argument("--adb-path", help="Path to adb binary (Android only)")
+    pull_parser.add_argument(
+        "--platform",
+        "-p",
+        choices=["android", "ios", "auto"],
+        default="auto",
+        help="Target platform (default: auto-detect)",
+    )
     pull_parser.add_argument(
         "--output-dir",
         "-o",
@@ -438,7 +682,7 @@ Examples:
     pull_parser.add_argument(
         "--package",
         default="ai.ciris.mobile",
-        help="Android package name (default: ai.ciris.mobile)",
+        help="Package/Bundle ID (default: ai.ciris.mobile)",
     )
 
     # ========== go-screen subcommand ==========
@@ -474,6 +718,46 @@ Examples:
         default="ai.ciris.mobile",
         help="Android package name (default: ai.ciris.mobile)",
     )
+
+    # ========== build subcommand ==========
+    build_parser = subparsers.add_parser(
+        "build",
+        help="Build and deploy iOS/Android app",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+iOS Build Examples:
+  python -m tools.qa_runner.modules.mobile build --platform ios
+  python -m tools.qa_runner.modules.mobile build --platform ios --device UDID
+  python -m tools.qa_runner.modules.mobile build --platform ios --simulator
+  python -m tools.qa_runner.modules.mobile build --platform ios --clean --verbose
+
+Android Build Examples:
+  python -m tools.qa_runner.modules.mobile build --platform android
+  python -m tools.qa_runner.modules.mobile build --platform android --device emulator-5554
+
+Notes:
+  iOS builds require Xcode and a valid development certificate.
+  For physical devices, ensure the device is connected and trusted.
+  For simulators, one will be auto-selected or booted if needed.
+""",
+    )
+    build_parser.add_argument(
+        "--platform",
+        "-p",
+        choices=["ios", "android"],
+        required=True,
+        help="Target platform (required)",
+    )
+    build_parser.add_argument("--device", "-d", help="Device UDID/serial (auto-selects if not specified)")
+    build_parser.add_argument("--simulator", "-s", action="store_true", help="Prefer iOS simulator over physical device")
+    build_parser.add_argument("--scheme", default="iosApp", help="Xcode scheme (default: iosApp)")
+    build_parser.add_argument("--configuration", "-c", default="Debug", help="Build configuration (default: Debug)")
+    build_parser.add_argument("--clean", action="store_true", help="Clean build before building")
+    build_parser.add_argument("--no-prepare", action="store_true", help="Skip Python bundle preparation (iOS)")
+    build_parser.add_argument("--build-only", action="store_true", help="Build only, don't install/launch")
+    build_parser.add_argument("--no-launch", action="store_true", help="Install but don't launch the app")
+    build_parser.add_argument("--adb-path", help="Path to adb binary (Android only)")
+    build_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
     # ========== test subcommand ==========
     test_parser = subparsers.add_parser(
@@ -566,6 +850,8 @@ Examples:
         return pull_logs_command(args)
     elif args.command == "go-screen":
         return go_screen_command(args)
+    elif args.command == "build":
+        return build_command(args)
     elif args.command == "test":
         return test_command(args)
     else:

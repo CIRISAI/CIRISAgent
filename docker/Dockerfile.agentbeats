@@ -1,0 +1,97 @@
+# CIRIS AgentBeats Purple Agent
+# Optimized for HE-300 ethical benchmarking via A2A protocol
+#
+# Build:
+#   docker build -f docker/Dockerfile.agentbeats -t ghcr.io/cirisai/ciris-agent:purple .
+#
+# Run:
+#   docker run -p 9000:9000 -e LLM_API_KEY=your_key ghcr.io/cirisai/ciris-agent:purple
+
+# Stage 1: Build stage
+FROM python:3.12-slim AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy requirements and install
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+# Stage 2: Runtime stage
+FROM python:3.12-slim
+
+# AgentBeats labels
+LABEL org.opencontainers.image.title="CIRIS Agent Purple"
+LABEL org.opencontainers.image.description="CIRIS ethical AI agent for HE-300 benchmarking"
+LABEL org.opencontainers.image.version="1.9.4"
+LABEL org.opencontainers.image.source="https://github.com/CIRISAI/CIRISAgent"
+LABEL ai.agentbeats.protocols="a2a"
+LABEL ai.agentbeats.type="purple-agent"
+LABEL ai.agentbeats.benchmark="he300"
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1000 agent && \
+    mkdir -p /app/data /app/logs && \
+    chown -R agent:agent /app
+
+WORKDIR /app
+
+# Copy Python packages from builder
+COPY --from=builder /root/.local /home/agent/.local
+
+# Copy application code
+COPY --chown=agent:agent . .
+
+# Ensure proper permissions
+RUN chown -R agent:agent /app/data /app/logs && \
+    chmod 750 /app/data /app/logs
+
+# Switch to non-root user
+USER agent
+
+# Add Python packages to PATH
+ENV PATH=/home/agent/.local/bin:$PATH
+
+# AgentBeats Configuration
+# Port 9000 is the AgentBeats standard for purple agents
+ENV CIRIS_A2A_PORT=9000
+ENV CIRIS_A2A_HOST=0.0.0.0
+ENV CIRIS_A2A_TIMEOUT=60
+
+# Adapter configuration - A2A only for benchmarking
+ENV CIRIS_ADAPTER=a2a
+
+# Benchmarking optimizations
+ENV CIRIS_LOG_LEVEL=WARNING
+ENV CIRIS_TELEMETRY_ENABLED=false
+ENV CIRIS_AUDIT_ENABLED=false
+
+# Covenant Metrics - Full traces for research corpus contribution
+ENV CIRIS_COVENANT_METRICS_CONSENT=true
+ENV CIRIS_COVENANT_METRICS_TRACE_LEVEL=full_traces
+
+# LLM configuration (override at runtime)
+# ENV LLM_PROVIDER=anthropic
+# ENV LLM_API_KEY=your_key
+# ENV LLM_MODEL=claude-sonnet-4-20250514
+
+# Expose ports: 8080 for API, 9000 for A2A (AgentBeats standard)
+EXPOSE 8080 9000
+
+# Health check for AgentBeats orchestration
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:9000/health || exit 1
+
+# Run CIRIS with API + A2A + Covenant Metrics adapters and HE-300 benchmark template
+# API adapter provides base infrastructure, A2A provides benchmark endpoint
+CMD ["python", "main.py", "--adapter", "api", "--adapter", "a2a", "--adapter", "ciris_covenant_metrics", "--template", "he-300-benchmark"]

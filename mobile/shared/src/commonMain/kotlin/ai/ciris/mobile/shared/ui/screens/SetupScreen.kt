@@ -4,6 +4,7 @@ import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.models.Platform
 import ai.ciris.mobile.shared.models.SetupMode
 import ai.ciris.mobile.shared.models.filterAdaptersForPlatform
+import ai.ciris.mobile.shared.platform.getOAuthProviderName
 import ai.ciris.mobile.shared.viewmodels.SetupStep
 import ai.ciris.mobile.shared.viewmodels.SetupFormState
 import ai.ciris.mobile.shared.viewmodels.SetupViewModel
@@ -13,6 +14,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -163,7 +166,7 @@ fun SetupScreen(
                 }
             }
 
-            // Navigation buttons
+            // Navigation buttons - with navigation bar padding to avoid overlap
             NavigationButtons(
                 currentStep = state.currentStep,
                 canProceed = state.canProceedFromCurrentStep(),
@@ -203,7 +206,8 @@ fun SetupScreen(
                 onBack = { viewModel.previousStep() },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
             )
         }
     }
@@ -357,7 +361,7 @@ private fun WelcomeStep(
                         )
                     }
                     Text(
-                        text = "Since you signed in with Google, CIRIS can start working right away. Free access is limited and includes web search via privacy-protecting providers (Exa, Brave).",
+                        text = "Since you signed in with ${getOAuthProviderName()}, CIRIS can start working right away. Free access is limited and includes web search via privacy-protecting providers (Exa, Brave).",
                         color = SetupColors.SuccessText,
                         fontSize = 14.sp,
                         lineHeight = 20.sp
@@ -493,7 +497,7 @@ private fun LlmConfigurationStep(
                         )
                     }
                     Text(
-                        text = "Your Google account includes limited free AI access with web search (Exa, Brave). Privacy-protected and never used for training.",
+                        text = "Your ${getOAuthProviderName()} account includes limited free AI access with web search (Exa, Brave). Privacy-protected and never used for training.",
                         color = SetupColors.SuccessText,
                         fontSize = 14.sp,
                         lineHeight = 20.sp
@@ -946,7 +950,7 @@ private fun AccountConfirmationStep(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Google Account Connected",
+                        text = "${getOAuthProviderName()} Account Connected",
                         color = SetupColors.SuccessDark,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
@@ -959,7 +963,7 @@ private fun AccountConfirmationStep(
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                     Text(
-                        text = "You'll sign in to CIRIS using your Google account. A secure random password will be generated for the admin account (you won't need to use it).",
+                        text = "You'll sign in to CIRIS using your ${getOAuthProviderName()} account. A secure random password will be generated for the admin account (you won't need to use it).",
                         color = SetupColors.SuccessText,
                         fontSize = 13.sp,
                         lineHeight = 18.sp
@@ -987,11 +991,11 @@ private fun AccountConfirmationStep(
 
                 SummaryRow(
                     label = "AI",
-                    value = if (state.useCirisProxy()) "Free AI Access (via Google)" else state.llmProvider
+                    value = if (state.useCirisProxy()) "Free AI Access (via ${getOAuthProviderName()})" else state.llmProvider
                 )
                 SummaryRow(label = "Assistant", value = "Ally")
                 if (state.isGoogleAuth) {
-                    SummaryRow(label = "Sign-in", value = "Google Account")
+                    SummaryRow(label = "Sign-in", value = "${getOAuthProviderName()} Account")
                 }
             }
         }

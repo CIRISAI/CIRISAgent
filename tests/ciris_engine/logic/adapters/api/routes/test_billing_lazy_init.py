@@ -6,7 +6,11 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from fastapi import Request
 
-from ciris_engine.logic.adapters.api.routes.billing import _get_credit_provider, _try_lazy_init_billing_provider
+from ciris_engine.logic.adapters.api.routes.billing import (
+    _get_credit_provider,
+    _try_lazy_init_billing_provider,
+    _validate_billing_url,
+)
 
 
 class TestGetCreditProvider:
@@ -200,3 +204,116 @@ class TestTryLazyInitBillingProvider:
                     assert mock_logger.info.called
                     info_calls = [str(call) for call in mock_logger.info.call_args_list]
                     assert any("BILLING_LAZY_INIT" in call for call in info_calls)
+
+
+class TestValidateBillingUrl:
+    """Tests for _validate_billing_url function (SSRF prevention)."""
+
+    def test_accepts_trusted_https_host(self):
+        """Accepts HTTPS URLs for trusted hosts."""
+        url = "https://billing.ciris.ai/v1"
+        result = _validate_billing_url(url)
+        assert result == url
+
+    def test_accepts_localhost_http(self):
+        """Accepts HTTP for localhost."""
+        url = "http://localhost:8000/v1"
+        result = _validate_billing_url(url)
+        assert result == url
+
+    def test_accepts_localhost_https(self):
+        """Accepts HTTPS for localhost."""
+        url = "https://localhost:8000/v1"
+        result = _validate_billing_url(url)
+        assert result == url
+
+    def test_accepts_127_0_0_1_http(self):
+        """Accepts HTTP for 127.0.0.1."""
+        url = "http://127.0.0.1:8000/v1"
+        result = _validate_billing_url(url)
+        assert result == url
+
+    def test_accepts_ciris_services_pattern(self):
+        """Accepts billing*.ciris-services-N.ai pattern."""
+        # billing1.ciris-services-1.ai
+        url = "https://billing1.ciris-services-1.ai/v1"
+        assert _validate_billing_url(url) == url
+
+        # billing.ciris-services-99.ai (no number after billing)
+        url2 = "https://billing.ciris-services-99.ai/v1"
+        assert _validate_billing_url(url2) == url2
+
+        # billing2.ciris-services-42.ai
+        url3 = "https://billing2.ciris-services-42.ai/v1"
+        assert _validate_billing_url(url3) == url3
+
+    def test_rejects_invalid_ciris_services_pattern(self):
+        """Rejects hosts that look similar but don't match pattern."""
+        # Wrong TLD
+        url = "https://billing1.ciris-services-1.com/v1"
+        with pytest.raises(ValueError, match="Untrusted billing host"):
+            _validate_billing_url(url)
+
+        # Service number > 99
+        url2 = "https://billing1.ciris-services-100.ai/v1"
+        with pytest.raises(ValueError, match="Untrusted billing host"):
+            _validate_billing_url(url2)
+
+        # Missing ciris-services
+        url3 = "https://billing1.evil-services-1.ai/v1"
+        with pytest.raises(ValueError, match="Untrusted billing host"):
+            _validate_billing_url(url3)
+
+    def test_rejects_untrusted_host(self):
+        """Rejects URLs pointing to untrusted hosts."""
+        url = "https://evil-attacker.com/v1"
+        with pytest.raises(ValueError, match="Untrusted billing host"):
+            _validate_billing_url(url)
+
+    def test_rejects_http_for_non_localhost(self):
+        """Rejects HTTP for non-localhost hosts (even trusted ones)."""
+        url = "http://billing.ciris.ai/v1"
+        with pytest.raises(ValueError, match="must use HTTPS"):
+            _validate_billing_url(url)
+
+    def test_rejects_invalid_scheme(self):
+        """Rejects non-HTTP/HTTPS schemes."""
+        url = "ftp://billing.ciris.ai/v1"
+        with pytest.raises(ValueError, match="Invalid billing URL scheme"):
+            _validate_billing_url(url)
+
+    def test_rejects_file_scheme(self):
+        """Rejects file:// scheme (potential path traversal)."""
+        url = "file:///etc/passwd"
+        with pytest.raises(ValueError, match="Invalid billing URL scheme"):
+            _validate_billing_url(url)
+
+    def test_rejects_javascript_scheme(self):
+        """Rejects javascript: scheme."""
+        url = "javascript:alert(1)"
+        with pytest.raises(ValueError, match="Invalid billing URL scheme"):
+            _validate_billing_url(url)
+
+    def test_rejects_empty_string(self):
+        """Rejects empty string URL."""
+        with pytest.raises(ValueError):
+            _validate_billing_url("")
+
+    def test_rejects_internal_ip_addresses(self):
+        """Rejects internal IP addresses (SSRF protection)."""
+        # 192.168.x.x is not in trusted hosts
+        url = "https://192.168.1.1/v1"
+        with pytest.raises(ValueError, match="Untrusted billing host"):
+            _validate_billing_url(url)
+
+    def test_rejects_metadata_endpoint(self):
+        """Rejects cloud metadata endpoints (common SSRF target)."""
+        # HTTP rejected first (must use HTTPS for non-localhost)
+        url = "http://169.254.169.254/latest/meta-data/"
+        with pytest.raises(ValueError, match="must use HTTPS"):
+            _validate_billing_url(url)
+
+        # Even with HTTPS, untrusted host is rejected
+        url_https = "https://169.254.169.254/latest/meta-data/"
+        with pytest.raises(ValueError, match="Untrusted billing host"):
+            _validate_billing_url(url_https)

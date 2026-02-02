@@ -2,10 +2,14 @@
   "module": {
     "name": "clawdbot_summarize",
     "version": "1.0.0",
-    "description": "Summarize or extract text/transcripts from URLs, podcasts, and local files (great fallback for “transcribe this YouTube/video”).",
+    "description": "Summarize or extract text/transcripts from URLs, podcasts, and local files (great fallback for \u201ctranscribe this YouTube/video\u201d).",
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": "https://summarize.sh"
   },
+  "platform_requirements": [
+    "desktop_cli"
+  ],
+  "platform_requirements_rationale": "Requires CLI tools only available on desktop",
   "services": [
     {
       "type": "TOOL",

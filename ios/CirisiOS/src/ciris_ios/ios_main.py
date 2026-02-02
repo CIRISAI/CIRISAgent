@@ -34,93 +34,211 @@ IS_IOS = sys.platform == "ios" or "darwin" in sys.platform
 
 
 # =============================================================================
+# STARTUP STATUS
+# =============================================================================
+
+import json
+from dataclasses import dataclass, asdict
+from typing import List, Optional
+
+@dataclass
+class StartupStep:
+    """Represents a single startup check step."""
+    id: int
+    name: str
+    status: str  # "pending", "running", "ok", "failed"
+    message: Optional[str] = None
+
+@dataclass
+class StartupStatus:
+    """Overall startup status."""
+    steps: List[StartupStep]
+    current_step: int
+    all_passed: Optional[bool] = None
+    runtime_started: bool = False
+
+@dataclass
+class ServiceStatus:
+    """Service initialization status for Compose UI."""
+    services_online: int
+    services_total: int
+    phase: str  # "initializing", "starting", "ready", "error"
+    message: Optional[str] = None
+
+def get_status_file_path() -> Path:
+    """Get the path to the startup status file."""
+    home = Path.home()
+    ciris_dir = home / "Documents" / "ciris"
+    ciris_dir.mkdir(parents=True, exist_ok=True)
+    return ciris_dir / "startup_status.json"
+
+def write_startup_status(status: StartupStatus):
+    """Write startup status to JSON file for Swift to read."""
+    status_file = get_status_file_path()
+    print(f"[STARTUP] Writing status to: {status_file}")
+    try:
+        with open(status_file, "w") as f:
+            json.dump(asdict(status), f, indent=2)
+        print(f"[STARTUP] Status written successfully (all_passed={status.all_passed})")
+    except Exception as e:
+        print(f"[STARTUP] Warning: Could not write status file: {e}")
+        import traceback
+        traceback.print_exc()
+
+def init_startup_status() -> StartupStatus:
+    """Initialize startup status with all steps pending."""
+    steps = [
+        StartupStep(1, "Pydantic", "pending"),
+        StartupStep(2, "FastAPI", "pending"),
+        StartupStep(3, "Cryptography", "pending"),
+        StartupStep(4, "HTTP Client", "pending"),
+        StartupStep(5, "Database", "pending"),
+        StartupStep(6, "CIRIS Engine", "pending"),
+    ]
+    status = StartupStatus(steps=steps, current_step=0)
+    write_startup_status(status)
+    return status
+
+def update_step_status(status: StartupStatus, step_id: int, step_status: str, message: Optional[str] = None):
+    """Update a step's status and write to file."""
+    for step in status.steps:
+        if step.id == step_id:
+            step.status = step_status
+            step.message = message
+            break
+    status.current_step = step_id
+    write_startup_status(status)
+
+
+# =============================================================================
 # STARTUP CHECKS
 # =============================================================================
 
 
-def check_pydantic() -> bool:
+def check_pydantic(status: Optional[StartupStatus] = None) -> bool:
     """Verify pydantic loads correctly."""
     print("[1/6] Checking pydantic...")
+    if status:
+        update_step_status(status, 1, "running")
     try:
         import pydantic
         from pydantic_core import _pydantic_core
 
+        msg = f"v{pydantic.VERSION}"
         print(f"      Pydantic: {pydantic.VERSION}")
         print(f"      pydantic-core: {_pydantic_core.__version__}")
         print("[1/6] OK")
+        if status:
+            update_step_status(status, 1, "ok", msg)
         return True
     except ImportError as e:
         print(f"[1/6] FAILED: {e}")
+        if status:
+            update_step_status(status, 1, "failed", str(e))
         return False
 
 
-def check_fastapi() -> bool:
+def check_fastapi(status: Optional[StartupStatus] = None) -> bool:
     """Verify FastAPI loads correctly."""
     print("[2/6] Checking FastAPI...")
+    if status:
+        update_step_status(status, 2, "running")
     try:
         import fastapi
 
+        msg = f"v{fastapi.__version__}"
         print(f"      FastAPI: {fastapi.__version__}")
         print("[2/6] OK")
+        if status:
+            update_step_status(status, 2, "ok", msg)
         return True
     except ImportError as e:
         print(f"[2/6] FAILED: {e}")
+        if status:
+            update_step_status(status, 2, "failed", str(e))
         return False
 
 
-def check_cryptography() -> bool:
+def check_cryptography(status: Optional[StartupStatus] = None) -> bool:
     """Verify cryptography loads correctly."""
     print("[3/6] Checking cryptography...")
+    if status:
+        update_step_status(status, 3, "running")
     try:
         import cryptography
 
+        msg = f"v{cryptography.__version__}"
         print(f"      Cryptography: {cryptography.__version__}")
         print("[3/6] OK")
+        if status:
+            update_step_status(status, 3, "ok", msg)
         return True
     except ImportError as e:
         print(f"[3/6] FAILED: {e}")
+        if status:
+            update_step_status(status, 3, "failed", str(e))
         return False
 
 
-def check_httpx() -> bool:
+def check_httpx(status: Optional[StartupStatus] = None) -> bool:
     """Verify httpx loads correctly."""
     print("[4/6] Checking httpx...")
+    if status:
+        update_step_status(status, 4, "running")
     try:
         import httpx
 
+        msg = f"v{httpx.__version__}"
         print(f"      httpx: {httpx.__version__}")
         print("[4/6] OK")
+        if status:
+            update_step_status(status, 4, "ok", msg)
         return True
     except ImportError as e:
         print(f"[4/6] FAILED: {e}")
+        if status:
+            update_step_status(status, 4, "failed", str(e))
         return False
 
 
-def check_aiosqlite() -> bool:
+def check_aiosqlite(status: Optional[StartupStatus] = None) -> bool:
     """Verify aiosqlite loads correctly."""
     print("[5/6] Checking aiosqlite...")
+    if status:
+        update_step_status(status, 5, "running")
     try:
         import aiosqlite
 
+        msg = f"v{aiosqlite.__version__}"
         print(f"      aiosqlite: {aiosqlite.__version__}")
         print("[5/6] OK")
+        if status:
+            update_step_status(status, 5, "ok", msg)
         return True
     except ImportError as e:
         print(f"[5/6] FAILED: {e}")
+        if status:
+            update_step_status(status, 5, "failed", str(e))
         return False
 
 
-def check_ciris_engine() -> bool:
+def check_ciris_engine(status: Optional[StartupStatus] = None) -> bool:
     """Verify CIRIS engine loads correctly."""
     print("[6/6] Checking CIRIS engine...")
+    if status:
+        update_step_status(status, 6, "running")
     try:
         from ciris_engine.schemas.config.essential import EssentialConfig
 
         print("      EssentialConfig: OK")
         print("[6/6] OK")
+        if status:
+            update_step_status(status, 6, "ok", "Ready")
         return True
     except ImportError as e:
         print(f"[6/6] FAILED: {e}")
+        if status:
+            update_step_status(status, 6, "failed", str(e))
         return False
 
 
@@ -309,21 +427,28 @@ def run_startup_checks() -> bool:
     print("=" * 50)
     print("")
 
+    # Initialize status tracking
+    status = init_startup_status()
+
     checks = [
-        check_pydantic,
-        check_fastapi,
-        check_cryptography,
-        check_httpx,
-        check_aiosqlite,
-        check_ciris_engine,
+        (check_pydantic, 1),
+        (check_fastapi, 2),
+        (check_cryptography, 3),
+        (check_httpx, 4),
+        (check_aiosqlite, 5),
+        (check_ciris_engine, 6),
     ]
 
     all_passed = True
-    for check in checks:
-        if not check():
+    for check_func, step_id in checks:
+        if not check_func(status):
             all_passed = False
 
     print("")
+
+    # Update final status
+    status.all_passed = all_passed
+    write_startup_status(status)
 
     if all_passed:
         print("=" * 50)

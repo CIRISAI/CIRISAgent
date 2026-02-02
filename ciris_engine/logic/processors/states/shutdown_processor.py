@@ -228,7 +228,7 @@ class ShutdownProcessor(BaseProcessor):
                 )
                 self._consent_evaluated = True
                 logger.info(
-                    f"Shutdown consent evaluation: required={self._consent_required}, " f"reason={self._consent_reason}"
+                    f"Shutdown consent evaluation: required={self._consent_required}, reason={self._consent_reason}"
                 )
 
             # Check for emergency shutdown (always requires consent)

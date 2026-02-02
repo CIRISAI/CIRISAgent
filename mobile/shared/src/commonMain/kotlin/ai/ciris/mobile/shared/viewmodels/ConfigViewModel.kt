@@ -67,10 +67,36 @@ class ConfigViewModel(
     // Success message
     private val _successMessage = MutableStateFlow<String?>(null)
     val successMessage: StateFlow<String?> = _successMessage.asStateFlow()
+    private var dataLoadStarted = false
 
     init {
-        logInfo("init", "ConfigViewModel initialized")
+        logInfo("init", "ConfigViewModel initialized (data load deferred until startPolling() called)")
+        // NOTE: Don't auto-load here - wait for startPolling() to be called
+        // when the screen becomes visible and has a valid auth token
+    }
+
+    /**
+     * Start config data loading.
+     * Must be called explicitly when the screen becomes visible.
+     */
+    fun startPolling() {
+        val method = "startPolling"
+        if (dataLoadStarted) {
+            logDebug(method, "Data load already started, skipping")
+            return
+        }
+        dataLoadStarted = true
+        logInfo(method, "Starting config data loading")
         loadConfigs()
+    }
+
+    /**
+     * Stop polling (for lifecycle management)
+     */
+    fun stopPolling() {
+        val method = "stopPolling"
+        logInfo(method, "Stopping config polling")
+        dataLoadStarted = false // Allow restart
     }
 
     /**

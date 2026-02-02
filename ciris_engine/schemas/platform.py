@@ -41,6 +41,9 @@ class PlatformRequirement(str, Enum):
     # Network requirements
     CIRIS_PROXY = "ciris_proxy"  # Requires routing through CIRIS proxy
 
+    # Desktop/CLI requirements (not available on mobile)
+    DESKTOP_CLI = "desktop_cli"  # Requires desktop CLI tools (not available on Android/iOS)
+
 
 class PlatformCapabilities(BaseModel):
     """Current platform capabilities available at runtime.

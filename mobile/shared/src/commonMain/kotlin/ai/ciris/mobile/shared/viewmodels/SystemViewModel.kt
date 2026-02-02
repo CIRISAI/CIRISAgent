@@ -60,10 +60,12 @@ class SystemViewModel(
 
     // Auto-refresh job
     private var refreshJob: Job? = null
+    private var pollingStarted = false
 
     init {
-        logInfo("init", "SystemViewModel initialized")
-        loadSystemData()
+        logInfo("init", "SystemViewModel initialized (data load deferred until startPolling() called)")
+        // NOTE: Don't auto-load here - wait for startPolling() to be called
+        // when the screen becomes visible and has a valid auth token
     }
 
     /**
@@ -223,16 +225,21 @@ class SystemViewModel(
     }
 
     /**
-     * Start auto-refresh polling
+     * Start auto-refresh polling.
+     * Must be called explicitly when the screen becomes visible.
      */
     fun startPolling() {
         val method = "startPolling"
-        if (refreshJob?.isActive == true) {
-            logDebug(method, "Polling already active")
+        if (pollingStarted) {
+            logDebug(method, "Polling already started, skipping")
             return
         }
+        pollingStarted = true
+        logInfo(method, "Starting auto-refresh polling (interval=${REFRESH_INTERVAL_MS}ms)")
 
-        logInfo(method, "Starting auto-refresh polling")
+        // Fetch initial data
+        loadSystemData()
+
         refreshJob = viewModelScope.launch {
             while (isActive) {
                 delay(REFRESH_INTERVAL_MS)
@@ -253,6 +260,7 @@ class SystemViewModel(
         logInfo(method, "Stopping auto-refresh polling")
         refreshJob?.cancel()
         refreshJob = null
+        pollingStarted = false // Allow restart
     }
 
     /**

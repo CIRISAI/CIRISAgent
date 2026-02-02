@@ -60,6 +60,12 @@ class QARunner:
                     "[dim]Auto-configured adapter: api,external_data_sql for DSAR multi-source tests[/dim]"
                 )
 
+        # HE-300 benchmark needs A2A adapter
+        if modules and QAModule.HE300_BENCHMARK in modules:
+            if "a2a" not in self.config.adapter:
+                self.config.adapter = "api,a2a"
+                self.console.print("[dim]Auto-configured adapter: api,a2a for HE-300 benchmark tests[/dim]")
+
         # Determine database backends to test
         if self.config.database_backends is None:
             self.database_backends = ["sqlite"]  # Default to SQLite only
@@ -1292,9 +1298,16 @@ class QARunner:
                 elif test.method == "CUSTOM":
                     # Custom method handler for special tests like streaming verification
                     if test.custom_handler:
-                        from .modules.streaming_verification import StreamingVerificationModule
+                        # Dispatch to appropriate module based on test module
+                        if test.module == QAModule.HE300_BENCHMARK:
+                            from .modules.he300_benchmark_tests import HE300BenchmarkModule
 
-                        custom_result = StreamingVerificationModule.run_custom_test(test, self.config, self.token)
+                            custom_result = HE300BenchmarkModule.run_custom_test(test, self.config, self.token)
+                        else:
+                            # Default to streaming verification module
+                            from .modules.streaming_verification import StreamingVerificationModule
+
+                            custom_result = StreamingVerificationModule.run_custom_test(test, self.config, self.token)
                         if custom_result["success"]:
                             # Print validation details
                             if self.config.verbose:

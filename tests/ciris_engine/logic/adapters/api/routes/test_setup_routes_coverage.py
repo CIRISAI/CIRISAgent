@@ -7,6 +7,8 @@ Covers uncovered helper functions:
 - _log_oauth_linking_skip
 - _get_llm_providers
 - _get_available_adapters
+- _should_skip_manifest
+- _create_adapter_from_manifest
 """
 
 from unittest.mock import Mock, patch
@@ -15,12 +17,15 @@ import pytest
 from fastapi import HTTPException
 
 from ciris_engine.logic.adapters.api.routes.setup import (
+    AdapterConfig,
     LLMValidationRequest,
     SetupCompleteRequest,
     _classify_llm_connection_error,
+    _create_adapter_from_manifest,
     _get_available_adapters,
     _get_llm_providers,
     _log_oauth_linking_skip,
+    _should_skip_manifest,
     _validate_api_key_for_provider,
     _validate_setup_passwords,
 )
@@ -316,3 +321,194 @@ class TestGetAvailableAdapters:
         discord = next((a for a in adapters if a.id == "discord"), None)
         if discord:
             assert "DISCORD_BOT_TOKEN" in discord.required_env_vars
+
+
+class TestShouldSkipManifest:
+    """Tests for _should_skip_manifest helper."""
+
+    def _create_mock_manifest(
+        self,
+        name: str = "test_adapter",
+        is_mock: bool = False,
+        reference: bool = False,
+        for_qa: bool = False,
+        services: list = None,
+        metadata: dict = None,
+    ) -> Mock:
+        """Create a mock manifest for testing."""
+        manifest = Mock()
+        manifest.module = Mock()
+        manifest.module.name = name
+        manifest.module.is_mock = is_mock
+        manifest.module.reference = reference
+        manifest.module.for_qa = for_qa
+        manifest.services = services if services is not None else [Mock()]
+        manifest.metadata = metadata
+        return manifest
+
+    def test_skip_already_seen(self):
+        """Skip manifest if module_id already in seen_ids."""
+        manifest = self._create_mock_manifest(name="already_seen")
+        seen_ids = {"already_seen"}
+        assert _should_skip_manifest(manifest, "already_seen", seen_ids) is True
+
+    def test_skip_covenant_metrics(self):
+        """Skip ciris_covenant_metrics (handled separately)."""
+        manifest = self._create_mock_manifest(name="ciris_covenant_metrics")
+        seen_ids = set()
+        assert _should_skip_manifest(manifest, "ciris_covenant_metrics", seen_ids) is True
+
+    def test_skip_mock_modules(self):
+        """Skip mock modules."""
+        manifest = self._create_mock_manifest(is_mock=True)
+        seen_ids = set()
+        assert _should_skip_manifest(manifest, "test_adapter", seen_ids) is True
+
+    def test_skip_reference_modules(self):
+        """Skip reference modules."""
+        manifest = self._create_mock_manifest(reference=True)
+        seen_ids = set()
+        assert _should_skip_manifest(manifest, "test_adapter", seen_ids) is True
+
+    def test_skip_qa_modules(self):
+        """Skip QA modules."""
+        manifest = self._create_mock_manifest(for_qa=True)
+        seen_ids = set()
+        assert _should_skip_manifest(manifest, "test_adapter", seen_ids) is True
+
+    def test_skip_no_services(self):
+        """Skip modules with no services."""
+        manifest = self._create_mock_manifest(services=[])
+        seen_ids = set()
+        assert _should_skip_manifest(manifest, "test_adapter", seen_ids) is True
+
+    def test_skip_library_type(self):
+        """Skip modules with metadata type = library."""
+        manifest = self._create_mock_manifest(metadata={"type": "library"})
+        seen_ids = set()
+        assert _should_skip_manifest(manifest, "test_adapter", seen_ids) is True
+
+    def test_skip_common_suffix(self):
+        """Skip modules ending with _common."""
+        manifest = self._create_mock_manifest(name="ciris_common")
+        seen_ids = set()
+        assert _should_skip_manifest(manifest, "ciris_common", seen_ids) is True
+
+    def test_skip_common_infix(self):
+        """Skip modules with _common_ in name."""
+        manifest = self._create_mock_manifest(name="ciris_common_utils")
+        seen_ids = set()
+        assert _should_skip_manifest(manifest, "ciris_common_utils", seen_ids) is True
+
+    def test_do_not_skip_valid_adapter(self):
+        """Do not skip valid adapter."""
+        manifest = self._create_mock_manifest(name="valid_adapter")
+        seen_ids = set()
+        assert _should_skip_manifest(manifest, "valid_adapter", seen_ids) is False
+
+
+class TestCreateAdapterFromManifest:
+    """Tests for _create_adapter_from_manifest helper."""
+
+    def _create_mock_manifest(
+        self,
+        name: str = "test_adapter",
+        description: str = "Test adapter description",
+        capabilities: list = None,
+        metadata: dict = None,
+        platform_requirements: list = None,
+    ) -> Mock:
+        """Create a mock manifest for testing."""
+        manifest = Mock()
+        manifest.module = Mock()
+        manifest.module.name = name
+        manifest.module.description = description
+        manifest.capabilities = capabilities
+        manifest.metadata = metadata
+        manifest.platform_requirements = platform_requirements
+        return manifest
+
+    def test_creates_adapter_config(self):
+        """Creates AdapterConfig from manifest."""
+        manifest = self._create_mock_manifest()
+        result = _create_adapter_from_manifest(manifest, "test_adapter")
+        assert isinstance(result, AdapterConfig)
+        assert result.id == "test_adapter"
+
+    def test_name_formatting(self):
+        """Name is formatted with title case and spaces."""
+        manifest = self._create_mock_manifest(name="my_test_adapter")
+        result = _create_adapter_from_manifest(manifest, "my_test_adapter")
+        assert result.name == "My Test Adapter"
+
+    def test_description_from_manifest(self):
+        """Uses description from manifest."""
+        manifest = self._create_mock_manifest(description="Custom description")
+        result = _create_adapter_from_manifest(manifest, "test_adapter")
+        assert result.description == "Custom description"
+
+    def test_description_fallback(self):
+        """Uses fallback description when manifest has none."""
+        manifest = self._create_mock_manifest(description=None)
+        result = _create_adapter_from_manifest(manifest, "test_adapter")
+        assert result.description == "test_adapter adapter"
+
+    def test_requires_binaries_true(self):
+        """Detects requires:binaries capability."""
+        manifest = self._create_mock_manifest(capabilities=["requires:binaries", "other"])
+        result = _create_adapter_from_manifest(manifest, "test_adapter")
+        assert result.requires_binaries is True
+
+    def test_requires_binaries_false(self):
+        """No requires:binaries means requires_binaries is False."""
+        manifest = self._create_mock_manifest(capabilities=["other"])
+        result = _create_adapter_from_manifest(manifest, "test_adapter")
+        assert result.requires_binaries is False
+
+    def test_supported_platforms_from_metadata(self):
+        """Extracts supported_platforms from metadata."""
+        manifest = self._create_mock_manifest(
+            metadata={"supported_platforms": ["linux", "darwin"]}
+        )
+        result = _create_adapter_from_manifest(manifest, "test_adapter")
+        assert result.supported_platforms == ["linux", "darwin"]
+
+    def test_supported_platforms_empty_when_missing(self):
+        """Empty supported_platforms when not in metadata."""
+        manifest = self._create_mock_manifest(metadata={})
+        result = _create_adapter_from_manifest(manifest, "test_adapter")
+        assert result.supported_platforms == []
+
+    def test_supported_platforms_empty_when_invalid_type(self):
+        """Empty supported_platforms when metadata value is not a list."""
+        manifest = self._create_mock_manifest(
+            metadata={"supported_platforms": "linux"}  # String, not list
+        )
+        result = _create_adapter_from_manifest(manifest, "test_adapter")
+        assert result.supported_platforms == []
+
+    def test_ciris_services_adapter_enabled_by_default(self):
+        """ciris_hosted_tools is enabled by default."""
+        manifest = self._create_mock_manifest(name="ciris_hosted_tools")
+        result = _create_adapter_from_manifest(manifest, "ciris_hosted_tools")
+        assert result.enabled_by_default is True
+        assert result.requires_ciris_services is True
+
+    def test_regular_adapter_not_enabled_by_default(self):
+        """Regular adapters are not enabled by default."""
+        manifest = self._create_mock_manifest()
+        result = _create_adapter_from_manifest(manifest, "test_adapter")
+        assert result.enabled_by_default is False
+        assert result.requires_ciris_services is False
+
+    def test_platform_requirements_from_manifest(self):
+        """Uses platform_requirements from manifest."""
+        manifest = self._create_mock_manifest(platform_requirements=["gpu", "cuda"])
+        result = _create_adapter_from_manifest(manifest, "test_adapter")
+        assert result.platform_requirements == ["gpu", "cuda"]
+
+    def test_platform_requirements_empty_when_none(self):
+        """Empty platform_requirements when manifest has None."""
+        manifest = self._create_mock_manifest(platform_requirements=None)
+        result = _create_adapter_from_manifest(manifest, "test_adapter")
+        assert result.platform_requirements == []

@@ -2,6 +2,9 @@ package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.models.ChatMessage
 import ai.ciris.mobile.shared.models.MessageType
+import ai.ciris.mobile.shared.ui.components.DebugConsole
+import ai.ciris.mobile.shared.ui.components.DebugIndicator
+import ai.ciris.mobile.shared.ui.components.ErrorToast
 import ai.ciris.mobile.shared.viewmodels.AgentProcessingState
 import ai.ciris.mobile.shared.viewmodels.BubbleEmoji
 import ai.ciris.mobile.shared.viewmodels.InteractViewModel
@@ -31,9 +34,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -60,6 +65,7 @@ import kotlinx.datetime.Instant
 fun InteractScreen(
     viewModel: InteractViewModel,
     onNavigateBack: () -> Unit,
+    onSessionExpired: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsState()
@@ -71,11 +77,22 @@ fun InteractScreen(
     val processingStatus by viewModel.processingStatus.collectAsState()
     val authError by viewModel.authError.collectAsState()
     val bubbleEmojis by viewModel.bubbleEmojis.collectAsState()
+
+    // When auth error occurs, navigate to login silently
+    LaunchedEffect(authError) {
+        if (authError != null) {
+            viewModel.clearAuthError()
+            onSessionExpired()
+        }
+    }
     val agentProcessingState by viewModel.agentProcessingState.collectAsState()
     val sseConnected by viewModel.sseConnected.collectAsState()
     val timelineEvents by viewModel.timelineEvents.collectAsState()
     val showTimeline by viewModel.showTimeline.collectAsState()
     val showLegend by viewModel.showLegend.collectAsState()
+
+    // Debug console state
+    var showDebugConsole by remember { mutableStateOf(false) }
 
     // Focus requester for the text input
     val focusRequester = remember { FocusRequester() }
@@ -87,7 +104,8 @@ fun InteractScreen(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFFFAFAFA))
-            .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
+            // Don't apply imePadding to entire screen - apply to input bar only
+            // This avoids iOS issues where keyboard insets don't reset properly
     ) {
         // Main content column
         Column(
@@ -101,17 +119,7 @@ fun InteractScreen(
             onEmergencyStop = { viewModel.shutdown(emergency = true) }
         )
 
-        // Auth error banner - shown when session expires
-        AnimatedVisibility(
-            visible = authError != null,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            AuthErrorBanner(
-                message = authError ?: "",
-                onDismiss = { viewModel.clearAuthError() }
-            )
-        }
+        // Auth error is now handled by LaunchedEffect above - navigates to login silently
 
         // AI Warning banner (from fragment_interact.xml:65-76)
         AIWarningBanner()
@@ -173,8 +181,8 @@ fun InteractScreen(
         }
 
             // Input bar with agent state icon
-            // Note: Don't use windowInsetsPadding(navigationBars) here as it conflicts
-            // with imePadding() on parent, creating a gap when keyboard is open
+            // Apply imePadding and navigationBarsPadding here at the input bar level
+            // This ensures keyboard pushes the input up without leaving ghost gaps
             ChatInputBarWithBubbles(
                 text = inputText,
                 onTextChange = { viewModel.onInputTextChanged(it) },
@@ -186,7 +194,10 @@ fun InteractScreen(
                 bubbleEmojis = bubbleEmojis,
                 sseConnected = sseConnected,
                 onLegendToggle = { viewModel.toggleLegend() },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .navigationBarsPadding()
             )
         } // End of Column
 
@@ -201,6 +212,26 @@ fun InteractScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(start = 8.dp, bottom = 70.dp) // Align with agent icon position
+        )
+
+        // Error toast - appears at top when errors occur
+        ErrorToast(
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
+
+        // Debug indicator button - bottom right corner
+        DebugIndicator(
+            onTap = { showDebugConsole = !showDebugConsole },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 80.dp)
+        )
+
+        // Debug console panel - slides up from bottom
+        DebugConsole(
+            isExpanded = showDebugConsole,
+            onToggle = { showDebugConsole = false },
+            modifier = Modifier.align(Alignment.BottomCenter)
         )
     } // End of Box
 }

@@ -14,12 +14,15 @@ import ai.ciris.api.models.NativeTokenRequest as SdkNativeTokenRequest
 import ai.ciris.api.models.StateTransitionRequest as SdkStateTransitionRequest
 import ai.ciris.api.models.ConfigUpdate as SdkConfigUpdate
 import ai.ciris.api.models.ConsentRequest as SdkConsentRequest
+import ai.ciris.api.models.ConfigValue
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
@@ -41,6 +44,31 @@ data class LlmConfigData(
     val backupModel: String?,
     val backupApiKeySet: Boolean
 )
+
+/**
+ * Extract the actual display value from a ConfigValue union type.
+ * ConfigValue has multiple nullable fields (stringValue, intValue, etc.)
+ * but only one will be non-null at a time.
+ */
+private fun ConfigValue.toDisplayString(): String {
+    // Use local variables to enable smart cast (cross-module properties can't smart cast)
+    val strVal = stringValue
+    val intVal = intValue
+    val floatVal = floatValue
+    val boolVal = boolValue
+    val listVal = listValue
+    val dictVal = dictValue
+
+    return when {
+        strVal != null -> strVal
+        intVal != null -> intVal.toString()
+        floatVal != null -> floatVal.toString()
+        boolVal != null -> boolVal.toString()
+        listVal != null -> listVal.joinToString(", ") { it.toString() }
+        dictVal != null -> dictVal.entries.joinToString(", ") { "${it.key}: ${it.value}" }
+        else -> "(empty)"
+    }
+}
 
 /**
  * Unified API client for CIRIS backend using the generated OpenAPI SDK.
@@ -454,6 +482,87 @@ class CIRISApiClient(
         } catch (e: Exception) {
             logException(method, e, "userId=$userId")
             throw e
+        }
+    }
+
+    override suspend fun appleAuth(idToken: String, userId: String?): AuthResponse {
+        val method = "appleAuth"
+        logInfo(method, "Attempting Apple auth: userId=$userId, idToken=${maskToken(idToken)}")
+
+        return try {
+            // Use manual HTTP request since generated SDK doesn't include Apple auth endpoint
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(Logging) {
+                    level = LogLevel.INFO
+                }
+            }
+
+            val requestBody = mapOf(
+                "id_token" to idToken,
+                "provider" to "apple"
+            )
+
+            logDebug(method, "POST $baseUrl/v1/auth/native/apple")
+            val response: HttpResponse = client.post("$baseUrl/v1/auth/native/apple") {
+                contentType(ContentType.Application.Json)
+                setBody(requestBody)
+            }
+
+            logDebug(method, "Response status: ${response.status}")
+
+            if (response.status.value !in 200..299) {
+                val errorBody = response.body<String>()
+                logError(method, "Apple auth failed: ${response.status} - $errorBody")
+                throw Exception("Apple auth failed: ${response.status}")
+            }
+
+            val body: NativeTokenResponseBody = response.body()
+            logInfo(method, "Apple auth successful: userId=${body.userId}, role=${body.role}")
+
+            client.close()
+
+            AuthResponse(
+                access_token = body.accessToken,
+                token_type = "bearer",
+                user = UserInfo(
+                    user_id = body.userId,
+                    email = body.email ?: "",
+                    name = body.name,
+                    photo_url = null,
+                    role = body.role
+                )
+            )
+        } catch (e: Exception) {
+            logException(method, e, "userId=$userId")
+            throw e
+        }
+    }
+
+    @Serializable
+    private data class NativeTokenResponseBody(
+        @SerialName("access_token") val accessToken: String,
+        @SerialName("token_type") val tokenType: String,
+        @SerialName("expires_in") val expiresIn: Int,
+        @SerialName("user_id") val userId: String,
+        val role: String,
+        val email: String? = null,
+        val name: String? = null
+    )
+
+    override suspend fun nativeAuth(idToken: String, userId: String?, provider: String): AuthResponse {
+        val method = "nativeAuth"
+        logInfo(method, "Attempting native auth: provider=$provider, userId=$userId")
+
+        return when (provider.lowercase()) {
+            "google" -> googleAuth(idToken, userId)
+            "apple" -> appleAuth(idToken, userId)
+            else -> throw IllegalArgumentException("Unknown OAuth provider: $provider")
         }
     }
 
@@ -947,8 +1056,8 @@ class CIRISApiClient(
                         version = module.version,
                         description = module.description,
                         moduleSource = module.moduleSource,
-                        serviceTypes = module.serviceTypes ?: emptyList(),
-                        capabilities = module.capabilities ?: emptyList(),
+                        serviceTypes = (module.serviceTypes ?: emptyList()).filter { it.isNotBlank() },
+                        capabilities = (module.capabilities ?: emptyList()).filter { it.isNotBlank() },
                         platformAvailable = module.platformAvailable ?: true
                     )
                 },
@@ -959,8 +1068,8 @@ class CIRISApiClient(
                         version = module.version,
                         description = module.description,
                         moduleSource = module.moduleSource,
-                        serviceTypes = module.serviceTypes ?: emptyList(),
-                        capabilities = module.capabilities ?: emptyList(),
+                        serviceTypes = (module.serviceTypes ?: emptyList()).filter { it.isNotBlank() },
+                        capabilities = (module.capabilities ?: emptyList()).filter { it.isNotBlank() },
                         platformAvailable = module.platformAvailable ?: true
                     )
                 },
@@ -1253,7 +1362,7 @@ class CIRISApiClient(
                 configs = data.configs.map { config ->
                     ConfigItemData(
                         key = config.key,
-                        displayValue = config.`value`.toString(),
+                        displayValue = config.`value`.toDisplayString(),
                         updatedAt = config.updatedAt,
                         updatedBy = config.updatedBy,
                         isSensitive = config.isSensitive ?: false
@@ -1286,7 +1395,7 @@ class CIRISApiClient(
 
             ConfigItemData(
                 key = data.key,
-                displayValue = data.`value`.toString(),
+                displayValue = data.`value`.toDisplayString(),
                 updatedAt = data.updatedAt,
                 updatedBy = data.updatedBy,
                 isSensitive = data.isSensitive ?: false
@@ -1320,7 +1429,7 @@ class CIRISApiClient(
 
             ConfigItemData(
                 key = data.key,
-                displayValue = data.`value`.toString(),
+                displayValue = data.`value`.toDisplayString(),
                 updatedAt = data.updatedAt,
                 updatedBy = data.updatedBy,
                 isSensitive = data.isSensitive ?: false

@@ -49,6 +49,7 @@ class QAModule(Enum):
     SYSTEM_MESSAGES = "system_messages"  # System message visibility for UI/UX testing
     HOSTED_TOOLS = "hosted_tools"  # CIRIS hosted tools (web search via proxy) testing
     UTILITY_ADAPTERS = "utility_adapters"  # Weather and navigation adapters testing
+    HE300_BENCHMARK = "he300_benchmark"  # HE-300 ethical benchmark via A2A adapter
 
     # Handler modules
     HANDLERS = "handlers"
@@ -257,6 +258,10 @@ class QAConfig:
         elif module == QAModule.UTILITY_ADAPTERS:
             # Utility adapters (weather, navigation) tests use SDK client
             return []  # Will be handled separately by runner
+        elif module == QAModule.HE300_BENCHMARK:
+            from .modules.he300_benchmark_tests import HE300BenchmarkModule
+
+            return HE300BenchmarkModule.get_he300_benchmark_tests()
 
         # Handler test modules
         elif module == QAModule.HANDLERS:

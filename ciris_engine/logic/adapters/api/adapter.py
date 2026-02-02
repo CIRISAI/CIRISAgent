@@ -16,6 +16,7 @@ from uvicorn import Server
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters.base import Service
+from ciris_engine.logic.utils.platform_detection import is_ios
 from ciris_engine.logic.persistence.models.correlations import get_active_channels_by_adapter, is_admin_channel
 from ciris_engine.logic.registries.base import Priority
 from ciris_engine.logic.services.runtime.adapter_configuration import AdapterConfigurationService
@@ -864,10 +865,19 @@ class ApiPlatform(Service):
         self._server = uvicorn.Server(config)
         assert self._server is not None
 
+        # On iOS, Python runs on a background thread but the threading module
+        # may incorrectly identify it as the main thread. Directly calling _serve()
+        # bypasses the signal handling wrapper that requires the actual main thread.
+        run_on_ios = is_ios()
+
         async def _run_server_safely() -> None:
             """Run server and catch SystemExit to prevent process crash."""
             try:
-                await self._server.serve()  # type: ignore[union-attr]
+                if run_on_ios:
+                    # Bypass signal handling on iOS - call _serve directly
+                    await self._server._serve()  # type: ignore[union-attr]
+                else:
+                    await self._server.serve()  # type: ignore[union-attr]
             except SystemExit as e:
                 # uvicorn calls sys.exit(1) on startup failures - log and reraise
                 logger.error(f"[API_ADAPTER] Server startup failed with SystemExit: {e}")

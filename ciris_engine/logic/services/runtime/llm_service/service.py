@@ -135,35 +135,40 @@ def _build_openrouter_provider_config() -> Dict[str, Any]:
     return provider_config
 
 
+def _count_images_in_content(content: Any) -> Tuple[int, int]:
+    """Count images and their size in a message content block.
+
+    Returns:
+        Tuple of (image_count, total_bytes)
+    """
+    if not isinstance(content, list):
+        return 0, 0
+
+    count = 0
+    total_bytes = 0
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "image_url":
+            count += 1
+            url = block.get("image_url", {}).get("url", "")
+            if url.startswith("data:image"):
+                total_bytes += len(url)
+    return count, total_bytes
+
+
 def _log_multimodal_content(
     msg_list: List[MessageDict],
     model_name: str,
     thought_id: Optional[str],
     resp_model_name: str,
 ) -> int:
-    """Log details about multimodal (vision) content in messages.
-
-    Args:
-        msg_list: List of message dicts
-        model_name: The model being called
-        thought_id: Optional thought ID for tracing
-        resp_model_name: Name of the response model
-
-    Returns:
-        Number of images found in the messages
-    """
+    """Log details about multimodal (vision) content in messages."""
     image_count = 0
     total_image_bytes = 0
 
     for msg in msg_list:
-        content = msg.get("content", "")
-        if isinstance(content, list):
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "image_url":
-                    image_count += 1
-                    url = block.get("image_url", {}).get("url", "")
-                    if url.startswith("data:image"):
-                        total_image_bytes += len(url)
+        count, size = _count_images_in_content(msg.get("content", ""))
+        image_count += count
+        total_image_bytes += size
 
     if image_count > 0:
         logger.info(

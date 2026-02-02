@@ -43,10 +43,36 @@ class AuditViewModel(
     // State
     private val _state = MutableStateFlow(AuditScreenState())
     val state: StateFlow<AuditScreenState> = _state.asStateFlow()
+    private var dataLoadStarted = false
 
     init {
-        logInfo("init", "AuditViewModel initialized")
+        logInfo("init", "AuditViewModel initialized (data load deferred until startPolling() called)")
+        // NOTE: Don't auto-load here - wait for startPolling() to be called
+        // when the screen becomes visible and has a valid auth token
+    }
+
+    /**
+     * Start audit data loading.
+     * Must be called explicitly when the screen becomes visible.
+     */
+    fun startPolling() {
+        val method = "startPolling"
+        if (dataLoadStarted) {
+            logDebug(method, "Data load already started, skipping")
+            return
+        }
+        dataLoadStarted = true
+        logInfo(method, "Starting audit data loading")
         fetchAuditEntries()
+    }
+
+    /**
+     * Stop polling (for lifecycle management)
+     */
+    fun stopPolling() {
+        val method = "stopPolling"
+        logInfo(method, "Stopping audit polling")
+        dataLoadStarted = false // Allow restart
     }
 
     /**

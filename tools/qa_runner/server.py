@@ -604,11 +604,9 @@ class APIServerManager:
             env["CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP"] = "2025-01-01T00:00:00Z"
             # Use short flush interval for QA (5 seconds instead of 60)
             env["CIRIS_COVENANT_METRICS_FLUSH_INTERVAL"] = "5"
-            # Set full trace level for comprehensive data capture
-            env["CIRIS_COVENANT_METRICS_TRACE_LEVEL"] = "full_traces"
-            self.console.print(
-                "[dim]Enabling covenant_metrics adapter with consent for trace capture (full_traces)[/dim]"
-            )
+            # Set detailed trace level (actionable identifiers) - covenant_metrics tests load generic/full
+            env["CIRIS_COVENANT_METRICS_TRACE_LEVEL"] = "detailed"
+            self.console.print("[dim]Enabling covenant_metrics adapter with consent for trace capture (detailed)[/dim]")
 
         # Load Reddit credentials if Reddit adapter is being used
         if "reddit" in self.config.adapter.lower():

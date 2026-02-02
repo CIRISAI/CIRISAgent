@@ -220,7 +220,7 @@ class BaseObserver(Generic[MessageT], ABC):
             result = await check_for_covenant(str(content), str(channel))
 
             if result and result.success:
-                logger.critical(f"COVENANT EXECUTED: {result.command.name} from {result.wa_id} " f"via {channel}")
+                logger.critical(f"COVENANT EXECUTED: {result.command.name} from {result.wa_id} via {channel}")
                 # If we get here, it wasn't a SIGKILL command
                 # (FREEZE or SAFE_MODE allow continuation)
 

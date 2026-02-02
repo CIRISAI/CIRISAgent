@@ -418,6 +418,83 @@ async def _discover_adapters() -> List[ModuleTypeInfo]:
 
 
 # ============================================================================
+# Adapter Listing Helpers
+# ============================================================================
+
+
+def _create_auto_adapter_info(adapter_name: str, service_type: Any) -> AdapterInfo:
+    """Create an AdapterInfo for an auto-loaded adapter."""
+    return AdapterInfo(
+        adapter_id=f"{adapter_name}_auto",
+        adapter_type=adapter_name.upper(),
+        status=AdapterStatus.RUNNING,
+        started_at=datetime.now(timezone.utc),
+        config_params=AdapterConfig(adapter_type=adapter_name, enabled=True, settings={}),
+        services_registered=[service_type.value],
+        messages_processed=0,
+        error_count=0,
+        last_error=None,
+        tools=[],
+    )
+
+
+def _get_auto_loaded_adapters(
+    service_registry: Any, seen_adapter_ids: set
+) -> List[AdapterInfo]:
+    """Get auto-loaded adapters from service registry."""
+    from ciris_engine.schemas.runtime.enums import ServiceType
+
+    auto_adapters: List[AdapterInfo] = []
+    for service_type in [ServiceType.TOOL, ServiceType.WISE_AUTHORITY]:
+        try:
+            providers = service_registry.get_providers_by_type(service_type)
+            for provider_info in providers:
+                metadata = provider_info.get("metadata", {})
+                if not metadata.get("auto_loaded"):
+                    continue
+                adapter_name = metadata.get("adapter", "unknown")
+                adapter_id = f"{adapter_name}_auto"
+                if adapter_id not in seen_adapter_ids:
+                    seen_adapter_ids.add(adapter_id)
+                    auto_adapters.append(_create_auto_adapter_info(adapter_name, service_type))
+        except Exception as e:
+            logger.debug(f"Error getting {service_type} providers: {e}")
+    return auto_adapters
+
+
+def _convert_adapter_to_status(adapter: AdapterInfo) -> AdapterStatusSchema:
+    """Convert AdapterInfo to AdapterStatusSchema."""
+    is_running = adapter.status == AdapterStatus.RUNNING or str(adapter.status).lower() == "running"
+
+    config = adapter.config_params or AdapterConfig(
+        adapter_type=adapter.adapter_type, enabled=is_running, settings={}
+    )
+
+    metrics = None
+    if adapter.messages_processed > 0 or adapter.error_count > 0:
+        uptime = (datetime.now(timezone.utc) - adapter.started_at).total_seconds() if adapter.started_at else 0
+        metrics = AdapterMetrics(
+            messages_processed=adapter.messages_processed,
+            errors_count=adapter.error_count,
+            uptime_seconds=uptime,
+            last_error=adapter.last_error,
+            last_error_time=None,
+        )
+
+    return AdapterStatusSchema(
+        adapter_id=adapter.adapter_id,
+        adapter_type=adapter.adapter_type,
+        is_running=is_running,
+        loaded_at=adapter.started_at or datetime.now(timezone.utc),
+        services_registered=adapter.services_registered,
+        config_params=config,
+        metrics=metrics,
+        last_activity=None,
+        tools=adapter.tools,
+    )
+
+
+# ============================================================================
 # Endpoints
 # ============================================================================
 
@@ -426,99 +503,29 @@ async def _discover_adapters() -> List[ModuleTypeInfo]:
 async def list_adapters(
     request: Request, auth: AuthContext = Depends(require_observer)
 ) -> SuccessResponse[AdapterListResponse]:
-    """
-    List all loaded adapters.
-
-    Returns information about all currently loaded adapter instances
-    including their type, status, and basic metrics.
-    """
+    """List all loaded adapters with their type, status, and metrics."""
     runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
     if not runtime_control:
         raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
 
     try:
-        # Get adapter list from runtime control service
         adapters = await runtime_control.list_adapters()
         seen_adapter_ids = {a.adapter_id for a in adapters}
 
-        # Also include auto-loaded adapters from ServiceRegistry
         service_registry = getattr(request.app.state, "service_registry", None)
         if service_registry:
-            from ciris_engine.schemas.runtime.enums import ServiceType
+            adapters.extend(_get_auto_loaded_adapters(service_registry, seen_adapter_ids))
 
-            for service_type in [ServiceType.TOOL, ServiceType.WISE_AUTHORITY]:
-                try:
-                    providers = service_registry.get_providers_by_type(service_type)
-                    for provider_info in providers:
-                        metadata = provider_info.get("metadata", {})
-                        if metadata.get("auto_loaded"):
-                            adapter_name = metadata.get("adapter", "unknown")
-                            adapter_id = f"{adapter_name}_auto"
-                            if adapter_id not in seen_adapter_ids:
-                                seen_adapter_ids.add(adapter_id)
-                                adapters.append(
-                                    AdapterInfo(
-                                        adapter_id=adapter_id,
-                                        adapter_type=adapter_name.upper(),
-                                        status=AdapterStatus.RUNNING,
-                                        started_at=datetime.now(timezone.utc),
-                                        config_params=AdapterConfig(
-                                            adapter_type=adapter_name, enabled=True, settings={}
-                                        ),
-                                        services_registered=[service_type.value],
-                                        messages_processed=0,
-                                        error_count=0,
-                                        last_error=None,
-                                        tools=[],
-                                    )
-                                )
-                except Exception as e:
-                    logger.debug(f"Error getting {service_type} providers: {e}")
-
-        # Convert to response format
-        adapter_statuses = []
-        for adapter in adapters:
-            # Convert AdapterInfo to AdapterStatusSchema
-            is_running = adapter.status == AdapterStatus.RUNNING or str(adapter.status).lower() == "running"
-
-            # Use actual config from adapter if available
-            config = adapter.config_params or AdapterConfig(
-                adapter_type=adapter.adapter_type, enabled=is_running, settings={}
-            )
-
-            metrics = None
-            if adapter.messages_processed > 0 or adapter.error_count > 0:
-                metrics = AdapterMetrics(
-                    messages_processed=adapter.messages_processed,
-                    errors_count=adapter.error_count,
-                    uptime_seconds=(
-                        (datetime.now(timezone.utc) - adapter.started_at).total_seconds() if adapter.started_at else 0
-                    ),
-                    last_error=adapter.last_error,
-                    last_error_time=None,
-                )
-
-            adapter_statuses.append(
-                AdapterStatusSchema(
-                    adapter_id=adapter.adapter_id,
-                    adapter_type=adapter.adapter_type,
-                    is_running=is_running,
-                    loaded_at=adapter.started_at or datetime.now(timezone.utc),
-                    services_registered=adapter.services_registered,
-                    config_params=config,
-                    metrics=metrics,
-                    last_activity=None,
-                    tools=adapter.tools,
-                )
-            )
-
+        adapter_statuses = [_convert_adapter_to_status(a) for a in adapters]
         running_count = sum(1 for a in adapter_statuses if a.is_running)
 
-        response = AdapterListResponse(
-            adapters=adapter_statuses, total_count=len(adapter_statuses), running_count=running_count
+        return SuccessResponse(
+            data=AdapterListResponse(
+                adapters=adapter_statuses,
+                total_count=len(adapter_statuses),
+                running_count=running_count,
+            )
         )
-
-        return SuccessResponse(data=response)
 
     except ValidationError as e:
         logger.error(f"Validation error listing adapters: {e}")

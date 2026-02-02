@@ -415,16 +415,62 @@ def _get_agent_templates() -> List[AgentTemplate]:
     return templates
 
 
+# Constants for adapter filtering
+_SKIP_ADAPTERS = {"ciris_covenant_metrics"}  # Handled by consent checkbox
+_CIRIS_SERVICES_ADAPTERS = {"ciris_hosted_tools"}  # Require Google sign-in
+
+
+def _should_skip_manifest(manifest: Any, module_id: str, seen_ids: set[str]) -> bool:
+    """Check if a manifest should be skipped during adapter discovery."""
+    if module_id in seen_ids:
+        return True
+    if module_id in _SKIP_ADAPTERS:
+        logger.debug(f"[SETUP ADAPTERS] Skipping {module_id} (handled separately)")
+        return True
+    if manifest.module.is_mock:
+        return True
+    if manifest.module.reference or manifest.module.for_qa:
+        return True
+    if not manifest.services:
+        return True
+    if manifest.metadata and manifest.metadata.get("type") == "library":
+        return True
+    if module_id.endswith("_common") or "_common_" in module_id:
+        return True
+    return False
+
+
+def _create_adapter_from_manifest(manifest: Any, module_id: str) -> AdapterConfig:
+    """Create an AdapterConfig from a service manifest."""
+    capabilities = manifest.capabilities or []
+    requires_binaries = "requires:binaries" in capabilities
+
+    supported_platforms: List[str] = []
+    if manifest.metadata:
+        platforms = manifest.metadata.get("supported_platforms")
+        if platforms and isinstance(platforms, list):
+            supported_platforms = platforms
+
+    requires_ciris_services = module_id in _CIRIS_SERVICES_ADAPTERS
+
+    return AdapterConfig(
+        id=module_id,
+        name=manifest.module.name.replace("_", " ").title(),
+        description=manifest.module.description or f"{module_id} adapter",
+        enabled_by_default=requires_ciris_services,
+        required_env_vars=[],
+        optional_env_vars=[],
+        platform_requirements=manifest.platform_requirements or [],
+        platform_available=True,
+        requires_binaries=requires_binaries,
+        required_binaries=[],
+        supported_platforms=supported_platforms,
+        requires_ciris_services=requires_ciris_services,
+    )
+
+
 def _get_available_adapters() -> List[AdapterConfig]:
-    """Get all adapters with platform requirements for KMP-side filtering.
-
-    Returns ALL adapters with their requirements metadata.
-    KMP clients filter locally based on platform capabilities.
-
-    Filters out only:
-    - ciris_covenant_metrics (handled by separate consent checkbox)
-    - Mock/library/reference modules
-    """
+    """Get all adapters with platform requirements for KMP-side filtering."""
     from ciris_engine.logic.services.tool.discovery_service import AdapterDiscoveryService
 
     adapters: List[AdapterConfig] = []
@@ -442,95 +488,27 @@ def _get_available_adapters() -> List[AdapterConfig]:
             platform_available=True,
             requires_binaries=False,
             required_binaries=[],
-            supported_platforms=[],  # All platforms
+            supported_platforms=[],
             requires_ciris_services=False,
         )
     )
     seen_ids.add("api")
 
-    # Adapters to skip entirely (handled separately)
-    SKIP_ADAPTERS = {
-        "ciris_covenant_metrics",  # Handled by consent checkbox, not adapter list
-    }
-
-    # Adapters that require CIRIS AI services (Google sign-in)
-    CIRIS_SERVICES_ADAPTERS = {
-        "ciris_hosted_tools",
-    }
-
-    # Discover all adapters
     try:
         discovery = AdapterDiscoveryService()
-        manifests = discovery.discover_adapters()
-
-        for manifest in manifests:
+        for manifest in discovery.discover_adapters():
             module_id = manifest.module.name
-
-            # Skip if already added
-            if module_id in seen_ids:
+            if _should_skip_manifest(manifest, module_id, seen_ids):
                 continue
 
-            # Skip adapters handled separately
-            if module_id in SKIP_ADAPTERS:
-                logger.debug(f"[SETUP ADAPTERS] Skipping {module_id} (handled separately)")
-                continue
-
-            # Skip mock modules
-            if manifest.module.is_mock:
-                continue
-
-            # Skip reference/QA modules
-            if manifest.module.reference or manifest.module.for_qa:
-                continue
-
-            # Skip library-type modules (no services)
-            if not manifest.services:
-                continue
-
-            # Skip modules with metadata type = library
-            if manifest.metadata and manifest.metadata.get("type") == "library":
-                continue
-
-            # Skip common/shared modules
-            if module_id.endswith("_common") or "_common_" in module_id:
-                continue
-
-            # Extract platform requirements from manifest
-            capabilities = manifest.capabilities or []
-            requires_binaries = "requires:binaries" in capabilities
-
-            # Get supported platforms from metadata
-            supported_platforms: List[str] = []
-            if manifest.metadata:
-                platforms = manifest.metadata.get("supported_platforms")
-                if platforms and isinstance(platforms, list):
-                    supported_platforms = platforms
-
-            # Check if requires CIRIS services
-            requires_ciris_services = module_id in CIRIS_SERVICES_ADAPTERS
-
-            # Create adapter config with all requirements
-            adapter_config = AdapterConfig(
-                id=module_id,
-                name=manifest.module.name.replace("_", " ").title(),
-                description=manifest.module.description or f"{module_id} adapter",
-                enabled_by_default=requires_ciris_services,  # CIRIS services adapters enabled by default
-                required_env_vars=[],
-                optional_env_vars=[],
-                platform_requirements=manifest.platform_requirements or [],
-                platform_available=True,  # KMP will determine this
-                requires_binaries=requires_binaries,
-                required_binaries=[],  # Could extract from manifest if needed
-                supported_platforms=supported_platforms,
-                requires_ciris_services=requires_ciris_services,
-            )
-
+            adapter_config = _create_adapter_from_manifest(manifest, module_id)
             adapters.append(adapter_config)
             seen_ids.add(module_id)
             logger.debug(
-                f"[SETUP ADAPTERS] Discovered adapter: {module_id} (requires_binaries={requires_binaries}, supported_platforms={supported_platforms})"
+                f"[SETUP ADAPTERS] Discovered adapter: {module_id} "
+                f"(requires_binaries={adapter_config.requires_binaries}, "
+                f"supported_platforms={adapter_config.supported_platforms})"
             )
-
     except Exception as e:
         logger.warning(f"[SETUP ADAPTERS] Failed to discover adapters: {e}")
 
@@ -670,12 +648,11 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
             # Some providers (Together AI) return non-standard model list responses
             logger.info("[VALIDATE_LLM] Attempting test completion...")
             model_to_test = config.model or "gpt-3.5-turbo"
-            _response = await client.chat.completions.create(
+            await client.chat.completions.create(
                 model=model_to_test,
                 messages=[{"role": "user", "content": "Hi"}],
                 max_tokens=1,
-            )
-            del _response  # Validation only - response not needed
+            )  # Validation only - response not needed
             logger.info(f"[VALIDATE_LLM] SUCCESS! Test completion worked with model: {model_to_test}")
             return LLMValidationResponse(
                 valid=True,
@@ -703,12 +680,11 @@ async def _validate_anthropic_connection(config: LLMValidationRequest) -> LLMVal
 
         # Try a minimal completion
         model_to_test = config.model or "claude-haiku-4-5-20251001"
-        _response = await client.messages.create(
+        await client.messages.create(
             model=model_to_test,
             max_tokens=1,
             messages=[{"role": "user", "content": "Hi"}],
-        )
-        del _response  # Validation only - response not needed
+        )  # Validation only - response not needed
         logger.info(f"[VALIDATE_LLM] SUCCESS! Anthropic test completion worked with model: {model_to_test}")
         return LLMValidationResponse(
             valid=True,
@@ -740,12 +716,11 @@ async def _validate_google_connection(config: LLMValidationRequest) -> LLMValida
 
         # Try a minimal completion
         model_to_test = config.model or "gemini-2.0-flash"
-        _response = await client.chat.completions.create(
+        await client.chat.completions.create(
             model=model_to_test,
             messages=[{"role": "user", "content": "Hi"}],
             max_tokens=1,
-        )
-        del _response  # Validation only - response not needed
+        )  # Validation only - response not needed
         logger.info(f"[VALIDATE_LLM] SUCCESS! Google test completion worked with model: {model_to_test}")
         return LLMValidationResponse(
             valid=True,

@@ -1157,6 +1157,16 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
         adapters_str = ",".join(setup.enabled_adapters)
         f.write(f"CIRIS_ADAPTER={adapters_str}\n")
 
+        # Handle covenant metrics consent - if enabled, set consent timestamp
+        if "ciris_covenant_metrics" in setup.enabled_adapters:
+            from datetime import datetime, timezone
+
+            consent_timestamp = datetime.now(timezone.utc).isoformat()
+            f.write("\n# Covenant Metrics Consent (auto-set when adapter enabled)\n")
+            f.write("CIRIS_COVENANT_METRICS_CONSENT=true\n")
+            f.write(f"CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP={consent_timestamp}\n")
+            logger.info(f"[SETUP] Covenant metrics consent enabled with timestamp: {consent_timestamp}")
+
         # Adapter-specific environment variables
         if setup.adapter_config:
             f.write("\n# Adapter-Specific Configuration\n")

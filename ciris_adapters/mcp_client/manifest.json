@@ -6,6 +6,8 @@
     "author": "CIRIS Team",
     "safe_domain": true
   },
+  "platform_requirements": ["desktop_cli"],
+  "platform_requirements_rationale": "MCP client requires Node.js and stdio transport, only available on desktop",
   "services": [
     {
       "type": "TOOL",

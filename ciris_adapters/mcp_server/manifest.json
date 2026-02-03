@@ -6,6 +6,8 @@
     "author": "CIRIS Team",
     "safe_domain": true
   },
+  "platform_requirements": ["desktop_cli"],
+  "platform_requirements_rationale": "MCP server requires stdio transport or HTTP binding, only available on desktop",
   "services": [
     {
       "type": "RUNTIME_CONTROL",

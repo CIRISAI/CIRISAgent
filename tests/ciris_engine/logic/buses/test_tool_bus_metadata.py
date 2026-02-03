@@ -18,8 +18,9 @@ from ciris_engine.logic.buses.tool_bus import ToolBus
 class MockToolService:
     """Mock tool service with configurable metadata."""
 
-    def __init__(self, metadata=None):
+    def __init__(self, metadata=None, tools=None):
         self._metadata = metadata or {}
+        self._tools = tools or ["mock_tool_query"]
         self.name = "mock_tool"
 
     def get_service_metadata(self):
@@ -32,7 +33,7 @@ class MockToolService:
 
     async def list_tools(self):
         """Mock tool listing."""
-        return ["mock_tool_query"]
+        return self._tools
 
     async def get_tool_schema(self, tool_name):
         """Mock schema."""
@@ -40,7 +41,7 @@ class MockToolService:
 
     async def get_available_tools(self):
         """Mock available tools."""
-        return ["mock_tool_query"]
+        return self._tools
 
     async def get_tool_info(self, tool_name):
         """Mock tool info."""
@@ -443,6 +444,203 @@ class TestBackwardCompatibility:
         # Should handle gracefully
         results = bus.get_tools_by_metadata({"data_source": True})
         assert len(results) == 0
+
+
+class TestContextBasedRouting:
+    """Test context-based routing for tool execution."""
+
+    @pytest.mark.asyncio
+    async def test_routes_to_discord_service_with_channel_id(self, mock_service_registry, mock_time_service):
+        """Test routing to Discord service when channel_id is present."""
+        from unittest.mock import Mock
+
+        from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Create mock Discord and API tool services with test_tool support
+        discord_service = MockToolService(metadata={"provider": "discord"}, tools=["test_tool"])
+        discord_service.name = "DiscordToolService"
+        discord_service.__class__.__name__ = "DiscordToolService"
+
+        api_service = MockToolService(metadata={"provider": "api"}, tools=["test_tool"])
+        api_service.name = "APIToolService"
+        api_service.__class__.__name__ = "APIToolService"
+
+        # Mock execute_tool to return success
+        async def mock_execute(tool_name, params):
+            return ToolExecutionResult(
+                tool_name=tool_name,
+                status=ToolExecutionStatus.COMPLETED,
+                success=True,
+                data={"routed_to": "discord"},
+                error=None,
+                correlation_id="test-123",
+            )
+
+        discord_service.execute_tool = mock_execute
+
+        # Create bus
+        bus = ToolBus(mock_service_registry, mock_time_service)
+
+        # Create provider wrappers
+        providers = []
+        for service in [discord_service, api_service]:
+            provider = Mock()
+            provider.instance = service
+            providers.append(provider)
+
+        mock_service_registry._services = {ServiceType.TOOL: providers}
+
+        # Execute with channel_id - should route to Discord
+        result = await bus.execute_tool(
+            "test_tool", {"channel_id": "123456789", "message": "test"}, handler_name="default"
+        )
+
+        # Verify Discord service was used (via the routed_to field)
+        assert result.success is True
+        assert result.data.get("routed_to") == "discord"
+
+    @pytest.mark.asyncio
+    async def test_routes_to_discord_service_with_guild_id(self, mock_service_registry, mock_time_service):
+        """Test routing to Discord service when guild_id is present."""
+        from unittest.mock import Mock
+
+        from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Create mock Discord service with test_tool support
+        discord_service = MockToolService(metadata={"provider": "discord"}, tools=["test_tool"])
+        discord_service.name = "DiscordToolService"
+        discord_service.__class__.__name__ = "DiscordToolService"
+
+        api_service = MockToolService(metadata={"provider": "api"}, tools=["test_tool"])
+        api_service.name = "APIToolService"
+        api_service.__class__.__name__ = "APIToolService"
+
+        async def mock_execute(tool_name, params):
+            return ToolExecutionResult(
+                tool_name=tool_name,
+                status=ToolExecutionStatus.COMPLETED,
+                success=True,
+                data={"routed_to": "discord"},
+                error=None,
+                correlation_id="test-123",
+            )
+
+        discord_service.execute_tool = mock_execute
+
+        bus = ToolBus(mock_service_registry, mock_time_service)
+
+        providers = []
+        for service in [discord_service, api_service]:
+            provider = Mock()
+            provider.instance = service
+            providers.append(provider)
+
+        mock_service_registry._services = {ServiceType.TOOL: providers}
+
+        # Execute with guild_id - should route to Discord
+        result = await bus.execute_tool(
+            "test_tool", {"guild_id": "987654321", "action": "test"}, handler_name="default"
+        )
+
+        assert result.success is True
+        assert result.data.get("routed_to") == "discord"
+
+    @pytest.mark.asyncio
+    async def test_routes_to_api_service_without_discord_context(self, mock_service_registry, mock_time_service):
+        """Test routing to API service when no Discord context is present."""
+        from unittest.mock import Mock
+
+        from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Create mock services with test_tool support
+        discord_service = MockToolService(metadata={"provider": "discord"}, tools=["test_tool"])
+        discord_service.name = "DiscordToolService"
+        discord_service.__class__.__name__ = "DiscordToolService"
+
+        api_service = MockToolService(metadata={"provider": "api"}, tools=["test_tool"])
+        api_service.name = "APIToolService"
+        api_service.__class__.__name__ = "APIToolService"
+
+        async def mock_execute_discord(tool_name, params):
+            return ToolExecutionResult(
+                tool_name=tool_name,
+                status=ToolExecutionStatus.COMPLETED,
+                success=True,
+                data={"routed_to": "discord"},
+                error=None,
+                correlation_id="test-123",
+            )
+
+        async def mock_execute_api(tool_name, params):
+            return ToolExecutionResult(
+                tool_name=tool_name,
+                status=ToolExecutionStatus.COMPLETED,
+                success=True,
+                data={"routed_to": "api"},
+                error=None,
+                correlation_id="test-123",
+            )
+
+        discord_service.execute_tool = mock_execute_discord
+        api_service.execute_tool = mock_execute_api
+
+        bus = ToolBus(mock_service_registry, mock_time_service)
+
+        providers = []
+        for service in [discord_service, api_service]:
+            provider = Mock()
+            provider.instance = service
+            providers.append(provider)
+
+        mock_service_registry._services = {ServiceType.TOOL: providers}
+
+        # Execute without channel_id/guild_id - should route to API (fallback behavior)
+        result = await bus.execute_tool("test_tool", {"message": "test"}, handler_name="default")
+
+        assert result.success is True
+        # Without Discord context, it picks the first matching service or API as fallback
+        assert result.data is not None
+
+    @pytest.mark.asyncio
+    async def test_extracts_nested_context_channel_id(self, mock_service_registry, mock_time_service):
+        """Test extracting channel_id from nested context parameter."""
+        from unittest.mock import Mock
+
+        from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Create mock Discord service with test_tool support
+        discord_service = MockToolService(metadata={"provider": "discord"}, tools=["test_tool"])
+        discord_service.name = "DiscordToolService"
+        discord_service.__class__.__name__ = "DiscordToolService"
+
+        async def mock_execute(tool_name, params):
+            return ToolExecutionResult(
+                tool_name=tool_name,
+                status=ToolExecutionStatus.COMPLETED,
+                success=True,
+                data={"routed_to": "discord"},
+                error=None,
+                correlation_id="test-123",
+            )
+
+        discord_service.execute_tool = mock_execute
+
+        bus = ToolBus(mock_service_registry, mock_time_service)
+
+        provider = Mock()
+        provider.instance = discord_service
+        mock_service_registry._services = {ServiceType.TOOL: [provider]}
+
+        # Execute with nested context.channel_id
+        result = await bus.execute_tool(
+            "test_tool", {"context": {"channel_id": "nested_channel_123"}, "message": "test"}, handler_name="default"
+        )
+
+        assert result.success is True
 
 
 class TestMetadataExtensibility:

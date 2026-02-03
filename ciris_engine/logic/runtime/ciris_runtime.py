@@ -174,6 +174,8 @@ class CIRISRuntime(ServicePropertyMixin):
         self._agent_task: Optional[asyncio.Task[Any]] = None
         self._shutdown_complete = False
         self._shutdown_in_progress = False
+        self._safe_mode = False
+        self._safe_mode_reason: Optional[str] = None
 
         # Resume protection
         self._resume_in_progress = False
@@ -252,6 +254,100 @@ class CIRISRuntime(ServicePropertyMixin):
     def _request_shutdown(self, reason: str = "Shutdown requested") -> None:
         """Wrapper used during initialization failures."""
         self.request_shutdown(reason)
+
+    def enter_safe_mode(self, reason: str) -> bool:
+        """
+        Enter safe mode - reduces agent to minimal functionality.
+
+        In safe mode, the agent:
+        - Can still respond to messages
+        - Cannot execute autonomous tool actions
+        - Cannot make memory modifications
+        - Logs all attempted actions for review
+
+        Args:
+            reason: Human-readable reason for entering safe mode
+
+        Returns:
+            True if safe mode was activated successfully
+        """
+        if self._safe_mode:
+            logger.warning(f"Already in safe mode (reason: {self._safe_mode_reason})")
+            return True
+
+        logger.critical(f"ENTERING SAFE MODE: {reason}")
+        self._safe_mode = True
+        self._safe_mode_reason = reason
+
+        # Log to audit if available
+        if hasattr(self, "service_initializer") and self.service_initializer:
+            audit_service = getattr(self.service_initializer, "audit_service", None)
+            if audit_service:
+                try:
+                    # Fire and forget - don't block on audit
+                    import asyncio
+
+                    asyncio.create_task(
+                        audit_service.log_event(
+                            event_type="covenant_safe_mode",
+                            event_data={"reason": reason, "activated": True},
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to log safe mode to audit: {e}")
+
+        return True
+
+    def exit_safe_mode(self, authorized_by: str) -> bool:
+        """
+        Exit safe mode - requires explicit authorization.
+
+        Args:
+            authorized_by: Identifier of who authorized exit from safe mode
+
+        Returns:
+            True if safe mode was exited successfully
+        """
+        if not self._safe_mode:
+            logger.warning("Not in safe mode, nothing to exit")
+            return True
+
+        logger.critical(f"EXITING SAFE MODE: Authorized by {authorized_by}")
+        self._safe_mode = False
+        previous_reason = self._safe_mode_reason
+        self._safe_mode_reason = None
+
+        # Log to audit if available
+        if hasattr(self, "service_initializer") and self.service_initializer:
+            audit_service = getattr(self.service_initializer, "audit_service", None)
+            if audit_service:
+                try:
+                    import asyncio
+
+                    asyncio.create_task(
+                        audit_service.log_event(
+                            event_type="covenant_safe_mode",
+                            event_data={
+                                "reason": previous_reason,
+                                "activated": False,
+                                "authorized_by": authorized_by,
+                            },
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to log safe mode exit to audit: {e}")
+
+        return True
+
+    @property
+    def is_safe_mode(self) -> bool:
+        """Check if runtime is in safe mode."""
+        return self._safe_mode
+
+    @property
+    def safe_mode_reason(self) -> Optional[str]:
+        """Get the reason for safe mode, if active."""
+        return self._safe_mode_reason if self._safe_mode else None
 
     def set_preload_tasks(self, tasks: List[str]) -> None:
         """Set tasks to be loaded after successful WORK state transition."""

@@ -118,13 +118,26 @@ class ToolBus(BaseBus[ToolService]):
             selected_service = supporting_services[0]
             logger.debug(f"Using {type(selected_service).__name__} (only service with this tool)")
         else:
-            # Multiple services support this tool - use routing logic
-            # TODO: In future, extract channel_id/guild_id from context to route appropriately
-            # For now, prefer APIToolService over SecretsToolService for general tools
-            for service in supporting_services:
-                if "APIToolService" in type(service).__name__:
-                    selected_service = service
-                    break
+            # Multiple services support this tool - use context-based routing
+            # Extract channel_id/guild_id from parameters to route to Discord adapter when present
+            channel_id = get_str(parameters, "channel_id") or get_str(parameters, "context.channel_id")
+            guild_id = get_str(parameters, "guild_id") or get_str(parameters, "context.guild_id")
+
+            if channel_id or guild_id:
+                # Route to Discord-based tool service if context indicates Discord origin
+                for service in supporting_services:
+                    service_name = type(service).__name__
+                    if "Discord" in service_name:
+                        selected_service = service
+                        logger.debug(f"Routing to {service_name} based on channel_id/guild_id context")
+                        break
+
+            # Fall back to preferring APIToolService over SecretsToolService for general tools
+            if not selected_service:
+                for service in supporting_services:
+                    if "APIToolService" in type(service).__name__:
+                        selected_service = service
+                        break
 
             if not selected_service:
                 selected_service = supporting_services[0]

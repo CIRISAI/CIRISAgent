@@ -288,7 +288,6 @@ struct InitializingView: View {
     @State private var runtimeStatus: RuntimeStatus? = nil
     @State private var statusTimer: Timer? = nil
     @State private var hasStartedInit = false
-    @State private var showDebugLog = false
 
     let cirisColor = Color(red: 0.255, green: 0.612, blue: 0.627)
 
@@ -404,22 +403,10 @@ struct InitializingView: View {
                         .padding(.top, 12)
                     }
 
-                    // Debug log button
-                    Button(action: { showDebugLog = true }) {
-                        HStack {
-                            Image(systemName: "doc.text.magnifyingglass")
-                            Text("View Logs")
-                        }
-                        .font(.system(size: 12))
-                        .foregroundColor(.gray.opacity(0.6))
-                    }
-                    .padding(.top, 16)
+                    // Note: Debug log button removed for production release
                 }
             }
             .padding(.vertical, 40)
-        }
-        .sheet(isPresented: $showDebugLog) {
-            DebugLogView()
         }
         .onAppear {
             // Start polling FIRST, then start initialization

@@ -3,6 +3,7 @@ package ai.ciris.mobile.shared.viewmodels
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.ReasoningEvent
 import ai.ciris.mobile.shared.api.ReasoningStreamClient
+import ai.ciris.mobile.shared.auth.TokenManager
 import ai.ciris.mobile.shared.models.ChatMessage
 import ai.ciris.mobile.shared.models.MessageType
 import androidx.lifecycle.ViewModel
@@ -389,6 +390,11 @@ class InteractViewModel(
             if (isAuthError) {
                 authErrorCount++
                 logWarn(method, "Auth error #$authErrorCount: $errorMessage")
+                // On first auth error, trigger automatic token refresh via TokenManager
+                if (authErrorCount == 1) {
+                    logInfo(method, "Triggering automatic token refresh via TokenManager")
+                    TokenManager.shared?.on401Error()
+                }
                 // Only show error after 3 consecutive failures to avoid flashing during token refresh
                 if (authErrorCount >= 3 && _authError.value == null) {
                     logError(method, "Persistent auth error (3+ failures) - showing UI notification")

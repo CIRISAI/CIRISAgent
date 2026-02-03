@@ -246,7 +246,9 @@ fun CIRISApp(
     var pendingProvider by remember { mutableStateOf("apple") } // Default to apple on iOS
 
     // Token Manager for handling token refresh
-    val tokenManager = remember { TokenManager(coroutineScope) }
+    val tokenManager = remember {
+        TokenManager(coroutineScope).also { TokenManager.setShared(it) }
+    }
 
     // Track when CIRIS token exchange completes after silent refresh
     var tokenExchangeComplete by remember { mutableStateOf(false) }

@@ -34,6 +34,25 @@ class TokenManager(
 
         // Refresh interval: 45 minutes (before 1-hour expiry)
         private const val REFRESH_INTERVAL_MS = 45L * 60L * 1000L
+
+        // Shared instance for global access (set by CIRISApp)
+        @Volatile
+        private var _shared: TokenManager? = null
+
+        /**
+         * Get the shared TokenManager instance.
+         * Returns null if not yet initialized by CIRISApp.
+         */
+        val shared: TokenManager?
+            get() = _shared
+
+        /**
+         * Set the shared instance. Called by CIRISApp when creating the TokenManager.
+         */
+        fun setShared(instance: TokenManager) {
+            _shared = instance
+            println("[$TAG][INFO][setShared] Shared TokenManager instance set")
+        }
     }
 
     private fun log(level: String, method: String, message: String) {

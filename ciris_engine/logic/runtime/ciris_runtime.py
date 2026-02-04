@@ -176,6 +176,7 @@ class CIRISRuntime(ServicePropertyMixin):
         self._shutdown_in_progress = False
         self._safe_mode = False
         self._safe_mode_reason: Optional[str] = None
+        self._background_tasks: set[asyncio.Task[Any]] = set()
 
         # Resume protection
         self._resume_in_progress = False
@@ -269,11 +270,11 @@ class CIRISRuntime(ServicePropertyMixin):
             reason: Human-readable reason for entering safe mode
 
         Returns:
-            True if safe mode was activated successfully
+            True if safe mode was activated successfully, False if already in safe mode
         """
         if self._safe_mode:
             logger.warning(f"Already in safe mode (reason: {self._safe_mode_reason})")
-            return True
+            return False  # Already in safe mode - no state change
 
         logger.critical(f"ENTERING SAFE MODE: {reason}")
         self._safe_mode = True
@@ -284,15 +285,18 @@ class CIRISRuntime(ServicePropertyMixin):
             audit_service = getattr(self.service_initializer, "audit_service", None)
             if audit_service:
                 try:
-                    # Fire and forget - don't block on audit
+                    # Fire and forget - save task to prevent GC
                     import asyncio
 
-                    asyncio.create_task(
+                    task = asyncio.create_task(
                         audit_service.log_event(
                             event_type="covenant_safe_mode",
                             event_data={"reason": reason, "activated": True},
                         )
                     )
+                    # Store task reference to prevent premature garbage collection
+                    self._background_tasks.add(task)
+                    task.add_done_callback(self._background_tasks.discard)
                 except Exception as e:
                     logger.error(f"Failed to log safe mode to audit: {e}")
 
@@ -306,11 +310,11 @@ class CIRISRuntime(ServicePropertyMixin):
             authorized_by: Identifier of who authorized exit from safe mode
 
         Returns:
-            True if safe mode was exited successfully
+            True if safe mode was exited successfully, False if not in safe mode
         """
         if not self._safe_mode:
             logger.warning("Not in safe mode, nothing to exit")
-            return True
+            return False  # Not in safe mode - no state change
 
         logger.critical(f"EXITING SAFE MODE: Authorized by {authorized_by}")
         self._safe_mode = False
@@ -324,7 +328,7 @@ class CIRISRuntime(ServicePropertyMixin):
                 try:
                     import asyncio
 
-                    asyncio.create_task(
+                    task = asyncio.create_task(
                         audit_service.log_event(
                             event_type="covenant_safe_mode",
                             event_data={
@@ -334,6 +338,9 @@ class CIRISRuntime(ServicePropertyMixin):
                             },
                         )
                     )
+                    # Store task reference to prevent premature garbage collection
+                    self._background_tasks.add(task)
+                    task.add_done_callback(self._background_tasks.discard)
                 except Exception as e:
                     logger.error(f"Failed to log safe mode exit to audit: {e}")
 

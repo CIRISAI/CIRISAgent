@@ -3,9 +3,12 @@
 Manages registration and configuration of SQL, REST, and HL7 connectors.
 """
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -230,9 +233,9 @@ async def register_sql_connector(
                 },
             )
             if init_result.success:
-                logger.info(f"Registered connector {connector_id} with tool bus")
+                logger.info("Registered connector with tool bus")
             else:
-                logger.warning(f"Tool bus registration returned: {init_result.error}")
+                logger.warning("Tool bus registration returned an error")
         except Exception as e:
             logger.warning(f"Could not register with tool bus: {e}")
 
@@ -316,6 +319,28 @@ async def list_connectors(
     )
 
 
+async def _test_sql_connector(connector_id: str, tool_bus: Any) -> tuple[bool, str]:
+    """Test SQL connector via tool bus."""
+    if not tool_bus:
+        return True, "SQL connection test successful (tool bus unavailable, skipped)"
+
+    try:
+        test_result = await tool_bus.execute_tool(
+            "sql_query",
+            {"connector_id": connector_id, "sql": "SELECT 1"},
+        )
+        if test_result.success:
+            return True, "SQL connection test successful"
+        return False, test_result.error or "Connection test failed"
+    except Exception as e:
+        return False, f"Connection test error: {str(e)}"
+
+
+def _test_rest_connector() -> tuple[bool, str]:
+    """Test REST connector (simulated for now)."""
+    return True, "REST API connection test successful (simulated)"
+
+
 @router.post("/{connector_id}/test", response_model=StandardResponse)
 async def test_connector(
     connector_id: str,
@@ -329,10 +354,7 @@ async def test_connector(
 
     Requires admin privileges.
     """
-    import logging
     import time
-
-    logger = logging.getLogger(__name__)
 
     # Verify admin privileges
     if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
@@ -349,52 +371,18 @@ async def test_connector(
         )
 
     connector = _connector_registry[connector_id]
+    connector_type = connector["connector_type"]
 
     # Perform test based on connector type
     start_time = time.time()
-    success = False
-    message = ""
 
-    try:
-        if connector["connector_type"] == "sql":
-            # Test SQL connection via tool bus using sql_query with SELECT 1
-            tool_bus = getattr(req.app.state, "tool_bus", None)
-            if tool_bus:
-                try:
-                    test_result = await tool_bus.execute_tool(
-                        "sql_query",
-                        {
-                            "connector_id": connector_id,
-                            "sql": "SELECT 1",
-                        },
-                    )
-                    success = test_result.success
-                    if success:
-                        message = "SQL connection test successful"
-                    else:
-                        message = test_result.error or "Connection test failed"
-                except Exception as e:
-                    success = False
-                    message = f"Connection test error: {str(e)}"
-            else:
-                # Fallback if tool bus not available
-                success = True
-                message = "SQL connection test successful (tool bus unavailable, skipped)"
-
-        elif connector["connector_type"] == "rest":
-            success = True
-            message = "REST API connection test successful (simulated)"
-
-        else:
-            message = f"Testing not implemented for {connector['connector_type']}"
-
-    except Exception as e:
-        from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
-
-        safe_connector_id = sanitize_for_log(connector_id, max_length=100)
-        logger.error(f"Connector test failed for {safe_connector_id}: {e}")
-        success = False
-        message = f"Connection test failed: {str(e)}"
+    if connector_type == "sql":
+        tool_bus = getattr(req.app.state, "tool_bus", None)
+        success, message = await _test_sql_connector(connector_id, tool_bus)
+    elif connector_type == "rest":
+        success, message = _test_rest_connector()
+    else:
+        success, message = False, f"Testing not implemented for {connector_type}"
 
     latency_ms = (time.time() - start_time) * 1000
     tested_at = datetime.now(timezone.utc).isoformat()
@@ -534,7 +522,6 @@ async def delete_connector(
     # Note: The SQLToolService in the adapter handles its own lifecycle.
     # Removing from the local registry prevents API access to this connector.
     # The adapter's service can be reconfigured with a new connector if needed.
-    logger.info(f"Connector {connector_id} removed from API registry")
 
     from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log, sanitize_username
 

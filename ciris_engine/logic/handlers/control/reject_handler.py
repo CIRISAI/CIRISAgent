@@ -61,7 +61,7 @@ class RejectHandler(BaseActionHandler):
 
         # Handle adaptive filtering if requested
         if isinstance(params, RejectParams) and params.create_filter:
-            await self._create_adaptive_filter(params, thought, dispatch_context)
+            await self._create_adaptive_filter(params, thought)
 
         # REJECT is a terminal action - no follow-up thoughts should be created
         self.logger.info(f"REJECT action completed for thought {thought_id}. This is a terminal action.")
@@ -75,9 +75,7 @@ class RejectHandler(BaseActionHandler):
             return False
         return channel_id.startswith("api_") or channel_id.startswith("ws:")
 
-    async def _create_adaptive_filter(
-        self, params: RejectParams, thought: Thought, dispatch_context: DispatchContext
-    ) -> None:
+    async def _create_adaptive_filter(self, params: RejectParams, thought: Thought) -> None:
         """Create an adaptive filter based on the rejected content."""
         try:
             # Get filter service from service registry

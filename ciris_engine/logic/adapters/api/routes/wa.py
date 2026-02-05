@@ -7,7 +7,7 @@ Manages human-in-the-loop deferrals and permissions.
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import NoReturn, Optional, cast
+from typing import Annotated, NoReturn, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -123,11 +123,11 @@ def sanitize_for_log(value: str) -> str:
     return "".join(c if c.isprintable() and c not in "\n\r\t" else " " for c in value)
 
 
-@router.get("/deferrals")
+@router.get("/deferrals", responses={503: {"description": "Wise Authority service not available"}})
 async def get_deferrals(
     request: Request,
-    wa_id: Optional[str] = Query(None, description="Filter by WA ID"),
-    auth: AuthContext = Depends(require_observer),
+    auth: Annotated[AuthContext, Depends(require_observer)],
+    wa_id: Annotated[Optional[str], Query(description="Filter by WA ID")] = None,
 ) -> SuccessResponse[DeferralListResponse]:
     """
     Get list of pending deferrals.
@@ -149,12 +149,15 @@ async def get_deferrals(
         raise_wa_error(f"Failed to retrieve deferrals: {str(e)}")
 
 
-@router.post("/deferrals/{deferral_id}/resolve", response_model=SuccessResponse[ResolveDeferralResponse])
+@router.post(
+    "/deferrals/{deferral_id}/resolve",
+    responses={503: {"description": "Wise Authority service not available"}},
+)
 async def resolve_deferral(
     request: Request,
     deferral_id: str,
     resolve_request: ResolveDeferralRequest,
-    auth: AuthContext = Depends(require_authority),
+    auth: Annotated[AuthContext, Depends(require_authority)],
 ) -> SuccessResponse[ResolveDeferralResponse]:
     """
     Resolve a pending deferral with guidance.
@@ -201,11 +204,11 @@ async def resolve_deferral(
         raise_wa_error(f"Failed to resolve deferral: {str(e)}")
 
 
-@router.get("/permissions", response_model=SuccessResponse[PermissionsListResponse])
+@router.get("/permissions", responses={503: {"description": "Wise Authority service not available"}})
 async def get_permissions(
     request: Request,
-    wa_id: Optional[str] = Query(None, description="WA ID to get permissions for (defaults to current user)"),
-    auth: AuthContext = Depends(require_observer),
+    auth: Annotated[AuthContext, Depends(require_observer)],
+    wa_id: Annotated[Optional[str], Query(description="WA ID to get permissions for (defaults to current user)")] = None,
 ) -> SuccessResponse[PermissionsListResponse]:
     """
     Get WA permission status.
@@ -230,9 +233,10 @@ async def get_permissions(
         raise_wa_error(f"Failed to retrieve permissions: {str(e)}")
 
 
-@router.get("/status", response_model=SuccessResponse[WAStatusResponse])
+@router.get("/status", responses={503: {"description": "Wise Authority service not available"}})
 async def get_wa_status(
-    request: Request, auth: AuthContext = Depends(require_observer)
+    request: Request,
+    auth: Annotated[AuthContext, Depends(require_observer)],
 ) -> SuccessResponse[WAStatusResponse]:
     """
     Get current WA service status.
@@ -270,9 +274,11 @@ async def get_wa_status(
         raise_wa_error(f"Failed to retrieve WA status: {str(e)}")
 
 
-@router.post("/guidance", response_model=SuccessResponse[WAGuidanceResponse])
+@router.post("/guidance", responses={503: {"description": "Wise Authority service not available"}})
 async def request_guidance(
-    request: Request, guidance_request: WAGuidanceRequest, auth: AuthContext = Depends(require_observer)
+    request: Request,
+    guidance_request: WAGuidanceRequest,
+    auth: Annotated[AuthContext, Depends(require_observer)],
 ) -> SuccessResponse[WAGuidanceResponse]:
     """
     Request guidance from WA on a specific topic.

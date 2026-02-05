@@ -6,9 +6,33 @@ Tests the first-run setup wizard API endpoints.
 
 import os
 import sqlite3
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..config import QAModule, QATestCase
+
+# ============================================================================
+# API Key Loading for Live Provider Tests
+# ============================================================================
+
+_KEY_FILES: Dict[str, str] = {
+    "anthropic": os.path.expanduser("~/.anthropic_key"),
+    "google": os.path.expanduser("~/.google_key"),
+    "groq": os.path.expanduser("~/.groq_key"),
+    "openrouter": os.path.expanduser("~/.openrouter_key"),
+    "together": os.path.expanduser("~/.together_key"),
+}
+
+
+def _load_api_key(provider: str) -> Optional[str]:
+    """Load API key from key file, or return None if not available."""
+    key_file = _KEY_FILES.get(provider)
+    if not key_file or not Path(key_file).exists():
+        return None
+    try:
+        return Path(key_file).read_text().strip()
+    except Exception:
+        return None
 
 
 def _validate_templates_response(response: Any, config: Any) -> Dict[str, Any]:
@@ -65,6 +89,119 @@ def _validate_templates_response(response: Any, config: Any) -> Dict[str, Any]:
         errors.append(f"Expected at least {expected_min_count} templates, got {len(data)}: {template_ids}")
 
     return {"passed": len(errors) == 0, "errors": errors}
+
+
+def _validate_list_models_response(response: Any, config: Any) -> Dict[str, Any]:
+    """Validate that list-models response contains live model data.
+
+    Args:
+        response: The requests.Response from /v1/setup/list-models
+        config: QA runner config (unused but required by runner)
+
+    Returns:
+        Dict with {"passed": bool, "errors": list}
+    """
+    errors: List[str] = []
+
+    try:
+        json_data = response.json() if hasattr(response, "json") else response
+    except Exception as e:
+        return {"passed": False, "errors": [f"Failed to parse response JSON: {e}"]}
+
+    data = json_data.get("data", {})
+
+    if not data:
+        return {"passed": False, "errors": ["No data in response"]}
+
+    # Check required fields
+    if "provider" not in data:
+        errors.append("Missing 'provider' field in response")
+    if "models" not in data:
+        errors.append("Missing 'models' field in response")
+    if "source" not in data:
+        errors.append("Missing 'source' field in response")
+
+    source = data.get("source", "")
+    models = data.get("models", [])
+
+    if source == "live":
+        # Live query succeeded - should have models
+        if not models:
+            errors.append("Live query returned 0 models")
+        else:
+            # Verify model structure
+            first_model = models[0]
+            required_fields = ["id", "display_name", "source"]
+            for field in required_fields:
+                if field not in first_model:
+                    errors.append(f"Model missing required field: {field}")
+    elif source == "static":
+        # Static fallback - error should be set
+        if not data.get("error"):
+            errors.append("Static fallback response missing 'error' field")
+
+    return {"passed": len(errors) == 0, "errors": errors}
+
+
+def _build_list_models_tests() -> List[QATestCase]:
+    """Build live model listing tests for providers with available API keys."""
+    tests: List[QATestCase] = []
+
+    provider_configs = [
+        ("anthropic", "anthropic", None),
+        ("google", "google", None),
+        ("groq", "groq", None),
+        ("openrouter", "openrouter", None),
+        ("together", "together", None),
+    ]
+
+    for provider, key_name, base_url in provider_configs:
+        api_key = _load_api_key(key_name)
+        if not api_key:
+            continue
+
+        payload: Dict[str, Any] = {
+            "provider": provider,
+            "api_key": api_key,
+        }
+        if base_url:
+            payload["base_url"] = base_url
+
+        tests.append(
+            QATestCase(
+                name=f"List models from {provider} (live)",
+                module=QAModule.SETUP,
+                endpoint="/v1/setup/list-models",
+                method="POST",
+                payload=payload,
+                expected_status=200,
+                requires_auth=False,
+                timeout=15.0,
+                description=f"Query {provider} API for available models with CIRIS compatibility annotations",
+                custom_validation=_validate_list_models_response,
+            )
+        )
+
+    # Always add a static fallback test (no valid key needed)
+    tests.append(
+        QATestCase(
+            name="List models with invalid key (static fallback)",
+            module=QAModule.SETUP,
+            endpoint="/v1/setup/list-models",
+            method="POST",
+            payload={
+                "provider": "openai",
+                "api_key": "sk-invalid-key-for-fallback-test",
+            },
+            expected_status=200,
+            requires_auth=False,
+            timeout=15.0,
+            description="Verify static fallback when live query fails with invalid credentials",
+            custom_validation=_validate_list_models_response,
+        )
+    )
+
+    return tests
 
 
 class SetupTestModule:
@@ -151,6 +288,8 @@ class SetupTestModule:
                 requires_auth=False,
                 description="Test LLM validation with invalid OpenAI key (returns valid: false)",
             ),
+            # POST /v1/setup/list-models - Live model listing tests
+            *_build_list_models_tests(),
             # NOTE: GET /v1/setup/config test removed - requires actual first-run state
             # which QA runner cannot easily simulate. This endpoint is tested in unit tests.
             # POST /v1/setup/complete - Complete setup (minimal config)

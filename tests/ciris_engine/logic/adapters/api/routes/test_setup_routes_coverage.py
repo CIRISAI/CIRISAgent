@@ -467,9 +467,7 @@ class TestCreateAdapterFromManifest:
 
     def test_supported_platforms_from_metadata(self):
         """Extracts supported_platforms from metadata."""
-        manifest = self._create_mock_manifest(
-            metadata={"supported_platforms": ["linux", "darwin"]}
-        )
+        manifest = self._create_mock_manifest(metadata={"supported_platforms": ["linux", "darwin"]})
         result = _create_adapter_from_manifest(manifest, "test_adapter")
         assert result.supported_platforms == ["linux", "darwin"]
 
@@ -481,9 +479,7 @@ class TestCreateAdapterFromManifest:
 
     def test_supported_platforms_empty_when_invalid_type(self):
         """Empty supported_platforms when metadata value is not a list."""
-        manifest = self._create_mock_manifest(
-            metadata={"supported_platforms": "linux"}  # String, not list
-        )
+        manifest = self._create_mock_manifest(metadata={"supported_platforms": "linux"})  # String, not list
         result = _create_adapter_from_manifest(manifest, "test_adapter")
         assert result.supported_platforms == []
 
@@ -512,3 +508,361 @@ class TestCreateAdapterFromManifest:
         manifest = self._create_mock_manifest(platform_requirements=None)
         result = _create_adapter_from_manifest(manifest, "test_adapter")
         assert result.platform_requirements == []
+
+
+# ============================================================================
+# Live Model Listing Helper Tests
+# ============================================================================
+
+
+class TestDetectOllama:
+    """Tests for _detect_ollama helper."""
+
+    def test_standard_ollama_port(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _detect_ollama
+
+        assert _detect_ollama("http://localhost:11434") is True
+
+    def test_ollama_port_with_path(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _detect_ollama
+
+        assert _detect_ollama("http://myserver:11434/v1") is True
+
+    def test_non_ollama_port(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _detect_ollama
+
+        assert _detect_ollama("http://localhost:8080") is False
+
+    def test_none_url(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _detect_ollama
+
+        assert _detect_ollama(None) is False
+
+    def test_empty_string(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _detect_ollama
+
+        assert _detect_ollama("") is False
+
+
+class TestGetProviderBaseUrl:
+    """Tests for _get_provider_base_url helper."""
+
+    def test_known_provider_groq(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_provider_base_url
+
+        assert _get_provider_base_url("groq", None) == "https://api.groq.com/openai/v1"
+
+    def test_known_provider_together(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_provider_base_url
+
+        assert _get_provider_base_url("together", None) == "https://api.together.xyz/v1"
+
+    def test_known_provider_openrouter(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_provider_base_url
+
+        assert _get_provider_base_url("openrouter", None) == "https://openrouter.ai/api/v1"
+
+    def test_custom_url_overrides_default(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_provider_base_url
+
+        assert _get_provider_base_url("groq", "https://custom.url/v1") == "https://custom.url/v1"
+
+    def test_unknown_provider_no_url(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_provider_base_url
+
+        assert _get_provider_base_url("openai", None) is None
+
+    def test_unknown_provider_with_url(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_provider_base_url
+
+        assert _get_provider_base_url("other", "https://my-api.com/v1") == "https://my-api.com/v1"
+
+
+class TestAnnotateModelsWithCapabilities:
+    """Tests for _annotate_models_with_capabilities helper."""
+
+    def test_known_model_annotated(self):
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, _annotate_models_with_capabilities
+
+        models = [LiveModelInfo(id="gpt-4o", display_name="gpt-4o")]
+        result = _annotate_models_with_capabilities(models, "openai")
+        assert result[0].display_name == "GPT-4o"
+        assert result[0].ciris_compatible is True
+        assert result[0].source == "both"
+
+    def test_unknown_model_left_as_is(self):
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, _annotate_models_with_capabilities
+
+        models = [LiveModelInfo(id="ft:custom-model-2025", display_name="ft:custom-model-2025")]
+        result = _annotate_models_with_capabilities(models, "openai")
+        assert result[0].ciris_compatible is None
+        assert result[0].source == "live"
+
+    def test_unknown_provider(self):
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, _annotate_models_with_capabilities
+
+        models = [LiveModelInfo(id="my-model", display_name="my-model")]
+        result = _annotate_models_with_capabilities(models, "nonexistent_provider")
+        assert result[0].ciris_compatible is None
+
+    def test_empty_models_list(self):
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, _annotate_models_with_capabilities
+
+        result = _annotate_models_with_capabilities([], "openai")
+        assert result == []
+
+
+class TestSortModels:
+    """Tests for _sort_models helper."""
+
+    def test_sorting_order(self):
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, _sort_models
+
+        models = [
+            LiveModelInfo(id="a", display_name="A", ciris_compatible=False),
+            LiveModelInfo(id="b", display_name="B", ciris_compatible=True, ciris_recommended=True),
+            LiveModelInfo(id="c", display_name="C", ciris_compatible=None),
+            LiveModelInfo(id="d", display_name="D", ciris_compatible=True),
+        ]
+        sorted_models = _sort_models(models)
+        assert sorted_models[0].id == "b"  # recommended
+        assert sorted_models[1].id == "d"  # compatible
+        assert sorted_models[2].id == "c"  # unknown
+        assert sorted_models[3].id == "a"  # incompatible
+
+    def test_alphabetical_within_group(self):
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, _sort_models
+
+        models = [
+            LiveModelInfo(id="z", display_name="Zebra", ciris_compatible=True),
+            LiveModelInfo(id="a", display_name="Alpha", ciris_compatible=True),
+        ]
+        sorted_models = _sort_models(models)
+        assert sorted_models[0].id == "a"
+        assert sorted_models[1].id == "z"
+
+    def test_empty_list(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _sort_models
+
+        assert _sort_models([]) == []
+
+
+class TestGetStaticFallbackModels:
+    """Tests for _get_static_fallback_models helper."""
+
+    def test_known_provider(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_static_fallback_models
+
+        models = _get_static_fallback_models("openai")
+        assert len(models) > 0
+        assert all(m.source == "static" for m in models)
+
+    def test_unknown_provider_empty(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_static_fallback_models
+
+        models = _get_static_fallback_models("nonexistent_provider")
+        assert len(models) == 0
+
+
+class TestBuildFallbackResponse:
+    """Tests for _build_fallback_response helper."""
+
+    def test_includes_error_message(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _build_fallback_response
+
+        resp = _build_fallback_response("openai", "Connection timed out")
+        assert resp.source == "static"
+        assert resp.error is not None
+        assert "Connection timed out" in resp.error
+        assert resp.total_count > 0
+        assert resp.provider == "openai"
+
+    def test_unknown_provider_empty_models(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _build_fallback_response
+
+        resp = _build_fallback_response("nonexistent", "No such provider")
+        assert resp.source == "static"
+        assert resp.total_count == 0
+        assert resp.error is not None
+
+
+class TestListModelsForProvider:
+    """Tests for _list_models_for_provider orchestrator."""
+
+    @pytest.mark.asyncio
+    async def test_invalid_api_key_returns_static(self):
+        """Invalid API key triggers static fallback."""
+        from ciris_engine.logic.adapters.api.routes.setup import LLMValidationRequest, _list_models_for_provider
+
+        config = LLMValidationRequest(
+            provider="openai",
+            api_key="your_openai_api_key_here",  # Placeholder key triggers validation error
+        )
+        result = await _list_models_for_provider(config)
+        assert result.source == "static"
+        assert result.error is not None
+
+    @pytest.mark.asyncio
+    async def test_live_query_exception_falls_back(self):
+        """Exception during live query triggers static fallback."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import LLMValidationRequest, _list_models_for_provider
+
+        config = LLMValidationRequest(
+            provider="openai",
+            api_key="sk-valid-key-12345",
+        )
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup._fetch_live_models",
+            side_effect=TimeoutError("Connection timed out"),
+        ):
+            result = await _list_models_for_provider(config)
+            assert result.source == "static"
+            assert result.error is not None
+
+    @pytest.mark.asyncio
+    async def test_successful_live_query(self):
+        """Successful live query returns annotated models."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import (
+            LiveModelInfo,
+            LLMValidationRequest,
+            _list_models_for_provider,
+        )
+
+        config = LLMValidationRequest(
+            provider="openai",
+            api_key="sk-valid-key-12345",
+        )
+
+        mock_models = [
+            LiveModelInfo(id="gpt-4o", display_name="gpt-4o", source="live"),
+            LiveModelInfo(id="gpt-3.5-turbo", display_name="gpt-3.5-turbo", source="live"),
+        ]
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup._fetch_live_models",
+            return_value=mock_models,
+        ):
+            result = await _list_models_for_provider(config)
+            assert result.source == "live"
+            assert result.error is None
+            assert result.total_count == 2
+
+    @pytest.mark.asyncio
+    async def test_local_provider_skips_api_key_validation(self):
+        """Local provider does not require API key validation."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import (
+            LiveModelInfo,
+            LLMValidationRequest,
+            _list_models_for_provider,
+        )
+
+        config = LLMValidationRequest(
+            provider="local",
+            api_key="",
+            base_url="http://localhost:11434",
+        )
+
+        mock_models = [LiveModelInfo(id="llama3", display_name="llama3", source="live")]
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup._fetch_live_models",
+            return_value=mock_models,
+        ):
+            result = await _list_models_for_provider(config)
+            assert result.source == "live"
+
+
+class TestFetchLiveModels:
+    """Tests for _fetch_live_models dispatch function."""
+
+    @pytest.mark.asyncio
+    async def test_dispatches_to_anthropic(self):
+        """Anthropic provider dispatches to _list_models_anthropic."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, LLMValidationRequest, _fetch_live_models
+
+        config = LLMValidationRequest(provider="anthropic", api_key="sk-ant-test123")
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup._list_models_anthropic",
+            return_value=[LiveModelInfo(id="claude-3-opus", display_name="Claude 3 Opus", source="live")],
+        ) as mock_anthropic:
+            result = await _fetch_live_models(config)
+            mock_anthropic.assert_called_once_with("sk-ant-test123")
+            assert len(result) == 1
+            assert result[0].id == "claude-3-opus"
+
+    @pytest.mark.asyncio
+    async def test_dispatches_to_google(self):
+        """Google provider dispatches to _list_models_google."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, LLMValidationRequest, _fetch_live_models
+
+        config = LLMValidationRequest(provider="google", api_key="AIza-test123")
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup._list_models_google",
+            return_value=[LiveModelInfo(id="gemini-2.0-flash-exp", display_name="Gemini 2.0 Flash", source="live")],
+        ) as mock_google:
+            result = await _fetch_live_models(config)
+            mock_google.assert_called_once_with("AIza-test123")
+            assert len(result) == 1
+
+    @pytest.mark.asyncio
+    async def test_dispatches_to_ollama(self):
+        """Local provider with Ollama URL dispatches to _list_models_ollama."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, LLMValidationRequest, _fetch_live_models
+
+        config = LLMValidationRequest(provider="local", api_key="", base_url="http://localhost:11434")
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup._list_models_ollama",
+            return_value=[LiveModelInfo(id="llama3:latest", display_name="llama3:latest", source="live")],
+        ) as mock_ollama:
+            result = await _fetch_live_models(config)
+            mock_ollama.assert_called_once_with("http://localhost:11434")
+            assert len(result) == 1
+
+    @pytest.mark.asyncio
+    async def test_dispatches_to_openai_compatible(self):
+        """OpenAI provider dispatches to _list_models_openai_compatible."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, LLMValidationRequest, _fetch_live_models
+
+        config = LLMValidationRequest(provider="openai", api_key="sk-test123")
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup._list_models_openai_compatible",
+            return_value=[LiveModelInfo(id="gpt-4o", display_name="gpt-4o", source="live")],
+        ) as mock_openai:
+            result = await _fetch_live_models(config)
+            mock_openai.assert_called_once_with("sk-test123", None, "openai")
+            assert len(result) == 1
+
+    @pytest.mark.asyncio
+    async def test_groq_resolves_base_url(self):
+        """Groq provider resolves to correct base URL."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, LLMValidationRequest, _fetch_live_models
+
+        config = LLMValidationRequest(provider="groq", api_key="gsk_test123")
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup._list_models_openai_compatible",
+            return_value=[],
+        ) as mock_openai:
+            await _fetch_live_models(config)
+            mock_openai.assert_called_once_with("gsk_test123", "https://api.groq.com/openai/v1", "groq")

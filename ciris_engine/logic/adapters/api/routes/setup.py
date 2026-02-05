@@ -5,6 +5,7 @@ Provides GUI-based setup wizard accessible at /v1/setup/*.
 Replaces the CLI wizard for pip-installed CIRIS agents.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -17,6 +18,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from ciris_engine.config.model_capabilities import ModelCapabilities, get_model_capabilities
 from ciris_engine.logic.config.db_paths import get_audit_db_full_path
 from ciris_engine.logic.setup.first_run import get_default_config_path, is_first_run
 from ciris_engine.logic.setup.wizard import create_env_file, generate_encryption_key
@@ -122,6 +124,36 @@ class LLMValidationResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error details if validation failed")
 
 
+class LiveModelInfo(BaseModel):
+    """A model returned from a provider's live API, annotated with CIRIS compatibility."""
+
+    id: str = Field(..., description="Model ID as returned by the provider")
+    display_name: str = Field(..., description="Human-readable name (from capabilities DB or derived)")
+    ciris_compatible: Optional[bool] = Field(
+        None, description="True if CIRIS-compatible, False if incompatible, None if unknown"
+    )
+    ciris_recommended: bool = Field(default=False, description="Whether CIRIS recommends this model")
+    tier: Optional[str] = Field(None, description="Performance tier (default, fast, fallback, premium, legacy)")
+    capabilities: Optional[ModelCapabilities] = Field(
+        None, description="Model capabilities if known from capabilities DB"
+    )
+    context_window: Optional[int] = Field(None, description="Context window size if known")
+    notes: Optional[str] = Field(None, description="Additional notes (e.g., rejection reason)")
+    source: str = Field(default="live", description="Data source: 'live', 'static', or 'both'")
+
+
+class ListModelsResponse(BaseModel):
+    """Response from the list-models endpoint."""
+
+    provider: str = Field(..., description="Provider ID that was queried")
+    models: List[LiveModelInfo] = Field(default_factory=list, description="Models sorted by CIRIS compatibility")
+    total_count: int = Field(default=0, description="Total number of models returned")
+    source: str = Field(default="live", description="Data source: 'live' (API queried) or 'static' (fallback)")
+    error: Optional[str] = Field(
+        None, description="If live query failed, the error message (data is from static fallback)"
+    )
+
+
 class SetupCompleteRequest(BaseModel):
     """Request to complete setup."""
 
@@ -201,6 +233,19 @@ class ChangePasswordRequest(BaseModel):
 
     old_password: str = Field(..., description="Current password")
     new_password: str = Field(..., description="New password (min 8 characters)")
+
+
+# ============================================================================
+# Constants for live model listing
+# ============================================================================
+
+_PROVIDER_BASE_URLS: Dict[str, str] = {
+    "openrouter": "https://openrouter.ai/api/v1",
+    "groq": "https://api.groq.com/openai/v1",
+    "together": "https://api.together.xyz/v1",
+}
+
+_LIST_MODELS_TIMEOUT = 10.0  # seconds
 
 
 # ============================================================================
@@ -747,6 +792,237 @@ async def _validate_google_connection(config: LLMValidationRequest) -> LLMValida
     except Exception as e:
         logger.error(f"[VALIDATE_LLM] Google API call FAILED: {type(e).__name__}: {e}")
         return _classify_llm_connection_error(e, "https://generativelanguage.googleapis.com")
+
+
+# =============================================================================
+# LIVE MODEL LISTING HELPER FUNCTIONS
+# =============================================================================
+
+
+def _detect_ollama(base_url: Optional[str]) -> bool:
+    """Check if a base URL points to an Ollama instance."""
+    if not base_url:
+        return False
+    return ":11434" in base_url
+
+
+def _get_provider_base_url(provider: str, base_url: Optional[str]) -> Optional[str]:
+    """Resolve the base URL for a provider, using known defaults if not provided."""
+    if base_url:
+        return base_url
+    return _PROVIDER_BASE_URLS.get(provider)
+
+
+async def _list_models_openai_compatible(api_key: str, base_url: Optional[str], provider: str) -> List[LiveModelInfo]:
+    """Query models from an OpenAI-compatible API endpoint."""
+    from openai import AsyncOpenAI
+
+    client_kwargs: Dict[str, Any] = {"api_key": api_key or "local", "timeout": _LIST_MODELS_TIMEOUT}
+    if base_url:
+        client_kwargs["base_url"] = base_url
+
+    client = AsyncOpenAI(**client_kwargs)
+    models_page = await asyncio.wait_for(client.models.list(), timeout=_LIST_MODELS_TIMEOUT)
+
+    result: List[LiveModelInfo] = []
+    for model in models_page.data:
+        result.append(LiveModelInfo(id=model.id, display_name=model.id, source="live"))
+    return result
+
+
+async def _list_models_anthropic(api_key: str) -> List[LiveModelInfo]:
+    """Query models from the Anthropic API using the native SDK."""
+    import anthropic
+
+    client = anthropic.AsyncAnthropic(api_key=api_key)
+    result: List[LiveModelInfo] = []
+
+    page = await asyncio.wait_for(client.models.list(limit=100), timeout=_LIST_MODELS_TIMEOUT)
+    for model in page.data:
+        display = getattr(model, "display_name", model.id)
+        result.append(LiveModelInfo(id=model.id, display_name=display, source="live"))
+
+    while page.has_next_page():
+        page = await asyncio.wait_for(page.get_next_page(), timeout=_LIST_MODELS_TIMEOUT)
+        for model in page.data:
+            display = getattr(model, "display_name", model.id)
+            result.append(LiveModelInfo(id=model.id, display_name=display, source="live"))
+
+    return result
+
+
+async def _list_models_google(api_key: str) -> List[LiveModelInfo]:
+    """Query models from Google AI using the google-genai SDK."""
+    try:
+        from google import genai
+
+        client = genai.Client(api_key=api_key)
+        raw_models = await asyncio.wait_for(_google_models_to_list(client), timeout=_LIST_MODELS_TIMEOUT)
+
+        result: List[LiveModelInfo] = []
+        for model in raw_models:
+            model_name = model.name or ""
+            # Strip "models/" prefix that Google returns
+            model_id = model_name.replace("models/", "") if model_name.startswith("models/") else model_name
+            display = getattr(model, "display_name", None) or model_id
+            result.append(LiveModelInfo(id=model_id, display_name=display, source="live"))
+        return result
+    except ImportError:
+        # Fall back to OpenAI-compatible endpoint
+        return await _list_models_openai_compatible(
+            api_key, "https://generativelanguage.googleapis.com/v1beta/openai/", "google"
+        )
+
+
+async def _google_models_to_list(client: Any) -> List[Any]:
+    """Collect Google models into a list (helper to work with asyncio.wait_for)."""
+    result = []
+    async for model in client.aio.models.list(config={"query_base": True}):
+        result.append(model)
+    return result
+
+
+async def _list_models_ollama(base_url: str) -> List[LiveModelInfo]:
+    """Query models from an Ollama instance via /api/tags."""
+    import httpx
+
+    # Ollama uses /api/tags, not OpenAI-compatible /v1/models
+    ollama_base = base_url.rstrip("/")
+    if "/v1" in ollama_base:
+        ollama_base = ollama_base.split("/v1")[0]
+
+    async with httpx.AsyncClient(timeout=_LIST_MODELS_TIMEOUT) as client:
+        response = await client.get(f"{ollama_base}/api/tags")
+        response.raise_for_status()
+        data = response.json()
+
+    result: List[LiveModelInfo] = []
+    for model in data.get("models", []):
+        model_name = model.get("name", "")
+        result.append(LiveModelInfo(id=model_name, display_name=model_name, source="live"))
+    return result
+
+
+def _annotate_models_with_capabilities(models: List[LiveModelInfo], provider_id: str) -> List[LiveModelInfo]:
+    """Cross-reference live models with MODEL_CAPABILITIES.json for CIRIS compatibility."""
+    try:
+        config = get_model_capabilities()
+    except Exception:
+        return models
+
+    provider_models = config.get_provider_models(provider_id)
+    if provider_models is None:
+        return models
+
+    for model in models:
+        known_info = provider_models.get(model.id)
+        if known_info is not None:
+            model.display_name = known_info.display_name
+            model.ciris_compatible = known_info.ciris_compatible
+            model.ciris_recommended = known_info.ciris_recommended
+            model.tier = known_info.tier
+            model.capabilities = known_info.capabilities
+            model.context_window = known_info.context_window
+            model.notes = known_info.notes or known_info.rejection_reason
+            model.source = "both"
+
+    return models
+
+
+def _sort_models(models: List[LiveModelInfo]) -> List[LiveModelInfo]:
+    """Sort models: recommended first, then compatible, unknown, incompatible."""
+
+    def sort_key(m: LiveModelInfo) -> tuple[int, str]:
+        if m.ciris_recommended:
+            priority = 0
+        elif m.ciris_compatible is True:
+            priority = 1
+        elif m.ciris_compatible is None:
+            priority = 2
+        else:
+            priority = 3
+        return (priority, m.display_name.lower())
+
+    return sorted(models, key=sort_key)
+
+
+def _get_static_fallback_models(provider_id: str) -> List[LiveModelInfo]:
+    """Load models from MODEL_CAPABILITIES.json as a static fallback."""
+    try:
+        config = get_model_capabilities()
+    except Exception:
+        return []
+
+    provider_models = config.get_provider_models(provider_id)
+    if provider_models is None:
+        return []
+
+    result: List[LiveModelInfo] = []
+    for model_id, info in provider_models.items():
+        result.append(
+            LiveModelInfo(
+                id=model_id,
+                display_name=info.display_name,
+                ciris_compatible=info.ciris_compatible,
+                ciris_recommended=info.ciris_recommended,
+                tier=info.tier,
+                capabilities=info.capabilities,
+                context_window=info.context_window,
+                notes=info.notes or info.rejection_reason,
+                source="static",
+            )
+        )
+    return result
+
+
+def _build_fallback_response(provider_id: str, error_msg: str) -> ListModelsResponse:
+    """Build a response from static capabilities data when live query fails."""
+    fallback_models = _get_static_fallback_models(provider_id)
+    sorted_models = _sort_models(fallback_models)
+    return ListModelsResponse(
+        provider=provider_id,
+        models=sorted_models,
+        total_count=len(sorted_models),
+        source="static",
+        error=f"Live query failed: {error_msg}. Showing cached model data.",
+    )
+
+
+async def _fetch_live_models(config: LLMValidationRequest) -> List[LiveModelInfo]:
+    """Dispatch to provider-specific model listing function."""
+    if config.provider == "anthropic":
+        return await _list_models_anthropic(config.api_key)
+    if config.provider == "google":
+        return await _list_models_google(config.api_key)
+    if config.provider == "local" and _detect_ollama(config.base_url):
+        return await _list_models_ollama(config.base_url or "http://localhost:11434")
+
+    resolved_url = _get_provider_base_url(config.provider, config.base_url)
+    return await _list_models_openai_compatible(config.api_key, resolved_url, config.provider)
+
+
+async def _list_models_for_provider(config: LLMValidationRequest) -> ListModelsResponse:
+    """Query provider for models and annotate with CIRIS compatibility."""
+    # Validate API key first (reuse existing helper)
+    api_key_error = _validate_api_key_for_provider(config)
+    if api_key_error and config.provider != "local":
+        return _build_fallback_response(config.provider, api_key_error.error or "Invalid API key")
+
+    try:
+        live_models = await _fetch_live_models(config)
+    except Exception as e:
+        logger.warning("[LIST_MODELS] Live query failed, falling back to static data")
+        return _build_fallback_response(config.provider, str(e))
+
+    annotated = _annotate_models_with_capabilities(live_models, config.provider)
+    sorted_models = _sort_models(annotated)
+
+    return ListModelsResponse(
+        provider=config.provider,
+        models=sorted_models,
+        total_count=len(sorted_models),
+        source="live",
+    )
 
 
 # =============================================================================
@@ -1370,6 +1646,21 @@ async def validate_llm(config: LLMValidationRequest) -> SuccessResponse[LLMValid
     """
     validation_result = await _validate_llm_connection(config)
     return SuccessResponse(data=validation_result)
+
+
+@router.post("/list-models", response_model=SuccessResponse[ListModelsResponse])
+async def list_models(config: LLMValidationRequest) -> SuccessResponse[ListModelsResponse]:
+    """List available models from a provider's live API.
+
+    Queries the provider's models API using the provided credentials,
+    then cross-references with the on-device MODEL_CAPABILITIES.json
+    for CIRIS compatibility annotations.
+
+    Falls back to static capabilities data if the live query fails.
+    This endpoint is always accessible without authentication during first-run.
+    """
+    result = await _list_models_for_provider(config)
+    return SuccessResponse(data=result)
 
 
 @router.post("/complete", response_model=SuccessResponse[Dict[str, str]])

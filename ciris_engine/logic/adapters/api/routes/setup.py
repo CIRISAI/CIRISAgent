@@ -1481,7 +1481,7 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
 # ============================================================================
 
 
-@router.get("/status", response_model=SuccessResponse[SetupStatusResponse])
+@router.get("/status")
 async def get_setup_status() -> SuccessResponse[SetupStatusResponse]:
     """Check setup status.
 
@@ -1502,7 +1502,7 @@ async def get_setup_status() -> SuccessResponse[SetupStatusResponse]:
     return SuccessResponse(data=status)
 
 
-@router.get("/providers", response_model=SuccessResponse[List[LLMProvider]])
+@router.get("/providers")
 async def list_providers() -> SuccessResponse[List[LLMProvider]]:
     """List available LLM providers.
 
@@ -1513,7 +1513,7 @@ async def list_providers() -> SuccessResponse[List[LLMProvider]]:
     return SuccessResponse(data=providers)
 
 
-@router.get("/templates", response_model=SuccessResponse[List[AgentTemplate]])
+@router.get("/templates")
 async def list_templates() -> SuccessResponse[List[AgentTemplate]]:
     """List available agent templates.
 
@@ -1524,7 +1524,7 @@ async def list_templates() -> SuccessResponse[List[AgentTemplate]]:
     return SuccessResponse(data=templates)
 
 
-@router.get("/adapters", response_model=SuccessResponse[List[AdapterConfig]])
+@router.get("/adapters")
 async def list_adapters() -> SuccessResponse[List[AdapterConfig]]:
     """List available adapters with platform requirements.
 
@@ -1536,7 +1536,10 @@ async def list_adapters() -> SuccessResponse[List[AdapterConfig]]:
     return SuccessResponse(data=adapters)
 
 
-@router.get("/adapters/available", response_model=SuccessResponse[Dict[str, Any]])
+@router.get(
+    "/adapters/available",
+    responses={500: {"description": "Adapter discovery failed"}},
+)
 async def list_available_adapters_for_setup() -> SuccessResponse[Dict[str, Any]]:
     """List discovered adapters with eligibility status (no auth required for setup).
 
@@ -1652,7 +1655,7 @@ async def get_provider_models(provider_id: str) -> SuccessResponse[Dict[str, Any
         )
 
 
-@router.post("/validate-llm", response_model=SuccessResponse[LLMValidationResponse])
+@router.post("/validate-llm")
 async def validate_llm(config: LLMValidationRequest) -> SuccessResponse[LLMValidationResponse]:
     """Validate LLM configuration.
 
@@ -1663,7 +1666,7 @@ async def validate_llm(config: LLMValidationRequest) -> SuccessResponse[LLMValid
     return SuccessResponse(data=validation_result)
 
 
-@router.post("/list-models", response_model=SuccessResponse[ListModelsResponse])
+@router.post("/list-models")
 async def list_models(config: LLMValidationRequest) -> SuccessResponse[ListModelsResponse]:
     """List available models from a provider's live API.
 
@@ -1678,7 +1681,7 @@ async def list_models(config: LLMValidationRequest) -> SuccessResponse[ListModel
     return SuccessResponse(data=result)
 
 
-@router.post("/complete", response_model=SuccessResponse[Dict[str, str]])
+@router.post("/complete")
 async def complete_setup(setup: SetupCompleteRequest, request: Request) -> SuccessResponse[Dict[str, str]]:
     """Complete initial setup.
 
@@ -1820,7 +1823,7 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@router.get("/config", response_model=SuccessResponse[SetupConfigResponse])
+@router.get("/config")
 async def get_current_config(request: Request) -> SuccessResponse[SetupConfigResponse]:
     """Get current configuration.
 
@@ -1862,7 +1865,7 @@ async def get_current_config(request: Request) -> SuccessResponse[SetupConfigRes
     return SuccessResponse(data=config)
 
 
-@router.put("/config", response_model=SuccessResponse[Dict[str, str]])
+@router.put("/config")
 async def update_config(
     setup: SetupCompleteRequest, auth: AuthContext = Depends(get_auth_context)
 ) -> SuccessResponse[Dict[str, str]]:

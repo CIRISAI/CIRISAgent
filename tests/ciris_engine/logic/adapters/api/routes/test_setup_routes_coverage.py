@@ -848,7 +848,7 @@ class TestFetchLiveModels:
             return_value=[LiveModelInfo(id="gpt-4o", display_name="gpt-4o", source="live")],
         ) as mock_openai:
             result = await _fetch_live_models(config)
-            mock_openai.assert_called_once_with("sk-test123", None, "openai")
+            mock_openai.assert_called_once_with("sk-test123", None)
             assert len(result) == 1
 
     @pytest.mark.asyncio
@@ -865,4 +865,4 @@ class TestFetchLiveModels:
             return_value=[],
         ) as mock_openai:
             await _fetch_live_models(config)
-            mock_openai.assert_called_once_with("gsk_test123", "https://api.groq.com/openai/v1", "groq")
+            mock_openai.assert_called_once_with("gsk_test123", "https://api.groq.com/openai/v1")

@@ -813,7 +813,7 @@ def _get_provider_base_url(provider: str, base_url: Optional[str]) -> Optional[s
     return _PROVIDER_BASE_URLS.get(provider)
 
 
-async def _list_models_openai_compatible(api_key: str, base_url: Optional[str], provider: str) -> List[LiveModelInfo]:
+async def _list_models_openai_compatible(api_key: str, base_url: Optional[str]) -> List[LiveModelInfo]:
     """Query models from an OpenAI-compatible API endpoint."""
     from openai import AsyncOpenAI
 
@@ -869,9 +869,7 @@ async def _list_models_google(api_key: str) -> List[LiveModelInfo]:
         return result
     except ImportError:
         # Fall back to OpenAI-compatible endpoint
-        return await _list_models_openai_compatible(
-            api_key, "https://generativelanguage.googleapis.com/v1beta/openai/", "google"
-        )
+        return await _list_models_openai_compatible(api_key, "https://generativelanguage.googleapis.com/v1beta/openai/")
 
 
 async def _google_models_to_list(client: Any) -> List[Any]:
@@ -884,15 +882,20 @@ async def _google_models_to_list(client: Any) -> List[Any]:
 
 async def _list_models_ollama(base_url: str) -> List[LiveModelInfo]:
     """Query models from an Ollama instance via /api/tags."""
+    from urllib.parse import urlparse
+
     import httpx
 
-    # Ollama uses /api/tags, not OpenAI-compatible /v1/models
-    ollama_base = base_url.rstrip("/")
-    if "/v1" in ollama_base:
-        ollama_base = ollama_base.split("/v1")[0]
+    # Validate and sanitize the URL to prevent injection
+    parsed = urlparse(base_url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("Ollama URL must use http or https scheme")
+
+    # Reconstruct a safe URL from parsed components
+    safe_base = f"{parsed.scheme}://{parsed.netloc}"
 
     async with httpx.AsyncClient(timeout=_LIST_MODELS_TIMEOUT) as client:
-        response = await client.get(f"{ollama_base}/api/tags")
+        response = await client.get(f"{safe_base}/api/tags")
         response.raise_for_status()
         data = response.json()
 
@@ -904,29 +907,41 @@ async def _list_models_ollama(base_url: str) -> List[LiveModelInfo]:
 
 
 def _annotate_models_with_capabilities(models: List[LiveModelInfo], provider_id: str) -> List[LiveModelInfo]:
-    """Cross-reference live models with MODEL_CAPABILITIES.json for CIRIS compatibility."""
+    """Cross-reference live models with MODEL_CAPABILITIES.json for CIRIS compatibility.
+
+    Returns a new list of annotated models. Models found in the capabilities DB
+    are enriched with compatibility info; unknown models are passed through unchanged.
+    """
     try:
         config = get_model_capabilities()
     except Exception:
-        return models
+        return list(models)
 
     provider_models = config.get_provider_models(provider_id)
     if provider_models is None:
-        return models
+        return list(models)
 
+    annotated: List[LiveModelInfo] = []
     for model in models:
         known_info = provider_models.get(model.id)
         if known_info is not None:
-            model.display_name = known_info.display_name
-            model.ciris_compatible = known_info.ciris_compatible
-            model.ciris_recommended = known_info.ciris_recommended
-            model.tier = known_info.tier
-            model.capabilities = known_info.capabilities
-            model.context_window = known_info.context_window
-            model.notes = known_info.notes or known_info.rejection_reason
-            model.source = "both"
+            annotated.append(
+                LiveModelInfo(
+                    id=model.id,
+                    display_name=known_info.display_name,
+                    ciris_compatible=known_info.ciris_compatible,
+                    ciris_recommended=known_info.ciris_recommended,
+                    tier=known_info.tier,
+                    capabilities=known_info.capabilities,
+                    context_window=known_info.context_window,
+                    notes=known_info.notes or known_info.rejection_reason,
+                    source="both",
+                )
+            )
+        else:
+            annotated.append(model)
 
-    return models
+    return annotated
 
 
 def _sort_models(models: List[LiveModelInfo]) -> List[LiveModelInfo]:
@@ -998,7 +1013,7 @@ async def _fetch_live_models(config: LLMValidationRequest) -> List[LiveModelInfo
         return await _list_models_ollama(config.base_url or "http://localhost:11434")
 
     resolved_url = _get_provider_base_url(config.provider, config.base_url)
-    return await _list_models_openai_compatible(config.api_key, resolved_url, config.provider)
+    return await _list_models_openai_compatible(config.api_key, resolved_url)
 
 
 async def _list_models_for_provider(config: LLMValidationRequest) -> ListModelsResponse:

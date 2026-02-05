@@ -6,7 +6,7 @@ Manages registration and configuration of SQL, REST, and HL7 connectors.
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -140,11 +140,11 @@ def _validate_rest_config(config: Dict[str, Any]) -> None:
         )
 
 
-@router.post("/sql", response_model=StandardResponse)
+@router.post("/sql")
 async def register_sql_connector(
     request: ConnectorRegistrationRequest,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: Annotated[TokenData, Depends(get_current_user)],
 ) -> StandardResponse:
     """
     Register a new SQL database connector.
@@ -267,10 +267,10 @@ async def register_sql_connector(
     )
 
 
-@router.get("/", response_model=StandardResponse)
+@router.get("/")
 async def list_connectors(
+    current_user: Annotated[TokenData, Depends(get_current_user)],
     connector_type: Optional[str] = None,
-    current_user: TokenData = Depends(get_current_user),
 ) -> StandardResponse:
     """
     List all registered connectors.
@@ -341,11 +341,11 @@ def _test_rest_connector() -> tuple[bool, str]:
     return True, "REST API connection test successful (simulated)"
 
 
-@router.post("/{connector_id}/test", response_model=StandardResponse)
+@router.post("/{connector_id}/test")
 async def test_connector(
     connector_id: str,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: Annotated[TokenData, Depends(get_current_user)],
 ) -> StandardResponse:
     """
     Test connector connection health.
@@ -417,11 +417,11 @@ async def test_connector(
     )
 
 
-@router.patch("/{connector_id}", response_model=StandardResponse)
+@router.patch("/{connector_id}")
 async def update_connector(
     connector_id: str,
     update_request: ConnectorUpdateRequest,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: Annotated[TokenData, Depends(get_current_user)],
 ) -> StandardResponse:
     """
     Update connector configuration.
@@ -484,10 +484,10 @@ async def update_connector(
     )
 
 
-@router.delete("/{connector_id}", response_model=StandardResponse)
+@router.delete("/{connector_id}")
 async def delete_connector(
     connector_id: str,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: Annotated[TokenData, Depends(get_current_user)],
 ) -> StandardResponse:
     """
     Remove a connector from the system.

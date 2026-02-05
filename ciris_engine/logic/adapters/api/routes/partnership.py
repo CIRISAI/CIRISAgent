@@ -29,7 +29,7 @@ Philosophy: "No Bypass Patterns" - partnerships require genuine bilateral consen
 """
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
@@ -383,10 +383,10 @@ def _handle_partnership_defer(
 router = APIRouter(prefix="/partnership", tags=["Partnership"])
 
 
-@router.get("/pending", response_model=StandardResponse)
+@router.get("/pending")
 async def list_pending_partnerships(
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: Annotated[TokenData, Depends(get_current_user)],
 ) -> StandardResponse:
     """
     List all pending partnership requests (admin only).
@@ -420,10 +420,10 @@ async def list_pending_partnerships(
     )
 
 
-@router.get("/metrics", response_model=StandardResponse)
+@router.get("/metrics")
 async def get_partnership_metrics(
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: Annotated[TokenData, Depends(get_current_user)],
 ) -> StandardResponse:
     """
     Get partnership system metrics (admin only).
@@ -447,11 +447,11 @@ async def get_partnership_metrics(
     )
 
 
-@router.get("/history/{user_id}", response_model=StandardResponse)
+@router.get("/history/{user_id}")
 async def get_partnership_history(
     user_id: str,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: Annotated[TokenData, Depends(get_current_user)],
 ) -> StandardResponse:
     """
     Get partnership history for a user (admin only).
@@ -473,11 +473,11 @@ async def get_partnership_history(
     )
 
 
-@router.post("/decide", response_model=StandardResponse)
+@router.post("/decide")
 async def decide_partnership(
     req: Request,
     decision_data: dict[str, Any],
-    current_user: TokenData = Depends(get_current_user),
+    current_user: Annotated[TokenData, Depends(get_current_user)],
 ) -> StandardResponse:
     """
     User decides on a partnership request (accept/reject/defer).

@@ -13,7 +13,7 @@ import secrets
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -1867,7 +1867,8 @@ async def get_current_config(request: Request) -> SuccessResponse[SetupConfigRes
 
 @router.put("/config")
 async def update_config(
-    setup: SetupCompleteRequest, auth: AuthContext = Depends(get_auth_context)
+    setup: SetupCompleteRequest,
+    auth: Annotated[AuthContext, Depends(get_auth_context)],
 ) -> SuccessResponse[Dict[str, str]]:
     """Update configuration.
 

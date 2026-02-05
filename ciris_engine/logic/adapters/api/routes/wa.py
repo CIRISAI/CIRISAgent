@@ -7,7 +7,7 @@ Manages human-in-the-loop deferrals and permissions.
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Annotated, NoReturn, Optional, cast
+from typing import Annotated, NoReturn, Optional, TypeVar, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -65,7 +65,11 @@ def get_wa_service(request: Request) -> WiseAuthorityServiceProtocol:
     return cast(WiseAuthorityServiceProtocol, request.app.state.wise_authority_service)
 
 
-def create_wa_success_response[T: BaseModel](data: T) -> SuccessResponse[T]:
+# TypeVar for generic response wrapper (Python 3.10 compatible)
+_T = TypeVar("_T", bound=BaseModel)
+
+
+def create_wa_success_response(data: _T) -> SuccessResponse[_T]:
     """Create a standardized success response with metadata.
 
     Consolidates the repeated SuccessResponse wrapper pattern.

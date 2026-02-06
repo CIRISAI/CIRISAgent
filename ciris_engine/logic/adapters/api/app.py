@@ -79,13 +79,29 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
     )
 
     # Add CORS middleware
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],  # Configure based on deployment
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    cors_enabled = True
+    cors_origins: list[str] = ["*"]
+    cors_allow_credentials = False
+    if adapter_config:
+        cors_enabled = bool(getattr(adapter_config, "cors_enabled", True))
+        configured_origins = getattr(adapter_config, "cors_origins", ["*"])
+        if isinstance(configured_origins, list) and configured_origins:
+            cors_origins = configured_origins
+        cors_allow_credentials = bool(getattr(adapter_config, "cors_allow_credentials", False))
+
+    if cors_enabled:
+        if "*" in cors_origins and cors_allow_credentials:
+            # Browsers reject wildcard origins with credentials; fail safe by disabling credentials.
+            print("CORS configuration warning: wildcard origins cannot use credentials. Disabling credentials.")
+            cors_allow_credentials = False
+
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=cors_allow_credentials,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     # Add rate limiting middleware if enabled in config
     if adapter_config and getattr(adapter_config, "rate_limit_enabled", False):

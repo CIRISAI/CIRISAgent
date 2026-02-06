@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 from ciris_engine.logic.adapters.api.api_communication import APICommunicationService
 from ciris_engine.logic.adapters.api.app import create_app
 from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
-from ciris_engine.schemas.api.auth import Permission, UserRole
+from ciris_engine.schemas.api.auth import AuthContext, Permission, ROLE_PERMISSIONS, UserRole
 from ciris_engine.schemas.runtime.messages import FetchedMessage
 from ciris_engine.schemas.telemetry.core import (
     ServiceCorrelation,
@@ -381,32 +381,44 @@ def mock_request_with_cognitive_state(mock_app_state_with_cognitive_state):
 
 
 async def _get_admin_user():
-    """Mock dependency that returns admin user."""
-    from ciris_engine.logic.adapters.api.models import TokenData
-
-    return TokenData(username="admin", email="admin@ciris.ai", role="ADMIN")
+    """Mock dependency that returns admin auth context."""
+    return AuthContext(
+        user_id="admin",
+        role=UserRole.ADMIN,
+        permissions=set(ROLE_PERMISSIONS.get(UserRole.ADMIN, set())),
+        api_key_id="test-admin-key",
+        authenticated_at=datetime(2025, 9, 8, 12, 0, 0, tzinfo=timezone.utc),
+    )
 
 
 async def _get_regular_user():
-    """Mock dependency that returns regular user."""
-    from ciris_engine.logic.adapters.api.models import TokenData
-
-    return TokenData(username="user", email="user@example.com", role="USER")
+    """Mock dependency that returns observer auth context."""
+    return AuthContext(
+        user_id="user",
+        role=UserRole.OBSERVER,
+        permissions=set(ROLE_PERMISSIONS.get(UserRole.OBSERVER, set())),
+        api_key_id="test-user-key",
+        authenticated_at=datetime(2025, 9, 8, 12, 0, 0, tzinfo=timezone.utc),
+    )
 
 
 async def _get_system_admin_user():
-    """Mock dependency that returns system admin user."""
-    from ciris_engine.logic.adapters.api.models import TokenData
-
-    return TokenData(username="sysadmin", email="sysadmin@ciris.ai", role="SYSTEM_ADMIN")
+    """Mock dependency that returns system admin auth context."""
+    return AuthContext(
+        user_id="sysadmin",
+        role=UserRole.SYSTEM_ADMIN,
+        permissions=set(ROLE_PERMISSIONS.get(UserRole.SYSTEM_ADMIN, set())),
+        api_key_id="test-sysadmin-key",
+        authenticated_at=datetime(2025, 9, 8, 12, 0, 0, tzinfo=timezone.utc),
+    )
 
 
 @pytest.fixture
 def client_with_admin_auth(app):
     """Create test client with admin auth override."""
-    from ciris_engine.logic.adapters.api.auth import get_current_user
+    from ciris_engine.logic.adapters.api.dependencies.auth import get_auth_context
 
-    app.dependency_overrides[get_current_user] = _get_admin_user
+    app.dependency_overrides[get_auth_context] = _get_admin_user
     client = TestClient(app)
 
     yield client
@@ -418,9 +430,9 @@ def client_with_admin_auth(app):
 @pytest.fixture
 def client_with_user_auth(app):
     """Create test client with regular user auth override."""
-    from ciris_engine.logic.adapters.api.auth import get_current_user
+    from ciris_engine.logic.adapters.api.dependencies.auth import get_auth_context
 
-    app.dependency_overrides[get_current_user] = _get_regular_user
+    app.dependency_overrides[get_auth_context] = _get_regular_user
     client = TestClient(app)
 
     yield client
@@ -432,9 +444,9 @@ def client_with_user_auth(app):
 @pytest.fixture
 def client_with_sysadmin_auth(app):
     """Create test client with system admin auth override."""
-    from ciris_engine.logic.adapters.api.auth import get_current_user
+    from ciris_engine.logic.adapters.api.dependencies.auth import get_auth_context
 
-    app.dependency_overrides[get_current_user] = _get_system_admin_user
+    app.dependency_overrides[get_auth_context] = _get_system_admin_user
     client = TestClient(app)
 
     yield client

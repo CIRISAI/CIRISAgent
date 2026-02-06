@@ -31,9 +31,15 @@ def _get_auth_services(request: Request) -> tuple[Optional[Any], Optional[Any]]:
     return wa_auth_service, api_auth_service
 
 
-def _create_fallback_token_data() -> TokenData:
-    """Create fallback token data for development mode."""
-    return TokenData(username="admin", email="admin@ciris.ai", role="SYSTEM_ADMIN")
+def _ensure_auth_services_available(wa_auth_service: Optional[Any], api_auth_service: Optional[Any]) -> None:
+    """Fail closed when authentication backends are unavailable."""
+    if wa_auth_service is not None or api_auth_service is not None:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Authentication service unavailable",
+    )
 
 
 def _try_api_key_validation(token_str: str, api_auth_service: Optional[Any], logger: Any) -> Optional[TokenData]:
@@ -125,9 +131,7 @@ async def get_current_user(request: Request, token: Optional[str] = Depends(secu
         f"[AUTH] WA auth service available: {wa_auth_service is not None}, API auth service available: {api_auth_service is not None}"
     )
 
-    # Fallback to development mode if no services available
-    if not wa_auth_service and not api_auth_service:
-        return _create_fallback_token_data()
+    _ensure_auth_services_available(wa_auth_service, api_auth_service)
 
     try:
         # Try API key validation first

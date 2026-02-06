@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from fastapi.middleware.cors import CORSMiddleware
 
 from ciris_engine.logic.adapters.api.adapter import ApiPlatform
 from ciris_engine.logic.adapters.api.api_communication import APICommunicationService
@@ -438,6 +439,43 @@ class TestAPIAppCoverage:
         assert app.state.message_handler is None
         assert app.state.communication_service is None
         assert app.state.tool_service is None
+
+    def test_create_app_applies_configured_cors_settings(self):
+        """Test create_app uses adapter CORS configuration."""
+        from ciris_engine.logic.adapters.api.app import create_app
+
+        config = APIAdapterConfig(
+            cors_enabled=True,
+            cors_origins=["http://localhost:3000"],
+            cors_allow_credentials=True,
+        )
+        app = create_app(adapter_config=config)
+
+        cors_middleware = next((m for m in app.user_middleware if m.cls is CORSMiddleware), None)
+        assert cors_middleware is not None
+        assert cors_middleware.kwargs["allow_origins"] == ["http://localhost:3000"]
+        assert cors_middleware.kwargs["allow_credentials"] is True
+
+    def test_create_app_disables_credentials_with_wildcard_origin(self):
+        """Test create_app enforces safe wildcard CORS behavior."""
+        from ciris_engine.logic.adapters.api.app import create_app
+
+        config = APIAdapterConfig(cors_enabled=True, cors_origins=["*"], cors_allow_credentials=True)
+        app = create_app(adapter_config=config)
+
+        cors_middleware = next((m for m in app.user_middleware if m.cls is CORSMiddleware), None)
+        assert cors_middleware is not None
+        assert cors_middleware.kwargs["allow_origins"] == ["*"]
+        assert cors_middleware.kwargs["allow_credentials"] is False
+
+    def test_create_app_can_disable_cors(self):
+        """Test create_app skips CORS middleware when disabled."""
+        from ciris_engine.logic.adapters.api.app import create_app
+
+        config = APIAdapterConfig(cors_enabled=False)
+        app = create_app(adapter_config=config)
+
+        assert all(m.cls is not CORSMiddleware for m in app.user_middleware)
 
 
 class TestAPIConcurrentHandling:

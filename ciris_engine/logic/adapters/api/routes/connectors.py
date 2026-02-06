@@ -10,8 +10,10 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from ..auth import get_current_user
-from ..models import StandardResponse, TokenData
+from ciris_engine.schemas.api.auth import UserRole
+
+from ..dependencies.auth import AuthContext, require_authenticated
+from ..models import StandardResponse
 
 router = APIRouter(prefix="/connectors", tags=["Connectors"])
 
@@ -85,6 +87,11 @@ class ConnectorUpdateRequest(BaseModel):
 _connector_registry: Dict[str, Dict[str, Any]] = {}
 
 
+def _is_admin_role(role: UserRole) -> bool:
+    """Check whether role is permitted to perform connector administration."""
+    return role in {UserRole.ADMIN, UserRole.SYSTEM_ADMIN}
+
+
 def _validate_sql_config(config: Dict[str, Any]) -> None:
     """Validate SQL connector configuration.
 
@@ -141,7 +148,7 @@ def _validate_rest_config(config: Dict[str, Any]) -> None:
 async def register_sql_connector(
     request: ConnectorRegistrationRequest,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """
     Register a new SQL database connector.
@@ -162,10 +169,10 @@ async def register_sql_connector(
     logger = logging.getLogger(__name__)
 
     logger.debug(f"[CONNECTOR_REG] Request to register SQL connector: {request.config.get('connector_name')}")
-    logger.debug(f"[CONNECTOR_REG] Current user: {current_user.username}, Role: {current_user.role}")
+    logger.debug(f"[CONNECTOR_REG] Current user: {current_user.user_id}, Role: {current_user.role.value}")
 
     # Verify admin privileges
-    if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
+    if not _is_admin_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only administrators can register connectors",
@@ -192,7 +199,7 @@ async def register_sql_connector(
         "config": request.config,
         "status": "registered",
         "registered_at": datetime.now(timezone.utc).isoformat(),
-        "registered_by": current_user.username,
+        "registered_by": current_user.user_id,
         "enabled": True,
         "total_requests": 0,
     }
@@ -217,7 +224,7 @@ async def register_sql_connector(
     # Sanitize user-controlled data before logging
     safe_connector_id = sanitize_for_log(connector_id, max_length=100)
     safe_connector_name = sanitize_for_log(request.config.get("connector_name", "unknown"), max_length=100)
-    safe_username = sanitize_username(current_user.username)
+    safe_username = sanitize_username(current_user.user_id)
 
     logger.info(f"SQL connector registered: {safe_connector_id} ({safe_connector_name}) by {safe_username}")
 
@@ -243,7 +250,7 @@ async def register_sql_connector(
 @router.get("/", response_model=StandardResponse)
 async def list_connectors(
     connector_type: Optional[str] = None,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """
     List all registered connectors.
@@ -253,7 +260,7 @@ async def list_connectors(
     Requires admin privileges.
     """
     # Verify admin privileges
-    if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
+    if not _is_admin_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only administrators can list connectors",
@@ -296,7 +303,7 @@ async def list_connectors(
 async def test_connector(
     connector_id: str,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """
     Test connector connection health.
@@ -311,7 +318,7 @@ async def test_connector(
     logger = logging.getLogger(__name__)
 
     # Verify admin privileges
-    if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
+    if not _is_admin_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only administrators can test connectors",
@@ -386,7 +393,7 @@ async def test_connector(
     from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log, sanitize_username
 
     safe_connector_id = sanitize_for_log(connector_id, max_length=100)
-    safe_username = sanitize_username(current_user.username)
+    safe_username = sanitize_username(current_user.user_id)
     safe_message = sanitize_for_log(result.message, max_length=200)
     logger.info(f"Connector {safe_connector_id} tested by {safe_username}: {safe_message}")
 
@@ -404,7 +411,7 @@ async def test_connector(
 async def update_connector(
     connector_id: str,
     update_request: ConnectorUpdateRequest,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """
     Update connector configuration.
@@ -418,7 +425,7 @@ async def update_connector(
     logger = logging.getLogger(__name__)
 
     # Verify admin privileges
-    if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
+    if not _is_admin_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only administrators can update connectors",
@@ -443,12 +450,12 @@ async def update_connector(
         connector["status"] = "registered" if update_request.enabled else "disabled"
 
     connector["last_updated"] = datetime.now(timezone.utc).isoformat()
-    connector["last_updated_by"] = current_user.username
+    connector["last_updated_by"] = current_user.user_id
 
     from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log, sanitize_username
 
     safe_connector_id = sanitize_for_log(connector_id, max_length=100)
-    safe_username = sanitize_username(current_user.username)
+    safe_username = sanitize_username(current_user.user_id)
     logger.info(f"Connector {safe_connector_id} updated by {safe_username}")
 
     return StandardResponse(
@@ -470,7 +477,7 @@ async def update_connector(
 @router.delete("/{connector_id}", response_model=StandardResponse)
 async def delete_connector(
     connector_id: str,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """
     Remove a connector from the system.
@@ -484,7 +491,7 @@ async def delete_connector(
     logger = logging.getLogger(__name__)
 
     # Verify admin privileges
-    if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
+    if not _is_admin_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only administrators can delete connectors",
@@ -517,7 +524,7 @@ async def delete_connector(
 
     safe_connector_id = sanitize_for_log(connector_id, max_length=100)
     safe_connector_name = sanitize_for_log(connector_name, max_length=100)
-    safe_username = sanitize_username(current_user.username)
+    safe_username = sanitize_username(current_user.user_id)
     logger.warning(f"Connector {safe_connector_id} ({safe_connector_name}) deleted by {safe_username}")
 
     return StandardResponse(

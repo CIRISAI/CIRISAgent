@@ -25,6 +25,7 @@ from ciris_engine.logic.persistence.models.dsar import (
 )
 from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
+from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.consent.core import (
     ConsentDecayStatus,
     ConsentStream,
@@ -33,10 +34,15 @@ from ciris_engine.schemas.consent.core import (
     DSARExportPackage,
 )
 
-from ..auth import get_current_user
-from ..models import StandardResponse, TokenData
+from ..dependencies.auth import AuthContext, require_authenticated
+from ..models import StandardResponse
 
 router = APIRouter(prefix="/dsar", tags=["DSAR"])
+
+
+def _is_admin_role(role: UserRole) -> bool:
+    """Check whether role can perform DSAR administration actions."""
+    return role in {UserRole.ADMIN, UserRole.SYSTEM_ADMIN}
 
 
 class DSARRequest(BaseModel):
@@ -439,14 +445,14 @@ async def check_dsar_status(ticket_id: str) -> StandardResponse:
 
 @router.get("/", response_model=StandardResponse)
 async def list_dsar_requests(
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """
     List all DSAR requests (admin only).
 
     This endpoint is for administrators to review pending requests.
     """
-    if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
+    if not _is_admin_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only administrators can list DSAR requests",
@@ -485,7 +491,7 @@ async def update_dsar_status(
     ticket_id: str,
     new_status: str,
     notes: Optional[str] = None,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """
     Update the status of a DSAR request (admin only).
@@ -493,7 +499,7 @@ async def update_dsar_status(
     Status workflow:
     - pending_review → in_progress → completed/rejected
     """
-    if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
+    if not _is_admin_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only administrators can update DSAR status",
@@ -525,7 +531,7 @@ async def update_dsar_status(
     logger = logging.getLogger(__name__)
     # Sanitize ALL user input before logging to prevent log injection
     safe_ticket_id = sanitize_for_log(ticket_id, max_length=100)  # Sanitize ticket_id too
-    safe_username = sanitize_username(current_user.username)
+    safe_username = sanitize_username(current_user.user_id)
     safe_status = sanitize_for_log(new_status, max_length=50)
     logger.info(f"DSAR {safe_ticket_id} status updated to {safe_status} by {safe_username}")
 
@@ -534,7 +540,7 @@ async def update_dsar_status(
         data={
             "ticket_id": ticket_id,
             "new_status": new_status,
-            "updated_by": current_user.username,
+            "updated_by": current_user.user_id,
         },
         message=f"DSAR {ticket_id} status updated to {new_status}",
         metadata={

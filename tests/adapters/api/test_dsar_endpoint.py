@@ -11,7 +11,9 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.app import create_app
+from ciris_engine.logic.adapters.api.dependencies.auth import get_auth_context
 from ciris_engine.logic.adapters.api.routes import dsar
+from ciris_engine.schemas.api.auth import AuthContext, ROLE_PERMISSIONS, UserRole
 
 
 @pytest.fixture
@@ -29,6 +31,21 @@ def auth_headers():
 
 class TestDSAREndpoint:
     """Test DSAR endpoint functionality."""
+
+    @staticmethod
+    def _override_auth(client: TestClient, user_id: str, role: UserRole) -> None:
+        """Override auth dependency with deterministic test context."""
+
+        async def _auth_override() -> AuthContext:
+            return AuthContext(
+                user_id=user_id,
+                role=role,
+                permissions=set(ROLE_PERMISSIONS.get(role, set())),
+                api_key_id="test-key",
+                authenticated_at=datetime.now(timezone.utc),
+            )
+
+        client.app.dependency_overrides[get_auth_context] = _auth_override
 
     def test_submit_dsar_request(self, client, test_db):
         """Test submitting a DSAR request."""
@@ -102,11 +119,9 @@ class TestDSAREndpoint:
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert "not found" in response.json()["detail"]
 
-    @patch("ciris_engine.logic.adapters.api.routes.dsar.get_current_user")
-    def test_list_dsar_requests_admin(self, mock_auth, client, test_db):
+    def test_list_dsar_requests_admin(self, client, test_db):
         """Test listing DSAR requests as admin."""
-        # Mock admin user
-        mock_auth.return_value = MagicMock(user_id="admin", username="admin", role="ADMIN")
+        self._override_auth(client, user_id="admin", role=UserRole.ADMIN)
 
         # Submit some requests first
         for i in range(3):
@@ -123,23 +138,16 @@ class TestDSAREndpoint:
         assert data["data"]["total"] >= 3
 
     def test_list_dsar_requests_non_admin(self, client, test_db):
-        """Test that non-admins cannot list DSAR requests (when auth is implemented)."""
-        # TODO: Currently auth always returns admin, so this test is adjusted
-        # When proper auth is implemented, this should test 403 for non-admins
+        """Test that non-admins cannot list DSAR requests."""
+        self._override_auth(client, user_id="observer", role=UserRole.OBSERVER)
 
-        # For now, test that the endpoint exists and requires some auth
-        response = client.get("/v1/dsar/", headers={"Authorization": "Bearer user_token"})
+        response = client.get("/v1/dsar/", headers={"Authorization": "Bearer observer_token"})
 
-        # Currently returns 200 because mock auth always returns SYSTEM_ADMIN
-        assert response.status_code == status.HTTP_200_OK
-        # Once auth is implemented, this should be:
-        # assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    @patch("ciris_engine.logic.adapters.api.routes.dsar.get_current_user")
-    def test_update_dsar_status_admin(self, mock_auth, client, test_db):
+    def test_update_dsar_status_admin(self, client, test_db):
         """Test updating DSAR status as admin."""
-        # Mock admin user
-        mock_auth.return_value = MagicMock(user_id="admin", username="admin", role="ADMIN")
+        self._override_auth(client, user_id="admin", role=UserRole.ADMIN)
 
         # Submit a request first
         request_data = {"request_type": "delete", "email": "update@example.com"}
@@ -159,11 +167,9 @@ class TestDSAREndpoint:
         assert data["data"]["new_status"] == "in_progress"
         assert data["data"]["updated_by"] == "admin"
 
-    @patch("ciris_engine.logic.adapters.api.routes.dsar.get_current_user")
-    def test_update_dsar_invalid_status(self, mock_auth, client, test_db):
+    def test_update_dsar_invalid_status(self, client, test_db):
         """Test updating DSAR with invalid status."""
-        # Mock admin user
-        mock_auth.return_value = MagicMock(user_id="admin", username="admin", role="ADMIN")
+        self._override_auth(client, user_id="admin", role=UserRole.ADMIN)
 
         # Submit a request first
         request_data = {"request_type": "access", "email": "invalid@example.com"}

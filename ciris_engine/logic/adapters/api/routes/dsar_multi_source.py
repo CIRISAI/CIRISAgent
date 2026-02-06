@@ -22,8 +22,8 @@ from ciris_engine.logic.services.governance.dsar.schemas import (
 )
 from ciris_engine.schemas.consent.core import DSARExportFormat
 
-from ..auth import get_current_user
-from ..models import StandardResponse, TokenData
+from ..dependencies.auth import AuthContext, require_authenticated
+from ..models import StandardResponse
 
 router = APIRouter(prefix="/dsar/multi-source", tags=["DSAR Multi-Source"])
 
@@ -152,7 +152,7 @@ def _initialize_orchestrator(req: Request) -> DSAROrchestrator:
 async def submit_multi_source_dsar(
     request: MultiSourceDSARRequest,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """
     Submit a multi-source Data Subject Access Request (DSAR).
@@ -335,7 +335,7 @@ async def submit_multi_source_dsar(
 @router.get("/{ticket_id}", response_model=StandardResponse)
 async def get_multi_source_status(
     ticket_id: str,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """
     Get real-time status of multi-source DSAR request.
@@ -389,7 +389,7 @@ async def get_multi_source_status(
 @router.get("/{ticket_id}/partial", response_model=StandardResponse)
 async def get_partial_results(
     ticket_id: str,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """
     Get partial results as sources complete.
@@ -436,7 +436,7 @@ async def get_partial_results(
 @router.delete("/{ticket_id}", response_model=StandardResponse)
 async def cancel_multi_source_request(
     ticket_id: str,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """
     Cancel in-progress multi-source DSAR request.

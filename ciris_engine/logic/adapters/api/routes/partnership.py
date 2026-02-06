@@ -33,11 +33,12 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.consent.core import PartnershipHistory, PartnershipMetrics, PartnershipRequest
 from ciris_engine.schemas.runtime.enums import TaskStatus
 
-from ..auth import get_current_user
-from ..models import StandardResponse, TokenData
+from ..dependencies.auth import AuthContext, require_authenticated
+from ..models import StandardResponse
 
 
 def _handle_partnership_accept(
@@ -45,7 +46,7 @@ def _handle_partnership_accept(
     task_id: str,
     task: Any,
     partnership_manager: Any,
-    current_user: TokenData,
+    decided_by: str,
 ) -> StandardResponse:
     """Handle partnership acceptance - creates PARTNERED consent status.
 
@@ -54,7 +55,7 @@ def _handle_partnership_accept(
         task_id: Partnership task ID
         task: Task object
         partnership_manager: Partnership manager instance
-        current_user: Current authenticated user
+        decided_by: User identifier for audit trail
 
     Returns:
         StandardResponse with partnership acceptance confirmation
@@ -139,7 +140,7 @@ def _handle_partnership_accept(
         message=f"Partnership accepted for {partnership_user_id}",
         metadata={
             "timestamp": now.isoformat(),
-            "decided_by": current_user.username,
+            "decided_by": decided_by,
         },
     )
 
@@ -149,7 +150,7 @@ def _handle_partnership_reject(
     task_id: str,
     task: Any,
     partnership_manager: Any,
-    current_user: TokenData,
+    decided_by: str,
     reason: Optional[str],
 ) -> StandardResponse:
     """Handle partnership rejection.
@@ -159,7 +160,7 @@ def _handle_partnership_reject(
         task_id: Partnership task ID
         task: Task object
         partnership_manager: Partnership manager instance
-        current_user: Current authenticated user
+        decided_by: User identifier for audit trail
         reason: Optional reason for rejection
 
     Returns:
@@ -193,7 +194,7 @@ def _handle_partnership_reject(
         user_id=partnership_user_id,
         task_id=task_id,
         outcome_type=PartnershipOutcomeType.REJECTED,
-        decided_by=current_user.username,
+        decided_by=decided_by,
         decided_at=datetime.now(timezone.utc),
         reason=reason or "Partnership request was declined",
         notes=None,
@@ -215,7 +216,7 @@ def _handle_partnership_reject(
         message=f"Partnership rejected for {partnership_user_id}",
         metadata={
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "decided_by": current_user.username,
+            "decided_by": decided_by,
         },
     )
 
@@ -225,7 +226,7 @@ def _handle_partnership_defer(
     task_id: str,
     task: Any,
     partnership_manager: Any,
-    current_user: TokenData,
+    decided_by: str,
     reason: Optional[str],
 ) -> StandardResponse:
     """Handle partnership deferral.
@@ -235,7 +236,7 @@ def _handle_partnership_defer(
         task_id: Partnership task ID
         task: Task object
         partnership_manager: Partnership manager instance
-        current_user: Current authenticated user
+        decided_by: User identifier for audit trail
         reason: Optional reason for deferral
 
     Returns:
@@ -265,7 +266,7 @@ def _handle_partnership_defer(
         user_id=partnership_user_id,
         task_id=task_id,
         outcome_type=PartnershipOutcomeType.DEFERRED,
-        decided_by=current_user.username,
+        decided_by=decided_by,
         decided_at=datetime.now(timezone.utc),
         reason=reason or "More information needed before deciding",
         notes=None,
@@ -287,7 +288,7 @@ def _handle_partnership_defer(
         message=f"Partnership deferred for {partnership_user_id}",
         metadata={
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "decided_by": current_user.username,
+            "decided_by": decided_by,
         },
     )
 
@@ -295,10 +296,27 @@ def _handle_partnership_defer(
 router = APIRouter(prefix="/partnership", tags=["Partnership"])
 
 
+def _is_admin_role(role: UserRole) -> bool:
+    """Check whether role can perform admin-only partnership operations."""
+    return role in {UserRole.ADMIN, UserRole.SYSTEM_ADMIN}
+
+
+def _resolve_actor_name(req: Request, auth: AuthContext) -> str:
+    """Resolve a stable actor name for audit metadata and parity with legacy behavior."""
+    auth_service = getattr(req.app.state, "auth_service", None)
+    if not auth_service:
+        return auth.user_id
+
+    user = auth_service.get_user(auth.user_id)
+    if user and getattr(user, "name", None):
+        return user.name
+    return auth.user_id
+
+
 @router.get("/pending", response_model=StandardResponse)
 async def list_pending_partnerships(
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """
     List all pending partnership requests (admin only).
@@ -308,7 +326,7 @@ async def list_pending_partnerships(
 
     Requires: ADMIN or SYSTEM_ADMIN role
     """
-    if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
+    if not _is_admin_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only administrators can view pending partnerships",
@@ -358,7 +376,7 @@ async def list_pending_partnerships(
 @router.get("/metrics", response_model=StandardResponse)
 async def get_partnership_metrics(
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """
     Get partnership system metrics (admin only).
@@ -371,7 +389,7 @@ async def get_partnership_metrics(
 
     Requires: ADMIN or SYSTEM_ADMIN role
     """
-    if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
+    if not _is_admin_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only administrators can view partnership metrics",
@@ -408,7 +426,7 @@ async def get_partnership_metrics(
 async def get_partnership_history(
     user_id: str,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """
     Get partnership history for a user (admin only).
@@ -418,7 +436,7 @@ async def get_partnership_history(
 
     Requires: ADMIN or SYSTEM_ADMIN role
     """
-    if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
+    if not _is_admin_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only administrators can view partnership history",
@@ -456,7 +474,7 @@ async def get_partnership_history(
 async def decide_partnership(
     req: Request,
     decision_data: dict[str, Any],
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """
     User decides on a partnership request (accept/reject/defer).
@@ -522,9 +540,12 @@ async def decide_partnership(
             detail="Task does not contain valid user context",
         )
 
+    actor_name = _resolve_actor_name(req, current_user)
+    actor_identifiers = {current_user.user_id, actor_name}
+
     # Verify the current user has permission to decide on this partnership
     # Either the user involved in the partnership OR an admin can decide
-    if current_user.username != partnership_user_id and current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
+    if partnership_user_id not in actor_identifiers and not _is_admin_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only decide on your own partnership requests",
@@ -534,8 +555,8 @@ async def decide_partnership(
     partnership_manager = consent_manager._partnership_manager
 
     if decision == "accept":
-        return _handle_partnership_accept(partnership_user_id, task_id, task, partnership_manager, current_user)
+        return _handle_partnership_accept(partnership_user_id, task_id, task, partnership_manager, actor_name)
     elif decision == "reject":
-        return _handle_partnership_reject(partnership_user_id, task_id, task, partnership_manager, current_user, reason)
+        return _handle_partnership_reject(partnership_user_id, task_id, task, partnership_manager, actor_name, reason)
     else:  # defer
-        return _handle_partnership_defer(partnership_user_id, task_id, task, partnership_manager, current_user, reason)
+        return _handle_partnership_defer(partnership_user_id, task_id, task, partnership_manager, actor_name, reason)

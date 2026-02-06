@@ -28,8 +28,8 @@ from ciris_engine.logic.persistence.models.tickets import (
 )
 from ciris_engine.schemas.config.tickets import TicketsConfig, TicketSOPConfig
 
-from ..auth import get_current_user
-from ..models import StandardResponse, TokenData
+from ..dependencies.auth import AuthContext, require_authenticated
+from ..models import StandardResponse
 
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
 
@@ -186,7 +186,7 @@ def _initialize_ticket_metadata(sop_config: TicketSOPConfig) -> Dict[str, Any]:
 @router.get("/sops", response_model=List[str])
 async def list_supported_sops(
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> List[str]:
     """List all supported Standard Operating Procedures for this agent.
 
@@ -211,7 +211,7 @@ async def list_supported_sops(
 async def get_sop_metadata(
     sop: str,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> SOPMetadataResponse:
     """Get metadata about a specific Standard Operating Procedure.
 
@@ -252,7 +252,7 @@ async def get_sop_metadata(
 async def create_new_ticket(
     request: CreateTicketRequest,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> TicketResponse:
     """Create a new ticket.
 
@@ -338,7 +338,7 @@ async def create_new_ticket(
 async def get_ticket_by_id(
     ticket_id: str,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> TicketResponse:
     """Get a specific ticket by ID.
 
@@ -366,7 +366,7 @@ async def list_all_tickets(
     status_filter: Optional[str] = None,
     email: Optional[str] = None,
     limit: Optional[int] = None,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> List[TicketResponse]:
     """List tickets with optional filters.
 
@@ -476,7 +476,7 @@ async def update_existing_ticket(
     ticket_id: str,
     request: UpdateTicketRequest,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> TicketResponse:
     """Update ticket status, metadata, or notes.
 
@@ -508,7 +508,7 @@ async def update_existing_ticket(
 async def cancel_ticket(
     ticket_id: str,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: AuthContext = Depends(require_authenticated),
 ) -> StandardResponse:
     """Cancel/delete a ticket.
 

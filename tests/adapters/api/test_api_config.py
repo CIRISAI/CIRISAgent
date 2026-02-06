@@ -20,6 +20,7 @@ class TestAPIConfig:
         assert config.host == "127.0.0.1"
         assert config.port == 8080
         assert config.cors_origins == ["*"]
+        assert config.cors_allow_credentials is False
         assert config.rate_limit_enabled is True  # Enabled by default in 1.3.1+
         assert config.rate_limit_per_minute == 60
 
@@ -61,6 +62,7 @@ class TestAPIConfig:
             {
                 "CIRIS_API_PORT": "8888",  # String that should become int
                 "CIRIS_API_CORS_ORIGINS": '["http://localhost:3000", "http://localhost:3001"]',  # JSON string
+                "CIRIS_API_CORS_ALLOW_CREDENTIALS": "true",
             },
         ):
             config = APIAdapterConfig()
@@ -69,6 +71,7 @@ class TestAPIConfig:
             assert config.port == 8888
             assert isinstance(config.port, int)
             assert config.cors_origins == ["http://localhost:3000", "http://localhost:3001"]
+            assert config.cors_allow_credentials is True
 
     def test_production_bug_scenario(self):
         """Test the production bug where env vars were overridden."""

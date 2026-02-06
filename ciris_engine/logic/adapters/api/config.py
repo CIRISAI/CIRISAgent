@@ -23,6 +23,10 @@ class APIAdapterConfig(BaseModel):
 
     cors_enabled: bool = Field(default=True, description="Enable CORS support")
     cors_origins: list[str] = Field(default_factory=lambda: ["*"], description="Allowed CORS origins")
+    cors_allow_credentials: bool = Field(
+        default=False,
+        description="Allow credentialed CORS requests (must not be combined with wildcard origins)",
+    )
 
     max_request_size: int = Field(default=1024 * 1024, description="Maximum request size in bytes")
     request_timeout: float = Field(default=30.0, description="Request timeout in seconds")
@@ -86,6 +90,10 @@ class APIAdapterConfig(BaseModel):
                 self.cors_origins = json.loads(env_cors_origins)
             except (ValueError, json.JSONDecodeError):
                 pass
+
+        env_cors_credentials = get_env_var("CIRIS_API_CORS_ALLOW_CREDENTIALS")
+        if env_cors_credentials is not None:
+            self.cors_allow_credentials = env_cors_credentials.lower() in ("true", "1", "yes", "on")
 
         # Check for proxy/managed mode configuration
         env_agent_id = get_env_var("CIRIS_AGENT_ID")

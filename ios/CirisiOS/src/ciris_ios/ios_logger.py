@@ -11,6 +11,7 @@ Log files are written to ~/Documents/ciris/logs/
 - swift_bridge.log - Swift-side logs (written by Swift)
 """
 
+import json
 import logging
 import os
 import sys
@@ -19,11 +20,11 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-import json
 
 # Log directory
 _LOG_DIR: Optional[Path] = None
 _INITIALIZED = False
+
 
 # Custom formatters
 class IOSFormatter(logging.Formatter):
@@ -88,14 +89,14 @@ def init_logging(component: str = "kmp") -> logging.Logger:
         if main_log.exists() and main_log.stat().st_size > 1_000_000:
             _rotate_log(main_log)
 
-        main_handler = logging.FileHandler(main_log, mode='a', encoding='utf-8')
+        main_handler = logging.FileHandler(main_log, mode="a", encoding="utf-8")
         main_handler.setLevel(logging.DEBUG)
         main_handler.setFormatter(formatter)
         root_logger.addHandler(main_handler)
 
         # 2. Error log (errors only)
         error_log = log_dir / "kmp_errors.log"
-        error_handler = logging.FileHandler(error_log, mode='a', encoding='utf-8')
+        error_handler = logging.FileHandler(error_log, mode="a", encoding="utf-8")
         error_handler.setLevel(logging.ERROR)
         error_handler.setFormatter(formatter)
         root_logger.addHandler(error_handler)
@@ -183,7 +184,7 @@ def write_status_file(status: dict):
     status["timestamp_unix"] = time.time()
 
     try:
-        with open(status_path, 'w') as f:
+        with open(status_path, "w") as f:
             json.dump(status, f, indent=2)
     except Exception as e:
         print(f"[ios_logger] Failed to write status file: {e}")
@@ -227,7 +228,7 @@ def get_recent_logs(lines: int = 100, log_type: str = "runtime") -> str:
         return f"No {log_type} log file found"
 
     try:
-        with open(log_file, 'r') as f:
+        with open(log_file, "r") as f:
             all_lines = f.readlines()
             return "".join(all_lines[-lines:])
     except Exception as e:
@@ -238,10 +239,7 @@ def get_all_logs_summary() -> dict:
     """Get a summary of all log files."""
     log_dir = get_log_dir()
 
-    summary = {
-        "log_directory": str(log_dir),
-        "files": {}
-    }
+    summary = {"log_directory": str(log_dir), "files": {}}
 
     for log_file in log_dir.glob("*.log"):
         try:
@@ -250,7 +248,7 @@ def get_all_logs_summary() -> dict:
                 "size_bytes": stat.st_size,
                 "size_human": _human_size(stat.st_size),
                 "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                "lines": sum(1 for _ in open(log_file))
+                "lines": sum(1 for _ in open(log_file)),
             }
         except Exception as e:
             summary["files"][log_file.name] = {"error": str(e)}
@@ -260,7 +258,7 @@ def get_all_logs_summary() -> dict:
 
 def _human_size(size: int) -> str:
     """Convert bytes to human readable format."""
-    for unit in ['B', 'KB', 'MB', 'GB']:
+    for unit in ["B", "KB", "MB", "GB"]:
         if size < 1024:
             return f"{size:.1f} {unit}"
         size /= 1024

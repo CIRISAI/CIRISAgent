@@ -16,13 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..device_helper import (
-    DeviceHelper,
-    DeviceInfo,
-    LogCollection,
-    Platform,
-    UIElement,
-)
+from ..device_helper import DeviceHelper, DeviceInfo, LogCollection, Platform, UIElement
 
 
 class XCRunHelper(DeviceHelper):
@@ -100,11 +94,7 @@ class XCRunHelper(DeviceHelper):
                 # Extract iOS version from runtime string
                 # e.g., "com.apple.CoreSimulator.SimRuntime.iOS-17-0" -> "17.0"
                 version_match = re.search(r"iOS[.-](\d+)[.-](\d+)", runtime)
-                os_version = (
-                    f"{version_match.group(1)}.{version_match.group(2)}"
-                    if version_match
-                    else None
-                )
+                os_version = f"{version_match.group(1)}.{version_match.group(2)}" if version_match else None
 
                 for device in device_list:
                     if device.get("isAvailable", False):
@@ -634,9 +624,7 @@ class XCRunHelper(DeviceHelper):
     def set_location(self, latitude: float, longitude: float) -> bool:
         """Set simulated location."""
         target = self._get_device_target()
-        result = self._run_simctl(
-            ["location", target, "set", f"{latitude},{longitude}"]
-        )
+        result = self._run_simctl(["location", target, "set", f"{latitude},{longitude}"])
         return result.returncode == 0
 
     def push_notification(self, bundle_id: str, payload: dict) -> bool:

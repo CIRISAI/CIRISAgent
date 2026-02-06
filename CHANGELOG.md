@@ -5,6 +5,60 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.5] - 2026-02-05
+
+### Added
+
+- **Live Provider Model Listing** - `POST /v1/setup/list-models` endpoint for real-time model discovery
+  - Fetches available models directly from provider APIs during setup
+  - Supports OpenAI, Anthropic, Google, and OpenRouter providers
+  - 30-second timeout with graceful fallback to cached defaults
+
+- **Web UI QA Runner** - End-to-end browser testing with Playwright
+  - Full setup wizard flow: load → LLM config → model selection → account creation → login
+  - Covenant metrics consent checkbox verification
+  - Agent interaction testing (send message, receive response)
+  - Screenshot capture at each step for debugging
+  - `python -m tools.qa_runner.modules.web_ui` command
+
+- **Mobile Platform Detection** - Platform-specific Python path resolution
+  - `getPythonPath()` for iOS and Android runtime detection
+  - Enhanced startup screen with Python environment diagnostics
+
+### Fixed
+
+- **ARM32 Android Support** - Fixed engine startup on 32-bit ARM devices
+  - Pinned bcrypt to 3.1.7 (only version with armeabi-v7a wheels)
+  - Reported by user in Ethiopia on 32-bit Android device
+
+- **Mobile Error Screen Debug Info** - Added device info to startup failure screens
+  - Android: Shows OS version, device model, CPU architecture, supported ABIs
+  - iOS: Shows iOS version, device model, CPU, app version, memory
+  - Both platforms include GitHub issue reporting link
+
+- **Python 3.10 Compatibility** - Fixed PEP 695 type parameter syntax
+  - Replaced `def func[T: Type]()` with traditional TypeVar for Python 3.10 support
+  - Affected wa.py route helpers
+
+- **LLM Validation Base URL** - Setup wizard now resolves provider base URLs consistently
+  - `_validate_llm_connection` uses same `_get_provider_base_url()` as model listing
+  - Fixes validation failures when provider requires non-default base URL
+
+### Changed
+
+- **SonarCloud Code Quality** - Addressed 44 code smell issues across API routes
+  - Removed redundant `response_model` parameters (FastAPI infers from return type)
+  - Converted `Depends()` to `Annotated` type hints (PEP 593)
+  - Added HTTPException documentation via `responses` parameter
+  - Files: connectors.py, partnership.py, setup.py, wa.py
+
+### Tests
+
+- Added 54 new tests for API routes
+  - test_connectors.py: 18 new tests (36 total)
+  - test_partnership_endpoint.py: 8 new tests (26 total)
+  - test_wa_routes.py: 28 new tests (new file)
+
 ## [1.9.4] - 2026-02-01
 
 ### Added

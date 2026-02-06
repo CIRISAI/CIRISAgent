@@ -28,8 +28,11 @@ from ciris_engine.schemas.consent.core import (
 
 @pytest.fixture
 def client():
-    """Create test client."""
+    """Create test client with mock auth services."""
     app = create_app()
+    # Set up mock auth services to prevent 503 (fail-closed behavior)
+    app.state.authentication_service = MagicMock()
+    app.state.auth_service = MagicMock()
     return TestClient(app)
 
 

@@ -16,8 +16,11 @@ from ciris_engine.logic.adapters.api.routes import dsar
 
 @pytest.fixture
 def client(test_db):
-    """Create test client with database."""
+    """Create test client with database and mock auth services."""
     app = create_app()
+    # Set up mock auth services to prevent 503 (fail-closed behavior)
+    app.state.authentication_service = MagicMock()
+    app.state.auth_service = MagicMock()
     return TestClient(app)
 
 

@@ -11,10 +11,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, field_serializer
 
-from ciris_engine.schemas.api.auth import AuthContext
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.api.telemetry import (
     APIResponseThoughtStep,
@@ -26,13 +25,8 @@ from ciris_engine.schemas.api.telemetry import (
 )
 from ciris_engine.schemas.types import JSONDict
 
-from ..constants import (
-    DESC_CURRENT_COGNITIVE_STATE,
-    DESC_END_TIME,
-    DESC_START_TIME,
-    ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE,
-)
-from ..dependencies.auth import require_admin, require_observer
+from ..constants import DESC_END_TIME, DESC_START_TIME, ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE
+from ._common import RESPONSES_400, RESPONSES_404_500_503, RESPONSES_500_503, AuthAdminDep, AuthObserverDep
 
 # Error message constants to avoid duplication
 ERROR_TELEMETRY_NOT_INITIALIZED = "Critical system failure: Telemetry service not initialized"
@@ -640,11 +634,11 @@ async def _export_otlp_logs(limit: int, start_time: Optional[datetime], end_time
     return convert_logs_to_otlp_json(logs)
 
 
-@router.get("/otlp/{signal}", response_model=None)
+@router.get("/otlp/{signal}", response_model=None, responses={**RESPONSES_400, **RESPONSES_500_503})
 async def get_otlp_telemetry(
-    signal: str,
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
+    signal: str,
     limit: int = Query(100, ge=1, le=1000, description="Maximum items to return"),
     start_time: Optional[datetime] = Query(None, description=DESC_START_TIME),
     end_time: Optional[datetime] = Query(None, description=DESC_END_TIME),
@@ -682,10 +676,8 @@ async def get_otlp_telemetry(
         raise HTTPException(status_code=500, detail=f"Failed to export {signal} in OTLP format")
 
 
-@router.get("/overview", response_model=SuccessResponse[SystemOverview])
-async def get_telemetry_overview(
-    request: Request, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[SystemOverview]:
+@router.get("/overview", responses=RESPONSES_500_503)
+async def get_telemetry_overview(request: Request, auth: AuthObserverDep) -> SuccessResponse[SystemOverview]:
     """
     System metrics summary.
 
@@ -751,10 +743,8 @@ class ResourceTelemetryResponse(BaseModel):
     health: ResourceHealthStatus = Field(..., description="Health status")
 
 
-@router.get("/resources", response_model=SuccessResponse[ResourceTelemetryResponse])
-async def get_resource_telemetry(
-    request: Request, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[ResourceTelemetryResponse]:
+@router.get("/resources", responses=RESPONSES_500_503)
+async def get_resource_telemetry(request: Request, auth: AuthObserverDep) -> SuccessResponse[ResourceTelemetryResponse]:
     """
     Get current resource usage telemetry.
 
@@ -971,10 +961,8 @@ def _calculate_metrics_summary(metrics: List[DetailedMetric]) -> MetricAggregate
         return MetricAggregate(min=0.0, max=0.0, avg=0.0, sum=0.0, count=0)
 
 
-@router.get("/metrics", response_model=SuccessResponse[MetricsResponse])
-async def get_detailed_metrics(
-    request: Request, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[MetricsResponse]:
+@router.get("/metrics", responses=RESPONSES_500_503)
+async def get_detailed_metrics(request: Request, auth: AuthObserverDep) -> SuccessResponse[MetricsResponse]:
     """
     Detailed metrics.
 
@@ -1267,10 +1255,10 @@ def _build_trace_from_audit_entries(trace_id: str, entries: List[Any]) -> Reason
     )
 
 
-@router.get("/traces", response_model=SuccessResponse[TracesResponse])
+@router.get("/traces", responses=RESPONSES_500_503)
 async def get_reasoning_traces(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
     limit: int = Query(10, ge=1, le=100, description="Maximum traces to return"),
     start_time: Optional[datetime] = Query(None, description=DESC_START_TIME),
     end_time: Optional[datetime] = Query(None, description=DESC_END_TIME),
@@ -1438,10 +1426,10 @@ async def _get_logs_from_file_reader(
         return []
 
 
-@router.get("/logs", response_model=SuccessResponse[LogsResponse])
+@router.get("/logs", responses=RESPONSES_500_503)
 async def get_system_logs(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
     start_time: Optional[datetime] = Query(None, description=DESC_START_TIME),
     end_time: Optional[datetime] = Query(None, description=DESC_END_TIME),
     level: Optional[str] = Query(None, description="Log level filter"),
@@ -1724,9 +1712,9 @@ def _build_query_response(
     )
 
 
-@router.post("/query", response_model=SuccessResponse[QueryResponse])
+@router.post("/query", responses=RESPONSES_500_503)
 async def query_telemetry(
-    request: Request, query: TelemetryQuery, auth: AuthContext = Depends(require_admin)
+    request: Request, query: TelemetryQuery, auth: AuthAdminDep
 ) -> SuccessResponse[QueryResponse]:
     """
     Custom telemetry queries.
@@ -1763,11 +1751,11 @@ async def query_telemetry(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/metrics/{metric_name}", response_model=SuccessResponse[DetailedMetric])
+@router.get("/metrics/{metric_name}", responses=RESPONSES_404_500_503)
 async def get_detailed_metric(
     request: Request,
+    auth: AuthObserverDep,
     metric_name: str,
-    auth: AuthContext = Depends(require_observer),
     hours: int = Query(24, ge=1, le=168, description="Hours of history to include"),
 ) -> SuccessResponse[DetailedMetric]:
     """
@@ -1861,10 +1849,10 @@ async def get_detailed_metric(
 # Helper functions moved to telemetry_helpers.py
 
 
-@router.get("/unified", response_model=None)
+@router.get("/unified", response_model=None, responses=RESPONSES_500_503)
 async def get_unified_telemetry(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
     view: str = Query("summary", description="View type: summary|health|operational|detailed|performance|reliability"),
     category: Optional[str] = Query(
         None, description="Filter by category: buses|graph|infrastructure|governance|runtime|adapters|components|all"
@@ -1924,10 +1912,10 @@ async def get_unified_telemetry(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/resources/history", response_model=SuccessResponse)
+@router.get("/resources/history", responses=RESPONSES_500_503)
 async def get_resource_history(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
     hours: int = Query(24, ge=1, le=168, description="Hours of history"),
 ) -> SuccessResponse[ResourceHistoryResponse]:
     """

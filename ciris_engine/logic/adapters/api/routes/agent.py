@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from ciris_engine.logic.adapters.base_observer import BillingServiceError, CreditCheckFailed, CreditDenied
@@ -27,7 +27,7 @@ from ..constants import (
     ERROR_MEMORY_SERVICE_NOT_AVAILABLE,
     ERROR_MESSAGE_HANDLER_NOT_CONFIGURED,
 )
-from ..dependencies.auth import require_observer
+from ._common import AuthObserverDep
 
 logger = logging.getLogger(__name__)
 
@@ -653,9 +653,9 @@ async def _inject_error_to_channel(request: Request, channel_id: str, content: s
         logger.warning(f"Could not inject error message to channel: {e}")
 
 
-@router.post("/message", response_model=SuccessResponse[MessageSubmissionResponse])
+@router.post("/message")
 async def submit_message(
-    request: Request, body: MessageRequest, auth: AuthContext = Depends(require_observer)
+    request: Request, body: MessageRequest, auth: AuthObserverDep
 ) -> SuccessResponse[MessageSubmissionResponse]:
     """
     Submit a message to the agent (async pattern - returns immediately).
@@ -768,10 +768,8 @@ async def submit_message(
     return SuccessResponse(data=response)
 
 
-@router.post("/interact", response_model=SuccessResponse[InteractResponse])
-async def interact(
-    request: Request, body: InteractRequest, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[InteractResponse]:
+@router.post("/interact")
+async def interact(request: Request, body: InteractRequest, auth: AuthObserverDep) -> SuccessResponse[InteractResponse]:
     """
     Send message and get response.
 
@@ -893,12 +891,12 @@ async def interact(
         return SuccessResponse(data=response)
 
 
-@router.get("/history", response_model=SuccessResponse[ConversationHistory])
+@router.get("/history")
 async def get_history(
     request: Request,
+    auth: AuthObserverDep,
     limit: int = Query(50, ge=1, le=200, description="Maximum messages to return"),
     before: Optional[datetime] = Query(None, description="Get messages before this time"),
-    auth: AuthContext = Depends(require_observer),
 ) -> SuccessResponse[ConversationHistory]:
     """
     Conversation history.
@@ -1379,8 +1377,8 @@ def _get_agent_identity_info(runtime: Any) -> Tuple[str, str]:
     return agent_id, agent_name
 
 
-@router.get("/status", response_model=SuccessResponse[AgentStatus])
-async def get_status(request: Request, auth: AuthContext = Depends(require_observer)) -> SuccessResponse[AgentStatus]:
+@router.get("/status")
+async def get_status(request: Request, auth: AuthObserverDep) -> SuccessResponse[AgentStatus]:
     """
     Agent status and cognitive state.
 
@@ -1467,10 +1465,8 @@ def _build_service_availability(service_registry: Any) -> ServiceAvailability:
     return services
 
 
-@router.get("/identity", response_model=SuccessResponse[AgentIdentity])
-async def get_identity(
-    request: Request, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[AgentIdentity]:
+@router.get("/identity")
+async def get_identity(request: Request, auth: AuthObserverDep) -> SuccessResponse[AgentIdentity]:
     """
     Agent identity and capabilities.
 
@@ -1691,8 +1687,8 @@ def _add_default_api_channels(channels: List[ChannelInfo], request: Request, aut
         )
 
 
-@router.get("/channels", response_model=SuccessResponse[ChannelList])
-async def get_channels(request: Request, auth: AuthContext = Depends(require_observer)) -> SuccessResponse[ChannelList]:
+@router.get("/channels")
+async def get_channels(request: Request, auth: AuthObserverDep) -> SuccessResponse[ChannelList]:
     """
     List active communication channels.
 

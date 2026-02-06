@@ -7,7 +7,7 @@ Provides interactive configuration workflow for adapters including OAuth callbac
 import html
 import logging
 import uuid
-from typing import Any, Dict, Optional
+from typing import Annotated, Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 
@@ -15,6 +15,7 @@ from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.runtime.enums import ServiceType
 
 from ...dependencies.auth import AuthContext, require_admin, require_observer
+from .._common import RESPONSES_ADAPTER_CONFIG, RESPONSES_ADAPTER_CONFIG_SESSION
 from .helpers import get_adapter_config_service
 from .schemas import (
     ConfigurationCompleteRequest,
@@ -90,11 +91,11 @@ async def _load_adapter_after_config(request: Request, session: Any, persist: bo
 # ============================================================================
 
 
-@router.post("/adapters/{adapter_type}/configure/start", response_model=SuccessResponse[ConfigurationSessionResponse])
+@router.post("/adapters/{adapter_type}/configure/start", responses=RESPONSES_ADAPTER_CONFIG)
 async def start_adapter_configuration(
     adapter_type: str,
     request: Request,
-    auth: AuthContext = Depends(require_admin),
+    auth: Annotated[AuthContext, Depends(require_admin)],
 ) -> SuccessResponse[ConfigurationSessionResponse]:
     """
     Start interactive configuration session for an adapter.
@@ -139,11 +140,17 @@ async def start_adapter_configuration(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/adapters/configure/{session_id}", response_model=SuccessResponse[ConfigurationStatusResponse])
+@router.get(
+    "/adapters/configure/{session_id}",
+    responses={
+        404: {"description": "Session not found"},
+        500: {"description": "Failed to get configuration status"},
+    },
+)
 async def get_configuration_status(
     session_id: str,
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: Annotated[AuthContext, Depends(require_observer)],
 ) -> SuccessResponse[ConfigurationStatusResponse]:
     """
     Get current status of a configuration session.
@@ -191,12 +198,12 @@ async def get_configuration_status(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/adapters/configure/{session_id}/step", response_model=SuccessResponse[StepExecutionResponse])
+@router.post("/adapters/configure/{session_id}/step", responses=RESPONSES_ADAPTER_CONFIG_SESSION)
 async def execute_configuration_step(
     session_id: str,
     request: Request,
-    body: StepExecutionRequest = Body(...),
-    auth: AuthContext = Depends(require_admin),
+    body: StepExecutionRequest,
+    auth: Annotated[AuthContext, Depends(require_admin)],
 ) -> SuccessResponse[StepExecutionResponse]:
     """
     Execute the current configuration step.
@@ -230,7 +237,13 @@ async def execute_configuration_step(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/adapters/configure/{session_id}/status")
+@router.get(
+    "/adapters/configure/{session_id}/status",
+    responses={
+        404: {"description": "Session not found"},
+        500: {"description": "Failed to get session status"},
+    },
+)
 async def get_session_status(
     session_id: str,
     request: Request,
@@ -277,7 +290,14 @@ async def get_session_status(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/adapters/configure/{session_id}/oauth/callback")
+@router.get(
+    "/adapters/configure/{session_id}/oauth/callback",
+    responses={
+        400: {"description": "Invalid OAuth state"},
+        404: {"description": "Session not found"},
+        500: {"description": "OAuth callback processing failed"},
+    },
+)
 async def oauth_callback(
     session_id: str,
     code: str,
@@ -356,7 +376,14 @@ async def oauth_callback(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/adapters/oauth/callback")
+@router.get(
+    "/adapters/oauth/callback",
+    responses={
+        400: {"description": "OAuth callback failed"},
+        404: {"description": "Session not found"},
+        500: {"description": "OAuth processing error"},
+    },
+)
 async def oauth_deeplink_callback(
     code: str,
     state: str,
@@ -430,12 +457,18 @@ async def oauth_deeplink_callback(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/adapters/configure/{session_id}/complete", response_model=SuccessResponse[ConfigurationCompleteResponse])
+@router.post(
+    "/adapters/configure/{session_id}/complete",
+    responses={
+        404: {"description": "Session not found"},
+        500: {"description": "Configuration completion failed"},
+    },
+)
 async def complete_configuration(
     session_id: str,
     request: Request,
-    body: ConfigurationCompleteRequest = Body(default=ConfigurationCompleteRequest()),
-    auth: AuthContext = Depends(require_admin),
+    auth: Annotated[AuthContext, Depends(require_admin)],
+    body: ConfigurationCompleteRequest = ConfigurationCompleteRequest(),
 ) -> SuccessResponse[ConfigurationCompleteResponse]:
     """
     Finalize and apply the configuration.

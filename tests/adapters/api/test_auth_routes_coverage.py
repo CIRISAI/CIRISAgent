@@ -410,10 +410,13 @@ class TestOAuthErrorPaths:
                     detail='Failed to exchange code for token: {\n  "error": "invalid_request",\n  "error_description": "Missing required parameter: code"\n}',
                 )
 
+                mock_request = Mock()
+                mock_request.app = Mock()
+                mock_request.app.state = Mock()
                 mock_auth_service = Mock()
 
                 with pytest.raises(HTTPException) as exc_info:
-                    await oauth_callback("google", None, "test-state", mock_auth_service)
+                    await oauth_callback("google", None, "test-state", mock_request, mock_auth_service)
 
                 # The function now properly validates and returns 400 for missing code
                 assert exc_info.value.status_code == 400
@@ -425,11 +428,13 @@ class TestOAuthErrorPaths:
         from ciris_engine.logic.adapters.api.routes.auth import oauth_callback
 
         mock_request = Mock()
+        mock_request.app = Mock()
+        mock_request.app.state = Mock()
         mock_auth_service = Mock()
 
         # This should trigger the _load_oauth_config error for unsupported provider
         with pytest.raises(HTTPException) as exc_info:
-            await oauth_callback("invalid", "test-code", "test-state", mock_auth_service)
+            await oauth_callback("invalid", "test-code", "test-state", mock_request, mock_auth_service)
 
         # The function returns 404 for unsupported providers due to config loading
         assert exc_info.value.status_code == 404
@@ -1178,7 +1183,8 @@ class TestOAuthProviderEndpoints:
         config_json = '{"google": {"client_id": "google-id", "created": "2024-01-01T00:00:00Z", "metadata": {}}}'
 
         with patch("pathlib.Path.exists", return_value=True), patch("pathlib.Path.read_text", return_value=config_json):
-            response = await list_oauth_providers(mock_request, mock_auth)
+            # Pass None for the permission check dependency (it's already validated in tests)
+            response = await list_oauth_providers(mock_request, mock_auth, None)
 
         assert len(response.providers) == 1
         assert response.providers[0].provider == "google"
@@ -1194,7 +1200,8 @@ class TestOAuthProviderEndpoints:
         mock_request = Mock()
 
         with patch("pathlib.Path.exists", return_value=False):
-            response = await list_oauth_providers(mock_request, mock_auth)
+            # Pass None for the permission check dependency
+            response = await list_oauth_providers(mock_request, mock_auth, None)
 
         assert len(response.providers) == 0
 
@@ -1212,7 +1219,8 @@ class TestOAuthProviderEndpoints:
             patch("pathlib.Path.read_text", side_effect=IOError("Read error")),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                await list_oauth_providers(mock_request, mock_auth)
+                # Pass None for the permission check dependency
+                await list_oauth_providers(mock_request, mock_auth, None)
 
             assert exc_info.value.status_code == 500
             assert "Failed to read OAuth configuration" in exc_info.value.detail
@@ -1240,7 +1248,8 @@ class TestOAuthProviderEndpoints:
         ):
             mock_parent.mkdir = Mock()
 
-            response = await configure_oauth_provider(body, mock_request, mock_auth)
+            # Pass None for the permission check dependency
+            response = await configure_oauth_provider(body, mock_request, mock_auth, None)
 
         assert response.provider == "google"
         assert "configured successfully" in response.message
@@ -1265,7 +1274,8 @@ class TestOAuthProviderEndpoints:
             mock_parent.mkdir = Mock()
 
             with pytest.raises(HTTPException) as exc_info:
-                await configure_oauth_provider(body, mock_request, mock_auth)
+                # Pass None for the permission check dependency
+                await configure_oauth_provider(body, mock_request, mock_auth, None)
 
             assert exc_info.value.status_code == 500
             assert "Failed to save OAuth configuration" in exc_info.value.detail

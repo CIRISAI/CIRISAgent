@@ -3,7 +3,7 @@ Unit tests for telemetry API endpoint metric name alignment.
 """
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 from fastapi import Request
@@ -75,9 +75,8 @@ class TestTelemetryAPIMetrics:
             user_id="test_user", role="OBSERVER", permissions=set(), authenticated_at=datetime.now(timezone.utc)
         )
 
-        # Call the endpoint
-        with patch("ciris_engine.logic.adapters.api.routes.telemetry.require_observer", return_value=mock_auth):
-            response = await telemetry.get_detailed_metrics(self.mock_request, auth=mock_auth)
+        # Call the endpoint directly with mock auth
+        response = await telemetry.get_detailed_metrics(self.mock_request, auth=mock_auth)
 
         # Verify correct metrics were queried
         expected_metrics = [
@@ -144,9 +143,8 @@ class TestTelemetryAPIMetrics:
             user_id="test_user", role="OBSERVER", permissions=set(), authenticated_at=datetime.now(timezone.utc)
         )
 
-        # Call overview endpoint
-        with patch("ciris_engine.logic.adapters.api.routes.telemetry.require_observer", return_value=mock_auth):
-            response = await telemetry.get_telemetry_overview(self.mock_request, auth=mock_auth)
+        # Call overview endpoint directly with mock auth
+        response = await telemetry.get_telemetry_overview(self.mock_request, auth=mock_auth)
 
         # Check that correct metrics were queried for total estimation
         expected_overview_metrics = [
@@ -193,11 +191,10 @@ class TestTelemetryAPIMetrics:
             user_id="test_user", role="OBSERVER", permissions=set(), authenticated_at=datetime.now(timezone.utc)
         )
 
-        # Call individual metric endpoint
-        with patch("ciris_engine.logic.adapters.api.routes.telemetry.require_observer", return_value=mock_auth):
-            response = await telemetry.get_detailed_metric(
-                request=self.mock_request, metric_name="llm.tokens.total", auth=mock_auth, hours=24
-            )
+        # Call individual metric endpoint directly with mock auth
+        response = await telemetry.get_detailed_metric(
+            request=self.mock_request, auth=mock_auth, metric_name="llm.tokens.total", hours=24
+        )
 
         # Verify response contains the metric data
         assert response is not None
@@ -231,8 +228,7 @@ class TestTelemetryAPIMetrics:
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
-            with patch("ciris_engine.logic.adapters.api.routes.telemetry.require_observer", return_value=mock_auth):
-                await telemetry.get_detailed_metrics(self.mock_request, auth=mock_auth)
+            await telemetry.get_detailed_metrics(self.mock_request, auth=mock_auth)
 
         assert exc_info.value.status_code == 503
         assert "Telemetry service" in exc_info.value.detail

@@ -134,6 +134,47 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # Only requires time service which is provided in __init__
         return self._time_service is not None
 
+    def _get_current_time(self) -> datetime:
+        """Get the current time from the time service or fallback to system time.
+
+        Returns:
+            Current datetime in UTC timezone.
+        """
+        return self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+
+    def _get_current_timestamp(self) -> int:
+        """Get the current Unix timestamp from the time service or fallback to system time.
+
+        Returns:
+            Current Unix timestamp as integer.
+        """
+        return int(self._time_service.timestamp() if self._time_service else datetime.now(timezone.utc).timestamp())
+
+    def _build_base_jwt_payload(
+        self, wa: "WACertificate", sub_type: JWTSubType, expires_in_seconds: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Build the base JWT payload with common fields.
+
+        Args:
+            wa: The WA certificate to build the payload for.
+            sub_type: The JWT subject type (USER, OAUTH, AUTHORITY, ANON).
+            expires_in_seconds: Optional TTL in seconds. If None, no expiry is added.
+
+        Returns:
+            Dictionary containing the base JWT payload fields.
+        """
+        now = self._get_current_timestamp()
+        payload: Dict[str, Any] = {
+            "sub": wa.wa_id,
+            "sub_type": sub_type.value,
+            "name": wa.name,
+            "scope": wa.scopes,
+            "iat": now,
+        }
+        if expires_in_seconds is not None:
+            payload["exp"] = now + expires_in_seconds
+        return payload
+
     @staticmethod
     def _encode_public_key(pubkey_bytes: bytes) -> str:
         """Encode public key using base64url without padding."""
@@ -171,7 +212,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 import socket
 
                 hostname = socket.gethostname()
-        except Exception:
+        except (OSError, IOError):
+            # File read or network/socket error - use fallback
             hostname = "default"
 
         # Combine machine-specific data with purpose identifier
@@ -257,7 +299,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             try:
                 encrypted = encrypted_path.read_bytes()
                 return self._decrypt_secret(encrypted)
-            except Exception as e:
+            except (ValueError, OSError, IOError) as e:
+                # ValueError from _decrypt_secret, OSError/IOError from file operations
                 logger.warning(f"Failed to decrypt gateway secret: {type(e).__name__}")
                 # Fall through to regenerate
 
@@ -296,7 +339,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                     for link in raw_links:
                         try:
                             oauth_links.append(OAuthIdentityLink(**link))
-                        except Exception as exc:
+                        except (TypeError, ValueError) as exc:
+                            # Pydantic validation errors are ValueError, invalid dict keys are TypeError
                             logger.warning("Invalid OAuth link entry skipped: %s", exc)
             except json.JSONDecodeError:
                 logger.warning("Invalid oauth_links_json for WA %s", row_dict.get("wa_id"))
@@ -365,7 +409,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             raise ValueError(f"OAuth identity {provider}:{external_id} already linked to another WA")
 
         links = list(existing.oauth_links)
-        timestamp = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        timestamp = self._get_current_time()
         found = False
         for idx, link in enumerate(links):
             if link.provider == provider and link.external_id == external_id:
@@ -477,7 +521,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # Generate new observer WA
         private_key, public_key = self.generate_keypair()
-        timestamp = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        timestamp = self._get_current_time()
         wa_id = self._generate_wa_id(timestamp)
         jwt_kid = f"wa-jwt-{wa_id[-6:].lower()}"
 
@@ -540,7 +584,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 details={
                     "wa_id": wa_id,
                     "reason": reason,
-                    "timestamp": self._time_service.now().isoformat() if self._time_service else None,
+                    "timestamp": self._get_current_time().isoformat(),
                 },
             )
         logger.info(f"Revoked WA {wa_id}: {reason}")
@@ -552,9 +596,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     async def update_last_login(self, wa_id: str) -> None:
         """Update last login timestamp."""
-        await self.update_wa(
-            wa_id, last_login=self._time_service.now() if self._time_service else datetime.now(timezone.utc)
-        )
+        await self.update_wa(wa_id, last_login=self._get_current_time())
 
     # JWTService Protocol Implementation
 
@@ -565,50 +607,22 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         if not wa:
             raise ValueError(f"WA {wa_id} not found")
 
-        payload = {
-            "sub": wa.wa_id,
-            "sub_type": JWTSubType.ANON.value,
-            "name": wa.name,
-            "scope": wa.scopes,
-            "iat": int(
-                self._time_service.timestamp() if self._time_service else datetime.now(timezone.utc).timestamp()
-            ),
-        }
-
         # For observer tokens, use adapter_id and make them long-lived (no expiry)
         if wa.role == WARole.OBSERVER and wa.adapter_id:
+            # Only add expiry if explicitly requested with ttl > 0
+            payload = self._build_base_jwt_payload(wa, JWTSubType.ANON, ttl if ttl > 0 else None)
             payload["adapter"] = wa.adapter_id
-            # No expiry for observer tokens by default
-            if ttl > 0:
-                # Only add expiry if explicitly requested
-                payload["exp"] = (
-                    int(
-                        self._time_service.timestamp() if self._time_service else datetime.now(timezone.utc).timestamp()
-                    )
-                    + ttl
-                )
         else:
             # For non-observer tokens, include channel and expiry
+            payload = self._build_base_jwt_payload(wa, JWTSubType.ANON, ttl)
             payload["channel"] = channel_id
-            payload["exp"] = (
-                int(self._time_service.timestamp() if self._time_service else datetime.now(timezone.utc).timestamp())
-                + ttl
-            )
 
         return jwt.encode(payload, self.gateway_secret, algorithm="HS256", headers={"kid": wa.jwt_kid})
 
     def create_gateway_token(self, wa: WACertificate, expires_hours: int = 8) -> str:
         """Create gateway-signed token (OAuth/password auth)."""
-        now = int(self._time_service.timestamp() if self._time_service else datetime.now(timezone.utc).timestamp())
-
-        payload = {
-            "sub": wa.wa_id,
-            "sub_type": JWTSubType.OAUTH.value if wa.oauth_provider else JWTSubType.USER.value,
-            "name": wa.name,
-            "scope": wa.scopes,
-            "iat": now,
-            "exp": now + (expires_hours * 3600),
-        }
+        sub_type = JWTSubType.OAUTH if wa.oauth_provider else JWTSubType.USER
+        payload = self._build_base_jwt_payload(wa, sub_type, expires_hours * 3600)
 
         if wa.oauth_provider:
             payload["oauth_provider"] = wa.oauth_provider
@@ -617,16 +631,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     def _create_authority_token(self, wa: WACertificate, private_key: bytes) -> str:
         """Create WA-signed authority token."""
-        now = int(self._time_service.timestamp() if self._time_service else datetime.now(timezone.utc).timestamp())
-
-        payload = {
-            "sub": wa.wa_id,
-            "sub_type": JWTSubType.AUTHORITY.value,
-            "name": wa.name,
-            "scope": wa.scopes,
-            "iat": now,
-            "exp": now + (24 * 3600),  # 24 hours
-        }
+        payload = self._build_base_jwt_payload(wa, JWTSubType.AUTHORITY, 24 * 3600)  # 24 hours
 
         # Load Ed25519 private key
         signing_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_key)
@@ -749,11 +754,18 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
             return (context, expiration)
 
+        except jwt.ExpiredSignatureError:
+            logger.debug("[TOKEN_VERIFY] JWT token has expired")
+            return None
+        except jwt.DecodeError as e:
+            logger.debug(f"[TOKEN_VERIFY] JWT decode error: {e}")
+            return None
         except jwt.InvalidTokenError as e:
             logger.debug(f"[TOKEN_VERIFY] JWT InvalidTokenError: {type(e).__name__}: {str(e)}")
             return None
-        except Exception as e:
-            logger.debug(f"[TOKEN_VERIFY] Unexpected exception: {type(e).__name__}: {str(e)}", exc_info=True)
+        except (KeyError, ValueError, TypeError) as e:
+            # Handle malformed token payload or type conversion errors
+            logger.debug(f"[TOKEN_VERIFY] Token payload error: {type(e).__name__}: {str(e)}")
             return None
 
     # WACrypto Protocol Implementation
@@ -823,7 +835,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             import hmac
 
             return hmac.compare_digest(key, stored_key)
-        except Exception:
+        except (ValueError, TypeError, IndexError):
             return False
 
     # codeql[py/weak-sensitive-data-hashing]
@@ -896,13 +908,21 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 expires_at=(
                     datetime.fromtimestamp(claims.get("exp", 0), tz=timezone.utc)
                     if hasattr(claims, "get")
-                    else (self._time_service.now() if self._time_service else datetime.now(timezone.utc))
+                    else self._get_current_time()
                 ),
                 permissions=wa.scopes,
                 metadata={},
             )
-        except Exception as e:
-            logger.error(f"Authentication failed: {e}")
+        except jwt.ExpiredSignatureError:
+            logger.warning("Authentication failed: Token has expired")
+            self._auth_failures += 1
+            return None
+        except jwt.InvalidTokenError as e:
+            logger.warning(f"Authentication failed: Invalid token - {type(e).__name__}")
+            self._auth_failures += 1
+            return None
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error(f"Authentication failed: Malformed token data - {type(e).__name__}: {e}")
             self._auth_failures += 1
             return None
 
@@ -936,11 +956,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             wa_name = wa.name if wa else context.wa_id
 
             # Use expiration from token, or current time as fallback
-            expires_at = (
-                expiration
-                if expiration
-                else (self._time_service.now() if self._time_service else datetime.now(timezone.utc))
-            )
+            expires_at = expiration if expiration else self._get_current_time()
 
             return TokenVerification(
                 valid=True,
@@ -950,8 +966,16 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 expires_at=expires_at,
                 error=None,
             )
-        except Exception as e:
-            logger.error(f"Token verification failed: {e}")
+        except jwt.ExpiredSignatureError:
+            logger.warning("Token verification failed: Token has expired")
+            return TokenVerification(
+                valid=False, wa_id=None, name=None, role=None, expires_at=None, error="Token expired"
+            )
+        except jwt.InvalidTokenError as e:
+            logger.warning(f"Token verification failed: {type(e).__name__}")
+            return TokenVerification(valid=False, wa_id=None, name=None, role=None, expires_at=None, error=str(e))
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error(f"Token verification failed: Malformed data - {type(e).__name__}: {e}")
             return TokenVerification(valid=False, wa_id=None, name=None, role=None, expires_at=None, error=str(e))
 
     async def create_wa(
@@ -962,7 +986,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         private_key, public_key = self.generate_keypair()
 
         # Create certificate
-        timestamp = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        timestamp = self._get_current_time()
         wa_id = self._generate_wa_id(timestamp)
         jwt_kid = f"wa-jwt-{wa_id[-6:].lower()}"
 
@@ -1241,7 +1265,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         system_key_path.chmod(0o600)
 
         # Create the system WA certificate
-        timestamp = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        timestamp = self._get_current_time()
         wa_id = self._generate_wa_id(timestamp)
         jwt_kid = f"wa-jwt-{wa_id[-6:].lower()}"
 
@@ -1324,7 +1348,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         canonical_json = json.dumps(task_data, sort_keys=True, separators=(",", ":"))
         signature = self.sign_data(canonical_json.encode("utf-8"), private_key)
-        signed_at = (self._time_service.now() if self._time_service else datetime.now(timezone.utc)).isoformat()
+        signed_at = self._get_current_time().isoformat()
 
         return signature, signed_at
 
@@ -1433,34 +1457,33 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     def verify_token_sync(self, token: str) -> Optional[JSONDict]:
         """Synchronously verify a token (for non-async contexts)."""
+        # For sync verification, we can only verify gateway-signed tokens
+        # since authority tokens require async DB lookups for public keys
+
         try:
-            # For sync verification, we can only verify gateway-signed tokens
-            # since authority tokens require async DB lookups for public keys
+            # Verify the token with gateway secret first
+            decoded = jwt.decode(token, self.gateway_secret, algorithms=["HS256"])
 
-            # Try gateway-signed token verification
-            try:
-                # Verify the token with gateway secret first
-                decoded = jwt.decode(token, self.gateway_secret, algorithms=["HS256"])
+            # Now that the token is verified, we can trust its contents
+            # Validate that this is indeed a gateway-signed token type
+            sub_type = decoded.get("sub_type")
+            if sub_type in [JWTSubType.ANON.value, JWTSubType.OAUTH.value, JWTSubType.USER.value]:
+                # Valid gateway token
+                return dict(decoded)
+            else:
+                # Invalid sub_type for gateway token
+                return None
 
-                # Now that the token is verified, we can trust its contents
-                # Validate that this is indeed a gateway-signed token type
-                sub_type = decoded.get("sub_type")
-                if sub_type in [JWTSubType.ANON.value, JWTSubType.OAUTH.value, JWTSubType.USER.value]:
-                    # Valid gateway token
-                    return dict(decoded)
-                else:
-                    # Invalid sub_type for gateway token
-                    return None
-
-            except jwt.InvalidTokenError:
-                # Token failed verification with gateway secret
-                pass
-
+        except jwt.ExpiredSignatureError:
+            # Token has expired
+            return None
+        except jwt.InvalidTokenError:
+            # Token failed verification with gateway secret
             # Authority tokens require async DB access for public key retrieval
             # So we cannot verify them in sync mode
             return None
-
-        except Exception:
+        except (KeyError, TypeError):
+            # Malformed token payload
             return None
 
     def get_capabilities(self) -> ServiceCapabilities:
@@ -1512,15 +1535,20 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 if isinstance(role_counts_raw, dict)
                 else {"OBSERVER": 0, "USER": 0, "ADMIN": 0, "AUTHORITY": 0, "ROOT": 0}
             )
-        except Exception as e:
-            logger.warning(
-                f"Authentication service health check failed: {type(e).__name__}: {str(e)} - Unable to access auth database"
-            )
+        except (OSError, IOError) as e:
+            # Database file access errors
+            logger.warning(f"Authentication service health check failed: {type(e).__name__} - Database access error")
+            cert_count = 0
+            role_counts = {"OBSERVER": 0, "USER": 0, "ADMIN": 0, "AUTHORITY": 0, "ROOT": 0}
+            revoked_count = 0
+        except (KeyError, TypeError, ValueError) as e:
+            # Malformed data from database
+            logger.warning(f"Authentication service health check failed: {type(e).__name__} - Malformed database data")
             cert_count = 0
             role_counts = {"OBSERVER": 0, "USER": 0, "ADMIN": 0, "AUTHORITY": 0, "ROOT": 0}
             revoked_count = 0
 
-        current_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        current_time = self._get_current_time()
         uptime_seconds = 0.0
         if self._start_time:
             uptime_seconds = (current_time - self._start_time).total_seconds()
@@ -1562,7 +1590,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         """Start the service."""
         await super().start()
         self._started = True
-        self._start_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        self._start_time = self._get_current_time()
         logger.info("AuthenticationService started")
 
     async def stop(self) -> None:
@@ -1609,7 +1637,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # Get all base + custom metrics
         metrics = self._collect_metrics()
 
-        current_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        current_time = self._get_current_time()
         uptime_seconds = 0.0
         if self._start_time:
             uptime_seconds = (current_time - self._start_time).total_seconds()

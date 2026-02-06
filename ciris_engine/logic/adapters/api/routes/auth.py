@@ -15,7 +15,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Annotated, Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -39,6 +39,7 @@ from ciris_engine.schemas.runtime.api import APIRole
 
 from ..dependencies.auth import check_permissions, get_auth_context, get_auth_service, optional_auth
 from ..services.auth_service import APIAuthService
+from ._common import AuthDep, AuthServiceDep, OptionalAuthDep
 
 # Constants
 OAUTH_CONFIG_PATH = Path("/home/ciris/shared/oauth/oauth.json")
@@ -202,10 +203,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Authentication"])
 
 
-@router.post("/auth/login", response_model=LoginResponse)
-async def login(
-    request: LoginRequest, req: Request, auth_service: APIAuthService = Depends(get_auth_service)
-) -> LoginResponse:
+@router.post("/auth/login")
+async def login(request: LoginRequest, req: Request, auth_service: AuthServiceDep) -> LoginResponse:
     """
     Authenticate with username/password.
 
@@ -253,9 +252,7 @@ async def login(
 
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(
-    auth: AuthContext = Depends(get_auth_context), auth_service: APIAuthService = Depends(get_auth_service)
-) -> None:
+async def logout(auth: AuthDep, auth_service: AuthServiceDep) -> None:
     """
     End the current session by revoking the API key.
 
@@ -270,10 +267,8 @@ async def logout(
     return None
 
 
-@router.get("/auth/me", response_model=UserInfo)
-async def get_current_user(
-    auth: AuthContext = Depends(get_auth_context), auth_service: APIAuthService = Depends(get_auth_service)
-) -> UserInfo:
+@router.get("/auth/me")
+async def get_current_user(auth: AuthDep, auth_service: AuthServiceDep) -> UserInfo:
     """
     Get current authenticated user information.
 
@@ -297,11 +292,11 @@ async def get_current_user(
     )
 
 
-@router.post("/auth/refresh", response_model=LoginResponse)
+@router.post("/auth/refresh")
 async def refresh_token(
     request: TokenRefreshRequest,
-    auth: Optional[AuthContext] = Depends(optional_auth),
-    auth_service: APIAuthService = Depends(get_auth_service),
+    auth: OptionalAuthDep,
+    auth_service: AuthServiceDep,
 ) -> LoginResponse:
     """
     Refresh access token.
@@ -361,11 +356,11 @@ class OAuthProvidersResponse(BaseModel):
     providers: List[OAuthProviderInfo] = Field(default_factory=list, description="List of configured providers")
 
 
-@router.get("/auth/oauth/providers", response_model=OAuthProvidersResponse)
+@router.get("/auth/oauth/providers")
 async def list_oauth_providers(
     request: Request,
-    auth: AuthContext = Depends(get_auth_context),
-    _: None = Depends(check_permissions(["users.write"])),  # SYSTEM_ADMIN only
+    auth: AuthDep,
+    _: Annotated[None, Depends(check_permissions(["users.write"]))],  # SYSTEM_ADMIN only
 ) -> OAuthProvidersResponse:
     """
     List configured OAuth providers.
@@ -426,12 +421,12 @@ class ConfigureOAuthProviderResponse(BaseModel):
     message: str = Field(..., description="Status message")
 
 
-@router.post("/auth/oauth/providers", response_model=ConfigureOAuthProviderResponse)
+@router.post("/auth/oauth/providers")
 async def configure_oauth_provider(
     body: ConfigureOAuthProviderRequest,
     request: Request,
-    auth: AuthContext = Depends(get_auth_context),
-    _: None = Depends(check_permissions(["users.write"])),  # SYSTEM_ADMIN only
+    auth: AuthDep,
+    _: Annotated[None, Depends(check_permissions(["users.write"]))],  # SYSTEM_ADMIN only
 ) -> ConfigureOAuthProviderResponse:
     """
     Configure an OAuth provider.
@@ -1173,7 +1168,7 @@ async def oauth_callback(
     code: str,
     state: str,
     request: Request,
-    auth_service: APIAuthService = Depends(get_auth_service),
+    auth_service: AuthServiceDep,
     marketing_opt_in: bool = False,
 ) -> RedirectResponse:
     """
@@ -1595,11 +1590,11 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
         )
 
 
-@router.post("/auth/native/google", response_model=NativeTokenResponse)
+@router.post("/auth/native/google")
 async def native_google_token_exchange(
     native_request: NativeTokenRequest,
     fastapi_request: Request,
-    auth_service: APIAuthService = Depends(get_auth_service),
+    auth_service: AuthServiceDep,
 ) -> NativeTokenResponse:
     """
     Exchange a native Google ID token for a CIRIS API token.
@@ -1822,11 +1817,11 @@ async def _auto_mint_system_admin_if_needed(
         logger.warning(f"CIRIS_USER_CREATE: [{log_prefix}] Auto-mint failed (user can mint manually): {mint_error}")
 
 
-@router.post("/auth/native/apple", response_model=NativeTokenResponse)
+@router.post("/auth/native/apple")
 async def native_apple_token_exchange(
     native_request: AppleNativeTokenRequest,
     fastapi_request: Request,
-    auth_service: APIAuthService = Depends(get_auth_service),
+    auth_service: AuthServiceDep,
 ) -> NativeTokenResponse:
     """
     Exchange a native Apple ID token for a CIRIS API token.
@@ -1917,11 +1912,11 @@ async def native_apple_token_exchange(
 # ========== API Key Management Endpoints ==========
 
 
-@router.post("/auth/api-keys", response_model=APIKeyResponse)
+@router.post("/auth/api-keys")
 async def create_api_key(
     request: APIKeyCreateRequest,
-    auth: AuthContext = Depends(get_auth_context),
-    auth_service: APIAuthService = Depends(get_auth_service),
+    auth: AuthDep,
+    auth_service: AuthServiceDep,
 ) -> APIKeyResponse:
     """
     Create a new API key for the authenticated user.
@@ -1957,10 +1952,8 @@ async def create_api_key(
     )
 
 
-@router.get("/auth/api-keys", response_model=APIKeyListResponse)
-async def list_api_keys(
-    auth: AuthContext = Depends(get_auth_context), auth_service: APIAuthService = Depends(get_auth_service)
-) -> APIKeyListResponse:
+@router.get("/auth/api-keys")
+async def list_api_keys(auth: AuthDep, auth_service: AuthServiceDep) -> APIKeyListResponse:
     """
     List all API keys for the authenticated user.
 
@@ -1990,8 +1983,8 @@ async def list_api_keys(
 @router.delete("/auth/api-keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_api_key(
     key_id: str,
-    auth: AuthContext = Depends(get_auth_context),
-    auth_service: APIAuthService = Depends(get_auth_service),
+    auth: AuthDep,
+    auth_service: AuthServiceDep,
 ) -> None:
     """
     Delete an API key.

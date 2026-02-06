@@ -308,8 +308,10 @@ def _resolve_actor_name(req: Request, auth: AuthContext) -> str:
         return auth.user_id
 
     user = auth_service.get_user(auth.user_id)
-    if user and getattr(user, "name", None):
-        return user.name
+    if user:
+        user_name = getattr(user, "name", None)
+        if isinstance(user_name, str) and user_name:
+            return user_name
     return auth.user_id
 
 

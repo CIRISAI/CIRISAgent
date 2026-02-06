@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.platform.getDeviceDebugInfo
 import ai.ciris.mobile.shared.ui.components.CIRISSignet
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
 import ai.ciris.mobile.shared.viewmodels.StartupPhase
@@ -171,17 +172,76 @@ fun StartupScreen(
                 )
             }
 
-            // Show Logs button (appears on error, matches Android)
-            errorMessage?.let { _ ->
-                Spacer(Modifier.height(24.dp))
+            // Error section with debug info (appears on error)
+            errorMessage?.let { error ->
+                Spacer(Modifier.height(16.dp))
 
-                // Simple text button like Android
-                Text(
-                    text = "Show Logs",
-                    fontSize = 14.sp,
-                    color = CIRISColors.AccentCyan,
-                    modifier = Modifier.padding(12.dp)
-                )
+                // Error message box
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = CIRISColors.ErrorRed.copy(alpha = 0.1f),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                        )
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Text(
+                        text = "Engine Failed to Start",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = CIRISColors.ErrorRed,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    // Error message
+                    Text(
+                        text = error,
+                        fontSize = 12.sp,
+                        color = CIRISColors.TextSecondary,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    // Debug info section
+                    Text(
+                        text = "Debug Information",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = CIRISColors.TextTertiary,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+
+                    // Platform-specific debug info will be provided by expect/actual
+                    val debugInfo = getDeviceDebugInfo()
+                    Text(
+                        text = debugInfo,
+                        fontSize = 10.sp,
+                        color = CIRISColors.TextDim,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    // Help text
+                    Text(
+                        text = "If this persists, please report at:\ngithub.com/CIRISAI/CIRISAgent/issues",
+                        fontSize = 10.sp,
+                        color = CIRISColors.TextDim,
+                        textAlign = TextAlign.Start
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Retry button
+                Button(
+                    onClick = { viewModel.retry() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CIRISColors.SignetTeal
+                    )
+                ) {
+                    Text("Retry", color = Color.White)
+                }
             }
         }
     }

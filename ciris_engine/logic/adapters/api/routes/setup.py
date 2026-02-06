@@ -680,8 +680,11 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
 
         # Build client configuration
         client_kwargs: Dict[str, Any] = {"api_key": config.api_key or "local"}  # Local LLMs can use placeholder
-        if config.base_url:
-            client_kwargs["base_url"] = config.base_url
+
+        # Resolve base URL using provider defaults (same as list-models)
+        resolved_base_url = _get_provider_base_url(config.provider, config.base_url)
+        if resolved_base_url:
+            client_kwargs["base_url"] = resolved_base_url
 
         logger.info(f"[VALIDATE_LLM] Creating OpenAI client with base_url: {client_kwargs.get('base_url', 'default')}")
 

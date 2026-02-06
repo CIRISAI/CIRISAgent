@@ -41,7 +41,7 @@ android {
                 install "pyyaml==6.0.3"
                 install "python-dotenv==1.0.1"
                 install "cryptography==42.0.8"
-                install "bcrypt"
+                install "bcrypt==3.1.7"  // Pinned: only 3.1.7 has ARM32 (armeabi-v7a) wheels
                 install "PyJWT==2.8.0"
                 install "python-jose==3.3.0"
                 install "passlib==1.7.4"

@@ -169,16 +169,21 @@ async def execute_safe_mode(wa_id: str, reason: str) -> CovenantExecutionResult:
 
         runtime = CIRISRuntime.get_instance()  # type: ignore[attr-defined]
         if runtime:
-            # TODO: Implement safe mode in runtime
-            # For now, just log that we would enter safe mode
-            logger.warning("Safe mode not fully implemented - logging only")
-
-            return CovenantExecutionResult(
-                success=True,
-                command=CovenantCommandType.SAFE_MODE,
-                wa_id=wa_id,
-                message="Safe mode activated (partial implementation)",
-            )
+            success = runtime.enter_safe_mode(reason)
+            if success:
+                return CovenantExecutionResult(
+                    success=True,
+                    command=CovenantCommandType.SAFE_MODE,
+                    wa_id=wa_id,
+                    message=f"Safe mode activated. Reason: {reason}",
+                )
+            else:
+                return CovenantExecutionResult(
+                    success=False,
+                    command=CovenantCommandType.SAFE_MODE,
+                    wa_id=wa_id,
+                    message="Failed to activate safe mode",
+                )
     except Exception as e:
         logger.error(f"Failed to enter safe mode: {e}")
         return CovenantExecutionResult(

@@ -6,6 +6,8 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": null
   },
+  "platform_requirements": ["desktop_cli"],
+  "platform_requirements_rationale": "BlueBubbles is a macOS iMessage bridge that requires desktop environment",
   "services": [
     {
       "type": "TOOL",

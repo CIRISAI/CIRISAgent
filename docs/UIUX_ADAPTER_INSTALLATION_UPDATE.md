@@ -1,7 +1,7 @@
 # UI/UX Update: Adapter Installation & Covenant Metrics Integration
 
-**Version:** 1.9.3
-**Date:** 2026-01-28
+**Version:** 1.9.5
+**Date:** 2026-02-04
 **Status:** Specification
 
 ---
@@ -12,6 +12,7 @@ This document describes UI/UX enhancements for:
 1. **Adapter Auto-Discovery & Installation** - New features for discovering and installing adapters with missing dependencies
 2. **Setup Wizard Integration** - How to surface adapter installation in the onboarding flow
 3. **Covenant Metrics Opt-In** - Adding telemetry consent to setup wizard
+4. **Live Model Listing** - Dynamic model dropdown populated from provider APIs (v1.9.5)
 
 ---
 
@@ -24,6 +25,7 @@ This document describes UI/UX enhancements for:
 | `/v1/system/adapters/available` | GET | Get discovery report with eligibility status |
 | `/v1/system/adapters/{name}/install` | POST | Install missing dependencies |
 | `/v1/system/adapters/{name}/check-eligibility` | POST | Recheck after manual installation |
+| `/v1/setup/list-models` | POST | Query provider API for live model list with CIRIS annotations |
 
 ### 1.2 Adapter States
 
@@ -481,9 +483,263 @@ if "ciris_covenant_metrics" in enabled_adapters:
 
 ---
 
-## Part 4: Implementation Checklist
+## Part 4: Live Model Listing (v1.9.5)
 
-### 4.1 Mobile App Changes
+### 4.1 Overview
+
+The `POST /v1/setup/list-models` endpoint queries LLM providers for their live model lists, cross-references with the static `MODEL_CAPABILITIES.json` for CIRIS compatibility annotations, and returns sorted results. Falls back gracefully to static data on failure.
+
+This enables a **dynamic model dropdown** in the LLM_CONFIGURATION wizard step instead of free-text model entry.
+
+### 4.2 Endpoint
+
+```
+POST /v1/setup/list-models
+```
+
+No authentication required during first-run setup.
+
+**Request Body** (reuses `LLMValidationRequest`):
+```json
+{
+  "provider": "anthropic",
+  "api_key": "sk-ant-...",
+  "base_url": null,
+  "model": null
+}
+```
+
+**Response** (`ListModelsResponse`):
+```json
+{
+  "data": {
+    "provider": "anthropic",
+    "models": [
+      {
+        "id": "claude-sonnet-4-20250514",
+        "display_name": "Claude Sonnet 4",
+        "ciris_compatible": true,
+        "ciris_recommended": true,
+        "tier": "default",
+        "capabilities": {
+          "supports_tools": true,
+          "supports_streaming": true,
+          "supports_json_mode": true,
+          "supports_system_prompt": true,
+          "supports_vision": true
+        },
+        "context_window": 200000,
+        "notes": null,
+        "source": "both"
+      },
+      {
+        "id": "claude-3-5-haiku-20241022",
+        "display_name": "Claude 3.5 Haiku",
+        "ciris_compatible": true,
+        "ciris_recommended": false,
+        "tier": "fast",
+        "capabilities": { "..." },
+        "context_window": 200000,
+        "notes": null,
+        "source": "both"
+      },
+      {
+        "id": "claude-3-opus-20240229",
+        "display_name": "claude-3-opus-20240229",
+        "ciris_compatible": null,
+        "ciris_recommended": false,
+        "tier": null,
+        "capabilities": null,
+        "context_window": null,
+        "notes": null,
+        "source": "live"
+      }
+    ],
+    "total_count": 15,
+    "source": "live",
+    "error": null
+  }
+}
+```
+
+**Static Fallback Response** (when live query fails):
+```json
+{
+  "data": {
+    "provider": "openai",
+    "models": [ "..." ],
+    "total_count": 5,
+    "source": "static",
+    "error": "Authentication failed (HTTP 401)"
+  }
+}
+```
+
+### 4.3 Provider Routing
+
+| Provider | SDK / Method | Notes |
+|----------|-------------|-------|
+| `anthropic` | `AsyncAnthropic().models.list()` | Native SDK with cursor pagination |
+| `google` | `genai.Client().aio.models.list()` | Google GenAI SDK |
+| `local` (Ollama) | `httpx GET /api/tags` | Detected via `:11434` in URL |
+| `openai` | `AsyncOpenAI().models.list()` | OpenAI SDK |
+| `openrouter` | `AsyncOpenAI().models.list()` | OpenAI-compatible, base URL auto-resolved |
+| `groq` | `AsyncOpenAI().models.list()` | OpenAI-compatible, base URL auto-resolved |
+| `together` | `AsyncOpenAI().models.list()` | OpenAI-compatible, base URL auto-resolved |
+
+Known base URLs resolved automatically:
+- `openrouter` -> `https://openrouter.ai/api/v1`
+- `groq` -> `https://api.groq.com/openai/v1`
+- `together` -> `https://api.together.xyz/v1`
+
+### 4.4 Model Sorting
+
+Models are sorted by CIRIS compatibility for optimal UX:
+
+1. **Recommended** (`ciris_recommended=true`) - first
+2. **Compatible** (`ciris_compatible=true`, not recommended) - second
+3. **Unknown** (`ciris_compatible=null`) - third
+4. **Incompatible** (`ciris_compatible=false`) - last
+5. Alphabetical within each group
+
+### 4.5 Error Handling
+
+| Failure | Behavior |
+|---------|----------|
+| Invalid API key | Static fallback with error message |
+| Timeout (10s) | Static fallback with error message |
+| Auth error (401/403) | Static fallback with error message |
+| SDK not installed | Static fallback (alternative approach or static data) |
+| Unknown provider | Empty model list, `source="static"` |
+
+### 4.6 Mobile UI Integration - Model Dropdown
+
+The LLM_CONFIGURATION step should use the list-models endpoint to populate a model dropdown after the user enters their API key:
+
+```
+┌────────────────────────────────────────┐
+│  ← Back                        Step 2/5│
+│                                        │
+│  LLM Configuration                     │
+│                                        │
+│  Provider:  [Anthropic     ▼]          │
+│                                        │
+│  API Key:   [sk-ant-•••••••••]         │
+│                                        │
+│  Model:     [Loading models...   ]     │
+│             ┌──────────────────────┐   │
+│             │ ★ Claude Sonnet 4    │   │
+│             │   Recommended        │   │
+│             │ ✓ Claude 3.5 Haiku   │   │
+│             │   Fast tier          │   │
+│             │ ✓ Claude Opus 4      │   │
+│             │   Premium tier       │   │
+│             │ ─────────────────    │   │
+│             │   claude-3-opus-...  │   │
+│             │   Unknown compat.    │   │
+│             └──────────────────────┘   │
+│                                        │
+│  ┌────────────────────────────────┐   │
+│  │           [Continue]           │   │
+│  └────────────────────────────────┘   │
+└────────────────────────────────────────┘
+```
+
+**UX Flow:**
+1. User selects provider and enters API key
+2. On API key blur/submit, call `POST /v1/setup/list-models` with provider + key
+3. Show loading spinner in model dropdown
+4. Populate dropdown with sorted models (recommended first, with visual indicators)
+5. If live query fails, show static models with a note about the fallback
+6. Pre-select the recommended model if available
+
+### 4.7 State Management
+
+```kotlin
+// Add to SetupFormState
+data class SetupFormState(
+    // ... existing fields ...
+
+    // Live Model Listing
+    val modelsLoading: Boolean = false,
+    val availableModels: List<LiveModelInfo> = emptyList(),
+    val modelsSource: String = "",  // "live" or "static"
+    val modelsError: String? = null,
+    val selectedModelId: String? = null
+)
+```
+
+### 4.8 API Integration
+
+```kotlin
+// SetupViewModel.kt additions
+
+suspend fun loadModelsForProvider(provider: String, apiKey: String, baseUrl: String? = null) {
+    _state.update { it.copy(modelsLoading = true, modelsError = null) }
+
+    try {
+        val response = apiClient.post(
+            "/v1/setup/list-models",
+            body = mapOf(
+                "provider" to provider,
+                "api_key" to apiKey,
+                "base_url" to baseUrl
+            )
+        )
+        val result = response.parseAs<SuccessResponse<ListModelsResponse>>()
+        val data = result.data
+
+        _state.update {
+            it.copy(
+                modelsLoading = false,
+                availableModels = data.models,
+                modelsSource = data.source,
+                modelsError = data.error,
+                // Auto-select recommended model
+                selectedModelId = data.models
+                    .firstOrNull { m -> m.cirisRecommended }?.id
+                    ?: data.models.firstOrNull()?.id
+            )
+        }
+    } catch (e: Exception) {
+        _state.update {
+            it.copy(modelsLoading = false, modelsError = e.message)
+        }
+    }
+}
+```
+
+### 4.9 Schemas
+
+```kotlin
+@Serializable
+data class LiveModelInfo(
+    val id: String,
+    @SerialName("display_name") val displayName: String,
+    @SerialName("ciris_compatible") val cirisCompatible: Boolean? = null,
+    @SerialName("ciris_recommended") val cirisRecommended: Boolean = false,
+    val tier: String? = null,
+    val capabilities: ModelCapabilities? = null,
+    @SerialName("context_window") val contextWindow: Int? = null,
+    val notes: String? = null,
+    val source: String = "live"
+)
+
+@Serializable
+data class ListModelsResponse(
+    val provider: String,
+    val models: List<LiveModelInfo> = emptyList(),
+    @SerialName("total_count") val totalCount: Int = 0,
+    val source: String = "live",
+    val error: String? = null
+)
+```
+
+---
+
+## Part 5: Implementation Checklist
+
+### 5.1 Mobile App Changes
 
 - [ ] Add `SetupStep.OPTIONAL_FEATURES` to wizard flow
 - [ ] Create `OptionalFeaturesStep` composable
@@ -493,15 +749,23 @@ if "ciris_covenant_metrics" in enabled_adapters:
 - [ ] Update `completeSetup()` to include covenant metrics config
 - [ ] Add privacy policy link handler
 
-### 4.2 Backend Changes
+### 5.2 Backend Changes
 
+- [x] `POST /v1/setup/list-models` endpoint (v1.9.5 - implemented)
+- [x] Per-provider model listing (OpenAI, Anthropic, Google, Ollama) (v1.9.5)
+- [x] CIRIS compatibility annotation from MODEL_CAPABILITIES.json (v1.9.5)
+- [x] Static fallback on live query failure (v1.9.5)
+- [x] URL sanitization for Ollama base URLs (v1.9.5)
 - [ ] Ensure `/v1/system/adapters/available` works without auth during setup
 - [ ] Add covenant metrics fields to setup completion
 - [ ] Update `.env` generation to include covenant metrics config
 - [ ] Add adapter installation progress endpoint (optional, for real-time updates)
 
-### 4.3 Testing
+### 5.3 Testing
 
+- [x] Unit tests for list-models helpers (31 tests) (v1.9.5)
+- [x] Integration tests for list-models endpoint (3 tests) (v1.9.5)
+- [x] QA runner live provider tests for list-models (6 tests) (v1.9.5)
 - [ ] Unit tests for new wizard step
 - [ ] Integration tests for adapter discovery in setup
 - [ ] Integration tests for covenant metrics opt-in
@@ -510,9 +774,9 @@ if "ciris_covenant_metrics" in enabled_adapters:
 
 ---
 
-## Part 5: UX Guidelines
+## Part 6: UX Guidelines
 
-### 5.1 Consent Language
+### 6.1 Consent Language
 
 **DO:**
 - Use clear, plain language
@@ -528,7 +792,7 @@ if "ciris_covenant_metrics" in enabled_adapters:
 - Make consent required for basic functionality
 - Use technical jargon
 
-### 5.2 Installation UX
+### 6.2 Installation UX
 
 **DO:**
 - Show clear progress indicators
@@ -543,7 +807,7 @@ if "ciris_covenant_metrics" in enabled_adapters:
 - Hide installation commands
 - Fail silently
 
-### 5.3 Adapter Discovery
+### 6.3 Adapter Discovery
 
 **DO:**
 - Group adapters by state (ready/installable/manual)
@@ -641,8 +905,10 @@ data class CovenantMetricsConfig(
 
 ### Tests
 - `tests/adapters/api/test_adapter_availability.py`
+- `tests/adapters/api/test_setup_routes.py` - Integration tests (includes `TestListModelsEndpoint`)
+- `tests/ciris_engine/logic/adapters/api/routes/test_setup_routes_coverage.py` - Unit tests (31 list-models helper tests)
 - `tests/adapters/covenant_metrics/test_covenant_metrics_adapter.py`
-- `tools/qa_runner/modules/setup_tests.py`
+- `tools/qa_runner/modules/setup_tests.py` - QA runner live provider tests
 
 ---
 

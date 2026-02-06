@@ -288,7 +288,6 @@ struct InitializingView: View {
     @State private var runtimeStatus: RuntimeStatus? = nil
     @State private var statusTimer: Timer? = nil
     @State private var hasStartedInit = false
-    @State private var showDebugLog = false
 
     let cirisColor = Color(red: 0.255, green: 0.612, blue: 0.627)
 
@@ -404,22 +403,10 @@ struct InitializingView: View {
                         .padding(.top, 12)
                     }
 
-                    // Debug log button
-                    Button(action: { showDebugLog = true }) {
-                        HStack {
-                            Image(systemName: "doc.text.magnifyingglass")
-                            Text("View Logs")
-                        }
-                        .font(.system(size: 12))
-                        .foregroundColor(.gray.opacity(0.6))
-                    }
-                    .padding(.top, 16)
+                    // Note: Debug log button removed for production release
                 }
             }
             .padding(.vertical, 40)
-        }
-        .sheet(isPresented: $showDebugLog) {
-            DebugLogView()
         }
         .onAppear {
             // Start polling FIRST, then start initialization
@@ -879,69 +866,120 @@ struct StartupErrorView: View {
             Color(red: 0.1, green: 0.1, blue: 0.18)
                 .ignoresSafeArea()
 
-            VStack(spacing: 20) {
-                // CIRIS Signet (dimmed)
-                Image("CIRISSignet")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 80, height: 80)
-                    .opacity(0.5)
+            ScrollView {
+                VStack(spacing: 20) {
+                    // CIRIS Signet (dimmed)
+                    Image("CIRISSignet")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 80, height: 80)
+                        .opacity(0.5)
 
-                Text("Startup Failed")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(.red)
+                    Text("Engine Failed to Start")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.red)
 
-                Text("The following components failed to load:")
-                    .font(.system(size: 14))
-                    .foregroundColor(.gray)
+                    if !failedSteps.isEmpty {
+                        Text("The following components failed to load:")
+                            .font(.system(size: 14))
+                            .foregroundColor(.gray)
 
-                // Failed steps
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(failedSteps) { step in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.red)
-                                Text(step.name)
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(.white)
-                            }
-                            if let msg = step.message {
-                                Text(msg)
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundColor(.gray)
-                                    .lineLimit(2)
+                        // Failed steps
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(failedSteps) { step in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(.red)
+                                        Text(step.name)
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundColor(.white)
+                                    }
+                                    if let msg = step.message {
+                                        Text(msg)
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .foregroundColor(.gray)
+                                            .lineLimit(3)
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.red.opacity(0.1))
+                                .cornerRadius(8)
                             }
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(8)
+                        .padding(.horizontal, 24)
+                    } else {
+                        // Show generic error message
+                        Text(message)
+                            .font(.system(size: 14))
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
+
+                    Spacer().frame(height: 10)
+
+                    // Debug information section
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Debug Information")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.gray)
+
+                        Text(getDebugInfo())
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.gray.opacity(0.8))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(12)
+                    .background(Color.white.opacity(0.05))
+                    .cornerRadius(8)
+                    .padding(.horizontal, 24)
+
+                    Text("If this persists, please report at:\ngithub.com/CIRISAI/CIRISAgent/issues")
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray.opacity(0.6))
+                        .multilineTextAlignment(.center)
+
+                    Spacer().frame(height: 20)
+
+                    Button(action: onRetry) {
+                        Text("Retry")
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 32)
+                            .padding(.vertical, 12)
+                            .background(cirisColor)
+                            .cornerRadius(8)
                     }
                 }
-                .padding(.horizontal, 24)
-
-                Spacer().frame(height: 10)
-
-                Text("This usually means a native Python module\nis missing from the app bundle.")
-                    .font(.system(size: 12))
-                    .foregroundColor(.gray)
-                    .multilineTextAlignment(.center)
-
-                Spacer().frame(height: 20)
-
-                Button(action: onRetry) {
-                    Text("Retry")
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, 12)
-                        .background(cirisColor)
-                        .cornerRadius(8)
-                }
+                .padding(.vertical, 40)
             }
-            .padding(.vertical, 40)
         }
+    }
+
+    private func getDebugInfo() -> String {
+        let device = UIDevice.current
+        let processInfo = ProcessInfo.processInfo
+
+        // Get app version
+        let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+        let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
+
+        // Check if simulator
+        #if targetEnvironment(simulator)
+        let cpuArch = "Simulator"
+        #else
+        let cpuArch = "arm64"
+        #endif
+
+        return """
+        Platform: iOS \(device.systemVersion)
+        Device: \(device.model)
+        CPU: \(cpuArch)
+        App: CIRIS v\(appVersion) (\(buildNumber))
+        Memory: \(processInfo.physicalMemory / 1024 / 1024) MB
+        """
     }
 }
 

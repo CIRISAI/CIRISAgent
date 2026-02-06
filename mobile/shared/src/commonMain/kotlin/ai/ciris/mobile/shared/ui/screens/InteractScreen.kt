@@ -2,9 +2,6 @@ package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.models.ChatMessage
 import ai.ciris.mobile.shared.models.MessageType
-import ai.ciris.mobile.shared.ui.components.DebugConsole
-import ai.ciris.mobile.shared.ui.components.DebugIndicator
-import ai.ciris.mobile.shared.ui.components.ErrorToast
 import ai.ciris.mobile.shared.viewmodels.AgentProcessingState
 import ai.ciris.mobile.shared.viewmodels.BubbleEmoji
 import ai.ciris.mobile.shared.viewmodels.InteractViewModel
@@ -90,9 +87,6 @@ fun InteractScreen(
     val timelineEvents by viewModel.timelineEvents.collectAsState()
     val showTimeline by viewModel.showTimeline.collectAsState()
     val showLegend by viewModel.showLegend.collectAsState()
-
-    // Debug console state
-    var showDebugConsole by remember { mutableStateOf(false) }
 
     // Focus requester for the text input
     val focusRequester = remember { FocusRequester() }
@@ -214,25 +208,7 @@ fun InteractScreen(
                 .padding(start = 8.dp, bottom = 70.dp) // Align with agent icon position
         )
 
-        // Error toast - appears at top when errors occur
-        ErrorToast(
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
-
-        // Debug indicator button - bottom right corner
-        DebugIndicator(
-            onTap = { showDebugConsole = !showDebugConsole },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = 80.dp)
-        )
-
-        // Debug console panel - slides up from bottom
-        DebugConsole(
-            isExpanded = showDebugConsole,
-            onToggle = { showDebugConsole = false },
-            modifier = Modifier.align(Alignment.BottomCenter)
-        )
+        // Note: ErrorToast, DebugIndicator, and DebugConsole removed for production release
     } // End of Box
 }
 

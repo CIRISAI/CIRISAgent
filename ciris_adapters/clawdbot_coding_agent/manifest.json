@@ -6,6 +6,8 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": null
   },
+  "platform_requirements": ["desktop_cli"],
+  "platform_requirements_rationale": "Requires CLI coding agents that only run on desktop platforms",
   "services": [
     {
       "type": "TOOL",

@@ -17,7 +17,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**BETA RELEASE 1.9.4-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
+**STABLE RELEASE 1.9.5** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 
@@ -117,13 +117,13 @@ CIRIS uses an OpenAI-compatible API interface for LLM inference:
 
 | Provider | Endpoint | Authentication | Platform |
 |----------|----------|----------------|----------|
-| ciris.ai | `https://ciris.ai/v1` | Google Sign-In | Android only |
+| ciris.ai | `https://ciris.ai/v1` | Google Sign-In | Android, iOS |
 | OpenAI | `https://api.openai.com/v1` | API Key | All |
 | Groq | `https://api.groq.com/openai/v1` | API Key | All |
 | Together.ai | `https://api.together.ai/v1` | API Key | All |
 | Local LLMs | `http://localhost:8080/v1` | Optional | All |
 
-**ciris.ai Proxy** (Android only): Available exclusively on Android due to Google Play Services dependencies. Uses Google Sign-In for authentication with automatic token refresh. No logging - prompts and responses pass through without being stored. Backend providers are Groq and Together.ai.
+**ciris.ai Proxy** (Mobile): Available on Android and iOS via the unified KMP mobile app. Uses Google Sign-In for authentication with automatic token refresh. No logging - prompts and responses pass through without being stored. Backend providers are Groq and Together.ai.
 
 ### Agent Templates
 
@@ -164,6 +164,35 @@ python main.py
 - Wise Authority adapters load automatically when their domain is needed
 - Mock LLM disables real LLM services when loaded (testing only)
 
+## Mobile Apps
+
+CIRIS provides native mobile apps for Android and iOS via **Kotlin Multiplatform (KMP)**:
+
+```
+mobile/                    # Unified KMP codebase
+├── shared/               # Shared Kotlin code (ViewModels, API, UI)
+├── androidApp/           # Android-specific code
+└── iosApp/               # iOS-specific code (SwiftUI shell)
+```
+
+**Key Features:**
+- **Unified Codebase**: Single Kotlin codebase for both platforms via Compose Multiplatform
+- **Setup Wizard**: 4-step guided setup with LLM configuration and optional features
+- **Covenant Metrics Consent**: Explicit opt-in for AI alignment research (anonymous metrics only)
+- **Google Sign-In**: Free CIRIS AI proxy access with Google authentication
+- **BYOK Mode**: Bring Your Own Key for OpenAI, Anthropic, Groq, Together.ai, or local LLMs
+
+**Building:**
+```bash
+# Android
+cd mobile && ./gradlew :androidApp:assembleDebug
+
+# iOS (requires Xcode)
+cd mobile/iosApp && xcodebuild -scheme iosApp
+```
+
+**→ [Mobile Development Guide](mobile/README.md)** - Full build instructions and architecture
+
 ## Deployment Ready
 
 ✅ **22 core services** with message bus architecture
@@ -171,6 +200,7 @@ python main.py
 ✅ **Thousands of tests** with comprehensive coverage
 ✅ **SonarCloud quality gates** passing
 ✅ **Currently powering** Discord moderation at agents.ciris.ai
+✅ **Mobile apps** for Android and iOS via unified KMP codebase
 
 ## Documentation
 

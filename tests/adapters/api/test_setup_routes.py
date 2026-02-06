@@ -935,3 +935,84 @@ class TestValidateSetupPasswords:
         with pytest.raises(Exception) as exc_info:
             _validate_setup_passwords(setup, is_oauth_user=False)
         assert "System admin password" in str(exc_info.value.detail)
+
+
+class TestListModelsEndpoint:
+    """Test POST /v1/setup/list-models endpoint."""
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup._list_models_for_provider")
+    def test_list_models_success(self, mock_list, mock_first_run, client):
+        """Test successful model listing returns expected structure."""
+        from ciris_engine.logic.adapters.api.routes.setup import ListModelsResponse, LiveModelInfo
+
+        mock_list.return_value = ListModelsResponse(
+            provider="openai",
+            models=[
+                LiveModelInfo(
+                    id="gpt-4o", display_name="GPT-4o", ciris_compatible=True, ciris_recommended=True, source="both"
+                ),
+                LiveModelInfo(id="gpt-3.5-turbo", display_name="gpt-3.5-turbo", source="live"),
+            ],
+            total_count=2,
+            source="live",
+        )
+
+        response = client.post(
+            "/v1/setup/list-models",
+            json={
+                "provider": "openai",
+                "api_key": "sk-test123",
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["provider"] == "openai"
+        assert data["source"] == "live"
+        assert len(data["models"]) == 2
+        assert data["models"][0]["id"] == "gpt-4o"
+        assert data["models"][0]["ciris_compatible"] is True
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup._list_models_for_provider")
+    def test_list_models_static_fallback(self, mock_list, mock_first_run, client):
+        """Test fallback response when live query fails."""
+        from ciris_engine.logic.adapters.api.routes.setup import ListModelsResponse, LiveModelInfo
+
+        mock_list.return_value = ListModelsResponse(
+            provider="openai",
+            models=[LiveModelInfo(id="gpt-4o", display_name="GPT-4o", ciris_compatible=True, source="static")],
+            total_count=1,
+            source="static",
+            error="Live query failed: Connection timeout. Showing cached model data.",
+        )
+
+        response = client.post(
+            "/v1/setup/list-models",
+            json={
+                "provider": "openai",
+                "api_key": "sk-test123",
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["source"] == "static"
+        assert data["error"] is not None
+        assert "Connection timeout" in data["error"]
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup._list_models_for_provider")
+    def test_list_models_no_auth_required(self, mock_list, mock_first_run, client):
+        """Test endpoint is accessible without auth during first-run."""
+        from ciris_engine.logic.adapters.api.routes.setup import ListModelsResponse
+
+        mock_list.return_value = ListModelsResponse(provider="openai", models=[], total_count=0, source="live")
+
+        response = client.post(
+            "/v1/setup/list-models",
+            json={
+                "provider": "openai",
+                "api_key": "sk-test123",
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK

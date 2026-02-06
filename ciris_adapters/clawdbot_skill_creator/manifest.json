@@ -6,6 +6,8 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": null
   },
+  "platform_requirements": ["desktop_cli"],
+  "platform_requirements_rationale": "Requires file system access for skill packaging, only available on desktop",
   "services": [
     {
       "type": "TOOL",

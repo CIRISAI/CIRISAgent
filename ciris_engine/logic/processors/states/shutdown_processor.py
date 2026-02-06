@@ -28,6 +28,7 @@ from ciris_engine.logic.utils.shutdown_manager import get_shutdown_manager
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
 from ciris_engine.schemas.processors.base import ProcessorServices
+from ciris_engine.schemas.processors.context import ProcessorContext
 from ciris_engine.schemas.processors.results import ShutdownResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
@@ -222,9 +223,10 @@ class ShutdownProcessor(BaseProcessor):
         try:
             # Evaluate consent requirement once per shutdown session
             if not self._consent_evaluated:
+                shutdown_context = ProcessorContext(origin="shutdown")
                 self._consent_required, self._consent_reason = await self.condition_evaluator.requires_consent(
                     self.cognitive_behaviors,
-                    context=None,  # TODO: Pass ProcessorContext when available
+                    context=shutdown_context,
                 )
                 self._consent_evaluated = True
                 logger.info(

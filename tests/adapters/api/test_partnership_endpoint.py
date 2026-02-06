@@ -9,10 +9,11 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import status
+from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.app import create_app
+from ciris_engine.logic.adapters.api.routes.partnership import create_partnership_response, require_admin
 from ciris_engine.schemas.consent.core import (
     ConsentCategory,
     PartnershipAgingStatus,
@@ -570,3 +571,182 @@ class TestPartnershipDecideEndpoint:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "accept" in response.json()["detail"].lower() or "reject" in response.json()["detail"].lower()
+
+
+class TestPartnershipHelpers:
+    """Test partnership helper functions directly."""
+
+    def test_require_admin_allows_admin(self):
+        """Test require_admin passes for ADMIN role."""
+        user = MagicMock(role="ADMIN")
+        require_admin(user, "test action")  # Should not raise
+
+    def test_require_admin_allows_system_admin(self):
+        """Test require_admin passes for SYSTEM_ADMIN role."""
+        user = MagicMock(role="SYSTEM_ADMIN")
+        require_admin(user, "test action")  # Should not raise
+
+    def test_require_admin_rejects_user(self):
+        """Test require_admin raises 403 for USER role."""
+        user = MagicMock(role="USER")
+        with pytest.raises(HTTPException) as exc_info:
+            require_admin(user, "view metrics")
+        assert exc_info.value.status_code == 403
+        assert "view metrics" in exc_info.value.detail
+
+    def test_create_partnership_response_basic(self):
+        """Test create_partnership_response with minimal args."""
+        resp = create_partnership_response(
+            data={"key": "value"},
+            message="Test message",
+        )
+        assert resp.success is True
+        assert resp.data == {"key": "value"}
+        assert resp.message == "Test message"
+        assert "timestamp" in resp.metadata
+
+    def test_create_partnership_response_with_extra_metadata(self):
+        """Test create_partnership_response merges extra metadata."""
+        resp = create_partnership_response(
+            data={"key": "value"},
+            message="Test",
+            extra_metadata={"extra": "data"},
+        )
+        assert resp.metadata["extra"] == "data"
+        assert "timestamp" in resp.metadata
+
+    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
+    @patch("ciris_engine.logic.persistence.get_task_by_id")
+    def test_decide_partnership_no_user_context(self, mock_get_task, mock_auth, client):
+        """Test decide endpoint when task has no user context."""
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+        from ciris_engine.schemas.runtime.models import Task
+
+        mock_auth.return_value = MagicMock(username="user1", role="USER")
+        mock_task = Task(
+            task_id="task_123",
+            channel_id="ch",
+            description="test",
+            priority=5,
+            status=TaskStatus.ACTIVE,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            updated_at=datetime.now(timezone.utc).isoformat(),
+            context=None,
+            parent_task_id=None,
+        )
+        mock_get_task.return_value = mock_task
+
+        response = client.post(
+            "/v1/partnership/decide",
+            json={"task_id": "task_123", "decision": "accept"},
+            headers={"Authorization": "Bearer token"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "user context" in response.json()["detail"].lower()
+
+    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
+    @patch("ciris_engine.logic.persistence.get_task_by_id")
+    @patch("ciris_engine.logic.persistence.add_graph_node")
+    @patch("ciris_engine.logic.persistence.models.tasks.update_task_status")
+    def test_accept_partnership_approval_fails(
+        self, mock_update, mock_graph, mock_get_task, mock_auth, client, mock_partnership_manager
+    ):
+        """Test accept when finalize_partnership_approval returns None."""
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+        from ciris_engine.schemas.runtime.models import Task, TaskContext
+
+        mock_auth.return_value = MagicMock(username="user1", role="USER")
+        mock_task = Task(
+            task_id="task_123",
+            channel_id="ch",
+            description="test",
+            priority=5,
+            status=TaskStatus.ACTIVE,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            updated_at=datetime.now(timezone.utc).isoformat(),
+            context=TaskContext(channel_id="ch", user_id="user1", correlation_id="c", parent_task_id=None),
+            parent_task_id=None,
+        )
+        mock_get_task.return_value = mock_task
+        mock_partnership_manager.finalize_partnership_approval.return_value = None
+
+        with patch.object(client.app.state, "consent_manager", create=True) as mock_consent:
+            mock_consent._partnership_manager = mock_partnership_manager
+            response = client.post(
+                "/v1/partnership/decide",
+                json={"task_id": "task_123", "decision": "accept"},
+                headers={"Authorization": "Bearer token"},
+            )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "approval failed" in response.json()["detail"].lower()
+
+    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
+    @patch("ciris_engine.logic.persistence.get_task_by_id")
+    @patch("ciris_engine.logic.persistence.models.tasks.update_task_status")
+    def test_reject_without_reason_uses_default(
+        self, mock_update, mock_get_task, mock_auth, client, mock_partnership_manager
+    ):
+        """Test reject without reason uses default message."""
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+        from ciris_engine.schemas.runtime.models import Task, TaskContext
+
+        mock_auth.return_value = MagicMock(username="user1", role="USER")
+        mock_task = Task(
+            task_id="task_123",
+            channel_id="ch",
+            description="test",
+            priority=5,
+            status=TaskStatus.ACTIVE,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            updated_at=datetime.now(timezone.utc).isoformat(),
+            context=TaskContext(channel_id="ch", user_id="user1", correlation_id="c", parent_task_id=None),
+            parent_task_id=None,
+        )
+        mock_get_task.return_value = mock_task
+        mock_partnership_manager._pending_partnerships = {}
+        mock_partnership_manager._partnership_history = {}
+
+        with patch.object(client.app.state, "consent_manager", create=True) as mock_consent:
+            mock_consent._partnership_manager = mock_partnership_manager
+            response = client.post(
+                "/v1/partnership/decide",
+                json={"task_id": "task_123", "decision": "reject"},
+                headers={"Authorization": "Bearer token"},
+            )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["data"]["reason"] == "Partnership request was declined"
+
+    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
+    @patch("ciris_engine.logic.persistence.get_task_by_id")
+    @patch("ciris_engine.logic.persistence.models.tasks.update_task_status")
+    def test_defer_without_reason_uses_default(
+        self, mock_update, mock_get_task, mock_auth, client, mock_partnership_manager
+    ):
+        """Test defer without reason uses default message."""
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+        from ciris_engine.schemas.runtime.models import Task, TaskContext
+
+        mock_auth.return_value = MagicMock(username="user1", role="USER")
+        mock_task = Task(
+            task_id="task_123",
+            channel_id="ch",
+            description="test",
+            priority=5,
+            status=TaskStatus.ACTIVE,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            updated_at=datetime.now(timezone.utc).isoformat(),
+            context=TaskContext(channel_id="ch", user_id="user1", correlation_id="c", parent_task_id=None),
+            parent_task_id=None,
+        )
+        mock_get_task.return_value = mock_task
+        mock_partnership_manager._partnership_history = {}
+
+        with patch.object(client.app.state, "consent_manager", create=True) as mock_consent:
+            mock_consent._partnership_manager = mock_partnership_manager
+            response = client.post(
+                "/v1/partnership/decide",
+                json={"task_id": "task_123", "decision": "defer"},
+                headers={"Authorization": "Bearer token"},
+            )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["data"]["reason"] == "More information needed before deciding"

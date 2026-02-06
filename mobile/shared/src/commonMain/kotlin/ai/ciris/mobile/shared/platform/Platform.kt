@@ -44,3 +44,9 @@ fun getOAuthProviderId(): String = when (getPlatform()) {
     Platform.IOS -> "apple"
     Platform.ANDROID -> "google"
 }
+
+/**
+ * Get device debug information for error reporting.
+ * Includes platform, OS version, CPU architecture, and app version.
+ */
+expect fun getDeviceDebugInfo(): String

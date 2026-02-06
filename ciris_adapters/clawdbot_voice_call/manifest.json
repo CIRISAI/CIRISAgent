@@ -6,6 +6,8 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": null
   },
+  "platform_requirements": ["desktop_cli"],
+  "platform_requirements_rationale": "Requires Moltbot voice plugin which only runs on desktop",
   "services": [
     {
       "type": "TOOL",

@@ -127,6 +127,9 @@ class ServerManager:
             os.path.join(self.config.project_root, "ciris_engine.db-shm"),
             os.path.join(self.config.project_root, "audit.db"),
             os.path.join(self.config.project_root, "secrets.db"),
+            # Also remove .env to reset first-run state (both locations checked in dev mode)
+            os.path.join(self.config.project_root, ".env"),
+            os.path.join(self.config.project_root, "ciris", ".env"),  # Dev mode first-priority path
         ]
 
         for path in data_paths:
@@ -284,18 +287,25 @@ class ServerManager:
                 response = requests.get(f"{self.base_url}/v1/system/health", timeout=5)
                 if response.status_code == 200:
                     data = response.json()
-                    # Response format: {"success": true, "data": {"cognitive_state": "work", ...}}
+                    # Response format: {"data": {"cognitive_state": "work"|null, ...}}
                     health_data = data.get("data", data)
-                    agent_state = health_data.get("cognitive_state", "unknown")
+                    agent_state = health_data.get("cognitive_state")
 
-                    if agent_state.lower() in ["work", "ready"]:
+                    # In first-run mode, cognitive_state is null - that's OK
+                    # Check for healthy status or normal operation states
+                    is_healthy = health_data.get("status") == "healthy"
+                    is_ready = agent_state and agent_state.lower() in ["work", "ready"]
+                    is_first_run = agent_state is None and is_healthy
+
+                    if is_ready or is_first_run:
                         status.running = True
                         status.healthy = True
-                        status.agent_state = agent_state
-                        print(f"✅ Server ready (state: {agent_state})")
+                        status.agent_state = agent_state or "first-run"
+                        state_msg = agent_state or "first-run (setup required)"
+                        print(f"✅ Server ready (state: {state_msg})")
                         return status
                     else:
-                        print(f"   Agent state: {agent_state}")
+                        print(f"   Agent state: {agent_state}, healthy: {is_healthy}")
 
             except requests.exceptions.ConnectionError:
                 pass  # Server not ready yet

@@ -71,7 +71,8 @@ Examples:
     parser.add_argument(
         "--wipe",
         action="store_true",
-        help="Wipe all data before testing (clean slate)",
+        default=True,
+        help="Wipe all data before testing (clean slate) - enabled by default",
     )
     parser.add_argument(
         "--no-wipe",

@@ -25,6 +25,7 @@ from .test_cases import (
     test_live_model_listing,
     test_load_models,
     test_load_setup_wizard,
+    test_login_after_setup,
     test_navigate_to_llm_config,
     test_receive_response,
     test_select_model,
@@ -121,6 +122,7 @@ class WebUITestRunner:
         "live_model_listing": test_live_model_listing,
         "select_model": test_select_model,
         "complete_setup": test_complete_setup,
+        "login": test_login_after_setup,
         "send_message": test_send_message,
         "receive_response": test_receive_response,
     }

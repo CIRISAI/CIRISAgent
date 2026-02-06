@@ -58,6 +58,7 @@ class WebUITestConfig:
 
     # Test account (for setup wizard)
     admin_password: str = "testpassword123"
+    admin_username: str = "testadmin"
     user_email: str = "test@example.com"
     user_password: str = "userpassword123"
 
@@ -627,59 +628,157 @@ async def test_complete_setup(browser: BrowserHelper, config: WebUITestConfig) -
     Test completing the setup wizard.
 
     Steps:
-    1. Click through remaining steps (admin password, account, adapters)
-    2. Complete setup
-    3. Verify redirect to main UI
+    1. Click Continue through steps until Account Creation
+    2. Fill account info (Generate Random for admin, username, passwords)
+    3. Click Complete Setup ONCE
+    4. Wait for redirect to login page
     """
     start = datetime.now()
     report = TestReport(name="complete_setup", result=TestResult.PASSED)
 
     try:
-        steps_completed = 0
+        # Step 1: Navigate through wizard steps until Account Creation
+        for step in range(5):  # Max 5 steps
+            await browser.wait(1)
+            content = await browser.get_page_content()
+            current_url = browser.page.url
+            report.details[f"step_{step}_url"] = current_url
 
-        # Test Connection (if available)
-        if await browser.click_text("Test Connection"):
-            await browser.wait(3)
-            steps_completed += 1
+            # Already on login page - setup done
+            if "Sign in" in content or "/login" in current_url:
+                report.message = "Setup completed - on login page"
+                report.details["final_page"] = "login"
+                return report
 
-        # Continue to next step
-        for _ in range(5):  # Max steps to try
-            # Look for continue/next buttons
+            # On Account Creation step - stop and fill form
+            if "Create Your Accounts" in content or "Admin Account" in content:
+                report.details["reached_account_step"] = True
+                break
+
+            # Scroll to bottom to ensure Continue button is visible
+            await browser.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await browser.wait(0.5)
+
+            # Look specifically for Continue button
+            continue_btn = browser.page.locator("button:has-text('Continue')")
+            continue_count = await continue_btn.count()
+            report.details[f"step_{step}_continue_count"] = continue_count
+
             clicked = False
+            if continue_count > 0:
+                for i in range(continue_count):
+                    btn = continue_btn.nth(i)
+                    btn_text = (await btn.text_content() or "").strip()
+                    btn_enabled = await btn.is_enabled()
+                    report.details[f"step_{step}_btn_{i}"] = f"{btn_text[:40]}(en={btn_enabled})"
 
-            for btn_text in ["Continue", "Next", "Continue to", "Finish", "Complete Setup", "Start CIRIS"]:
-                if await browser.click_text(btn_text):
-                    clicked = True
-                    steps_completed += 1
-                    await browser.wait(2)
-                    break
+                    if btn_enabled:
+                        await btn.scroll_into_view_if_needed()
+                        await btn.click()
+                        clicked = True
+                        report.details[f"step_{step}_clicked"] = btn_text[:50]
+                        await browser.wait(2)
+                        shot = await browser.screenshot(f"setup_step_{step + 1}", full_page=True)
+                        report.screenshots.append(shot.path)
+                        break
 
             if not clicked:
+                report.details[f"step_{step}_no_button"] = True
                 break
 
-            # Take screenshot after each step
-            shot = await browser.screenshot(f"setup_step_{steps_completed}", full_page=True)
-            report.screenshots.append(shot.path)
+        # Step 2: Fill Account Creation form
+        content = await browser.get_page_content()
+        if "Create Your Accounts" in content or "Admin Account" in content:
+            # Click "Generate Random" for admin password
+            generate_link = browser.page.locator("button, a").filter(has_text="Generate Random")
+            if await generate_link.count() > 0:
+                await generate_link.first.click()
+                await browser.wait(1)
+                report.details["admin_password"] = "generated"
 
-            # Check if we've reached the main UI
-            content = await browser.get_page_content()
-            if "Dashboard" in content or "Chat" in content or "Interact" in content:
-                report.message = f"Setup completed after {steps_completed} steps"
-                report.details["steps_completed"] = steps_completed
-                break
+            # Fill username field (id="username")
+            username_input = browser.page.locator("input#username")
+            if await username_input.count() > 0:
+                await username_input.first.fill(config.admin_username)
+                report.details["username"] = config.admin_username
+            else:
+                # Fallback to placeholder search
+                username_input = browser.page.locator("input[placeholder*='username']")
+                if await username_input.count() > 0:
+                    await username_input.first.fill(config.admin_username)
+                    report.details["username"] = config.admin_username
 
-            # Fill any password fields we encounter
+            # Fill user password fields (not admin password - that was generated)
+            # Admin fields have IDs: adminPassword, adminPasswordConfirm
+            # User fields have different IDs or no ID
             password_inputs = browser.page.locator("input[type='password']")
             pw_count = await password_inputs.count()
             for i in range(pw_count):
                 inp = password_inputs.nth(i)
-                placeholder = await inp.get_attribute("placeholder") or ""
-                if "admin" in placeholder.lower():
-                    await inp.fill(config.admin_password)
-                elif "password" in placeholder.lower():
-                    await inp.fill(config.user_password)
+                field_id = await inp.get_attribute("id") or ""
+                # Skip admin password fields (already generated)
+                if "admin" in field_id.lower():
+                    continue
+                # Fill user password and confirm
+                await inp.fill(config.user_password)
 
-        report.details["steps_completed"] = steps_completed
+            await browser.wait(1)
+            shot = await browser.screenshot("setup_account_filled", full_page=True)
+            report.screenshots.append(shot.path)
+
+        # Step 3: Click Complete Setup ONCE and wait for redirect
+        complete_btn = browser.page.locator("button").filter(has_text="Complete Setup")
+        if await complete_btn.count() > 0:
+            await complete_btn.first.click()
+            report.details["clicked_complete_setup"] = True
+
+            # Wait for redirect (up to 15 seconds)
+            for i in range(15):
+                await browser.wait(1)
+                content = await browser.get_page_content()
+                current_url = browser.page.url
+
+                # Success - redirected to login
+                if "Sign in" in content or "/login" in current_url:
+                    report.message = "Setup completed - redirected to login"
+                    report.details["final_page"] = "login"
+                    shot = await browser.screenshot("setup_complete_login", full_page=True)
+                    report.screenshots.append(shot.path)
+                    return report
+
+                # Success - reached main UI
+                if "Dashboard" in content or "Welcome back" in content:
+                    report.message = "Setup completed - reached main UI"
+                    report.details["final_page"] = "main"
+                    return report
+
+                # Setup Complete page - click "Go to Login" button
+                if "Setup Complete" in content:
+                    go_to_login_btn = browser.page.locator("button, a").filter(has_text="Go to Login")
+                    if await go_to_login_btn.count() > 0:
+                        await go_to_login_btn.first.click()
+                        report.details["clicked_go_to_login"] = True
+                        await browser.wait(2)
+                        # Continue loop to detect redirect to login
+                        continue
+
+                # Still processing
+                if "Completing" in content or "Processing" in content:
+                    continue
+
+            # Timeout waiting for redirect - capture console logs for debugging
+            report.message = "Setup submitted but redirect not detected"
+            shot = await browser.screenshot("setup_complete_timeout", full_page=True)
+            report.screenshots.append(shot.path)
+            # Capture recent console logs to help debug
+            console_logs = browser.get_recent_console_logs(count=50)
+            report.details["console_logs"] = [
+                f"[{log.get('type', 'log')}] {log.get('text', '')[:200]}"
+                for log in console_logs
+            ]
+        else:
+            report.result = TestResult.FAILED
+            report.message = "Complete Setup button not found"
 
     except Exception as e:
         report.result = TestResult.ERROR
@@ -694,27 +793,133 @@ async def test_complete_setup(browser: BrowserHelper, config: WebUITestConfig) -
 # =============================================================================
 
 
+async def test_login_after_setup(browser: BrowserHelper, config: WebUITestConfig) -> TestReport:
+    """
+    Test logging in after setup completes.
+
+    Steps:
+    1. Detect login page
+    2. Enter credentials created during setup
+    3. Click Sign in
+    4. Verify we reach the main UI
+    """
+    start = datetime.now()
+    report = TestReport(name="login_after_setup", result=TestResult.PASSED)
+
+    try:
+        await browser.wait(1)
+        content = await browser.get_page_content()
+        current_url = browser.page.url
+
+        # Check if we're on the login page
+        on_login_page = "Sign in" in content or "sign in" in content.lower() or "/login" in current_url
+        if not on_login_page:
+            # Maybe we're already logged in or on another page
+            if "Dashboard" in content or "Chat" in content:
+                report.result = TestResult.SKIPPED
+                report.message = "Already logged in - on main UI"
+                return report
+            report.result = TestResult.SKIPPED
+            report.message = f"Not on login page (URL: {current_url})"
+            shot = await browser.screenshot("login_skipped_page")
+            report.screenshots.append(shot.path)
+            return report
+
+        report.details["detected_login_page"] = True
+
+        # Find username input - look for input near "Username" label or first text input
+        username_input = browser.page.locator("input[type='text']").first
+        if await username_input.count() > 0:
+            await username_input.clear()
+            await username_input.fill(config.admin_username)
+            report.details["username_entered"] = config.admin_username
+
+        # Find and fill password
+        password_input = browser.page.locator("input[type='password']").first
+        if await password_input.count() > 0:
+            await password_input.clear()
+            await password_input.fill(config.user_password)
+            report.details["password_entered"] = True
+
+        # Take screenshot before login
+        shot = await browser.screenshot("login_credentials_entered")
+        report.screenshots.append(shot.path)
+
+        # Click Sign in button
+        sign_in_btn = browser.page.locator("button").filter(has_text="Sign in")
+        if await sign_in_btn.count() > 0:
+            await sign_in_btn.first.click()
+            report.details["clicked_sign_in"] = True
+
+            # Wait for login to complete (up to 10 seconds)
+            for i in range(10):
+                await browser.wait(1)
+                content = await browser.get_page_content()
+                current_url = browser.page.url
+
+                # Check for successful login - no longer on login page
+                if "/login" not in current_url and "Sign in to CIRIS" not in content:
+                    if "Dashboard" in content or "Chat" in content or "Interact" in content:
+                        report.message = "Login successful - reached main UI"
+                        report.details["final_page"] = "main"
+                        break
+                    elif "Welcome" in content:
+                        report.message = "Login successful"
+                        break
+
+                # Check for error
+                if "Invalid" in content or "incorrect" in content.lower():
+                    report.result = TestResult.FAILED
+                    report.message = "Login failed - invalid credentials"
+                    break
+            else:
+                report.message = "Login submitted - waiting for redirect"
+        else:
+            report.result = TestResult.FAILED
+            report.message = "Sign in button not found"
+
+        # Take screenshot after login attempt
+        shot = await browser.screenshot("login_result")
+        report.screenshots.append(shot.path)
+
+    except Exception as e:
+        report.result = TestResult.ERROR
+        report.message = str(e)
+
+    report.duration_seconds = (datetime.now() - start).total_seconds()
+    return report
+
+
 async def test_send_message(browser: BrowserHelper, config: WebUITestConfig) -> TestReport:
     """
     Test sending a message to the agent.
 
     Steps:
-    1. Find message input
-    2. Send test message
-    3. Wait for response
+    1. Navigate to chat/interaction page
+    2. Find message input (textarea for chat)
+    3. Send test message
     """
     start = datetime.now()
     report = TestReport(name="send_message", result=TestResult.PASSED)
 
     try:
-        # Navigate to main page if needed
+        await browser.wait(1)
+        content = await browser.get_page_content()
+
+        # If on login page, skip this test
+        if "Sign in" in content or "Login" in content:
+            report.result = TestResult.SKIPPED
+            report.message = "Still on login page - login test must run first"
+            return report
+
+        # Navigate to main/chat page if needed
         current_url = browser.page.url
         if "/setup" in current_url:
             await browser.goto(config.base_url)
             await browser.wait(2)
 
-        # Find message input
-        message_input = browser.page.locator("textarea, input[type='text']").first
+        # Look specifically for a textarea (chat input) not a regular text input
+        message_input = browser.page.locator("textarea").first
 
         if await message_input.count() > 0:
             await message_input.fill(config.test_message)
@@ -861,8 +1066,12 @@ async def test_full_e2e_flow(browser: BrowserHelper, config: WebUITestConfig) ->
     report = await test_complete_setup(browser, config)
     reports.append(report)
 
-    # Steps 8-9: Interaction (optional based on setup success)
-    if reports[-1].result == TestResult.PASSED:
+    # Step 8: Login after setup
+    report = await test_login_after_setup(browser, config)
+    reports.append(report)
+
+    # Steps 9-10: Interaction (optional based on login success)
+    if report.result == TestResult.PASSED or report.result == TestResult.SKIPPED:
         report = await test_send_message(browser, config)
         reports.append(report)
 

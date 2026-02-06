@@ -5,6 +5,21 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.6] - 2026-02-06
+
+### Changed
+
+- **SonarCloud Code Quality** - Major API route improvements
+  - New `_common.py` pattern library with `AuthDep`, `AuthObserverDep`, `RESPONSES_*` dictionaries
+  - Fixed S8409/S8410/S8415 blockers across agent.py, auth.py, setup.py, telemetry.py, adapters.py
+  - Replaced broad `except Exception` with specific types (JWT errors, ValueError, TypeError)
+  - Extracted reusable helpers in `control_service.py` and `authentication/service.py`
+
+- **Mobile QA Runner** - iOS and Android testing improvements
+  - Enhanced device helper and build helper modules
+  - iOS logger and main entry point updates
+  - Platform-specific path detection fixes
+
 ## [1.9.5] - 2026-02-05
 
 ### Added

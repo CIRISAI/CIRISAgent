@@ -45,14 +45,9 @@ from typing import Dict, List, Optional, Tuple
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from tools.qa_runner.modules.mobile.adb_helper import ADBHelper
+from tools.qa_runner.modules.mobile.device_helper import DeviceHelper, Platform, create_device_helper, detect_platform
 from tools.qa_runner.modules.mobile.test_runner import MobileTestConfig, MobileTestRunner
 from tools.qa_runner.modules.mobile.ui_automator import UIAutomator
-from tools.qa_runner.modules.mobile.device_helper import (
-    DeviceHelper,
-    Platform,
-    create_device_helper,
-    detect_platform,
-)
 
 # ========== Screen Registry ==========
 # Extensible registry of app screens and how to navigate to them
@@ -109,26 +104,27 @@ def pull_logs_command(args) -> int:
     print("=" * 60 + "\n")
 
     # Determine platform
-    platform = getattr(args, 'platform', 'auto')
-    if platform == 'auto':
+    platform = getattr(args, "platform", "auto")
+    if platform == "auto":
         # Try iOS first if on macOS
         try:
             from .ios.xcrun_helper import XCRunHelper
+
             ios_helper = XCRunHelper()
             ios_devices = ios_helper.get_devices()
             booted_ios = [d for d in ios_devices if d.state == "booted"]
             if booted_ios:
-                platform = 'ios'
+                platform = "ios"
                 print("[INFO] Auto-detected iOS simulator")
         except Exception:
             pass
 
-        if platform == 'auto':
-            platform = 'android'
+        if platform == "auto":
+            platform = "android"
 
     bundle_id = args.package
 
-    if platform == 'ios':
+    if platform == "ios":
         # Try physical device first if device_id looks like physical, or auto-detect
         helper = None
         device = None
@@ -137,6 +133,7 @@ def pull_logs_command(args) -> int:
         # Check for physical devices first
         try:
             from .ios.idevice_helper import IDeviceHelper
+
             phys_helper = IDeviceHelper(device_id=args.device)
             phys_devices = phys_helper.get_devices()
             connected = [d for d in phys_devices if d.state == "device"]
@@ -158,6 +155,7 @@ def pull_logs_command(args) -> int:
         if not helper:
             try:
                 from .ios.xcrun_helper import XCRunHelper
+
                 sim_helper = XCRunHelper(device_id=args.device)
                 sim_devices = sim_helper.get_devices()
                 booted = [d for d in sim_devices if d.state == "booted"]
@@ -182,11 +180,13 @@ def pull_logs_command(args) -> int:
                 all_devices = []
                 try:
                     from .ios.idevice_helper import IDeviceHelper
+
                     all_devices.extend(IDeviceHelper().get_devices())
                 except Exception:
                     pass
                 try:
                     from .ios.xcrun_helper import XCRunHelper
+
                     all_devices.extend([d for d in XCRunHelper().get_devices() if d.state == "booted"])
                 except Exception:
                     pass
@@ -452,7 +452,7 @@ def build_command(args) -> int:
 
     if platform == "ios":
         try:
-            from .ios.build_helper import iOSBuildHelper, iOSBuildConfig
+            from .ios.build_helper import iOSBuildConfig, iOSBuildHelper
         except ImportError as e:
             print(f"[ERROR] Failed to import iOS build helper: {e}")
             return 1
@@ -541,10 +541,7 @@ def build_command(args) -> int:
 
                     if not args.no_launch:
                         print("[INFO] Launching app...")
-                        adb._run_adb([
-                            "shell", "am", "start", "-n",
-                            "ai.ciris.mobile/.MainActivity"
-                        ])
+                        adb._run_adb(["shell", "am", "start", "-n", "ai.ciris.mobile/.MainActivity"])
                         print("[SUCCESS] App launched")
             except Exception as e:
                 print(f"[WARN] Install/launch failed: {e}")
@@ -749,7 +746,9 @@ Notes:
         help="Target platform (required)",
     )
     build_parser.add_argument("--device", "-d", help="Device UDID/serial (auto-selects if not specified)")
-    build_parser.add_argument("--simulator", "-s", action="store_true", help="Prefer iOS simulator over physical device")
+    build_parser.add_argument(
+        "--simulator", "-s", action="store_true", help="Prefer iOS simulator over physical device"
+    )
     build_parser.add_argument("--scheme", default="iosApp", help="Xcode scheme (default: iosApp)")
     build_parser.add_argument("--configuration", "-c", default="Debug", help="Build configuration (default: Debug)")
     build_parser.add_argument("--clean", action="store_true", help="Clean build before building")

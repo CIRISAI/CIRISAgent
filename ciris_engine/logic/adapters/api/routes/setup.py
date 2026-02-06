@@ -13,18 +13,25 @@ import secrets
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from ciris_engine.config.model_capabilities import ModelCapabilities, get_model_capabilities
 from ciris_engine.logic.config.db_paths import get_audit_db_full_path
 from ciris_engine.logic.setup.first_run import get_default_config_path, is_first_run
-from ciris_engine.logic.setup.wizard import create_env_file, generate_encryption_key
+from ciris_engine.logic.setup.wizard import create_env_file
 from ciris_engine.schemas.api.responses import SuccessResponse
 
-from ..dependencies.auth import AuthContext, get_auth_context
+from ._common import (
+    RESPONSES_400_403_500,
+    RESPONSES_401_500,
+    RESPONSES_403,
+    RESPONSES_404_500,
+    RESPONSES_500,
+    AuthAdminDep,
+)
 
 router = APIRouter(prefix="/setup", tags=["setup"])
 logger = logging.getLogger(__name__)
@@ -1479,6 +1486,90 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
     return config_path
 
 
+def _log_setup_debug_info(setup: SetupCompleteRequest) -> bool:
+    """Log comprehensive debug information for OAuth identity linking.
+
+    Args:
+        setup: Setup configuration request
+
+    Returns:
+        Whether OAuth linking will happen
+    """
+    logger.info("CIRIS_SETUP_DEBUG " + "=" * 60)
+    logger.info("CIRIS_SETUP_DEBUG complete_setup() endpoint called")
+    logger.info("CIRIS_SETUP_DEBUG " + "=" * 60)
+
+    # Log ALL OAuth-related fields received from frontend
+    logger.info("CIRIS_SETUP_DEBUG OAuth fields received from frontend:")
+    logger.info(f"CIRIS_SETUP_DEBUG   oauth_provider = {repr(setup.oauth_provider)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   oauth_external_id = {repr(setup.oauth_external_id)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   oauth_email = {repr(setup.oauth_email)}")
+
+    # Check truthiness explicitly
+    logger.debug("CIRIS_SETUP_DEBUG Truthiness checks:")
+    logger.debug(f"CIRIS_SETUP_DEBUG   bool(oauth_provider) = {bool(setup.oauth_provider)}")
+    logger.debug(f"CIRIS_SETUP_DEBUG   bool(oauth_external_id) = {bool(setup.oauth_external_id)}")
+    logger.debug(f"CIRIS_SETUP_DEBUG   oauth_external_id is None = {setup.oauth_external_id is None}")
+    logger.debug(f"CIRIS_SETUP_DEBUG   oauth_external_id == '' = {setup.oauth_external_id == ''}")
+
+    # The critical check that determines OAuth linking
+    will_link_oauth = bool(setup.oauth_provider) and bool(setup.oauth_external_id)
+    logger.debug(
+        f"CIRIS_SETUP_DEBUG CRITICAL: Will OAuth linking happen? = {will_link_oauth}"
+    )  # NOSONAR - boolean status only
+    if not will_link_oauth:
+        if not setup.oauth_provider:
+            logger.debug("CIRIS_SETUP_DEBUG   Reason: oauth_provider is falsy")
+        if not setup.oauth_external_id:
+            logger.debug("CIRIS_SETUP_DEBUG   Reason: oauth_external_id is falsy")
+
+    # Log other setup fields
+    logger.debug("CIRIS_SETUP_DEBUG Other setup fields:")
+    logger.debug(f"CIRIS_SETUP_DEBUG   admin_username = {setup.admin_username}")
+    logger.debug(
+        f"CIRIS_SETUP_DEBUG   admin_password set = {bool(setup.admin_password)}"
+    )  # NOSONAR - boolean only, not password
+    logger.debug(
+        f"CIRIS_SETUP_DEBUG   system_admin_password set = {bool(setup.system_admin_password)}"
+    )  # NOSONAR - boolean only
+    logger.debug(f"CIRIS_SETUP_DEBUG   llm_provider = {setup.llm_provider}")
+    logger.debug(f"CIRIS_SETUP_DEBUG   template_id = {setup.template_id}")
+
+    return will_link_oauth
+
+
+async def _schedule_runtime_resume(runtime: Any) -> None:
+    """Schedule runtime resume in background after setup completion.
+
+    Args:
+        runtime: The application runtime object
+    """
+    # Set resume flag AND timestamp BEFORE scheduling task to prevent SmartStartup from killing us
+    # This flag blocks local-shutdown requests during the resume sequence
+    # The timestamp enables timeout detection for stuck resume scenarios
+    runtime._resume_in_progress = True
+    runtime._resume_started_at = time.time()
+    logger.info(f"[Setup] Set _resume_in_progress=True, _resume_started_at={runtime._resume_started_at:.3f}")
+
+    async def _resume_runtime() -> None:
+        await asyncio.sleep(0.5)  # Brief delay to ensure response is sent
+        try:
+            await runtime.resume_from_first_run()
+            logger.info("Successfully resumed from first-run mode - agent processor running")
+        except Exception as e:
+            logger.error(f"Failed to resume from first-run: {e}", exc_info=True)
+            # Clear the flag and timestamp so shutdown can proceed
+            runtime._resume_in_progress = False
+            runtime._resume_started_at = None
+            logger.info("[Setup] Cleared _resume_in_progress due to error")
+            # If resume fails, fall back to restart
+            runtime.request_shutdown("Resume failed - restarting to apply configuration")
+
+    # Store task to prevent garbage collection and log task creation
+    resume_task = asyncio.create_task(_resume_runtime())
+    logger.info(f"Scheduled background resume task: {resume_task.get_name()}")
+
+
 # ============================================================================
 # Endpoints
 # ============================================================================
@@ -1561,7 +1652,7 @@ async def list_available_adapters_for_setup() -> SuccessResponse[Dict[str, Any]]
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/models")
+@router.get("/models", responses=RESPONSES_500)
 async def get_model_capabilities_endpoint() -> SuccessResponse[Dict[str, Any]]:
     """Get CIRIS-compatible LLM model capabilities.
 
@@ -1606,7 +1697,7 @@ async def get_model_capabilities_endpoint() -> SuccessResponse[Dict[str, Any]]:
         )
 
 
-@router.get("/models/{provider_id}")
+@router.get("/models/{provider_id}", responses=RESPONSES_404_500)
 async def get_provider_models(provider_id: str) -> SuccessResponse[Dict[str, Any]]:
     """Get CIRIS-compatible models for a specific provider.
 
@@ -1684,7 +1775,7 @@ async def list_models(config: LLMValidationRequest) -> SuccessResponse[ListModel
     return SuccessResponse(data=result)
 
 
-@router.post("/complete")
+@router.post("/complete", responses=RESPONSES_400_403_500)
 async def complete_setup(setup: SetupCompleteRequest, request: Request) -> SuccessResponse[Dict[str, str]]:
     """Complete initial setup.
 
@@ -1692,46 +1783,8 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
     Only accessible during first-run (no authentication required).
     After setup, authentication is required for reconfiguration.
     """
-    # CIRIS_SETUP_DEBUG: Comprehensive logging for OAuth identity linking
-    logger.info("CIRIS_SETUP_DEBUG " + "=" * 60)
-    logger.info("CIRIS_SETUP_DEBUG complete_setup() endpoint called")
-    logger.info("CIRIS_SETUP_DEBUG " + "=" * 60)
-
-    # Log ALL OAuth-related fields received from frontend
-    logger.info("CIRIS_SETUP_DEBUG OAuth fields received from frontend:")
-    logger.info(f"CIRIS_SETUP_DEBUG   oauth_provider = {repr(setup.oauth_provider)}")
-    logger.info(f"CIRIS_SETUP_DEBUG   oauth_external_id = {repr(setup.oauth_external_id)}")
-    logger.info(f"CIRIS_SETUP_DEBUG   oauth_email = {repr(setup.oauth_email)}")
-
-    # Check truthiness explicitly
-    logger.debug("CIRIS_SETUP_DEBUG Truthiness checks:")
-    logger.debug(f"CIRIS_SETUP_DEBUG   bool(oauth_provider) = {bool(setup.oauth_provider)}")
-    logger.debug(f"CIRIS_SETUP_DEBUG   bool(oauth_external_id) = {bool(setup.oauth_external_id)}")
-    logger.debug(f"CIRIS_SETUP_DEBUG   oauth_external_id is None = {setup.oauth_external_id is None}")
-    logger.debug(f"CIRIS_SETUP_DEBUG   oauth_external_id == '' = {setup.oauth_external_id == ''}")
-
-    # The critical check that determines OAuth linking
-    will_link_oauth = bool(setup.oauth_provider) and bool(setup.oauth_external_id)
-    logger.debug(
-        f"CIRIS_SETUP_DEBUG CRITICAL: Will OAuth linking happen? = {will_link_oauth}"
-    )  # NOSONAR - boolean status only
-    if not will_link_oauth:
-        if not setup.oauth_provider:
-            logger.debug("CIRIS_SETUP_DEBUG   Reason: oauth_provider is falsy")
-        if not setup.oauth_external_id:
-            logger.debug("CIRIS_SETUP_DEBUG   Reason: oauth_external_id is falsy")
-
-    # Log other setup fields
-    logger.debug("CIRIS_SETUP_DEBUG Other setup fields:")
-    logger.debug(f"CIRIS_SETUP_DEBUG   admin_username = {setup.admin_username}")
-    logger.debug(
-        f"CIRIS_SETUP_DEBUG   admin_password set = {bool(setup.admin_password)}"
-    )  # NOSONAR - boolean only, not password
-    logger.debug(
-        f"CIRIS_SETUP_DEBUG   system_admin_password set = {bool(setup.system_admin_password)}"
-    )  # NOSONAR - boolean only
-    logger.debug(f"CIRIS_SETUP_DEBUG   llm_provider = {setup.llm_provider}")
-    logger.debug(f"CIRIS_SETUP_DEBUG   template_id = {setup.template_id}")
+    # Log debug info and determine if OAuth linking will happen
+    _log_setup_debug_info(setup)
 
     # Only allow during first-run
     if not is_first_run():
@@ -1783,33 +1836,7 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
 
         # Resume initialization from first-run mode to start agent processor
         logger.info("Setup complete - resuming initialization to start agent processor")
-        # Schedule resume in background to allow response to be sent first
-        import asyncio
-
-        # Set resume flag AND timestamp BEFORE scheduling task to prevent SmartStartup from killing us
-        # This flag blocks local-shutdown requests during the resume sequence
-        # The timestamp enables timeout detection for stuck resume scenarios
-        runtime._resume_in_progress = True
-        runtime._resume_started_at = time.time()
-        logger.info(f"[Setup] Set _resume_in_progress=True, _resume_started_at={runtime._resume_started_at:.3f}")
-
-        async def _resume_runtime() -> None:
-            await asyncio.sleep(0.5)  # Brief delay to ensure response is sent
-            try:
-                await runtime.resume_from_first_run()
-                logger.info("✅ Successfully resumed from first-run mode - agent processor running")
-            except Exception as e:
-                logger.error(f"Failed to resume from first-run: {e}", exc_info=True)
-                # Clear the flag and timestamp so shutdown can proceed
-                runtime._resume_in_progress = False
-                runtime._resume_started_at = None
-                logger.info("[Setup] Cleared _resume_in_progress due to error")
-                # If resume fails, fall back to restart
-                runtime.request_shutdown("Resume failed - restarting to apply configuration")
-
-        # Store task to prevent garbage collection and log task creation
-        resume_task = asyncio.create_task(_resume_runtime())
-        logger.info(f"Scheduled background resume task: {resume_task.get_name()}")
+        await _schedule_runtime_resume(runtime)
 
         return SuccessResponse(
             data={
@@ -1826,7 +1853,7 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@router.get("/config")
+@router.get("/config", responses=RESPONSES_401_500)
 async def get_current_config(request: Request) -> SuccessResponse[SetupConfigResponse]:
     """Get current configuration.
 
@@ -1868,21 +1895,21 @@ async def get_current_config(request: Request) -> SuccessResponse[SetupConfigRes
     return SuccessResponse(data=config)
 
 
-@router.put("/config")
+@router.put(
+    "/config",
+    responses={**RESPONSES_403, **RESPONSES_500},
+)
 async def update_config(
     setup: SetupCompleteRequest,
-    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    auth: AuthAdminDep,
 ) -> SuccessResponse[Dict[str, str]]:
     """Update configuration.
 
     Updates setup configuration after initial setup.
-    Requires admin authentication.
+    Requires admin authentication (enforced by AuthAdminDep).
     """
-    # Check for admin role
-    from ciris_engine.schemas.api.auth import UserRole
-
-    if auth.role.level < UserRole.ADMIN.level:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+    # Note: Admin role check is performed by AuthAdminDep dependency
+    _ = auth  # Used for auth enforcement
 
     try:
         # Save updated configuration (path determined internally)

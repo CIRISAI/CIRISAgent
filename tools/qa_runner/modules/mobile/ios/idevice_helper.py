@@ -11,13 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..device_helper import (
-    DeviceHelper,
-    DeviceInfo,
-    LogCollection,
-    Platform,
-    UIElement,
-)
+from ..device_helper import DeviceHelper, DeviceInfo, LogCollection, Platform, UIElement
 
 
 class IDeviceHelper(DeviceHelper):
@@ -119,7 +113,11 @@ class IDeviceHelper(DeviceHelper):
                         devices.append(
                             DeviceInfo(
                                 identifier=device.get("identifier", ""),
-                                state="device" if device.get("connectionProperties", {}).get("tunnelState") == "connected" else "offline",
+                                state=(
+                                    "device"
+                                    if device.get("connectionProperties", {}).get("tunnelState") == "connected"
+                                    else "offline"
+                                ),
                                 platform=Platform.IOS,
                                 name=device.get("deviceProperties", {}).get("name"),
                                 os_version=device.get("deviceProperties", {}).get("osVersionNumber"),
@@ -386,9 +384,7 @@ class IDeviceHelper(DeviceHelper):
 
         return collection
 
-    def _pull_app_data_devicectl(
-        self, device: str, bundle_id: str, output_path: Path, collection: LogCollection
-    ):
+    def _pull_app_data_devicectl(self, device: str, bundle_id: str, output_path: Path, collection: LogCollection):
         """Pull app data using xcrun devicectl."""
         # Create temp directory for downloaded files
         docs_dir = output_path / "Documents"
@@ -397,12 +393,21 @@ class IDeviceHelper(DeviceHelper):
         # Pull entire Documents directory
         result = subprocess.run(
             [
-                "xcrun", "devicectl", "device", "copy", "from",
-                "--device", device,
-                "--domain-type", "appDataContainer",
-                "--domain-identifier", bundle_id,
-                "--source", "Documents",
-                "--destination", str(docs_dir),
+                "xcrun",
+                "devicectl",
+                "device",
+                "copy",
+                "from",
+                "--device",
+                device,
+                "--domain-type",
+                "appDataContainer",
+                "--domain-identifier",
+                bundle_id,
+                "--source",
+                "Documents",
+                "--destination",
+                str(docs_dir),
             ],
             capture_output=True,
             text=True,
@@ -443,13 +448,9 @@ class IDeviceHelper(DeviceHelper):
             python_res = docs_dir / "PythonResources"
             if python_res.exists():
                 collection.metadata["python_resources_exists"] = True
-                collection.metadata["python_resources_contents"] = [
-                    p.name for p in python_res.iterdir() if p.is_dir()
-                ]
+                collection.metadata["python_resources_contents"] = [p.name for p in python_res.iterdir() if p.is_dir()]
 
-    def _pull_system_logs(
-        self, device: str, output_path: Path, bundle_id: str, collection: LogCollection
-    ):
+    def _pull_system_logs(self, device: str, output_path: Path, bundle_id: str, collection: LogCollection):
         """Pull system logs using idevicesyslog."""
         if not self._has_idevice:
             return
@@ -471,9 +472,7 @@ class IDeviceHelper(DeviceHelper):
         except Exception as e:
             collection.metadata["system_log_error"] = str(e)
 
-    def _pull_crash_logs(
-        self, device: str, output_path: Path, bundle_id: str, collection: LogCollection
-    ):
+    def _pull_crash_logs(self, device: str, output_path: Path, bundle_id: str, collection: LogCollection):
         """Pull crash logs from device."""
         crash_dir = output_path / "crashes"
         crash_dir.mkdir(exist_ok=True)

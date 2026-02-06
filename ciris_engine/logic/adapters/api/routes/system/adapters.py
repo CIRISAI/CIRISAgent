@@ -8,7 +8,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import ValidationError
@@ -28,6 +28,7 @@ from ciris_engine.schemas.services.core.runtime import AdapterInfo, AdapterStatu
 
 from ...constants import ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE
 from ...dependencies.auth import AuthContext, require_admin, require_observer
+from .._common import RESPONSES_500_503, RESPONSES_ADAPTER_CRUD, RESPONSES_ADAPTER_STATUS
 from .helpers import get_adapter_config_service
 from .schemas import (
     AdapterActionRequest,
@@ -438,9 +439,7 @@ def _create_auto_adapter_info(adapter_name: str, service_type: Any) -> AdapterIn
     )
 
 
-def _get_auto_loaded_adapters(
-    service_registry: Any, seen_adapter_ids: set[str]
-) -> List[AdapterInfo]:
+def _get_auto_loaded_adapters(service_registry: Any, seen_adapter_ids: set[str]) -> List[AdapterInfo]:
     """Get auto-loaded adapters from service registry."""
     from ciris_engine.schemas.runtime.enums import ServiceType
 
@@ -466,9 +465,7 @@ def _convert_adapter_to_status(adapter: AdapterInfo) -> AdapterStatusSchema:
     """Convert AdapterInfo to AdapterStatusSchema."""
     is_running = adapter.status == AdapterStatus.RUNNING or str(adapter.status).lower() == "running"
 
-    config = adapter.config_params or AdapterConfig(
-        adapter_type=adapter.adapter_type, enabled=is_running, settings={}
-    )
+    config = adapter.config_params or AdapterConfig(adapter_type=adapter.adapter_type, enabled=is_running, settings={})
 
     metrics = None
     if adapter.messages_processed > 0 or adapter.error_count > 0:
@@ -499,9 +496,10 @@ def _convert_adapter_to_status(adapter: AdapterInfo) -> AdapterStatusSchema:
 # ============================================================================
 
 
-@router.get("/adapters", response_model=SuccessResponse[AdapterListResponse])
+@router.get("/adapters", responses=RESPONSES_500_503)
 async def list_adapters(
-    request: Request, auth: AuthContext = Depends(require_observer)
+    request: Request,
+    auth: Annotated[AuthContext, Depends(require_observer)],
 ) -> SuccessResponse[AdapterListResponse]:
     """List all loaded adapters with their type, status, and metrics."""
     runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
@@ -540,9 +538,10 @@ async def list_adapters(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/adapters/types", response_model=SuccessResponse[ModuleTypesResponse])
+@router.get("/adapters/types", responses={500: {"description": "Failed to discover module types"}})
 async def list_module_types(
-    request: Request, auth: AuthContext = Depends(require_observer)
+    request: Request,
+    auth: Annotated[AuthContext, Depends(require_observer)],
 ) -> SuccessResponse[ModuleTypesResponse]:
     """
     List all available module/adapter types.
@@ -577,11 +576,14 @@ async def list_module_types(
 
 @router.get(
     "/adapters/persisted",
-    response_model=SuccessResponse[PersistedConfigsResponse],
+    responses={
+        500: {"description": "Failed to list persisted configurations"},
+        503: {"description": "Adapter configuration service unavailable"},
+    },
 )
 async def list_persisted_configurations(
     request: Request,
-    auth: AuthContext = Depends(require_admin),
+    auth: Annotated[AuthContext, Depends(require_admin)],
 ) -> SuccessResponse[PersistedConfigsResponse]:
     """
     List all persisted adapter configurations.
@@ -616,12 +618,15 @@ async def list_persisted_configurations(
 
 @router.delete(
     "/adapters/{adapter_type}/persisted",
-    response_model=SuccessResponse[RemovePersistedResponse],
+    responses={
+        500: {"description": "Failed to remove persisted configuration"},
+        503: {"description": "Configuration service unavailable"},
+    },
 )
 async def remove_persisted_configuration(
     adapter_type: str,
     request: Request,
-    auth: AuthContext = Depends(require_admin),
+    auth: Annotated[AuthContext, Depends(require_admin)],
 ) -> SuccessResponse[RemovePersistedResponse]:
     """
     Remove a persisted adapter configuration.
@@ -664,9 +669,13 @@ async def remove_persisted_configuration(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/adapters/available", response_model=SuccessResponse[Dict[str, Any]])
+@router.get(
+    "/adapters/available",
+    responses={500: {"description": "Failed to get adapter availability"}},
+)
 async def list_available_adapters(
-    request: Request, auth: AuthContext = Depends(require_observer)
+    request: Request,
+    auth: Annotated[AuthContext, Depends(require_observer)],
 ) -> SuccessResponse[Dict[str, Any]]:
     """
     List all discovered adapters with eligibility status.
@@ -687,12 +696,18 @@ async def list_available_adapters(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/adapters/{adapter_name}/install", response_model=SuccessResponse[Dict[str, Any]])
+@router.post(
+    "/adapters/{adapter_name}/install",
+    responses={
+        404: {"description": "Adapter not found"},
+        500: {"description": "Installation failed"},
+    },
+)
 async def install_adapter_dependencies(
     adapter_name: str,
     request: Request,
-    body: Dict[str, Any] = Body(default={}),
-    auth: AuthContext = Depends(require_admin),
+    auth: Annotated[AuthContext, Depends(require_admin)],
+    body: Annotated[Dict[str, Any], Body()] = {},
 ) -> SuccessResponse[Dict[str, Any]]:
     """
     Install missing dependencies for an adapter.
@@ -773,11 +788,17 @@ async def install_adapter_dependencies(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/adapters/{adapter_name}/check-eligibility", response_model=SuccessResponse[Dict[str, Any]])
+@router.post(
+    "/adapters/{adapter_name}/check-eligibility",
+    responses={
+        404: {"description": "Adapter not found"},
+        500: {"description": "Eligibility check failed"},
+    },
+)
 async def recheck_adapter_eligibility(
     adapter_name: str,
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: Annotated[AuthContext, Depends(require_observer)],
 ) -> SuccessResponse[Dict[str, Any]]:
     """
     Recheck eligibility for an adapter.
@@ -814,9 +835,13 @@ async def recheck_adapter_eligibility(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/adapters/configurable", response_model=SuccessResponse[ConfigurableAdaptersResponse])
+@router.get(
+    "/adapters/configurable",
+    responses={500: {"description": "Failed to list configurable adapters"}},
+)
 async def list_configurable_adapters(
-    request: Request, auth: AuthContext = Depends(require_admin)
+    request: Request,
+    auth: Annotated[AuthContext, Depends(require_admin)],
 ) -> SuccessResponse[ConfigurableAdaptersResponse]:
     """
     List adapters that support interactive configuration.
@@ -871,9 +896,11 @@ async def list_configurable_adapters(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/adapters/{adapter_id}", response_model=SuccessResponse[AdapterStatusSchema])
+@router.get("/adapters/{adapter_id}", responses=RESPONSES_ADAPTER_STATUS)
 async def get_adapter_status(
-    adapter_id: str, request: Request, auth: AuthContext = Depends(require_observer)
+    adapter_id: str,
+    request: Request,
+    auth: Annotated[AuthContext, Depends(require_observer)],
 ) -> SuccessResponse[AdapterStatusSchema]:
     """
     Get detailed status of a specific adapter.
@@ -937,13 +964,13 @@ async def get_adapter_status(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/adapters/{adapter_type}", response_model=SuccessResponse[AdapterOperationResult])
+@router.post("/adapters/{adapter_type}", responses=RESPONSES_ADAPTER_CRUD)
 async def load_adapter(
     adapter_type: str,
     body: AdapterActionRequest,
     request: Request,
+    auth: Annotated[AuthContext, Depends(require_admin)],
     adapter_id: Optional[str] = None,
-    auth: AuthContext = Depends(require_admin),
 ) -> SuccessResponse[AdapterOperationResult]:
     """
     Load a new adapter instance.
@@ -996,9 +1023,11 @@ async def load_adapter(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/adapters/{adapter_id}", response_model=SuccessResponse[AdapterOperationResult])
+@router.delete("/adapters/{adapter_id}", responses=RESPONSES_ADAPTER_CRUD)
 async def unload_adapter(
-    adapter_id: str, request: Request, auth: AuthContext = Depends(require_admin)
+    adapter_id: str,
+    request: Request,
+    auth: Annotated[AuthContext, Depends(require_admin)],
 ) -> SuccessResponse[AdapterOperationResult]:
     """
     Unload an adapter instance.
@@ -1038,9 +1067,18 @@ async def unload_adapter(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/adapters/{adapter_id}/reload", response_model=SuccessResponse[AdapterOperationResult])
+@router.put(
+    "/adapters/{adapter_id}/reload",
+    responses={
+        **RESPONSES_ADAPTER_CRUD,
+        400: {"description": "Failed to unload adapter for reload"},
+    },
+)
 async def reload_adapter(
-    adapter_id: str, body: AdapterActionRequest, request: Request, auth: AuthContext = Depends(require_admin)
+    adapter_id: str,
+    body: AdapterActionRequest,
+    request: Request,
+    auth: Annotated[AuthContext, Depends(require_admin)],
 ) -> SuccessResponse[AdapterOperationResult]:
     """
     Reload an adapter with new configuration.

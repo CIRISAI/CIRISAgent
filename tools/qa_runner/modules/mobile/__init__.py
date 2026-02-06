@@ -5,6 +5,9 @@ Automated testing for the CIRIS mobile app.
 Supports both Android (ADB) and iOS (xcrun simctl) platforms.
 """
 
+# Legacy imports (backward compatibility)
+from .adb_helper import ADBHelper
+
 # Cross-platform device helper protocol
 from .device_helper import (
     DeviceHelper,
@@ -15,9 +18,6 @@ from .device_helper import (
     create_device_helper,
     detect_platform,
 )
-
-# Legacy imports (backward compatibility)
-from .adb_helper import ADBHelper
 from .test_cases import (
     test_app_launch,
     test_chat_interaction,

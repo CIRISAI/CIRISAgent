@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 class Platform(Enum):
     """Mobile platform types."""
+
     ANDROID = "android"
     IOS = "ios"
     UNKNOWN = "unknown"
@@ -21,6 +22,7 @@ class Platform(Enum):
 @dataclass
 class DeviceInfo:
     """Cross-platform device information."""
+
     identifier: str  # Serial (Android) or UDID (iOS)
     state: str  # "device", "booted", "offline", "shutdown"
     platform: Platform
@@ -37,6 +39,7 @@ class DeviceInfo:
 @dataclass
 class UIElement:
     """Cross-platform UI element representation."""
+
     resource_id: str = ""
     text: str = ""
     content_desc: str = ""
@@ -73,6 +76,7 @@ class UIElement:
 @dataclass
 class LogCollection:
     """Results from log collection."""
+
     output_dir: Path
     app_logs: List[Path] = field(default_factory=list)
     system_logs: List[Path] = field(default_factory=list)
@@ -289,18 +293,14 @@ def detect_platform(app_path: str) -> Platform:
         Detected platform
     """
     path_lower = app_path.lower()
-    if path_lower.endswith('.apk'):
+    if path_lower.endswith(".apk"):
         return Platform.ANDROID
-    elif path_lower.endswith('.app') or path_lower.endswith('.ipa'):
+    elif path_lower.endswith(".app") or path_lower.endswith(".ipa"):
         return Platform.IOS
     return Platform.UNKNOWN
 
 
-def create_device_helper(
-    platform: Platform,
-    device_id: Optional[str] = None,
-    **kwargs
-) -> DeviceHelper:
+def create_device_helper(platform: Platform, device_id: Optional[str] = None, **kwargs) -> DeviceHelper:
     """
     Factory function to create appropriate device helper.
 
@@ -314,19 +314,22 @@ def create_device_helper(
     """
     if platform == Platform.ANDROID:
         from .android.adb_helper import ADBDeviceHelper
+
         return ADBDeviceHelper(device_serial=device_id, **kwargs)
     elif platform == Platform.IOS:
         # Check if device_id indicates simulator
-        if device_id and device_id.startswith('sim:'):
+        if device_id and device_id.startswith("sim:"):
             from .ios.xcrun_helper import XCRunHelper
+
             return XCRunHelper(device_id=device_id[4:], **kwargs)
         elif device_id and _is_physical_device(device_id):
             from .ios.idevice_helper import IDeviceHelper
+
             return IDeviceHelper(device_id=device_id, **kwargs)
         else:
             # Try to detect if we should use physical device or simulator
-            from .ios.xcrun_helper import XCRunHelper
             from .ios.idevice_helper import IDeviceHelper
+            from .ios.xcrun_helper import XCRunHelper
 
             # Check for physical devices first
             try:

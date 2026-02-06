@@ -21,6 +21,7 @@ from ..device_helper import DeviceInfo, Platform
 
 class iOSTarget(Enum):
     """iOS build target type."""
+
     SIMULATOR = "simulator"
     DEVICE = "device"
 
@@ -28,6 +29,7 @@ class iOSTarget(Enum):
 @dataclass
 class iOSBuildConfig:
     """Configuration for iOS builds."""
+
     project_path: Path
     scheme: str = "iosApp"
     configuration: str = "Debug"
@@ -56,6 +58,7 @@ class iOSBuildConfig:
 @dataclass
 class iOSBuildResult:
     """Result of an iOS build operation."""
+
     success: bool
     app_path: Optional[Path] = None
     target: Optional[iOSTarget] = None
@@ -89,8 +92,7 @@ class iOSBuildHelper:
                 return iOSBuildConfig(project_path=candidate)
 
         raise RuntimeError(
-            "Could not auto-detect iOS project. "
-            "Please run from CIRISAgent directory or provide explicit config."
+            "Could not auto-detect iOS project. " "Please run from CIRISAgent directory or provide explicit config."
         )
 
     def _verify_tools(self) -> None:
@@ -148,14 +150,16 @@ class iOSBuildHelper:
 
                 for device in device_list:
                     if device.get("isAvailable", False):
-                        devices.append(DeviceInfo(
-                            identifier=device["udid"],
-                            state="booted" if device["state"] == "Booted" else "available",
-                            platform=Platform.IOS,
-                            name=device["name"],
-                            os_version=ios_version,
-                            model=device.get("deviceTypeIdentifier", "").split(".")[-1],
-                        ))
+                        devices.append(
+                            DeviceInfo(
+                                identifier=device["udid"],
+                                state="booted" if device["state"] == "Booted" else "available",
+                                platform=Platform.IOS,
+                                name=device["name"],
+                                os_version=ios_version,
+                                model=device.get("deviceTypeIdentifier", "").split(".")[-1],
+                            )
+                        )
         except (json.JSONDecodeError, KeyError):
             pass
 
@@ -179,14 +183,16 @@ class iOSBuildHelper:
 
                 is_connected = conn_props.get("tunnelState") == "connected"
 
-                devices.append(DeviceInfo(
-                    identifier=device.get("identifier", ""),
-                    state="device" if is_connected else "offline",
-                    platform=Platform.IOS,
-                    name=dev_props.get("name"),
-                    os_version=dev_props.get("osVersionNumber"),
-                    model=hw_props.get("marketingName"),
-                ))
+                devices.append(
+                    DeviceInfo(
+                        identifier=device.get("identifier", ""),
+                        state="device" if is_connected else "offline",
+                        platform=Platform.IOS,
+                        name=dev_props.get("name"),
+                        os_version=dev_props.get("osVersionNumber"),
+                        model=hw_props.get("marketingName"),
+                    )
+                )
         except (json.JSONDecodeError, KeyError):
             pass
 
@@ -307,28 +313,41 @@ class iOSBuildHelper:
 
         cmd = [
             "xcodebuild",
-            "-project", f"{self.config.scheme}.xcodeproj",
-            "-scheme", self.config.scheme,
-            "-configuration", self.config.configuration,
-            "-sdk", sdk,
+            "-project",
+            f"{self.config.scheme}.xcodeproj",
+            "-scheme",
+            self.config.scheme,
+            "-configuration",
+            self.config.configuration,
+            "-sdk",
+            sdk,
         ]
 
         if target == iOSTarget.DEVICE:
-            cmd.extend([
-                "-destination", "generic/platform=iOS",
-                "CODE_SIGN_IDENTITY=Apple Development",
-                "CODE_SIGNING_REQUIRED=YES",
-            ])
+            cmd.extend(
+                [
+                    "-destination",
+                    "generic/platform=iOS",
+                    "CODE_SIGN_IDENTITY=Apple Development",
+                    "CODE_SIGNING_REQUIRED=YES",
+                ]
+            )
         else:
             # For simulator, use specific device if provided
             if device:
-                cmd.extend([
-                    "-destination", f"platform=iOS Simulator,id={device.identifier}",
-                ])
+                cmd.extend(
+                    [
+                        "-destination",
+                        f"platform=iOS Simulator,id={device.identifier}",
+                    ]
+                )
             else:
-                cmd.extend([
-                    "-destination", "generic/platform=iOS Simulator",
-                ])
+                cmd.extend(
+                    [
+                        "-destination",
+                        "generic/platform=iOS Simulator",
+                    ]
+                )
 
         if self.config.clean_build:
             cmd.append("clean")
@@ -418,11 +437,18 @@ class iOSBuildHelper:
 
     def _install_to_device(self, app_path: Path, device: DeviceInfo) -> bool:
         """Install to physical device using devicectl."""
-        result = self._run_command([
-            "xcrun", "devicectl", "device", "install", "app",
-            "--device", device.identifier,
-            str(app_path),
-        ])
+        result = self._run_command(
+            [
+                "xcrun",
+                "devicectl",
+                "device",
+                "install",
+                "app",
+                "--device",
+                device.identifier,
+                str(app_path),
+            ]
+        )
 
         if result.returncode != 0:
             print(f"[ERROR] Install failed: {result.stderr}")
@@ -435,17 +461,28 @@ class iOSBuildHelper:
         # Boot simulator if not booted
         if device.state != "booted":
             print(f"[INFO] Booting simulator {device.name}...")
-            result = self._run_command([
-                "xcrun", "simctl", "boot", device.identifier,
-            ])
+            result = self._run_command(
+                [
+                    "xcrun",
+                    "simctl",
+                    "boot",
+                    device.identifier,
+                ]
+            )
             if result.returncode != 0:
                 print(f"[ERROR] Failed to boot simulator: {result.stderr}")
                 return False
             time.sleep(2)
 
-        result = self._run_command([
-            "xcrun", "simctl", "install", device.identifier, str(app_path),
-        ])
+        result = self._run_command(
+            [
+                "xcrun",
+                "simctl",
+                "install",
+                device.identifier,
+                str(app_path),
+            ]
+        )
 
         if result.returncode != 0:
             print(f"[ERROR] Install failed: {result.stderr}")
@@ -472,8 +509,13 @@ class iOSBuildHelper:
     def _launch_on_device(self, device: DeviceInfo, wait: bool = False) -> bool:
         """Launch on physical device using devicectl."""
         cmd = [
-            "xcrun", "devicectl", "device", "process", "launch",
-            "--device", device.identifier,
+            "xcrun",
+            "devicectl",
+            "device",
+            "process",
+            "launch",
+            "--device",
+            device.identifier,
             self.config.bundle_id,
         ]
 
@@ -487,9 +529,15 @@ class iOSBuildHelper:
 
     def _launch_on_simulator(self, device: DeviceInfo) -> bool:
         """Launch on simulator using simctl."""
-        result = self._run_command([
-            "xcrun", "simctl", "launch", device.identifier, self.config.bundle_id,
-        ])
+        result = self._run_command(
+            [
+                "xcrun",
+                "simctl",
+                "launch",
+                device.identifier,
+                self.config.bundle_id,
+            ]
+        )
 
         if result.returncode != 0:
             print(f"[ERROR] Launch failed: {result.stderr}")
@@ -554,15 +602,16 @@ class iOSBuildHelper:
 
         # Find current build number
         import re
-        match = re.search(r'<key>CFBundleVersion</key>\s*<string>(\d+)</string>', content)
+
+        match = re.search(r"<key>CFBundleVersion</key>\s*<string>(\d+)</string>", content)
 
         if match:
             current = int(match.group(1))
             new_version = current + 1
 
             new_content = re.sub(
-                r'(<key>CFBundleVersion</key>\s*<string>)\d+(</string>)',
-                f'\\g<1>{new_version}\\g<2>',
+                r"(<key>CFBundleVersion</key>\s*<string>)\d+(</string>)",
+                f"\\g<1>{new_version}\\g<2>",
                 content,
             )
 

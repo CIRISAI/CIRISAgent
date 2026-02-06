@@ -76,6 +76,66 @@ class _ProviderLookupResult:
     service_type: str
 
 
+def _map_circuit_breaker_state(state_str: str) -> CircuitBreakerState:
+    """Map circuit breaker state string to enum.
+
+    This is a module-level helper used by multiple methods to avoid
+    duplicating the state mapping logic.
+
+    Args:
+        state_str: The state string from provider info ("closed", "open", "half_open")
+
+    Returns:
+        The corresponding CircuitBreakerState enum value
+    """
+    if state_str == "closed":
+        return CircuitBreakerState.CLOSED
+    elif state_str == "open":
+        return CircuitBreakerState.OPEN
+    else:
+        return CircuitBreakerState.HALF_OPEN
+
+
+# Type alias for clarity
+AgentProcessorType = Any  # Would be AgentProcessor but avoiding circular import
+
+
+def _build_service_health_detail(
+    is_healthy: bool,
+    circuit_breaker_state: str = "closed",
+    priority: str = "DIRECT",
+    priority_group: int = -1,
+    strategy: str = "DIRECT",
+    error: Optional[str] = None,
+) -> ConfigDict:
+    """Build a standardized service health detail dict.
+
+    This helper centralizes the service health detail construction
+    used by get_service_health_status for both direct and registry services.
+
+    Args:
+        is_healthy: Whether the service is healthy
+        circuit_breaker_state: Circuit breaker state ("closed", "open", "half_open", "error")
+        priority: Service priority level
+        priority_group: Service priority group (-1 for direct services)
+        strategy: Service selection strategy
+        error: Optional error message if service is unhealthy
+
+    Returns:
+        A ConfigDict with standardized health detail fields
+    """
+    detail: ConfigDict = {
+        "healthy": is_healthy,
+        "circuit_breaker_state": circuit_breaker_state,
+        "priority": priority,
+        "priority_group": priority_group,
+        "strategy": strategy,
+    }
+    if error is not None:
+        detail["error"] = error
+    return detail
+
+
 class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
     """Service for runtime control of processor, adapters, and configuration."""
 
@@ -143,6 +203,36 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             raise RuntimeError("Config manager not available - must be injected via dependency injection")
         return self.config_manager
 
+    def _get_agent_processor(self) -> Optional[AgentProcessorType]:
+        """Get the agent processor if available.
+
+        This helper centralizes the agent processor availability check
+        used by multiple processor control methods.
+
+        Returns:
+            The agent processor if available, None otherwise
+        """
+        if not self.runtime or not hasattr(self.runtime, "agent_processor"):
+            return None
+        return self.runtime.agent_processor
+
+    def _processor_not_available_response(self, operation: str) -> ProcessorControlResponse:
+        """Build a standard error response when agent processor is not available.
+
+        Args:
+            operation: The operation that was attempted (e.g., "single_step", "pause")
+
+        Returns:
+            ProcessorControlResponse with error set
+        """
+        return ProcessorControlResponse(
+            success=False,
+            processor_name="agent",
+            operation=operation,
+            new_status=self._processor_status,
+            error=_ERROR_AGENT_PROCESSOR_NOT_AVAILABLE,
+        )
+
     async def _initialize(self) -> None:
         """Initialize the runtime control service."""
         try:
@@ -158,17 +248,12 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             _start_time = self._now()
 
             # Get the agent processor from runtime
-            if not self.runtime or not hasattr(self.runtime, "agent_processor"):
-                return ProcessorControlResponse(
-                    success=False,
-                    processor_name="agent",
-                    operation="single_step",
-                    new_status=self._processor_status,
-                    error=_ERROR_AGENT_PROCESSOR_NOT_AVAILABLE,
-                )
+            agent_processor = self._get_agent_processor()
+            if agent_processor is None:
+                return self._processor_not_available_response("single_step")
 
             # Ensure processor is paused
-            if not self.runtime.agent_processor.is_paused():
+            if not agent_processor.is_paused():
                 return ProcessorControlResponse(
                     success=False,
                     processor_name="agent",
@@ -177,7 +262,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                     error="Cannot single-step unless processor is paused",
                 )
 
-            result = await self.runtime.agent_processor.single_step()
+            result = await agent_processor.single_step()
 
             # Track thought processing time if a thought was processed
             if result.success and result.processing_time_ms:
@@ -207,6 +292,8 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             raw_step_results = result.step_results if hasattr(result, "step_results") else []
             validated_step_results = []
 
+            from pydantic import ValidationError
+
             from ciris_engine.schemas.services.runtime_control import StepResultData
 
             for step_result in raw_step_results:
@@ -217,9 +304,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                         validated_step_results.append(validated)
                     elif isinstance(step_result, StepResultData):
                         validated_step_results.append(step_result)
-                except Exception:
+                except (ValidationError, TypeError, KeyError):
                     # Skip invalid results - this happens during thought initiation
                     # when step_results only contain {"thought_id": ..., "initiated": True}
+                    # ValidationError: schema mismatch, TypeError: wrong type, KeyError: missing field
                     pass
 
             # Map SingleStepResult fields to ProcessorControlResponse
@@ -260,16 +348,11 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             _start_time = self._now()
 
             # Get the agent processor from runtime
-            if not self.runtime or not hasattr(self.runtime, "agent_processor"):
-                return ProcessorControlResponse(
-                    success=False,
-                    processor_name="agent",
-                    operation="pause",
-                    new_status=self._processor_status,
-                    error=_ERROR_AGENT_PROCESSOR_NOT_AVAILABLE,
-                )
+            agent_processor = self._get_agent_processor()
+            if agent_processor is None:
+                return self._processor_not_available_response("pause")
 
-            success = await self.runtime.agent_processor.pause_processing()
+            success = await agent_processor.pause_processing()
             if success:
                 old_status = self._processor_status
                 self._processor_status = ProcessorStatus.PAUSED
@@ -304,16 +387,11 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             _start_time = self._now()
 
             # Get the agent processor from runtime
-            if not self.runtime or not hasattr(self.runtime, "agent_processor"):
-                return ProcessorControlResponse(
-                    success=False,
-                    processor_name="agent",
-                    operation="resume",
-                    new_status=self._processor_status,
-                    error=_ERROR_AGENT_PROCESSOR_NOT_AVAILABLE,
-                )
+            agent_processor = self._get_agent_processor()
+            if agent_processor is None:
+                return self._processor_not_available_response("resume")
 
-            success = await self.runtime.agent_processor.resume_processing()
+            success = await agent_processor.resume_processing()
             if success:
                 old_status = self._processor_status
                 self._processor_status = ProcessorStatus.RUNNING
@@ -353,13 +431,9 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             True if transition was successful, False otherwise
         """
         try:
-            if not self.runtime or not hasattr(self.runtime, "agent_processor"):
+            agent_processor = self._get_agent_processor()
+            if agent_processor is None:
                 logger.error("Cannot transition state: agent processor not available")
-                return False
-
-            agent_processor = self.runtime.agent_processor
-            if not agent_processor:
-                logger.error("Cannot transition state: agent processor is None")
                 return False
 
             # Convert string to AgentState enum (values are lowercase)
@@ -399,18 +473,8 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
     async def get_processor_queue_status(self) -> ProcessorQueueStatus:
         """Get processor queue status."""
         try:
-            if not self.runtime or not hasattr(self.runtime, "agent_processor"):
-                return ProcessorQueueStatus(
-                    processor_name="unknown",
-                    queue_size=0,
-                    max_size=0,
-                    processing_rate=0.0,
-                    average_latency_ms=0.0,
-                    oldest_message_age_seconds=None,
-                )
-
-            # Check if agent processor is available
-            if not hasattr(self.runtime, "agent_processor") or self.runtime.agent_processor is None:
+            agent_processor = self._get_agent_processor()
+            if agent_processor is None:
                 logger.debug("Agent processor not yet initialized, returning empty queue status")
                 return ProcessorQueueStatus(
                     processor_name="agent",
@@ -422,7 +486,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 )
 
             # Get queue status from agent processor
-            queue_status = self.runtime.agent_processor.get_queue_status()
+            queue_status = agent_processor.get_queue_status()
 
             await self._record_event("processor_query", "queue_status", success=True)
 
@@ -619,9 +683,18 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             except InvalidSignature:
                 logger.error("Invalid signature on emergency command")
                 return False
+            except ValueError as e:
+                # bytes.fromhex can raise ValueError for invalid hex
+                logger.error(f"Invalid signature format (not valid hex): {e}")
+                return False
 
+        except (ValueError, TypeError) as e:
+            # ValueError: invalid key format, TypeError: wrong key type
+            logger.error(f"Signature verification failed due to format error: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Signature verification failed: {e}")
+            # Catch-all for unexpected errors (e.g., cryptography library errors)
+            logger.error(f"Signature verification failed unexpectedly: {e}")
             return False
 
     def _configure_kill_switch(self, config: KillSwitchConfig) -> None:
@@ -648,8 +721,12 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                     # Extract WA ID from comment or use hash
                     wa_id = self._extract_wa_id_from_pem(key_pem)
                     self._wa_key_map.add_key(wa_id, key_pem)
-            except Exception as e:
-                logger.error(f"Failed to load WA public key: {e}")
+            except ValueError as e:
+                # Invalid PEM format or key data
+                logger.error(f"Failed to load WA public key (invalid format): {e}")
+            except TypeError as e:
+                # Wrong key type provided
+                logger.error(f"Failed to load WA public key (wrong type): {e}")
 
         logger.info(f"Kill switch configured with {self._wa_key_map.count()} root WA keys")
 
@@ -1700,14 +1777,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                     for provider in providers:
                         service_name = f"{handler}.{svc_type}.{provider['name']}"
                         cb_state_str = provider.get("circuit_breaker_state", "closed")
-
-                        # Map string state to enum
-                        if cb_state_str == "closed":
-                            cb_state = CircuitBreakerState.CLOSED
-                        elif cb_state_str == "open":
-                            cb_state = CircuitBreakerState.OPEN
-                        else:
-                            cb_state = CircuitBreakerState.HALF_OPEN
+                        cb_state = _map_circuit_breaker_state(cb_state_str)
 
                         circuit_breakers[service_name] = CircuitBreakerStatus(
                             state=cb_state,
@@ -1725,14 +1795,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 for provider in providers:
                     service_name = f"global.{svc_type}.{provider['name']}"
                     cb_state_str = provider.get("circuit_breaker_state", "closed")
-
-                    # Map string state to enum
-                    if cb_state_str == "closed":
-                        cb_state = CircuitBreakerState.CLOSED
-                    elif cb_state_str == "open":
-                        cb_state = CircuitBreakerState.OPEN
-                    else:
-                        cb_state = CircuitBreakerState.HALF_OPEN
+                    cb_state = _map_circuit_breaker_state(cb_state_str)
 
                     circuit_breakers[service_name] = CircuitBreakerStatus(
                         state=cb_state,
@@ -1893,13 +1956,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                         else:
                             is_healthy = True  # Assume healthy if no health check
 
-                        service_details[service_key] = {
-                            "healthy": is_healthy,
-                            "circuit_breaker_state": "closed",  # Direct services don't use circuit breakers
-                            "priority": "DIRECT",  # Direct call, no priority
-                            "priority_group": -1,  # Not applicable
-                            "strategy": "DIRECT",  # Direct call
-                        }
+                        service_details[service_key] = _build_service_health_detail(is_healthy=is_healthy)
 
                         if is_healthy:
                             healthy_count += 1
@@ -1907,14 +1964,9 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                             unhealthy_count += 1
                     except Exception as e:
                         logger.error(f"Error checking health of {display_name}: {e}")
-                        service_details[service_key] = {
-                            "healthy": False,
-                            "circuit_breaker_state": "error",
-                            "priority": "DIRECT",
-                            "priority_group": -1,
-                            "strategy": "DIRECT",
-                            "error": str(e),
-                        }
+                        service_details[service_key] = _build_service_health_detail(
+                            is_healthy=False, circuit_breaker_state="error", error=str(e)
+                        )
                         unhealthy_count += 1
 
             # Then get registry services (bus-based services)
@@ -1932,13 +1984,13 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                         cb_state = provider.get("circuit_breaker_state", "closed")
                         is_healthy = cb_state == "closed"
 
-                        service_details[service_key] = {
-                            "healthy": is_healthy,
-                            "circuit_breaker_state": cb_state,
-                            "priority": provider.get("priority", "NORMAL"),
-                            "priority_group": provider.get("priority_group", 0),
-                            "strategy": provider.get("strategy", "FALLBACK"),
-                        }
+                        service_details[service_key] = _build_service_health_detail(
+                            is_healthy=is_healthy,
+                            circuit_breaker_state=cb_state,
+                            priority=provider.get("priority", "NORMAL"),
+                            priority_group=provider.get("priority_group", 0),
+                            strategy=provider.get("strategy", "FALLBACK"),
+                        )
 
                         if is_healthy:
                             healthy_count += 1

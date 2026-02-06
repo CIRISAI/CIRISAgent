@@ -38,32 +38,39 @@ IS_IOS = sys.platform == "ios" or "darwin" in sys.platform
 # =============================================================================
 
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import List, Optional
+
 
 @dataclass
 class StartupStep:
     """Represents a single startup check step."""
+
     id: int
     name: str
     status: str  # "pending", "running", "ok", "failed"
     message: Optional[str] = None
 
+
 @dataclass
 class StartupStatus:
     """Overall startup status."""
+
     steps: List[StartupStep]
     current_step: int
     all_passed: Optional[bool] = None
     runtime_started: bool = False
 
+
 @dataclass
 class ServiceStatus:
     """Service initialization status for Compose UI."""
+
     services_online: int
     services_total: int
     phase: str  # "initializing", "starting", "ready", "error"
     message: Optional[str] = None
+
 
 def get_status_file_path() -> Path:
     """Get the path to the startup status file."""
@@ -71,6 +78,7 @@ def get_status_file_path() -> Path:
     ciris_dir = home / "Documents" / "ciris"
     ciris_dir.mkdir(parents=True, exist_ok=True)
     return ciris_dir / "startup_status.json"
+
 
 def write_startup_status(status: StartupStatus):
     """Write startup status to JSON file for Swift to read."""
@@ -83,7 +91,9 @@ def write_startup_status(status: StartupStatus):
     except Exception as e:
         print(f"[STARTUP] Warning: Could not write status file: {e}")
         import traceback
+
         traceback.print_exc()
+
 
 def init_startup_status() -> StartupStatus:
     """Initialize startup status with all steps pending."""
@@ -98,6 +108,7 @@ def init_startup_status() -> StartupStatus:
     status = StartupStatus(steps=steps, current_step=0)
     write_startup_status(status)
     return status
+
 
 def update_step_status(status: StartupStatus, step_id: int, step_status: str, message: Optional[str] = None):
     """Update a step's status and write to file."""

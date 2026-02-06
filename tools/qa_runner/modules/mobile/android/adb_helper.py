@@ -14,13 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..device_helper import (
-    DeviceHelper,
-    DeviceInfo,
-    LogCollection,
-    Platform,
-    UIElement,
-)
+from ..device_helper import DeviceHelper, DeviceInfo, LogCollection, Platform, UIElement
 
 
 class ADBDeviceHelper(DeviceHelper):
@@ -175,10 +169,15 @@ class ADBDeviceHelper(DeviceHelper):
         else:
             component = f"{bundle_id}/.MainActivity"
 
-        result = self._run_adb([
-            "shell", "am", "start",
-            "-n", component,
-        ])
+        result = self._run_adb(
+            [
+                "shell",
+                "am",
+                "start",
+                "-n",
+                component,
+            ]
+        )
         return result.returncode == 0
 
     def force_stop_app(self, bundle_id: str) -> bool:
@@ -210,10 +209,18 @@ class ADBDeviceHelper(DeviceHelper):
 
     def swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300) -> bool:
         """Swipe gesture."""
-        result = self._run_adb([
-            "shell", "input", "swipe",
-            str(x1), str(y1), str(x2), str(y2), str(duration_ms),
-        ])
+        result = self._run_adb(
+            [
+                "shell",
+                "input",
+                "swipe",
+                str(x1),
+                str(y1),
+                str(x2),
+                str(y2),
+                str(duration_ms),
+            ]
+        )
         return result.returncode == 0
 
     def input_text(self, text: str) -> bool:
@@ -365,30 +372,57 @@ class ADBDeviceHelper(DeviceHelper):
 
         # Pull logcat - Python logs
         python_log = output_path / "logcat_python.txt"
-        result = self._run_adb([
-            "logcat", "-d", "-v", "time", "-s",
-            "python.stdout:V", "python.stderr:V",
-        ], timeout=60)
+        result = self._run_adb(
+            [
+                "logcat",
+                "-d",
+                "-v",
+                "time",
+                "-s",
+                "python.stdout:V",
+                "python.stderr:V",
+            ],
+            timeout=60,
+        )
         with open(python_log, "w") as f:
             f.write(result.stdout)
         collection.system_logs.append(python_log)
 
         # Pull logcat - App logs
         app_log = output_path / "logcat_app.txt"
-        result = self._run_adb([
-            "logcat", "-d", "-v", "time", "-s",
-            "CIRISApp:V", "MainActivity:V", "PythonRuntime:V",
-            "EnvFileUpdater:V", "TokenManager:V", "BillingViewModel:V",
-        ], timeout=60)
+        result = self._run_adb(
+            [
+                "logcat",
+                "-d",
+                "-v",
+                "time",
+                "-s",
+                "CIRISApp:V",
+                "MainActivity:V",
+                "PythonRuntime:V",
+                "EnvFileUpdater:V",
+                "TokenManager:V",
+                "BillingViewModel:V",
+            ],
+            timeout=60,
+        )
         with open(app_log, "w") as f:
             f.write(result.stdout)
         collection.system_logs.append(app_log)
 
         # Pull logcat - Crashes
         crash_log = output_path / "logcat_crashes.txt"
-        result = self._run_adb([
-            "logcat", "-d", "-v", "time", "-s", "AndroidRuntime:E",
-        ], timeout=60)
+        result = self._run_adb(
+            [
+                "logcat",
+                "-d",
+                "-v",
+                "time",
+                "-s",
+                "AndroidRuntime:E",
+            ],
+            timeout=60,
+        )
         with open(crash_log, "w") as f:
             f.write(result.stdout)
         if result.stdout.strip():
@@ -400,6 +434,7 @@ class ADBDeviceHelper(DeviceHelper):
         # Save metadata
         metadata_path = output_path / "device_info.json"
         import json
+
         with open(metadata_path, "w") as f:
             json.dump(collection.metadata, f, indent=2, default=str)
 
@@ -421,10 +456,16 @@ class ADBDeviceHelper(DeviceHelper):
 
         log_files = ["latest.log", "incidents_latest.log", "ciris.log"]
         for log_name in log_files:
-            result = self._run_adb([
-                "shell", "run-as", bundle_id,
-                "cat", f"files/logs/{log_name}",
-            ], timeout=30)
+            result = self._run_adb(
+                [
+                    "shell",
+                    "run-as",
+                    bundle_id,
+                    "cat",
+                    f"files/logs/{log_name}",
+                ],
+                timeout=30,
+            )
             if result.returncode == 0 and result.stdout.strip():
                 log_path = logs_dir / log_name
                 with open(log_path, "w") as f:
@@ -435,10 +476,17 @@ class ADBDeviceHelper(DeviceHelper):
         db_dir = output_path / "databases"
         db_dir.mkdir(exist_ok=True)
 
-        db_list = self._run_adb([
-            "shell", "run-as", bundle_id,
-            "find", "files/", "-name", "*.db",
-        ])
+        db_list = self._run_adb(
+            [
+                "shell",
+                "run-as",
+                bundle_id,
+                "find",
+                "files/",
+                "-name",
+                "*.db",
+            ]
+        )
         for db_path in db_list.stdout.strip().split("\n"):
             if db_path.strip():
                 db_name = Path(db_path).name
@@ -454,16 +502,26 @@ class ADBDeviceHelper(DeviceHelper):
         prefs_dir = output_path / "prefs"
         prefs_dir.mkdir(exist_ok=True)
 
-        prefs_list = self._run_adb([
-            "shell", "run-as", bundle_id,
-            "ls", "shared_prefs/",
-        ])
+        prefs_list = self._run_adb(
+            [
+                "shell",
+                "run-as",
+                bundle_id,
+                "ls",
+                "shared_prefs/",
+            ]
+        )
         for pref_name in prefs_list.stdout.strip().split("\n"):
             if pref_name.strip() and pref_name.endswith(".xml"):
-                result = self._run_adb([
-                    "shell", "run-as", bundle_id,
-                    "cat", f"shared_prefs/{pref_name}",
-                ])
+                result = self._run_adb(
+                    [
+                        "shell",
+                        "run-as",
+                        bundle_id,
+                        "cat",
+                        f"shared_prefs/{pref_name}",
+                    ]
+                )
                 if result.returncode == 0:
                     pref_path = prefs_dir / pref_name
                     with open(pref_path, "w") as f:
@@ -471,17 +529,22 @@ class ADBDeviceHelper(DeviceHelper):
                     collection.preferences.append(pref_path)
 
         # Pull .env file (redact tokens)
-        result = self._run_adb([
-            "shell", "run-as", bundle_id,
-            "cat", "files/.env",
-        ])
+        result = self._run_adb(
+            [
+                "shell",
+                "run-as",
+                bundle_id,
+                "cat",
+                "files/.env",
+            ]
+        )
         if result.returncode == 0 and result.stdout.strip():
             env_path = output_path / "env_file.txt"
             # Redact sensitive values
             env_content = result.stdout
             env_content = re.sub(
-                r'(OPENAI_API_KEY|GOOGLE_ID_TOKEN|ACCESS_TOKEN)=.*',
-                r'\1=[REDACTED]',
+                r"(OPENAI_API_KEY|GOOGLE_ID_TOKEN|ACCESS_TOKEN)=.*",
+                r"\1=[REDACTED]",
                 env_content,
             )
             with open(env_path, "w") as f:
@@ -497,8 +560,12 @@ class ADBDeviceHelper(DeviceHelper):
         try:
             self._log_process = subprocess.Popen(
                 [
-                    self.adb_path, "-s", self.device_serial or "",
-                    "logcat", "-v", "time",
+                    self.adb_path,
+                    "-s",
+                    self.device_serial or "",
+                    "logcat",
+                    "-v",
+                    "time",
                 ],
                 stdout=open(output_path, "w"),
                 stderr=subprocess.DEVNULL,
@@ -519,9 +586,15 @@ class ADBDeviceHelper(DeviceHelper):
 
     def grant_permission(self, bundle_id: str, permission: str) -> bool:
         """Grant permission to app."""
-        result = self._run_adb([
-            "shell", "pm", "grant", bundle_id, permission,
-        ])
+        result = self._run_adb(
+            [
+                "shell",
+                "pm",
+                "grant",
+                bundle_id,
+                permission,
+            ]
+        )
         return result.returncode == 0
 
     def set_property(self, key: str, value: str) -> bool:
@@ -536,7 +609,11 @@ class ADBDeviceHelper(DeviceHelper):
 
     def forward_port(self, local_port: int, remote_port: int) -> bool:
         """Forward local port to device."""
-        result = self._run_adb([
-            "forward", f"tcp:{local_port}", f"tcp:{remote_port}",
-        ])
+        result = self._run_adb(
+            [
+                "forward",
+                f"tcp:{local_port}",
+                f"tcp:{remote_port}",
+            ]
+        )
         return result.returncode == 0

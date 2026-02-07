@@ -20,10 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Covenant Metrics Signature Verification** - JSON serialization mismatch
-  - Added `separators=(",", ":")` for compact JSON matching CIRISLens
-  - Reduces trace size ~80% by removing whitespace
+- **Covenant Metrics Trace Size Optimization** - 98% size reduction
+  - Compact JSON with `separators=(",", ":")` removes whitespace
+  - `_strip_empty()` removes null, empty strings, empty lists/dicts
+  - Trace size: 100KB → 1.7KB
   - Added debug logging with len/hash/preview for verification
+  - **Note**: CIRISLens needs matching `_strip_empty` logic for verification
 
 ## [1.9.6] - 2026-02-06
 

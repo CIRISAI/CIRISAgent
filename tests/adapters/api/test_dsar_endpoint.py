@@ -11,16 +11,21 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.app import create_app
+from ciris_engine.logic.adapters.api.auth import get_current_user
+from ciris_engine.logic.adapters.api.models import TokenData
 from ciris_engine.logic.adapters.api.routes import dsar
 
 
 @pytest.fixture
 def client(test_db):
-    """Create test client with database and mock auth services."""
+    """Create test client with database and mock auth."""
     app = create_app()
-    # Set up mock auth services to prevent 503 (fail-closed behavior)
-    app.state.authentication_service = MagicMock()
-    app.state.auth_service = MagicMock()
+
+    # Override auth dependency to return admin user
+    def mock_get_current_user():
+        return TokenData(username="admin", email="admin@test.com", role="ADMIN")
+
+    app.dependency_overrides[get_current_user] = mock_get_current_user
     return TestClient(app)
 
 

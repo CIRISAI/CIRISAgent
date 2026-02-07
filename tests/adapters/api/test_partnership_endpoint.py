@@ -13,6 +13,8 @@ from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.app import create_app
+from ciris_engine.logic.adapters.api.auth import get_current_user
+from ciris_engine.logic.adapters.api.models import TokenData
 from ciris_engine.logic.adapters.api.routes.partnership import create_partnership_response, require_admin
 from ciris_engine.schemas.consent.core import (
     ConsentCategory,
@@ -28,11 +30,14 @@ from ciris_engine.schemas.consent.core import (
 
 @pytest.fixture
 def client():
-    """Create test client with mock auth services."""
+    """Create test client with mock auth that returns admin user."""
     app = create_app()
-    # Set up mock auth services to prevent 503 (fail-closed behavior)
-    app.state.authentication_service = MagicMock()
-    app.state.auth_service = MagicMock()
+
+    # Override auth dependency to return admin user
+    def mock_get_current_user():
+        return TokenData(username="admin", email="admin@test.com", role="ADMIN")
+
+    app.dependency_overrides[get_current_user] = mock_get_current_user
     return TestClient(app)
 
 

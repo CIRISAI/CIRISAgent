@@ -676,7 +676,7 @@ async def get_otlp_telemetry(
         raise HTTPException(status_code=500, detail=f"Failed to export {signal} in OTLP format")
 
 
-@router.get("/overview", responses=RESPONSES_500_503)
+@router.get("/overview", response_model=None, responses=RESPONSES_500_503)
 async def get_telemetry_overview(request: Request, auth: AuthObserverDep) -> SuccessResponse[SystemOverview]:
     """
     System metrics summary.
@@ -743,7 +743,7 @@ class ResourceTelemetryResponse(BaseModel):
     health: ResourceHealthStatus = Field(..., description="Health status")
 
 
-@router.get("/resources", responses=RESPONSES_500_503)
+@router.get("/resources", response_model=None, responses=RESPONSES_500_503)
 async def get_resource_telemetry(request: Request, auth: AuthObserverDep) -> SuccessResponse[ResourceTelemetryResponse]:
     """
     Get current resource usage telemetry.
@@ -961,7 +961,7 @@ def _calculate_metrics_summary(metrics: List[DetailedMetric]) -> MetricAggregate
         return MetricAggregate(min=0.0, max=0.0, avg=0.0, sum=0.0, count=0)
 
 
-@router.get("/metrics", responses=RESPONSES_500_503)
+@router.get("/metrics", response_model=None, responses=RESPONSES_500_503)
 async def get_detailed_metrics(request: Request, auth: AuthObserverDep) -> SuccessResponse[MetricsResponse]:
     """
     Detailed metrics.
@@ -1255,7 +1255,7 @@ def _build_trace_from_audit_entries(trace_id: str, entries: List[Any]) -> Reason
     )
 
 
-@router.get("/traces", responses=RESPONSES_500_503)
+@router.get("/traces", response_model=None, responses=RESPONSES_500_503)
 async def get_reasoning_traces(
     request: Request,
     auth: AuthObserverDep,
@@ -1426,7 +1426,7 @@ async def _get_logs_from_file_reader(
         return []
 
 
-@router.get("/logs", responses=RESPONSES_500_503)
+@router.get("/logs", response_model=None, responses=RESPONSES_500_503)
 async def get_system_logs(
     request: Request,
     auth: AuthObserverDep,
@@ -1712,7 +1712,7 @@ def _build_query_response(
     )
 
 
-@router.post("/query", responses=RESPONSES_500_503)
+@router.post("/query", response_model=None, responses=RESPONSES_500_503)
 async def query_telemetry(
     request: Request, query: TelemetryQuery, auth: AuthAdminDep
 ) -> SuccessResponse[QueryResponse]:
@@ -1751,7 +1751,7 @@ async def query_telemetry(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/metrics/{metric_name}", responses=RESPONSES_404_500_503)
+@router.get("/metrics/{metric_name}", response_model=None, responses=RESPONSES_404_500_503)
 async def get_detailed_metric(
     request: Request,
     auth: AuthObserverDep,
@@ -1912,7 +1912,7 @@ async def get_unified_telemetry(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/resources/history", responses=RESPONSES_500_503)
+@router.get("/resources/history", response_model=None, responses=RESPONSES_500_503)
 async def get_resource_history(
     request: Request,
     auth: AuthObserverDep,

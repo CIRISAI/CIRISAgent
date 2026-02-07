@@ -5,18 +5,18 @@ Simplified configuration management with role-based filtering.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi import APIRouter, HTTPException, Path, Request
 from pydantic import BaseModel, Field, field_serializer
 
-from ciris_engine.schemas.api.auth import UserRole
+from ciris_engine.schemas.api.auth import AuthContext, UserRole
 from ciris_engine.schemas.api.config_security import ConfigSecurity
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.services.nodes import ConfigValue as ConfigValueWrapper
 
 from ..constants import DESC_CONFIGURATION_KEY, ERROR_CONFIG_SERVICE_NOT_AVAILABLE
-from ..dependencies.auth import AuthContext, get_auth_context, require_admin, require_observer
+from ._common import RESPONSES_403, RESPONSES_404_500_503, RESPONSES_500_503, AuthAdminDep, AuthDep, AuthObserverDep
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -135,9 +135,9 @@ class ConfigUpdate(BaseModel):
 # Endpoints
 
 
-@router.get("", response_model=SuccessResponse[ConfigListResponse])
+@router.get("", response_model=None, responses=RESPONSES_500_503)
 async def list_configs(
-    request: Request, prefix: Optional[str] = None, auth: AuthContext = Depends(require_observer)
+    request: Request, auth: AuthObserverDep, prefix: Optional[str] = None
 ) -> SuccessResponse[ConfigListResponse]:
     """
     List all configurations.
@@ -186,11 +186,11 @@ async def list_configs(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{key:path}", response_model=SuccessResponse[ConfigItemResponse])
+@router.get("/{key:path}", response_model=None, responses=RESPONSES_404_500_503)
 async def get_config(
     request: Request,
+    auth: AuthObserverDep,
     key: str = Path(..., description=DESC_CONFIGURATION_KEY),
-    auth: AuthContext = Depends(require_observer),
 ) -> SuccessResponse[ConfigItemResponse]:
     """
     Get specific config.
@@ -235,12 +235,12 @@ async def get_config(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/{key:path}", response_model=SuccessResponse[ConfigItemResponse])
+@router.put("/{key:path}", response_model=None, responses={**RESPONSES_403, **RESPONSES_500_503})
 async def update_config(
     request: Request,
     body: ConfigUpdate,
+    auth: AuthDep,
     key: str = Path(..., description=DESC_CONFIGURATION_KEY),
-    auth: AuthContext = Depends(get_auth_context),
 ) -> SuccessResponse[ConfigItemResponse]:
     """
     Update config.
@@ -292,11 +292,11 @@ async def update_config(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/{key:path}", response_model=SuccessResponse[Dict[str, str]])
+@router.delete("/{key:path}", response_model=None, responses={**RESPONSES_403, **RESPONSES_500_503})
 async def delete_config(
     request: Request,
+    auth: AuthAdminDep,
     key: str = Path(..., description=DESC_CONFIGURATION_KEY),
-    auth: AuthContext = Depends(require_admin),
 ) -> SuccessResponse[Dict[str, str]]:
     """
     Delete config.

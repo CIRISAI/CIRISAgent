@@ -13,7 +13,7 @@ Architecture:
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -30,6 +30,9 @@ from ciris_engine.schemas.config.tickets import TicketsConfig, TicketSOPConfig
 
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
+
+# Type alias for authenticated user dependency (S8410 compliance)
+CurrentUserDep = Annotated[TokenData, Depends(get_current_user)]
 
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
 
@@ -183,10 +186,15 @@ def _initialize_ticket_metadata(sop_config: TicketSOPConfig) -> Dict[str, Any]:
 # ============================================================================
 
 
-@router.get("/sops", response_model=List[str])
+@router.get(
+    "/sops",
+    responses={
+        500: {"description": "Tickets configuration not available"},
+    },
+)
 async def list_supported_sops(
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: CurrentUserDep,
 ) -> List[str]:
     """List all supported Standard Operating Procedures for this agent.
 
@@ -207,11 +215,16 @@ async def list_supported_sops(
     return tickets_config.list_sops()
 
 
-@router.get("/sops/{sop}", response_model=SOPMetadataResponse)
+@router.get(
+    "/sops/{sop}",
+    responses={
+        404: {"description": "SOP not found or not supported"},
+    },
+)
 async def get_sop_metadata(
     sop: str,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: CurrentUserDep,
 ) -> SOPMetadataResponse:
     """Get metadata about a specific Standard Operating Procedure.
 
@@ -248,11 +261,18 @@ async def get_sop_metadata(
     )
 
 
-@router.post("/", response_model=TicketResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        500: {"description": "Ticket creation or retrieval failed"},
+        501: {"description": "SOP not supported by this agent"},
+    },
+)
 async def create_new_ticket(
     request: CreateTicketRequest,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: CurrentUserDep,
 ) -> TicketResponse:
     """Create a new ticket.
 
@@ -334,11 +354,16 @@ async def create_new_ticket(
     return TicketResponse(**ticket)
 
 
-@router.get("/{ticket_id}", response_model=TicketResponse)
+@router.get(
+    "/{ticket_id}",
+    responses={
+        404: {"description": "Ticket not found"},
+    },
+)
 async def get_ticket_by_id(
     ticket_id: str,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: CurrentUserDep,
 ) -> TicketResponse:
     """Get a specific ticket by ID.
 
@@ -358,15 +383,15 @@ async def get_ticket_by_id(
     return TicketResponse(**ticket)
 
 
-@router.get("/", response_model=List[TicketResponse])
+@router.get("/")
 async def list_all_tickets(
     req: Request,
+    current_user: CurrentUserDep,
     sop: Optional[str] = None,
     ticket_type: Optional[str] = None,
     status_filter: Optional[str] = None,
     email: Optional[str] = None,
     limit: Optional[int] = None,
-    current_user: TokenData = Depends(get_current_user),
 ) -> List[TicketResponse]:
     """List tickets with optional filters.
 
@@ -471,12 +496,18 @@ def _retrieve_updated_ticket(ticket_id: str, db_path: Optional[str]) -> Dict[str
     return updated_ticket
 
 
-@router.patch("/{ticket_id}", response_model=TicketResponse)
+@router.patch(
+    "/{ticket_id}",
+    responses={
+        404: {"description": "Ticket not found"},
+        500: {"description": "Update failed"},
+    },
+)
 async def update_existing_ticket(
     ticket_id: str,
     request: UpdateTicketRequest,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: CurrentUserDep,
 ) -> TicketResponse:
     """Update ticket status, metadata, or notes.
 
@@ -504,11 +535,17 @@ async def update_existing_ticket(
     return TicketResponse(**updated_ticket)
 
 
-@router.delete("/{ticket_id}", response_model=StandardResponse)
+@router.delete(
+    "/{ticket_id}",
+    responses={
+        404: {"description": "Ticket not found"},
+        500: {"description": "Deletion failed"},
+    },
+)
 async def cancel_ticket(
     ticket_id: str,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: CurrentUserDep,
 ) -> StandardResponse:
     """Cancel/delete a ticket.
 

@@ -11,14 +11,19 @@ from typing import Any, Dict, Optional
 from urllib.parse import quote, urlparse
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ciris_engine.config.ciris_services import get_billing_url
 from ciris_engine.schemas.api.auth import AuthContext
 from ciris_engine.schemas.types import JSONDict
 
-from ..dependencies.auth import require_observer
+from ._common import (
+    RESPONSES_BILLING_503,
+    RESPONSES_BILLING_PURCHASE_INITIATE,
+    RESPONSES_BILLING_PURCHASE_STATUS,
+    AuthObserverDep,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -485,10 +490,10 @@ def _build_mobile_credit_response(result: Any) -> CreditStatusResponse:
     )
 
 
-@router.get("/credits", response_model=CreditStatusResponse)
+@router.get("/credits", responses=RESPONSES_BILLING_503)
 async def get_credits(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> CreditStatusResponse:
     """
     Get user's credit balance and status.
@@ -556,11 +561,11 @@ async def get_credits(
     return response
 
 
-@router.post("/purchase/initiate", response_model=PurchaseInitiateResponse)
+@router.post("/purchase/initiate", responses=RESPONSES_BILLING_PURCHASE_INITIATE)
 async def initiate_purchase(
     request: Request,
     body: PurchaseInitiateRequest,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> PurchaseInitiateResponse:
     """
     Initiate credit purchase (creates Stripe payment intent).
@@ -639,11 +644,11 @@ async def initiate_purchase(
     )
 
 
-@router.get("/purchase/status/{payment_id}", response_model=PurchaseStatusResponse)
+@router.get("/purchase/status/{payment_id}", responses=RESPONSES_BILLING_PURCHASE_STATUS)
 async def get_purchase_status(
     payment_id: str,
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> PurchaseStatusResponse:
     """
     Check payment status (optional - for polling after payment).
@@ -729,10 +734,10 @@ async def get_purchase_status(
     )
 
 
-@router.get("/transactions", response_model=TransactionListResponse)
+@router.get("/transactions", responses=RESPONSES_BILLING_503)
 async def get_transactions(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
     limit: int = 50,
     offset: int = 0,
 ) -> TransactionListResponse:
@@ -866,11 +871,11 @@ class GooglePlayVerifyResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error message if verification failed")
 
 
-@router.post("/google-play/verify", response_model=GooglePlayVerifyResponse)
+@router.post("/google-play/verify")
 async def verify_google_play_purchase(
     request: Request,
     body: GooglePlayVerifyRequest,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> GooglePlayVerifyResponse:
     """
     Verify a Google Play purchase and add credits.

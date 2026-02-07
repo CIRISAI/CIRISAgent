@@ -170,7 +170,15 @@ def is_authorized_key(public_key: str) -> bool:
     return public_key in ROOT_WA_AUTHORITY_KEYS
 
 
-@router.post("/emergency/shutdown", response_model=SuccessResponse[EmergencyShutdownStatus])
+@router.post(
+    "/emergency/shutdown",
+    responses={
+        400: {"description": "Invalid command type"},
+        403: {"description": "Command verification failed - timestamp, signature, or authorization error"},
+        500: {"description": "Emergency shutdown execution failed"},
+        503: {"description": "Runtime or shutdown service not available"},
+    },
+)
 async def emergency_shutdown(command: WASignedCommand, request: Request) -> SuccessResponse[EmergencyShutdownStatus]:
     """
     Execute emergency shutdown with cryptographically signed command.

@@ -9,18 +9,16 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.schemas.api.auth import AuthContext
-from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
+from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.services.core.runtime import (
     ProcessorQueueStatus,
     ServiceHealthStatus,
     ServiceSelectionExplanation,
 )
 from ciris_engine.schemas.services.runtime_control import PipelineState, StepPoint
-from ciris_engine.schemas.services.runtime_control import StepResultUnion as StepResult
 from ciris_engine.schemas.types import JSONDict
 
 from ..constants import (
@@ -28,7 +26,7 @@ from ..constants import (
     DESC_HUMAN_READABLE_STATUS,
     ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE,
 )
-from ..dependencies.auth import require_admin, require_observer
+from ._common import RESPONSES_500_503, AuthAdminDep, AuthObserverDep
 
 router = APIRouter(prefix="/system", tags=["system-extensions"])
 logger = logging.getLogger(__name__)
@@ -37,10 +35,8 @@ logger = logging.getLogger(__name__)
 # Runtime Control Extensions
 
 
-@router.get("/runtime/queue", response_model=SuccessResponse[ProcessorQueueStatus])
-async def get_processing_queue_status(
-    request: Request, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[ProcessorQueueStatus]:
+@router.get("/runtime/queue", responses=RESPONSES_500_503)
+async def get_processing_queue_status(request: Request, auth: AuthObserverDep) -> SuccessResponse[ProcessorQueueStatus]:
     """
     Get processing queue status.
 
@@ -292,9 +288,9 @@ def _consolidate_step_results(result: Any) -> Optional[JSONDict]:
     }
 
 
-@router.post("/runtime/step", response_model=SuccessResponse[SingleStepResponse])
+@router.post("/runtime/step", responses=RESPONSES_500_503)
 async def single_step_processor(
-    request: Request, auth: AuthContext = Depends(require_admin), body: JSONDict = Body(default={})
+    request: Request, auth: AuthAdminDep, body: JSONDict = Body(default={})
 ) -> SuccessResponse[SingleStepResponse]:
     """
     Execute a single processing step.
@@ -352,10 +348,8 @@ class ServicePriorityUpdateRequest(BaseModel):
     strategy: Optional[str] = Field(None, description="Selection strategy (FALLBACK, ROUND_ROBIN)")
 
 
-@router.get("/services/health", response_model=SuccessResponse[ServiceHealthStatus])
-async def get_service_health_details(
-    request: Request, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[ServiceHealthStatus]:
+@router.get("/services/health", responses=RESPONSES_500_503)
+async def get_service_health_details(request: Request, auth: AuthObserverDep) -> SuccessResponse[ServiceHealthStatus]:
     """
     Get detailed service health status.
 
@@ -390,9 +384,9 @@ class ServicePriorityUpdateResponse(BaseModel):
     message: str = Field(..., description="Status message")
 
 
-@router.put("/services/{provider_name}/priority", response_model=SuccessResponse[ServicePriorityUpdateResponse])
+@router.put("/services/{provider_name}/priority", responses=RESPONSES_500_503)
 async def update_service_priority(
-    provider_name: str, body: ServicePriorityUpdateRequest, request: Request, auth: AuthContext = Depends(require_admin)
+    provider_name: str, body: ServicePriorityUpdateRequest, request: Request, auth: AuthAdminDep
 ) -> SuccessResponse[ServicePriorityUpdateResponse]:
     """
     Update service provider priority.
@@ -446,9 +440,9 @@ class CircuitBreakerResetResponse(BaseModel):
     message: str = Field(..., description="Status message")
 
 
-@router.post("/services/circuit-breakers/reset", response_model=SuccessResponse[CircuitBreakerResetResponse])
+@router.post("/services/circuit-breakers/reset", responses=RESPONSES_500_503)
 async def reset_service_circuit_breakers(
-    body: CircuitBreakerResetRequest, request: Request, auth: AuthContext = Depends(require_admin)
+    body: CircuitBreakerResetRequest, request: Request, auth: AuthAdminDep
 ) -> SuccessResponse[CircuitBreakerResetResponse]:
     """
     Reset circuit breakers.
@@ -479,9 +473,9 @@ async def reset_service_circuit_breakers(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/services/selection-logic", response_model=SuccessResponse[ServiceSelectionExplanation])
+@router.get("/services/selection-logic", responses=RESPONSES_500_503)
 async def get_service_selection_explanation(
-    request: Request, auth: AuthContext = Depends(require_observer)
+    request: Request, auth: AuthObserverDep
 ) -> SuccessResponse[ServiceSelectionExplanation]:
     """
     Get service selection logic explanation.
@@ -583,10 +577,8 @@ def _get_processor_state_definitions(current_state_name: Optional[str]) -> List[
     ]
 
 
-@router.get("/processors", response_model=SuccessResponse[List[ProcessorStateInfo]])
-async def get_processor_states(
-    request: Request, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[List[ProcessorStateInfo]]:
+@router.get("/processors", responses=RESPONSES_500_503)
+async def get_processor_states(request: Request, auth: AuthObserverDep) -> SuccessResponse[List[ProcessorStateInfo]]:
     """
     Get information about all processor states.
 
@@ -794,8 +786,8 @@ def _redact_observer_sensitive_data(events: List[Any], allowed_user_ids: set[str
     return redacted_events
 
 
-@router.get("/runtime/reasoning-stream")
-async def reasoning_stream(request: Request, auth: AuthContext = Depends(require_observer)) -> Any:
+@router.get("/runtime/reasoning-stream", responses=RESPONSES_500_503)
+async def reasoning_stream(request: Request, auth: AuthObserverDep) -> Any:
     """
     Stream live H3ERE reasoning steps as they occur.
 

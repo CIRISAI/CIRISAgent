@@ -5,7 +5,7 @@ Coordinates GDPR data subject requests across CIRIS + external data sources.
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Annotated, Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -24,6 +24,9 @@ from ciris_engine.schemas.consent.core import DSARExportFormat
 
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
+
+# Type alias for authenticated user dependency (S8410 compliance)
+CurrentUserDep = Annotated[TokenData, Depends(get_current_user)]
 
 router = APIRouter(prefix="/dsar/multi-source", tags=["DSAR Multi-Source"])
 
@@ -147,12 +150,26 @@ def _initialize_orchestrator(req: Request) -> DSAROrchestrator:
 
 # Register both slash and non-slash variants to support clients with and without
 # redirect handling. The non-slash variant is the canonical route.
-@router.post("", response_model=StandardResponse)
-@router.post("/", response_model=StandardResponse)
+@router.post(
+    "",
+    responses={
+        400: {"description": "Bad request - corrections field required for correction requests"},
+        500: {"description": "Multi-source DSAR orchestration or persistence failed"},
+        503: {"description": "Tool bus or memory bus not available"},
+    },
+)
+@router.post(
+    "/",
+    responses={
+        400: {"description": "Bad request - corrections field required for correction requests"},
+        500: {"description": "Multi-source DSAR orchestration or persistence failed"},
+        503: {"description": "Tool bus or memory bus not available"},
+    },
+)
 async def submit_multi_source_dsar(
     request: MultiSourceDSARRequest,
     req: Request,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: CurrentUserDep,
 ) -> StandardResponse:
     """
     Submit a multi-source Data Subject Access Request (DSAR).
@@ -332,10 +349,15 @@ async def submit_multi_source_dsar(
     )
 
 
-@router.get("/{ticket_id}", response_model=StandardResponse)
+@router.get(
+    "/{ticket_id}",
+    responses={
+        404: {"description": "Multi-source DSAR ticket not found"},
+    },
+)
 async def get_multi_source_status(
     ticket_id: str,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: CurrentUserDep,
 ) -> StandardResponse:
     """
     Get real-time status of multi-source DSAR request.
@@ -386,10 +408,15 @@ async def get_multi_source_status(
     )
 
 
-@router.get("/{ticket_id}/partial", response_model=StandardResponse)
+@router.get(
+    "/{ticket_id}/partial",
+    responses={
+        404: {"description": "Multi-source DSAR ticket not found"},
+    },
+)
 async def get_partial_results(
     ticket_id: str,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: CurrentUserDep,
 ) -> StandardResponse:
     """
     Get partial results as sources complete.
@@ -433,10 +460,15 @@ async def get_partial_results(
     )
 
 
-@router.delete("/{ticket_id}", response_model=StandardResponse)
+@router.delete(
+    "/{ticket_id}",
+    responses={
+        404: {"description": "Multi-source DSAR ticket not found"},
+    },
+)
 async def cancel_multi_source_request(
     ticket_id: str,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: CurrentUserDep,
 ) -> StandardResponse:
     """
     Cancel in-progress multi-source DSAR request.

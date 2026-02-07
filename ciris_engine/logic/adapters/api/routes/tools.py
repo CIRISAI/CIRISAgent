@@ -18,13 +18,12 @@ from typing import Any, Dict, List, Optional, cast
 from urllib.parse import quote, urljoin
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ciris_engine.config.ciris_services import get_billing_url
-from ciris_engine.schemas.api.auth import AuthContext
 
-from ..dependencies.auth import require_observer
+from ._common import RESPONSES_TOOL_BALANCE, RESPONSES_TOOL_BALANCE_ALL, RESPONSES_TOOL_PURCHASE, AuthObserverDep
 
 logger = logging.getLogger(__name__)
 
@@ -220,11 +219,11 @@ async def _make_billing_request(
 # Endpoints
 
 
-@router.get("/balance/{tool_name}", response_model=ToolBalanceResponse)
+@router.get("/balance/{tool_name}", responses=RESPONSES_TOOL_BALANCE)
 async def get_tool_balance(
     tool_name: str,
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> ToolBalanceResponse:
     """
     Get balance for a specific tool.
@@ -285,10 +284,10 @@ async def get_tool_balance(
         raise HTTPException(status_code=503, detail=ERR_BILLING_UNAVAILABLE)
 
 
-@router.get("/balance", response_model=AllToolBalancesResponse)
+@router.get("/balance", responses=RESPONSES_TOOL_BALANCE_ALL)
 async def get_all_tool_balances(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> AllToolBalancesResponse:
     """
     Get balance for all tools.
@@ -354,11 +353,11 @@ async def get_all_tool_balances(
         raise HTTPException(status_code=503, detail=ERR_BILLING_UNAVAILABLE)
 
 
-@router.get("/check/{tool_name}", response_model=ToolCreditCheckResponse)
+@router.get("/check/{tool_name}", responses=RESPONSES_TOOL_BALANCE)
 async def check_tool_credit(
     tool_name: str,
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> ToolCreditCheckResponse:
     """
     Quick credit check for a tool.
@@ -419,10 +418,10 @@ async def check_tool_credit(
         raise HTTPException(status_code=503, detail=ERR_BILLING_UNAVAILABLE)
 
 
-@router.get("/available", response_model=AvailableToolsResponse)
+@router.get("/available")
 async def get_available_tools(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> AvailableToolsResponse:
     """
     Get list of available tools for this platform.
@@ -473,11 +472,11 @@ async def get_available_tools(
     )
 
 
-@router.post("/purchase", response_model=ToolPurchaseResponse)
+@router.post("/purchase", responses=RESPONSES_TOOL_PURCHASE)
 async def verify_tool_purchase(
     purchase: ToolPurchaseRequest,
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> ToolPurchaseResponse:
     """
     Verify and process a Google Play tool credit purchase.

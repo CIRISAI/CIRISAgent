@@ -50,6 +50,14 @@ OptionalAuthDep = Annotated[Optional[AuthContext], Depends(optional_auth)]
 AuthServiceDep = Annotated[APIAuthService, Depends(get_auth_service)]
 
 # ============================================================================
+# Common error message constants (avoid duplication - SonarCloud S1192)
+# ============================================================================
+
+MSG_BILLING_SERVICE_UNAVAILABLE = "Billing service unavailable"
+MSG_BILLING_OR_RESOURCE_UNAVAILABLE = "Billing service unavailable or resource monitor not available"
+MSG_GOOGLE_AUTH_REQUIRED = "Google Sign-In required or authentication failed"
+
+# ============================================================================
 # Standard HTTP Response Dictionaries for OpenAPI Documentation
 # ============================================================================
 # These are used in the `responses` parameter of route decorators to document
@@ -162,20 +170,18 @@ RESPONSES_ADAPTER_CONFIG_SESSION: ResponseDict = {
 # Billing-specific response patterns
 # ============================================================================
 
-RESPONSES_BILLING_503: ResponseDict = {
-    503: {"description": "Billing service unavailable or resource monitor not available"}
-}
+RESPONSES_BILLING_503: ResponseDict = {503: {"description": MSG_BILLING_OR_RESOURCE_UNAVAILABLE}}
 
 RESPONSES_BILLING_PURCHASE_INITIATE: ResponseDict = {
     400: {"description": "Invalid purchase request or email required"},
     403: {"description": "Billing not enabled"},
-    503: {"description": "Billing service unavailable or resource monitor not available"},
+    503: {"description": MSG_BILLING_OR_RESOURCE_UNAVAILABLE},
 }
 
 RESPONSES_BILLING_PURCHASE_STATUS: ResponseDict = {
     400: {"description": "Invalid payment ID format"},
     404: {"description": "Payment not found"},
-    503: {"description": "Billing service unavailable or resource monitor not available"},
+    503: {"description": MSG_BILLING_OR_RESOURCE_UNAVAILABLE},
 }
 
 # ============================================================================
@@ -183,19 +189,19 @@ RESPONSES_BILLING_PURCHASE_STATUS: ResponseDict = {
 # ============================================================================
 
 RESPONSES_TOOL_BALANCE: ResponseDict = {
-    401: {"description": "Google Sign-In required or authentication failed"},
+    401: {"description": MSG_GOOGLE_AUTH_REQUIRED},
     404: {"description": "Tool not found"},
-    503: {"description": "Billing service unavailable"},
+    503: {"description": MSG_BILLING_SERVICE_UNAVAILABLE},
 }
 
 RESPONSES_TOOL_BALANCE_ALL: ResponseDict = {
-    401: {"description": "Google Sign-In required or authentication failed"},
-    503: {"description": "Billing service unavailable"},
+    401: {"description": MSG_GOOGLE_AUTH_REQUIRED},
+    503: {"description": MSG_BILLING_SERVICE_UNAVAILABLE},
 }
 
 RESPONSES_TOOL_PURCHASE: ResponseDict = {
     400: {"description": "Invalid tool name or purchase data"},
-    401: {"description": "Google Sign-In required or authentication failed"},
+    401: {"description": MSG_GOOGLE_AUTH_REQUIRED},
     409: {"description": "Purchase already processed"},
-    503: {"description": "Billing service unavailable"},
+    503: {"description": MSG_BILLING_SERVICE_UNAVAILABLE},
 }

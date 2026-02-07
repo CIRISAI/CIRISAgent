@@ -7,7 +7,7 @@ Adds runtime queue, service management, and processor state endpoints.
 import copy
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Annotated, Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, Body, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -290,7 +290,7 @@ def _consolidate_step_results(result: Any) -> Optional[JSONDict]:
 
 @router.post("/runtime/step", responses=RESPONSES_500_503)
 async def single_step_processor(
-    request: Request, auth: AuthAdminDep, body: JSONDict = Body(default={})
+    request: Request, auth: AuthAdminDep, body: Annotated[JSONDict, Body()] = {}
 ) -> SuccessResponse[SingleStepResponse]:
     """
     Execute a single processing step.
@@ -786,6 +786,165 @@ def _redact_observer_sensitive_data(events: List[Any], allowed_user_ids: set[str
     return redacted_events
 
 
+# ============================================================================
+# Reasoning Stream Helper Functions (reduce cognitive complexity - SonarCloud)
+# ============================================================================
+
+
+def _get_runtime_control_service(request: Request) -> Any:
+    """Get runtime control service from request state, raising 503 if unavailable."""
+    runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
+    if not runtime_control:
+        runtime_control = getattr(request.app.state, "runtime_control_service", None)
+    if not runtime_control:
+        raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
+    return runtime_control
+
+
+def _get_auth_service_for_stream(request: Request) -> Any:
+    """Get authentication service from request state, raising 503 if unavailable."""
+    auth_service = getattr(request.app.state, "authentication_service", None)
+    if not auth_service:
+        raise HTTPException(status_code=503, detail="Authentication service not available")
+    return auth_service
+
+
+async def _setup_stream_permissions(auth: "AuthContext", auth_service: Any) -> tuple[bool, set[str], set[str]]:
+    """Set up permissions for SSE stream filtering.
+
+    Returns:
+        Tuple of (can_see_all, allowed_channel_ids, allowed_user_ids)
+    """
+    from ciris_engine.schemas.api.auth import UserRole
+
+    user_role = auth.role
+    can_see_all = user_role in (UserRole.ADMIN, UserRole.SYSTEM_ADMIN, UserRole.AUTHORITY)
+
+    if can_see_all:
+        return (True, set(), set())
+
+    user_id = auth.user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
+
+    allowed_channel_ids = await _get_user_allowed_channel_ids(auth_service, user_id)
+    allowed_user_ids = {user_id}
+
+    logger.info(f"SSE Filter: OBSERVER user_id={user_id}, allowed_channel_ids={allowed_channel_ids}")
+    return (False, allowed_channel_ids, allowed_user_ids)
+
+
+async def _fetch_uncached_channel_ids(events: List[Any], task_channel_cache: dict[str, str]) -> None:
+    """Batch fetch channel IDs for uncached task IDs and update cache."""
+    uncached_task_ids = [
+        event.get("task_id")
+        for event in events
+        if event.get("task_id") and event.get("task_id") not in task_channel_cache
+    ]
+
+    if uncached_task_ids:
+        logger.info(f"SSE Filter: Fetching channel_ids for uncached tasks: {uncached_task_ids}")
+        new_mappings = await _batch_fetch_task_channel_ids(uncached_task_ids)
+        logger.info(f"SSE Filter: Fetched task->channel mappings: {new_mappings}")
+        task_channel_cache.update(new_mappings)
+
+
+def _log_event_filtering(events: List[Any], task_channel_cache: dict[str, str]) -> None:
+    """Log event task IDs before filtering for debugging."""
+    event_task_ids = [event.get("task_id") for event in events if event.get("task_id")]
+    logger.info(f"SSE Filter: Processing {len(events)} events with task_ids: {event_task_ids}")
+    logger.info(f"SSE Filter: Current task_channel_cache: {task_channel_cache}")
+
+
+async def _filter_events_for_observer(
+    step_update: JSONDict,
+    user_role: Any,
+    allowed_channel_ids: set[str],
+    allowed_user_ids: set[str],
+    task_channel_cache: dict[str, str],
+) -> Optional[JSONDict]:
+    """Filter events for OBSERVER users, returning None if all filtered out."""
+    from ciris_engine.schemas.api.auth import UserRole
+
+    events = step_update.get("events", [])
+    if not events:
+        logger.debug(" SSE no events in update, skipping")
+        return None
+
+    # Batch lookup uncached task IDs
+    await _fetch_uncached_channel_ids(events, task_channel_cache)
+
+    # Log for debugging
+    _log_event_filtering(events, task_channel_cache)
+
+    # Filter events based on channel_id whitelist
+    filtered_events = _filter_events_by_channel_access(events, allowed_channel_ids, task_channel_cache)
+
+    logger.info(f"SSE Filter: Filtered to {len(filtered_events)}/{len(events)} events")
+
+    # Redact sensitive data for OBSERVER users
+    if filtered_events and user_role == UserRole.OBSERVER:
+        filtered_events = _redact_observer_sensitive_data(filtered_events, allowed_user_ids)
+
+    if not filtered_events:
+        logger.debug(" SSE all events filtered out, skipping update")
+        return None
+
+    logger.debug(f" SSE sending {len(filtered_events)} events to client")
+    return {"events": filtered_events}
+
+
+def _make_sse_event(event_type: str, data: Any) -> str:
+    """Generate SSE formatted event string."""
+    import json
+
+    return f"event: {event_type}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
+async def _process_stream_event(
+    stream_queue: Any,
+    can_see_all: bool,
+    user_role: Any,
+    allowed_channel_ids: set[str],
+    allowed_user_ids: set[str],
+    task_channel_cache: dict[str, str],
+) -> Optional[str]:
+    """Process a single stream event, returning SSE string or None to skip.
+
+    Handles:
+    - Waiting for events with 30s timeout (sends keepalive on timeout)
+    - Filtering events for OBSERVER users
+    - Error handling with SSE error events
+    """
+    import asyncio
+
+    try:
+        step_update = await asyncio.wait_for(stream_queue.get(), timeout=30.0)
+
+        logger.debug(
+            f" SSE received update from queue - events_count={len(step_update.get('events', []))}, "
+            f"can_see_all={can_see_all}"
+        )
+
+        # SECURITY: Filter events for OBSERVER users (ADMIN+ bypass filtering)
+        if not can_see_all:
+            filtered_update = await _filter_events_for_observer(
+                step_update, user_role, allowed_channel_ids, allowed_user_ids, task_channel_cache
+            )
+            if filtered_update is None:
+                return None
+            step_update = filtered_update
+
+        return _make_sse_event("step_update", step_update)
+
+    except asyncio.TimeoutError:
+        return _make_sse_event("keepalive", {"timestamp": datetime.now().isoformat()})
+
+    except Exception as step_error:
+        logger.error(f"Error processing step result in stream: {step_error}")
+        return _make_sse_event("error", {"error": str(step_error)})
+
+
 @router.get("/runtime/reasoning-stream", responses=RESPONSES_500_503)
 async def reasoning_stream(request: Request, auth: AuthObserverDep) -> Any:
     """
@@ -796,141 +955,44 @@ async def reasoning_stream(request: Request, auth: AuthObserverDep) -> Any:
     Requires OBSERVER role or higher.
     """
     import asyncio
-    import json
 
     from fastapi.responses import StreamingResponse
 
-    from ciris_engine.schemas.api.auth import UserRole
+    # Validate services are available (raises 503 if not)
+    _get_runtime_control_service(request)
+    auth_service = _get_auth_service_for_stream(request)
 
-    # Get runtime control service
-    runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
-    if not runtime_control:
-        runtime_control = getattr(request.app.state, "runtime_control_service", None)
-    if not runtime_control:
-        raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
-
-    # Get authentication service for OAuth lookup
-    auth_service = getattr(request.app.state, "authentication_service", None)
-    if not auth_service:
-        raise HTTPException(status_code=503, detail="Authentication service not available")
-
-    # SECURITY: Determine if user can see all events (ADMIN or higher)
+    # SECURITY: Set up permissions for this user
+    can_see_all, allowed_channel_ids, allowed_user_ids = await _setup_stream_permissions(auth, auth_service)
     user_role = auth.role
-    can_see_all = user_role in (UserRole.ADMIN, UserRole.SYSTEM_ADMIN, UserRole.AUTHORITY)
-
-    # SECURITY: Get user's allowed channel IDs (user_id + linked OAuth accounts)
-    allowed_channel_ids: set[str] = set()
-    allowed_user_ids: set[str] = set()  # User IDs for profile filtering
-    task_channel_cache: dict[str, str] = {}  # Cache task_id -> channel_id lookups
-
-    if not can_see_all:
-        user_id = auth.user_id
-        if not user_id:
-            raise HTTPException(status_code=401, detail="User ID not found in token")
-
-        allowed_channel_ids = await _get_user_allowed_channel_ids(auth_service, user_id)
-        allowed_user_ids = {user_id}  # User can only see their own profile
-
-        # DEBUG: Log allowed channel IDs for OBSERVER users
-        logger.info(f"SSE Filter: OBSERVER user_id={user_id}, allowed_channel_ids={allowed_channel_ids}")
+    task_channel_cache: dict[str, str] = {}
 
     async def stream_reasoning_steps() -> Any:
         """Generate Server-Sent Events for live reasoning steps."""
+        from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
+
+        stream_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=100)
+        reasoning_event_stream.subscribe(stream_queue)
+
+        logger.debug(
+            f" SSE stream connected - user_id={auth.user_id}, role={user_role}, "
+            f"can_see_all={can_see_all}, allowed_channel_ids={allowed_channel_ids}"
+        )
+
         try:
-            # Subscribe to the global reasoning event stream
-            from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
+            yield _make_sse_event("connected", {"status": "connected", "timestamp": datetime.now().isoformat()})
 
-            # Create a queue for this client
-            stream_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=100)
-            reasoning_event_stream.subscribe(stream_queue)
+            while True:
+                step_update = await _process_stream_event(
+                    stream_queue, can_see_all, user_role, allowed_channel_ids, allowed_user_ids, task_channel_cache
+                )
+                if step_update is not None:
+                    yield step_update
 
-            logger.debug(
-                f" SSE stream connected - user_id={auth.user_id}, role={user_role}, can_see_all={can_see_all}, allowed_channel_ids={allowed_channel_ids}"
-            )
-
-            try:
-                # Send initial connection event
-                yield f"event: connected\ndata: {json.dumps({'status': 'connected', 'timestamp': datetime.now().isoformat()})}\n\n"
-
-                # Stream live step results as they occur
-                while True:
-                    try:
-                        # Wait for step results with timeout to send keepalive
-                        step_update = await asyncio.wait_for(stream_queue.get(), timeout=30.0)
-
-                        logger.debug(
-                            f" SSE received update from queue - events_count={len(step_update.get('events', []))}, can_see_all={can_see_all}"
-                        )
-
-                        # SECURITY: Filter events for OBSERVER users
-                        # ADMIN+ users bypass filtering and see all events
-                        if not can_see_all:
-                            events = step_update.get("events", [])
-                            if not events:
-                                logger.debug(" SSE no events in update, skipping")
-                                continue
-
-                            # Batch lookup uncached task IDs
-                            uncached_task_ids = [
-                                event.get("task_id")
-                                for event in events
-                                if event.get("task_id") and event.get("task_id") not in task_channel_cache
-                            ]
-
-                            # SECURITY: Batch fetch channel_ids for efficiency
-                            if uncached_task_ids:
-                                logger.info(f"SSE Filter: Fetching channel_ids for uncached tasks: {uncached_task_ids}")
-                                new_mappings = await _batch_fetch_task_channel_ids(uncached_task_ids)
-                                logger.info(f"SSE Filter: Fetched task->channel mappings: {new_mappings}")
-                                task_channel_cache.update(new_mappings)
-
-                            # DEBUG: Log event task_ids before filtering
-                            event_task_ids = [event.get("task_id") for event in events if event.get("task_id")]
-                            logger.info(f"SSE Filter: Processing {len(events)} events with task_ids: {event_task_ids}")
-                            logger.info(f"SSE Filter: Current task_channel_cache: {task_channel_cache}")
-
-                            # Filter events based on channel_id whitelist
-                            filtered_events = _filter_events_by_channel_access(
-                                events, allowed_channel_ids, task_channel_cache
-                            )
-
-                            # DEBUG: Log filtering results
-                            logger.info(f"SSE Filter: Filtered to {len(filtered_events)}/{len(events)} events")
-
-                            # SECURITY: Redact sensitive task information for OBSERVER users
-                            # This removes recently_completed_tasks and pending_tasks from snapshots
-                            # and filters user_profiles to only show user's OWN profile
-                            if filtered_events and user_role == UserRole.OBSERVER:
-                                filtered_events = _redact_observer_sensitive_data(filtered_events, allowed_user_ids)
-
-                            # Replace events with filtered list
-                            if filtered_events:
-                                step_update = {"events": filtered_events}
-                                logger.debug(f" SSE sending {len(filtered_events)} events to client")
-                            else:
-                                # No events for this user, skip this update silently
-                                logger.debug(" SSE all events filtered out, skipping update")
-                                continue
-
-                        # Stream the step update
-                        yield f"event: step_update\ndata: {json.dumps(step_update, default=str)}\n\n"
-
-                    except asyncio.TimeoutError:
-                        # Send keepalive every 30 seconds
-                        yield f"event: keepalive\ndata: {json.dumps({'timestamp': datetime.now().isoformat()})}\n\n"
-
-                    except Exception as step_error:
-                        logger.error(f"Error processing step result in stream: {step_error}")
-                        yield f"event: error\ndata: {json.dumps({'error': str(step_error)})}\n\n"
-                        break
-
-            finally:
-                # Clean up subscription
-                reasoning_event_stream.unsubscribe(stream_queue)
-
-        except Exception as e:
-            logger.error(f"Error in reasoning stream: {e}")
-            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+        except GeneratorExit:
+            pass
+        finally:
+            reasoning_event_stream.unsubscribe(stream_queue)
 
     return StreamingResponse(
         stream_reasoning_steps(),

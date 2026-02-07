@@ -9,23 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **API Auth Hardening** - Fail closed when auth services unavailable
-  - Removed dev mode fallback that returned admin tokens
-  - Returns 503 "Authentication service unavailable" instead
+- **API Auth Hardening** - Fail closed when auth services unavailable (503 instead of dev fallback)
+- **CORS Configuration** - Configurable `cors_allow_credentials` with wildcard safety checks
 
-- **CORS Configuration** - Configurable origins with safety checks
-  - New `cors_allow_credentials` config option
-  - Prevents wildcard origins + credentials combo (browsers reject this)
-  - `CIRIS_API_CORS_ALLOW_CREDENTIALS` env var support
+### Added
+
+- **Template Selection in Setup Wizard** - Optional "Advanced Settings" section
+  - CLI `--template` flag now honored (was ignored on first-run)
+  - Template picker in both CIRISGUI-Standalone and KMP mobile wizards
+- **Mobile Live Model Selection** - `POST /v1/setup/list-models` in KMP generated API
 
 ### Fixed
 
-- **Covenant Metrics Trace Size Optimization** - 98% size reduction
-  - Compact JSON with `separators=(",", ":")` removes whitespace
-  - `_strip_empty()` removes null, empty strings, empty lists/dicts
-  - Trace size: 100KB → 1.7KB
-  - Added debug logging with len/hash/preview for verification
-  - **Note**: CIRISLens needs matching `_strip_empty` logic for verification
+- **Covenant Metrics Trace Optimization** - 98% size reduction (100KB → 1.7KB)
+  - `_strip_empty()` removes null/empty values, compact JSON separators
 
 ## [1.9.6] - 2026-02-06
 

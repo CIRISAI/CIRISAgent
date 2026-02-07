@@ -5,6 +5,7 @@ Provides control over agent runtime behavior and cognitive state transitions.
 """
 
 import logging
+from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
@@ -27,15 +28,30 @@ from .schemas import RuntimeAction, RuntimeControlResponse, StateTransitionReque
 
 logger = logging.getLogger(__name__)
 
+# Type aliases for dependency injection (S8410 compliance)
+AuthAdminDep = Annotated[AuthContext, Depends(require_admin)]
+RuntimeActionDep = Annotated[RuntimeAction, Body(...)]
+StateTransitionRequestDep = Annotated[StateTransitionRequest, Body(...)]
+
 router = APIRouter()
 
 # Valid cognitive states for transition
 VALID_COGNITIVE_STATES = {"WORK", "DREAM", "PLAY", "SOLITUDE"}
 
 
-@router.post("/runtime/{action}", response_model=SuccessResponse[RuntimeControlResponse])
+@router.post(
+    "/runtime/{action}",
+    responses={
+        400: {"description": "Invalid runtime action"},
+        500: {"description": "Runtime control operation failed"},
+        503: {"description": "Runtime control service not available"},
+    },
+)
 async def control_runtime(
-    action: str, request: Request, body: RuntimeAction = Body(...), auth: AuthContext = Depends(require_admin)
+    action: str,
+    request: Request,
+    body: RuntimeActionDep,
+    auth: AuthAdminDep,
 ) -> SuccessResponse[RuntimeControlResponse]:
     """
     Runtime control actions.
@@ -74,11 +90,18 @@ async def control_runtime(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/state/transition", response_model=SuccessResponse[StateTransitionResponse])
+@router.post(
+    "/state/transition",
+    responses={
+        400: {"description": "Invalid target state"},
+        500: {"description": "State transition failed"},
+        503: {"description": "Runtime control service not available or state transition not supported"},
+    },
+)
 async def transition_cognitive_state(
     request: Request,
-    body: StateTransitionRequest = Body(...),
-    auth: AuthContext = Depends(require_admin),
+    body: StateTransitionRequestDep,
+    auth: AuthAdminDep,
 ) -> SuccessResponse[StateTransitionResponse]:
     """
     Request a cognitive state transition.

@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import Annotated, Any, Dict, Generic, List, Optional, TypeVar
 
 import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -22,6 +22,25 @@ from ..services.auth_service import (
     PERMISSION_WA_MINT,
     APIAuthService,
 )
+from ._common import (
+    RESPONSES_400,
+    RESPONSES_400_404_500,
+    RESPONSES_401_403_404_500,
+    RESPONSES_403,
+    RESPONSES_404,
+    RESPONSES_404_500,
+    RESPONSES_500,
+    RESPONSES_500_503,
+    AuthDep,
+    AuthServiceDep,
+)
+
+# Annotated type aliases for permission-checked dependencies (S8410 fix)
+CheckUsersReadDep = Annotated[None, Depends(check_permissions([PERMISSION_USERS_READ]))]
+CheckUsersWriteDep = Annotated[None, Depends(check_permissions([PERMISSION_USERS_WRITE]))]
+CheckUsersDeleteDep = Annotated[None, Depends(check_permissions([PERMISSION_USERS_DELETE]))]
+CheckWAMintDep = Annotated[None, Depends(check_permissions([PERMISSION_WA_MINT]))]
+CheckManagePermsDep = Annotated[None, Depends(check_permissions([PERMISSION_MANAGE_USER_PERMISSIONS]))]
 
 # Error message constants
 ERROR_USER_NOT_FOUND = "User not found"
@@ -272,8 +291,11 @@ class UpdateUserSettingsRequest(BaseModel):
     marketing_opt_in: Optional[bool] = Field(None, description="User consent for marketing communications")
 
 
-@router.get("", response_model=PaginatedResponse[UserSummary])
+@router.get("", responses=RESPONSES_500)
 async def list_users(
+    auth: AuthDep,
+    auth_service: AuthServiceDep,
+    _: CheckUsersReadDep,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
@@ -281,9 +303,6 @@ async def list_users(
     api_role: Optional[APIRole] = None,
     wa_role: Optional[WARole] = None,
     is_active: Optional[bool] = None,
-    auth: AuthContext = Depends(get_auth_context),
-    auth_service: APIAuthService = Depends(get_auth_service),
-    _: None = Depends(check_permissions([PERMISSION_USERS_READ])),
 ) -> PaginatedResponse[UserSummary]:
     """
     List all users with optional filtering.
@@ -328,12 +347,12 @@ async def list_users(
     )
 
 
-@router.post("", response_model=UserDetail)
+@router.post("", responses=RESPONSES_400_404_500)
 async def create_user(
     request: CreateUserRequest,
-    auth: AuthContext = Depends(get_auth_context),
-    auth_service: APIAuthService = Depends(get_auth_service),
-    _: None = Depends(check_permissions([PERMISSION_USERS_WRITE])),
+    auth: AuthDep,
+    auth_service: AuthServiceDep,
+    _: CheckUsersWriteDep,
 ) -> UserDetail:
     """
     Create a new user account.
@@ -357,10 +376,8 @@ async def create_user(
     return await get_user(user.wa_id, auth, auth_service, None)
 
 
-@router.post("/request-permissions", response_model=PermissionRequestResponse)
-async def request_permissions(
-    auth: AuthContext = Depends(get_auth_context), auth_service: APIAuthService = Depends(get_auth_service)
-) -> PermissionRequestResponse:
+@router.post("/request-permissions", responses=RESPONSES_404_500)
+async def request_permissions(auth: AuthDep, auth_service: AuthServiceDep) -> PermissionRequestResponse:
     """
     Request communication permissions for the current user.
 
@@ -403,10 +420,10 @@ async def request_permissions(
     )
 
 
-@router.get("/permission-requests", response_model=List[PermissionRequestUser])
+@router.get("/permission-requests", responses={**RESPONSES_403, **RESPONSES_500})
 async def get_permission_requests(
-    auth: AuthContext = Depends(get_auth_context),
-    auth_service: APIAuthService = Depends(get_auth_service),
+    auth: AuthDep,
+    auth_service: AuthServiceDep,
     include_granted: bool = Query(False, description="Include users who already have permissions"),
 ) -> List[PermissionRequestUser]:
     """
@@ -458,10 +475,10 @@ async def get_permission_requests(
     return permission_requests
 
 
-@router.get("/me/settings", response_model=UserSettingsResponse)
+@router.get("/me/settings", responses=RESPONSES_500_503)
 async def get_my_settings(
     request: Request,
-    auth: AuthContext = Depends(get_auth_context),
+    auth: AuthDep,
 ) -> UserSettingsResponse:
     """
     Get the current user's personal settings.
@@ -508,11 +525,11 @@ async def get_my_settings(
         raise HTTPException(status_code=500, detail="Failed to retrieve user settings")
 
 
-@router.put("/me/settings", response_model=UserSettingsResponse)
+@router.put("/me/settings", responses=RESPONSES_500_503)
 async def update_my_settings(
     http_request: Request,
     request: UpdateUserSettingsRequest,
-    auth: AuthContext = Depends(get_auth_context),
+    auth: AuthDep,
 ) -> UserSettingsResponse:
     """
     Update the current user's personal settings.
@@ -605,12 +622,12 @@ async def update_my_settings(
         raise HTTPException(status_code=500, detail="Failed to update user settings")
 
 
-@router.get("/{user_id}", response_model=UserDetail)
+@router.get("/{user_id}", responses=RESPONSES_404_500)
 async def get_user(
     user_id: str,
-    auth: AuthContext = Depends(get_auth_context),
-    auth_service: APIAuthService = Depends(get_auth_service),
-    _: None = Depends(check_permissions([PERMISSION_USERS_READ])),
+    auth: AuthDep,
+    auth_service: AuthServiceDep,
+    _: CheckUsersReadDep,
 ) -> UserDetail:
     """
     Get detailed information about a specific user.
@@ -624,13 +641,13 @@ async def get_user(
     return _build_user_detail(user_id, user, auth_service)
 
 
-@router.put("/{user_id}", response_model=UserDetail)
+@router.put("/{user_id}", responses=RESPONSES_400_404_500)
 async def update_user(
     user_id: str,
     request: UpdateUserRequest,
-    auth: AuthContext = Depends(get_auth_context),
-    auth_service: APIAuthService = Depends(get_auth_service),
-    _: None = Depends(check_permissions([PERMISSION_USERS_WRITE])),
+    auth: AuthDep,
+    auth_service: AuthServiceDep,
+    _: CheckUsersWriteDep,
 ) -> UserDetail:
     """
     Update user information (role, active status).
@@ -652,12 +669,12 @@ async def update_user(
     return await get_user(user_id, auth, auth_service, None)
 
 
-@router.put("/{user_id}/password")
+@router.put("/{user_id}/password", responses=RESPONSES_400_404_500)
 async def change_password(
     user_id: str,
     request: ChangePasswordRequest,
-    auth: AuthContext = Depends(get_auth_context),
-    auth_service: APIAuthService = Depends(get_auth_service),
+    auth: AuthDep,
+    auth_service: AuthServiceDep,
 ) -> Dict[str, str]:
     """
     Change user password.
@@ -685,12 +702,12 @@ async def change_password(
     return {"message": "Password changed successfully"}
 
 
-@router.post("/{user_id}/oauth-links", response_model=UserDetail)
+@router.post("/{user_id}/oauth-links", responses=RESPONSES_404_500)
 async def link_oauth_account(
     user_id: str,
     request: LinkOAuthAccountRequest,
-    auth: AuthContext = Depends(get_auth_context),
-    auth_service: APIAuthService = Depends(get_auth_service),
+    auth: AuthDep,
+    auth_service: AuthServiceDep,
 ) -> UserDetail:
     """
     Link an OAuth identity to an existing user.
@@ -717,13 +734,13 @@ async def link_oauth_account(
     return _build_user_detail(user_id, user, auth_service)
 
 
-@router.delete("/{user_id}/oauth-links/{provider}/{external_id}", response_model=UserDetail)
+@router.delete("/{user_id}/oauth-links/{provider}/{external_id}", responses=RESPONSES_404_500)
 async def unlink_oauth_account(
     user_id: str,
     provider: str,
     external_id: str,
-    auth: AuthContext = Depends(get_auth_context),
-    auth_service: APIAuthService = Depends(get_auth_service),
+    auth: AuthDep,
+    auth_service: AuthServiceDep,
 ) -> UserDetail:
     """
     Remove a linked OAuth identity from a user.
@@ -742,12 +759,12 @@ async def unlink_oauth_account(
     return _build_user_detail(user_id, user, auth_service)
 
 
-@router.post("/{user_id}/mint-wa", response_model=UserDetail)
+@router.post("/{user_id}/mint-wa", responses={**RESPONSES_400, **RESPONSES_403, **RESPONSES_404, **RESPONSES_500})
 async def mint_wise_authority(
     user_id: str,
     request: MintWARequest,
-    auth: AuthContext = Depends(get_auth_context),
-    auth_service: APIAuthService = Depends(get_auth_service),
+    auth: AuthDep,
+    auth_service: AuthServiceDep,
 ) -> UserDetail:
     """
     Mint a user as a Wise Authority.
@@ -844,11 +861,11 @@ async def mint_wise_authority(
     return await get_user(user_id, auth, auth_service, None)
 
 
-@router.get("/wa/key-check", response_model=WAKeyCheckResponse)
+@router.get("/wa/key-check", responses=RESPONSES_500)
 async def check_wa_key_exists(
+    auth: AuthDep,
+    _: CheckWAMintDep,
     path: str = Query(..., description="Filename of private key to check"),
-    auth: AuthContext = Depends(get_auth_context),
-    _: None = Depends(check_permissions([PERMISSION_WA_MINT])),  # SYSTEM_ADMIN only
 ) -> WAKeyCheckResponse:
     """
     Check if a WA private key exists at the given filename.
@@ -899,12 +916,12 @@ async def check_wa_key_exists(
         return WAKeyCheckResponse(exists=False, error="Failed to check key file", filename=filename)
 
 
-@router.delete("/{user_id}", response_model=DeactivateUserResponse)
+@router.delete("/{user_id}", responses=RESPONSES_400_404_500)
 async def deactivate_user(
     user_id: str,
-    auth: AuthContext = Depends(get_auth_context),
-    auth_service: APIAuthService = Depends(get_auth_service),
-    _: None = Depends(check_permissions([PERMISSION_USERS_DELETE])),
+    auth: AuthDep,
+    auth_service: AuthServiceDep,
+    _: CheckUsersDeleteDep,
 ) -> DeactivateUserResponse:
     """
     Deactivate a user account.
@@ -923,11 +940,11 @@ async def deactivate_user(
     return DeactivateUserResponse(message="User deactivated successfully")
 
 
-@router.get("/{user_id}/api-keys", response_model=List[APIKeyInfo])
+@router.get("/{user_id}/api-keys", responses=RESPONSES_500)
 async def list_user_api_keys(
     user_id: str,
-    auth: AuthContext = Depends(get_auth_context),
-    auth_service: APIAuthService = Depends(get_auth_service),
+    auth: AuthDep,
+    auth_service: AuthServiceDep,
 ) -> List[APIKeyInfo]:
     """
     List API keys for a user.
@@ -955,13 +972,13 @@ async def list_user_api_keys(
     ]
 
 
-@router.put("/{user_id}/permissions", response_model=UserDetail)
+@router.put("/{user_id}/permissions", responses=RESPONSES_404_500)
 async def update_user_permissions(
     user_id: str,
     request: UpdatePermissionsRequest,
-    auth: AuthContext = Depends(get_auth_context),
-    auth_service: APIAuthService = Depends(get_auth_service),
-    _: None = Depends(check_permissions([PERMISSION_MANAGE_USER_PERMISSIONS])),
+    auth: AuthDep,
+    auth_service: AuthServiceDep,
+    _: CheckManagePermsDep,
 ) -> UserDetail:
     """
     Update user's custom permissions.

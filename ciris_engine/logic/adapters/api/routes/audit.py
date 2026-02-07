@@ -11,15 +11,15 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi import Path as FastAPIPath
 from fastapi import Query, Request
 from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
-from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_str, get_str_optional
+from ciris_engine.logic.utils.jsondict_helpers import get_str, get_str_optional
 from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.schemas.api.audit import AuditContext, EntryVerification
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
@@ -27,7 +27,7 @@ from ciris_engine.schemas.services.graph.audit import AuditQuery, VerificationRe
 from ciris_engine.schemas.services.nodes import AuditEntry
 
 from ..constants import DESC_END_TIME, DESC_RESULTS_OFFSET, DESC_START_TIME, ERROR_AUDIT_SERVICE_NOT_AVAILABLE
-from ..dependencies.auth import AuthContext, require_admin, require_observer
+from ._common import RESPONSES_404_500_503, RESPONSES_500_503, AuthAdminDep, AuthObserverDep
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -390,10 +390,10 @@ async def _merge_audit_sources(
 # Endpoints
 
 
-@router.get("/entries", response_model=SuccessResponse[AuditEntriesResponse])
+@router.get("/entries", responses=RESPONSES_500_503)
 async def query_audit_entries(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
     # Time range filters
     start_time: Optional[datetime] = Query(None, description=DESC_START_TIME),
     end_time: Optional[datetime] = Query(None, description=DESC_END_TIME),
@@ -521,11 +521,11 @@ def _add_chain_navigation(response: AuditEntryDetailResponse, entries: List[Any]
         )
 
 
-@router.get("/entries/{entry_id}", response_model=SuccessResponse[AuditEntryDetailResponse])
+@router.get("/entries/{entry_id}", responses=RESPONSES_404_500_503)
 async def get_audit_entry(
     request: Request,
+    auth: AuthObserverDep,
     entry_id: str = FastAPIPath(..., description="Audit entry ID"),
-    auth: AuthContext = Depends(require_observer),
     verify: bool = Query(False, description="Include verification information"),
 ) -> SuccessResponse[AuditEntryDetailResponse]:
     """
@@ -572,10 +572,10 @@ async def get_audit_entry(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/search", response_model=SuccessResponse[AuditEntriesResponse])
+@router.post("/search", responses=RESPONSES_500_503)
 async def search_audit_trails(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
     search_text: Optional[str] = Query(None, description="Text to search for"),
     entity_id: Optional[str] = Query(None, description="Filter by entity ID"),
     severity: Optional[str] = Query(None, description="Filter by severity"),
@@ -608,11 +608,11 @@ async def search_audit_trails(
     )
 
 
-@router.post("/verify/{entry_id}", response_model=SuccessResponse[VerificationReport])
+@router.post("/verify/{entry_id}", responses=RESPONSES_500_503)
 async def verify_audit_entry(
     request: Request,
+    auth: AuthAdminDep,
     entry_id: str = FastAPIPath(..., description="Audit entry ID to verify"),
-    auth: AuthContext = Depends(require_admin),
 ) -> SuccessResponse[VerificationReport]:
     """
     Verify the integrity of a specific audit entry.
@@ -632,10 +632,10 @@ async def verify_audit_entry(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/export", response_model=SuccessResponse[AuditExportResponse])
+@router.post("/export", responses=RESPONSES_500_503)
 async def export_audit_data(
     request: Request,
-    auth: AuthContext = Depends(require_admin),
+    auth: AuthAdminDep,
     start_date: Optional[datetime] = Query(None, description="Export start date"),
     end_date: Optional[datetime] = Query(None, description="Export end date"),
     format: str = Query("jsonl", pattern="^(json|jsonl|csv)$", description="Export format"),

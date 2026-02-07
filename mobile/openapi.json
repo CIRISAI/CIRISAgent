@@ -94,6 +94,31 @@
         }
       }
     },
+    "/v1/setup/adapters/available": {
+      "get": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "List Available Adapters For Setup",
+        "description": "List discovered adapters with eligibility status (no auth required for setup).\n\nReturns both eligible (ready to use) and ineligible (missing requirements)\nadapters, including installation hints for ineligible adapters.\nThis endpoint is accessible without authentication during first-run setup.",
+        "operationId": "list_available_adapters_for_setup_v1_setup_adapters_available_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_Dict_str__Any__"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Adapter discovery failed"
+          }
+        }
+      }
+    },
     "/v1/setup/models": {
       "get": {
         "tags": [
@@ -112,6 +137,9 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal server error"
           }
         }
       }
@@ -145,6 +173,12 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "500": {
+            "description": "Internal server error"
           },
           "422": {
             "description": "Validation Error",
@@ -201,6 +235,48 @@
         }
       }
     },
+    "/v1/setup/list-models": {
+      "post": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "List Models",
+        "description": "List available models from a provider's live API.\n\nQueries the provider's models API using the provided credentials,\nthen cross-references with the on-device MODEL_CAPABILITIES.json\nfor CIRIS compatibility annotations.\n\nFalls back to static capabilities data if the live query fails.\nThis endpoint is always accessible without authentication during first-run.",
+        "operationId": "list_models_v1_setup_list_models_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LLMValidationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_ListModelsResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/setup/complete": {
       "post": {
         "tags": [
@@ -229,6 +305,15 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad request - invalid input parameters"
+          },
+          "403": {
+            "description": "Forbidden - insufficient permissions"
+          },
+          "500": {
+            "description": "Internal server error"
           },
           "422": {
             "description": "Validation Error",
@@ -261,6 +346,12 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized - authentication required"
+          },
+          "500": {
+            "description": "Internal server error"
           }
         }
       },
@@ -269,7 +360,7 @@
           "setup"
         ],
         "summary": "Update Config",
-        "description": "Update configuration.\n\nUpdates setup configuration after initial setup.\nRequires admin authentication.",
+        "description": "Update configuration.\n\nUpdates setup configuration after initial setup.\nRequires admin authentication (enforced by AuthAdminDep).",
         "operationId": "update_config_v1_setup_config_put",
         "parameters": [
           {
@@ -309,6 +400,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Forbidden - insufficient permissions"
+          },
+          "500": {
+            "description": "Internal server error"
           },
           "422": {
             "description": "Validation Error",
@@ -2759,7 +2856,7 @@
           "system"
         ],
         "summary": "List Adapters",
-        "description": "List all loaded adapters.\n\nReturns information about all currently loaded adapter instances\nincluding their type, status, and basic metrics.",
+        "description": "List all loaded adapters with their type, status, and metrics.",
         "operationId": "list_adapters_v1_system_adapters_get",
         "parameters": [
           {
@@ -2789,6 +2886,12 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "503": {
+            "description": "Service unavailable"
           },
           "422": {
             "description": "Validation Error",
@@ -2840,6 +2943,9 @@
               }
             }
           },
+          "500": {
+            "description": "Failed to discover module types"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2889,6 +2995,12 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Failed to list persisted configurations"
+          },
+          "503": {
+            "description": "Adapter configuration service unavailable"
           },
           "422": {
             "description": "Validation Error",
@@ -2949,6 +3061,12 @@
               }
             }
           },
+          "500": {
+            "description": "Failed to remove persisted configuration"
+          },
+          "503": {
+            "description": "Configuration service unavailable"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2998,6 +3116,9 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Failed to get adapter availability"
           },
           "422": {
             "description": "Validation Error",
@@ -3070,6 +3191,12 @@
               }
             }
           },
+          "404": {
+            "description": "Adapter not found"
+          },
+          "500": {
+            "description": "Installation failed"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3129,6 +3256,12 @@
               }
             }
           },
+          "404": {
+            "description": "Adapter not found"
+          },
+          "500": {
+            "description": "Eligibility check failed"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3178,6 +3311,9 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Failed to list configurable adapters"
           },
           "422": {
             "description": "Validation Error",
@@ -3238,6 +3374,15 @@
               }
             }
           },
+          "404": {
+            "description": "Adapter not found"
+          },
+          "500": {
+            "description": "Failed to retrieve adapter status"
+          },
+          "503": {
+            "description": "Adapter service unavailable"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3294,6 +3439,21 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid adapter configuration"
+          },
+          "404": {
+            "description": "Adapter not found"
+          },
+          "409": {
+            "description": "Adapter already exists"
+          },
+          "500": {
+            "description": "Adapter operation failed"
+          },
+          "503": {
+            "description": "Adapter service unavailable"
           },
           "422": {
             "description": "Validation Error",
@@ -3380,6 +3540,21 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid adapter configuration"
+          },
+          "404": {
+            "description": "Adapter not found"
+          },
+          "409": {
+            "description": "Adapter already exists"
+          },
+          "500": {
+            "description": "Adapter operation failed"
+          },
+          "503": {
+            "description": "Adapter service unavailable"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3449,6 +3624,21 @@
               }
             }
           },
+          "400": {
+            "description": "Failed to unload adapter for reload"
+          },
+          "404": {
+            "description": "Adapter not found"
+          },
+          "409": {
+            "description": "Adapter already exists"
+          },
+          "500": {
+            "description": "Adapter operation failed"
+          },
+          "503": {
+            "description": "Adapter service unavailable"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3508,6 +3698,15 @@
               }
             }
           },
+          "404": {
+            "description": "Adapter or session not found"
+          },
+          "500": {
+            "description": "Configuration operation failed"
+          },
+          "503": {
+            "description": "Adapter configuration service unavailable"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3566,6 +3765,12 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Session not found"
+          },
+          "500": {
+            "description": "Failed to get configuration status"
           },
           "422": {
             "description": "Validation Error",
@@ -3636,6 +3841,15 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid session state or OAuth callback"
+          },
+          "404": {
+            "description": "Session not found"
+          },
+          "500": {
+            "description": "Configuration step failed"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3678,6 +3892,12 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Session not found"
+          },
+          "500": {
+            "description": "Failed to get session status"
           },
           "422": {
             "description": "Validation Error",
@@ -3737,6 +3957,15 @@
                 "schema": {}
               }
             }
+          },
+          "400": {
+            "description": "Invalid OAuth state"
+          },
+          "404": {
+            "description": "Session not found"
+          },
+          "500": {
+            "description": "OAuth callback processing failed"
           },
           "422": {
             "description": "Validation Error",
@@ -3822,6 +4051,15 @@
               }
             }
           },
+          "400": {
+            "description": "OAuth callback failed"
+          },
+          "404": {
+            "description": "Session not found"
+          },
+          "500": {
+            "description": "OAuth processing error"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3892,6 +4130,12 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Session not found"
+          },
+          "500": {
+            "description": "Configuration completion failed"
           },
           "422": {
             "description": "Validation Error",
@@ -4335,6 +4579,15 @@
               }
             }
           },
+          "400": {
+            "description": "Bad request - invalid input parameters"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "503": {
+            "description": "Service unavailable"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -4384,6 +4637,12 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "503": {
+            "description": "Service unavailable"
           },
           "422": {
             "description": "Validation Error",
@@ -4435,6 +4694,12 @@
               }
             }
           },
+          "500": {
+            "description": "Internal server error"
+          },
+          "503": {
+            "description": "Service unavailable"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -4484,6 +4749,12 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "503": {
+            "description": "Service unavailable"
           },
           "422": {
             "description": "Validation Error",
@@ -4586,6 +4857,12 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "503": {
+            "description": "Service unavailable"
           },
           "422": {
             "description": "Validation Error",
@@ -4725,6 +5002,12 @@
               }
             }
           },
+          "500": {
+            "description": "Internal server error"
+          },
+          "503": {
+            "description": "Service unavailable"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -4784,6 +5067,12 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "503": {
+            "description": "Service unavailable"
           },
           "422": {
             "description": "Validation Error",
@@ -4857,6 +5146,15 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "503": {
+            "description": "Service unavailable"
           },
           "422": {
             "description": "Validation Error",
@@ -4960,6 +5258,12 @@
               }
             }
           },
+          "500": {
+            "description": "Internal server error"
+          },
+          "503": {
+            "description": "Service unavailable"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -5019,10 +5323,16 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
+                  "$ref": "#/components/schemas/SuccessResponse_ResourceHistoryResponse_"
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "503": {
+            "description": "Service unavailable"
           },
           "422": {
             "description": "Validation Error",
@@ -5711,6 +6021,9 @@
               }
             }
           },
+          "503": {
+            "description": "Wise Authority service not available"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -5780,6 +6093,9 @@
               }
             }
           },
+          "503": {
+            "description": "Wise Authority service not available"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -5848,6 +6164,9 @@
               }
             }
           },
+          "503": {
+            "description": "Wise Authority service not available"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -5897,6 +6216,9 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Wise Authority service not available"
           },
           "422": {
             "description": "Validation Error",
@@ -5957,6 +6279,9 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Wise Authority service not available"
           },
           "422": {
             "description": "Validation Error",
@@ -6413,6 +6738,48 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/NativeTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeTokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/native/apple": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Native Apple Token Exchange",
+        "description": "Exchange a native Apple ID token for a CIRIS API token.\n\nThis endpoint is used by native iOS apps that perform Apple Sign-In\ndirectly and need to exchange their Apple ID token for a CIRIS API token.\n\nUnlike the web OAuth flow (which uses authorization codes), native apps get\nID tokens directly from Apple Sign-In SDK and send them here.",
+        "operationId": "native_apple_token_exchange_v1_auth_native_apple_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppleNativeTokenRequest"
               }
             }
           },
@@ -7612,7 +7979,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ciris_engine__logic__adapters__api__routes__users__APIKeyInfo"
+                    "$ref": "#/components/schemas/APIKeyInfo"
                   },
                   "title": "Response List User Api Keys V1 Users  User Id  Api Keys Get"
                 }
@@ -10219,47 +10586,18 @@
           "key_id": {
             "type": "string",
             "title": "Key Id",
-            "description": "Key identifier (partial)"
+            "description": "Unique key identifier"
           },
-          "role": {
-            "$ref": "#/components/schemas/UserRole",
-            "description": "Role assigned to the key"
-          },
-          "expires_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expires At",
-            "description": "When the key expires"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description",
-            "description": "Key description"
+          "masked_key": {
+            "type": "string",
+            "title": "Masked Key",
+            "description": "Masked version of the key (e.g., 'ciris_****')"
           },
           "created_at": {
             "type": "string",
             "format": "date-time",
             "title": "Created At",
             "description": "When the key was created"
-          },
-          "created_by": {
-            "type": "string",
-            "title": "Created By",
-            "description": "User who created the key"
           },
           "last_used": {
             "anyOf": [
@@ -10272,30 +10610,41 @@
               }
             ],
             "title": "Last Used",
-            "description": "Last time the key was used"
+            "description": "When the key was last used"
           },
           "is_active": {
             "type": "boolean",
             "title": "Is Active",
-            "description": "Whether the key is active"
+            "description": "Whether the key is currently active"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Optional name for the key"
           }
         },
         "type": "object",
         "required": [
           "key_id",
-          "role",
+          "masked_key",
           "created_at",
-          "created_by",
           "is_active"
         ],
         "title": "APIKeyInfo",
-        "description": "API key information (without the actual key)."
+        "description": "Information about an API key (masked for security)."
       },
       "APIKeyListResponse": {
         "properties": {
           "api_keys": {
             "items": {
-              "$ref": "#/components/schemas/APIKeyInfo"
+              "$ref": "#/components/schemas/ciris_engine__schemas__api__auth__APIKeyInfo"
             },
             "type": "array",
             "title": "Api Keys",
@@ -11302,6 +11651,27 @@
         "title": "AllToolBalancesResponse",
         "description": "Balance information for all tools."
       },
+      "AppleNativeTokenRequest": {
+        "properties": {
+          "id_token": {
+            "type": "string",
+            "title": "Id Token",
+            "description": "Apple ID token (JWT) from native Sign-In"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "description": "OAuth provider (always 'apple')",
+            "default": "apple"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id_token"
+        ],
+        "title": "AppleNativeTokenRequest",
+        "description": "Request model for Apple native app token exchange."
+      },
       "AuditContext": {
         "properties": {
           "entity_id": {
@@ -12256,7 +12626,7 @@
         "title": "ConfigListResponse",
         "description": "List of configuration values."
       },
-      "ConfigNodeAttributes": {
+      "ConfigNodeAttributes-Input": {
         "properties": {
           "created_at": {
             "type": "string",
@@ -12489,6 +12859,272 @@
               {
                 "type": "string",
                 "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At",
+            "description": "When this config expires"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "created_by",
+          "key",
+          "value",
+          "description",
+          "category",
+          "value_type"
+        ],
+        "title": "ConfigNodeAttributes",
+        "description": "Specific attributes for configuration nodes.\n\nUsed by the config service for storing system and behavioral configuration."
+      },
+      "ConfigNodeAttributes-Output": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At",
+            "description": "When this node was created"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At",
+            "description": "When this node was last updated"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By",
+            "description": "Service or user that created this node"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By",
+            "description": "Service or user that last updated this node"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "Tags for categorization and search"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version",
+            "description": "Schema version for migration support",
+            "default": 1
+          },
+          "secret_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Secret Refs",
+            "description": "Secret reference UUIDs for encrypted data"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Configuration key (unique within scope)"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              }
+            ],
+            "title": "Value",
+            "description": "Configuration value"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "What this configuration controls"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "description": "Category: system, behavioral, ethical, operational"
+          },
+          "value_type": {
+            "type": "string",
+            "title": "Value Type",
+            "description": "Expected type: string, integer, float, boolean, list, dict"
+          },
+          "validation_rules": {
+            "items": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "items": {},
+                    "type": "array"
+                  },
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Validation Rules",
+            "description": "Validation rules for this config"
+          },
+          "is_sensitive": {
+            "type": "boolean",
+            "title": "Is Sensitive",
+            "description": "Whether this contains sensitive data",
+            "default": false
+          },
+          "requires_authority": {
+            "type": "boolean",
+            "title": "Requires Authority",
+            "description": "Whether changes require WiseAuthority approval",
+            "default": false
+          },
+          "previous_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Value",
+            "description": "Previous value before last update"
+          },
+          "change_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Reason",
+            "description": "Reason for last change"
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By",
+            "description": "Who approved this config if required"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "description": "Scope: system, channel, user",
+            "default": "system"
+          },
+          "applies_to": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Applies To",
+            "description": "Specific entities this applies to"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "description": "Whether this config is currently active",
+            "default": true
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
               },
               {
                 "type": "null"
@@ -15157,7 +15793,7 @@
             "description": "Channel ID for context"
           },
           "node": {
-            "$ref": "#/components/schemas/GraphNode"
+            "$ref": "#/components/schemas/GraphNode-Output"
           },
           "reason": {
             "type": "string",
@@ -15297,8 +15933,14 @@
       "GraphEdgeAttributes": {
         "properties": {
           "created_at": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Created At"
           },
           "context": {
@@ -15319,7 +15961,7 @@
         "title": "GraphEdgeAttributes",
         "description": "Typed attributes for graph edges."
       },
-      "GraphNode": {
+      "GraphNode-Input": {
         "properties": {
           "id": {
             "type": "string",
@@ -15337,19 +15979,19 @@
           "attributes": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/NodeAttributesBase"
+                "$ref": "#/components/schemas/NodeAttributesBase-Input"
               },
               {
-                "$ref": "#/components/schemas/MemoryNodeAttributes"
+                "$ref": "#/components/schemas/MemoryNodeAttributes-Input"
               },
               {
-                "$ref": "#/components/schemas/ConfigNodeAttributes"
+                "$ref": "#/components/schemas/ConfigNodeAttributes-Input"
               },
               {
-                "$ref": "#/components/schemas/TelemetryNodeAttributes"
+                "$ref": "#/components/schemas/TelemetryNodeAttributes-Input"
               },
               {
-                "$ref": "#/components/schemas/LogNodeAttributes"
+                "$ref": "#/components/schemas/LogNodeAttributes-Input"
               },
               {
                 "additionalProperties": {
@@ -15382,7 +16024,7 @@
                 "type": "object"
               },
               {
-                "$ref": "#/components/schemas/GraphNodeAttributes"
+                "$ref": "#/components/schemas/GraphNodeAttributes-Input"
               }
             ],
             "title": "Attributes",
@@ -15450,7 +16092,136 @@
         "title": "GraphNode",
         "description": "Base node for the graph - everything is a memory."
       },
-      "GraphNodeAttributes": {
+      "GraphNode-Output": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique node identifier"
+          },
+          "type": {
+            "$ref": "#/components/schemas/NodeType",
+            "description": "Type of node"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/GraphScope",
+            "description": "Scope of the node"
+          },
+          "attributes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeAttributesBase-Output"
+              },
+              {
+                "$ref": "#/components/schemas/MemoryNodeAttributes-Output"
+              },
+              {
+                "$ref": "#/components/schemas/ConfigNodeAttributes-Output"
+              },
+              {
+                "$ref": "#/components/schemas/TelemetryNodeAttributes-Output"
+              },
+              {
+                "$ref": "#/components/schemas/LogNodeAttributes-Output"
+              },
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "items": {},
+                      "type": "array"
+                    },
+                    {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "$ref": "#/components/schemas/GraphNodeAttributes-Output"
+              }
+            ],
+            "title": "Attributes",
+            "description": "Node attributes"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version",
+            "description": "Version number",
+            "default": 1
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By",
+            "description": "Who last updated"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At",
+            "description": "When last updated"
+          },
+          "consent_stream": {
+            "$ref": "#/components/schemas/ConsentStream",
+            "description": "Consent stream for this node (TEMPORARY=14-day, PARTNERED=persistent, ANONYMOUS=stats-only)",
+            "default": "temporary"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At",
+            "description": "Expiry time for TEMPORARY consent nodes (auto-set to 14 days for TEMPORARY)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "scope",
+          "attributes"
+        ],
+        "title": "GraphNode",
+        "description": "Base node for the graph - everything is a memory."
+      },
+      "GraphNodeAttributes-Input": {
         "properties": {
           "created_at": {
             "type": "string",
@@ -15460,6 +16231,64 @@
           "updated_at": {
             "type": "string",
             "format": "date-time",
+            "title": "Updated At"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By",
+            "description": "Who created this node"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content",
+            "description": "Optional content for the node"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "Tags for categorization"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "created_by"
+        ],
+        "title": "GraphNodeAttributes",
+        "description": "Base typed attributes for graph nodes."
+      },
+      "GraphNodeAttributes-Output": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Updated At"
           },
           "created_by": {
@@ -16098,6 +16927,145 @@
         "title": "LinkedOAuthAccount",
         "description": "Linked OAuth identity summary."
       },
+      "ListModelsResponse": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "description": "Provider ID that was queried"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/LiveModelInfo"
+            },
+            "type": "array",
+            "title": "Models",
+            "description": "Models sorted by CIRIS compatibility"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count",
+            "description": "Total number of models returned",
+            "default": 0
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Data source: 'live' (API queried) or 'static' (fallback)",
+            "default": "live"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "If live query failed, the error message (data is from static fallback)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider"
+        ],
+        "title": "ListModelsResponse",
+        "description": "Response from the list-models endpoint."
+      },
+      "LiveModelInfo": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Model ID as returned by the provider"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name",
+            "description": "Human-readable name (from capabilities DB or derived)"
+          },
+          "ciris_compatible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ciris Compatible",
+            "description": "True if CIRIS-compatible, False if incompatible, None if unknown"
+          },
+          "ciris_recommended": {
+            "type": "boolean",
+            "title": "Ciris Recommended",
+            "description": "Whether CIRIS recommends this model",
+            "default": false
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier",
+            "description": "Performance tier (default, fast, fallback, premium, legacy)"
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelCapabilities"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Model capabilities if known from capabilities DB"
+          },
+          "context_window": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Window",
+            "description": "Context window size if known"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes",
+            "description": "Additional notes (e.g., rejection reason)"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Data source: 'live', 'static', or 'both'",
+            "default": "live"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "title": "LiveModelInfo",
+        "description": "A model returned from a provider's live API, annotated with CIRIS compatibility."
+      },
       "LogContext": {
         "properties": {
           "trace_id": {
@@ -16287,7 +17255,7 @@
         "title": "LogEntryResponse",
         "description": "System log entry."
       },
-      "LogNodeAttributes": {
+      "LogNodeAttributes-Input": {
         "properties": {
           "created_at": {
             "type": "string",
@@ -16298,6 +17266,107 @@
           "updated_at": {
             "type": "string",
             "format": "date-time",
+            "title": "Updated At",
+            "description": "When this node was last updated"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By",
+            "description": "Service or user that created this node"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By",
+            "description": "Service or user that last updated this node"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "Tags for categorization and search"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version",
+            "description": "Schema version for migration support",
+            "default": 1
+          },
+          "secret_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Secret Refs",
+            "description": "Secret reference UUIDs for encrypted data"
+          },
+          "log_message": {
+            "type": "string",
+            "title": "Log Message",
+            "description": "The log message content"
+          },
+          "log_level": {
+            "type": "string",
+            "title": "Log Level",
+            "description": "Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL"
+          },
+          "log_tags": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Log Tags",
+            "description": "Additional tags for the log entry"
+          },
+          "retention_policy": {
+            "type": "string",
+            "title": "Retention Policy",
+            "description": "Retention policy for this log",
+            "default": "raw"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "created_by",
+          "log_message",
+          "log_level"
+        ],
+        "title": "LogNodeAttributes",
+        "description": "Specific attributes for log entry nodes.\n\nUsed by the memory service for storing log entries as TSDB_DATA nodes."
+      },
+      "LogNodeAttributes-Output": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At",
+            "description": "When this node was created"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Updated At",
             "description": "When this node was last updated"
           },
@@ -16532,7 +17601,7 @@
             "description": "Channel ID for context"
           },
           "node": {
-            "$ref": "#/components/schemas/GraphNode"
+            "$ref": "#/components/schemas/GraphNode-Output"
           }
         },
         "additionalProperties": false,
@@ -16543,7 +17612,7 @@
         "title": "MemorizeParams",
         "description": "Parameters for MEMORIZE action."
       },
-      "MemoryNodeAttributes": {
+      "MemoryNodeAttributes-Input": {
         "properties": {
           "created_at": {
             "type": "string",
@@ -16752,6 +17821,226 @@
         "title": "MemoryNodeAttributes",
         "description": "Specific attributes for memory nodes.\n\nUsed by the memory service for storing knowledge, experiences, and insights."
       },
+      "MemoryNodeAttributes-Output": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At",
+            "description": "When this node was created"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At",
+            "description": "When this node was last updated"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By",
+            "description": "Service or user that created this node"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By",
+            "description": "Service or user that last updated this node"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "Tags for categorization and search"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version",
+            "description": "Schema version for migration support",
+            "default": 1
+          },
+          "secret_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Secret Refs",
+            "description": "Secret reference UUIDs for encrypted data"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "The actual memory content"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type",
+            "description": "Type of content: text, embedding, reference",
+            "default": "text"
+          },
+          "memory_type": {
+            "type": "string",
+            "title": "Memory Type",
+            "description": "Type: fact, experience, learning, insight, observation"
+          },
+          "importance": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Importance",
+            "description": "Importance score from 0.0 to 1.0",
+            "default": 0.5
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Confidence in this memory from 0.0 to 1.0",
+            "default": 1.0
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Where this memory originated"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type",
+            "description": "Source type: internal, user, system, external",
+            "default": "internal"
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id",
+            "description": "Channel context if applicable"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id",
+            "description": "User context if applicable"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id",
+            "description": "Task context if applicable"
+          },
+          "access_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Access Count",
+            "description": "Number of times accessed",
+            "default": 0
+          },
+          "last_accessed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Accessed",
+            "description": "Last access timestamp"
+          },
+          "related_memories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Related Memories",
+            "description": "IDs of related memory nodes"
+          },
+          "derived_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Derived From",
+            "description": "Parent memory ID if this is derived"
+          },
+          "embedding_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Model",
+            "description": "Model used for embedding"
+          },
+          "embedding_dimensions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Dimensions",
+            "description": "Embedding vector dimensions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "created_by",
+          "content",
+          "memory_type",
+          "source"
+        ],
+        "title": "MemoryNodeAttributes",
+        "description": "Specific attributes for memory nodes.\n\nUsed by the memory service for storing knowledge, experiences, and insights."
+      },
       "MemoryOpResult_GraphNode_": {
         "properties": {
           "status": {
@@ -16771,7 +18060,7 @@
           "data": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/GraphNode"
+                "$ref": "#/components/schemas/GraphNode-Output"
               },
               {
                 "type": "null"
@@ -17330,6 +18619,46 @@
           "wa_role": "AUTHORITY"
         }
       },
+      "ModelCapabilities": {
+        "properties": {
+          "tool_use": {
+            "type": "boolean",
+            "title": "Tool Use",
+            "description": "Native function/tool calling support"
+          },
+          "structured_output": {
+            "type": "boolean",
+            "title": "Structured Output",
+            "description": "Reliable JSON output for tool calls"
+          },
+          "vision": {
+            "type": "boolean",
+            "title": "Vision",
+            "description": "Image/multimodal input support",
+            "default": false
+          },
+          "json_mode": {
+            "type": "boolean",
+            "title": "Json Mode",
+            "description": "JSON mode for structured responses",
+            "default": false
+          },
+          "streaming": {
+            "type": "boolean",
+            "title": "Streaming",
+            "description": "Streaming response support",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tool_use",
+          "structured_output"
+        ],
+        "title": "ModelCapabilities",
+        "description": "Capabilities flags for an LLM model."
+      },
       "ModuleConfigParameter": {
         "properties": {
           "name": {
@@ -17768,7 +19097,7 @@
         "title": "NativeTokenResponse",
         "description": "Response model for native app token exchange."
       },
-      "NodeAttributesBase": {
+      "NodeAttributesBase-Input": {
         "properties": {
           "created_at": {
             "type": "string",
@@ -17779,6 +19108,81 @@
           "updated_at": {
             "type": "string",
             "format": "date-time",
+            "title": "Updated At",
+            "description": "When this node was last updated"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By",
+            "description": "Service or user that created this node"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By",
+            "description": "Service or user that last updated this node"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "Tags for categorization and search"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version",
+            "description": "Schema version for migration support",
+            "default": 1
+          },
+          "secret_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Secret Refs",
+            "description": "Secret reference UUIDs for encrypted data"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "created_by"
+        ],
+        "title": "NodeAttributesBase",
+        "description": "Base schema for all graph node attributes.\n\nThis replaces the Dict[str, Any] pattern in graph services.\nAll node-specific attributes should inherit from this base."
+      },
+      "NodeAttributesBase-Output": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At",
+            "description": "When this node was created"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Updated At",
             "description": "When this node was last updated"
           },
@@ -18435,7 +19839,8 @@
           "android_keystore",
           "google_native_auth",
           "apple_native_auth",
-          "ciris_proxy"
+          "ciris_proxy",
+          "desktop_cli"
         ],
         "title": "PlatformRequirement",
         "description": "Platform security requirements for adapters and tools.\n\nThese represent proof-of-possession and device attestation requirements\nthat cannot be satisfied without specific platform capabilities."
@@ -19345,6 +20750,27 @@
         "title": "ResourceBudget",
         "description": "Limits for all monitored resources"
       },
+      "ResourceDataPoint": {
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp",
+            "description": "ISO timestamp"
+          },
+          "value": {
+            "type": "number",
+            "title": "Value",
+            "description": "Measured value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timestamp",
+          "value"
+        ],
+        "title": "ResourceDataPoint",
+        "description": "Resource data point."
+      },
       "ResourceHealthStatus": {
         "properties": {
           "status": {
@@ -19395,6 +20821,35 @@
         ],
         "title": "ResourceHistoryPoint",
         "description": "Historical resource usage point."
+      },
+      "ResourceHistoryResponse": {
+        "properties": {
+          "period": {
+            "$ref": "#/components/schemas/TimePeriod",
+            "description": "Time period covered"
+          },
+          "cpu": {
+            "$ref": "#/components/schemas/ResourceMetricData",
+            "description": "CPU usage data"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/ResourceMetricData",
+            "description": "Memory usage data"
+          },
+          "disk": {
+            "$ref": "#/components/schemas/ResourceMetricData",
+            "description": "Disk usage data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "period",
+          "cpu",
+          "memory",
+          "disk"
+        ],
+        "title": "ResourceHistoryResponse",
+        "description": "Historical resource usage response."
       },
       "ResourceLimit": {
         "properties": {
@@ -19462,6 +20917,68 @@
         ],
         "title": "ResourceLimits",
         "description": "Resource usage limits."
+      },
+      "ResourceMetricData": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceDataPoint"
+            },
+            "type": "array",
+            "title": "Data",
+            "description": "Time series data points"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/ResourceMetricStats",
+            "description": "Statistical summary"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit",
+            "description": "Unit of measurement"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "stats",
+          "unit"
+        ],
+        "title": "ResourceMetricData",
+        "description": "Resource usage metric data with time series and stats."
+      },
+      "ResourceMetricStats": {
+        "properties": {
+          "min": {
+            "type": "number",
+            "title": "Min",
+            "description": "Minimum value"
+          },
+          "max": {
+            "type": "number",
+            "title": "Max",
+            "description": "Maximum value"
+          },
+          "avg": {
+            "type": "number",
+            "title": "Avg",
+            "description": "Average value"
+          },
+          "current": {
+            "type": "number",
+            "title": "Current",
+            "description": "Current value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "min",
+          "max",
+          "avg",
+          "current"
+        ],
+        "title": "ResourceMetricStats",
+        "description": "Resource usage statistics."
       },
       "ResourceSnapshot": {
         "properties": {
@@ -21559,7 +23076,7 @@
       "StoreRequest": {
         "properties": {
           "node": {
-            "$ref": "#/components/schemas/GraphNode",
+            "$ref": "#/components/schemas/GraphNode-Input",
             "description": "Typed graph node to store"
           }
         },
@@ -21626,23 +23143,6 @@
         ],
         "title": "StreamMetadata",
         "description": "Metadata for a consent stream."
-      },
-      "SuccessResponse": {
-        "properties": {
-          "data": {
-            "title": "Data",
-            "description": "Response data"
-          },
-          "metadata": {
-            "$ref": "#/components/schemas/ResponseMetadata"
-          }
-        },
-        "type": "object",
-        "required": [
-          "data"
-        ],
-        "title": "SuccessResponse",
-        "description": "Standard success response wrapper."
       },
       "SuccessResponse_AdapterListResponse_": {
         "properties": {
@@ -21989,7 +23489,7 @@
       "SuccessResponse_GraphNode_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/GraphNode",
+            "$ref": "#/components/schemas/GraphNode-Output",
             "description": "Response data"
           },
           "metadata": {
@@ -22033,6 +23533,22 @@
           "data"
         ],
         "title": "SuccessResponse[LLMValidationResponse]"
+      },
+      "SuccessResponse_ListModelsResponse_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListModelsResponse",
+            "description": "Response data"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "SuccessResponse[ListModelsResponse]"
       },
       "SuccessResponse_List_AdapterConfig__": {
         "properties": {
@@ -22098,7 +23614,7 @@
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/GraphNode"
+              "$ref": "#/components/schemas/GraphNode-Output"
             },
             "type": "array",
             "title": "Data",
@@ -22345,6 +23861,22 @@
           "data"
         ],
         "title": "SuccessResponse[ResolveDeferralResponse]"
+      },
+      "SuccessResponse_ResourceHistoryResponse_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ResourceHistoryResponse",
+            "description": "Response data"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "SuccessResponse[ResourceHistoryResponse]"
       },
       "SuccessResponse_ResourceTelemetryResponse_": {
         "properties": {
@@ -23058,7 +24590,7 @@
         "title": "TaskCompleteParams",
         "description": "Parameters for TASK_COMPLETE action."
       },
-      "TelemetryNodeAttributes": {
+      "TelemetryNodeAttributes-Input": {
         "properties": {
           "created_at": {
             "type": "string",
@@ -23148,6 +24680,305 @@
           "end_time": {
             "type": "string",
             "format": "date-time",
+            "title": "End Time",
+            "description": "End of measurement period"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Duration Seconds",
+            "description": "Duration of measurement period"
+          },
+          "aggregation_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aggregation Type",
+            "description": "How this was aggregated: sum, avg, max, min, p50, p95, p99"
+          },
+          "sample_count": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Sample Count",
+            "description": "Number of samples in this metric",
+            "default": 1
+          },
+          "min_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Value",
+            "description": "Minimum observed value"
+          },
+          "max_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Value",
+            "description": "Maximum observed value"
+          },
+          "mean_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Value",
+            "description": "Mean/average value"
+          },
+          "std_deviation": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Std Deviation",
+            "description": "Standard deviation"
+          },
+          "percentiles": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Percentiles",
+            "description": "Percentile values (e.g., p50, p95, p99)"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Labels",
+            "description": "Metric labels for filtering and grouping"
+          },
+          "service_name": {
+            "type": "string",
+            "title": "Service Name",
+            "description": "Service that generated this metric"
+          },
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host",
+            "description": "Host/instance that generated this"
+          },
+          "warning_threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning Threshold",
+            "description": "Warning threshold value"
+          },
+          "critical_threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Critical Threshold",
+            "description": "Critical threshold value"
+          },
+          "threshold_direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold Direction",
+            "description": "Threshold direction: above, below"
+          },
+          "resource_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Type",
+            "description": "Resource type: cpu, memory, disk, network, tokens"
+          },
+          "resource_limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Limit",
+            "description": "Resource limit if applicable"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "created_by",
+          "metric_name",
+          "metric_type",
+          "value",
+          "start_time",
+          "end_time",
+          "duration_seconds",
+          "service_name"
+        ],
+        "title": "TelemetryNodeAttributes",
+        "description": "Specific attributes for telemetry nodes.\n\nUsed by the telemetry service for storing metrics, performance data, and system observations."
+      },
+      "TelemetryNodeAttributes-Output": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At",
+            "description": "When this node was created"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At",
+            "description": "When this node was last updated"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By",
+            "description": "Service or user that created this node"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By",
+            "description": "Service or user that last updated this node"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "Tags for categorization and search"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version",
+            "description": "Schema version for migration support",
+            "default": 1
+          },
+          "secret_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Secret Refs",
+            "description": "Secret reference UUIDs for encrypted data"
+          },
+          "metric_name": {
+            "type": "string",
+            "title": "Metric Name",
+            "description": "Name of the metric"
+          },
+          "metric_type": {
+            "type": "string",
+            "title": "Metric Type",
+            "description": "Type: counter, gauge, histogram, summary"
+          },
+          "value": {
+            "type": "number",
+            "title": "Value",
+            "description": "Numeric value of the metric"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit",
+            "description": "Unit of measurement"
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time",
+            "description": "Start of measurement period"
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "End Time",
             "description": "End of measurement period"
           },
@@ -23829,6 +25660,33 @@
         "title": "TicketResponse",
         "description": "Response containing ticket data."
       },
+      "TimePeriod": {
+        "properties": {
+          "start": {
+            "type": "string",
+            "title": "Start",
+            "description": "Start time (ISO format)"
+          },
+          "end": {
+            "type": "string",
+            "title": "End",
+            "description": "End time (ISO format)"
+          },
+          "hours": {
+            "type": "integer",
+            "title": "Hours",
+            "description": "Period length in hours"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "hours"
+        ],
+        "title": "TimePeriod",
+        "description": "Time period for historical data."
+      },
       "TimeSyncStatus": {
         "properties": {
           "synchronized": {
@@ -23873,7 +25731,7 @@
         "properties": {
           "memories": {
             "items": {
-              "$ref": "#/components/schemas/GraphNode"
+              "$ref": "#/components/schemas/GraphNode-Output"
             },
             "type": "array",
             "title": "Memories",
@@ -26277,23 +28135,52 @@
         "title": "WAStatusResponse",
         "description": "WA service status response."
       },
-      "ciris_engine__logic__adapters__api__routes__users__APIKeyInfo": {
+      "ciris_engine__schemas__api__auth__APIKeyInfo": {
         "properties": {
           "key_id": {
             "type": "string",
             "title": "Key Id",
-            "description": "Unique key identifier"
+            "description": "Key identifier (partial)"
           },
-          "masked_key": {
-            "type": "string",
-            "title": "Masked Key",
-            "description": "Masked version of the key (e.g., 'ciris_****')"
+          "role": {
+            "$ref": "#/components/schemas/UserRole",
+            "description": "Role assigned to the key"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At",
+            "description": "When the key expires"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Key description"
           },
           "created_at": {
             "type": "string",
             "format": "date-time",
             "title": "Created At",
             "description": "When the key was created"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By",
+            "description": "User who created the key"
           },
           "last_used": {
             "anyOf": [
@@ -26306,35 +28193,24 @@
               }
             ],
             "title": "Last Used",
-            "description": "When the key was last used"
+            "description": "Last time the key was used"
           },
           "is_active": {
             "type": "boolean",
             "title": "Is Active",
-            "description": "Whether the key is currently active"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name",
-            "description": "Optional name for the key"
+            "description": "Whether the key is active"
           }
         },
         "type": "object",
         "required": [
           "key_id",
-          "masked_key",
+          "role",
           "created_at",
+          "created_by",
           "is_active"
         ],
         "title": "APIKeyInfo",
-        "description": "Information about an API key (masked for security)."
+        "description": "API key information (without the actual key)."
       },
       "ciris_engine__schemas__runtime__adapter_management__AdapterConfig": {
         "properties": {

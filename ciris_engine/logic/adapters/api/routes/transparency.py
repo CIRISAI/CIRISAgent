@@ -150,7 +150,14 @@ async def _get_active_agents(request: Request) -> int:
     return 1  # Default to 1
 
 
-@router.get("/feed", response_model=TransparencyStats)
+@router.get(
+    "/feed",
+    responses={
+        400: {"description": "Hours must be between 1 and 168 (7 days)"},
+        500: {"description": "Failed to retrieve transparency statistics"},
+        503: {"description": "Audit service not available"},
+    },
+)
 async def get_transparency_feed(
     request: Request,
     hours: int = 24,
@@ -234,7 +241,7 @@ async def get_transparency_feed(
         raise HTTPException(status_code=500, detail=f"Failed to retrieve transparency statistics: {str(e)}")
 
 
-@router.get("/policy", response_model=TransparencyPolicy)
+@router.get("/policy")
 async def get_transparency_policy() -> TransparencyPolicy:
     """
     Get transparency policy information.
@@ -317,7 +324,7 @@ class TracesListResponse(BaseModel):
     consent_given: bool = Field(..., description="Whether metrics consent is active")
 
 
-@router.get("/traces", response_model=TracesListResponse)
+@router.get("/traces")
 async def get_coherence_traces(
     request: Request,
     limit: int = 10,
@@ -468,7 +475,7 @@ def _trace_to_response(trace: Any) -> CompleteTraceResponse:
     )
 
 
-@router.get("/traces/latest", response_model=Optional[CompleteTraceResponse])
+@router.get("/traces/latest")
 async def get_latest_trace(request: Request) -> Optional[CompleteTraceResponse]:
     """
     Get the most recently captured reasoning trace.

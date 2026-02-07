@@ -180,6 +180,50 @@ class SetupViewModel {
         _state.value = _state.value.copy(covenantMetricsConsent = consent)
     }
 
+    // ========== Template Selection (V1.9.7) ==========
+
+    /**
+     * Load available templates from the setup API.
+     * Call this when entering the OPTIONAL_FEATURES step.
+     */
+    suspend fun loadAvailableTemplates(
+        fetchFunc: suspend () -> List<AgentTemplateInfo>
+    ) {
+        _state.value = _state.value.copy(templatesLoading = true)
+        try {
+            val templates = fetchFunc()
+            _state.value = _state.value.copy(
+                availableTemplates = templates,
+                templatesLoading = false
+            )
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(templatesLoading = false)
+        }
+    }
+
+    /**
+     * Set the selected template ID.
+     */
+    fun setSelectedTemplate(templateId: String) {
+        _state.value = _state.value.copy(selectedTemplateId = templateId)
+    }
+
+    /**
+     * Toggle advanced settings visibility.
+     */
+    fun setShowAdvancedSettings(show: Boolean) {
+        _state.value = _state.value.copy(showAdvancedSettings = show)
+    }
+
+    /**
+     * Get selected template name for display.
+     */
+    fun getSelectedTemplateName(): String {
+        val templates = _state.value.availableTemplates
+        val selectedId = _state.value.selectedTemplateId
+        return templates.find { it.id == selectedId }?.name ?: "Default"
+    }
+
     // ========== Adapter Configuration ==========
 
     /**
@@ -347,7 +391,7 @@ class SetupViewModel {
                 backup_llm_model = "default",
 
                 // Agent configuration
-                template_id = "ally",  // Force Ally template for mobile
+                template_id = currentState.selectedTemplateId,
                 enabled_adapters = enabledAdapters,
                 adapter_config = adapterConfig,
                 agent_port = 8080,
@@ -384,7 +428,7 @@ class SetupViewModel {
                 llm_model = currentState.llmModel.takeIf { it.isNotEmpty() },
 
                 // Agent configuration
-                template_id = "ally",  // Force Ally template for mobile
+                template_id = currentState.selectedTemplateId,
                 enabled_adapters = enabledAdapters,
                 adapter_config = adapterConfig,
                 agent_port = 8080,

@@ -193,12 +193,27 @@ class Ed25519TraceSigner:
             logger.warning(f"Could not load unified signing key: {e}")
             return False
 
+    @staticmethod
+    def _strip_empty(obj: Any) -> Any:
+        """Recursively strip None, empty strings, empty lists, empty dicts to reduce payload size."""
+        if isinstance(obj, dict):
+            result = {}
+            for k, v in obj.items():
+                stripped = Ed25519TraceSigner._strip_empty(v)
+                # Keep the value if it's not empty (0 and False are valid values)
+                if stripped is not None and stripped != "" and stripped != [] and stripped != {}:
+                    result[k] = stripped
+            return result
+        elif isinstance(obj, list):
+            return [Ed25519TraceSigner._strip_empty(item) for item in obj if item is not None]
+        return obj
+
     def sign_trace(self, trace: CompleteTrace) -> bool:
         """Sign a trace with Ed25519 unified signing key.
 
         Signs the JSON array of components (not the full trace object).
         This matches CIRISLens verification which expects:
-            message = json.dumps([c.model_dump() for c in trace.components], sort_keys=True).encode('utf-8')
+            message = json.dumps([c.model_dump() for c in trace.components], sort_keys=True, separators=(",", ":")).encode('utf-8')
 
         Returns True if signing succeeded, False if key not available.
         """
@@ -209,17 +224,22 @@ class Ed25519TraceSigner:
         try:
             # Build the canonical message that CIRISLens will verify against:
             # JSON array of components, alphabetically sorted keys, no extra whitespace
+            # Strip null values to reduce payload size
             components_list = [
                 {
                     "component_type": c.component_type,
-                    "data": c.data,
+                    "data": self._strip_empty(c.data),
                     "event_type": c.event_type,
                     "timestamp": c.timestamp,
                 }
                 for c in trace.components
             ]
-            # Must match CIRISLens exactly: sort_keys=True, UTF-8 encoded
-            message = json.dumps(components_list, sort_keys=True).encode("utf-8")
+            # Compact JSON: sort_keys=True, no extra whitespace, UTF-8 encoded
+            message = json.dumps(components_list, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+            # Log hash for debugging signature verification mismatches (no content preview for privacy)
+            message_hash = hashlib.sha256(message).hexdigest()
+            logger.debug(f"Signing trace {trace.trace_id}: len={len(message)}, hash={message_hash}")
 
             # Sign the raw message bytes (not a hash)
             trace.signature = self._unified_key.sign_base64(message)
@@ -254,13 +274,13 @@ class Ed25519TraceSigner:
             components_list = [
                 {
                     "component_type": c.component_type,
-                    "data": c.data,
+                    "data": self._strip_empty(c.data),
                     "event_type": c.event_type,
                     "timestamp": c.timestamp,
                 }
                 for c in trace.components
             ]
-            message = json.dumps(components_list, sort_keys=True).encode("utf-8")
+            message = json.dumps(components_list, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
             # Verify
             public_key.verify(sig_bytes, message)

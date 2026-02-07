@@ -3,7 +3,7 @@ Additional telemetry metrics endpoints.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import List
+from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from pydantic import BaseModel, Field
@@ -12,6 +12,9 @@ from ciris_engine.schemas.api.responses import SuccessResponse
 
 from ..constants import ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE
 from ..dependencies.auth import AuthContext, require_observer
+
+# Type alias for authenticated observer dependency (S8410 compliance)
+AuthObserverDep = Annotated[AuthContext, Depends(require_observer)]
 
 router = APIRouter()
 
@@ -37,11 +40,17 @@ class MetricDetail(BaseModel):
     timestamp: str = Field(..., description="When this data was collected")
 
 
-@router.get("/metrics/{metric_name}", response_model=SuccessResponse[MetricDetail])
+@router.get(
+    "/metrics/{metric_name}",
+    responses={
+        500: {"description": "Error retrieving metric detail"},
+        503: {"description": "Telemetry service not available"},
+    },
+)
 async def get_metric_detail(
     request: Request,
+    auth: AuthObserverDep,
     metric_name: str = Path(..., description="Name of the metric"),
-    auth: AuthContext = Depends(require_observer),
 ) -> SuccessResponse[MetricDetail]:
     """
     Get detailed information about a specific metric.

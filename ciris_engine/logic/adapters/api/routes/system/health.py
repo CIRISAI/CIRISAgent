@@ -6,7 +6,7 @@ Provides health status and time synchronization information.
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -30,10 +30,13 @@ from .schemas import SystemHealthResponse, SystemTimeResponse
 
 logger = logging.getLogger(__name__)
 
+# Type alias for authenticated observer dependency (S8410 compliance)
+AuthObserverDep = Annotated[AuthContext, Depends(require_observer)]
+
 router = APIRouter()
 
 
-@router.get("/health", response_model=SuccessResponse[SystemHealthResponse])
+@router.get("/health")
 async def get_system_health(request: Request) -> SuccessResponse[SystemHealthResponse]:
     """
     Overall system health.
@@ -67,9 +70,16 @@ async def get_system_health(request: Request) -> SuccessResponse[SystemHealthRes
     return SuccessResponse(data=response)
 
 
-@router.get("/time", response_model=SuccessResponse[SystemTimeResponse])
+@router.get(
+    "/time",
+    responses={
+        500: {"description": "Failed to get time information"},
+        503: {"description": "Time service not available"},
+    },
+)
 async def get_system_time(
-    request: Request, auth: AuthContext = Depends(require_observer)
+    request: Request,
+    auth: AuthObserverDep,
 ) -> SuccessResponse[SystemTimeResponse]:
     """
     System time information.

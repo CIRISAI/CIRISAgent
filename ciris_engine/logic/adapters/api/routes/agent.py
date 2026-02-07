@@ -27,7 +27,7 @@ from ..constants import (
     ERROR_MEMORY_SERVICE_NOT_AVAILABLE,
     ERROR_MESSAGE_HANDLER_NOT_CONFIGURED,
 )
-from ._common import AuthObserverDep
+from ._common import RESPONSES_402_403_503, RESPONSES_500, RESPONSES_503, AuthObserverDep
 
 logger = logging.getLogger(__name__)
 
@@ -653,7 +653,7 @@ async def _inject_error_to_channel(request: Request, channel_id: str, content: s
         logger.warning(f"Could not inject error message to channel: {e}")
 
 
-@router.post("/message")
+@router.post("/message", response_model=None, responses=RESPONSES_402_403_503)
 async def submit_message(
     request: Request, body: MessageRequest, auth: AuthObserverDep
 ) -> SuccessResponse[MessageSubmissionResponse]:
@@ -768,7 +768,7 @@ async def submit_message(
     return SuccessResponse(data=response)
 
 
-@router.post("/interact")
+@router.post("/interact", response_model=None, responses=RESPONSES_402_403_503)
 async def interact(request: Request, body: InteractRequest, auth: AuthObserverDep) -> SuccessResponse[InteractResponse]:
     """
     Send message and get response.
@@ -891,7 +891,7 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
         return SuccessResponse(data=response)
 
 
-@router.get("/history")
+@router.get("/history", response_model=None, responses=RESPONSES_500)
 async def get_history(
     request: Request,
     auth: AuthObserverDep,
@@ -1377,7 +1377,7 @@ def _get_agent_identity_info(runtime: Any) -> Tuple[str, str]:
     return agent_id, agent_name
 
 
-@router.get("/status")
+@router.get("/status", response_model=None, responses={**RESPONSES_500, **RESPONSES_503})
 async def get_status(request: Request, auth: AuthObserverDep) -> SuccessResponse[AgentStatus]:
     """
     Agent status and cognitive state.
@@ -1465,7 +1465,7 @@ def _build_service_availability(service_registry: Any) -> ServiceAvailability:
     return services
 
 
-@router.get("/identity")
+@router.get("/identity", response_model=None, responses={**RESPONSES_500, **RESPONSES_503})
 async def get_identity(request: Request, auth: AuthObserverDep) -> SuccessResponse[AgentIdentity]:
     """
     Agent identity and capabilities.
@@ -1687,7 +1687,7 @@ def _add_default_api_channels(channels: List[ChannelInfo], request: Request, aut
         )
 
 
-@router.get("/channels")
+@router.get("/channels", response_model=None, responses=RESPONSES_500)
 async def get_channels(request: Request, auth: AuthObserverDep) -> SuccessResponse[ChannelList]:
     """
     List active communication channels.

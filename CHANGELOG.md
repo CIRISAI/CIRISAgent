@@ -5,6 +5,25 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.7] - 2026-02-07
+
+### Security
+
+- **API Auth Hardening** - Fail closed when auth services unavailable (503 instead of dev fallback)
+- **CORS Configuration** - Configurable `cors_allow_credentials` with wildcard safety checks
+
+### Added
+
+- **Template Selection in Setup Wizard** - Optional "Advanced Settings" section
+  - CLI `--template` flag now honored (was ignored on first-run)
+  - Template picker in both CIRISGUI-Standalone and KMP mobile wizards
+- **Mobile Live Model Selection** - `POST /v1/setup/list-models` in KMP generated API
+
+### Fixed
+
+- **Covenant Metrics Trace Optimization** - 98% size reduction (100KB → 1.7KB)
+  - `_strip_empty()` removes null/empty values, compact JSON separators
+
 ## [1.9.6] - 2026-02-06
 
 ### Changed

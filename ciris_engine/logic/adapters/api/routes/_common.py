@@ -26,13 +26,7 @@ from fastapi import Depends
 
 from ciris_engine.schemas.api.auth import AuthContext
 
-from ..dependencies.auth import (
-    get_auth_context,
-    get_auth_service,
-    optional_auth,
-    require_admin,
-    require_observer,
-)
+from ..dependencies.auth import get_auth_context, get_auth_service, optional_auth, require_admin, require_observer
 from ..services.auth_service import APIAuthService
 
 # ============================================================================
@@ -56,6 +50,14 @@ OptionalAuthDep = Annotated[Optional[AuthContext], Depends(optional_auth)]
 AuthServiceDep = Annotated[APIAuthService, Depends(get_auth_service)]
 
 # ============================================================================
+# Common error message constants (avoid duplication - SonarCloud S1192)
+# ============================================================================
+
+MSG_BILLING_SERVICE_UNAVAILABLE = "Billing service unavailable"
+MSG_BILLING_OR_RESOURCE_UNAVAILABLE = "Billing service unavailable or resource monitor not available"
+MSG_GOOGLE_AUTH_REQUIRED = "Google Sign-In required or authentication failed"
+
+# ============================================================================
 # Standard HTTP Response Dictionaries for OpenAPI Documentation
 # ============================================================================
 # These are used in the `responses` parameter of route decorators to document
@@ -64,33 +66,19 @@ AuthServiceDep = Annotated[APIAuthService, Depends(get_auth_service)]
 # Use Union[int, str] for FastAPI compatibility (OpenAPI allows string status codes)
 ResponseDict = Dict[Union[int, str], Dict[str, Any]]
 
-RESPONSES_400: ResponseDict = {
-    400: {"description": "Bad request - invalid input parameters"}
-}
+RESPONSES_400: ResponseDict = {400: {"description": "Bad request - invalid input parameters"}}
 
-RESPONSES_401: ResponseDict = {
-    401: {"description": "Unauthorized - authentication required"}
-}
+RESPONSES_401: ResponseDict = {401: {"description": "Unauthorized - authentication required"}}
 
-RESPONSES_403: ResponseDict = {
-    403: {"description": "Forbidden - insufficient permissions"}
-}
+RESPONSES_403: ResponseDict = {403: {"description": "Forbidden - insufficient permissions"}}
 
-RESPONSES_404: ResponseDict = {
-    404: {"description": "Resource not found"}
-}
+RESPONSES_404: ResponseDict = {404: {"description": "Resource not found"}}
 
-RESPONSES_409: ResponseDict = {
-    409: {"description": "Conflict - resource already exists or state conflict"}
-}
+RESPONSES_409: ResponseDict = {409: {"description": "Conflict - resource already exists or state conflict"}}
 
-RESPONSES_500: ResponseDict = {
-    500: {"description": "Internal server error"}
-}
+RESPONSES_500: ResponseDict = {500: {"description": "Internal server error"}}
 
-RESPONSES_503: ResponseDict = {
-    503: {"description": "Service unavailable"}
-}
+RESPONSES_503: ResponseDict = {503: {"description": "Service unavailable"}}
 
 # ============================================================================
 # Combined Response Dictionaries (common patterns)
@@ -140,6 +128,14 @@ RESPONSES_401_500: ResponseDict = {
     **RESPONSES_500,
 }
 
+RESPONSES_402: ResponseDict = {402: {"description": "Payment required - insufficient credits"}}
+
+RESPONSES_402_403_503: ResponseDict = {
+    402: {"description": "Payment required - insufficient credits"},
+    **RESPONSES_403,
+    **RESPONSES_503,
+}
+
 # ============================================================================
 # Adapter-specific response patterns
 # ============================================================================
@@ -168,4 +164,44 @@ RESPONSES_ADAPTER_CONFIG_SESSION: ResponseDict = {
     400: {"description": "Invalid session state or OAuth callback"},
     404: {"description": "Session not found"},
     500: {"description": "Configuration step failed"},
+}
+
+# ============================================================================
+# Billing-specific response patterns
+# ============================================================================
+
+RESPONSES_BILLING_503: ResponseDict = {503: {"description": MSG_BILLING_OR_RESOURCE_UNAVAILABLE}}
+
+RESPONSES_BILLING_PURCHASE_INITIATE: ResponseDict = {
+    400: {"description": "Invalid purchase request or email required"},
+    403: {"description": "Billing not enabled"},
+    503: {"description": MSG_BILLING_OR_RESOURCE_UNAVAILABLE},
+}
+
+RESPONSES_BILLING_PURCHASE_STATUS: ResponseDict = {
+    400: {"description": "Invalid payment ID format"},
+    404: {"description": "Payment not found"},
+    503: {"description": MSG_BILLING_OR_RESOURCE_UNAVAILABLE},
+}
+
+# ============================================================================
+# Tool-specific response patterns
+# ============================================================================
+
+RESPONSES_TOOL_BALANCE: ResponseDict = {
+    401: {"description": MSG_GOOGLE_AUTH_REQUIRED},
+    404: {"description": "Tool not found"},
+    503: {"description": MSG_BILLING_SERVICE_UNAVAILABLE},
+}
+
+RESPONSES_TOOL_BALANCE_ALL: ResponseDict = {
+    401: {"description": MSG_GOOGLE_AUTH_REQUIRED},
+    503: {"description": MSG_BILLING_SERVICE_UNAVAILABLE},
+}
+
+RESPONSES_TOOL_PURCHASE: ResponseDict = {
+    400: {"description": "Invalid tool name or purchase data"},
+    401: {"description": MSG_GOOGLE_AUTH_REQUIRED},
+    409: {"description": "Purchase already processed"},
+    503: {"description": MSG_BILLING_SERVICE_UNAVAILABLE},
 }

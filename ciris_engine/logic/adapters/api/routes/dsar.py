@@ -11,7 +11,7 @@ INTEGRATED WITH CONSENSUAL EVOLUTION PROTOCOL v0.2:
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -35,6 +35,9 @@ from ciris_engine.schemas.consent.core import (
 
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
+
+# Type alias for authenticated user dependency (S8410 compliance)
+CurrentUserDep = Annotated[TokenData, Depends(get_current_user)]
 
 router = APIRouter(prefix="/dsar", tags=["DSAR"])
 
@@ -273,7 +276,12 @@ def _build_response_message(
     return message
 
 
-@router.post("/", response_model=StandardResponse)
+@router.post(
+    "/",
+    responses={
+        500: {"description": "Failed to persist DSAR request"},
+    },
+)
 async def submit_dsar(
     request: DSARRequest,
     req: Request,
@@ -404,7 +412,12 @@ async def submit_dsar(
     )
 
 
-@router.get("/{ticket_id}", response_model=StandardResponse)
+@router.get(
+    "/{ticket_id}",
+    responses={
+        404: {"description": "DSAR ticket not found"},
+    },
+)
 async def check_dsar_status(ticket_id: str) -> StandardResponse:
     """
     Check the status of a DSAR request.
@@ -437,9 +450,14 @@ async def check_dsar_status(ticket_id: str) -> StandardResponse:
     )
 
 
-@router.get("/", response_model=StandardResponse)
+@router.get(
+    "/",
+    responses={
+        403: {"description": "Only administrators can list DSAR requests"},
+    },
+)
 async def list_dsar_requests(
-    current_user: TokenData = Depends(get_current_user),
+    current_user: CurrentUserDep,
 ) -> StandardResponse:
     """
     List all DSAR requests (admin only).
@@ -480,12 +498,19 @@ async def list_dsar_requests(
     )
 
 
-@router.put("/{ticket_id}/status", response_model=StandardResponse)
+@router.put(
+    "/{ticket_id}/status",
+    responses={
+        400: {"description": "Invalid status value"},
+        403: {"description": "Only administrators can update DSAR status"},
+        404: {"description": "DSAR ticket not found"},
+    },
+)
 async def update_dsar_status(
     ticket_id: str,
     new_status: str,
+    current_user: CurrentUserDep,
     notes: Optional[str] = None,
-    current_user: TokenData = Depends(get_current_user),
 ) -> StandardResponse:
     """
     Update the status of a DSAR request (admin only).
@@ -543,7 +568,14 @@ async def update_dsar_status(
     )
 
 
-@router.get("/{ticket_id}/deletion-status", response_model=StandardResponse)
+@router.get(
+    "/{ticket_id}/deletion-status",
+    responses={
+        400: {"description": "Ticket is not a deletion request or has no user identifier"},
+        404: {"description": "DSAR ticket not found"},
+        500: {"description": "Could not retrieve deletion status"},
+    },
+)
 async def get_deletion_status(
     ticket_id: str,
     req: Request,

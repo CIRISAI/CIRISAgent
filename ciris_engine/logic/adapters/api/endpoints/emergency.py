@@ -5,7 +5,7 @@ Provides WA-authorized emergency control endpoints including kill switch.
 """
 
 import logging
-from typing import Any, Dict
+from typing import Annotated, Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -25,9 +25,20 @@ def get_runtime_service() -> RuntimeControlServiceProtocol:
     return None  # type: ignore
 
 
-@router.post("/shutdown", response_model=EmergencyShutdownStatus)
+# Type alias for runtime service dependency (S8410 compliance)
+RuntimeServiceDep = Annotated[RuntimeControlServiceProtocol, Depends(get_runtime_service)]
+
+
+@router.post(
+    "/shutdown",
+    responses={
+        403: {"description": "Command verification failed"},
+        500: {"description": "Emergency shutdown failed"},
+    },
+)
 async def emergency_shutdown(
-    command: WASignedCommand, runtime_service: RuntimeControlServiceProtocol = Depends(get_runtime_service)
+    command: WASignedCommand,
+    runtime_service: RuntimeServiceDep,
 ) -> EmergencyShutdownStatus:
     """
     Execute WA-authorized emergency shutdown.
@@ -64,7 +75,7 @@ async def emergency_shutdown(
 
 @router.get("/kill-switch/status")
 async def get_kill_switch_status(
-    runtime_service: RuntimeControlServiceProtocol = Depends(get_runtime_service),
+    runtime_service: RuntimeServiceDep,
 ) -> JSONDict:
     """
     Get current kill switch configuration status.

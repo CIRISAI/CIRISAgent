@@ -5,13 +5,11 @@ Implements Consensual Evolution Protocol v0.2.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Annotated, Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import JSONResponse
 
 from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService, ConsentValidationError
-from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.consent.core import (
     CategoryMetadata,
     ConsentAuditEntry,
@@ -33,7 +31,7 @@ from ciris_engine.schemas.consent.core import (
     StreamMetadata,
 )
 
-from ..dependencies.auth import AuthContext, get_auth_context, require_observer
+from ._common import RESPONSES_400, RESPONSES_403, RESPONSES_404, RESPONSES_500, AuthDep, AuthObserverDep
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +120,10 @@ def get_consent_manager(request: Request) -> ConsentService:
     return manager
 
 
+# Annotated type alias for consent manager dependency (S8410 fix)
+ConsentManagerDep = Annotated[ConsentService, Depends(get_consent_manager)]
+
+
 def _build_consent_record(
     consent_status: ConsentStatus, user_id: str, status_filter: Optional[str] = None
 ) -> ConsentRecordResponse:
@@ -157,10 +159,10 @@ def _build_consent_record(
     )
 
 
-@router.get("/status", response_model=ConsentStatusResponse)
+@router.get("/status")
 async def get_consent_status(
-    auth: AuthContext = Depends(get_auth_context),
-    manager: ConsentService = Depends(get_consent_manager),
+    auth: AuthDep,
+    manager: ConsentManagerDep,
 ) -> ConsentStatusResponse:
     """
     Get current consent status for authenticated user.
@@ -188,12 +190,12 @@ async def get_consent_status(
         )
 
 
-@router.get("/query", response_model=ConsentQueryResponse)
+@router.get("/query", responses={**RESPONSES_403})
 async def query_consents(
+    auth: AuthDep,
+    manager: ConsentManagerDep,
     status: Optional[str] = None,
     user_id: Optional[str] = None,
-    auth: AuthContext = Depends(get_auth_context),
-    manager: ConsentService = Depends(get_consent_manager),
 ) -> ConsentQueryResponse:
     """
     Query consent records with optional filters.
@@ -232,11 +234,11 @@ async def query_consents(
     return ConsentQueryResponse(consents=consents, total=len(consents))
 
 
-@router.post("/grant", response_model=ConsentStatus)
+@router.post("/grant", responses={**RESPONSES_400})
 async def grant_consent(
     request: ConsentRequest,
-    auth: AuthContext = Depends(get_auth_context),
-    manager: ConsentService = Depends(get_consent_manager),
+    auth: AuthDep,
+    manager: ConsentManagerDep,
 ) -> ConsentStatus:
     """
     Grant or update consent.
@@ -281,11 +283,11 @@ async def grant_consent(
         )
 
 
-@router.post("/revoke", response_model=ConsentDecayStatus)
+@router.post("/revoke", responses={**RESPONSES_404})
 async def revoke_consent(
+    auth: AuthDep,
+    manager: ConsentManagerDep,
     reason: Optional[str] = None,
-    auth: AuthContext = Depends(get_auth_context),
-    manager: ConsentService = Depends(get_consent_manager),
 ) -> ConsentDecayStatus:
     """
     Revoke consent and start decay protocol.
@@ -304,10 +306,13 @@ async def revoke_consent(
         )
 
 
-@router.get("/impact", response_model=ConsentImpactReport)
+@router.get(
+    "/impact",
+    responses={**RESPONSES_400, **RESPONSES_404, **RESPONSES_500, 501: {"description": "Memory bus not available"}},
+)
 async def get_impact_report(
-    auth: AuthContext = Depends(get_auth_context),
-    manager: ConsentService = Depends(get_consent_manager),
+    auth: AuthDep,
+    manager: ConsentManagerDep,
 ) -> ConsentImpactReport:
     """
     Get impact report showing contribution to collective learning.
@@ -345,11 +350,11 @@ async def get_impact_report(
         )
 
 
-@router.get("/audit", response_model=list[ConsentAuditEntry])
+@router.get("/audit", responses={**RESPONSES_500})
 async def get_audit_trail(
+    auth: AuthDep,
+    manager: ConsentManagerDep,
     limit: int = 100,
-    auth: AuthContext = Depends(get_auth_context),
-    manager: ConsentService = Depends(get_consent_manager),
 ) -> list[ConsentAuditEntry]:
     """
     Get consent change history - IMMUTABLE AUDIT TRAIL.
@@ -371,7 +376,7 @@ async def get_audit_trail(
         )
 
 
-@router.get("/streams", response_model=ConsentStreamsResponse)
+@router.get("/streams")
 async def get_consent_streams() -> ConsentStreamsResponse:
     """
     Get available consent streams and their descriptions.
@@ -395,7 +400,7 @@ async def get_consent_streams() -> ConsentStreamsResponse:
     )
 
 
-@router.get("/categories", response_model=ConsentCategoriesResponse)
+@router.get("/categories")
 async def get_consent_categories() -> ConsentCategoriesResponse:
     """
     Get available consent categories for PARTNERED stream.
@@ -411,10 +416,10 @@ async def get_consent_categories() -> ConsentCategoriesResponse:
     return ConsentCategoriesResponse(categories=categories_dict)
 
 
-@router.get("/partnership/status", response_model=PartnershipStatusResponse)
+@router.get("/partnership/status")
 async def check_partnership_status(
-    auth: AuthContext = Depends(get_auth_context),
-    manager: ConsentService = Depends(get_consent_manager),
+    auth: AuthDep,
+    manager: ConsentManagerDep,
 ) -> PartnershipStatusResponse:
     """
     Check status of pending partnership request.
@@ -447,10 +452,10 @@ async def check_partnership_status(
     )
 
 
-@router.post("/cleanup", response_model=ConsentCleanupResponse)
+@router.post("/cleanup")
 async def cleanup_expired(
-    _auth: AuthContext = Depends(require_observer),
-    manager: ConsentService = Depends(get_consent_manager),
+    _auth: AuthObserverDep,
+    manager: ConsentManagerDep,
 ) -> ConsentCleanupResponse:
     """
     Clean up expired TEMPORARY consents (admin only).
@@ -550,11 +555,11 @@ async def _get_audit_export_data(manager: ConsentService, user_id: str) -> list[
 
 
 # DSAR (Data Subject Access Request) endpoints
-@router.post("/dsar/initiate", response_model=DSARInitiateResponse)
+@router.post("/dsar/initiate", responses={**RESPONSES_500})
 async def initiate_dsar(
+    auth: AuthDep,
+    manager: ConsentManagerDep,
     request_type: str = "full",
-    auth: AuthContext = Depends(get_auth_context),
-    manager: ConsentService = Depends(get_consent_manager),
 ) -> DSARInitiateResponse:
     """
     Initiate automated DSAR (Data Subject Access Request).
@@ -601,10 +606,10 @@ async def initiate_dsar(
         )
 
 
-@router.get("/dsar/status/{request_id}", response_model=DSARStatusResponse)
+@router.get("/dsar/status/{request_id}", responses={**RESPONSES_400, **RESPONSES_403})
 async def get_dsar_status(
     request_id: str,
-    auth: AuthContext = Depends(get_auth_context),
+    auth: AuthDep,
 ) -> DSARStatusResponse:
     """
     Get status of a DSAR request.

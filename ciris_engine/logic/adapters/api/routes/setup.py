@@ -176,7 +176,7 @@ class SetupCompleteRequest(BaseModel):
     backup_llm_model: Optional[str] = Field(None, description="Backup LLM model name (CIRIS_OPENAI_MODEL_NAME_2)")
 
     # Template Selection
-    template_id: str = Field(default="general", description="Agent template ID")
+    template_id: str = Field(default="default", description="Agent template ID")
 
     # Adapter Configuration
     enabled_adapters: List[str] = Field(default=["api"], description="List of enabled adapters")
@@ -1878,6 +1878,16 @@ async def get_current_config(request: Request) -> SuccessResponse[SetupConfigRes
             logger.warning(f"Authentication failed for /setup/config: {e}")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
 
+    # Get template from CLI flag (via runtime config) or environment variable
+    # CLI --template flag takes precedence on first-run before .env exists
+    template_id = os.getenv("CIRIS_TEMPLATE")
+    if not template_id:
+        runtime = getattr(request.app.state, "runtime", None)
+        if runtime and hasattr(runtime, "essential_config") and runtime.essential_config:
+            template_id = getattr(runtime.essential_config, "default_template", None)
+    if not template_id:
+        template_id = "default"
+
     # Read current config from environment
     config = SetupConfigResponse(
         llm_provider="openai" if os.getenv("OPENAI_API_BASE") is None else "other",
@@ -1887,7 +1897,7 @@ async def get_current_config(request: Request) -> SuccessResponse[SetupConfigRes
         backup_llm_base_url=os.getenv("CIRIS_OPENAI_API_BASE_2"),
         backup_llm_model=os.getenv("CIRIS_OPENAI_MODEL_NAME_2"),
         backup_llm_api_key_set=bool(os.getenv("CIRIS_OPENAI_API_KEY_2")),
-        template_id=os.getenv("CIRIS_TEMPLATE", "general"),
+        template_id=template_id,
         enabled_adapters=os.getenv("CIRIS_ADAPTER", "api").split(","),
         agent_port=int(os.getenv("CIRIS_API_PORT", "8080")),
     )

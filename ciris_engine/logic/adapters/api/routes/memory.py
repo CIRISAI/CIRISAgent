@@ -10,7 +10,7 @@ This is a refactored version with better modularity and testability.
 import html
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import HTMLResponse, Response
@@ -20,7 +20,17 @@ from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode
 from ciris_engine.schemas.services.operations import GraphScope, MemoryOpResult, MemoryOpStatus
 
-from ..dependencies.auth import AuthContext, require_admin, require_observer
+from ..dependencies.auth import AuthContext
+from ._common import (
+    RESPONSES_403,
+    RESPONSES_404,
+    RESPONSES_404_500_503,
+    RESPONSES_500,
+    RESPONSES_500_503,
+    RESPONSES_503,
+    AuthAdminDep,
+    AuthObserverDep,
+)
 from .memory_filters import filter_nodes_by_user_attribution, get_user_allowed_ids, should_apply_user_filtering
 
 # Import extracted modules
@@ -49,6 +59,10 @@ def get_memory_service(request: Request) -> Any:
     if not memory_service:
         raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
     return memory_service
+
+
+# Annotated type alias for memory service dependency (SonarCloud S8410)
+MemoryServiceDep = Annotated[Any, Depends(get_memory_service)]
 
 
 # ============================================================================
@@ -293,12 +307,12 @@ def generate_html_wrapper(svg: str, hours: int, layout: str, node_count: int, wi
 # ============================================================================
 
 
-@router.post("/store", response_model=SuccessResponse[MemoryOpResult[GraphNode]])
+@router.post("/store", responses=RESPONSES_500_503)
 async def store_memory(
     request: Request,
     body: StoreRequest,
-    auth: AuthContext = Depends(require_admin),
-    memory_service: Any = Depends(get_memory_service),
+    auth: AuthAdminDep,
+    memory_service: MemoryServiceDep,
 ) -> SuccessResponse[MemoryOpResult[GraphNode]]:
     """
     Store typed nodes in memory (MEMORIZE).
@@ -325,12 +339,12 @@ async def store_memory(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/query", response_model=SuccessResponse[List[GraphNode]])
+@router.post("/query", responses=RESPONSES_500_503)
 async def query_memory(
     request: Request,
     body: QueryRequest,
-    auth: AuthContext = Depends(require_observer),
-    memory_service: Any = Depends(get_memory_service),
+    auth: AuthObserverDep,
+    memory_service: MemoryServiceDep,
 ) -> SuccessResponse[List[GraphNode]]:
     """
     Query memories with flexible filters (RECALL).
@@ -397,12 +411,12 @@ async def query_memory(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/{node_id}", response_model=SuccessResponse[MemoryOpResult[GraphNode]])
+@router.delete("/{node_id}", responses=RESPONSES_500_503)
 async def forget_memory(
     request: Request,
+    auth: AuthAdminDep,
+    memory_service: MemoryServiceDep,
     node_id: str = Path(..., description="Node ID to forget"),
-    auth: AuthContext = Depends(require_admin),
-    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[MemoryOpResult[GraphNode]]:
     """
     Forget a specific memory node (FORGET).
@@ -443,14 +457,14 @@ async def forget_memory(
 # ============================================================================
 
 
-@router.get("/timeline", response_model=SuccessResponse[TimelineResponse])
+@router.get("/timeline", responses=RESPONSES_500_503)
 async def get_timeline(
     request: Request,
+    auth: AuthObserverDep,
+    memory_service: MemoryServiceDep,
     hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
     scope: Optional[str] = Query(None, description="Filter by scope"),
     type: Optional[str] = Query(None, description="Filter by node type"),
-    auth: AuthContext = Depends(require_observer),
-    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[TimelineResponse]:
     """
     Get a timeline view of recent memories.
@@ -515,11 +529,11 @@ async def get_timeline(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/stats", response_model=SuccessResponse[MemoryStats])
+@router.get("/stats", responses=RESPONSES_500_503)
 async def get_stats(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
-    memory_service: Any = Depends(get_memory_service),
+    auth: AuthObserverDep,
+    memory_service: MemoryServiceDep,
 ) -> SuccessResponse[MemoryStats]:
     """
     Get statistics about memory storage.
@@ -580,17 +594,17 @@ async def get_stats(
 # ============================================================================
 
 
-@router.get("/visualize/graph")
+@router.get("/visualize/graph", responses=RESPONSES_500_503)
 async def visualize_graph(
     request: Request,
+    auth: AuthObserverDep,
+    memory_service: MemoryServiceDep,
     hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
     layout: str = Query("hierarchy", description="Layout: hierarchy, timeline, circular"),
     width: int = Query(800, ge=400, le=2000, description="SVG width"),
     height: int = Query(600, ge=300, le=1500, description="SVG height"),
     scope: Optional[str] = Query(None, description="Filter by scope"),
     type: Optional[str] = Query(None, description="Filter by node type"),
-    auth: AuthContext = Depends(require_observer),
-    memory_service: Any = Depends(get_memory_service),
 ) -> Response:
     """
     Generate an interactive SVG visualization of the memory graph.
@@ -638,12 +652,12 @@ async def visualize_graph(
 # No direct API endpoint should be exposed for manual memory manipulation
 
 
-@router.get("/{node_id}/edges", response_model=SuccessResponse[List[GraphEdge]])
+@router.get("/{node_id}/edges", responses=RESPONSES_500_503)
 async def get_node_edges(
     request: Request,
+    auth: AuthObserverDep,
+    memory_service: MemoryServiceDep,
     node_id: str = Path(..., description="Node ID"),
-    auth: AuthContext = Depends(require_observer),
-    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[List[GraphEdge]]:
     """
     Get all edges connected to a node.
@@ -673,12 +687,12 @@ async def get_node_edges(
 # ============================================================================
 
 
-@router.get("/recall/{node_id}", response_model=SuccessResponse[GraphNode])
+@router.get("/recall/{node_id}", responses={**RESPONSES_403, **RESPONSES_404, **RESPONSES_500, **RESPONSES_503})
 async def recall_by_id(
     request: Request,
+    auth: AuthObserverDep,
+    memory_service: MemoryServiceDep,
     node_id: str = Path(..., description="Node ID to recall"),
-    auth: AuthContext = Depends(require_observer),
-    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[GraphNode]:
     """
     Recall a specific node by ID (legacy endpoint).
@@ -734,16 +748,16 @@ async def recall_by_id(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{node_id}", response_model=SuccessResponse[GraphNode])
+@router.get("/{node_id}", responses={**RESPONSES_403, **RESPONSES_404, **RESPONSES_500, **RESPONSES_503})
 async def get_node(
     request: Request,
+    auth: AuthObserverDep,
+    memory_service: MemoryServiceDep,
     node_id: str = Path(..., description="Node ID"),
-    auth: AuthContext = Depends(require_observer),
-    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[GraphNode]:
     """
     Get a specific node by ID.
 
     Standard RESTful endpoint for node retrieval.
     """
-    return await recall_by_id(request, node_id, auth, memory_service)
+    return await recall_by_id(request, auth, memory_service, node_id)

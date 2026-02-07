@@ -26,6 +26,7 @@ import ai.ciris.api.models.SuccessResponseListAgentTemplate
 import ai.ciris.api.models.SuccessResponseListLLMProvider
 import ai.ciris.api.models.SuccessResponseSetupConfigResponse
 import ai.ciris.api.models.SuccessResponseSetupStatusResponse
+import ai.ciris.api.models.SuccessResponseListModelsResponse
 
 import ai.ciris.api.infrastructure.*
 import io.ktor.client.HttpClient
@@ -376,6 +377,37 @@ open class SetupApi : ApiClient {
         ).wrap()
     }
 
+
+    /**
+     * List Models
+     * List available models from provider's live API. Queries the provider's models API using the provided credentials, then cross-references with CIRIS compatibility annotations.
+     * @param llMValidationRequest
+     * @return SuccessResponseListModelsResponse
+     */
+    @Suppress("UNCHECKED_CAST")
+    open suspend fun listModelsV1SetupListModelsPost(llMValidationRequest: LLMValidationRequest): HttpResponse<SuccessResponseListModelsResponse> {
+
+        val localVariableAuthNames = listOf<String>()
+
+        val localVariableBody = llMValidationRequest
+
+        val localVariableQuery = mutableMapOf<String, List<String>>()
+        val localVariableHeaders = mutableMapOf<String, String>()
+
+        val localVariableConfig = RequestConfig<kotlin.Any?>(
+            RequestMethod.POST,
+            "/v1/setup/list-models",
+            query = localVariableQuery,
+            headers = localVariableHeaders,
+            requiresAuthentication = false,
+        )
+
+        return jsonRequest(
+            localVariableConfig,
+            localVariableBody,
+            localVariableAuthNames
+        ).wrap()
+    }
 
 
 }

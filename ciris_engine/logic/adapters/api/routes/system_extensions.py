@@ -809,7 +809,7 @@ def _get_auth_service_for_stream(request: Request) -> Any:
     return auth_service
 
 
-async def _setup_stream_permissions(auth: "AuthContext", auth_service: Any) -> tuple[bool, set[str], set[str]]:
+async def _setup_stream_permissions(auth: Any, auth_service: Any) -> tuple[bool, set[str], set[str]]:
     """Set up permissions for SSE stream filtering.
 
     Returns:
@@ -866,9 +866,14 @@ async def _filter_events_for_observer(
     """Filter events for OBSERVER users, returning None if all filtered out."""
     from ciris_engine.schemas.api.auth import UserRole
 
-    events = step_update.get("events", [])
-    if not events:
+    raw_events = step_update.get("events", [])
+    if not raw_events:
         logger.debug(" SSE no events in update, skipping")
+        return None
+
+    # Cast to list for type safety (JSONDict values are union types)
+    events: List[Any] = list(raw_events) if isinstance(raw_events, list) else []
+    if not events:
         return None
 
     # Batch lookup uncached task IDs

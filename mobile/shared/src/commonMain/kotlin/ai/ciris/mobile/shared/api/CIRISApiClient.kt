@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.api
 
 import ai.ciris.mobile.shared.models.*
 import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.viewmodels.AgentTemplateInfo
 import ai.ciris.mobile.shared.viewmodels.ConfigItemData
 import ai.ciris.mobile.shared.viewmodels.SetupCompletionResult
 import ai.ciris.mobile.shared.viewmodels.StateTransitionResult
@@ -704,6 +705,36 @@ class CIRISApiClient(
                     supported_platforms = adapter.supportedPlatforms ?: emptyList(),
                     requires_ciris_services = adapter.requiresCirisServices ?: false,
                     enabled_by_default = adapter.enabledByDefault ?: false
+                )
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Get available agent templates from setup API.
+     * V1.9.7: Added for Advanced Settings template selection.
+     */
+    suspend fun getSetupTemplates(): List<AgentTemplateInfo> {
+        val method = "getSetupTemplates"
+        logDebug(method, "Fetching setup templates")
+
+        return try {
+            val response = setupApi.listTemplatesV1SetupTemplatesGet()
+            logDebug(method, "Response: status=${response.status}")
+
+            val body = response.body()
+            val templates = body.`data` ?: emptyList()
+
+            logInfo(method, "Fetched ${templates.size} templates")
+
+            templates.map { template ->
+                AgentTemplateInfo(
+                    id = template.id,
+                    name = template.name,
+                    description = template.description
                 )
             }
         } catch (e: Exception) {

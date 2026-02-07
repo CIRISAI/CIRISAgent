@@ -83,6 +83,12 @@ data class SetupFormState(
     // No message content or PII is ever sent
     val covenantMetricsConsent: Boolean = false,
 
+    // V1.9.7: Template selection (Advanced Settings)
+    val availableTemplates: List<AgentTemplateInfo> = emptyList(),
+    val selectedTemplateId: String = "default",
+    val showAdvancedSettings: Boolean = false,
+    val templatesLoading: Boolean = false,
+
     // Adapter configuration
     // Available adapters from /v1/setup/adapters
     val availableAdapters: List<CommunicationAdapter> = emptyList(),
@@ -222,4 +228,15 @@ data class SetupCompletionResult(
     val agentId: String? = null,
     val adminUserId: String? = null,
     val error: String? = null
+)
+
+/**
+ * Agent template info for display in setup wizard.
+ * Source: GET /v1/setup/templates
+ */
+@Serializable
+data class AgentTemplateInfo(
+    val id: String,
+    val name: String,
+    val description: String
 )

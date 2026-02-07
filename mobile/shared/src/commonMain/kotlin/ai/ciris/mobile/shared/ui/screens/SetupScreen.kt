@@ -80,18 +80,27 @@ fun SetupScreen(
     val state by viewModel.state.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
-    // Load adapters when entering OPTIONAL_FEATURES step
+    // Load adapters and templates when entering OPTIONAL_FEATURES step
     LaunchedEffect(state.currentStep) {
-        if (state.currentStep == SetupStep.OPTIONAL_FEATURES && state.availableAdapters.isEmpty()) {
-            // Fetch all adapters from server, then filter client-side based on platform
-            // This approach works for both iOS and Android (KMP)
-            viewModel.loadAvailableAdapters {
-                val allAdapters = apiClient.getSetupAdapters()
-                filterAdaptersForPlatform(
-                    adapters = allAdapters,
-                    platform = Platform.ANDROID,  // TODO: Use expect/actual for platform detection
-                    useCirisServices = state.isGoogleAuth
-                )
+        if (state.currentStep == SetupStep.OPTIONAL_FEATURES) {
+            // Load adapters if not already loaded
+            if (state.availableAdapters.isEmpty()) {
+                // Fetch all adapters from server, then filter client-side based on platform
+                // This approach works for both iOS and Android (KMP)
+                viewModel.loadAvailableAdapters {
+                    val allAdapters = apiClient.getSetupAdapters()
+                    filterAdaptersForPlatform(
+                        adapters = allAdapters,
+                        platform = Platform.ANDROID,  // TODO: Use expect/actual for platform detection
+                        useCirisServices = state.isGoogleAuth
+                    )
+                }
+            }
+            // Load templates if not already loaded
+            if (state.availableTemplates.isEmpty()) {
+                viewModel.loadAvailableTemplates {
+                    apiClient.getSetupTemplates()
+                }
             }
         }
     }
@@ -810,6 +819,117 @@ private fun OptionalFeaturesStep(
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
+
+        // Section 3: Advanced Settings (collapsible)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = SetupColors.GrayLight,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { viewModel.setShowAdvancedSettings(!state.showAdvancedSettings) }
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (state.showAdvancedSettings) "▼" else "▶",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 14.sp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Advanced Settings",
+                    color = SetupColors.TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        AnimatedVisibility(visible = state.showAdvancedSettings) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = Color.White,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .border(1.dp, SetupColors.GrayLight, RoundedCornerShape(8.dp))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Agent Template",
+                        color = SetupColors.TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    Text(
+                        text = "Choose a personality template. Most users should use Default.",
+                        color = SetupColors.TextSecondary,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    if (state.templatesLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = SetupColors.Primary
+                        )
+                    } else if (state.availableTemplates.isEmpty()) {
+                        Text(
+                            text = "Default template will be used",
+                            color = SetupColors.TextSecondary,
+                            fontSize = 13.sp
+                        )
+                    } else {
+                        state.availableTemplates.forEach { template ->
+                            val isSelected = template.id == state.selectedTemplateId
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) SetupColors.Primary.copy(alpha = 0.1f) else Color.Transparent,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .clickable { viewModel.setSelectedTemplate(template.id) }
+                                    .border(
+                                        width = if (isSelected) 2.dp else 1.dp,
+                                        color = if (isSelected) SetupColors.Primary else SetupColors.GrayLight,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = template.name,
+                                            color = if (isSelected) SetupColors.Primary else SetupColors.TextPrimary,
+                                            fontSize = 14.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                        if (template.id == "default" || template.id == "ally") {
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "(Recommended)",
+                                                color = SetupColors.SuccessText,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = template.description,
+                                        color = SetupColors.TextSecondary,
+                                        fontSize = 12.sp,
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -993,7 +1113,7 @@ private fun AccountConfirmationStep(
                     label = "AI",
                     value = if (state.useCirisProxy()) "Free AI Access (via ${getOAuthProviderName()})" else state.llmProvider
                 )
-                SummaryRow(label = "Assistant", value = "Ally")
+                SummaryRow(label = "Assistant", value = viewModel.getSelectedTemplateName())
                 if (state.isGoogleAuth) {
                     SummaryRow(label = "Sign-in", value = "${getOAuthProviderName()} Account")
                 }

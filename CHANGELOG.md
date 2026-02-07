@@ -5,6 +5,26 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.7] - 2026-02-07
+
+### Security
+
+- **API Auth Hardening** - Fail closed when auth services unavailable
+  - Removed dev mode fallback that returned admin tokens
+  - Returns 503 "Authentication service unavailable" instead
+
+- **CORS Configuration** - Configurable origins with safety checks
+  - New `cors_allow_credentials` config option
+  - Prevents wildcard origins + credentials combo (browsers reject this)
+  - `CIRIS_API_CORS_ALLOW_CREDENTIALS` env var support
+
+### Fixed
+
+- **Covenant Metrics Signature Verification** - JSON serialization mismatch
+  - Added `separators=(",", ":")` for compact JSON matching CIRISLens
+  - Reduces trace size ~80% by removing whitespace
+  - Added debug logging with len/hash/preview for verification
+
 ## [1.9.6] - 2026-02-06
 
 ### Changed

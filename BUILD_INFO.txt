@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: 74486f94b5e9
-Build Time: 2026-02-06T09:55:48.791506
-Git Commit: 2fc20e917306552b690eabb8cde29661c33cf05b
-Git Branch: fix/sonar-agent-routes
+Code Hash: 4555df2057a9
+Build Time: 2026-02-06T22:59:38.318348
+Git Commit: 26ad5ea2e5763b9a470f4299cb42b28dce5fda29
+Git Branch: release/1.9.7
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

@@ -198,7 +198,7 @@ class Ed25519TraceSigner:
 
         Signs the JSON array of components (not the full trace object).
         This matches CIRISLens verification which expects:
-            message = json.dumps([c.model_dump() for c in trace.components], sort_keys=True).encode('utf-8')
+            message = json.dumps([c.model_dump() for c in trace.components], sort_keys=True, separators=(",", ":")).encode('utf-8')
 
         Returns True if signing succeeded, False if key not available.
         """
@@ -218,8 +218,15 @@ class Ed25519TraceSigner:
                 }
                 for c in trace.components
             ]
-            # Must match CIRISLens exactly: sort_keys=True, UTF-8 encoded
-            message = json.dumps(components_list, sort_keys=True).encode("utf-8")
+            # Must match CIRISLens exactly: sort_keys=True, compact separators, UTF-8 encoded
+            message = json.dumps(components_list, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+            # Log hash for debugging signature verification mismatches
+            message_hash = hashlib.sha256(message).hexdigest()
+            logger.info(
+                f"Signing trace {trace.trace_id}: len={len(message)}, "
+                f"hash={message_hash}, preview={message[:100].decode('utf-8', errors='replace')}"
+            )
 
             # Sign the raw message bytes (not a hash)
             trace.signature = self._unified_key.sign_base64(message)
@@ -260,7 +267,7 @@ class Ed25519TraceSigner:
                 }
                 for c in trace.components
             ]
-            message = json.dumps(components_list, sort_keys=True).encode("utf-8")
+            message = json.dumps(components_list, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
             # Verify
             public_key.verify(sig_bytes, message)

@@ -49,7 +49,6 @@ class RedditAdapter(Service):
         agent_id = getattr(runtime, "agent_id", None) if runtime else None
         filter_service = getattr(runtime, "filter_service", None) if runtime else None
         secrets_service = getattr(runtime, "secrets_service", None) if runtime else None
-        audit_service = getattr(runtime, "audit_service", None) if runtime else None
         agent_occurrence_id = getattr(runtime, "agent_occurrence_id", "default") if runtime else "default"
 
         # Create underlying Reddit services
@@ -66,7 +65,6 @@ class RedditAdapter(Service):
             agent_id=agent_id,
             filter_service=filter_service,
             secrets_service=secrets_service,
-            audit_service=audit_service,
             agent_occurrence_id=agent_occurrence_id,
         )
 

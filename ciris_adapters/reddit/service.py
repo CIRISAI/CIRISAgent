@@ -14,7 +14,6 @@ from pydantic import BaseModel, ValidationError
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.base_service import BaseService
-from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.runtime.enums import ServiceType
@@ -1272,7 +1271,6 @@ class RedditCommunicationService(RedditServiceBase):
         agent_id: Optional[str] = None,
         filter_service: Optional[object] = None,
         secrets_service: Optional[object] = None,
-        audit_service: Optional[AuditServiceProtocol] = None,
         agent_occurrence_id: str = "default",
     ) -> None:
         super().__init__(credentials, time_service=time_service, service_name="RedditCommunicationService")
@@ -1284,7 +1282,6 @@ class RedditCommunicationService(RedditServiceBase):
         self._agent_id = agent_id
         self._filter_service = filter_service
         self._secrets_service = secrets_service
-        self._audit_service = audit_service
         self._agent_occurrence_id = agent_occurrence_id
         self._observer: Optional[object] = None  # RedditObserver instance
 
@@ -1307,7 +1304,6 @@ class RedditCommunicationService(RedditServiceBase):
                 filter_service=self._filter_service,
                 secrets_service=self._secrets_service if isinstance(self._secrets_service, SecretsService) else None,
                 time_service=self._time_service,
-                audit_service=self._audit_service,
                 agent_occurrence_id=self._agent_occurrence_id,
             )
             await self._observer.start()

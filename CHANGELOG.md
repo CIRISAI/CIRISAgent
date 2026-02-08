@@ -19,8 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Previously just showed "Waiting for server..." indefinitely
   - Now displays meaningful error messages (e.g., "Build error: pydantic_core native library missing")
 
-- **Emulator Support** - Added x86_64 ABI for debug builds
+- **Emulator Support** - Added x86_64 ABI for debug builds only
   - ARM-only for release AAB (developing markets optimization)
+  - x86_64 gated to debug buildType (not in defaultConfig)
   - Debug APK includes x86_64 for emulator testing
 
 ### Fixed
@@ -29,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `sign_trace()` used `_strip_empty()` but `to_dict()` sent raw data
   - Now both use module-level `_strip_empty()` for consistent payloads
   - CIRISLens signature verification now succeeds for all trace levels
+
+- **Compose Thread Safety** - Fixed mutableStateOf mutation from background thread
+  - Python error state now updated via `runOnUiThread`
+  - Prevents snapshot concurrency exceptions on startup errors
 
 - **Redundant response_model** - Removed duplicate response_model parameters in FastAPI routes (S8409)
 - **Redundant None check** - Fixed always-true condition in discord_tool_service.py (S2589)

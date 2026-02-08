@@ -59,7 +59,7 @@ class ManualSignatureVerificationRequest(BaseModel):
     public_key_id: str = Field(..., description="Public key ID used for signing")
 
 
-@router.post("/deletion", response_model=StandardResponse)
+@router.post("/deletion")
 async def verify_deletion_proof(
     request: VerifyDeletionRequest,
     req: Request,
@@ -283,7 +283,7 @@ async def download_public_key(
         )
 
 
-@router.post("/verify-signature", response_model=StandardResponse)
+@router.post("/verify-signature")
 async def manual_signature_verification(
     request: ManualSignatureVerificationRequest,
     req: Request,
@@ -343,7 +343,7 @@ async def manual_signature_verification(
         )
 
 
-@router.get("/keys/current", response_model=StandardResponse)
+@router.get("/keys/current")
 async def get_current_public_key_info(
     req: Request,
 ) -> StandardResponse:

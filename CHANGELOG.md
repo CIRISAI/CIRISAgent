@@ -5,6 +5,34 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.9] - 2026-02-08
+
+### Added
+
+- **MCP Server JWT Authentication** - Added JWT token validation as authentication method
+  - New `security.py` module with `MCPServerSecurity` class
+  - Config options: `jwt_secret`, `jwt_algorithm` (default HS256)
+  - Environment variables: `MCP_JWT_SECRET`, `MCP_JWT_ALGORITHM`
+  - Falls back to API key auth if JWT validation fails
+
+- **Mobile Error Display** - Python runtime errors now shown on splash screen
+  - Previously just showed "Waiting for server..." indefinitely
+  - Now displays meaningful error messages (e.g., "Build error: pydantic_core native library missing")
+
+- **Emulator Support** - Added x86_64 ABI for debug builds
+  - ARM-only for release AAB (developing markets optimization)
+  - Debug APK includes x86_64 for emulator testing
+
+### Fixed
+
+- **Redundant response_model** - Removed duplicate response_model parameters in FastAPI routes (S8409)
+- **Redundant None check** - Fixed always-true condition in discord_tool_service.py (S2589)
+
+### Changed
+
+- **Adapter Renaming** - Renamed 49 clawdbot_* adapters to generic names
+  - e.g., `clawdbot_1password` → `onepassword`, `clawdbot_github` → `github`
+
 ## [1.9.8] - 2026-02-08
 
 ### Performance

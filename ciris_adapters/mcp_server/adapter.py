@@ -30,6 +30,7 @@ from ciris_engine.schemas.types import JSONDict
 
 from .config import MCPServerConfig, MCPTransportType
 from .handlers import MCPServerHandler
+from .security import MCPServerSecurity
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,9 @@ class Adapter(Service):
 
         # Initialize configuration
         self._initialize_config(typed_kwargs)
+
+        # Initialize security
+        self._security = MCPServerSecurity(self._config)
 
         # Get communication service for messaging
         communication = None
@@ -242,7 +246,7 @@ class Adapter(Service):
             auth_header = headers.get("authorization", "")
             if auth_header.startswith("Bearer "):
                 api_key = auth_header[7:]
-                user_id = self._authenticate(api_key)
+                user_id = await self._authenticate(api_key)
 
             # Read body
             content_length = int(headers.get("content-length", 0))
@@ -271,11 +275,11 @@ class Adapter(Service):
             writer.close()
             await writer.wait_closed()
 
-    def _authenticate(self, api_key: str) -> Optional[str]:
-        """Authenticate using API key.
+    async def _authenticate(self, api_key: str) -> Optional[str]:
+        """Authenticate using API key or JWT.
 
         Args:
-            api_key: The API key
+            api_key: The API key or JWT token
 
         Returns:
             User ID if authenticated, None otherwise
@@ -283,6 +287,11 @@ class Adapter(Service):
         # Check configured API key
         if self._config.api_key and api_key == self._config.api_key:
             return "api_user"
+
+        # Try to validate as JWT
+        user_id = await self._security.validate_token(api_key)
+        if user_id:
+            return user_id
 
         # Could integrate with auth service here
         # For now, treat api_key as user_id if no configured key

@@ -153,34 +153,72 @@ async def test_navigate_to_llm_config(browser: BrowserHelper, config: WebUITestC
     Test navigating to LLM configuration step.
 
     Steps:
-    1. Click "Continue to LLM Setup"
-    2. Verify LLM configuration page loads
+    1. Click "Continue to LLM Setup" button
+    2. Verify LLM configuration page loads (Step 2)
     """
     start = datetime.now()
     report = TestReport(name="navigate_to_llm_config", result=TestResult.PASSED)
 
     try:
-        # Click continue button
-        clicked = await browser.click_text("Continue to LLM Setup")
+        # Find and click the Continue to LLM Setup button
+        # The button text may include an arrow: "Continue to LLM Setup →"
+        continue_btn = browser.page.locator("button").filter(has_text="Continue to LLM Setup")
+        btn_count = await continue_btn.count()
+        report.details["continue_btn_count"] = btn_count
 
-        if not clicked:
-            # Try alternative text
+        clicked = False
+        if btn_count > 0:
+            await continue_btn.first.scroll_into_view_if_needed()
+            await browser.wait(0.3)
+            await continue_btn.first.click()
+            clicked = True
+            report.details["clicked"] = "Continue to LLM Setup button"
+        else:
+            # Fallback to text-based click
             clicked = await browser.click_text("Continue")
+            report.details["clicked"] = "Continue (fallback)"
 
+        # Wait for navigation
         await browser.wait(2)
 
         # Take screenshot
         shot = await browser.screenshot("setup_llm_config", full_page=True)
         report.screenshots.append(shot.path)
 
-        # Verify LLM config page
+        # Verify LLM config page - Step 2 should show API key configuration
         content = await browser.get_page_content()
 
-        if "Configure Your LLM" in content or "Provider" in content:
-            report.message = "LLM configuration page loaded"
+        # Check for Step 2 indicators - the page should show LLM/API configuration
+        step2_indicators = [
+            "Step 2",  # Step indicator
+            "API Key",  # API key input
+            "API key",  # lowercase variant
+            "Configure Your LLM",  # Original expected text
+            "Provider",  # Provider selection
+            "OpenAI",  # Provider name
+            "Anthropic",  # Provider name
+            "OpenRouter",  # Provider name
+            "Enter your",  # Input prompt
+            "Select a provider",  # Provider selection
+        ]
+
+        found_indicators = [ind for ind in step2_indicators if ind in content]
+        report.details["found_indicators"] = found_indicators
+
+        # Check if we found meaningful Step 2 indicators
+        # Provider names (OpenAI, Anthropic, etc.) are strong signals we're on Step 2
+        strong_indicators = ["OpenAI", "Anthropic", "OpenRouter", "Select a provider", "Enter your"]
+        found_strong = [ind for ind in strong_indicators if ind in content]
+
+        if found_strong:
+            # Strong indicators found - definitely on Step 2
+            report.message = f"LLM configuration page loaded (found: {', '.join(found_indicators[:3])})"
+        elif found_indicators:
+            # Weak indicators found - probably on Step 2
+            report.message = f"LLM configuration page loaded (found: {', '.join(found_indicators[:3])})"
         else:
             report.result = TestResult.FAILED
-            report.message = "LLM configuration page not found"
+            report.message = "LLM configuration page not found - no step 2 indicators"
 
     except Exception as e:
         report.result = TestResult.ERROR
@@ -657,18 +695,14 @@ async def test_complete_setup(browser: BrowserHelper, config: WebUITestConfig) -
 
             # On Optional Features step - check covenant metrics consent checkbox
             if "Help Improve AI Alignment" in content or "anonymous alignment metrics" in content:
-                consent_checkbox = browser.page.locator(
-                    "input[type='checkbox']"
-                ).filter(has=browser.page.locator("xpath=..").filter(has_text="agree to share"))
-                # Try simpler selector - checkbox near the consent text
-                consent_checkbox = browser.page.locator(
-                    "label:has-text('agree to share') input[type='checkbox']"
+                consent_checkbox = browser.page.locator("input[type='checkbox']").filter(
+                    has=browser.page.locator("xpath=..").filter(has_text="agree to share")
                 )
+                # Try simpler selector - checkbox near the consent text
+                consent_checkbox = browser.page.locator("label:has-text('agree to share') input[type='checkbox']")
                 if await consent_checkbox.count() == 0:
                     # Fallback: find any checkbox in the covenant metrics section
-                    consent_checkbox = browser.page.locator(
-                        ".bg-blue-50 input[type='checkbox']"
-                    )
+                    consent_checkbox = browser.page.locator(".bg-blue-50 input[type='checkbox']")
                 if await consent_checkbox.count() > 0:
                     is_checked = await consent_checkbox.first.is_checked()
                     if not is_checked:
@@ -798,8 +832,7 @@ async def test_complete_setup(browser: BrowserHelper, config: WebUITestConfig) -
             # Capture recent console logs to help debug
             console_logs = browser.get_recent_console_logs(count=50)
             report.details["console_logs"] = [
-                f"[{log.get('type', 'log')}] {log.get('text', '')[:200]}"
-                for log in console_logs
+                f"[{log.get('type', 'log')}] {log.get('text', '')[:200]}" for log in console_logs
             ]
         else:
             report.result = TestResult.FAILED

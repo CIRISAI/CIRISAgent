@@ -255,9 +255,9 @@ class Ed25519TraceSigner:
 
             # Log hash for debugging signature verification mismatches (no content preview for privacy)
             message_hash = hashlib.sha256(message).hexdigest()
-            logger.debug(
-                f"Signing trace {trace.trace_id} (level={trace.trace_level}): "
-                f"len={len(message)}, hash={message_hash}"
+            logger.info(
+                f"[SIGN_TRACE] trace={trace.trace_id} level={trace.trace_level} "
+                f"len={len(message)} hash={message_hash[:16]}"
             )
 
             # Sign the raw message bytes (not a hash)

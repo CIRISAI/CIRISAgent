@@ -645,15 +645,52 @@ def _classify_llm_connection_error(error: Exception, base_url: Optional[str]) ->
     return LLMValidationResponse(valid=False, message="Connection failed", error=f"Error: {error_str}")
 
 
-async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidationResponse:
-    """Validate LLM configuration by attempting a connection.
+async def _validate_openai_compatible(config: LLMValidationRequest) -> LLMValidationResponse:
+    """Validate OpenAI-compatible API connection."""
+    from openai import AsyncOpenAI
 
-    Args:
-        config: LLM configuration to validate
+    # Build client configuration
+    client_kwargs: Dict[str, Any] = {"api_key": config.api_key or "local"}
 
-    Returns:
-        Validation response with success/failure status
-    """
+    # Resolve base URL using provider defaults
+    resolved_base_url = _get_provider_base_url(config.provider, config.base_url)
+    if resolved_base_url:
+        client_kwargs["base_url"] = resolved_base_url
+
+    logger.info(f"[VALIDATE_LLM] Creating OpenAI client with base_url: {client_kwargs.get('base_url', 'default')}")
+
+    client = AsyncOpenAI(**client_kwargs)
+    model_to_test = config.model or "gpt-3.5-turbo"
+
+    # Try max_tokens first, fall back to max_completion_tokens for reasoning models
+    try:
+        await client.chat.completions.create(
+            model=model_to_test,
+            messages=[{"role": "user", "content": "Hi"}],
+            max_tokens=1,
+        )
+    except Exception as token_err:
+        error_str = str(token_err).lower()
+        if "max_tokens" in error_str and "max_completion_tokens" in error_str:
+            logger.info("[VALIDATE_LLM] Model requires max_completion_tokens, retrying...")
+            await client.chat.completions.create(
+                model=model_to_test,
+                messages=[{"role": "user", "content": "Hi"}],
+                max_completion_tokens=1,
+            )
+        else:
+            raise
+
+    logger.info(f"[VALIDATE_LLM] SUCCESS! Test completion worked with model: {model_to_test}")
+    return LLMValidationResponse(
+        valid=True,
+        message=f"Connection successful! Model '{model_to_test}' is available.",
+        error=None,
+    )
+
+
+def _log_validation_start(config: LLMValidationRequest) -> None:
+    """Log validation start details."""
     logger.info("[VALIDATE_LLM] " + "=" * 50)
     logger.info(f"[VALIDATE_LLM] Starting validation for provider: {config.provider}")
     logger.info(
@@ -665,6 +702,11 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
     logger.info(f"[VALIDATE_LLM] Base URL: {config.base_url}")
     logger.info(f"[VALIDATE_LLM] Model: {config.model}")
 
+
+async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidationResponse:
+    """Validate LLM configuration by attempting a connection."""
+    _log_validation_start(config)
+
     try:
         # Validate API key for provider type
         api_key_error = _validate_api_key_for_provider(config)
@@ -674,72 +716,20 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
 
         logger.info("[VALIDATE_LLM] API key format validation passed")
 
-        # Handle Anthropic separately - uses its own SDK
+        # Route to provider-specific validators
         if config.provider == "anthropic":
             return await _validate_anthropic_connection(config)
-
-        # Handle Google separately - uses OpenAI-compatible endpoint
         if config.provider == "google":
             return await _validate_google_connection(config)
 
-        # For OpenAI-compatible providers, use OpenAI client
-        from openai import AsyncOpenAI
-
-        # Build client configuration
-        client_kwargs: Dict[str, Any] = {"api_key": config.api_key or "local"}  # Local LLMs can use placeholder
-
-        # Resolve base URL using provider defaults (same as list-models)
-        resolved_base_url = _get_provider_base_url(config.provider, config.base_url)
-        if resolved_base_url:
-            client_kwargs["base_url"] = resolved_base_url
-
-        logger.info(f"[VALIDATE_LLM] Creating OpenAI client with base_url: {client_kwargs.get('base_url', 'default')}")
-
-        # Create client and test connection
-        client = AsyncOpenAI(**client_kwargs)
-
-        try:
-            # Try a minimal completion instead of models.list() - more reliable across providers
-            # Some providers (Together AI) return non-standard model list responses
-            logger.info("[VALIDATE_LLM] Attempting test completion...")
-            model_to_test = config.model or "gpt-3.5-turbo"
-
-            # OpenAI reasoning models (o1, o1-mini, o3-mini) use max_completion_tokens instead of max_tokens
-            # Try max_tokens first, fall back to max_completion_tokens if needed
-            try:
-                await client.chat.completions.create(
-                    model=model_to_test,
-                    messages=[{"role": "user", "content": "Hi"}],
-                    max_tokens=1,
-                )
-            except Exception as token_err:
-                error_str = str(token_err).lower()
-                if "max_tokens" in error_str and "max_completion_tokens" in error_str:
-                    # Reasoning model - retry with max_completion_tokens
-                    logger.info("[VALIDATE_LLM] Model requires max_completion_tokens, retrying...")
-                    await client.chat.completions.create(
-                        model=model_to_test,
-                        messages=[{"role": "user", "content": "Hi"}],
-                        max_completion_tokens=1,
-                    )
-                else:
-                    raise  # Re-raise if it's a different error
-
-            logger.info(f"[VALIDATE_LLM] SUCCESS! Test completion worked with model: {model_to_test}")
-            return LLMValidationResponse(
-                valid=True,
-                message=f"Connection successful! Model '{model_to_test}' is available.",
-                error=None,
-            )
-        except Exception as e:
-            logger.error(f"[VALIDATE_LLM] API call FAILED: {type(e).__name__}: {e}")
-            result = _classify_llm_connection_error(e, config.base_url)
-            logger.error(f"[VALIDATE_LLM] Classified error - valid: {result.valid}, error: {result.error}")
-            return result
+        # OpenAI-compatible providers
+        return await _validate_openai_compatible(config)
 
     except Exception as e:
-        logger.error(f"[VALIDATE_LLM] Unexpected error: {type(e).__name__}: {e}")
-        return LLMValidationResponse(valid=False, message="Validation error", error=str(e))
+        logger.error(f"[VALIDATE_LLM] API call FAILED: {type(e).__name__}: {e}")
+        result = _classify_llm_connection_error(e, config.base_url)
+        logger.error(f"[VALIDATE_LLM] Classified error - valid: {result.valid}, error: {result.error}")
+        return result
 
 
 async def _validate_anthropic_connection(config: LLMValidationRequest) -> LLMValidationResponse:

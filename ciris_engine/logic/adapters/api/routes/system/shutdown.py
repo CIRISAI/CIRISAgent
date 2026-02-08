@@ -7,14 +7,18 @@ Provides graceful shutdown functionality including local shutdown for mobile app
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Annotated, Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from starlette.responses import JSONResponse
 
+from ciris_engine.schemas.api.auth import AuthContext
 from ciris_engine.schemas.api.responses import SuccessResponse
 
-from ...dependencies.auth import AuthContext, require_admin
+from ...dependencies.auth import require_admin
+
+# Annotated type alias for FastAPI dependency injection (S8410)
+AuthAdminDep = Annotated[AuthContext, Depends(require_admin)]
 from .helpers import (
     RESUME_TIMEOUT_SECONDS,
     audit_shutdown_request,
@@ -34,9 +38,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/shutdown", response_model=SuccessResponse[ShutdownResponse])
+@router.post(
+    "/shutdown", responses={500: {"description": "Shutdown failed"}, 403: {"description": "Shutdown in progress"}}
+)
 async def shutdown_system(
-    body: ShutdownRequest, request: Request, auth: AuthContext = Depends(require_admin)
+    body: ShutdownRequest, request: Request, auth: AuthAdminDep
 ) -> SuccessResponse[ShutdownResponse]:
     """
     Graceful shutdown.
@@ -159,7 +165,15 @@ def _check_shutdown_already_in_progress(runtime: object, state_info: Dict[str, A
     )
 
 
-@router.post("/local-shutdown", response_model=SuccessResponse[ShutdownResponse])
+@router.post(
+    "/local-shutdown",
+    responses={
+        202: {"description": "Shutdown already in progress"},
+        403: {"description": "Not localhost - security rejection"},
+        409: {"description": "Resume in progress, retry later"},
+        503: {"description": "Server not ready"},
+    },
+)
 async def local_shutdown(request: Request) -> Response:
     """
     Localhost-only shutdown endpoint (no authentication required).

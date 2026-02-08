@@ -45,7 +45,7 @@ class DatabaseConfig(BaseModel):
         "Defaults to SQLite at main_db path for backward compatibility.",
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class ServiceEndpointsConfig(BaseModel):
@@ -56,7 +56,7 @@ class ServiceEndpointsConfig(BaseModel):
     llm_timeout: int = Field(30, description="LLM request timeout in seconds")
     llm_max_retries: int = Field(3, description="Maximum LLM retry attempts")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class SecurityConfig(BaseModel):
@@ -71,7 +71,7 @@ class SecurityConfig(BaseModel):
     enable_signed_audit: bool = Field(True, description="Enable cryptographic signing of audit entries")
     max_thought_depth: int = Field(7, description="Maximum thought chain depth before auto-defer")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class OperationalLimitsConfig(BaseModel):
@@ -85,7 +85,7 @@ class OperationalLimitsConfig(BaseModel):
     dma_timeout_seconds: float = Field(30.0, description="DMA evaluation timeout")
     conscience_retry_limit: int = Field(2, description="Maximum conscience evaluation retries")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class TelemetryConfig(BaseModel):
@@ -95,7 +95,7 @@ class TelemetryConfig(BaseModel):
     export_interval_seconds: int = Field(60, description="Telemetry export interval")
     retention_hours: int = Field(24, description="Telemetry data retention period")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class WorkflowConfig(BaseModel):
@@ -105,7 +105,7 @@ class WorkflowConfig(BaseModel):
     round_timeout_seconds: float = Field(300.0, description="Timeout for each processing round")
     enable_auto_defer: bool = Field(True, description="Automatically defer when hitting limits")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class GraphConfig(BaseModel):
@@ -123,7 +123,7 @@ class GraphConfig(BaseModel):
     tsdb_raw_retention_hours: int = Field(24, description="How long to keep raw TSDB data before basic consolidation")
     consolidation_timezone: str = Field("UTC", description="Timezone for consolidation scheduling (default: UTC)")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class AdaptersConfig(BaseModel):
@@ -146,7 +146,7 @@ class AdaptersConfig(BaseModel):
         description="List of adapter names to exclude from auto-loading",
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class EssentialConfig(BaseModel):
@@ -176,7 +176,7 @@ class EssentialConfig(BaseModel):
         description="Unique ID for this runtime occurrence (enables multiple instances against same database)",
     )
 
-    model_config = ConfigDict(extra="forbid")  # No ambiguity allowed in mission-critical config
+    model_config = ConfigDict(defer_build=True, extra="forbid")  # No ambiguity allowed in mission-critical config
 
     def load_env_vars(self) -> None:
         """Load configuration from environment variables if present."""
@@ -204,7 +204,7 @@ class CIRISNodeConfig(BaseModel):
     base_url: Optional[str] = Field(None, description="CIRISNode base URL")
     enabled: bool = Field(False, description="Whether CIRISNode integration is enabled")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
     def load_env_vars(self) -> None:
         """Load configuration from environment variables if present."""

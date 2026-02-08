@@ -17,7 +17,7 @@ class TokenUsageStats(BaseModel):
     completion_tokens: int = Field(0, description="Number of tokens in the completion")
     total_tokens: int = Field(0, description="Total tokens used")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CircuitBreakerStats(BaseModel):
@@ -44,7 +44,7 @@ class LLMHealthResponse(BaseModel):
     error_message: Optional[str] = Field(None, description="Error message if unhealthy")
     last_check: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    model_config = ConfigDict(protected_namespaces=())
+    model_config = ConfigDict(protected_namespaces=(), defer_build=True)
 
 
 class LLMResponse(BaseModel):
@@ -55,7 +55,7 @@ class LLMResponse(BaseModel):
     usage: TokenUsageStats = Field(default_factory=TokenUsageStats, description="Token usage stats")
     finish_reason: Optional[str] = Field(None, description="Why generation stopped")
 
-    model_config = ConfigDict(protected_namespaces=())
+    model_config = ConfigDict(protected_namespaces=(), defer_build=True)
 
 
 class ExtractedJSONData(BaseModel):
@@ -67,7 +67,7 @@ class ExtractedJSONData(BaseModel):
     result: Optional[str] = Field(None, description="Result value")
     status: Optional[str] = Field(None, description="Status indicator")
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", defer_build=True)
 
 
 class JSONExtractionResult(BaseModel):
@@ -98,7 +98,7 @@ class TextContentBlock(BaseModel):
     type: Literal["text"] = "text"
     text: str = Field(..., description="Text content")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ImageURLDetail(BaseModel):
@@ -109,7 +109,7 @@ class ImageURLDetail(BaseModel):
         default="auto", description="Image detail level for vision processing"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ImageContentBlock(BaseModel):
@@ -118,7 +118,7 @@ class ImageContentBlock(BaseModel):
     type: Literal["image_url"] = "image_url"
     image_url: ImageURLDetail = Field(..., description="Image URL details")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # Union type for content blocks in multimodal messages
@@ -173,7 +173,7 @@ class CachedResponseData(BaseModel):
     model: str = Field(..., description="Model used")
     finish_reason: Optional[str] = Field(None, description="Finish reason")
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", defer_build=True)
 
 
 class CachedLLMResponse(BaseModel):

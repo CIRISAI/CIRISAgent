@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from ciris_engine.schemas.types import JSONValue
@@ -27,6 +27,8 @@ class ObservationState(str, Enum):
 class ProcessSnapshotResult(BaseModel):
     """Result of processing a system snapshot for observation."""
 
+    model_config = ConfigDict(defer_build=True)
+
     patterns_detected: int = Field(0, description="Number of patterns detected")
     proposals_generated: int = Field(0, description="Number of proposals generated")
     changes_applied: int = Field(0, description="Number of changes applied")
@@ -37,6 +39,8 @@ class ProcessSnapshotResult(BaseModel):
 
 class ObservationCycleResult(BaseModel):
     """Result of running an observation cycle."""
+
+    model_config = ConfigDict(defer_build=True)
 
     cycle_id: str = Field(..., description="Unique cycle identifier")
     state: ObservationState = Field(..., description="Current observation state")
@@ -69,6 +73,8 @@ class ObservationCycleResult(BaseModel):
 class CycleEventData(BaseModel):
     """Data for observation cycle events."""
 
+    model_config = ConfigDict(defer_build=True)
+
     event_type: str = Field(..., description="Type of event")
     cycle_id: str = Field(..., description="Associated cycle ID")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -87,6 +93,8 @@ class CycleEventData(BaseModel):
 
 class ObservationStatus(BaseModel):
     """Current status of the observation system."""
+
+    model_config = ConfigDict(defer_build=True)
 
     is_active: bool = Field(..., description="Whether observation is active")
     current_state: ObservationState = Field(..., description="Current state")
@@ -115,6 +123,8 @@ class ObservationStatus(BaseModel):
 class ReviewOutcome(BaseModel):
     """Outcome of WA review process."""
 
+    model_config = ConfigDict(defer_build=True)
+
     review_id: str = Field(..., description="Review identifier")
     reviewer_id: str = Field(..., description="WA reviewer identifier")
     decision: str = Field(..., description="approve, reject, or modify")
@@ -141,6 +151,8 @@ class ReviewOutcome(BaseModel):
 class ConfigurationChange(BaseModel):
     """A proposed or applied configuration change."""
 
+    model_config = ConfigDict(defer_build=True)
+
     change_id: str = Field(..., description="Unique change identifier")
     scope: str = Field(..., description="Scope: LOCAL, ENVIRONMENT, IDENTITY, COMMUNITY")
     target_path: str = Field(..., description="Configuration path to change")
@@ -157,6 +169,8 @@ class ConfigurationChange(BaseModel):
 class ChangeApprovalResult(BaseModel):
     """Result of approving configuration changes."""
 
+    model_config = ConfigDict(defer_build=True)
+
     approved_count: int = Field(0, description="Number of changes approved")
     rejected_count: int = Field(0, description="Number of changes rejected")
     applied_changes: List[str] = Field(default_factory=list, description="Change IDs applied")
@@ -166,6 +180,8 @@ class ChangeApprovalResult(BaseModel):
 
 class RollbackResult(BaseModel):
     """Result of rolling back configuration changes."""
+
+    model_config = ConfigDict(defer_build=True)
 
     rollback_count: int = Field(0, description="Number of changes rolled back")
     successful_rollbacks: List[str] = Field(default_factory=list, description="Successfully rolled back")
@@ -177,6 +193,8 @@ class RollbackResult(BaseModel):
 class ObservabilitySignal(BaseModel):
     """A signal from observability sources."""
 
+    model_config = ConfigDict(defer_build=True)
+
     signal_type: str = Field(..., description="trace, log, metric, incident, security")
     timestamp: datetime = Field(..., description="When signal occurred")
     severity: str = Field("info", description="info, warning, error, critical")
@@ -187,6 +205,8 @@ class ObservabilitySignal(BaseModel):
 class ImprovementMetrics(BaseModel):
     """Expected improvement metrics for an observation opportunity."""
 
+    model_config = ConfigDict(defer_build=True)
+
     performance_gain_percent: float = Field(0.0, description="Expected performance improvement %")
     error_reduction_percent: float = Field(0.0, description="Expected error rate reduction %")
     resource_efficiency_gain: float = Field(0.0, description="Expected resource efficiency gain %")
@@ -194,6 +214,8 @@ class ImprovementMetrics(BaseModel):
 
 class ObservationOpportunity(BaseModel):
     """An opportunity for system observation."""
+
+    model_config = ConfigDict(defer_build=True)
 
     opportunity_id: str = Field(..., description="Unique identifier")
     trigger_signals: List[ObservabilitySignal] = Field(..., description="Signals that triggered this")
@@ -205,6 +227,8 @@ class ObservationOpportunity(BaseModel):
 
 class ObservabilityAnalysis(BaseModel):
     """Analysis of all observability signals for a time window."""
+
+    model_config = ConfigDict(defer_build=True)
 
     window_start: datetime = Field(..., description="Analysis window start")
     window_end: datetime = Field(..., description="Analysis window end")
@@ -228,6 +252,8 @@ class ObservabilityAnalysis(BaseModel):
 class ObservationImpact(BaseModel):
     """Measured impact of an observation."""
 
+    model_config = ConfigDict(defer_build=True)
+
     dimension: str = Field(..., description="Impact dimension measured")
     baseline_value: float = Field(..., description="Value before observation")
     current_value: float = Field(..., description="Value after observation")
@@ -237,6 +263,8 @@ class ObservationImpact(BaseModel):
 
 class ObservationEffectiveness(BaseModel):
     """Overall effectiveness of an observation across all dimensions."""
+
+    model_config = ConfigDict(defer_build=True)
 
     observation_id: str = Field(..., description="Observation being measured")
     measurement_period_hours: int = Field(24, description="Measurement period")
@@ -256,6 +284,8 @@ class ObservationEffectiveness(BaseModel):
 class PatternRecord(BaseModel):
     """A learned observation pattern."""
 
+    model_config = ConfigDict(defer_build=True)
+
     pattern_id: str = Field(..., description="Unique pattern identifier")
     trigger_conditions: List[ObservabilitySignal] = Field(..., description="What triggers this")
     successful_applications: int = Field(0, description="Times successfully applied")
@@ -269,6 +299,8 @@ class PatternRecord(BaseModel):
 class PatternLibrarySummary(BaseModel):
     """Summary of the pattern library."""
 
+    model_config = ConfigDict(defer_build=True)
+
     total_patterns: int = Field(0, description="Total patterns in library")
     high_reliability_patterns: int = Field(0, description="Patterns with >70% reliability score")
     recently_used_patterns: int = Field(0, description="Used in last 30 days")
@@ -279,6 +311,8 @@ class PatternLibrarySummary(BaseModel):
 class ImprovementRecord(BaseModel):
     """Record of a specific improvement."""
 
+    model_config = ConfigDict(defer_build=True)
+
     improvement_description: str = Field(..., description="What was improved")
     performance_gain: float = Field(..., description="Performance gain %")
     impact_score: float = Field(..., description="Overall impact score")
@@ -286,6 +320,8 @@ class ImprovementRecord(BaseModel):
 
 class ServiceImprovementReport(BaseModel):
     """Comprehensive service improvement report."""
+
+    model_config = ConfigDict(defer_build=True)
 
     report_period_start: datetime = Field(..., description="Report period start")
     report_period_end: datetime = Field(..., description="Report period end")
@@ -318,6 +354,8 @@ class ServiceImprovementReport(BaseModel):
 class PatternInsight(BaseModel):
     """Insight from pattern analysis."""
 
+    model_config = ConfigDict(defer_build=True)
+
     pattern_id: str = Field(..., description="Pattern identifier")
     pattern_type: str = Field(..., description="Type of pattern")
     description: str = Field(..., description="Pattern description")
@@ -331,6 +369,8 @@ class PatternInsight(BaseModel):
 
 class LearningSummary(BaseModel):
     """Summary of system learning progress."""
+
+    model_config = ConfigDict(defer_build=True)
 
     total_patterns: int = Field(0, description="Total patterns detected")
     patterns_by_type: Dict[str, int] = Field(default_factory=dict, description="Patterns grouped by type")
@@ -346,6 +386,8 @@ class LearningSummary(BaseModel):
 class PatternEffectiveness(BaseModel):
     """Effectiveness metrics for a specific pattern."""
 
+    model_config = ConfigDict(defer_build=True)
+
     pattern_id: str = Field(..., description="Pattern identifier")
     pattern_type: str = Field(..., description="Type of pattern")
     times_applied: int = Field(0, description="Times pattern was applied")
@@ -357,6 +399,8 @@ class PatternEffectiveness(BaseModel):
 
 class AnalysisStatus(BaseModel):
     """Current status of pattern analysis system."""
+
+    model_config = ConfigDict(defer_build=True)
 
     is_running: bool = Field(..., description="Whether analysis is active")
     last_analysis: datetime = Field(..., description="When last analysis ran")

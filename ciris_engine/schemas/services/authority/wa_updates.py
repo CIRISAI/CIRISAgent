@@ -81,7 +81,7 @@ class WACertificateUpdate(BaseModel):
 
         return updates
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WACertificateUpdateResponse(BaseModel):
@@ -93,7 +93,7 @@ class WACertificateUpdateResponse(BaseModel):
     updated_at: datetime = Field(..., description="When certificate was updated")
     message: Optional[str] = Field(None, description="Additional information about the update")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WABulkUpdate(BaseModel):
@@ -119,7 +119,7 @@ class WABulkUpdate(BaseModel):
 
         return unique_ids
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WABulkUpdateResponse(BaseModel):
@@ -132,7 +132,7 @@ class WABulkUpdateResponse(BaseModel):
     )
     updated_at: datetime = Field(..., description="When bulk update was completed")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = ["WACertificateUpdate", "WACertificateUpdateResponse", "WABulkUpdate", "WABulkUpdateResponse"]

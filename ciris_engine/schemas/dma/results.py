@@ -81,7 +81,7 @@ class IDMAResult(BaseModel):
     )
     reasoning: str = Field(..., description="Analysis of information diversity and epistemic health")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class EthicalDMAResult(BaseModel):
@@ -102,7 +102,7 @@ class EthicalDMAResult(BaseModel):
     reasoning: str = Field(..., description="Ethical reasoning for the identified stakeholders and conflicts")
     alignment_check: str = Field(..., description="Detailed ethical analysis addressing each CIRIS principle")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CSDMAResult(BaseModel):
@@ -112,7 +112,7 @@ class CSDMAResult(BaseModel):
     flags: List[str] = Field(default_factory=list, description="Common sense flags raised")
     reasoning: str = Field(..., description="Common sense reasoning")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DSDMAResult(BaseModel):
@@ -123,7 +123,7 @@ class DSDMAResult(BaseModel):
     flags: List[str] = Field(default_factory=list, description="Domain-specific flags")
     reasoning: str = Field(..., description="Domain-specific reasoning")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ActionSelectionDMAResult(BaseModel):
@@ -156,7 +156,7 @@ class ActionSelectionDMAResult(BaseModel):
     # User prompt for debugging/transparency (set by evaluator)
     user_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ASPDMALLMResult(BaseModel):
@@ -212,7 +212,7 @@ class ASPDMALLMResult(BaseModel):
     # === TASK_COMPLETE parameters ===
     completion_reason: Optional[str] = Field(None, description="Reason for task completion (for TASK_COMPLETE)")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 def _create_memorize_params(llm_result: "ASPDMALLMResult", channel_id: Optional[str]) -> MemorizeParams:

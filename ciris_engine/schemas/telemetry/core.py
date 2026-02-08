@@ -52,7 +52,7 @@ class ServiceRequestData(BaseModel):
     request_timestamp: datetime = Field(..., description="When request was made")
     timeout_seconds: Optional[float] = Field(None, description="Request timeout")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ServiceResponseData(BaseModel):
@@ -78,7 +78,7 @@ class ServiceResponseData(BaseModel):
     tokens_used: Optional[int] = Field(None, description="LLM tokens used")
     memory_bytes: Optional[int] = Field(None, description="Memory consumed")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class TraceContext(BaseModel):
@@ -95,7 +95,7 @@ class TraceContext(BaseModel):
     # Baggage
     baggage: Dict[str, str] = Field(default_factory=dict, description="Propagated context values")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class MetricData(BaseModel):
@@ -117,7 +117,7 @@ class MetricData(BaseModel):
     mean_value: Optional[float] = Field(None, description="Mean value")
     percentiles: Dict[str, float] = Field(default_factory=dict, description="Percentile values (e.g., p50, p95, p99)")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class LogData(BaseModel):
@@ -135,7 +135,7 @@ class LogData(BaseModel):
     # Structured data
     extra_fields: Dict[str, str] = Field(default_factory=dict, description="Additional structured log fields")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ServiceCorrelation(BaseModel):
@@ -178,7 +178,7 @@ class ServiceCorrelation(BaseModel):
     parent_correlation_id: Optional[str] = Field(None, description="Parent correlation if nested")
     child_correlation_ids: List[str] = Field(default_factory=list, description="Child correlations")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CorrelationQuery(BaseModel):
@@ -208,7 +208,7 @@ class CorrelationQuery(BaseModel):
     order_by: str = Field("timestamp", description="Field to order by")
     order_desc: bool = Field(True, description="Descending order")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CorrelationSummary(BaseModel):
@@ -235,7 +235,7 @@ class CorrelationSummary(BaseModel):
     total_tokens_used: int = Field(0, description="Total LLM tokens")
     total_memory_bytes: int = Field(0, description="Total memory used")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [

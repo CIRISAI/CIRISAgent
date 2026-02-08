@@ -9,7 +9,7 @@ device attestation, or specific hardware security features.
 from enum import Enum
 from typing import List, Optional, Set
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PlatformRequirement(str, Enum):
@@ -51,6 +51,8 @@ class PlatformCapabilities(BaseModel):
     This is populated by platform detection at startup and used to check
     if platform requirements can be satisfied.
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     platform: str = Field(..., description="Platform identifier (android, ios, linux, windows, macos)")
     capabilities: Set[PlatformRequirement] = Field(
@@ -105,6 +107,8 @@ class PlatformRequirementSet(BaseModel):
     Supports expressing requirements like:
     "Requires (Android Play Integrity OR iOS App Attest) AND Google Native Auth"
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     # All of these must be satisfied (AND)
     required: List[PlatformRequirement] = Field(

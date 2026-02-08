@@ -45,4 +45,4 @@ class AdapterStartupContext(BaseModel):
         None, description="Service registry for service discovery (ServiceRegistry)"
     )
 
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+    model_config = ConfigDict(defer_build=True, arbitrary_types_allowed=True, extra="forbid")

@@ -1,0 +1,99 @@
+{
+  "start_time": "2026-02-05T16:18:16.473128",
+  "end_time": "2026-02-05T16:19:19.914598",
+  "duration_seconds": 63.44147,
+  "success": false,
+  "error": null,
+  "summary": {
+    "total": 7,
+    "passed": 6,
+    "failed": 0,
+    "errors": 1,
+    "skipped": 0
+  },
+  "reports": [
+    {
+      "name": "load_setup_wizard",
+      "result": "passed",
+      "duration_seconds": 2.805355,
+      "message": "Setup wizard loaded successfully",
+      "screenshots": [
+        "web_ui_qa_reports/setup_step1_161824.png"
+      ],
+      "details": {
+        "page_title": "Welcome to CIRIS"
+      }
+    },
+    {
+      "name": "navigate_to_llm_config",
+      "result": "passed",
+      "duration_seconds": 2.114505,
+      "message": "LLM configuration page loaded",
+      "screenshots": [
+        "web_ui_qa_reports/setup_llm_config_161826.png"
+      ],
+      "details": {}
+    },
+    {
+      "name": "select_provider",
+      "result": "passed",
+      "duration_seconds": 1.080924,
+      "message": "Selected provider: OpenRouter",
+      "screenshots": [
+        "web_ui_qa_reports/setup_provider_selected_161827.png"
+      ],
+      "details": {
+        "provider": "openrouter"
+      }
+    },
+    {
+      "name": "enter_api_key",
+      "result": "passed",
+      "duration_seconds": 2.090728,
+      "message": "API key entered",
+      "screenshots": [
+        "web_ui_qa_reports/setup_key_entered_161829.png"
+      ],
+      "details": {
+        "key_prefix": "sk-or-v1-c..."
+      }
+    },
+    {
+      "name": "load_models",
+      "result": "passed",
+      "duration_seconds": 16.127915,
+      "message": "Models loaded. Found: claude, gpt, llama, model, compatible",
+      "screenshots": [
+        "web_ui_qa_reports/setup_models_loading_161845.png"
+      ],
+      "details": {
+        "triggered_load": true,
+        "models_found": [
+          "claude",
+          "gpt",
+          "llama",
+          "model",
+          "compatible"
+        ]
+      }
+    },
+    {
+      "name": "select_model",
+      "result": "passed",
+      "duration_seconds": 1.06634,
+      "message": "Model selection appears pre-configured",
+      "screenshots": [
+        "web_ui_qa_reports/setup_model_selected_161846.png"
+      ],
+      "details": {}
+    },
+    {
+      "name": "complete_setup",
+      "result": "error",
+      "duration_seconds": 33.051805,
+      "message": "Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for get_by_text(\"Continue\").first\n    - locator resolved to <button disabled class=\"w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium\">Continue to Optional Features \u2192</button>\n  - attempting click action\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n    - waiting 20ms\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n      - waiting 100ms\n    59 \u00d7 waiting for element to be visible, enabled and stable\n       - element is not enabled\n     - retrying click action\n       - waiting 500ms\n",
+      "screenshots": [],
+      "details": {}
+    }
+  ]
+}

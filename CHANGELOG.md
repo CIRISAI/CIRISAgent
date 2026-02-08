@@ -5,6 +5,37 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.8] - 2026-02-08
+
+### Performance
+
+- **Pydantic defer_build Optimization** - Added `defer_build=True` to 670 models for memory reduction
+  - Excludes visibility schemas with complex nested types (causes model_rebuild errors)
+
+### Fixed
+
+- **Trace Signature Per-Level Integrity** - Each trace level now has unique signature
+  - `trace_level` included in signed payload for generic/detailed/full_traces
+  - Fixes verification failures when same trace sent at multiple levels
+  - CIRISLens can now verify signatures at any trace level independently
+
+- **ASPDMA Prompt Schema Mismatch** - LLM now returns flat fields instead of nested `action_parameters`
+  - Fixes validation errors with Groq/Llama models returning `{"action_parameters": {...}}`
+  - Updated `action_instruction_generator.py` to match `ASPDMALLMResult` flat schema
+
+- **Live LLM Model Name** - Added `OPENAI_MODEL_NAME` to env var precedence in `service_initializer.py`
+  - QA runner `--live` mode now correctly uses specified model
+
+- **SonarCloud Blockers** - Resolved cognitive complexity and code smell issues
+  - `introspect_memory.py`: Extracted helper functions, fixed bare except clause
+  - `test_setup_ui.py`: Async file I/O with aiofiles, extracted helpers
+
+### Security
+
+- **Dockerfile Non-Root User** - Container now runs as unprivileged `ciris` user
+  - Added `--no-install-recommends` to minimize attack surface
+  - Proper file ownership with `COPY --chown`
+
 ## [1.9.7] - 2026-02-07
 
 ### Security

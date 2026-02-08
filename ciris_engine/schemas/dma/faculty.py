@@ -27,7 +27,7 @@ class ThoughtMetadata(BaseModel):
     priority: Optional[int] = Field(None, description="Thought priority level")
     tags: Optional[List[str]] = Field(None, description="Thought classification tags")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class FacultyContext(BaseModel):
@@ -52,7 +52,7 @@ class FacultyContext(BaseModel):
     conscience_failure_reason: Optional[str] = Field(None, description="Reason for conscience failure")
     conscience_guidance: Optional[str] = Field(None, description="Guidance from conscience")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class FacultyResult(BaseModel):
@@ -75,7 +75,7 @@ class FacultyResult(BaseModel):
     processing_time_ms: Optional[float] = Field(None, description="Time taken for analysis")
     error: Optional[str] = Field(None, description="Error message if analysis failed")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class FacultyEvaluationSet(BaseModel):
@@ -134,7 +134,7 @@ class FacultyEvaluationSet(BaseModel):
             for name, result in self.evaluations.items()
         }
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ConscienceFailureContext(BaseModel):
@@ -157,7 +157,7 @@ class ConscienceFailureContext(BaseModel):
     severity: str = Field("medium", description="Severity level: low, medium, high, critical")
     requires_escalation: bool = Field(False, description="Whether to escalate to human")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class EnhancedDMAInputs(BaseModel):
@@ -190,4 +190,4 @@ class EnhancedDMAInputs(BaseModel):
     recursive_evaluation: bool = Field(False, description="Whether this is a recursive evaluation")
     conscience_context: Optional[ConscienceFailureContext] = Field(None, description="Conscience failure context")
 
-    model_config = ConfigDict(extra="allow")  # Allow pass-through of other fields
+    model_config = ConfigDict(extra="allow", defer_build=True)  # Allow pass-through of other fields

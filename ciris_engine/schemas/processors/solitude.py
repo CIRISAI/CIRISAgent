@@ -6,7 +6,7 @@ These replace all Dict[str, Any] usage in logic/processors/states/solitude_proce
 
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ReflectionData(BaseModel):
@@ -16,6 +16,8 @@ class ReflectionData(BaseModel):
     thoughts_reviewed: int = Field(0, description="Number of thoughts reviewed")
     memories_consolidated: int = Field(0, description="Number of memories consolidated")
     cleanup_performed: bool = Field(False, description="Whether cleanup was performed")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class SolitudeProcessingResult(BaseModel):
@@ -30,6 +32,8 @@ class SolitudeProcessingResult(BaseModel):
     exit_reason: Optional[str] = Field(None, description="Reason for exiting solitude")
     error: Optional[str] = Field(None, description="Error message if processing failed")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class MaintenanceResult(BaseModel):
     """Result from maintenance operations."""
@@ -39,6 +43,8 @@ class MaintenanceResult(BaseModel):
     database_optimized: bool = Field(False, description="Whether database was optimized")
     errors: List[str] = Field(default_factory=list, description="Any errors during maintenance")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class TaskTypePattern(BaseModel):
     """Identified pattern in task types."""
@@ -46,6 +52,8 @@ class TaskTypePattern(BaseModel):
     pattern: str = Field(..., description="Pattern type")
     value: str = Field(..., description="Pattern value")
     count: int = Field(..., description="Occurrence count")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class ReflectionResult(BaseModel):
@@ -55,6 +63,8 @@ class ReflectionResult(BaseModel):
     patterns_identified: List[TaskTypePattern] = Field(default_factory=list, description="Identified patterns")
     memories_consolidated: int = Field(0, description="Number of memories consolidated")
     insights: List[str] = Field(default_factory=list, description="Insights from reflection")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class ExitConditions(BaseModel):
@@ -66,6 +76,8 @@ class ExitConditions(BaseModel):
     time_in_solitude: Optional[float] = Field(None, description="Time spent in solitude (seconds)")
     resource_usage: Optional[float] = Field(None, description="Current resource usage percentage")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class TaskTypeStats(BaseModel):
     """Statistics about task types."""
@@ -73,6 +85,8 @@ class TaskTypeStats(BaseModel):
     task_types: Dict[str, int] = Field(default_factory=dict, description="Count by task type")
     most_common_type: Optional[str] = Field(None, description="Most common task type")
     most_common_count: int = Field(0, description="Count of most common type")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 # Fix forward references

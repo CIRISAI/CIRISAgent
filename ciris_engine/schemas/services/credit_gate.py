@@ -5,11 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CreditAccount(BaseModel):
     """Account reference used when querying external credit providers."""
+
+    model_config = ConfigDict(defer_build=True)
 
     provider: str = Field(..., description="Provider namespace (e.g., 'oauth:google', 'app:internal')")
     account_id: str = Field(..., description="Identifier scoped to the provider")
@@ -28,6 +30,8 @@ class CreditAccount(BaseModel):
 class CreditContext(BaseModel):
     """Lightweight context captured alongside a credit decision."""
 
+    model_config = ConfigDict(defer_build=True)
+
     agent_id: Optional[str] = Field(None, description="Agent performing the interaction")
     channel_id: Optional[str] = Field(None, description="Interaction channel identifier")
     request_id: Optional[str] = Field(None, description="Request correlation ID")
@@ -40,6 +44,8 @@ class CreditContext(BaseModel):
 
 class CreditCheckResult(BaseModel):
     """Outcome returned from the credit provider after a balance check."""
+
+    model_config = ConfigDict(defer_build=True)
 
     has_credit: bool = Field(..., description="Whether the account has sufficient credit to proceed")
     credits_remaining: Optional[int] = Field(None, description="Remaining paid credits in provider-specific units")
@@ -64,6 +70,8 @@ class CreditCheckResult(BaseModel):
 class CreditSpendRequest(BaseModel):
     """Parameters describing a credit spend attempt."""
 
+    model_config = ConfigDict(defer_build=True)
+
     amount_minor: int = Field(..., ge=1, description="Amount in provider minor units (e.g., cents)")
     currency: str = Field(..., min_length=3, max_length=3, description="ISO-4217 currency code")
     description: Optional[str] = Field(None, description="Human-readable description of the spend")
@@ -72,6 +80,8 @@ class CreditSpendRequest(BaseModel):
 
 class CreditSpendResult(BaseModel):
     """Outcome of a credit spend attempt."""
+
+    model_config = ConfigDict(defer_build=True)
 
     succeeded: bool = Field(..., description="Whether the spend was accepted by the provider")
     transaction_id: Optional[str] = Field(None, description="Provider transaction identifier")

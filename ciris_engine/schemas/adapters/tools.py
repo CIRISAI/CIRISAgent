@@ -31,7 +31,7 @@ class ToolParameterSchema(BaseModel):
     properties: JSONDict = Field(..., description="Parameter properties")
     required: List[str] = Field(default_factory=list, description="Required parameters")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # ============================================================================
@@ -46,7 +46,7 @@ class BinaryRequirement(BaseModel):
     min_version: Optional[str] = Field(None, description="Minimum version (semver)")
     verify_command: Optional[str] = Field(None, description="Command to verify installation (e.g., 'ffmpeg -version')")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class EnvVarRequirement(BaseModel):
@@ -56,7 +56,7 @@ class EnvVarRequirement(BaseModel):
     description: Optional[str] = Field(None, description="What this variable is for")
     secret: bool = Field(False, description="Whether this is a secret (affects display)")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ConfigRequirement(BaseModel):
@@ -65,7 +65,7 @@ class ConfigRequirement(BaseModel):
     key: str = Field(..., description="Config key path (e.g., 'adapters.home_assistant.token')")
     description: Optional[str] = Field(None, description="What this config is for")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ToolRequirements(BaseModel):
@@ -83,7 +83,7 @@ class ToolRequirements(BaseModel):
         default_factory=list, description="Supported platforms (darwin, linux, win32). Empty = all"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # ============================================================================
@@ -105,7 +105,7 @@ class InstallStep(BaseModel):
     verify_command: Optional[str] = Field(None, description="Command to verify success")
     platforms: List[str] = Field(default_factory=list, description="Platforms this step applies to. Empty = all")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # ============================================================================
@@ -121,7 +121,7 @@ class UsageExample(BaseModel):
     code: str = Field(..., description="The example code/parameters")
     language: str = Field("json", description="Code language for syntax highlighting")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ToolGotcha(BaseModel):
@@ -131,7 +131,7 @@ class ToolGotcha(BaseModel):
     description: str = Field(..., description="Detailed explanation of the pitfall")
     severity: str = Field("warning", description="Severity: info, warning, error")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ToolDocumentation(BaseModel):
@@ -145,7 +145,7 @@ class ToolDocumentation(BaseModel):
     homepage: Optional[str] = Field(None, description="Tool homepage URL")
     docs_url: Optional[str] = Field(None, description="Documentation URL")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # ============================================================================
@@ -167,7 +167,7 @@ class ToolDMAGuidance(BaseModel):
     min_confidence: float = Field(0.0, ge=0.0, le=1.0, description="Minimum confidence score to use this tool")
     requires_approval: bool = Field(False, description="Whether this tool requires wise authority approval")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # ============================================================================
@@ -236,7 +236,7 @@ class ToolInfo(BaseModel):
     # Tool version
     version: Optional[str] = Field(None, description="Tool version string")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ToolResult(BaseModel):
@@ -246,7 +246,7 @@ class ToolResult(BaseModel):
     data: Optional[JSONDict] = Field(None, description="Result data")
     error: Optional[str] = Field(None, description="Error message if failed")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ToolExecutionResult(BaseModel):
@@ -259,7 +259,7 @@ class ToolExecutionResult(BaseModel):
     error: Optional[str] = Field(None, description="Error message if failed")
     correlation_id: str = Field(..., description="Correlation ID for tracking")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [

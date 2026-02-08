@@ -1,0 +1,122 @@
+{
+  "start_time": "2026-02-05T16:49:43.744268",
+  "end_time": "2026-02-05T16:50:28.106507",
+  "duration_seconds": 44.362239,
+  "success": true,
+  "error": null,
+  "summary": {
+    "total": 6,
+    "passed": 6,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "reports": [
+    {
+      "name": "load_setup_wizard",
+      "result": "passed",
+      "duration_seconds": 2.798678,
+      "message": "Setup wizard loaded successfully",
+      "screenshots": [
+        "web_ui_qa_reports/setup_step1_164951.png"
+      ],
+      "details": {
+        "page_title": "Welcome to CIRIS"
+      }
+    },
+    {
+      "name": "navigate_to_llm_config",
+      "result": "passed",
+      "duration_seconds": 2.112394,
+      "message": "LLM configuration page loaded",
+      "screenshots": [
+        "web_ui_qa_reports/setup_llm_config_164953.png"
+      ],
+      "details": {}
+    },
+    {
+      "name": "select_provider",
+      "result": "passed",
+      "duration_seconds": 1.078805,
+      "message": "Selected provider: OpenRouter",
+      "screenshots": [
+        "web_ui_qa_reports/setup_provider_selected_164954.png"
+      ],
+      "details": {
+        "provider": "openrouter"
+      }
+    },
+    {
+      "name": "enter_api_key",
+      "result": "passed",
+      "duration_seconds": 2.718264,
+      "message": "API key entered",
+      "screenshots": [
+        "web_ui_qa_reports/setup_key_entered_164957.png"
+      ],
+      "details": {
+        "key_prefix": "sk-or-v1-c...",
+        "key_length": 73
+      }
+    },
+    {
+      "name": "load_models",
+      "result": "passed",
+      "duration_seconds": 29.456316,
+      "message": "Live models loaded: 344 models in dropdown (with \u2605 recommended)",
+      "screenshots": [
+        "web_ui_qa_reports/setup_before_load_models_164958.png",
+        "web_ui_qa_reports/setup_models_loading_164959.png",
+        "web_ui_qa_reports/setup_models_loaded_165026.png"
+      ],
+      "details": {
+        "load_link_count": 1,
+        "clicked": "Load available models link",
+        "load_wait_seconds": 0,
+        "never_saw_loading": true,
+        "select_count": 1,
+        "model_options": [
+          "Select a model...",
+          "\u2605 Llama 4 Maverick \u2713 (default)",
+          "Claude 3.5 Sonnet (via OpenRouter) \u2713 (premium)",
+          "GPT-4o (via OpenRouter) \u2713 (premium)",
+          "Llama 3.3 70B \u2713 (fallback)",
+          "ai21/jamba-large-1.7",
+          "ai21/jamba-mini-1.7",
+          "aion-labs/aion-1.0",
+          "aion-labs/aion-1.0-mini",
+          "aion-labs/aion-rp-llama-3.1-8b"
+        ],
+        "total_models": 344,
+        "has_recommended_indicator": true,
+        "has_compatibility_indicator": true
+      }
+    },
+    {
+      "name": "select_model",
+      "result": "passed",
+      "duration_seconds": 1.092887,
+      "message": "Selected: \u2605 Llama 4 Maverick \u2713 (default)",
+      "screenshots": [
+        "web_ui_qa_reports/setup_model_selected_165028.png"
+      ],
+      "details": {
+        "available_options": [
+          "Select a model...",
+          "\u2605 Llama 4 Maverick \u2713 (default)",
+          "Claude 3.5 Sonnet (via OpenRouter) \u2713 (premium)",
+          "GPT-4o (via OpenRouter) \u2713 (premium)",
+          "Llama 3.3 70B \u2713 (fallback)",
+          "ai21/jamba-large-1.7",
+          "ai21/jamba-mini-1.7",
+          "aion-labs/aion-1.0",
+          "aion-labs/aion-1.0-mini",
+          "aion-labs/aion-rp-llama-3.1-8b"
+        ],
+        "selection_reason": "recommended (\u2605)",
+        "selected_model": "\u2605 Llama 4 Maverick \u2713 (default)",
+        "selected_value": "meta-llama/llama-4-maverick"
+      }
+    }
+  ]
+}

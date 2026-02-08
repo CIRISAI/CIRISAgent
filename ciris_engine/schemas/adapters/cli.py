@@ -6,7 +6,7 @@ Provides typed schemas for logic/adapters/cli/cli_adapter.py.
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.types import JSONDict
 
@@ -14,6 +14,7 @@ from ciris_engine.schemas.types import JSONDict
 class CLIMessage(BaseModel):
     """A message received from or sent to CLI."""
 
+    model_config = ConfigDict(defer_build=True)
     channel_id: str = Field(..., description="Channel identifier")
     content: str = Field(..., description="Message content")
     timestamp: str = Field(..., description="ISO timestamp")
@@ -23,18 +24,21 @@ class CLIMessage(BaseModel):
 class CLIToolParameters(BaseModel):
     """Base parameters for CLI tool execution."""
 
+    model_config = ConfigDict(defer_build=True)
     correlation_id: Optional[str] = Field(None, description="Correlation ID for tracking")
 
 
 class ListFilesToolParams(CLIToolParameters):
     """Parameters for list_files tool."""
 
+    model_config = ConfigDict(defer_build=True)
     path: str = Field(".", description="Directory path to list")
 
 
 class ListFilesToolResult(BaseModel):
     """Result from list_files tool."""
 
+    model_config = ConfigDict(defer_build=True)
     success: bool = Field(..., description="Whether the operation succeeded")
     files: List[str] = Field(default_factory=list, description="List of files")
     count: int = Field(..., description="Number of files")
@@ -44,6 +48,7 @@ class ListFilesToolResult(BaseModel):
 class ReadFileToolParams(CLIToolParameters):
     """Parameters for read_file tool."""
 
+    model_config = ConfigDict(defer_build=True)
     path: str = Field(..., description="File path to read")
     encoding: str = Field("utf-8", description="File encoding")
 
@@ -51,6 +56,7 @@ class ReadFileToolParams(CLIToolParameters):
 class ReadFileToolResult(BaseModel):
     """Result from read_file tool."""
 
+    model_config = ConfigDict(defer_build=True)
     success: bool = Field(..., description="Whether the operation succeeded")
     content: Optional[str] = Field(None, description="File content")
     size: Optional[int] = Field(None, description="File size in bytes")
@@ -60,6 +66,7 @@ class ReadFileToolResult(BaseModel):
 class SystemInfoToolResult(BaseModel):
     """Result from system_info tool."""
 
+    model_config = ConfigDict(defer_build=True)
     success: bool = Field(..., description="Whether the operation succeeded")
     platform: str = Field(..., description="Operating system platform")
     python_version: str = Field(..., description="Python version")
@@ -71,6 +78,7 @@ class SystemInfoToolResult(BaseModel):
 class CLIGuidanceRequest(BaseModel):
     """Guidance request displayed to CLI user."""
 
+    model_config = ConfigDict(defer_build=True)
     question: str = Field(..., description="Question for the user")
     task_id: str = Field(..., description="Related task ID")
     ethical_considerations: List[str] = Field(default_factory=list, description="Ethical considerations")
@@ -80,6 +88,7 @@ class CLIGuidanceRequest(BaseModel):
 class CLIDeferralDisplay(BaseModel):
     """Deferral information displayed to CLI user."""
 
+    model_config = ConfigDict(defer_build=True)
     thought_id: str = Field(..., description="Deferred thought ID")
     task_id: str = Field(..., description="Related task ID")
     reason: str = Field(..., description="Reason for deferral")
@@ -90,6 +99,7 @@ class CLIDeferralDisplay(BaseModel):
 class CLICorrelationData(BaseModel):
     """Data stored in correlations for CLI operations."""
 
+    model_config = ConfigDict(defer_build=True)
     action: str = Field(..., description="Action performed")
     request: JSONDict = Field(default_factory=dict, description="Request data")
     response: JSONDict = Field(default_factory=dict, description="Response data")

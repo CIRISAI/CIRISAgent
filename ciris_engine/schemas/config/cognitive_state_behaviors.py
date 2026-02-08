@@ -12,7 +12,7 @@ Covenant References:
 
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Common description strings to avoid duplication
 _RATIONALE_DESC = "Mission-driven rationale for this configuration"
@@ -28,6 +28,8 @@ class WakeupBehavior(BaseModel):
     Disabling is only appropriate for agents where partnership model prioritizes
     seamless UX (e.g., Ally) or ephemeral sessions (e.g., Scout).
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     enabled: bool = Field(
         default=True, description="Whether to perform full wakeup ceremony. Default preserves Covenant compliance."
@@ -60,6 +62,8 @@ class ShutdownBehavior(BaseModel):
     - instant: Immediate termination (only for Tier 1-2 with no ongoing commitments)
     """
 
+    model_config = ConfigDict(defer_build=True)
+
     mode: Literal["always_consent", "conditional", "instant"] = Field(
         default="always_consent", description="Shutdown consent mode. Default preserves Covenant compliance."
     )
@@ -88,6 +92,8 @@ class StateBehavior(BaseModel):
     Used for PLAY and SOLITUDE states which share similar configuration needs.
     """
 
+    model_config = ConfigDict(defer_build=True)
+
     enabled: bool = Field(default=True, description="Whether this cognitive state is available for this agent")
     rationale: Optional[str] = Field(default=None, description=_RATIONALE_DESC)
 
@@ -100,6 +106,8 @@ class DreamBehavior(BaseModel):
     Covenant Reference: Section V mentions "Dream cycles for pattern processing"
     as part of model welfare protections.
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     enabled: bool = Field(default=True, description="Whether dream state is available for memory consolidation")
     auto_schedule: bool = Field(default=True, description="Whether to automatically schedule dream cycles")
@@ -114,6 +122,8 @@ class StatePreservationBehavior(BaseModel):
 
     Controls how agent state is preserved across restarts.
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     enabled: bool = Field(default=True, description="Whether to preserve state across restarts")
     resume_silently: bool = Field(
@@ -154,6 +164,8 @@ class CognitiveStateBehaviors(BaseModel):
         wakeup: enabled=False (ephemeral sessions)
         shutdown: mode=instant (no ongoing commitments)
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     wakeup: WakeupBehavior = Field(default_factory=WakeupBehavior, description="Wakeup ceremony configuration")
     shutdown: ShutdownBehavior = Field(default_factory=ShutdownBehavior, description="Shutdown protocol configuration")

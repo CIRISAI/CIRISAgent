@@ -19,7 +19,7 @@ class ValidationRule(BaseModel):
     parameters: Dict[str, Union[str, int, float, bool]] = Field(..., description="Rule parameters")
     error_message: Optional[str] = Field(None, description="Custom error message")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class BaseNodeData(BaseModel):
@@ -29,7 +29,7 @@ class BaseNodeData(BaseModel):
     created_at: datetime = Field(..., description="When this data was created")
     updated_at: datetime = Field(..., description="Last update time")
 
-    model_config = ConfigDict(extra="forbid")  # No extra fields allowed
+    model_config = ConfigDict(extra="forbid", defer_build=True)  # No extra fields allowed
 
     @field_serializer("created_at", "updated_at")
     def serialize_datetime(self, dt: datetime) -> str:

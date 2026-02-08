@@ -24,7 +24,7 @@ class ProcessorSpecificMetrics(BaseModel):
     custom_counters: Dict[str, int] = Field(default_factory=dict, description="Custom counter metrics")
     custom_gauges: Dict[str, float] = Field(default_factory=dict, description="Custom gauge metrics")
 
-    model_config = ConfigDict(extra="forbid")  # Strict validation for metrics
+    model_config = ConfigDict(extra="forbid", defer_build=True)  # Strict validation for metrics
 
 
 class ProcessorMetrics(BaseModel):
@@ -40,6 +40,8 @@ class ProcessorMetrics(BaseModel):
     additional_metrics: ProcessorSpecificMetrics = Field(
         default_factory=ProcessorSpecificMetrics, description="Processor-specific metrics"
     )
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class ProcessorServices(BaseModel):
@@ -75,7 +77,7 @@ class ProcessorServices(BaseModel):
     runtime: Any = Field(None, description="Runtime control interface")
     llm_service: Any = Field(None, description="LLM service for AI operations")
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, defer_build=True)
 
 
 class AdapterChannelContext(BaseModel):
@@ -95,7 +97,7 @@ class AdapterChannelContext(BaseModel):
     permissions: Dict[str, bool] = Field(default_factory=dict, description="Channel permissions")
     metadata: Dict[str, str] = Field(default_factory=dict, description="Additional channel metadata")
 
-    model_config = ConfigDict(extra="allow")  # Allow adapter-specific fields
+    model_config = ConfigDict(extra="allow", defer_build=True)  # Allow adapter-specific fields
 
 
 class ProcessorContext(BaseModel):
@@ -107,6 +109,8 @@ class ProcessorContext(BaseModel):
     channel_context: Optional[AdapterChannelContext] = Field(None, description="Channel context if available")
     task_context: Optional[str] = Field(None, description="Current task being processed")
     memory_context: Optional[str] = Field(None, description="Relevant memory context")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class MetricsUpdate(BaseModel):
@@ -128,3 +132,5 @@ class MetricsUpdate(BaseModel):
     # Custom metric updates
     custom_counters: Dict[str, int] = Field(default_factory=dict, description="Custom counter increments")
     custom_gauges: Dict[str, float] = Field(default_factory=dict, description="Custom gauge updates")
+
+    model_config = ConfigDict(defer_build=True)

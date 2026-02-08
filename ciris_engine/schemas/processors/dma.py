@@ -2,10 +2,10 @@
 
 from typing import Dict, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.dma.results import CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
-from ciris_engine.schemas.types import ConfigDict
+from ciris_engine.schemas.types import ConfigMapping
 
 
 class DMAMetadata(BaseModel):
@@ -14,8 +14,10 @@ class DMAMetadata(BaseModel):
     channel_id: Optional[str] = Field(None, description="Channel ID if available")
     user_id: Optional[str] = Field(None, description="User ID if available")
     platform: Optional[str] = Field(None, description="Platform name")
-    session_data: ConfigDict = Field(default_factory=dict, description="Session-specific data")
-    metadata: ConfigDict = Field(default_factory=dict, description="Additional context metadata")
+    session_data: ConfigMapping = Field(default_factory=dict, description="Session-specific data")
+    metadata: ConfigMapping = Field(default_factory=dict, description="Additional context metadata")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class InitialDMAResults(BaseModel):
@@ -32,6 +34,8 @@ class InitialDMAResults(BaseModel):
     dsdma_prompt: Optional[str] = Field(None, description="User prompt passed to DSDMA")
     idma_prompt: Optional[str] = Field(None, description="User prompt passed to IDMA")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class DMAError(BaseModel):
     """Error from a DMA execution."""
@@ -40,6 +44,8 @@ class DMAError(BaseModel):
     error_message: str = Field(..., description="Error message")
     error_type: str = Field(..., description="Type of error")
     traceback: Optional[str] = Field(None, description="Full traceback if available")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class DMAErrors(BaseModel):
@@ -53,6 +59,8 @@ class DMAErrors(BaseModel):
     def has_errors(self) -> bool:
         """Check if any errors occurred."""
         return any([self.ethical_pdma, self.csdma, self.dsdma, self.idma])
+
+    model_config = ConfigDict(defer_build=True)
 
     def get_error_summary(self) -> str:
         """Get summary of all errors."""
@@ -78,7 +86,9 @@ class ActionSelectionContext(BaseModel):
     csdma_result: CSDMAResult = Field(..., description="Common sense evaluation")
     dsdma_result: Optional[DSDMAResult] = Field(None, description="Domain specific evaluation")
     idma_result: Optional[IDMAResult] = Field(None, description="Information diversity evaluation")
-    metadata: ConfigDict = Field(default_factory=dict, description="Additional context")
+    metadata: ConfigMapping = Field(default_factory=dict, description="Additional context")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class CircuitBreakerStatus(BaseModel):
@@ -90,6 +100,8 @@ class CircuitBreakerStatus(BaseModel):
     last_failure: Optional[str] = Field(None, description="Last failure timestamp")
     next_attempt: Optional[str] = Field(None, description="When circuit will close")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class DMAOrchestratorStatus(BaseModel):
     """Status of the DMA orchestrator."""
@@ -98,6 +110,8 @@ class DMAOrchestratorStatus(BaseModel):
     retry_limit: int = Field(..., description="Retry limit for DMAs")
     timeout_seconds: float = Field(..., description="Timeout for DMA execution")
     dsdma_available: bool = Field(..., description="Whether DSDMA is configured")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 __all__ = [

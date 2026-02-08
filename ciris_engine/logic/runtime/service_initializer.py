@@ -1012,6 +1012,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         }
         model_name = (
             os.environ.get("CIRIS_LLM_MODEL_NAME")  # CIRIS_ prefix preferred
+            or os.environ.get("OPENAI_MODEL_NAME")  # OpenAI SDK convention
             or os.environ.get("OPENAI_MODEL")
             or os.environ.get("LLM_MODEL")
             or self._get_llm_service_config_value(config, "llm_model", default_models.get(provider, "gpt-4o-mini"))

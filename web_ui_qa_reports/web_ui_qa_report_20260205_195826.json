@@ -1,0 +1,159 @@
+{
+  "start_time": "2026-02-05T19:57:09.579647",
+  "end_time": "2026-02-05T19:58:19.670209",
+  "duration_seconds": 70.090562,
+  "success": false,
+  "error": null,
+  "summary": {
+    "total": 9,
+    "passed": 7,
+    "failed": 1,
+    "errors": 0,
+    "skipped": 1
+  },
+  "reports": [
+    {
+      "name": "load_setup_wizard",
+      "result": "passed",
+      "duration_seconds": 2.783571,
+      "message": "Setup wizard loaded successfully",
+      "screenshots": [
+        "web_ui_qa_reports/setup_step1_195717.png"
+      ],
+      "details": {
+        "page_title": "Welcome to CIRIS"
+      }
+    },
+    {
+      "name": "navigate_to_llm_config",
+      "result": "passed",
+      "duration_seconds": 2.121763,
+      "message": "LLM configuration page loaded",
+      "screenshots": [
+        "web_ui_qa_reports/setup_llm_config_195719.png"
+      ],
+      "details": {}
+    },
+    {
+      "name": "select_provider",
+      "result": "passed",
+      "duration_seconds": 1.085245,
+      "message": "Selected provider: OpenRouter",
+      "screenshots": [
+        "web_ui_qa_reports/setup_provider_selected_195720.png"
+      ],
+      "details": {
+        "provider": "openrouter"
+      }
+    },
+    {
+      "name": "enter_api_key",
+      "result": "passed",
+      "duration_seconds": 2.716954,
+      "message": "API key entered",
+      "screenshots": [
+        "web_ui_qa_reports/setup_key_entered_195723.png"
+      ],
+      "details": {
+        "key_prefix": "sk-or-v1-c...",
+        "key_length": 73
+      }
+    },
+    {
+      "name": "load_models",
+      "result": "passed",
+      "duration_seconds": 29.418326,
+      "message": "Live models loaded: 344 models in dropdown (with \u2605 recommended)",
+      "screenshots": [
+        "web_ui_qa_reports/setup_before_load_models_195724.png",
+        "web_ui_qa_reports/setup_models_loading_195725.png",
+        "web_ui_qa_reports/setup_models_loaded_195752.png"
+      ],
+      "details": {
+        "load_link_count": 1,
+        "clicked": "Load available models link",
+        "load_wait_seconds": 0,
+        "never_saw_loading": true,
+        "select_count": 1,
+        "model_options": [
+          "Select a model...",
+          "\u2605 Llama 4 Maverick \u2713 (default)",
+          "Claude 3.5 Sonnet (via OpenRouter) \u2713 (premium)",
+          "GPT-4o (via OpenRouter) \u2713 (premium)",
+          "Llama 3.3 70B \u2713 (fallback)",
+          "ai21/jamba-large-1.7",
+          "ai21/jamba-mini-1.7",
+          "aion-labs/aion-1.0",
+          "aion-labs/aion-1.0-mini",
+          "aion-labs/aion-rp-llama-3.1-8b"
+        ],
+        "total_models": 344,
+        "has_recommended_indicator": true,
+        "has_compatibility_indicator": true
+      }
+    },
+    {
+      "name": "select_model",
+      "result": "passed",
+      "duration_seconds": 1.085367,
+      "message": "Selected: \u2605 Llama 4 Maverick \u2713 (default)",
+      "screenshots": [
+        "web_ui_qa_reports/setup_model_selected_195753.png"
+      ],
+      "details": {
+        "available_options": [
+          "Select a model...",
+          "\u2605 Llama 4 Maverick \u2713 (default)",
+          "Claude 3.5 Sonnet (via OpenRouter) \u2713 (premium)",
+          "GPT-4o (via OpenRouter) \u2713 (premium)",
+          "Llama 3.3 70B \u2713 (fallback)",
+          "ai21/jamba-large-1.7",
+          "ai21/jamba-mini-1.7",
+          "aion-labs/aion-1.0",
+          "aion-labs/aion-1.0-mini",
+          "aion-labs/aion-rp-llama-3.1-8b"
+        ],
+        "selection_reason": "recommended (\u2605)",
+        "selected_model": "\u2605 Llama 4 Maverick \u2713 (default)",
+        "selected_value": "meta-llama/llama-4-maverick"
+      }
+    },
+    {
+      "name": "complete_setup",
+      "result": "passed",
+      "duration_seconds": 18.035002,
+      "message": null,
+      "screenshots": [
+        "web_ui_qa_reports/setup_connection_tested_195754.png",
+        "web_ui_qa_reports/setup_step_2_195757.png",
+        "web_ui_qa_reports/setup_step_3_195759.png",
+        "web_ui_qa_reports/setup_step_4_195802.png",
+        "web_ui_qa_reports/setup_step_5_195806.png",
+        "web_ui_qa_reports/setup_step_6_195810.png"
+      ],
+      "details": {
+        "clicked_test_connection": true,
+        "connection_test_result": "success",
+        "admin_password": "generated",
+        "username": "testadmin",
+        "steps_completed": 6
+      }
+    },
+    {
+      "name": "login_after_setup",
+      "result": "skipped",
+      "duration_seconds": 0.0,
+      "message": "Not on login page - may already be logged in",
+      "screenshots": [],
+      "details": {}
+    },
+    {
+      "name": "send_message",
+      "result": "failed",
+      "duration_seconds": 5.687337,
+      "message": "Could not find message input",
+      "screenshots": [],
+      "details": {}
+    }
+  ]
+}

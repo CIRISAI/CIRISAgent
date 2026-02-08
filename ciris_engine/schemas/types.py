@@ -27,7 +27,7 @@ JSONList = List[JSONValue]
 # Configuration values - for flexible configuration loading ONLY
 # These are intentionally flexible for config file parsing
 ConfigValue = Union[str, int, float, bool, List[Any], Dict[str, Any]]
-ConfigDict = Dict[str, ConfigValue]
+ConfigMapping = Dict[str, ConfigValue]  # Renamed from ConfigDict to avoid shadowing pydantic.ConfigDict
 
 # DEPRECATED ALIASES - Do not use in new code, use concrete models instead
 # These exist temporarily for backwards compatibility during migration
@@ -39,7 +39,7 @@ SerializedModel = Dict[str, Any]
 # Export only the core type aliases still in use
 __all__ = [
     "ConfigValue",
-    "ConfigDict",
+    "ConfigMapping",  # Renamed from ConfigDict to avoid shadowing pydantic.ConfigDict
     "JSONValue",
     "JSONDict",
     "JSONList",

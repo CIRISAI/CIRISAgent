@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.schemas.types import ConfigDict as ConfigDictType
+from ciris_engine.schemas.types import ConfigMapping as ConfigDictType
 from ciris_engine.schemas.types import JSONDict
 
 from .metadata import ServiceMetadata
@@ -25,7 +25,7 @@ class ServiceRequest(BaseModel):
     metadata: ServiceMetadata = Field(..., description="Service call metadata")
     correlation_id: UUID = Field(..., description="Correlation ID for tracing")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ServiceResponse(BaseModel):
@@ -36,7 +36,7 @@ class ServiceResponse(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Response timestamp")
     error: Optional[str] = Field(None, description="Error message if failed")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # Memory Service specific requests/responses
@@ -107,7 +107,7 @@ class LLMResponse(ServiceResponse):
     model_used: str = Field(..., description="Model that was used")
     tokens_used: int = Field(..., description="Number of tokens used")
 
-    model_config = ConfigDict(protected_namespaces=())
+    model_config = ConfigDict(protected_namespaces=(), defer_build=True)
 
 
 # Audit Service specific requests/responses

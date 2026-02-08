@@ -1,0 +1,189 @@
+{
+  "start_time": "2026-02-05T20:56:53.641644",
+  "end_time": "2026-02-05T20:58:05.645357",
+  "duration_seconds": 72.003713,
+  "success": true,
+  "error": null,
+  "summary": {
+    "total": 9,
+    "passed": 7,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 2
+  },
+  "reports": [
+    {
+      "name": "load_setup_wizard",
+      "result": "passed",
+      "duration_seconds": 2.8051,
+      "message": "Setup wizard loaded successfully",
+      "screenshots": [
+        "web_ui_qa_reports/setup_step1_205701.png"
+      ],
+      "details": {
+        "page_title": "Welcome to CIRIS"
+      }
+    },
+    {
+      "name": "navigate_to_llm_config",
+      "result": "passed",
+      "duration_seconds": 2.121168,
+      "message": "LLM configuration page loaded",
+      "screenshots": [
+        "web_ui_qa_reports/setup_llm_config_205703.png"
+      ],
+      "details": {}
+    },
+    {
+      "name": "select_provider",
+      "result": "passed",
+      "duration_seconds": 1.087902,
+      "message": "Selected provider: OpenRouter",
+      "screenshots": [
+        "web_ui_qa_reports/setup_provider_selected_205704.png"
+      ],
+      "details": {
+        "provider": "openrouter"
+      }
+    },
+    {
+      "name": "enter_api_key",
+      "result": "passed",
+      "duration_seconds": 2.715628,
+      "message": "API key entered",
+      "screenshots": [
+        "web_ui_qa_reports/setup_key_entered_205707.png"
+      ],
+      "details": {
+        "key_prefix": "sk-or-v1-c...",
+        "key_length": 73
+      }
+    },
+    {
+      "name": "load_models",
+      "result": "passed",
+      "duration_seconds": 29.435957,
+      "message": "Live models loaded: 344 models in dropdown (with \u2605 recommended)",
+      "screenshots": [
+        "web_ui_qa_reports/setup_before_load_models_205708.png",
+        "web_ui_qa_reports/setup_models_loading_205709.png",
+        "web_ui_qa_reports/setup_models_loaded_205736.png"
+      ],
+      "details": {
+        "load_link_count": 1,
+        "clicked": "Load available models link",
+        "load_wait_seconds": 0,
+        "never_saw_loading": true,
+        "select_count": 1,
+        "model_options": [
+          "Select a model...",
+          "\u2605 Llama 4 Maverick \u2713 (default)",
+          "Claude 3.5 Sonnet (via OpenRouter) \u2713 (premium)",
+          "GPT-4o (via OpenRouter) \u2713 (premium)",
+          "Llama 3.3 70B \u2713 (fallback)",
+          "ai21/jamba-large-1.7",
+          "ai21/jamba-mini-1.7",
+          "aion-labs/aion-1.0",
+          "aion-labs/aion-1.0-mini",
+          "aion-labs/aion-rp-llama-3.1-8b"
+        ],
+        "total_models": 344,
+        "has_recommended_indicator": true,
+        "has_compatibility_indicator": true
+      }
+    },
+    {
+      "name": "select_model",
+      "result": "passed",
+      "duration_seconds": 1.098724,
+      "message": "Selected: \u2605 Llama 4 Maverick \u2713 (default)",
+      "screenshots": [
+        "web_ui_qa_reports/setup_model_selected_205737.png"
+      ],
+      "details": {
+        "available_options": [
+          "Select a model...",
+          "\u2605 Llama 4 Maverick \u2713 (default)",
+          "Claude 3.5 Sonnet (via OpenRouter) \u2713 (premium)",
+          "GPT-4o (via OpenRouter) \u2713 (premium)",
+          "Llama 3.3 70B \u2713 (fallback)",
+          "ai21/jamba-large-1.7",
+          "ai21/jamba-mini-1.7",
+          "aion-labs/aion-1.0",
+          "aion-labs/aion-1.0-mini",
+          "aion-labs/aion-rp-llama-3.1-8b"
+        ],
+        "selection_reason": "recommended (\u2605)",
+        "selected_model": "\u2605 Llama 4 Maverick \u2713 (default)",
+        "selected_value": "meta-llama/llama-4-maverick"
+      }
+    },
+    {
+      "name": "complete_setup",
+      "result": "passed",
+      "duration_seconds": 25.556656,
+      "message": "Setup submitted but redirect not detected",
+      "screenshots": [
+        "web_ui_qa_reports/setup_step_1_205741.png",
+        "web_ui_qa_reports/setup_step_2_205745.png",
+        "web_ui_qa_reports/setup_account_filled_205748.png",
+        "web_ui_qa_reports/setup_complete_timeout_205803.png"
+      ],
+      "details": {
+        "step_0_url": "http://127.0.0.1:8080/setup/",
+        "step_0_continue_count": 1,
+        "step_0_btn_0": "Continue to Optional Features \u2192(en=True)",
+        "step_0_clicked": "Continue to Optional Features \u2192",
+        "step_1_url": "http://127.0.0.1:8080/setup/",
+        "step_1_continue_count": 1,
+        "step_1_btn_0": "Continue to User Setup \u2192(en=True)",
+        "step_1_clicked": "Continue to User Setup \u2192",
+        "step_2_url": "http://127.0.0.1:8080/setup/",
+        "reached_account_step": true,
+        "admin_password": "generated",
+        "username": "testadmin",
+        "clicked_complete_setup": true,
+        "console_logs": [
+          "[log] [CIRIS SDK] Creating default client with baseURL: http://127.0.0.1:8080",
+          "[log] \ud83d\udd10 visibleAdminNavigation.length: 0",
+          "[log] \ud83d\udd10 visibleAdminNavigation: Array",
+          "[log] \ud83d\udd10 visibleAdminNavigation.length: 0",
+          "[log] \ud83d\udd10 visibleAdminNavigation: Array",
+          "[error] [CIRIS SDK] Failed to parse JSON response: JSHandle@object",
+          "[error] [CIRIS SDK] Failed to parse JSON response: JSHandle@object",
+          "[error] [CIRIS SDK] Failed to parse JSON response: JSHandle@object",
+          "[log] CIRIS Manager not available, using local dev agent",
+          "[log] \ud83d\udd10 visibleAdminNavigation.length: 0",
+          "[log] \ud83d\udd10 visibleAdminNavigation: Array",
+          "[warning] [JavaScript Warning: \"The resource at \u201chttp://127.0.0.1:8080/_next/static/media/93f479601ee12b01-s.p.woff2\u201d preloaded with link preload was not used within a few seconds. Make sure all attributes of t",
+          "[log] [loadModels] Called with: JSHandle@object",
+          "[log] [loadModels] Starting API call...",
+          "[log] [loadModels] API response: JSHandle@object",
+          "[log] [loadModels] Auto-selected recommended model: meta-llama/llama-4-maverick",
+          "[log] [completeSetup] Called with state: {\"llmValid\":true,\"adminPasswordLen\":16,\"adminPasswordMatch\":true,\"usernameSet\":true,\"passwordLen\":15,\"passwordMatch\":true}",
+          "[log] [completeSetup] Calling API...",
+          "[log] [completeSetup] API response: Setup completed successfully. Starting agent processor... completed",
+          "[log] [completeSetup] Finally block, setting loading=false"
+        ]
+      }
+    },
+    {
+      "name": "login_after_setup",
+      "result": "skipped",
+      "duration_seconds": 0.0,
+      "message": "Not on login page (URL: http://127.0.0.1:8080/setup/)",
+      "screenshots": [
+        "web_ui_qa_reports/login_skipped_page_205804.png"
+      ],
+      "details": {}
+    },
+    {
+      "name": "send_message",
+      "result": "skipped",
+      "duration_seconds": 0.0,
+      "message": "Still on login page - login test must run first",
+      "screenshots": [],
+      "details": {}
+    }
+  ]
+}

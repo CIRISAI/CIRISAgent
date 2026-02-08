@@ -13,7 +13,7 @@ import aiofiles
 import yaml
 
 from ciris_engine.schemas.config.essential import EssentialConfig
-from ciris_engine.schemas.types import ConfigDict, JSONDict
+from ciris_engine.schemas.types import ConfigMapping, JSONDict
 
 from .env_utils import get_env_var
 
@@ -24,7 +24,7 @@ class ConfigBootstrap:
     """Load essential config from multiple sources in priority order."""
 
     @staticmethod
-    def _deep_merge(base: ConfigDict, update: ConfigDict) -> ConfigDict:
+    def _deep_merge(base: ConfigMapping, update: ConfigMapping) -> ConfigMapping:
         """Recursively merge two configuration dictionaries."""
         for key, value in update.items():
             if key in base and isinstance(base[key], dict) and isinstance(value, dict):
@@ -34,7 +34,7 @@ class ConfigBootstrap:
         return base
 
     @staticmethod
-    def _apply_env_overrides(config_data: ConfigDict) -> ConfigDict:
+    def _apply_env_overrides(config_data: ConfigMapping) -> ConfigMapping:
         """Apply environment variable overrides to config data."""
         from typing import cast
 
@@ -114,7 +114,7 @@ class ConfigBootstrap:
         return config_data
 
     @staticmethod
-    def _resolve_database_paths(config_data: ConfigDict) -> ConfigDict:
+    def _resolve_database_paths(config_data: ConfigMapping) -> ConfigMapping:
         """Resolve relative database paths to use proper data directory.
 
         If database paths are relative (not absolute), resolve them against
@@ -159,7 +159,7 @@ class ConfigBootstrap:
 
     @staticmethod
     async def load_essential_config(
-        config_path: Optional[Path] = None, cli_overrides: Optional[ConfigDict] = None
+        config_path: Optional[Path] = None, cli_overrides: Optional[ConfigMapping] = None
     ) -> EssentialConfig:
         """
         Load essential configuration from multiple sources.
@@ -178,7 +178,7 @@ class ConfigBootstrap:
             Validated EssentialConfig instance
         """
         # Start with empty config data
-        config_data: ConfigDict = {}
+        config_data: ConfigMapping = {}
 
         # Load from YAML file if exists
         yaml_path = config_path or Path("config/essential.yaml")

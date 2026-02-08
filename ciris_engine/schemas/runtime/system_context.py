@@ -154,7 +154,7 @@ class SystemSnapshot(BaseModel):
         description="Results from tools marked with context_enrichment=True, keyed by adapter_type:tool_name",
     )
 
-    model_config = ConfigDict(extra="forbid")  # Be strict about fields to catch misuse
+    model_config = ConfigDict(extra="forbid", defer_build=True)  # Be strict about fields to catch misuse
 
 
 class TaskSummary(BaseModel):
@@ -180,7 +180,7 @@ class TaskSummary(BaseModel):
     result_data: Optional[Dict[str, str]] = Field(None, description="Structured result data")
     error: Optional[str] = Field(None, description="Error if failed")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ThoughtState(BaseModel):
@@ -208,7 +208,7 @@ class ThoughtState(BaseModel):
     # Decision
     selected_action: Optional[str] = Field(None, description="Action selected")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class UserProfile(BaseModel):
@@ -255,7 +255,7 @@ class UserProfile(BaseModel):
     # Additional context
     notes: Optional[str] = Field(None, description="Additional notes or context about the user")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ChannelContext(BaseModel):
@@ -288,7 +288,7 @@ class ChannelContext(BaseModel):
     def serialize_datetimes(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class AuditVerification(BaseModel):
@@ -304,7 +304,7 @@ class AuditVerification(BaseModel):
     issues: List[str] = Field(default_factory=list, description="Issues found during verification")
     missing_entries: List[str] = Field(default_factory=list, description="Missing entry IDs")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ThoughtSummary(BaseModel):
@@ -317,7 +317,7 @@ class ThoughtSummary(BaseModel):
     thought_type: Optional[str] = Field(None, description="Type of thought")
     thought_depth: Optional[int] = Field(None, description="Processing depth")
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", defer_build=True)
 
 
 class TelemetrySummary(BaseModel):
@@ -370,7 +370,7 @@ class TelemetrySummary(BaseModel):
     def serialize_datetimes(self, dt: datetime, _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ContinuitySummary(BaseModel):
@@ -403,7 +403,7 @@ class ContinuitySummary(BaseModel):
     def serialize_datetimes(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [

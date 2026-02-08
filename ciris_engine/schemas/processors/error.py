@@ -33,7 +33,7 @@ class AdditionalErrorContext(BaseModel):
         default_factory=dict, description="Custom error context data"
     )
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", defer_build=True)
 
 
 class ErrorContext(BaseModel):
@@ -47,6 +47,8 @@ class ErrorContext(BaseModel):
     thought_content: Optional[str] = Field(None, description="Thought content if error during thought processing")
     action_type: Optional[str] = Field(None, description="Action type if error during action dispatch")
     additional_context: Optional[AdditionalErrorContext] = Field(None, description="Any additional context")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class ProcessingError(BaseModel):
@@ -62,6 +64,8 @@ class ProcessingError(BaseModel):
     recovery_successful: bool = Field(False, description="Whether recovery succeeded")
     should_continue: bool = Field(True, description="Whether processing should continue")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class ErrorHandlingResult(BaseModel):
     """Result of error handling operation."""
@@ -72,6 +76,8 @@ class ErrorHandlingResult(BaseModel):
     new_state: Optional[str] = Field(None, description="New state to transition to if needed")
     error_logged: bool = Field(True, description="Whether error was logged")
     metrics_updated: bool = Field(True, description="Whether error metrics were updated")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class ProcessorConfigOverrides(BaseModel):
@@ -97,7 +103,7 @@ class ProcessorConfigOverrides(BaseModel):
         default_factory=dict, description="Custom configuration values"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ProcessorConfig(BaseModel):
@@ -109,6 +115,8 @@ class ProcessorConfig(BaseModel):
     timeout_seconds: Optional[int] = Field(None, description="Processing timeout in seconds")
     error_threshold: int = Field(10, description="Error count before processor is considered unhealthy")
     config_overrides: Optional[ProcessorConfigOverrides] = Field(None, description="Processor-specific configuration")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 __all__ = [

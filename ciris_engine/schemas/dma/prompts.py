@@ -31,7 +31,7 @@ class PromptTemplate(BaseModel):
     usage_context: Optional[str] = Field(None, description="When to use this template")
     example_output: Optional[str] = Field(None, description="Example of filled template")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class PromptCollection(BaseModel):
@@ -123,7 +123,7 @@ class PromptCollection(BaseModel):
 
         return result
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class PromptVariable(BaseModel):
@@ -142,7 +142,7 @@ class PromptVariable(BaseModel):
     allowed_values: Optional[List[Any]] = Field(None, description="Allowed values (enum)")
     pattern: Optional[str] = Field(None, description="Regex pattern for validation")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class PromptMetadata(BaseModel):
@@ -169,4 +169,4 @@ class PromptMetadata(BaseModel):
     usage_count: int = Field(0, description="How many times loaded")
     last_used: Optional[str] = Field(None, description="ISO timestamp of last use")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)

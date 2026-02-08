@@ -1,0 +1,84 @@
+{
+  "start_time": "2026-02-05T16:27:27.819903",
+  "end_time": "2026-02-05T16:27:45.125577",
+  "duration_seconds": 17.305674,
+  "success": false,
+  "error": null,
+  "summary": {
+    "total": 6,
+    "passed": 4,
+    "failed": 2,
+    "errors": 0,
+    "skipped": 0
+  },
+  "reports": [
+    {
+      "name": "load_setup_wizard",
+      "result": "passed",
+      "duration_seconds": 2.783588,
+      "message": "Setup wizard loaded successfully",
+      "screenshots": [
+        "web_ui_qa_reports/setup_step1_162735.png"
+      ],
+      "details": {
+        "page_title": "Welcome to CIRIS"
+      }
+    },
+    {
+      "name": "navigate_to_llm_config",
+      "result": "passed",
+      "duration_seconds": 2.111222,
+      "message": "LLM configuration page loaded",
+      "screenshots": [
+        "web_ui_qa_reports/setup_llm_config_162737.png"
+      ],
+      "details": {}
+    },
+    {
+      "name": "select_provider",
+      "result": "passed",
+      "duration_seconds": 1.078808,
+      "message": "Selected provider: OpenRouter",
+      "screenshots": [
+        "web_ui_qa_reports/setup_provider_selected_162738.png"
+      ],
+      "details": {
+        "provider": "openrouter"
+      }
+    },
+    {
+      "name": "enter_api_key",
+      "result": "passed",
+      "duration_seconds": 2.086779,
+      "message": "API key entered",
+      "screenshots": [
+        "web_ui_qa_reports/setup_key_entered_162740.png"
+      ],
+      "details": {
+        "key_prefix": "sk-or-v1-c..."
+      }
+    },
+    {
+      "name": "load_models",
+      "result": "failed",
+      "duration_seconds": 0.0,
+      "message": "Model dropdown did not appear - live model listing failed",
+      "screenshots": [
+        "web_ui_qa_reports/setup_models_loaded_162745.png"
+      ],
+      "details": {
+        "clicked": "Load available models link",
+        "load_wait_seconds": 1,
+        "select_count": 0
+      }
+    },
+    {
+      "name": "select_model",
+      "result": "failed",
+      "duration_seconds": 0.0,
+      "message": "Model dropdown not found - run load_models test first",
+      "screenshots": [],
+      "details": {}
+    }
+  ]
+}

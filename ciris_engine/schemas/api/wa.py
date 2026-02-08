@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import WAPermission
@@ -18,6 +18,8 @@ from ciris_engine.schemas.types import JSONDict
 class DeferralListResponse(BaseModel):
     """Response containing list of pending deferrals."""
 
+    model_config = ConfigDict(defer_build=True)
+
     deferrals: List[PendingDeferral] = Field(..., description="List of pending deferrals")
     total: int = Field(..., description="Total number of pending deferrals")
 
@@ -25,12 +27,16 @@ class DeferralListResponse(BaseModel):
 class ResolveDeferralRequest(BaseModel):
     """Request to resolve a deferral with integrated guidance."""
 
+    model_config = ConfigDict(defer_build=True)
+
     resolution: str = Field(..., pattern="^(approve|reject|modify)$", description="Resolution type")
     guidance: str = Field(..., description="WA wisdom guidance integrated with the decision")
 
 
 class ResolveDeferralResponse(BaseModel):
     """Response after resolving a deferral."""
+
+    model_config = ConfigDict(defer_build=True)
 
     success: bool = Field(..., description="Whether resolution succeeded")
     deferral_id: str = Field(..., description="ID of resolved deferral")
@@ -40,12 +46,16 @@ class ResolveDeferralResponse(BaseModel):
 class PermissionsListResponse(BaseModel):
     """Response containing list of permissions."""
 
+    model_config = ConfigDict(defer_build=True)
+
     permissions: List[WAPermission] = Field(..., description="List of permissions")
     wa_id: str = Field(..., description="WA ID these permissions belong to")
 
 
 class WAStatusResponse(BaseModel):
     """WA service status response."""
+
+    model_config = ConfigDict(defer_build=True)
 
     service_healthy: bool = Field(..., description="Whether WA service is healthy")
     active_was: int = Field(..., description="Number of active WAs")
@@ -71,6 +81,8 @@ class UrgencyLevel(str, Enum):
 class WAGuidanceRequest(BaseModel):
     """Request for WA guidance on a topic."""
 
+    model_config = ConfigDict(defer_build=True)
+
     topic: str = Field(..., description="Topic requiring guidance")
     context: Optional[str] = Field(None, description="Additional context for the guidance request")
     urgency: Optional[UrgencyLevel] = Field(None, description="Urgency level")
@@ -78,6 +90,8 @@ class WAGuidanceRequest(BaseModel):
 
 class WAGuidanceResponse(BaseModel):
     """WA guidance response."""
+
+    model_config = ConfigDict(defer_build=True)
 
     guidance: str = Field(..., description="Wisdom guidance provided")
     wa_id: str = Field(..., description="ID of WA who provided guidance")

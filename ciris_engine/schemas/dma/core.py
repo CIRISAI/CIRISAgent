@@ -76,7 +76,7 @@ class DMAInputData(BaseModel):
         # Always return True for now - audit verification would need to be checked separately
         return True
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DMAContext(BaseModel):
@@ -101,7 +101,7 @@ class DMAContext(BaseModel):
     # Community context
     community_guidelines: List[str] = Field(default_factory=list, description="Applicable community guidelines")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DMADecision(BaseModel):
@@ -116,7 +116,7 @@ class DMADecision(BaseModel):
     factors_considered: List[str] = Field(default_factory=list, description="Factors in decision")
     alternatives_evaluated: List[str] = Field(default_factory=list, description="Alternatives considered")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class PrincipleEvaluation(BaseModel):
@@ -131,7 +131,7 @@ class PrincipleEvaluation(BaseModel):
     violation_details: Dict[str, str] = Field(default_factory=dict, description="Details per violation")
     mitigation_suggestions: List[str] = Field(default_factory=list, description="How to mitigate")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CommonSenseEvaluation(BaseModel):
@@ -145,7 +145,7 @@ class CommonSenseEvaluation(BaseModel):
     identified_risks: List[Dict[str, str]] = Field(default_factory=list, description="Risks identified")
     risk_level: str = Field(..., description="Overall risk: negligible, low, medium, high, extreme")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DomainEvaluation(BaseModel):
@@ -161,7 +161,7 @@ class DomainEvaluation(BaseModel):
     relevant_knowledge: List[str] = Field(default_factory=list, description="Relevant domain knowledge")
     recommendations: List[str] = Field(default_factory=list, description="Domain-specific recommendations")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class RecursiveReasoning(BaseModel):
@@ -183,7 +183,7 @@ class RecursiveReasoning(BaseModel):
     selection_validated: bool = Field(..., description="Whether selection process was valid")
     validation_reasoning: str = Field(..., description="Why valid or not")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # These are imported from other v1 schemas

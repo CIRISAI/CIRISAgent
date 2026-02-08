@@ -9,9 +9,10 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
-from ciris_engine.schemas.types import ConfigDict, ConfigValue
+from ciris_engine.schemas.types import ConfigMapping as ConfigDictType
+from ciris_engine.schemas.types import ConfigValue
 
 from .auth import UserRole
 
@@ -115,7 +116,7 @@ class ConfigSecurity:
         return "[REDACTED]"
 
     @classmethod
-    def filter_config(cls, config: ConfigDict, role: UserRole) -> ConfigDict:
+    def filter_config(cls, config: ConfigDictType, role: UserRole) -> ConfigDictType:
         """
         Filter entire configuration dictionary based on role.
 
@@ -167,6 +168,8 @@ class ConfigSecurity:
 class ConfigValueResponse(BaseModel):
     """Response for a single configuration value."""
 
+    model_config = ConfigDict(defer_build=True)
+
     key: str = Field(..., description="Configuration key")
     value: ConfigValue = Field(..., description="Configuration value (may be redacted)")
     is_sensitive: bool = Field(..., description="Whether this is a sensitive key")
@@ -182,11 +185,13 @@ class ConfigValueResponse(BaseModel):
 class ConfigListResponse(BaseModel):
     """Response for configuration list."""
 
-    configs: ConfigDict = Field(..., description="Configuration values")
+    model_config = ConfigDict(defer_build=True)
+
+    configs: ConfigDictType = Field(..., description="Configuration values")
     metadata: Dict[str, Union[str, int, float, bool]] = Field(..., description="Response metadata")
 
 
-def filter_config_for_role(config: ConfigDict, role: UserRole) -> ConfigDict:
+def filter_config_for_role(config: ConfigDictType, role: UserRole) -> ConfigDictType:
     """
     Filter configuration values based on user role.
 
@@ -203,12 +208,16 @@ def filter_config_for_role(config: ConfigDict, role: UserRole) -> ConfigDict:
 class ConfigUpdateRequest(BaseModel):
     """Request to update configuration value."""
 
+    model_config = ConfigDict(defer_build=True)
+
     value: ConfigValue = Field(..., description="New configuration value")
     comment: Optional[str] = Field(None, description="Optional comment about change")
 
 
 class ConfigUpdateResponse(BaseModel):
     """Response after configuration update."""
+
+    model_config = ConfigDict(defer_build=True)
 
     success: bool = Field(..., description="Whether update succeeded")
     key: str = Field(..., description="Configuration key")
@@ -218,6 +227,8 @@ class ConfigUpdateResponse(BaseModel):
 
 class ConfigHistoryEntry(BaseModel):
     """Configuration change history entry."""
+
+    model_config = ConfigDict(defer_build=True)
 
     key: str = Field(..., description="Configuration key")
     old_value: ConfigValue = Field(..., description="Previous value (may be redacted)")
@@ -230,11 +241,15 @@ class ConfigHistoryEntry(BaseModel):
 class ConfigValidationRequest(BaseModel):
     """Request to validate configuration changes."""
 
-    changes: ConfigDict = Field(..., description="Proposed changes")
+    model_config = ConfigDict(defer_build=True)
+
+    changes: ConfigDictType = Field(..., description="Proposed changes")
 
 
 class ConfigValidationResponse(BaseModel):
     """Response from configuration validation."""
+
+    model_config = ConfigDict(defer_build=True)
 
     valid: bool = Field(..., description="Whether all changes are valid")
     errors: Dict[str, str] = Field(default_factory=dict, description="Validation errors by key")

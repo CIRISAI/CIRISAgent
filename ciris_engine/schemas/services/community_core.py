@@ -24,7 +24,7 @@ class CommunityHealth(BaseModel):
     helpfulness: int = Field(default=50, ge=0, le=100, description="Helpfulness level (0-100)")
     flourishing: int = Field(default=50, ge=0, le=100, description="Composite flourishing metric from Annex A")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CommunityValue(BaseModel):
@@ -33,7 +33,7 @@ class CommunityValue(BaseModel):
     name: str = Field(description="Value name")
     importance: int = Field(ge=0, le=100, description="Importance rating (0-100)")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class MinimalCommunityContext(BaseModel):
@@ -46,7 +46,7 @@ class MinimalCommunityContext(BaseModel):
     health: CommunityHealth = Field(default_factory=CommunityHealth, description="Community health metrics")
     agent_role: Optional[str] = Field(default=None, description="Agent's role (moderator, helper, etc.)")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CommunityMember(BaseModel):
@@ -57,7 +57,7 @@ class CommunityMember(BaseModel):
     contribution_score: int = Field(default=50, ge=0, le=100, description="Contribution score (0-100)")
     last_active: Optional[str] = Field(default=None, description="ISO timestamp of last activity")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CommunityEvent(BaseModel):
@@ -69,7 +69,7 @@ class CommunityEvent(BaseModel):
     timestamp: str = Field(description="ISO timestamp of event")
     summary: str = Field(description="Brief event summary")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CommunitySnapshot(BaseModel):
@@ -81,7 +81,7 @@ class CommunitySnapshot(BaseModel):
     active_members: List[str] = Field(default_factory=list, description="IDs of currently active members")
     recent_events: List[CommunityEvent] = Field(default_factory=list, description="Recent significant events")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [

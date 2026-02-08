@@ -15,6 +15,8 @@ from ciris_engine.schemas.config.tickets import TicketsConfig
 class StewardshipCalculation(BaseModel):
     """Schema for the Stewardship Tier calculation details."""
 
+    model_config = ConfigDict(defer_build=True)
+
     creator_influence_score: int = Field(..., description="Creator-Influence Score (CIS)")
     risk_magnitude: int = Field(..., description="Risk Magnitude (RM)")
     formula: str = Field(..., description="Formula used for calculation")
@@ -23,6 +25,8 @@ class StewardshipCalculation(BaseModel):
 
 class CreatorLedgerEntry(BaseModel):
     """Schema for the Creator Ledger entry."""
+
+    model_config = ConfigDict(defer_build=True)
 
     creator_id: str = Field(..., description="Identifier for the creator or creating team")
     creation_timestamp: str = Field(..., description="ISO 8601 timestamp of the creation entry")
@@ -36,6 +40,8 @@ class CreatorLedgerEntry(BaseModel):
 class CreatorIntentStatement(BaseModel):
     """Schema for the Creator Intent Statement (CIS)."""
 
+    model_config = ConfigDict(defer_build=True)
+
     purpose_and_functionalities: List[str] = Field(..., description="The intended purpose and functionalities")
     limitations_and_design_choices: List[str] = Field(..., description="Known limitations and key design choices")
     anticipated_benefits: List[str] = Field(..., description="Anticipated benefits of the creation")
@@ -44,6 +50,8 @@ class CreatorIntentStatement(BaseModel):
 
 class Stewardship(BaseModel):
     """Schema for Book VI Stewardship information."""
+
+    model_config = ConfigDict(defer_build=True)
 
     stewardship_tier: int = Field(..., description="Calculated Stewardship Tier (ST) for the agent")
     creator_intent_statement: CreatorIntentStatement = Field(..., description="The Creator Intent Statement (CIS)")
@@ -90,7 +98,7 @@ class AgentTemplate(BaseModel):
         description="Template-driven cognitive state transition configuration",
     )
 
-    model_config = ConfigDict(extra="allow")  # Allow additional fields for extensibility
+    model_config = ConfigDict(defer_build=True, extra="allow")  # Allow additional fields for extensibility
 
     @field_validator("stewardship", mode="before")
     @classmethod
@@ -224,7 +232,7 @@ class DSDMAConfiguration(BaseModel):
     domain_specific_knowledge: Optional[Dict[str, Union[str, List[str], Dict[str, str]]]] = Field(
         None, description="Domain-specific knowledge like rules, principles, examples"
     )
-    model_config = ConfigDict(extra="allow")  # Allow domain-specific fields
+    model_config = ConfigDict(defer_build=True, extra="allow")  # Allow domain-specific fields
 
 
 class CSDMAOverrides(BaseModel):
@@ -232,7 +240,7 @@ class CSDMAOverrides(BaseModel):
 
     system_prompt: Optional[str] = Field(None, description="Override system prompt")
     user_prompt_template: Optional[str] = Field(None, description="Override user prompt template")
-    model_config = ConfigDict(extra="forbid")  # Strict validation
+    model_config = ConfigDict(defer_build=True, extra="forbid")  # Strict validation
 
 
 class ActionSelectionOverrides(BaseModel):
@@ -241,7 +249,7 @@ class ActionSelectionOverrides(BaseModel):
     system_prompt: Optional[str] = Field(None, description="Override system prompt")
     user_prompt_template: Optional[str] = Field(None, description="Override user prompt template")
     action_descriptions: Optional[Dict[str, str]] = Field(None, description="Override action descriptions")
-    model_config = ConfigDict(extra="allow")  # Allow for additional, template-specific guidance
+    model_config = ConfigDict(defer_build=True, extra="allow")  # Allow for additional, template-specific guidance
 
 
 class DiscordAdapterOverrides(BaseModel):
@@ -253,7 +261,7 @@ class DiscordAdapterOverrides(BaseModel):
     monitored_channel_ids: Optional[List[str]] = Field(None, description="Override monitored channels")
     allowed_user_ids: Optional[List[str]] = Field(None, description="Override allowed users")
     allowed_role_ids: Optional[List[str]] = Field(None, description="Override allowed roles")
-    model_config = ConfigDict(extra="forbid")  # Only allow known overrides
+    model_config = ConfigDict(defer_build=True, extra="forbid")  # Only allow known overrides
 
 
 class APIAdapterOverrides(BaseModel):
@@ -263,7 +271,7 @@ class APIAdapterOverrides(BaseModel):
     rate_limit_per_minute: Optional[int] = Field(None, description="Override rate limit")
     max_request_size: Optional[int] = Field(None, description="Override max request size")
     cors_origins: Optional[List[str]] = Field(None, description="Override CORS origins")
-    model_config = ConfigDict(extra="forbid")  # Only allow known overrides
+    model_config = ConfigDict(defer_build=True, extra="forbid")  # Only allow known overrides
 
 
 class CLIAdapterOverrides(BaseModel):
@@ -273,7 +281,7 @@ class CLIAdapterOverrides(BaseModel):
     prompt_prefix: Optional[str] = Field(None, description="Override prompt prefix")
     enable_colors: Optional[bool] = Field(None, description="Override color output")
     max_history_entries: Optional[int] = Field(None, description="Override history size")
-    model_config = ConfigDict(extra="forbid")  # Only allow known overrides
+    model_config = ConfigDict(defer_build=True, extra="forbid")  # Only allow known overrides
 
 
 # Update forward references

@@ -35,6 +35,8 @@ class PassiveObservationResult(BaseModel):
     thought_id: Optional[str] = Field(None, description="Thought ID if created")
     existing_task_updated: bool = Field(default=False, description="Whether an existing task was updated")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class MessageHandlingResult(BaseModel):
     """Result of handling an incoming message through the observer pipeline."""
@@ -50,6 +52,8 @@ class MessageHandlingResult(BaseModel):
     task_priority: int = Field(default=0, description="Priority of created task (0=passive, 5=high, 10=critical)")
     existing_task_updated: bool = Field(default=False, description="Whether an existing task was updated")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class IncomingMessage(BaseModel):
     """Schema for incoming messages from various sources."""
@@ -64,7 +68,7 @@ class IncomingMessage(BaseModel):
     # Native multimodal support - images attached to the message
     images: List[Any] = Field(default_factory=list, description="Images attached to this message (List[ImageContent])")
 
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    model_config = ConfigDict(populate_by_name=True, extra="allow", defer_build=True)
 
     @property
     def channel_id(self) -> Optional[str]:
@@ -96,7 +100,7 @@ class FetchedMessage(BaseModel):
     is_bot: Optional[bool] = False
     message_type: Optional[str] = Field(default="user", description="Type of message (user, agent, system, error)")
 
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    model_config = ConfigDict(populate_by_name=True, extra="allow", defer_build=True)
 
 
 __all__ = [

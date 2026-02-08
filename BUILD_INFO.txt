@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: a6c57ce7f0dd
-Build Time: 2026-02-07T14:10:52.237497
-Git Commit: e8e1bbf7b750949056ce74fe85126542c6de1786
-Git Branch: release/1.9.7
+Code Hash: 3d58e5d6327e
+Build Time: 2026-02-07T23:54:37.389225
+Git Commit: 09668bf871b3ff25649c1a12ecb08dee31af5171
+Git Branch: release/1.9.8
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

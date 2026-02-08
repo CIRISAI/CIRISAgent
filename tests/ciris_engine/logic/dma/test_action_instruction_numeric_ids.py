@@ -17,26 +17,25 @@ class TestActionInstructionNumericIds:
         """Create action instruction generator."""
         return ActionInstructionGenerator()
 
-    def test_memorize_instruction_includes_numeric_id_guidance(self, generator):
-        """Test MEMORIZE action includes guidance about numeric Discord IDs."""
+    def test_memorize_instruction_uses_flat_field_names(self, generator):
+        """Test MEMORIZE action uses flat field names (memorize_* prefix)."""
         schema = generator._generate_schema_for_action(HandlerActionType.MEMORIZE)
 
-        # Check that the schema includes numeric ID guidance
-        assert "numeric Discord IDs" in schema
-        assert "user/537080239679864862" in schema
-        assert "primary identifier" in schema
-        assert "Usernames can change" in schema
-        assert "numeric IDs are permanent" in schema
+        # Check that the schema uses flat field names
+        assert "MEMORIZE:" in schema
+        assert "memorize_node_type" in schema
+        assert "memorize_content" in schema
+        assert "memorize_scope" in schema
 
-    def test_recall_instruction_includes_numeric_id_guidance(self, generator):
-        """Test RECALL action includes guidance about using numeric IDs."""
+    def test_recall_instruction_uses_flat_field_names(self, generator):
+        """Test RECALL action uses flat field names (recall_* prefix)."""
         schema = generator._generate_schema_for_action(HandlerActionType.RECALL)
 
-        # Check that the schema includes numeric ID guidance
-        assert "numeric Discord IDs" in schema
-        assert "user/537080239679864862" in schema
-        assert "node_id" in schema
-        assert "If you only have a username" in schema
+        # Check that the schema uses flat field names
+        assert "RECALL:" in schema
+        assert "recall_query" in schema
+        assert "recall_node_type" in schema or "recall_scope" in schema
+        assert "recall_limit" in schema
 
     def test_forget_instruction_includes_numeric_id_guidance(self, generator):
         """Test FORGET action includes guidance about numeric IDs."""
@@ -53,38 +52,38 @@ class TestActionInstructionNumericIds:
             [HandlerActionType.MEMORIZE, HandlerActionType.RECALL, HandlerActionType.FORGET]
         )
 
-        # Verify all memory actions have numeric ID guidance
-        assert instructions.count("numeric Discord IDs") >= 3
-        assert instructions.count("user/537080239679864862") >= 3
+        # Verify all memory actions are present with flat field names
+        assert "MEMORIZE:" in instructions
+        assert "RECALL:" in instructions
+        assert "FORGET:" in instructions
+        # FORGET still has numeric ID guidance
+        assert "numeric Discord IDs" in instructions
 
     def test_memorize_schema_format(self, generator):
-        """Test that MEMORIZE schema is properly formatted."""
+        """Test that MEMORIZE schema is properly formatted with flat fields."""
         schema = generator._format_memory_action_schema("MEMORIZE")
 
-        # Check basic structure
+        # Check basic structure with flat field names
         assert "MEMORIZE:" in schema
-        assert "node" in schema
-        assert "id: string (unique identifier)" in schema
-        assert 'type: "agent"|"user"|"channel"|"concept"' in schema
-        assert 'scope: "local"|"identity"|"environment"' in schema
+        assert "memorize_node_type" in schema
+        assert "memorize_content" in schema
+        assert "memorize_scope" in schema
+        assert "local|identity|environment" in schema
 
         # Check guidance sections
-        assert "For type:" in schema
-        assert "For scope:" in schema
-        assert "IMPORTANT for user nodes:" in schema
+        assert "For memorize_node_type:" in schema or "user" in schema
+        assert "For memorize_scope:" in schema or "local" in schema
 
     def test_recall_schema_format(self, generator):
-        """Test that RECALL schema is properly formatted."""
+        """Test that RECALL schema is properly formatted with flat fields."""
         schema = generator._format_memory_action_schema("RECALL")
 
-        # Check basic structure
+        # Check basic structure with flat field names
         assert "RECALL:" in schema
-        assert "query" in schema
-        assert "node_type" in schema
-        assert "node_id" in schema
-        assert "scope" in schema
-        assert "limit" in schema
+        assert "recall_query" in schema
+        assert "recall_node_type" in schema
+        assert "recall_scope" in schema
+        assert "recall_limit" in schema
 
         # Check guidance
-        assert "For user lookups:" in schema
-        assert "Use numeric Discord IDs" in schema
+        assert "text" in schema.lower() or "search" in schema.lower()

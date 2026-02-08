@@ -18,7 +18,7 @@ class ProcessorContext(BaseModel):
     prefetched_thought: Optional[Thought] = Field(None, description="Pre-fetched thought object")
     batch_context: Optional[Any] = Field(None, description="Batch processing context")
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", defer_build=True)
 
 
 class BatchProcessingContext(BaseModel):
@@ -29,7 +29,7 @@ class BatchProcessingContext(BaseModel):
     current_index: int = Field(0, description="Current item index in batch")
     total_processed: int = Field(0, description="Total items processed so far")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = ["ProcessorContext", "BatchProcessingContext"]

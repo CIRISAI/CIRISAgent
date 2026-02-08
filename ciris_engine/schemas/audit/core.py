@@ -56,7 +56,7 @@ class EventPayload(BaseModel):
     channel_id: Optional[str] = Field(default=None, description="Channel involved")
     service_name: Optional[str] = Field(default=None, description="Service involved")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class AuditEvent(BaseModel):
@@ -70,7 +70,7 @@ class AuditEvent(BaseModel):
     event_data: EventPayload = Field(description="Structured event data")
     outcome: EventOutcome = Field(default=EventOutcome.SUCCESS, description="Event outcome")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class AuditLogEntry(BaseModel):
@@ -94,7 +94,7 @@ class AuditLogEntry(BaseModel):
     previous_hash: Optional[str] = Field(default=None, description="Hash of previous entry for tamper detection")
     entry_hash: Optional[str] = Field(default=None, description="Hash of this entry")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class AuditSummary(BaseModel):
@@ -110,7 +110,7 @@ class AuditSummary(BaseModel):
     earliest_event: Optional[datetime] = Field(default=None, description="Timestamp of earliest event")
     latest_event: Optional[datetime] = Field(default=None, description="Timestamp of latest event")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class AuditQuery(BaseModel):
@@ -125,7 +125,7 @@ class AuditQuery(BaseModel):
     outcome: Optional[EventOutcome] = Field(default=None, description="Filter by outcome")
     limit: int = Field(default=100, ge=1, le=1000, description="Maximum results to return")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [

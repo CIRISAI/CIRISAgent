@@ -34,7 +34,7 @@ class CoreProfile(BaseModel):
     last_shutdown_memory: Optional[str] = Field(None, description="Memory from last shutdown")
     startup_instructions: Optional[str] = Field(None, description="Instructions for startup")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class IdentityMetadata(BaseModel):
@@ -57,7 +57,7 @@ class IdentityMetadata(BaseModel):
     version: str = Field("1.0.0", description="Identity version")
     previous_versions: List[str] = Field(default_factory=list, description="Previous version hashes")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CapabilityDefinition(BaseModel):
@@ -75,7 +75,7 @@ class CapabilityDefinition(BaseModel):
     depends_on: List[str] = Field(default_factory=list, description="Other required capabilities")
     conflicts_with: List[str] = Field(default_factory=list, description="Conflicting capabilities")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class AgentIdentityRoot(BaseModel):
@@ -103,7 +103,7 @@ class AgentIdentityRoot(BaseModel):
     parent_agent_id: Optional[str] = Field(None, description="Parent agent if spawned")
     child_agent_ids: List[str] = Field(default_factory=list, description="Child agents spawned")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class IdentityUpdate(BaseModel):
@@ -126,7 +126,7 @@ class IdentityUpdate(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     correlation_id: str = Field(..., description="For tracing")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class IdentityValidation(BaseModel):
@@ -147,7 +147,7 @@ class IdentityValidation(BaseModel):
     # Recommendations
     recommendations: List[str] = Field(default_factory=list, description="Recommendations for fixes")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # IdentitySnapshot moved to schemas/services/nodes.py as TypedGraphNode

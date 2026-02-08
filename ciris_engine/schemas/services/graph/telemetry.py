@@ -106,7 +106,7 @@ class LLMUsageData(BaseModel):
     energy_kwh: Optional[float] = Field(None, description="Energy usage in kWh")
     model_used: Optional[str] = Field(None, description="Model name used")
 
-    model_config = ConfigDict(protected_namespaces=())
+    model_config = ConfigDict(protected_namespaces=(), defer_build=True)
 
 
 class TelemetryKwargs(BaseModel):
@@ -172,7 +172,7 @@ class CircuitBreakerState(BaseModel):
     consecutive_failures: int = Field(0, description="Consecutive failures")
     failure_rate: str = Field("0.00%", description="Failure rate percentage")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class MetricAggregates(BaseModel):

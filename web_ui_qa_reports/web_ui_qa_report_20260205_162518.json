@@ -1,0 +1,83 @@
+{
+  "start_time": "2026-02-05T16:24:40.868588",
+  "end_time": "2026-02-05T16:25:12.192075",
+  "duration_seconds": 31.323487,
+  "success": true,
+  "error": null,
+  "summary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "reports": [
+    {
+      "name": "load_setup_wizard",
+      "result": "passed",
+      "duration_seconds": 2.812931,
+      "message": "Setup wizard loaded successfully",
+      "screenshots": [
+        "web_ui_qa_reports/setup_step1_162448.png"
+      ],
+      "details": {
+        "page_title": "Welcome to CIRIS"
+      }
+    },
+    {
+      "name": "navigate_to_llm_config",
+      "result": "passed",
+      "duration_seconds": 2.110532,
+      "message": "LLM configuration page loaded",
+      "screenshots": [
+        "web_ui_qa_reports/setup_llm_config_162450.png"
+      ],
+      "details": {}
+    },
+    {
+      "name": "select_provider",
+      "result": "passed",
+      "duration_seconds": 1.075789,
+      "message": "Selected provider: OpenRouter",
+      "screenshots": [
+        "web_ui_qa_reports/setup_provider_selected_162451.png"
+      ],
+      "details": {
+        "provider": "openrouter"
+      }
+    },
+    {
+      "name": "enter_api_key",
+      "result": "passed",
+      "duration_seconds": 2.088118,
+      "message": "API key entered",
+      "screenshots": [
+        "web_ui_qa_reports/setup_key_entered_162453.png"
+      ],
+      "details": {
+        "key_prefix": "sk-or-v1-c..."
+      }
+    },
+    {
+      "name": "load_models",
+      "result": "passed",
+      "duration_seconds": 18.133975,
+      "message": "Models loaded. Found: claude, gpt, llama, gemini, compatible",
+      "screenshots": [
+        "web_ui_qa_reports/setup_models_loading_162512.png"
+      ],
+      "details": {
+        "clicked": "Load available models link",
+        "triggered_load": true,
+        "select_count": 0,
+        "models_found": [
+          "claude",
+          "gpt",
+          "llama",
+          "gemini",
+          "compatible"
+        ]
+      }
+    }
+  ]
+}

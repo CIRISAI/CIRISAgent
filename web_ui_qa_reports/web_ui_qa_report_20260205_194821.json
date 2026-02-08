@@ -1,0 +1,137 @@
+{
+  "start_time": "2026-02-05T19:46:56.157634",
+  "end_time": "2026-02-05T19:48:15.999152",
+  "duration_seconds": 79.841518,
+  "success": false,
+  "error": null,
+  "summary": {
+    "total": 7,
+    "passed": 6,
+    "failed": 0,
+    "errors": 1,
+    "skipped": 0
+  },
+  "reports": [
+    {
+      "name": "load_setup_wizard",
+      "result": "passed",
+      "duration_seconds": 2.790803,
+      "message": "Setup wizard loaded successfully",
+      "screenshots": [
+        "web_ui_qa_reports/setup_step1_194704.png"
+      ],
+      "details": {
+        "page_title": "Welcome to CIRIS"
+      }
+    },
+    {
+      "name": "navigate_to_llm_config",
+      "result": "passed",
+      "duration_seconds": 2.113235,
+      "message": "LLM configuration page loaded",
+      "screenshots": [
+        "web_ui_qa_reports/setup_llm_config_194706.png"
+      ],
+      "details": {}
+    },
+    {
+      "name": "select_provider",
+      "result": "passed",
+      "duration_seconds": 1.082633,
+      "message": "Selected provider: OpenRouter",
+      "screenshots": [
+        "web_ui_qa_reports/setup_provider_selected_194707.png"
+      ],
+      "details": {
+        "provider": "openrouter"
+      }
+    },
+    {
+      "name": "enter_api_key",
+      "result": "passed",
+      "duration_seconds": 2.733595,
+      "message": "API key entered",
+      "screenshots": [
+        "web_ui_qa_reports/setup_key_entered_194709.png"
+      ],
+      "details": {
+        "key_prefix": "sk-or-v1-c...",
+        "key_length": 73
+      }
+    },
+    {
+      "name": "load_models",
+      "result": "passed",
+      "duration_seconds": 29.470282,
+      "message": "Live models loaded: 344 models in dropdown (with \u2605 recommended)",
+      "screenshots": [
+        "web_ui_qa_reports/setup_before_load_models_194711.png",
+        "web_ui_qa_reports/setup_models_loading_194712.png",
+        "web_ui_qa_reports/setup_models_loaded_194739.png"
+      ],
+      "details": {
+        "load_link_count": 1,
+        "clicked": "Load available models link",
+        "load_wait_seconds": 0,
+        "never_saw_loading": true,
+        "select_count": 1,
+        "model_options": [
+          "Select a model...",
+          "\u2605 Llama 4 Maverick \u2713 (default)",
+          "Claude 3.5 Sonnet (via OpenRouter) \u2713 (premium)",
+          "GPT-4o (via OpenRouter) \u2713 (premium)",
+          "Llama 3.3 70B \u2713 (fallback)",
+          "ai21/jamba-large-1.7",
+          "ai21/jamba-mini-1.7",
+          "aion-labs/aion-1.0",
+          "aion-labs/aion-1.0-mini",
+          "aion-labs/aion-rp-llama-3.1-8b"
+        ],
+        "total_models": 344,
+        "has_recommended_indicator": true,
+        "has_compatibility_indicator": true
+      }
+    },
+    {
+      "name": "select_model",
+      "result": "passed",
+      "duration_seconds": 1.094869,
+      "message": "Selected: \u2605 Llama 4 Maverick \u2713 (default)",
+      "screenshots": [
+        "web_ui_qa_reports/setup_model_selected_194740.png"
+      ],
+      "details": {
+        "available_options": [
+          "Select a model...",
+          "\u2605 Llama 4 Maverick \u2713 (default)",
+          "Claude 3.5 Sonnet (via OpenRouter) \u2713 (premium)",
+          "GPT-4o (via OpenRouter) \u2713 (premium)",
+          "Llama 3.3 70B \u2713 (fallback)",
+          "ai21/jamba-large-1.7",
+          "ai21/jamba-mini-1.7",
+          "aion-labs/aion-1.0",
+          "aion-labs/aion-1.0-mini",
+          "aion-labs/aion-rp-llama-3.1-8b"
+        ],
+        "selection_reason": "recommended (\u2605)",
+        "selected_model": "\u2605 Llama 4 Maverick \u2713 (default)",
+        "selected_value": "meta-llama/llama-4-maverick"
+      }
+    },
+    {
+      "name": "complete_setup",
+      "result": "error",
+      "duration_seconds": 35.410983,
+      "message": "Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for get_by_text(\"Complete Setup\").first\n    - locator resolved to <button disabled class=\"w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium\">Complete Setup</button>\n  - attempting click action\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n    - waiting 20ms\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n      - waiting 100ms\n    59 \u00d7 waiting for element to be visible, enabled and stable\n       - element is not enabled\n     - retrying click action\n       - waiting 500ms\n",
+      "screenshots": [
+        "web_ui_qa_reports/setup_connection_tested_194741.png",
+        "web_ui_qa_reports/setup_step_2_194743.png",
+        "web_ui_qa_reports/setup_step_3_194745.png"
+      ],
+      "details": {
+        "clicked_test_connection": true,
+        "connection_test_result": "success"
+      }
+    }
+  ]
+}

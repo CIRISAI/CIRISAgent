@@ -6,7 +6,7 @@ These replace all Dict[str, Any] usage in processor status methods.
 
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.processors.base import ProcessorMetrics
 from ciris_engine.schemas.processors.solitude import ReflectionData
@@ -20,6 +20,8 @@ class SolitudeStats(BaseModel):
     total_rounds: int = Field(0, description="Total rounds completed")
     cleanup_performed: bool = Field(False, description="Whether cleanup was performed")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class ProcessorInfo(BaseModel):
     """General processor status information."""
@@ -32,3 +34,5 @@ class ProcessorInfo(BaseModel):
     # Processor-specific stats
     solitude_stats: Optional[SolitudeStats] = Field(None, description="Solitude-specific stats")
     critical_threshold: Optional[int] = Field(None, description="Critical threshold if applicable")
+
+    model_config = ConfigDict(defer_build=True)

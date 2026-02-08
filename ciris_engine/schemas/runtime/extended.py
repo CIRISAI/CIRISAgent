@@ -21,7 +21,7 @@ class IdentityLineage(BaseModel):
     wise_authority_id: str = Field(..., description="WA who sanctioned the creation")
     creation_ceremony_id: str = Field(..., description="Unique ID of the creation ceremony event")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class IdentityUpdateEntry(BaseModel):
@@ -36,7 +36,7 @@ class IdentityUpdateEntry(BaseModel):
     change_hash: str = Field(..., description="Hash of old and new values for integrity")
     wise_authority_approval: str = Field(..., description="WA approval signature")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class IdentityRoot(BaseModel):
@@ -77,7 +77,7 @@ class IdentityRoot(BaseModel):
     )
     reactivation_count: int = Field(default=0, description="Number of times agent has been reactivated")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CreationCeremonyRequest(BaseModel):
@@ -102,7 +102,7 @@ class CreationCeremonyRequest(BaseModel):
     wise_authority_id: Optional[str] = Field(None, description="Pre-approved by WA")
     approval_signature: Optional[str] = Field(None, description="WA approval signature")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CreationCeremonyResponse(BaseModel):
@@ -116,7 +116,7 @@ class CreationCeremonyResponse(BaseModel):
     error_message: Optional[str] = Field(None, description="Error if creation failed")
     ceremony_transcript: List[str] = Field(default_factory=list, description="Log of ceremony steps")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ScheduledTask(BaseModel):
@@ -148,7 +148,7 @@ class ScheduledTask(BaseModel):
         default_factory=list, description="History of self-deferrals with reasons"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ScheduledTaskInfo(BaseModel):
@@ -164,7 +164,7 @@ class ScheduledTaskInfo(BaseModel):
     last_triggered_at: Optional[str] = Field(None, description="Last execution timestamp (ISO format)")
     deferral_count: int = Field(default=0, description="Times agent has self-deferred")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ShutdownContext(BaseModel):
@@ -177,7 +177,7 @@ class ShutdownContext(BaseModel):
     initiated_by: str = Field(..., description="Who initiated the shutdown")
     allow_deferral: bool = Field(default=True, description="Whether agent can defer the shutdown")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ContinuityAwarenessMemory(BaseModel):
@@ -192,7 +192,7 @@ class ContinuityAwarenessMemory(BaseModel):
     reactivation_instructions: Optional[str] = Field(None, description="Agent's notes for its future sel")
     deferred_goals: List[Dict[str, str]] = Field(default_factory=list, description="Goals to pursue upon reactivation")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class IdentityEvolutionRequest(BaseModel):
@@ -205,7 +205,7 @@ class IdentityEvolutionRequest(BaseModel):
     human_sponsor_id: str = Field(..., description="Human requesting the change")
     urgency: str = Field(default="normal", description="normal, high, critical")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # Graph node type extension for Identity Root

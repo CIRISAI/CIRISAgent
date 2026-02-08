@@ -42,7 +42,7 @@ class TSASPDMAInputs(BaseModel):
     # Optional additional context
     context: Optional[Any] = Field(None, description="Additional processing context if available")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # NOTE: TSASPDMA OUTPUT is ActionSelectionDMAResult (same as ASPDMA!)

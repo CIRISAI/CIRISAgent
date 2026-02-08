@@ -7,7 +7,7 @@ Each state has its own result type with state-specific fields.
 
 from typing import List, Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class WakeupResult(BaseModel):
@@ -18,6 +18,8 @@ class WakeupResult(BaseModel):
     errors: int = Field(0)
     duration_seconds: float = Field(...)
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class WorkResult(BaseModel):
     """Result from WORK state processing."""
@@ -27,6 +29,8 @@ class WorkResult(BaseModel):
     errors: int = Field(0)
     duration_seconds: float = Field(...)
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class PlayResult(BaseModel):
     """Result from PLAY state processing."""
@@ -34,6 +38,8 @@ class PlayResult(BaseModel):
     thoughts_processed: int = Field(0)
     errors: int = Field(0)
     duration_seconds: float = Field(...)
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class SolitudeResult(BaseModel):
@@ -45,6 +51,8 @@ class SolitudeResult(BaseModel):
     should_exit_solitude: bool = Field(False, description="Whether to exit solitude state")
     exit_reason: str = Field("Unknown reason", description="Reason for exiting solitude")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class DreamResult(BaseModel):
     """Result from DREAM state processing."""
@@ -52,6 +60,8 @@ class DreamResult(BaseModel):
     thoughts_processed: int = Field(0)
     errors: int = Field(0)
     duration_seconds: float = Field(...)
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class ShutdownResult(BaseModel):
@@ -82,6 +92,8 @@ class ShutdownResult(BaseModel):
     thoughts: Optional[List[Tuple[str, str]]] = Field(
         None, description="List of (thought_id, status) tuples for debugging"
     )
+
+    model_config = ConfigDict(defer_build=True)
 
 
 # Discriminated union of all possible results

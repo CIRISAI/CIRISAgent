@@ -8,13 +8,15 @@ providing better type safety and validation.
 from datetime import datetime
 from typing import Any, Dict, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.types import JSONDict
 
 
 class CorrelationRequestData(BaseModel):
     """Schema for correlation request data."""
+
+    model_config = ConfigDict(defer_build=True)
 
     channel_id: Optional[str] = Field(None, description="Channel identifier")
     author_id: Optional[str] = Field(None, description="Author identifier")
@@ -32,6 +34,8 @@ class CorrelationRequestData(BaseModel):
 class CorrelationResponseData(BaseModel):
     """Schema for correlation response data."""
 
+    model_config = ConfigDict(defer_build=True)
+
     response_timestamp: str = Field(..., description="ISO timestamp of response")
     execution_time_ms: Optional[float] = Field(None, description="Execution time in milliseconds")
     success: bool = Field(True, description="Whether the operation succeeded")
@@ -46,6 +50,8 @@ class CorrelationResponseData(BaseModel):
 
 class ChannelInfo(BaseModel):
     """Schema for channel information."""
+
+    model_config = ConfigDict(defer_build=True)
 
     channel_id: str = Field(..., description="Unique channel identifier")
     channel_type: str = Field(..., description="Adapter type (discord, api, cli)")
@@ -63,6 +69,8 @@ class ChannelInfo(BaseModel):
 
 class ConversationSummaryData(BaseModel):
     """Schema for conversation summary from TSDB consolidation."""
+
+    model_config = ConfigDict(defer_build=True)
 
     channel_id: str = Field(..., description="Channel identifier")
     period_start: datetime = Field(..., description="Period start time")

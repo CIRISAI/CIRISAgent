@@ -19,12 +19,13 @@ class SimpleBenchRequest(BaseModel):
     model_id: str = Field(..., description="Model identifier")
     agent_id: str = Field(..., description="Agent identifier")
 
-    model_config = ConfigDict(protected_namespaces=())
+    model_config = ConfigDict(defer_build=True, protected_namespaces=())
 
 
 class SimpleBenchResult(BaseModel):
     """Result from SimpleBench run."""
 
+    model_config = ConfigDict(defer_build=True, protected_namespaces=())
     benchmark_id: str = Field(..., description="Unique benchmark run ID")
     agent_id: str = Field(..., description="Agent that was tested")
     model_id: str = Field(..., description="Model that was used")
@@ -39,15 +40,15 @@ class SimpleBenchResult(BaseModel):
 class HE300Request(BaseModel):
     """Request to run HE300 benchmark."""
 
+    model_config = ConfigDict(defer_build=True, protected_namespaces=())
     model_id: str = Field(..., description="Model identifier")
     agent_id: str = Field(..., description="Agent identifier")
-
-    model_config = ConfigDict(protected_namespaces=())
 
 
 class HE300Result(BaseModel):
     """Result from HE300 run."""
 
+    model_config = ConfigDict(defer_build=True, protected_namespaces=())
     benchmark_id: str = Field(..., description="Unique benchmark run ID")
     agent_id: str = Field(..., description="Agent that was tested")
     model_id: str = Field(..., description="Model that was used")
@@ -57,13 +58,12 @@ class HE300Result(BaseModel):
     completed_at: datetime = Field(..., description="Completion timestamp")
     details: Optional[Dict[str, Union[str, int, float, bool]]] = Field(None, description="Additional benchmark details")
 
-    model_config = ConfigDict(protected_namespaces=())
-
 
 # Chaos testing schemas
 class ChaosTestRequest(BaseModel):
     """Request to run chaos tests."""
 
+    model_config = ConfigDict(defer_build=True)
     agent_id: str = Field(..., description="Agent to test")
     scenarios: List[str] = Field(..., description="Chaos scenarios to run")
 
@@ -71,6 +71,7 @@ class ChaosTestRequest(BaseModel):
 class ChaosTestResult(BaseModel):
     """Result from a single chaos test."""
 
+    model_config = ConfigDict(defer_build=True)
     scenario: str = Field(..., description="Scenario that was tested")
     passed: bool = Field(..., description="Whether the test passed")
     recovery_time: Optional[float] = Field(None, description="Time to recover in seconds")
@@ -82,6 +83,7 @@ class ChaosTestResult(BaseModel):
 class WAServiceRequest(BaseModel):
     """Generic request to WA service."""
 
+    model_config = ConfigDict(defer_build=True)
     service: str = Field(..., description="WA service name")
     action: str = Field(..., description="Action to perform")
     params: JSONDict = Field(default_factory=dict, description="Service parameters")
@@ -90,6 +92,7 @@ class WAServiceRequest(BaseModel):
 class WAServiceResponse(BaseModel):
     """Generic response from WA service."""
 
+    model_config = ConfigDict(defer_build=True)
     service: str = Field(..., description="WA service name")
     action: str = Field(..., description="Action performed")
     success: bool = Field(..., description="Whether action succeeded")
@@ -101,6 +104,7 @@ class WAServiceResponse(BaseModel):
 class EventLogRequest(BaseModel):
     """Request to log an event."""
 
+    model_config = ConfigDict(defer_build=True)
     event_type: str = Field(..., description="Type of event")
     event_data: JSONDict = Field(..., description="Event data")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -110,6 +114,7 @@ class EventLogRequest(BaseModel):
 class EventLogResponse(BaseModel):
     """Response from event logging."""
 
+    model_config = ConfigDict(defer_build=True)
     event_id: str = Field(..., description="Unique event ID")
     accepted: bool = Field(..., description="Whether event was accepted")
     timestamp: datetime = Field(..., description="Server timestamp")
@@ -119,6 +124,7 @@ class EventLogResponse(BaseModel):
 class AssessmentSubmission(BaseModel):
     """Submit assessment answers."""
 
+    model_config = ConfigDict(defer_build=True)
     assessment_id: str = Field(..., description="Assessment ID")
     agent_id: str = Field(..., description="Agent taking assessment")
     answers: List[JSONDict] = Field(..., description="Assessment answers as attribute dictionaries")
@@ -127,6 +133,7 @@ class AssessmentSubmission(BaseModel):
 class AssessmentResult(BaseModel):
     """Assessment completion result."""
 
+    model_config = ConfigDict(defer_build=True)
     assessment_id: str = Field(..., description="Assessment ID")
     agent_id: str = Field(..., description="Agent ID")
     score: float = Field(..., description="Overall score")

@@ -71,7 +71,7 @@ class HandlerContext(BaseModel):
     action_parameters: ActionParameters = Field(..., description="Action-specific parameters")
     metadata: ServiceMetadata = Field(..., description="Service metadata")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class HandlerResult(BaseModel):
@@ -82,7 +82,7 @@ class HandlerResult(BaseModel):
     data: Optional[JSONDict] = Field(None, description="Additional result data")
     error: Optional[str] = Field(None, description="Error message if failed")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class HandlerDecapsulatedParams(BaseModel):
@@ -92,4 +92,4 @@ class HandlerDecapsulatedParams(BaseModel):
     action_params: JSONDict = Field(..., description="Decapsulated action parameters")
     context: DecapsulationContext = Field(..., description="Decapsulation context")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)

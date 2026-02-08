@@ -51,7 +51,7 @@ from ciris_engine.schemas.services.runtime_control import (
     WAPublicKeyMap,
 )
 from ciris_engine.schemas.services.shutdown import EmergencyShutdownStatus, KillSwitchConfig, WASignedCommand
-from ciris_engine.schemas.types import ConfigDict, ConfigValue
+from ciris_engine.schemas.types import ConfigMapping, ConfigValue
 
 # GraphConfigService is injected via dependency injection to avoid circular imports
 
@@ -107,7 +107,7 @@ def _build_service_health_detail(
     priority_group: int = -1,
     strategy: str = "DIRECT",
     error: Optional[str] = None,
-) -> ConfigDict:
+) -> ConfigMapping:
     """Build a standardized service health detail dict.
 
     This helper centralizes the service health detail construction
@@ -122,9 +122,9 @@ def _build_service_health_detail(
         error: Optional error message if service is unhealthy
 
     Returns:
-        A ConfigDict with standardized health detail fields
+        A ConfigMapping with standardized health detail fields
     """
-    detail: ConfigDict = {
+    detail: ConfigMapping = {
         "healthy": is_healthy,
         "circuit_breaker_state": circuit_breaker_state,
         "priority": priority,
@@ -1257,7 +1257,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 error=str(e),
             )
 
-    def _extract_backup_configs(self, backup_config: Any) -> ConfigDict:
+    def _extract_backup_configs(self, backup_config: Any) -> ConfigMapping:
         """Extract backup configuration data from ConfigValue wrapper."""
         backup_raw = backup_config.value
         backup_value = backup_raw.value if hasattr(backup_raw, "value") else backup_raw
@@ -1266,7 +1266,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             return self._parse_structured_backup(backup_value)
         elif isinstance(backup_value, dict):
             # Filter out None values to match the expected type
-            result: ConfigDict = {}
+            result: ConfigMapping = {}
             for k, v in backup_value.items():
                 if v is not None and isinstance(v, (str, int, float, bool, list, dict)):
                     result[k] = v
@@ -1274,7 +1274,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         else:
             raise ValueError("Backup data is not in expected format")
 
-    def _parse_structured_backup(self, backup_value: JSONDict) -> ConfigDict:
+    def _parse_structured_backup(self, backup_value: JSONDict) -> ConfigMapping:
         """Parse structured backup data with metadata."""
         timestamp_str = backup_value.get("backup_timestamp")
         if not isinstance(timestamp_str, str):
@@ -1288,7 +1288,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         )
         return backup_data.configs
 
-    async def _restore_configs_from_backup(self, configs: ConfigDict) -> None:
+    async def _restore_configs_from_backup(self, configs: ConfigMapping) -> None:
         """Restore individual configuration values from backup."""
         for key, value in configs.items():
             if not key.startswith("backup_"):  # Don't restore backups

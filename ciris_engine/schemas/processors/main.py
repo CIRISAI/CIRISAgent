@@ -23,7 +23,7 @@ class ProcessorServices(BaseModel):
     telemetry_service: Optional[object] = Field(None, description="Telemetry service")
     time_service: Optional[object] = Field(None, description="Time service")
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, defer_build=True)
 
 
 class ProcessingRoundResult(BaseModel):
@@ -40,6 +40,8 @@ class ProcessingRoundResult(BaseModel):
     processing_time_ms: float = Field(..., description="Processing time in milliseconds")
     details: JSONDict = Field(default_factory=dict, description="Additional round details")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class ProcessingStatus(BaseModel):
     """Overall processing status."""
@@ -53,6 +55,8 @@ class ProcessingStatus(BaseModel):
     errors_last_hour: int = Field(0, description="Errors in last hour")
     state_transitions: int = Field(0, description="Number of state transitions")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class PreloadTask(BaseModel):
     """A task to preload after WORK state transition."""
@@ -61,6 +65,8 @@ class PreloadTask(BaseModel):
     priority: int = Field(5, description="Task priority")
     channel_id: Optional[str] = Field(None, description="Channel to use")
     metadata: JSONDict = Field(default_factory=dict, description="Additional task metadata")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class StateTransitionResult(BaseModel):
@@ -73,6 +79,8 @@ class StateTransitionResult(BaseModel):
     timestamp: datetime = Field(..., description="When transition occurred")
     validation_errors: List[str] = Field(default_factory=list, description="Validation errors if failed")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class MainProcessorMetrics(BaseModel):
     """Metrics for a specific processor."""
@@ -83,6 +91,8 @@ class MainProcessorMetrics(BaseModel):
     errors: int = Field(0, description="Total errors")
     average_round_time_ms: float = Field(0.0, description="Average round processing time")
     last_active: Optional[datetime] = Field(None, description="Last activity time")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class GlobalProcessingMetrics(BaseModel):
@@ -97,6 +107,8 @@ class GlobalProcessingMetrics(BaseModel):
     )
     state_distribution: Dict[AgentState, int] = Field(default_factory=dict, description="Time spent in each state")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class ShutdownRequest(BaseModel):
     """Request to shutdown processing."""
@@ -107,3 +119,5 @@ class ShutdownRequest(BaseModel):
     force_after_timeout: bool = Field(True, description="Force shutdown after timeout")
     requested_by: str = Field("system", description="Who requested shutdown")
     timestamp: datetime = Field(..., description="When shutdown was requested")
+
+    model_config = ConfigDict(defer_build=True)

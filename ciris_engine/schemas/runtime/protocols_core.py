@@ -17,7 +17,7 @@ class LLMUsageStatistics(BaseModel):
     failed_calls: int = Field(0, description="Number of failed calls")
     success_rate: float = Field(1.0, ge=0.0, le=1.0, description="Success rate (0-1)")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class LLMStatus(BaseModel):
@@ -29,7 +29,7 @@ class LLMStatus(BaseModel):
     rate_limit_remaining: Optional[int] = Field(None, description="Remaining API calls")
     response_time_avg: Optional[float] = Field(None, description="Average response time")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class NetworkQueryRequest(BaseModel):
@@ -39,7 +39,7 @@ class NetworkQueryRequest(BaseModel):
     parameters: Dict[str, str] = Field(default_factory=dict, description="Query parameters")
     timeout: Optional[float] = Field(30.0, description="Query timeout")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class MetricDataPoint(BaseModel):
@@ -51,7 +51,7 @@ class MetricDataPoint(BaseModel):
     tags: Dict[str, str] = Field(default_factory=dict, description="Metric tags")
     service_name: Optional[str] = Field(None, description="Service that recorded metric")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ResourceLimits(BaseModel):
@@ -63,7 +63,7 @@ class ResourceLimits(BaseModel):
     max_api_calls_per_minute: Optional[int] = Field(None, description="API rate limit")
     max_concurrent_operations: Optional[int] = Field(None, description="Max concurrent ops")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class SecretInfo(BaseModel):
@@ -78,7 +78,7 @@ class SecretInfo(BaseModel):
     access_count: int = Field(0, description="Number of times accessed")
     decrypted_value: Optional[str] = Field(None, description="Decrypted value if requested")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class SecretsServiceStats(BaseModel):
@@ -90,7 +90,7 @@ class SecretsServiceStats(BaseModel):
     recent_detections: int = Field(0, description="Detections in last hour")
     storage_size_bytes: Optional[int] = Field(None, description="Storage size used")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = ["LLMStatus", "NetworkQueryRequest", "MetricDataPoint", "ResourceLimits", "SecretInfo", "SecretsServiceStats"]

@@ -1,0 +1,82 @@
+{
+  "start_time": "2026-02-05T16:33:29.695413",
+  "end_time": "2026-02-05T16:34:12.986710",
+  "duration_seconds": 43.291297,
+  "success": false,
+  "error": null,
+  "summary": {
+    "total": 5,
+    "passed": 4,
+    "failed": 1,
+    "errors": 0,
+    "skipped": 0
+  },
+  "reports": [
+    {
+      "name": "load_setup_wizard",
+      "result": "passed",
+      "duration_seconds": 2.782154,
+      "message": "Setup wizard loaded successfully",
+      "screenshots": [
+        "web_ui_qa_reports/setup_step1_163337.png"
+      ],
+      "details": {
+        "page_title": "Welcome to CIRIS"
+      }
+    },
+    {
+      "name": "navigate_to_llm_config",
+      "result": "passed",
+      "duration_seconds": 2.114191,
+      "message": "LLM configuration page loaded",
+      "screenshots": [
+        "web_ui_qa_reports/setup_llm_config_163339.png"
+      ],
+      "details": {}
+    },
+    {
+      "name": "select_provider",
+      "result": "passed",
+      "duration_seconds": 1.083556,
+      "message": "Selected provider: OpenRouter",
+      "screenshots": [
+        "web_ui_qa_reports/setup_provider_selected_163340.png"
+      ],
+      "details": {
+        "provider": "openrouter"
+      }
+    },
+    {
+      "name": "enter_api_key",
+      "result": "passed",
+      "duration_seconds": 2.742504,
+      "message": "API key entered",
+      "screenshots": [
+        "web_ui_qa_reports/setup_key_entered_163343.png"
+      ],
+      "details": {
+        "key_prefix": "sk-or-v1-c...",
+        "key_length": 73
+      }
+    },
+    {
+      "name": "load_models",
+      "result": "failed",
+      "duration_seconds": 0.0,
+      "message": "Model dropdown did not appear - live model listing failed",
+      "screenshots": [
+        "web_ui_qa_reports/setup_before_load_models_163344.png",
+        "web_ui_qa_reports/setup_models_loading_163345.png",
+        "web_ui_qa_reports/setup_models_loaded_163412.png"
+      ],
+      "details": {
+        "load_link_count": 1,
+        "clicked": "Load available models link",
+        "load_wait_seconds": 0,
+        "never_saw_loading": true,
+        "select_count": 0,
+        "page_has_error": true
+      }
+    }
+  ]
+}

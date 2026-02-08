@@ -31,7 +31,7 @@ class ServiceCapabilityDeclaration(BaseModel):
     version: str = Field(default="1.0.0", description="Capability version")
     parameters: Optional[Dict[str, str]] = Field(None, description="Parameter descriptions")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ServiceDependency(BaseModel):
@@ -42,7 +42,7 @@ class ServiceDependency(BaseModel):
     minimum_version: Optional[str] = Field(None, description="Minimum service version required")
     capabilities_required: List[str] = Field(default_factory=list, description="Required capabilities")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ServiceDeclaration(BaseModel):
@@ -53,7 +53,7 @@ class ServiceDeclaration(BaseModel):
     priority: ServicePriority = Field(ServicePriority.NORMAL, description="Service priority level")
     capabilities: List[str] = Field(default_factory=list, description="List of capability names")
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True, defer_build=True)
 
 
 class ModuleInfo(BaseModel):
@@ -74,7 +74,7 @@ class ModuleInfo(BaseModel):
     opt_in_required: bool = Field(False, description="Whether explicit opt-in is required")
     requires_consent: bool = Field(False, description="Whether user consent is required for data collection")
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True, defer_build=True)
 
 
 class LegacyDependencies(BaseModel):
@@ -85,7 +85,7 @@ class LegacyDependencies(BaseModel):
     external: Optional[Dict[str, str]] = Field(None, description="External package dependencies")
     internal: Optional[List[str]] = Field(None, description="Internal module dependencies")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ConfigurationParameter(BaseModel):
@@ -99,7 +99,7 @@ class ConfigurationParameter(BaseModel):
     required: bool = Field(True, description="Whether this parameter is required")
     enum: Optional[List[str]] = Field(None, description="Allowed values for string parameters")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class AdapterOAuthConfig(BaseModel):
@@ -119,7 +119,7 @@ class AdapterOAuthConfig(BaseModel):
     scopes: List[str] = Field(default_factory=list, description="OAuth scopes to request")
     pkce_required: bool = Field(True, description="Whether PKCE is required for this OAuth flow")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ConfigurationFieldDefinition(BaseModel):
@@ -147,7 +147,7 @@ class ConfigurationFieldDefinition(BaseModel):
     # Conditional display
     depends_on: Optional[Dict[str, Any]] = Field(None, description="Conditional display based on other fields")
 
-    model_config = ConfigDict(extra="allow")  # Allow additional field-specific properties
+    model_config = ConfigDict(extra="allow", defer_build=True)  # Allow additional field-specific properties
 
 
 class ConfigurationStep(BaseModel):
@@ -203,7 +203,7 @@ class ConfigurationStep(BaseModel):
     # Confirm step fields
     action: Optional[str] = Field(None, description="Action to perform on confirm (e.g., 'test_connection')")
 
-    model_config = ConfigDict(extra="allow")  # Allow additional step-specific properties
+    model_config = ConfigDict(extra="allow", defer_build=True)  # Allow additional step-specific properties
 
 
 class InteractiveConfiguration(BaseModel):
@@ -220,7 +220,7 @@ class InteractiveConfiguration(BaseModel):
     steps: List[ConfigurationStep] = Field(default_factory=list, description="Ordered list of configuration steps")
     completion_method: str = Field("apply_config", description="Method name to call when configuration is complete")
 
-    model_config = ConfigDict(extra="allow")  # Allow reference/documentation fields
+    model_config = ConfigDict(extra="allow", defer_build=True)  # Allow reference/documentation fields
 
 
 class ServiceManifest(BaseModel):
@@ -248,7 +248,7 @@ class ServiceManifest(BaseModel):
         None, description="Explanation of why platform requirements are needed"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
     def validate_manifest(self) -> List[str]:
         """Validate manifest consistency.
@@ -293,7 +293,7 @@ class ServiceMetadata(BaseModel):
     priority: ServicePriority = Field(ServicePriority.NORMAL, description="Service priority")
     health_status: str = Field("unknown", description="Current health status")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ModuleLoadResult(BaseModel):
@@ -305,7 +305,7 @@ class ModuleLoadResult(BaseModel):
     errors: List[str] = Field(default_factory=list, description="Any errors encountered")
     warnings: List[str] = Field(default_factory=list, description="Any warnings generated")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ServiceRegistration(BaseModel):
@@ -318,4 +318,4 @@ class ServiceRegistration(BaseModel):
     metadata: ServiceMetadata = Field(..., description="Service metadata")
     registered_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)

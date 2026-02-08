@@ -174,7 +174,7 @@ class AuthContext(BaseModel):
     session_id: Optional[str] = Field(None, description="Session ID if using session auth")
     authenticated_at: datetime = Field(..., description="When authentication occurred")
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(defer_build=True, arbitrary_types_allowed=True)
 
     # Request object (not serialized)
     request: Optional[Any] = Field(None, exclude=True)
@@ -202,6 +202,8 @@ class AuthContext(BaseModel):
 class APIKey(BaseModel):
     """API key model for authentication."""
 
+    model_config = ConfigDict(defer_build=True)
+
     id: str = Field(..., description="Unique key identifier")
     key_hash: str = Field(..., description="Hashed API key")
     user_id: str = Field(..., description="User who owns this key")
@@ -226,12 +228,16 @@ class APIKey(BaseModel):
 class LoginRequest(BaseModel):
     """Request to authenticate with username/password."""
 
+    model_config = ConfigDict(defer_build=True)
+
     username: str = Field(..., description="Username")
     password: str = Field(..., description="Password")
 
 
 class LoginResponse(BaseModel):
     """Response after successful login."""
+
+    model_config = ConfigDict(defer_build=True)
 
     access_token: str = Field(..., description="JWT access token")
     token_type: str = Field("bearer", description="Token type")
@@ -243,11 +249,15 @@ class LoginResponse(BaseModel):
 class TokenRefreshRequest(BaseModel):
     """Request to refresh access token."""
 
+    model_config = ConfigDict(defer_build=True)
+
     refresh_token: str = Field(..., description="Refresh token")
 
 
 class UserInfo(BaseModel):
     """Current user information."""
+
+    model_config = ConfigDict(defer_build=True)
 
     user_id: str = Field(..., description="User ID")
     username: str = Field(..., description="Username")
@@ -260,6 +270,8 @@ class UserInfo(BaseModel):
 class TokenResponse(BaseModel):
     """Token information response."""
 
+    model_config = ConfigDict(defer_build=True)
+
     user_id: str
     role: UserRole
     scopes: List[str]
@@ -269,11 +281,15 @@ class TokenResponse(BaseModel):
 class OAuth2StartRequest(BaseModel):
     """OAuth2 flow start request."""
 
+    model_config = ConfigDict(defer_build=True)
+
     redirect_uri: Optional[str] = Field(None, description="Custom redirect URI after authentication")
 
 
 class OAuth2CallbackResponse(BaseModel):
     """OAuth2 callback response with API key."""
+
+    model_config = ConfigDict(defer_build=True)
 
     access_token: str = Field(..., description="API key for accessing CIRIS API")
     token_type: str = Field("Bearer", description="Token type")
@@ -288,6 +304,8 @@ class OAuth2CallbackResponse(BaseModel):
 class APIKeyCreateRequest(BaseModel):
     """Request to create a new API key."""
 
+    model_config = ConfigDict(defer_build=True)
+
     description: Optional[str] = Field(None, description="Description of the key's purpose")
     expires_in_minutes: int = Field(
         ...,
@@ -300,6 +318,8 @@ class APIKeyCreateRequest(BaseModel):
 class APIKeyResponse(BaseModel):
     """Response with created API key."""
 
+    model_config = ConfigDict(defer_build=True)
+
     api_key: str = Field(..., description="The generated API key (show only once!)")
     role: UserRole = Field(..., description="Role assigned to the key")
     expires_at: Optional[datetime] = Field(None, description="When the key expires")
@@ -310,6 +330,8 @@ class APIKeyResponse(BaseModel):
 
 class APIKeyInfo(BaseModel):
     """API key information (without the actual key)."""
+
+    model_config = ConfigDict(defer_build=True)
 
     key_id: str = Field(..., description="Key identifier (partial)")
     role: UserRole = Field(..., description="Role assigned to the key")
@@ -324,12 +346,16 @@ class APIKeyInfo(BaseModel):
 class APIKeyListResponse(BaseModel):
     """List of API keys."""
 
+    model_config = ConfigDict(defer_build=True)
+
     api_keys: List[APIKeyInfo] = Field(..., description="List of API keys")
     total: int = Field(..., description="Total number of keys")
 
 
 class PermissionRequestResponse(BaseModel):
     """Response for permission request operation."""
+
+    model_config = ConfigDict(defer_build=True)
 
     success: bool = Field(..., description="Whether the request was successful")
     status: str = Field(
@@ -341,6 +367,8 @@ class PermissionRequestResponse(BaseModel):
 
 class PermissionRequestUser(BaseModel):
     """User with permission request information."""
+
+    model_config = ConfigDict(defer_build=True)
 
     id: str = Field(..., description="User ID")
     email: Optional[str] = Field(None, description="User email")

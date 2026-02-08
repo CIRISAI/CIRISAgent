@@ -20,7 +20,7 @@ class StateTransitionMetadata(BaseModel):
     forced: bool = Field(False, description="Whether transition was forced")
     validator_results: Dict[str, bool] = Field(default_factory=dict, description="Results of state validators")
 
-    model_config = ConfigDict(extra="allow")  # Allow additional fields for extensibility
+    model_config = ConfigDict(extra="allow", defer_build=True)  # Allow additional fields for extensibility
 
 
 class StateTransitionRecord(BaseModel):
@@ -31,7 +31,7 @@ class StateTransitionRecord(BaseModel):
     to_state: str = Field(description="State after transition")
     metadata: Optional[StateTransitionMetadata] = Field(None, description="Additional transition metadata")
 
-    model_config = ConfigDict(frozen=True)  # Make immutable once created
+    model_config = ConfigDict(frozen=True, defer_build=True)  # Make immutable once created
 
 
 class StateTransitionContext(BaseModel):
@@ -42,7 +42,7 @@ class StateTransitionContext(BaseModel):
     memory_state: Optional[str] = Field(None, description="Current memory state summary")
     processor_metrics: Dict[str, float] = Field(default_factory=dict, description="Current processor metrics")
 
-    model_config = ConfigDict(extra="allow")  # Allow additional fields for extensibility
+    model_config = ConfigDict(extra="allow", defer_build=True)  # Allow additional fields for extensibility
 
 
 class StateTransitionRequest(BaseModel):
@@ -52,6 +52,8 @@ class StateTransitionRequest(BaseModel):
     reason: Optional[str] = Field(None, description="Reason for the transition")
     force: bool = Field(False, description="Force transition even if conditions not met")
     context: Optional[StateTransitionContext] = Field(None, description="Additional transition context")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class StateTransitionResult(BaseModel):
@@ -63,6 +65,8 @@ class StateTransitionResult(BaseModel):
     reason: Optional[str] = Field(None, description="Reason for success or failure")
     timestamp: str = Field(description="ISO format timestamp of the attempt")
     duration_in_previous_state: Optional[float] = Field(None, description="Seconds spent in previous state")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class StateMetrics(BaseModel):
@@ -76,6 +80,8 @@ class StateMetrics(BaseModel):
     custom_metrics: Dict[str, Union[int, float, str]] = Field(
         default_factory=dict, description="State-specific custom metrics"
     )
+
+    model_config = ConfigDict(defer_build=True)
 
     def increment(self, metric: str, value: Union[int, float] = 1) -> None:
         """Increment a metric value."""
@@ -111,7 +117,7 @@ class StateConfiguration(BaseModel):
         default_factory=dict, description="Custom state settings"
     )
 
-    model_config = ConfigDict(extra="allow")  # Allow state-specific extensions
+    model_config = ConfigDict(extra="allow", defer_build=True)  # Allow state-specific extensions
 
 
 class StateMetadata(BaseModel):
@@ -123,6 +129,8 @@ class StateMetadata(BaseModel):
     state_config: StateConfiguration = Field(
         default_factory=StateConfiguration, description="State-specific configuration"
     )
+
+    model_config = ConfigDict(defer_build=True)
 
     def add_metric(self, key: str, value: Union[int, float, str]) -> None:
         """Add or update a metric."""
@@ -137,6 +145,8 @@ class StateHistory(BaseModel):
     )
     current_state: AgentState = Field(description="Current agent state")
     current_state_metadata: StateMetadata = Field(description="Metadata for current state")
+
+    model_config = ConfigDict(defer_build=True)
 
     def add_transition(self, record: StateTransitionRecord) -> None:
         """Add a transition record to history."""
@@ -180,7 +190,7 @@ class StateConditionDetails(BaseModel):
     actual_value: Optional[Union[int, float]] = Field(None, description="Actual value if applicable")
     error_message: Optional[str] = Field(None, description="Error if check failed")
 
-    model_config = ConfigDict(extra="allow")  # Allow additional fields for specific conditions
+    model_config = ConfigDict(extra="allow", defer_build=True)  # Allow additional fields for specific conditions
 
 
 class StateCondition(BaseModel):
@@ -191,6 +201,8 @@ class StateCondition(BaseModel):
     met: bool = Field(description="Whether the condition is currently met")
     details: Optional[StateConditionDetails] = Field(None, description="Additional condition details")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class StateTransitionValidation(BaseModel):
     """Validation result for a potential state transition."""
@@ -200,3 +212,5 @@ class StateTransitionValidation(BaseModel):
     is_valid: bool = Field(description="Whether the transition is valid")
     conditions: list[StateCondition] = Field(default_factory=list, description="Conditions checked")
     blocking_reason: Optional[str] = Field(None, description="Reason transition is blocked if invalid")
+
+    model_config = ConfigDict(defer_build=True)

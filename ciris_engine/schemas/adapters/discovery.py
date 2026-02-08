@@ -19,6 +19,7 @@ class AdapterAvailabilityStatus(BaseModel):
     about what's missing and how to install dependencies.
     """
 
+    model_config = ConfigDict(defer_build=True, extra="forbid")
     name: str = Field(..., description="Adapter module name")
     module_type: str = Field(default="", description="Module type (skill_adapter, etc.)")
     description: str = Field(default="", description="Adapter description")
@@ -46,8 +47,6 @@ class AdapterAvailabilityStatus(BaseModel):
     source_path: Optional[str] = Field(None, description="Path where adapter was discovered")
     is_builtin: bool = Field(False, description="True if from ciris_adapters/ (built-in)")
 
-    model_config = ConfigDict(extra="forbid")
-
 
 class AdapterDiscoveryReport(BaseModel):
     """Report of all discovered adapters and their availability.
@@ -55,6 +54,7 @@ class AdapterDiscoveryReport(BaseModel):
     Used as the response for GET /adapters/available endpoint.
     """
 
+    model_config = ConfigDict(defer_build=True, extra="forbid")
     eligible: List[AdapterAvailabilityStatus] = Field(
         default_factory=list, description="Adapters that are ready to use"
     )
@@ -67,23 +67,21 @@ class AdapterDiscoveryReport(BaseModel):
     total_eligible: int = Field(0, description="Number of eligible adapters")
     total_installable: int = Field(0, description="Number of ineligible adapters that have install hints")
 
-    model_config = ConfigDict(extra="forbid")
-
 
 class InstallRequest(BaseModel):
     """Request to install adapter dependencies."""
 
+    model_config = ConfigDict(defer_build=True, extra="forbid")
     dry_run: bool = Field(False, description="If true, report what would be installed without executing")
     install_step_id: Optional[str] = Field(
         None, description="Specific install step ID to use, or None for first applicable"
     )
 
-    model_config = ConfigDict(extra="forbid")
-
 
 class InstallResponse(BaseModel):
     """Response from adapter installation attempt."""
 
+    model_config = ConfigDict(defer_build=True, extra="forbid")
     success: bool = Field(..., description="Whether installation succeeded")
     message: str = Field(..., description="Human-readable result message")
     installed_binaries: List[str] = Field(
@@ -94,12 +92,11 @@ class InstallResponse(BaseModel):
         None, description="Updated eligibility status after installation"
     )
 
-    model_config = ConfigDict(extra="forbid")
-
 
 class RecheckEligibilityResponse(BaseModel):
     """Response from eligibility recheck."""
 
+    model_config = ConfigDict(defer_build=True, extra="forbid")
     name: str = Field(..., description="Adapter name")
     eligible: bool = Field(..., description="Current eligibility status")
     eligibility_reason: Optional[str] = Field(None, description="Reason if not eligible")
@@ -107,5 +104,3 @@ class RecheckEligibilityResponse(BaseModel):
     missing_env_vars: List[str] = Field(default_factory=list)
     missing_config: List[str] = Field(default_factory=list)
     can_install: bool = Field(False, description="Whether install hints are available")
-
-    model_config = ConfigDict(extra="forbid")

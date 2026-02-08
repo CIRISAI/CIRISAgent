@@ -41,7 +41,7 @@ class DMAResults(BaseModel):
     idma: Optional[IDMAResult] = Field(None, description="Intuition/CCA epistemic diversity evaluation")
     errors: List[str] = Field(default_factory=list, description="Errors during evaluation")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class SingleConscienceCheckResult(BaseModel):
@@ -57,7 +57,7 @@ class SingleConscienceCheckResult(BaseModel):
     thought_depth_triggered: Optional[bool] = Field(None, description="Whether thought depth guardrail was triggered")
     updated_status_detected: Optional[bool] = Field(None, description="Whether updated status was detected")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ConscienceCheckInternalResult(BaseModel):
@@ -74,7 +74,7 @@ class ConscienceCheckInternalResult(BaseModel):
         None, description="Whether the updated status conscience detected changes"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ConscienceApplicationResult(BaseModel):
@@ -127,7 +127,7 @@ class ConscienceApplicationResult(BaseModel):
         None, description="Epistemic humility conscience check result"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ProcessedThoughtResult(BaseModel):
@@ -157,7 +157,7 @@ class ProcessedThoughtResult(BaseModel):
         """Convenience property for compatibility."""
         return self.action_result.action_parameters
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ThoughtProcessingMetrics(BaseModel):
@@ -169,7 +169,7 @@ class ThoughtProcessingMetrics(BaseModel):
     llm_calls: int = Field(..., description="Number of LLM calls")
     tokens_used: int = Field(..., description="Total tokens consumed")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ProcessingError(BaseModel):
@@ -180,7 +180,7 @@ class ProcessingError(BaseModel):
     component: str = Field(..., description="Component that failed")
     recoverable: bool = Field(..., description="Whether error is recoverable")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [

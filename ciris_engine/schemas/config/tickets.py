@@ -7,11 +7,13 @@ DSAR tickets are always present (GDPR compliance), agents can add custom ticket 
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TicketStageConfig(BaseModel):
     """Configuration for a single stage in a ticket workflow."""
+
+    model_config = ConfigDict(defer_build=True)
 
     name: str = Field(..., description="Stage name (e.g., 'identity_resolution', 'data_export')")
     tools: List[str] = Field(default_factory=list, description="List of tool names required for this stage")
@@ -31,6 +33,8 @@ class TicketStageConfig(BaseModel):
 
 class TicketSOPConfig(BaseModel):
     """Configuration for a Standard Operating Procedure (SOP)."""
+
+    model_config = ConfigDict(defer_build=True)
 
     sop: str = Field(..., description="SOP identifier (e.g., 'DSAR_ACCESS', 'APPOINTMENT_SCHEDULE')")
     ticket_type: str = Field(..., description="Ticket type category (e.g., 'dsar', 'appointment', 'incident')")
@@ -60,6 +64,8 @@ class TicketSOPConfig(BaseModel):
 
 class TicketsConfig(BaseModel):
     """Ticket system configuration for an agent."""
+
+    model_config = ConfigDict(defer_build=True)
 
     enabled: bool = Field(
         default=True,

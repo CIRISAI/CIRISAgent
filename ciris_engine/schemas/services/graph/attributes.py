@@ -57,6 +57,7 @@ class NodeAttributesBase(BaseModel):
         extra="forbid",  # No extra fields allowed - ensures type safety
         validate_assignment=True,  # Validate on attribute assignment
         str_strip_whitespace=True,  # Clean up string inputs
+        defer_build=True,
     )
 
     @field_serializer("created_at", "updated_at")
@@ -101,7 +102,7 @@ class MemoryNodeAttributes(NodeAttributesBase):
     embedding_model: Optional[str] = Field(None, description="Model used for embedding")
     embedding_dimensions: Optional[int] = Field(None, description="Embedding vector dimensions")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
     @field_serializer("last_accessed")
     def serialize_last_accessed(self, dt: datetime | None) -> str | None:
@@ -148,7 +149,7 @@ class ConfigNodeAttributes(NodeAttributesBase):
     is_active: bool = Field(True, description="Whether this config is currently active")
     expires_at: Optional[datetime] = Field(None, description="When this config expires")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
     @field_serializer("expires_at")
     def serialize_expires_at(self, dt: datetime | None) -> str | None:
@@ -204,7 +205,7 @@ class TelemetryNodeAttributes(NodeAttributesBase):
     resource_type: Optional[str] = Field(None, description="Resource type: cpu, memory, disk, network, tokens")
     resource_limit: Optional[float] = Field(None, description="Resource limit if applicable")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
     @field_serializer("start_time", "end_time")
     def serialize_times(self, dt: datetime) -> str | None:
@@ -226,7 +227,7 @@ class LogNodeAttributes(NodeAttributesBase):
     log_tags: Dict[str, str] = Field(default_factory=dict, description="Additional tags for the log entry")
     retention_policy: str = Field("raw", description="Retention policy for this log")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # Type unions for flexibility

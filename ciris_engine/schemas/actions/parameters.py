@@ -21,7 +21,7 @@ class ObserveParams(BaseModel):
     active: bool = True  # Always active - agent should always create follow-up thoughts
     context: Optional[Dict[str, Union[str, List[str]]]] = Field(default=None)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class SpeakParams(BaseModel):
@@ -31,7 +31,7 @@ class SpeakParams(BaseModel):
     channel_context: Optional[ChannelContext] = None
     content: str
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ToolParams(BaseModel):
@@ -41,7 +41,7 @@ class ToolParams(BaseModel):
     name: str
     parameters: Dict[str, Union[str, int, float, bool, List[str], Dict[str, str]]] = Field(default_factory=dict)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class PonderParams(BaseModel):
@@ -50,7 +50,7 @@ class PonderParams(BaseModel):
     channel_id: Optional[str] = Field(None, description="Channel ID for context")
     questions: List[str]
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class RejectParams(BaseModel):
@@ -65,7 +65,7 @@ class RejectParams(BaseModel):
     filter_type: Optional[str] = Field(default="regex", description="Type of filter: regex, semantic, keyword")
     filter_priority: Optional[str] = Field(default="high", description="Priority level: critical, high, medium")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DeferParams(BaseModel):
@@ -78,7 +78,7 @@ class DeferParams(BaseModel):
         None, description="ISO timestamp to reactivate task (e.g., '2025-01-20T15:00:00Z')"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class MemorizeParams(BaseModel):
@@ -87,7 +87,7 @@ class MemorizeParams(BaseModel):
     channel_id: Optional[str] = Field(None, description="Channel ID for context")
     node: GraphNode
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
     @property
     def scope(self) -> GraphScope:
@@ -104,7 +104,7 @@ class RecallParams(BaseModel):
     scope: Optional[GraphScope] = Field(None, description="Scope to search in")
     limit: int = Field(10, description="Maximum number of results")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ForgetParams(BaseModel):
@@ -115,7 +115,7 @@ class ForgetParams(BaseModel):
     reason: str
     no_audit: bool = False
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
     @property
     def scope(self) -> GraphScope:
@@ -134,4 +134,4 @@ class TaskCompleteParams(BaseModel):
         description="If True, preserve task images after completion. Default False purges images for privacy/storage.",
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)

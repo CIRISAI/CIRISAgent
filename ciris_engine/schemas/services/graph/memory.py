@@ -27,7 +27,7 @@ class MemoryNodeData(BaseModel):
     # but we ensure they're JSON-serializable types
     data: JSONDict = Field(default_factory=dict, description="Node data attributes")
 
-    model_config = ConfigDict(extra="allow")  # Allow additional fields for flexibility
+    model_config = ConfigDict(extra="allow", defer_build=True)  # Allow additional fields for flexibility
 
 
 class MemorySearchFilter(BaseModel):

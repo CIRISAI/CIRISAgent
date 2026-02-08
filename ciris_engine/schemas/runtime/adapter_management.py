@@ -7,7 +7,7 @@ These replace all Dict[str, Any] usage in adapter_manager.py.
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.adapters.tools import ToolInfo
 
@@ -46,6 +46,8 @@ class AdapterConfig(BaseModel):
         "(e.g., MCP servers with bus_bindings). Validated by the adapter's typed config class.",
     )
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class AdapterLoadRequest(BaseModel):
     """Request to load an adapter."""
@@ -54,6 +56,8 @@ class AdapterLoadRequest(BaseModel):
     adapter_id: str = Field(..., description="Unique ID for the adapter instance")
     config: Optional[AdapterConfig] = Field(None, description="Configuration parameters")
     auto_start: bool = Field(True, description="Whether to auto-start the adapter")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class AdapterOperationResult(BaseModel):
@@ -66,6 +70,8 @@ class AdapterOperationResult(BaseModel):
     error: Optional[str] = Field(None, description="Error message if failed")
     details: Optional[Dict[str, Union[str, int, float, bool]]] = Field(None, description="Additional details")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class AdapterMetrics(BaseModel):
     """Metrics for an adapter."""
@@ -75,6 +81,8 @@ class AdapterMetrics(BaseModel):
     uptime_seconds: float = Field(0.0, description="Adapter uptime in seconds")
     last_error: Optional[str] = Field(None, description="Last error message")
     last_error_time: Optional[datetime] = Field(None, description="Last error timestamp")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class RuntimeAdapterStatus(BaseModel):
@@ -90,6 +98,8 @@ class RuntimeAdapterStatus(BaseModel):
     last_activity: Optional[datetime] = Field(None, description="Last activity timestamp")
     tools: Optional[List[ToolInfo]] = Field(None, description="Tools provided by adapter")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class AdapterListResponse(BaseModel):
     """Response containing list of adapters."""
@@ -97,6 +107,8 @@ class AdapterListResponse(BaseModel):
     adapters: List[RuntimeAdapterStatus] = Field(..., description="List of adapter statuses")
     total_count: int = Field(..., description="Total number of adapters")
     running_count: int = Field(..., description="Number of running adapters")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class ServiceRegistrationInfo(BaseModel):
@@ -106,6 +118,8 @@ class ServiceRegistrationInfo(BaseModel):
     provider_name: str = Field(..., description="Provider name")
     priority: str = Field(..., description="Registration priority")
     capabilities: List[str] = Field(..., description="Service capabilities")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class AdapterInfo(BaseModel):
@@ -117,6 +131,8 @@ class AdapterInfo(BaseModel):
     load_time: str = Field(..., description="ISO timestamp when loaded")
     is_running: bool = Field(..., description=IS_RUNNING_DESC)
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class CommunicationAdapterInfo(BaseModel):
     """Information about a communication adapter."""
@@ -124,6 +140,8 @@ class CommunicationAdapterInfo(BaseModel):
     adapter_id: str = Field(..., description=ADAPTER_ID_DESC)
     adapter_type: str = Field(..., description=ADAPTER_TYPE_DESC)
     is_running: bool = Field(..., description=IS_RUNNING_DESC)
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class CommunicationAdapterStatus(BaseModel):
@@ -134,6 +152,8 @@ class CommunicationAdapterStatus(BaseModel):
     communication_adapters: List[CommunicationAdapterInfo] = Field(..., description="List of adapters")
     safe_to_unload: bool = Field(..., description="Whether safe to unload")
     warning_message: Optional[str] = Field(None, description="Warning message")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class ModuleConfigParameter(BaseModel):
@@ -146,6 +166,8 @@ class ModuleConfigParameter(BaseModel):
     env_var: Optional[str] = Field(None, description="Environment variable name")
     required: bool = Field(True, description="Whether parameter is required")
     sensitivity: Optional[str] = Field(None, description="Sensitivity level (e.g., 'HIGH' for secrets)")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class ModuleTypeInfo(BaseModel):
@@ -181,6 +203,8 @@ class ModuleTypeInfo(BaseModel):
     )
     platform_available: bool = Field(True, description="Whether this adapter is available on the current platform")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class ModuleTypesResponse(BaseModel):
     """Response containing all available module types."""
@@ -189,3 +213,5 @@ class ModuleTypesResponse(BaseModel):
     adapters: List[ModuleTypeInfo] = Field(..., description="Dynamically loaded adapters")
     total_core: int = Field(..., description="Total number of core modules")
     total_adapters: int = Field(..., description="Total number of adapters")
+
+    model_config = ConfigDict(defer_build=True)

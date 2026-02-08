@@ -7,12 +7,12 @@ These schemas support agent introspection and monitoring.
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # CorrelationNode was removed in the cleanup
 from ciris_engine.schemas.handlers.schemas import HandlerResult
 from ciris_engine.schemas.runtime.models import Task, Thought
-from ciris_engine.schemas.types import ConfigDict
+from ciris_engine.schemas.types import ConfigMapping as TypeConfigDict
 
 
 class VisibilitySnapshot(BaseModel):
@@ -21,6 +21,8 @@ class VisibilitySnapshot(BaseModel):
     This is focused on TRACES - showing the "why" of agent behavior.
     Service health, metrics, and correlations belong in telemetry/metrics services.
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -38,6 +40,8 @@ class VisibilitySnapshot(BaseModel):
 class ThoughtStep(BaseModel):
     """Single step in the reasoning trace."""
 
+    model_config = ConfigDict(defer_build=True)
+
     thought: Thought = Field(..., description="The full thought object")
     conscience_results: Optional[ConfigDict] = Field(
         None, description="Conscience evaluation results (non-terminal actions)"
@@ -48,6 +52,8 @@ class ThoughtStep(BaseModel):
 
 class ReasoningTrace(BaseModel):
     """Complete reasoning trace for a task."""
+
+    model_config = ConfigDict(defer_build=True)
 
     task: Task = Field(..., description="The task being traced")
 
@@ -64,6 +70,8 @@ class ReasoningTrace(BaseModel):
 
 class DecisionRecord(BaseModel):
     """Record of a decision made for a task."""
+
+    model_config = ConfigDict(defer_build=True)
 
     decision_id: str = Field(..., description="Unique decision ID")
     timestamp: datetime = Field(..., description="When decision was made")
@@ -83,6 +91,8 @@ class DecisionRecord(BaseModel):
 
 class TaskDecisionHistory(BaseModel):
     """Complete decision history for a task."""
+
+    model_config = ConfigDict(defer_build=True)
 
     task_id: str = Field(..., description="Task ID")
     task_description: str = Field(..., description="What the task was")

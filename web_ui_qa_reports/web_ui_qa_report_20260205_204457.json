@@ -1,0 +1,15 @@
+{
+  "start_time": "2026-02-05T20:43:47.551265",
+  "end_time": "2026-02-05T20:44:47.719551",
+  "duration_seconds": 60.168286,
+  "success": false,
+  "error": "Server failed to start: Server startup timeout (60s)",
+  "summary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "reports": []
+}

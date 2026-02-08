@@ -140,7 +140,7 @@ class WACertificate(BaseModel):
         """Check if certificate has a specific scope."""
         return scope in self.scopes
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ChannelIdentity(BaseModel):
@@ -152,7 +152,7 @@ class ChannelIdentity(BaseModel):
     external_username: Optional[str] = None
     metadata: Dict[str, str] = Field(default_factory=dict)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class AuthorizationContext(BaseModel):
@@ -167,7 +167,7 @@ class AuthorizationContext(BaseModel):
     resource: Optional[str] = None
     channel_id: Optional[str] = None
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WACertificateRequest(BaseModel):
@@ -186,7 +186,7 @@ class WACertificateRequest(BaseModel):
     adapter_name: Optional[str] = None
     adapter_metadata: Dict[str, str] = Field(default_factory=dict)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WAToken(BaseModel):
@@ -198,7 +198,7 @@ class WAToken(BaseModel):
     scopes: List[str]
     wa_id: str
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WAAuthRequest(BaseModel):
@@ -211,7 +211,7 @@ class WAAuthRequest(BaseModel):
     channel_identity: Optional[ChannelIdentity] = None
     requested_scopes: List[str] = Field(default_factory=list)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WAAuthResponse(BaseModel):
@@ -222,7 +222,7 @@ class WAAuthResponse(BaseModel):
     certificate: Optional[WACertificate] = None
     error: Optional[str] = None
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WARoleMintRequest(BaseModel):
@@ -235,7 +235,7 @@ class WARoleMintRequest(BaseModel):
     parent_signature: str
     scopes: List[str] = Field(default_factory=list)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DeferralRequest(BaseModel):
@@ -247,7 +247,7 @@ class DeferralRequest(BaseModel):
     defer_until: datetime
     context: Dict[str, str] = Field(default_factory=dict)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DeferralResponse(BaseModel):
@@ -259,7 +259,7 @@ class DeferralResponse(BaseModel):
     wa_id: str
     signature: str
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class GuidanceRequest(BaseModel):
@@ -279,7 +279,7 @@ class GuidanceRequest(BaseModel):
     )
     inputs: Optional[Dict[str, str]] = Field(default=None, description="Structured inputs for non-text modalities")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WisdomAdvice(BaseModel):
@@ -300,7 +300,7 @@ class WisdomAdvice(BaseModel):
     )
     requires_professional: bool = Field(default=False, description="True if domain requires licensed professional")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class GuidanceResponse(BaseModel):
@@ -315,7 +315,7 @@ class GuidanceResponse(BaseModel):
     # NEW: Aggregated advice from multiple providers
     advice: Optional[List[WisdomAdvice]] = Field(default=None, description="Per-provider capability-tagged advice")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DeferralApprovalContext(BaseModel):
@@ -329,7 +329,7 @@ class DeferralApprovalContext(BaseModel):
     channel_id: Optional[str] = None
     metadata: Dict[str, str] = Field(default_factory=dict)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WAPermission(BaseModel):
@@ -345,7 +345,7 @@ class WAPermission(BaseModel):
     expires_at: Optional[datetime] = None
     metadata: Dict[str, str] = Field(default_factory=dict)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [

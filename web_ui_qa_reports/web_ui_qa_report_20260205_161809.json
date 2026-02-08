@@ -1,0 +1,81 @@
+{
+  "start_time": "2026-02-05T16:17:35.056729",
+  "end_time": "2026-02-05T16:18:04.350538",
+  "duration_seconds": 29.293809,
+  "success": true,
+  "error": null,
+  "summary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "reports": [
+    {
+      "name": "load_setup_wizard",
+      "result": "passed",
+      "duration_seconds": 2.787341,
+      "message": "Setup wizard loaded successfully",
+      "screenshots": [
+        "web_ui_qa_reports/setup_step1_161742.png"
+      ],
+      "details": {
+        "page_title": "Welcome to CIRIS"
+      }
+    },
+    {
+      "name": "navigate_to_llm_config",
+      "result": "passed",
+      "duration_seconds": 2.109004,
+      "message": "LLM configuration page loaded",
+      "screenshots": [
+        "web_ui_qa_reports/setup_llm_config_161745.png"
+      ],
+      "details": {}
+    },
+    {
+      "name": "select_provider",
+      "result": "passed",
+      "duration_seconds": 1.077063,
+      "message": "Selected provider: OpenRouter",
+      "screenshots": [
+        "web_ui_qa_reports/setup_provider_selected_161746.png"
+      ],
+      "details": {
+        "provider": "openrouter"
+      }
+    },
+    {
+      "name": "enter_api_key",
+      "result": "passed",
+      "duration_seconds": 2.079733,
+      "message": "API key entered",
+      "screenshots": [
+        "web_ui_qa_reports/setup_key_entered_161748.png"
+      ],
+      "details": {
+        "key_prefix": "sk-or-v1-c..."
+      }
+    },
+    {
+      "name": "load_models",
+      "result": "passed",
+      "duration_seconds": 16.112559,
+      "message": "Models loaded. Found: claude, gpt, llama, model, compatible",
+      "screenshots": [
+        "web_ui_qa_reports/setup_models_loading_161804.png"
+      ],
+      "details": {
+        "triggered_load": true,
+        "models_found": [
+          "claude",
+          "gpt",
+          "llama",
+          "model",
+          "compatible"
+        ]
+      }
+    }
+  ]
+}

@@ -37,7 +37,7 @@ class ProcessingThoughtContext(BaseModel):
     # Initial task context
     initial_task_context: Optional[TaskContext] = Field(None, description="Original task context")
 
-    model_config = ConfigDict(extra="allow")  # Allow additional fields for flexibility
+    model_config = ConfigDict(extra="allow", defer_build=True)  # Allow additional fields for flexibility
 
 
 __all__ = ["ProcessingThoughtContext"]

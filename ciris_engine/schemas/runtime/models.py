@@ -29,7 +29,7 @@ class ImageContent(BaseModel):
     filename: Optional[str] = Field(default=None, description="Original filename if available")
     size_bytes: Optional[int] = Field(default=None, description="File size in bytes for tracking")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
     def to_data_url(self) -> str:
         """Convert to data URL format for LLM APIs."""
@@ -47,7 +47,7 @@ class TaskContext(BaseModel):
     parent_task_id: Optional[str] = Field(None, description="Parent task if nested")
     agent_occurrence_id: str = Field(default="default", description="Runtime occurrence ID that owns this task")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class TaskOutcome(BaseModel):
@@ -59,7 +59,7 @@ class TaskOutcome(BaseModel):
     memories_created: List[str] = Field(default_factory=list, description="Memory node IDs created")
     errors: List[str] = Field(default_factory=list, description="Errors encountered")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ThoughtContext(BaseModel):
@@ -73,7 +73,7 @@ class ThoughtContext(BaseModel):
     correlation_id: str = Field(..., description="Correlation ID")
     agent_occurrence_id: str = Field(default="default", description="Runtime occurrence ID (inherited from task)")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class FinalAction(BaseModel):
@@ -83,7 +83,7 @@ class FinalAction(BaseModel):
     action_params: JSONDict = Field(..., description="Action parameters (will be typed per action)")
     reasoning: str = Field(..., description="Why this action was chosen")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class Task(BaseModel):
@@ -116,7 +116,7 @@ class Task(BaseModel):
         default_factory=list, description="Images attached to this task for multimodal processing"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class Thought(BaseModel):
@@ -142,7 +142,7 @@ class Thought(BaseModel):
         default_factory=list, description="Images from source task for multimodal processing"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [

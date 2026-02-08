@@ -8,7 +8,7 @@ replacing Dict[str, Any] returns with proper Pydantic models.
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 # ============================================================================
 # RESOURCE METRICS - Fixes the duplicate ResourceMetricData issue
@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field, field_serializer
 
 class MetricDataPoint(BaseModel):
     """Single metric data point for time series."""
+
+    model_config = ConfigDict(defer_build=True)
 
     timestamp: datetime = Field(..., description="When metric was recorded")
     value: float = Field(..., description="Metric value")
@@ -30,6 +32,8 @@ class MetricDataPoint(BaseModel):
 class ResourceMetricWithStats(BaseModel):
     """Resource metric with statistics - replaces dict format."""
 
+    model_config = ConfigDict(defer_build=True)
+
     data: List[MetricDataPoint] = Field(..., description="Time series data points")
     stats: Dict[str, float] = Field(..., description="Statistical summary")
     unit: str = Field(..., description="Metric unit")
@@ -37,6 +41,8 @@ class ResourceMetricWithStats(BaseModel):
 
 class ResourceTimeSeriesData(BaseModel):
     """Time series data for resource metrics - unified model."""
+
+    model_config = ConfigDict(defer_build=True)
 
     metric_name: str = Field(..., description="Name of the metric")
     data_points: List[MetricDataPoint] = Field(..., description="Time series data")

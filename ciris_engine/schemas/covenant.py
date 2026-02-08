@@ -58,7 +58,7 @@ class CovenantPayload(BaseModel):
     The payload is encoded steganographically into ~50 natural-language words.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, defer_build=True)
 
     timestamp: int = Field(
         ...,
@@ -186,7 +186,7 @@ class CovenantMessage(BaseModel):
     This is the result of parsing a message that may contain a covenant.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, defer_build=True)
 
     # Source information
     source_text: str = Field(
@@ -239,6 +239,8 @@ class CovenantExtractionResult(BaseModel):
     Most messages will have found=False.
     """
 
+    model_config = ConfigDict(defer_build=True)
+
     found: bool = Field(
         ...,
         description="Whether a valid covenant structure was found",
@@ -259,6 +261,8 @@ class CovenantVerificationResult(BaseModel):
 
     After extraction, the covenant must be verified against known authority keys.
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     valid: bool = Field(
         ...,

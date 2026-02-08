@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
 from ciris_engine.schemas.conscience.core import EpistemicData
@@ -25,7 +25,7 @@ from ciris_engine.schemas.dma.results import (
 from ciris_engine.schemas.handlers.schemas import HandlerResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
-from ciris_engine.schemas.types import ConfigDict, ConfigValue, JSONDict, SerializedModel
+from ciris_engine.schemas.types import ConfigMapping, ConfigValue, JSONDict, SerializedModel
 
 # Type aliases for configuration values
 ConfigItem = Tuple[str, ConfigValue]
@@ -34,11 +34,11 @@ ConfigItem = Tuple[str, ConfigValue]
 class ConfigDictMixin:
     """Mixin providing standard config dict access methods.
 
-    Classes using this mixin must have a 'configs: ConfigDict' field.
+    Classes using this mixin must have a 'configs: ConfigMapping' field.
     DRY pattern to avoid code duplication across classes with config fields.
     """
 
-    configs: ConfigDict  # Type hint for IDEs
+    configs: ConfigMapping  # Type hint for IDEs
 
     def get(self, key: str, default: Optional[ConfigValue] = None) -> Optional[ConfigValue]:
         """Get a configuration value with optional default."""
@@ -48,7 +48,7 @@ class ConfigDictMixin:
         """Set a configuration value."""
         self.configs[key] = value
 
-    def update(self, values: ConfigDict) -> None:
+    def update(self, values: ConfigMapping) -> None:
         """Update multiple configuration values."""
         self.configs.update(values)
 
@@ -142,6 +142,8 @@ class CircuitBreakerState(str, Enum):
 class CircuitBreakerStatus(BaseModel):
     """Status information for a circuit breaker."""
 
+    model_config = ConfigDict(defer_build=True)
+
     state: CircuitBreakerState = Field(..., description="Current state of the circuit breaker")
     failure_count: int = Field(0, description="Number of consecutive failures")
     last_failure_time: Optional[datetime] = Field(None, description="Time of last failure")
@@ -154,6 +156,8 @@ class CircuitBreakerStatus(BaseModel):
 
 class TraceContext(BaseModel):
     """OTLP-compatible trace context for step correlation."""
+
+    model_config = ConfigDict(defer_build=True)
 
     trace_id: str = Field(..., description="Unique trace identifier")
     span_id: str = Field(..., description="Unique span identifier")
@@ -169,6 +173,8 @@ class TraceContext(BaseModel):
 class SpanAttribute(BaseModel):
     """OTLP-compatible span attribute."""
 
+    model_config = ConfigDict(defer_build=True)
+
     key: str = Field(..., description="Attribute key")
     value: JSONDict = Field(
         ..., description="Attribute value in OTLP format"
@@ -178,7 +184,9 @@ class SpanAttribute(BaseModel):
 class ConfigValueMap(ConfigDictMixin, BaseModel):
     """Typed map for configuration values."""
 
-    configs: ConfigDict = Field(default_factory=dict, description="Configuration key-value pairs with typed values")
+    model_config = ConfigDict(defer_build=True)
+
+    configs: ConfigMapping = Field(default_factory=dict, description="Configuration key-value pairs with typed values")
 
     def items(self) -> List[ConfigItem]:
         """Get all key-value pairs."""
@@ -192,6 +200,8 @@ class ConfigValueMap(ConfigDictMixin, BaseModel):
 class TaskSelectionCriteria(ConfigDictMixin, BaseModel):
     """Criteria used for task selection in processing rounds."""
 
+    model_config = ConfigDict(defer_build=True)
+
     max_priority: Optional[int] = Field(None, description="Maximum priority threshold")
     min_priority: Optional[int] = Field(None, description="Minimum priority threshold")
     max_age_hours: Optional[float] = Field(None, description="Maximum age in hours")
@@ -201,7 +211,7 @@ class TaskSelectionCriteria(ConfigDictMixin, BaseModel):
     max_retry_count: int = Field(3, description="Maximum retry count for tasks")
     user_id_filter: Optional[str] = Field(None, description="User ID filter")
     batch_size: int = Field(10, description="Maximum number of tasks to select")
-    configs: ConfigDict = Field(
+    configs: ConfigMapping = Field(
         default_factory=dict, description="Additional configuration key-value pairs with typed values"
     )
 
@@ -212,6 +222,8 @@ class TaskSelectionCriteria(ConfigDictMixin, BaseModel):
 
 class ServiceProviderUpdate(BaseModel):
     """Details of a service provider update."""
+
+    model_config = ConfigDict(defer_build=True)
 
     service_type: str = Field(..., description="Type of service")
     old_priority: str = Field(..., description="Previous priority")
@@ -225,6 +237,8 @@ class ServiceProviderUpdate(BaseModel):
 class ServicePriorityUpdateResponse(BaseModel):
     """Response from service priority update operation."""
 
+    model_config = ConfigDict(defer_build=True)
+
     success: bool = Field(..., description="Whether the update succeeded")
     message: Optional[str] = Field(None, description="Success or error message")
     provider_name: str = Field(..., description="Name of the service provider")
@@ -235,6 +249,8 @@ class ServicePriorityUpdateResponse(BaseModel):
 
 class CircuitBreakerResetResponse(BaseModel):
     """Response from circuit breaker reset operation."""
+
+    model_config = ConfigDict(defer_build=True)
 
     success: bool = Field(..., description="Whether the reset succeeded")
     message: str = Field(..., description="Operation result message")
@@ -247,17 +263,21 @@ class CircuitBreakerResetResponse(BaseModel):
 class ServiceProviderInfo(BaseModel):
     """Information about a registered service provider."""
 
+    model_config = ConfigDict(defer_build=True)
+
     name: str = Field(..., description="Provider name")
     priority: str = Field(..., description="Priority level name")
     priority_group: int = Field(..., description="Priority group number")
     strategy: str = Field(..., description="Selection strategy")
-    capabilities: Optional[ConfigDict] = Field(None, description="Provider capabilities")
-    metadata: Optional[ConfigDict] = Field(None, description="Provider metadata")
+    capabilities: Optional[ConfigMapping] = Field(None, description="Provider capabilities")
+    metadata: Optional[ConfigMapping] = Field(None, description="Provider metadata")
     circuit_breaker_state: Optional[str] = Field(None, description="Circuit breaker state if available")
 
 
 class ServiceRegistryInfoResponse(BaseModel):
     """Enhanced service registry information response."""
+
+    model_config = ConfigDict(defer_build=True)
 
     total_services: int = Field(0, description="Total registered services")
     services_by_type: Dict[str, int] = Field(default_factory=dict, description="Count by service type")
@@ -276,6 +296,8 @@ class ServiceRegistryInfoResponse(BaseModel):
 
 class WAPublicKeyMap(BaseModel):
     """Map of Wise Authority IDs to their public keys."""
+
+    model_config = ConfigDict(defer_build=True)
 
     keys: Dict[str, str] = Field(
         default_factory=dict, description="Mapping of WA ID to Ed25519 public key (PEM format)"
@@ -305,7 +327,9 @@ class WAPublicKeyMap(BaseModel):
 class ConfigBackupData(BaseModel):
     """Data structure for configuration backups."""
 
-    configs: ConfigDict = Field(..., description="Backed up configuration values")
+    model_config = ConfigDict(defer_build=True)
+
+    configs: ConfigMapping = Field(..., description="Backed up configuration values")
     backup_timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), description="When the backup was created"
     )
@@ -338,6 +362,8 @@ class ProcessingQueueItem(BaseModel):
     Used for runtime control service to report queue status.
     """
 
+    model_config = ConfigDict(defer_build=True)
+
     item_id: str = Field(..., description="Unique identifier for the queue item")
     item_type: str = Field(..., description="Type of item (e.g., thought, task, message)")
     priority: int = Field(0, description="Processing priority (higher = more urgent)")
@@ -351,6 +377,8 @@ class ProcessingQueueItem(BaseModel):
 class QueuedThought(BaseModel):
     """A thought queued for processing in the next round."""
 
+    model_config = ConfigDict(defer_build=True)
+
     thought_id: str = Field(..., description="Unique thought ID")
     thought_type: str = Field(..., description="Type of thought")
     source_task_id: str = Field(..., description="Source task ID")
@@ -363,6 +391,8 @@ class QueuedThought(BaseModel):
 class QueuedTask(BaseModel):
     """A task that may generate thoughts."""
 
+    model_config = ConfigDict(defer_build=True)
+
     task_id: str = Field(..., description="Unique task ID")
     description: str = Field(..., description="Task description")
     status: str = Field(..., description="Task status")
@@ -373,6 +403,8 @@ class QueuedTask(BaseModel):
 
 class ThoughtInPipeline(BaseModel):
     """Tracks a thought's position in the processing pipeline."""
+
+    model_config = ConfigDict(defer_build=True)
 
     thought_id: str = Field(..., description="Unique thought ID")
     task_id: str = Field(..., description="Source task ID")
@@ -405,6 +437,8 @@ def _create_empty_pipeline_steps() -> Dict[str, List["ThoughtInPipeline"]]:
 
 class PipelineState(BaseModel):
     """Complete state of the processing pipeline."""
+
+    model_config = ConfigDict(defer_build=True)
 
     is_paused: bool = Field(False, description="Whether pipeline is paused")
     current_round: int = Field(0, description="Current processing round")
@@ -453,6 +487,8 @@ class PipelineState(BaseModel):
 
 class ThoughtProcessingResult(BaseModel):
     """Result from processing a thought through the full pipeline."""
+
+    model_config = ConfigDict(defer_build=True)
 
     thought_id: str = Field(..., description="Unique thought ID")
     task_id: str = Field(..., description="Source task ID")
@@ -504,6 +540,8 @@ class ThoughtProcessingResult(BaseModel):
 class StepResultStartRound(BaseModel):
     """Result from START_ROUND step - moves thoughts from PENDING to PROCESSING."""
 
+    model_config = ConfigDict(defer_build=True)
+
     step_point: StepPoint = Field(StepPoint.START_ROUND)
     success: bool = Field(..., description="Whether step succeeded")
 
@@ -522,6 +560,8 @@ class StepResultStartRound(BaseModel):
 
 class StepResultGatherContext(BaseModel):
     """Result from GATHER_CONTEXT step - builds context for DMA processing."""
+
+    model_config = ConfigDict(defer_build=True)
 
     step_point: StepPoint = Field(StepPoint.GATHER_CONTEXT)
     success: bool = Field(..., description="Whether step succeeded")
@@ -544,6 +584,8 @@ class StepResultGatherContext(BaseModel):
 class StepResultPerformDMAs(BaseModel):
     """Result from PERFORM_DMAS step - parallel execution of base DMAs."""
 
+    model_config = ConfigDict(defer_build=True)
+
     step_point: StepPoint = Field(StepPoint.PERFORM_DMAS)
     success: bool = Field(..., description="Whether step succeeded")
 
@@ -563,6 +605,8 @@ class StepResultPerformDMAs(BaseModel):
 class StepResultPerformASPDMA(BaseModel):
     """Result from PERFORM_ASPDMA step - action selection DMA execution."""
 
+    model_config = ConfigDict(defer_build=True)
+
     step_point: StepPoint = Field(StepPoint.PERFORM_ASPDMA)
     success: bool = Field(..., description="Whether step succeeded")
 
@@ -578,6 +622,8 @@ class StepResultPerformASPDMA(BaseModel):
 
 class StepResultConscienceExecution(BaseModel):
     """Result from CONSCIENCE_EXECUTION step - parallel conscience checks."""
+
+    model_config = ConfigDict(defer_build=True)
 
     step_point: StepPoint = Field(StepPoint.CONSCIENCE_EXECUTION)
     success: bool = Field(..., description="Whether step succeeded")
@@ -596,6 +642,8 @@ class StepResultConscienceExecution(BaseModel):
 class StepResultRecursiveASPDMA(BaseModel):
     """Result from RECURSIVE_ASPDMA step - retry after conscience failure."""
 
+    model_config = ConfigDict(defer_build=True)
+
     step_point: StepPoint = Field(StepPoint.RECURSIVE_ASPDMA)
     success: bool = Field(..., description="Whether step succeeded")
 
@@ -613,6 +661,8 @@ class StepResultRecursiveASPDMA(BaseModel):
 class StepResultRecursiveConscience(BaseModel):
     """Result from RECURSIVE_CONSCIENCE step - recheck after recursive ASPDMA."""
 
+    model_config = ConfigDict(defer_build=True)
+
     step_point: StepPoint = Field(StepPoint.RECURSIVE_CONSCIENCE)
     success: bool = Field(..., description="Whether step succeeded")
 
@@ -629,6 +679,8 @@ class StepResultRecursiveConscience(BaseModel):
 
 class StepResultFinalizeAction(BaseModel):
     """Result from FINALIZE_ACTION step - final action determined."""
+
+    model_config = ConfigDict(defer_build=True)
 
     step_point: StepPoint = Field(StepPoint.FINALIZE_ACTION)
     success: bool = Field(..., description="Whether step succeeded")
@@ -649,6 +701,8 @@ class StepResultFinalizeAction(BaseModel):
 class StepResultPerformAction(BaseModel):
     """Result from PERFORM_ACTION step - action dispatch begins."""
 
+    model_config = ConfigDict(defer_build=True)
+
     step_point: StepPoint = Field(StepPoint.PERFORM_ACTION)
     success: bool = Field(..., description="Whether step succeeded")
 
@@ -665,6 +719,8 @@ class StepResultPerformAction(BaseModel):
 
 class StepResultActionComplete(BaseModel):
     """Result from ACTION_COMPLETE step - action execution completed with audit trail."""
+
+    model_config = ConfigDict(defer_build=True)
 
     step_point: StepPoint = Field(StepPoint.ACTION_COMPLETE)
     success: bool = Field(..., description="Whether step succeeded")
@@ -686,6 +742,8 @@ class StepResultActionComplete(BaseModel):
 
 class StepResultRoundComplete(BaseModel):
     """Result from ROUND_COMPLETE step - processing round completed."""
+
+    model_config = ConfigDict(defer_build=True)
 
     step_point: StepPoint = Field(StepPoint.ROUND_COMPLETE)
     success: bool = Field(..., description="Whether step succeeded")
@@ -720,6 +778,8 @@ StepResultUnion = (
 
 class BaseStepData(BaseModel):
     """Base step data with common fields for all steps."""
+
+    model_config = ConfigDict(defer_build=True)
 
     timestamp: str = Field(..., description="ISO timestamp when step started")
     thought_id: str = Field(..., description="Unique thought identifier")
@@ -882,6 +942,8 @@ class ActionCompleteStepData(BaseStepData):
 class ActionResponse(BaseModel):
     """Typed response from action dispatch."""
 
+    model_config = ConfigDict(defer_build=True)
+
     success: bool = Field(..., description="Whether action dispatch succeeded")
     handler: str = Field(..., description="Handler that executed the action")
     action_type: str = Field(..., description="Type of action executed")
@@ -920,6 +982,8 @@ StepDataUnion = (
 class StepResultData(BaseModel):
     """Complete step result data structure for streaming."""
 
+    model_config = ConfigDict(defer_build=True)
+
     step_point: str = Field(..., description="Step point name")
     success: bool = Field(True, description="Whether step succeeded")
     processing_time_ms: float = Field(0.0, description="Step processing time")
@@ -934,6 +998,8 @@ class StepResultData(BaseModel):
 class StepExecutionResult(BaseModel):
     """Result from executing a single step for a paused thought."""
 
+    model_config = ConfigDict(defer_build=True)
+
     success: bool = Field(..., description="Whether step execution succeeded")
     thought_id: str = Field(..., description="Thought identifier")
     message: Optional[str] = Field(None, description="Success message")
@@ -942,6 +1008,8 @@ class StepExecutionResult(BaseModel):
 
 class AllStepsExecutionResult(BaseModel):
     """Result from executing steps for all paused thoughts."""
+
+    model_config = ConfigDict(defer_build=True)
 
     success: bool = Field(..., description="Whether execution succeeded")
     thoughts_advanced: int = Field(0, description="Number of thoughts advanced")
@@ -956,6 +1024,8 @@ class AllStepsExecutionResult(BaseModel):
 
 class ThoughtStartEvent(BaseModel):
     """Event 0: Thought begins processing - thought and task metadata (START_ROUND step)."""
+
+    model_config = ConfigDict(defer_build=True)
 
     event_type: ReasoningEvent = Field(ReasoningEvent.THOUGHT_START)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
@@ -984,6 +1054,8 @@ class SnapshotAndContextResult(BaseModel):
     The redundant context string field has been removed to eliminate duplication.
     """
 
+    model_config = ConfigDict(defer_build=True)
+
     event_type: ReasoningEvent = Field(ReasoningEvent.SNAPSHOT_AND_CONTEXT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
     task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
@@ -995,6 +1067,8 @@ class SnapshotAndContextResult(BaseModel):
 
 class DMAResultsEvent(BaseModel):
     """Event 2: Results from all 4 DMA perspectives (PERFORM_DMAS step)."""
+
+    model_config = ConfigDict(defer_build=True)
 
     event_type: ReasoningEvent = Field(ReasoningEvent.DMA_RESULTS)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
@@ -1021,6 +1095,8 @@ class IDMAResultEvent(BaseModel):
     Emitted separately from DMA_RESULTS to allow fine-grained tracing of identity/fragility checks.
     """
 
+    model_config = ConfigDict(defer_build=True)
+
     event_type: ReasoningEvent = Field(ReasoningEvent.IDMA_RESULT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
     task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
@@ -1044,6 +1120,8 @@ class IDMAResultEvent(BaseModel):
 class ASPDMAResultEvent(BaseModel):
     """Event 3: Selected action and rationale (PERFORM_ASPDMA + RECURSIVE_ASPDMA steps)."""
 
+    model_config = ConfigDict(defer_build=True)
+
     event_type: ReasoningEvent = Field(ReasoningEvent.ASPDMA_RESULT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
     task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
@@ -1065,6 +1143,8 @@ class TSASPDMAResultEvent(BaseModel):
     documentation and can refine parameters, request clarification (SPEAK), or
     reconsider (PONDER).
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     event_type: ReasoningEvent = Field(ReasoningEvent.TSASPDMA_RESULT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
@@ -1097,6 +1177,8 @@ class ConscienceResultEvent(BaseModel):
     - Bypass Guardrails (ALL actions): UpdatedStatus, ThoughtDepth
     - Ethical Faculties (non-exempt): Entropy, Coherence, OptimizationVeto, EpistemicHumility
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     event_type: ReasoningEvent = Field(ReasoningEvent.CONSCIENCE_RESULT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
@@ -1168,6 +1250,8 @@ class ConscienceResultEvent(BaseModel):
 
 class ActionResultEvent(BaseModel):
     """Event 5: Action execution outcome with audit trail and resource usage (ACTION_COMPLETE step)."""
+
+    model_config = ConfigDict(defer_build=True)
 
     event_type: ReasoningEvent = Field(ReasoningEvent.ACTION_RESULT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)

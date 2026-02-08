@@ -117,7 +117,7 @@ class GraphNodeAttributes(BaseModel):
     content: str | None = Field(None, description="Optional content for the node")
     tags: List[str] = Field(default_factory=list, description="Tags for categorization")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
     @field_serializer("created_at", "updated_at")
     def serialize_dt(self, dt: datetime) -> str | None:
@@ -144,7 +144,7 @@ class GraphNode(BaseModel):
         None, description="Expiry time for TEMPORARY consent nodes (auto-set to 14 days for TEMPORARY)"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
     @field_serializer("updated_at", "expires_at")
     def serialize_dt(self, dt: datetime | None) -> str | None:
@@ -157,7 +157,7 @@ class GraphEdgeAttributes(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     context: str | None = Field(None, description="Context of the relationship")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
     @field_serializer("created_at")
     def serialize_dt(self, dt: datetime) -> str | None:
@@ -176,7 +176,7 @@ class GraphEdge(BaseModel):
         default_factory=lambda: GraphEdgeAttributes(created_at=datetime.now(timezone.utc), context=None)
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ConnectedNodeInfo(BaseModel):

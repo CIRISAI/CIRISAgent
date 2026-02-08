@@ -19,7 +19,7 @@ class GuidanceContext(BaseModel):
     ethical_considerations: List[str] = Field(default_factory=list, description="Ethical factors to consider")
     domain_context: Dict[str, str] = Field(default_factory=dict, description="Domain-specific context")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DeferralContext(BaseModel):
@@ -32,7 +32,7 @@ class DeferralContext(BaseModel):
     priority: Optional[str] = Field(None, description="Priority level for later consideration")
     metadata: Dict[str, str] = Field(default_factory=dict, description="Additional deferral metadata")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ApprovalContext(BaseModel):
@@ -51,7 +51,7 @@ class ApprovalContext(BaseModel):
     # Additional context
     supporting_data: Dict[str, str] = Field(default_factory=dict, description="Supporting information")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WADecision(BaseModel):
@@ -77,7 +77,7 @@ class WADecision(BaseModel):
     # Signature
     signature: str = Field(..., description="Digital signature of decision")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WAInteractionLog(BaseModel):
@@ -105,7 +105,7 @@ class WAInteractionLog(BaseModel):
     task_id: Optional[str] = Field(None, description="Associated task")
     thought_id: Optional[str] = Field(None, description="Associated thought")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = ["GuidanceContext", "DeferralContext", "ApprovalContext", "WADecision", "WAInteractionLog"]

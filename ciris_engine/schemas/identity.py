@@ -2,11 +2,13 @@
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class UserIdentifier(BaseModel):
     """A single user identifier from a specific system."""
+
+    model_config = ConfigDict(defer_build=True)
 
     identifier_type: str = Field(
         ...,
@@ -31,6 +33,8 @@ class UserIdentifier(BaseModel):
 class UserIdentityNode(BaseModel):
     """Complete user identity with all known identifiers across systems."""
 
+    model_config = ConfigDict(defer_build=True)
+
     primary_id: str = Field(..., description="Primary user identifier (typically email or user_id)")
     identifiers: List[UserIdentifier] = Field(default_factory=list, description="All known identifiers for this user")
     graph_node_id: Optional[str] = Field(default=None, description="Reference to primary GraphNode in MemoryBus")
@@ -40,6 +44,8 @@ class UserIdentityNode(BaseModel):
 
 class IdentityMappingEvidence(BaseModel):
     """Evidence supporting an identity mapping."""
+
+    model_config = ConfigDict(defer_build=True)
 
     evidence_type: str = Field(..., description="Type of evidence (oauth, behavior, shared_attribute, etc.)")
     confidence: float = Field(
@@ -56,6 +62,8 @@ class IdentityMappingEvidence(BaseModel):
 class IdentityConflict(BaseModel):
     """Conflict detected in identity mapping."""
 
+    model_config = ConfigDict(defer_build=True)
+
     conflict_type: str = Field(
         ...,
         description="Type of conflict (duplicate_mapping, inconsistent_data, etc.)",
@@ -69,6 +77,8 @@ class IdentityConflict(BaseModel):
 
 class IdentityConfidence(BaseModel):
     """Confidence assessment for an identity mapping."""
+
+    model_config = ConfigDict(defer_build=True)
 
     score: float = Field(
         ...,
@@ -90,6 +100,8 @@ class IdentityConfidence(BaseModel):
 class IdentityGraphVisualization(BaseModel):
     """Identity graph structure for visualization/debugging."""
 
+    model_config = ConfigDict(defer_build=True)
+
     nodes: List[Dict[str, Any]] = Field(default_factory=list, description="Graph nodes with metadata")
     edges: List[Dict[str, Any]] = Field(default_factory=list, description="Graph edges with relationships")
     center_node_id: str = Field(..., description="Central node for this graph")
@@ -100,6 +112,8 @@ class IdentityGraphVisualization(BaseModel):
 
 class IdentityResolutionRequest(BaseModel):
     """Request for identity resolution."""
+
+    model_config = ConfigDict(defer_build=True)
 
     identifier: str = Field(..., description="User identifier value")
     identifier_type: str = Field(default="email", description="Type of identifier to resolve")
@@ -112,6 +126,8 @@ class IdentityResolutionRequest(BaseModel):
 
 class IdentityResolutionResult(BaseModel):
     """Result of identity resolution request."""
+
+    model_config = ConfigDict(defer_build=True)
 
     success: bool = Field(..., description="Whether resolution succeeded")
     identity_node: Optional[UserIdentityNode] = Field(default=None, description="Resolved identity node")
@@ -128,6 +144,8 @@ class IdentityResolutionResult(BaseModel):
 class IdentityMergeRequest(BaseModel):
     """Request to merge two user identities."""
 
+    model_config = ConfigDict(defer_build=True)
+
     primary_id: str = Field(..., description="Primary user identifier (kept)")
     secondary_id: str = Field(..., description="Secondary user identifier (merged into primary)")
     reason: str = Field(..., description="Reason for merge")
@@ -141,6 +159,8 @@ class IdentityMergeRequest(BaseModel):
 
 class IdentityMergeResult(BaseModel):
     """Result of identity merge operation."""
+
+    model_config = ConfigDict(defer_build=True)
 
     success: bool = Field(..., description="Whether merge succeeded")
     merged_identity: Optional[UserIdentityNode] = Field(default=None, description="Merged identity node")

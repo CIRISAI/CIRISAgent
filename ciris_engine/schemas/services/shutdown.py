@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EmergencyCommandType(str, Enum):
@@ -21,6 +21,8 @@ class EmergencyCommandType(str, Enum):
 
 class WASignedCommand(BaseModel):
     """A command signed by a Wise Authority."""
+
+    model_config = ConfigDict(defer_build=True)
 
     command_id: str = Field(..., description="Unique command identifier")
     command_type: EmergencyCommandType = Field(..., description="Type of emergency command")
@@ -49,6 +51,8 @@ class WASignedCommand(BaseModel):
 class EmergencyShutdownStatus(BaseModel):
     """Status of emergency shutdown process."""
 
+    model_config = ConfigDict(defer_build=True)
+
     command_received: datetime = Field(..., description="When command was received")
     command_verified: bool = Field(..., description="Whether signature was verified")
     verification_error: Optional[str] = Field(None, description="Error if verification failed")
@@ -66,6 +70,8 @@ class EmergencyShutdownStatus(BaseModel):
 
 class KillSwitchConfig(BaseModel):
     """Configuration for kill switch functionality."""
+
+    model_config = ConfigDict(defer_build=True)
 
     enabled: bool = Field(True, description="Whether kill switch is active")
 

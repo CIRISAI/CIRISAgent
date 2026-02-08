@@ -7,13 +7,15 @@ Provides type safety for all consolidation operations.
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.types import JSONDict, JSONValue
 
 
 class RequestData(BaseModel):
     """Typed request data for service interactions."""
+
+    model_config = ConfigDict(defer_build=True)
 
     channel_id: Optional[str] = Field(None, description="Channel ID")
     author_id: Optional[str] = Field(None, description="Author ID")
@@ -27,6 +29,8 @@ class RequestData(BaseModel):
 class ResponseData(BaseModel):
     """Typed response data for service interactions."""
 
+    model_config = ConfigDict(defer_build=True)
+
     execution_time_ms: Optional[float] = Field(None, description="Execution time in milliseconds")
     success: Optional[bool] = Field(None, description="Whether the operation succeeded")
     error: Optional[str] = Field(None, description="Error message if failed")
@@ -38,6 +42,8 @@ class ResponseData(BaseModel):
 
 class InteractionContext(BaseModel):
     """Typed context data for service interactions."""
+
+    model_config = ConfigDict(defer_build=True)
 
     trace_id: Optional[str] = Field(None, description="Trace ID for correlation")
     span_id: Optional[str] = Field(None, description="Span ID for correlation")
@@ -52,6 +58,8 @@ class InteractionContext(BaseModel):
 
 class ServiceInteractionData(BaseModel):
     """Data structure for service interaction consolidation."""
+
+    model_config = ConfigDict(defer_build=True)
 
     correlation_id: str = Field(..., description="Unique correlation ID")
     action_type: str = Field(..., description="Type of action performed")
@@ -78,6 +86,8 @@ class ServiceInteractionData(BaseModel):
 class MetricCorrelationData(BaseModel):
     """Data structure for metric correlation consolidation."""
 
+    model_config = ConfigDict(defer_build=True)
+
     correlation_id: str = Field(..., description="Unique correlation ID")
     metric_name: str = Field(..., description="Name of the metric")
     value: float = Field(..., description="Metric value")
@@ -99,6 +109,8 @@ class MetricCorrelationData(BaseModel):
 class SpanTags(BaseModel):
     """Typed tags for trace spans."""
 
+    model_config = ConfigDict(defer_build=True)
+
     task_id: Optional[str] = Field(None, description="Associated task ID")
     thought_id: Optional[str] = Field(None, description="Associated thought ID")
     component_type: Optional[str] = Field(None, description="Component type")
@@ -114,6 +126,8 @@ class SpanTags(BaseModel):
 
 class TraceSpanData(BaseModel):
     """Data structure for trace span consolidation."""
+
+    model_config = ConfigDict(defer_build=True)
 
     trace_id: str = Field(..., description="Trace ID")
     span_id: str = Field(..., description="Span ID")
@@ -145,6 +159,8 @@ class TraceSpanData(BaseModel):
 class ThoughtSummary(BaseModel):
     """Summary of a thought for consolidation."""
 
+    model_config = ConfigDict(defer_build=True)
+
     thought_id: str = Field(..., description="Thought ID")
     thought_type: str = Field(..., description="Type of thought")
     status: str = Field(..., description="Thought status")
@@ -159,6 +175,8 @@ class ThoughtSummary(BaseModel):
 class TaskMetadata(BaseModel):
     """Typed metadata for tasks."""
 
+    model_config = ConfigDict(defer_build=True)
+
     priority: Optional[int] = Field(None, description="Task priority")
     tags: List[str] = Field(default_factory=list, description="Task tags")
     source: Optional[str] = Field(None, description="Task source")
@@ -171,6 +189,8 @@ class TaskMetadata(BaseModel):
 
 class TaskCorrelationData(BaseModel):
     """Data structure for task correlation consolidation."""
+
+    model_config = ConfigDict(defer_build=True)
 
     task_id: str = Field(..., description="Unique task ID")
     status: str = Field(..., description="Task status")
@@ -203,6 +223,8 @@ class TaskCorrelationData(BaseModel):
 class ConversationEntry(BaseModel):
     """Single entry in a conversation."""
 
+    model_config = ConfigDict(defer_build=True)
+
     timestamp: Optional[str] = Field(None, description="ISO formatted timestamp")
     correlation_id: str = Field(..., description="Correlation ID")
     action_type: str = Field(..., description="Type of action")
@@ -216,6 +238,8 @@ class ConversationEntry(BaseModel):
 class ParticipantData(BaseModel):
     """Data about a conversation participant."""
 
+    model_config = ConfigDict(defer_build=True)
+
     message_count: int = Field(default=0, description="Number of messages")
     channels: List[str] = Field(default_factory=list, description="Channels participated in")
     author_name: Optional[str] = Field(None, description="Participant name")
@@ -223,6 +247,8 @@ class ParticipantData(BaseModel):
 
 class MetricAggregation(BaseModel):
     """Aggregated metric data."""
+
+    model_config = ConfigDict(defer_build=True)
 
     count: float = Field(..., description="Number of data points")
     sum: float = Field(..., description="Sum of values")
@@ -233,6 +259,8 @@ class MetricAggregation(BaseModel):
 
 class ConversationSummary(BaseModel):
     """Summary of a conversation."""
+
+    model_config = ConfigDict(defer_build=True)
 
     channel_id: str = Field(..., description="Channel ID")
     message_count: int = Field(..., description="Number of messages")
@@ -245,6 +273,8 @@ class ConversationSummary(BaseModel):
 class TraceSummary(BaseModel):
     """Summary of trace data."""
 
+    model_config = ConfigDict(defer_build=True)
+
     trace_count: int = Field(..., description="Number of traces")
     span_count: int = Field(..., description="Total number of spans")
     error_count: int = Field(..., description="Number of error spans")
@@ -256,6 +286,8 @@ class TraceSummary(BaseModel):
 class AuditSummary(BaseModel):
     """Summary of audit data."""
 
+    model_config = ConfigDict(defer_build=True)
+
     entry_count: int = Field(..., description="Number of audit entries")
     action_types: Dict[str, int] = Field(default_factory=dict, description="Count by action type")
     users: List[str] = Field(default_factory=list, description="Users who performed actions")
@@ -264,6 +296,8 @@ class AuditSummary(BaseModel):
 
 class TaskSummary(BaseModel):
     """Summary of task data."""
+
+    model_config = ConfigDict(defer_build=True)
 
     total_tasks: int = Field(..., description="Total number of tasks")
     completed_tasks: int = Field(..., description="Number of completed tasks")
@@ -276,6 +310,8 @@ class TaskSummary(BaseModel):
 class MemorySummary(BaseModel):
     """Summary of memory data."""
 
+    model_config = ConfigDict(defer_build=True)
+
     node_count: int = Field(..., description="Number of memory nodes")
     node_types: Dict[str, int] = Field(default_factory=dict, description="Count by node type")
     total_size_bytes: int = Field(default=0, description="Total size in bytes")
@@ -284,6 +320,8 @@ class MemorySummary(BaseModel):
 
 class TSDBPeriodSummary(BaseModel):
     """Summary data for a TSDB consolidation period."""
+
+    model_config = ConfigDict(defer_build=True)
 
     # Metrics data
     metrics: Dict[str, MetricAggregation] = Field(default_factory=dict, description="Aggregated metrics for the period")

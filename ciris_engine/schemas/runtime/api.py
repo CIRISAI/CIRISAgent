@@ -45,6 +45,8 @@ class APIUserInfo(BaseModel):
     auth_type: str = Field(..., description="Authentication type: password, oauth, api_key")
     permissions: List[str] = Field(default_factory=list, description="List of granted permissions")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class PaginatedResponse(BaseModel):
     """Generic paginated response for list endpoints."""
@@ -55,4 +57,4 @@ class PaginatedResponse(BaseModel):
     page_size: int = Field(..., description="Number of items per page")
     pages: int = Field(..., description="Total number of pages")
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, defer_build=True)

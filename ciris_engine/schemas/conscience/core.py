@@ -29,7 +29,7 @@ class EntropyCheckResult(BaseModel):
     threshold: float = Field(ge=0.0, le=1.0, description="Threshold used for check")
     message: str = Field(description="Human-readable result message")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class CoherenceCheckResult(BaseModel):
@@ -40,7 +40,7 @@ class CoherenceCheckResult(BaseModel):
     threshold: float = Field(ge=0.0, le=1.0, description="Threshold used for check")
     message: str = Field(description="Human-readable result message")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class OptimizationVetoResult(BaseModel):
@@ -55,7 +55,7 @@ class OptimizationVetoResult(BaseModel):
     )
     affected_values: List[str] = Field(default_factory=list, description="Values that would be affected")
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(defer_build=True, extra="forbid", populate_by_name=True)
 
 
 class EpistemicHumilityResult(BaseModel):
@@ -66,7 +66,7 @@ class EpistemicHumilityResult(BaseModel):
     reflective_justification: str = Field(description="Reflective justification")
     recommended_action: str = Field(description="Recommended action: proceed, ponder, or defer")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class EpistemicData(BaseModel):
@@ -82,7 +82,7 @@ class EpistemicData(BaseModel):
         default=None, description="Content of new observation that arrived during processing"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class ConscienceCheckResult(BaseModel):
@@ -135,7 +135,7 @@ class ConscienceCheckResult(BaseModel):
         default=None, description="Whether the updated status conscience detected changes"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 __all__ = [

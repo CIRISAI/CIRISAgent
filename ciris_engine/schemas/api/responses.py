@@ -7,7 +7,7 @@ All API responses follow these patterns - NO Dict[str, Any]!
 from datetime import datetime, timezone
 from typing import Any, Dict, Generic, Optional, TypeVar
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from ciris_engine.schemas.types import JSONDict
 from ciris_engine.utils.serialization import serialize_timestamp
@@ -17,6 +17,8 @@ T = TypeVar("T")
 
 class ResponseMetadata(BaseModel):
     """Metadata included with all responses."""
+
+    model_config = ConfigDict(defer_build=True)
 
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     request_id: Optional[str] = Field(None, description="Request tracking ID")
@@ -30,6 +32,8 @@ class ResponseMetadata(BaseModel):
 class SuccessResponse(BaseModel, Generic[T]):
     """Standard success response wrapper."""
 
+    model_config = ConfigDict(defer_build=True)
+
     data: T = Field(..., description="Response data")
     metadata: ResponseMetadata = Field(
         default_factory=lambda: ResponseMetadata(
@@ -41,6 +45,8 @@ class SuccessResponse(BaseModel, Generic[T]):
 class ErrorDetail(BaseModel):
     """Detailed error information."""
 
+    model_config = ConfigDict(defer_build=True)
+
     code: str = Field(..., description="Error code (e.g., RESOURCE_NOT_FOUND)")
     message: str = Field(..., description="Human-readable error message")
     details: Optional[JSONDict] = Field(None, description="Additional error context")
@@ -48,6 +54,8 @@ class ErrorDetail(BaseModel):
 
 class ErrorResponse(BaseModel):
     """Standard error response."""
+
+    model_config = ConfigDict(defer_build=True)
 
     error: ErrorDetail = Field(..., description="Error information")
     metadata: ResponseMetadata = Field(

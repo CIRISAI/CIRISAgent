@@ -28,6 +28,7 @@ class EmergencyShutdownCommand(BaseModel):
     signature: str = Field(..., description="HMAC-SHA256 signature of command")
 
     model_config = ConfigDict(
+        defer_build=True,
         json_schema_extra={
             "example": {
                 "action": "emergency_shutdown",
@@ -36,7 +37,7 @@ class EmergencyShutdownCommand(BaseModel):
                 "force": True,
                 "signature": "a1b2c3d4e5f6...",
             }
-        }
+        },
     )
 
 
@@ -50,6 +51,7 @@ class EmergencyShutdownResponse(BaseModel):
     shutdown_initiated: bool = Field(..., description="Whether shutdown was initiated")
 
     model_config = ConfigDict(
+        defer_build=True,
         json_schema_extra={
             "example": {
                 "status": "accepted",
@@ -58,12 +60,14 @@ class EmergencyShutdownResponse(BaseModel):
                 "timestamp": "2025-01-01T12:00:05Z",
                 "shutdown_initiated": True,
             }
-        }
+        },
     )
 
 
 class EmergencyStatus(BaseModel):
     """Current emergency system status."""
+
+    model_config = ConfigDict(defer_build=True)
 
     emergency_system_ready: bool = Field(..., description="Whether emergency system is operational")
     trusted_authorities: int = Field(..., description="Number of trusted authority keys configured")
@@ -74,6 +78,8 @@ class EmergencyStatus(BaseModel):
 class EmergencySignatureResult(BaseModel):
     """Result of emergency shutdown signature verification."""
 
+    model_config = ConfigDict(defer_build=True)
+
     valid: bool = Field(..., description="Whether signature is valid")
     authority_id: Optional[str] = Field(None, description="Authority ID if valid")
     reason: Optional[str] = Field(None, description="Reason for invalid signature")
@@ -81,6 +87,8 @@ class EmergencySignatureResult(BaseModel):
 
 class EmergencyAuditEntry(BaseModel):
     """Audit entry for emergency shutdown attempts."""
+
+    model_config = ConfigDict(defer_build=True)
 
     timestamp: datetime = Field(..., description="When attempt occurred")
     success: bool = Field(..., description="Whether shutdown was initiated")
@@ -92,6 +100,8 @@ class EmergencyAuditEntry(BaseModel):
 
 class TrustedAuthority(BaseModel):
     """Trusted authority for emergency shutdown."""
+
+    model_config = ConfigDict(defer_build=True)
 
     authority_id: str = Field(..., description="Unique authority identifier")
     public_key: str = Field(..., description="Public key for signature verification")

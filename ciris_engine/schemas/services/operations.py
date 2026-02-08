@@ -77,7 +77,7 @@ class MemoryOpResult(BaseModel, Generic[T]):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
     @property
     def nodes(self) -> List[GraphNode]:
@@ -104,7 +104,7 @@ class MemoryQuery(BaseModel):
     include_edges: bool = Field(False, description="Whether to include connected edges")
     depth: int = Field(1, ge=1, le=10, description="Graph traversal depth for connected nodes")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class MemoryRecallResult(BaseModel):
@@ -113,7 +113,7 @@ class MemoryRecallResult(BaseModel):
     nodes: List[GraphNode] = Field(default_factory=list, description="Retrieved graph nodes")
     total_count: int = Field(0, ge=0, description="Total number of nodes found")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [

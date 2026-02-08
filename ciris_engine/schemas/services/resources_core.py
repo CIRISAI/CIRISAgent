@@ -31,7 +31,7 @@ class ResourceLimit(BaseModel):
     action: ResourceAction = Field(default=ResourceAction.DEFER, description="Action when limit exceeded")
     cooldown_seconds: int = Field(default=60, ge=0, description="Cooldown period in seconds")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 def _memory_mb_limit() -> ResourceLimit:
@@ -68,7 +68,7 @@ class ResourceBudget(BaseModel):
     disk_mb: ResourceLimit = Field(default_factory=_disk_mb_limit, description="Disk usage limits in MB")
     thoughts_active: ResourceLimit = Field(default_factory=_thoughts_active_limit, description="Active thoughts limit")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ResourceSnapshot(BaseModel):
@@ -88,7 +88,7 @@ class ResourceSnapshot(BaseModel):
     warnings: List[str] = Field(default_factory=list, description="Active warnings")
     critical: List[str] = Field(default_factory=list, description="Critical issues")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ResourceCost(BaseModel):
@@ -118,7 +118,7 @@ class ResourceCost(BaseModel):
     )
     model_used: Optional[str] = Field(default=None, description="Model that incurred these costs")
 
-    model_config = ConfigDict(protected_namespaces=())
+    model_config = ConfigDict(protected_namespaces=(), defer_build=True)
 
     def calculate_from_tokens(self, tokens: int, model: Optional[str] = None) -> None:
         """Calculate all costs from token count"""
@@ -153,7 +153,7 @@ class ResourceCost(BaseModel):
         """Get carbon emissions in kilograms"""
         return self.carbon_g / 1000.0
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ResourceAlert(BaseModel):
@@ -169,7 +169,7 @@ class ResourceAlert(BaseModel):
     )
     message: str = Field(description="Human-readable alert message")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [

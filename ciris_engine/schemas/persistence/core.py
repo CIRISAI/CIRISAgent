@@ -20,7 +20,7 @@ class DeferralPackage(BaseModel):
     reason: Optional[str] = Field(None, description="Reason for deferral")
     context: Dict[str, str] = Field(default_factory=dict, description="Additional context as strings")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DeferralReportContext(BaseModel):
@@ -30,7 +30,7 @@ class DeferralReportContext(BaseModel):
     thought_id: str = Field(..., description="Associated thought ID")
     package: Optional[DeferralPackage] = Field(None, description="Deferral package data")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CorrelationUpdateRequest(BaseModel):
@@ -42,7 +42,7 @@ class CorrelationUpdateRequest(BaseModel):
     metric_value: Optional[float] = Field(None, description="Metric value if applicable")
     tags: Optional[Dict[str, str]] = Field(None, description="Tags to update")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class MetricsQuery(BaseModel):
@@ -55,7 +55,7 @@ class MetricsQuery(BaseModel):
     aggregation: str = Field("avg", description="Aggregation method: avg, sum, max, min")
     interval: str = Field("1h", description="Time bucket interval")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class IdentityContext(BaseModel):
@@ -75,7 +75,7 @@ class IdentityContext(BaseModel):
         default_factory=dict, description="Action selection overrides"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ThoughtSummary(BaseModel):
@@ -88,7 +88,7 @@ class ThoughtSummary(BaseModel):
     content: str = Field(..., description="Thought content")
     source_task_id: str = Field(..., description="Source task ID")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class TaskSummaryInfo(BaseModel):
@@ -101,7 +101,7 @@ class TaskSummaryInfo(BaseModel):
     priority: Optional[int] = Field(None, description="Task priority")
     channel_id: Optional[str] = Field(None, description="Associated channel")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class QueryTimeRange(BaseModel):
@@ -110,7 +110,7 @@ class QueryTimeRange(BaseModel):
     start_time: datetime = Field(..., description="Start of range")
     end_time: datetime = Field(..., description="End of range")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class PersistenceHealth(BaseModel):
@@ -124,7 +124,7 @@ class PersistenceHealth(BaseModel):
     last_query_time: Optional[datetime] = Field(None, description="Last successful query")
     error_message: Optional[str] = Field(None, description="Error if unhealthy")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [

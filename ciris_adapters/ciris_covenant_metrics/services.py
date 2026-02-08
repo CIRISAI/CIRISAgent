@@ -73,6 +73,21 @@ class TraceDetailLevel(str, Enum):
     FULL_TRACES = "full_traces"
 
 
+def _strip_empty(obj: Any) -> Any:
+    """Recursively strip None, empty strings, empty lists, empty dicts to reduce payload size."""
+    if isinstance(obj, dict):
+        result = {}
+        for k, v in obj.items():
+            stripped = _strip_empty(v)
+            # Keep the value if it's not empty (0 and False are valid values)
+            if stripped is not None and stripped != "" and stripped != [] and stripped != {}:
+                result[k] = stripped
+        return result
+    elif isinstance(obj, list):
+        return [_strip_empty(item) for item in obj if item is not None]
+    return obj
+
+
 @dataclass
 class SimpleCapabilities:
     """Simple capabilities container for duck-typing with WiseBus."""
@@ -108,7 +123,10 @@ class CompleteTrace:
     trace_level: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization."""
+        """Convert to dictionary for serialization.
+
+        Uses _strip_empty on component data to match what was signed.
+        """
         return {
             "trace_id": self.trace_id,
             "thought_id": self.thought_id,
@@ -120,9 +138,9 @@ class CompleteTrace:
             "components": [
                 {
                     "component_type": c.component_type,
+                    "data": _strip_empty(c.data),
                     "event_type": c.event_type,
                     "timestamp": c.timestamp,
-                    "data": c.data,
                 }
                 for c in self.components
             ],
@@ -197,21 +215,6 @@ class Ed25519TraceSigner:
             logger.warning(f"Could not load unified signing key: {e}")
             return False
 
-    @staticmethod
-    def _strip_empty(obj: Any) -> Any:
-        """Recursively strip None, empty strings, empty lists, empty dicts to reduce payload size."""
-        if isinstance(obj, dict):
-            result = {}
-            for k, v in obj.items():
-                stripped = Ed25519TraceSigner._strip_empty(v)
-                # Keep the value if it's not empty (0 and False are valid values)
-                if stripped is not None and stripped != "" and stripped != [] and stripped != {}:
-                    result[k] = stripped
-            return result
-        elif isinstance(obj, list):
-            return [Ed25519TraceSigner._strip_empty(item) for item in obj if item is not None]
-        return obj
-
     def sign_trace(self, trace: CompleteTrace) -> bool:
         """Sign a trace with Ed25519 unified signing key.
 
@@ -237,7 +240,7 @@ class Ed25519TraceSigner:
             components_list = [
                 {
                     "component_type": c.component_type,
-                    "data": self._strip_empty(c.data),
+                    "data": _strip_empty(c.data),
                     "event_type": c.event_type,
                     "timestamp": c.timestamp,
                 }
@@ -293,7 +296,7 @@ class Ed25519TraceSigner:
             components_list = [
                 {
                     "component_type": c.component_type,
-                    "data": self._strip_empty(c.data),
+                    "data": _strip_empty(c.data),
                     "event_type": c.event_type,
                     "timestamp": c.timestamp,
                 }

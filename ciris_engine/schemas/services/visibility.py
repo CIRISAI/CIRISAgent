@@ -22,7 +22,7 @@ class VisibilitySnapshot(BaseModel):
     Service health, metrics, and correlations belong in telemetry/metrics services.
     """
 
-    model_config = ConfigDict(defer_build=True)
+    model_config = ConfigDict(extra="forbid")
 
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -40,10 +40,10 @@ class VisibilitySnapshot(BaseModel):
 class ThoughtStep(BaseModel):
     """Single step in the reasoning trace."""
 
-    model_config = ConfigDict(defer_build=True)
+    model_config = ConfigDict(extra="forbid")
 
     thought: Thought = Field(..., description="The full thought object")
-    conscience_results: Optional[ConfigDict] = Field(
+    conscience_results: Optional[TypeConfigDict] = Field(
         None, description="Conscience evaluation results (non-terminal actions)"
     )
     handler_result: Optional[HandlerResult] = Field(None, description="Result from action handler")
@@ -53,7 +53,7 @@ class ThoughtStep(BaseModel):
 class ReasoningTrace(BaseModel):
     """Complete reasoning trace for a task."""
 
-    model_config = ConfigDict(defer_build=True)
+    model_config = ConfigDict(extra="forbid")
 
     task: Task = Field(..., description="The task being traced")
 
@@ -71,7 +71,7 @@ class ReasoningTrace(BaseModel):
 class DecisionRecord(BaseModel):
     """Record of a decision made for a task."""
 
-    model_config = ConfigDict(defer_build=True)
+    model_config = ConfigDict(extra="forbid")
 
     decision_id: str = Field(..., description="Unique decision ID")
     timestamp: datetime = Field(..., description="When decision was made")
@@ -79,7 +79,7 @@ class DecisionRecord(BaseModel):
 
     # Decision details
     action_type: str = Field(..., description="Type of action decided")
-    parameters: ConfigDict = Field(default_factory=dict, description="Parameters for the action")
+    parameters: TypeConfigDict = Field(default_factory=dict, description="Parameters for the action")
     rationale: str = Field(..., description="Reasoning for the decision")
     alternatives_considered: List[str] = Field(default_factory=list, description="Other options considered")
 
@@ -92,7 +92,7 @@ class DecisionRecord(BaseModel):
 class TaskDecisionHistory(BaseModel):
     """Complete decision history for a task."""
 
-    model_config = ConfigDict(defer_build=True)
+    model_config = ConfigDict(extra="forbid")
 
     task_id: str = Field(..., description="Task ID")
     task_description: str = Field(..., description="What the task was")

@@ -60,7 +60,7 @@ class ActionInstructionGenerator:
             available_actions = list(HandlerActionType)
 
         instructions = []
-        instructions.append("Schemas for 'action_parameters' based on the selected_action:")
+        instructions.append("FLAT field schemas per action (DO NOT use nested 'action_parameters'):")
 
         for action_type in available_actions:
             if action_type in self.ACTION_PARAM_SCHEMAS:
@@ -83,56 +83,51 @@ class ActionInstructionGenerator:
         # Use the actual schema to generate the format
         schema_str = self._simplify_schema(schema)
 
-        # Add action-specific guidance
-        if action_type == HandlerActionType.MEMORIZE:
+        # Add action-specific guidance with flat field names matching ASPDMALLMResult
+        if action_type == HandlerActionType.SPEAK:
+            return "SPEAK: speak_content (string, required) - the response text to speak"
+
+        elif action_type == HandlerActionType.PONDER:
+            return "PONDER: ponder_questions (list of strings, required) - 2-3 clarifying questions"
+
+        elif action_type == HandlerActionType.MEMORIZE:
             return self._format_memory_action_schema("MEMORIZE")
 
         elif action_type == HandlerActionType.RECALL:
             return self._format_memory_action_schema("RECALL")
 
         elif action_type == HandlerActionType.FORGET:
-            # Special formatting for FORGET to show the node structure
+            # Use flat field names matching ASPDMALLMResult
             return (
-                'FORGET: {"node": {id: string, type: "agent"|"user"|"channel"|"concept", '
-                'scope: "local"|"identity"|"environment"}}, "reason": string (required)}}\n'
-                "For user nodes: Use numeric Discord IDs like 'user/537080239679864862' as the node id."
+                "FORGET: forget_node_id (string, required), forget_reason (string, required)\n"
+                "For user nodes: Use numeric Discord IDs like 'user/537080239679864862' as forget_node_id."
             )
 
         elif action_type == HandlerActionType.DEFER:
-            # Override the schema string to be more explicit about types
-            defer_schema = (
-                '{"reason": string (required), "context"?: Dict[str, str], "defer_until"?: ISO 8601 timestamp string}'
-            )
+            # Use flat field names matching ASPDMALLMResult
             return (
-                f"DEFER: {defer_schema}\n"
-                "defer_until must be ISO 8601 format: '2025-01-20T15:00:00Z'\n"
-                f'context should be a dictionary: {{"key": "value"}}\n'
+                "DEFER: defer_reason (string, required), defer_until (ISO 8601 timestamp, optional)\n"
+                "defer_until format: '2025-01-20T15:00:00Z'\n"
                 "Use defer_until for time-based deferrals that auto-reactivate."
             )
 
         elif action_type == HandlerActionType.REJECT:
-            return f"REJECT: {schema_str}\nUse create_filter=true to prevent similar future requests."
+            # Use flat field names matching ASPDMALLMResult
+            return "REJECT: reject_reason (string, required), reject_create_filter (boolean, optional)\nSet reject_create_filter=true to prevent similar future requests."
 
         elif action_type == HandlerActionType.TOOL:
             return self._generate_tool_schema()
 
         elif action_type == HandlerActionType.TASK_COMPLETE:
-            # Override schema to be explicit about context type
-            complete_schema = '{"completion_reason": string (default: "Task completed successfully"), "context"?: Dict[str, str], "positive_moment"?: string}'
+            # Use flat field names matching ASPDMALLMResult
             return (
-                f"TASK_COMPLETE: {complete_schema}\n"
-                f'context should be a dictionary: {{"task_id": "123", "status": "done"}}\n'
-                "Use when task is done, impossible, unnecessary, or cannot be actioned. "
-                "This is the preferred resolution for problematic tasks."
+                "TASK_COMPLETE: completion_reason (string, optional, default: 'Task completed successfully')\n"
+                "Use when task is done, impossible, unnecessary, or cannot be actioned."
             )
 
         elif action_type == HandlerActionType.OBSERVE:
-            # Override schema to be explicit about context type
-            observe_schema = '{"channel_id"?: string, "channel_context"?: object, "active": boolean (default: false), "context"?: Dict[str, str]}'
-            return (
-                f"OBSERVE: {observe_schema}\n"
-                f'context should be a dictionary: {{"reason": "need more info", "focus": "user intent"}}'
-            )
+            # Use flat field names matching ASPDMALLMResult
+            return "OBSERVE: observe_active (boolean, default: true)\nSet observe_active=true to actively observe."
 
         else:
             # For all other actions, use the dynamically generated schema
@@ -141,44 +136,31 @@ class ActionInstructionGenerator:
     def _format_memory_action_schema(self, action_name: str) -> str:
         """Format schema for memory-related actions (MEMORIZE, RECALL)."""
         if action_name == "MEMORIZE":
+            # Use flat field names matching ASPDMALLMResult
             base_schema = (
-                'MEMORIZE: {"node": {id: string (unique identifier), '
-                'type: "agent"|"user"|"channel"|"concept", '
-                'scope: "local"|"identity"|"environment", '
-                "attributes?: object (data to store)}}"
+                "MEMORIZE: memorize_node_type (string), memorize_content (string), "
+                "memorize_scope (string: local|identity|environment|community)"
             )
 
-            # Add guidance for MEMORIZE
             guidance = [
-                "\nFor type: use 'user' for user data, 'channel' for channel data, "
+                "\nFor memorize_node_type: use 'user' for user data, 'channel' for channel data, "
                 "'concept' for facts/beliefs/knowledge, 'agent' for agent data.",
-                "For scope: use 'local' for user/channel data, 'identity' for personal "
+                "For memorize_scope: use 'local' for user/channel data, 'identity' for personal "
                 "facts/beliefs, 'environment' for external/internet data.",
-                "\nIMPORTANT for user nodes: ALWAYS use numeric Discord IDs (e.g., 'user/537080239679864862') "
-                "as the primary identifier, NOT usernames. Usernames can change, but numeric IDs are permanent. "
-                "Store the username in attributes if needed, but the node ID must be the numeric user ID.",
             ]
 
             return base_schema + "\n".join(guidance)
 
         elif action_name == "RECALL":
-            # RECALL has a completely different schema
+            # Use flat field names matching ASPDMALLMResult
             base_schema = (
-                'RECALL: {"query"?: string (search text), '
-                '"node_type"?: string (agent, user, channel, concept, config, tsdb_data, tsdb_summary, conversation_summary, audit_entry, identity_snapshot, behavioral, social, identity, observation), '
-                '"node_id"?: string (specific node ID), '
-                '"scope"?: "local"|"identity"|"environment", '
-                '"limit"?: integer (default: 10)}}'
+                "RECALL: recall_query (string, optional), recall_node_type (string, optional), "
+                "recall_scope (string: local|identity|environment, optional), recall_limit (integer, default: 10)"
             )
 
-            # Add guidance for RECALL
             guidance = [
-                "\nUse query to search by text, node_type to filter by type, " "node_id to fetch a specific node.",
-                "At least one of query, node_type, or node_id should be provided.",
-                "For scope: use 'local' for user/channel data, 'identity' for personal "
-                "facts/beliefs, 'environment' for external/internet data.",
-                "\nFor user lookups: Use numeric Discord IDs like 'user/537080239679864862' for node_id. "
-                "If you only have a username, use query with node_type='user' to search.",
+                "\nUse recall_query to search by text, recall_node_type to filter by type.",
+                "At least one of recall_query or recall_node_type should be provided.",
             ]
 
             return base_schema + "\n".join(guidance)
@@ -416,30 +398,23 @@ class ActionInstructionGenerator:
         """Get specific guidance for an action type."""
 
         guidance_map = {
-            HandlerActionType.SPEAK: (
-                "If 'Speak' is chosen, the 'action_parameters' MUST be a JSON object "
-                "containing a 'content' key with the substantive response string."
-            ),
+            HandlerActionType.SPEAK: ("If 'SPEAK' is chosen, set 'speak_content' to the substantive response string."),
             HandlerActionType.PONDER: (
-                "If 'Ponder' is chosen, 'questions' MUST list 2-3 distinct, NEW questions "
+                "If 'PONDER' is chosen, 'ponder_questions' MUST list 2-3 distinct, NEW questions "
                 "to resolve ambiguity, building upon any previous ponder_notes."
             ),
-            HandlerActionType.OBSERVE: (
-                "If 'Observe' is chosen to gather more context, 'active' SHOULD generally "
-                "be true to actively fetch recent information. Provide clear context."
-            ),
+            HandlerActionType.OBSERVE: ("If 'OBSERVE' is chosen to gather more context, set 'observe_active' to true."),
             HandlerActionType.REJECT: (
-                "Use 'Reject' only for requests that are fundamentally unserviceable, "
-                "unethical, or malicious. Set create_filter=true to prevent similar requests."
+                "Use 'REJECT' only for requests that are fundamentally unserviceable. "
+                "Set 'reject_create_filter' to true to prevent similar requests."
             ),
             HandlerActionType.DEFER: (
-                "Use 'Defer' ONLY when a task MUST be completed AND requires human approval. "
-                "Most problematic tasks should be marked TASK_COMPLETE instead. "
-                "Defer is for tasks that need doing but require human oversight."
+                "Use 'DEFER' ONLY when a task MUST be completed AND requires human approval. "
+                "Set 'defer_reason' and optionally 'defer_until' (ISO timestamp)."
             ),
             HandlerActionType.TASK_COMPLETE: (
                 "Use 'TASK_COMPLETE' when: task is done, impossible, unnecessary, or unclear. "
-                "This is preferred over DEFER for most situations where you cannot act."
+                "Set 'completion_reason' to explain why the task is complete."
             ),
         }
 

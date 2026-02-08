@@ -13,8 +13,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 50
-        versionName "1.9.7-esu"
+        versionCode 51
+        versionName "1.9.8"
 
         ndk {
             // Required by Chaquopy - must match splits.abi.include

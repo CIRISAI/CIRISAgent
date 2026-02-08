@@ -44,7 +44,7 @@
     "base_url": {
       "type": "string",
       "env": "CIRISNODE_BASE_URL",
-      "default": "https://admin.ethicsengine.org",
+      "default": "https://ethicsengine.ciris.ai",
       "description": "CIRISNode API base URL"
     },
     "auth_token": {

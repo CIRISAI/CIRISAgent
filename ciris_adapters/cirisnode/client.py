@@ -47,8 +47,8 @@ class CIRISNodeClient:
         """
         self.base_url: str = (
             base_url
-            or os.getenv("CIRISNODE_BASE_URL", "https://admin.ethicsengine.org")
-            or "https://admin.ethicsengine.org"
+            or os.getenv("CIRISNODE_BASE_URL", "https://ethicsengine.ciris.ai")
+            or "https://ethicsengine.ciris.ai"
         )
         self.auth_token = auth_token or os.getenv("CIRISNODE_AUTH_TOKEN")
         self.agent_token = agent_token or os.getenv("CIRISNODE_AGENT_TOKEN")

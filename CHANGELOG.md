@@ -40,6 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **CIRISNode Client Migrated to Adapter** - Moved from `ciris_engine/logic/adapters` to `ciris_adapters/cirisnode`
+  - Updated API endpoints to match CIRISNode v2 (`/api/v1/` prefix)
+  - JWT authentication via `CIRISNODE_AUTH_TOKEN` and `CIRISNODE_AGENT_TOKEN`
+  - Agent events use `X-Agent-Token` header for managed agent auth
+  - Async job model for benchmarks with polling convenience methods
+  - Tool service interface for integration via manifest.json
+
 - **Adapter Renaming** - Renamed 49 clawdbot_* adapters to generic names
   - e.g., `clawdbot_1password` → `onepassword`, `clawdbot_github` → `github`
 

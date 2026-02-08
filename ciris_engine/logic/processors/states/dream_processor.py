@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from ciris_engine.logic.adapters import CIRISNodeClient
+from ciris_adapters.cirisnode.client import CIRISNodeClient
 from ciris_engine.logic.buses.communication_bus import CommunicationBus
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.config import ConfigAccessor
@@ -422,7 +422,8 @@ class DreamProcessor(BaseProcessor):
 
         # Initialize CIRISNode client if enabled
         if self.cirisnode_enabled:
-            self.cirisnode_client = CIRISNodeClient(service_registry=self.service_registry, base_url=self.cirisnode_url)
+            self.cirisnode_client = CIRISNodeClient(base_url=self.cirisnode_url)
+            await self.cirisnode_client.start()
 
         logger.info(f"Starting dream cycle (duration: {duration}s)")
 
@@ -1113,12 +1114,14 @@ class DreamProcessor(BaseProcessor):
         he300_result = await self.cirisnode_client.run_he300(model_id=model_id, agent_id=agent_id)
         simplebench_result = await self.cirisnode_client.run_simplebench(model_id=model_id, agent_id=agent_id)
 
-        # Store results as insights
-        topic = he300_result.topic if hasattr(he300_result, "topic") else "Unknown"
-        score = simplebench_result.score if hasattr(simplebench_result, "score") else "N/A"
+        # Store results as insights (new client returns Dict instead of Pydantic models)
+        ethics_score = he300_result.get("ethics_score", 0.0)
+        score = simplebench_result.get("score", "N/A")
 
         if self.current_session:
-            self.current_session.insights_gained.append(f"Benchmark reflection: {topic} (score: {score})")
+            self.current_session.insights_gained.append(
+                f"Benchmark reflection: ethics={ethics_score:.2f}, simplebench={score}"
+            )
 
         benchmarks_run = get_int(self.dream_metrics, "benchmarks_run", 0)
         self.dream_metrics["benchmarks_run"] = benchmarks_run + 1

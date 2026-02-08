@@ -3,7 +3,7 @@
 from pathlib import Path
 
 # Version information
-CIRIS_VERSION = "1.9.8-stable"
+CIRIS_VERSION = "1.9.9"
 COVENANT_VERSION = "1.2-Beta"
 CIRIS_VERSION_MAJOR = 1
 CIRIS_VERSION_MINOR = 9

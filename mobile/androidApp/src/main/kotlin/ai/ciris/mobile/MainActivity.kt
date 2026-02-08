@@ -118,7 +118,10 @@ class MainActivity : ComponentActivity() {
                                 errorMsg.contains("ModuleNotFoundError") -> "Module not found: ${errorMsg.substringAfter("ModuleNotFoundError:")}"
                                 else -> "Python error: ${errorMsg.take(100)}"
                             }
-                            pythonError = shortError
+                            // Update Compose state on main thread (mutableStateOf is not thread-safe)
+                            runOnUiThread {
+                                pythonError = shortError
+                            }
                         }
                     }.start()
 

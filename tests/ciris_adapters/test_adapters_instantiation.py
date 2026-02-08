@@ -1,8 +1,8 @@
 """Tests to verify adapters can be instantiated without NameErrors."""
 
 import pytest
-from ciris_adapters.clawdbot_1password.service import OnepasswordToolService
-from ciris_adapters.clawdbot_github.service import GithubToolService
+from ciris_adapters.onepassword.service import OnepasswordToolService
+from ciris_adapters.github.service import GithubToolService
 
 def test_instantiate_adapters():
     """Test that adapters can be instantiated and _build_tool_info called."""

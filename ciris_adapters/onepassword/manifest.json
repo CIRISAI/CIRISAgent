@@ -1,6 +1,6 @@
 {
   "module": {
-    "name": "clawdbot_1password",
+    "name": "onepassword",
     "version": "1.0.0",
     "description": "Set up and use 1Password CLI (op). Use when installing the CLI, enabling desktop app integration, signing in (single or multi-account), or reading/injecting/running secrets via op.",
     "author": "CIRIS Team (converted from Clawdbot)",
@@ -10,7 +10,7 @@
     {
       "type": "TOOL",
       "priority": "NORMAL",
-      "class": "clawdbot_1password.service.OnepasswordToolService",
+      "class": "onepassword.service.OnepasswordToolService",
       "capabilities": [
         "tool:1password",
         "requires:binaries"
@@ -30,7 +30,7 @@
     ]
   },
   "exports": {
-    "service_class": "clawdbot_1password.service.OnepasswordToolService"
+    "service_class": "onepassword.service.OnepasswordToolService"
   },
   "configuration": {}
 }

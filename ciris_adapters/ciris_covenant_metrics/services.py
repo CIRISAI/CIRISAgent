@@ -104,6 +104,8 @@ class CompleteTrace:
     components: List[TraceComponent] = field(default_factory=list)
     signature: Optional[str] = None
     signature_key_id: Optional[str] = None
+    # Trace level determines what data is included - MUST be part of signature
+    trace_level: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -114,6 +116,7 @@ class CompleteTrace:
             "agent_id_hash": self.agent_id_hash,
             "started_at": self.started_at,
             "completed_at": self.completed_at,
+            "trace_level": self.trace_level,
             "components": [
                 {
                     "component_type": c.component_type,
@@ -137,6 +140,7 @@ class CompleteTrace:
             "agent_id_hash": self.agent_id_hash,
             "started_at": self.started_at,
             "completed_at": self.completed_at,
+            "trace_level": self.trace_level,
             "components": [
                 {
                     "component_type": c.component_type,
@@ -211,9 +215,14 @@ class Ed25519TraceSigner:
     def sign_trace(self, trace: CompleteTrace) -> bool:
         """Sign a trace with Ed25519 unified signing key.
 
-        Signs the JSON array of components (not the full trace object).
-        This matches CIRISLens verification which expects:
-            message = json.dumps([c.model_dump() for c in trace.components], sort_keys=True, separators=(",", ":")).encode('utf-8')
+        Signs a JSON object containing trace_level and components.
+        This ensures each trace level produces a unique, verifiable signature.
+
+        CIRISLens verification expects:
+            message = json.dumps({
+                "trace_level": trace.trace_level,
+                "components": [c.model_dump() for c in trace.components]
+            }, sort_keys=True, separators=(",", ":")).encode('utf-8')
 
         Returns True if signing succeeded, False if key not available.
         """
@@ -223,7 +232,7 @@ class Ed25519TraceSigner:
 
         try:
             # Build the canonical message that CIRISLens will verify against:
-            # JSON array of components, alphabetically sorted keys, no extra whitespace
+            # JSON object with trace_level and components, alphabetically sorted keys
             # Strip null values to reduce payload size
             components_list = [
                 {
@@ -234,12 +243,22 @@ class Ed25519TraceSigner:
                 }
                 for c in trace.components
             ]
+
+            # Include trace_level in signed payload for per-level verification
+            signed_payload = {
+                "components": components_list,
+                "trace_level": trace.trace_level,
+            }
+
             # Compact JSON: sort_keys=True, no extra whitespace, UTF-8 encoded
-            message = json.dumps(components_list, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            message = json.dumps(signed_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
             # Log hash for debugging signature verification mismatches (no content preview for privacy)
             message_hash = hashlib.sha256(message).hexdigest()
-            logger.debug(f"Signing trace {trace.trace_id}: len={len(message)}, hash={message_hash}")
+            logger.debug(
+                f"Signing trace {trace.trace_id} (level={trace.trace_level}): "
+                f"len={len(message)}, hash={message_hash}"
+            )
 
             # Sign the raw message bytes (not a hash)
             trace.signature = self._unified_key.sign_base64(message)
@@ -255,7 +274,7 @@ class Ed25519TraceSigner:
     def verify_trace(self, trace: CompleteTrace) -> bool:
         """Verify a trace signature using root public key.
 
-        Verifies against the canonical JSON components message.
+        Verifies against the canonical JSON payload with trace_level and components.
         """
         if not trace.signature or not self._root_pubkey:
             return False
@@ -280,7 +299,13 @@ class Ed25519TraceSigner:
                 }
                 for c in trace.components
             ]
-            message = json.dumps(components_list, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+            # Include trace_level in signed payload for per-level verification
+            signed_payload = {
+                "components": components_list,
+                "trace_level": trace.trace_level,
+            }
+            message = json.dumps(signed_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
             # Verify
             public_key.verify(sig_bytes, message)
@@ -1367,14 +1392,16 @@ class CovenantMetricsService:
 
             trace = self._active_traces.pop(thought_id)
             trace.completed_at = completion_time
+            # Set trace_level BEFORE signing - critical for per-level signature verification
+            trace.trace_level = self._trace_level.value
 
-        # Sign the trace
+        # Sign the trace (signature includes trace_level for uniqueness)
         if self._signer.sign_trace(trace):
             self._traces_signed += 1
             component_types = [c.event_type for c in trace.components]
             logger.info(
                 f"✅ TRACE COMPLETE #{self._traces_completed + 1}: {trace.trace_id} "
-                f"with {len(trace.components)} components: {component_types}"
+                f"(level={trace.trace_level}) with {len(trace.components)} components: {component_types}"
             )
         else:
             logger.warning(f"⚠️ Trace {trace.trace_id} completed but NOT signed (no key)")
@@ -1393,13 +1420,12 @@ class CovenantMetricsService:
         Args:
             trace: Completed trace to send
         """
+        # trace.trace_level is already set in _complete_trace before signing
         trace_dict = trace.to_dict()
-        # Include trace_level in the trace itself for proper categorization
-        trace_dict["trace_level"] = self._trace_level.value
         trace_event = {
             "event_type": "complete_trace",
             "trace": trace_dict,
-            "trace_level": self._trace_level.value,  # Also at event level
+            "trace_level": trace.trace_level,  # Also at event level for routing
         }
         await self._queue_event(trace_event)
 

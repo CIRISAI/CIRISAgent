@@ -35,6 +35,8 @@ CIRIS wraps LLM calls with:
 
 **Philosophy**: "No Untyped Dicts, No Bypass Patterns, No Exceptions" - See [CLAUDE.md](CLAUDE.md#core-philosophy-type-safety-first)
 
+**For AI Assistants**: See [llms.txt](llms.txt) for quick context and [docs/OVERVIEW.md](docs/OVERVIEW.md) for architecture.
+
 **Engine Documentation**: [ciris_engine/README.md](ciris_engine/README.md) - Technical architecture and implementation details
 
 ## Quick Start

@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Trace Signature Payload Mismatch** - Fixed ~900 byte difference between signed and sent payloads
+  - `sign_trace()` used `_strip_empty()` but `to_dict()` sent raw data
+  - Now both use module-level `_strip_empty()` for consistent payloads
+  - CIRISLens signature verification now succeeds for all trace levels
+
 - **Redundant response_model** - Removed duplicate response_model parameters in FastAPI routes (S8409)
 - **Redundant None check** - Fixed always-true condition in discord_tool_service.py (S2589)
 

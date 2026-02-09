@@ -1,0 +1,40 @@
+{
+  "module": {
+    "name": "ordercli",
+    "version": "1.0.0",
+    "description": "Foodora-only CLI for checking past orders and active order status (Deliveroo WIP).",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://ordercli.sh"
+  },
+  "platform_requirements": [
+    "desktop_cli"
+  ],
+  "platform_requirements_rationale": "Requires CLI tools only available on desktop",
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "ordercli.service.OrdercliToolService",
+      "capabilities": [
+        "tool:ordercli",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:ordercli",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "ordercli.service.OrdercliToolService"
+  },
+  "configuration": {}
+}

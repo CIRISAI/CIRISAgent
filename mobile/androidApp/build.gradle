@@ -13,11 +13,12 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 50
-        versionName "1.9.7-esu"
+        versionCode 52
+        versionName "1.9.9"
 
         ndk {
-            // Required by Chaquopy - must match splits.abi.include
+            // ARM only - developing markets optimization
+            // x86_64 added in debug buildType for emulator testing
             abiFilters "arm64-v8a", "armeabi-v7a"
         }
 
@@ -96,6 +97,17 @@ android {
         debug {
             debuggable true
             // Use default debug signing config
+            // Add x86_64 for emulator testing (not in release)
+            ndk {
+                abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"
+            }
+        }
+    }
+
+    // Exclude x86_64 from release AAB (developing markets optimization)
+    bundle {
+        abi {
+            enableSplit true
         }
     }
 

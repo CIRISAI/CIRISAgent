@@ -68,6 +68,9 @@ async def emergency_shutdown(
 
         return status
 
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is (don't convert to 500)
+        raise
     except Exception as e:
         logger.error(f"Emergency shutdown failed: {e}")
         raise HTTPException(status_code=500, detail=f"Emergency shutdown failed: {str(e)}")

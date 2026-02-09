@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             var pythonReady by remember { mutableStateOf(false) }
             var statusMessage by remember { mutableStateOf("Starting Python...") }
+            var pythonError by remember { mutableStateOf<String?>(null) }
 
             LaunchedEffect(Unit) {
                 // Start logcat reader for service status updates
@@ -110,18 +111,38 @@ class MainActivity : ComponentActivity() {
                             module.callAttr("main")
                         } catch (e: Exception) {
                             Log.e(TAG, "Python runtime error", e)
+                            // Extract meaningful error message
+                            val errorMsg = e.message ?: e.toString()
+                            val shortError = when {
+                                errorMsg.contains("pydantic_core") -> "Build error: pydantic_core native library missing"
+                                errorMsg.contains("ModuleNotFoundError") -> "Module not found: ${errorMsg.substringAfter("ModuleNotFoundError:")}"
+                                else -> "Python error: ${errorMsg.take(100)}"
+                            }
+                            // Update Compose state on main thread (mutableStateOf is not thread-safe)
+                            runOnUiThread {
+                                pythonError = shortError
+                            }
                         }
                     }.start()
 
-                    // Wait for server to respond
+                    // Wait for server to respond (or error)
                     statusMessage = "Waiting for server..."
-                    val ready = waitForServer()
+                    var attempts = 0
+                    while (attempts < 60 && pythonError == null) {
+                        delay(1000)
+                        attempts++
+                        val ready = checkServerOnce()
+                        if (ready) {
+                            Log.i(TAG, "Server ready - showing CIRISApp")
+                            pythonReady = true
+                            return@launch
+                        }
+                    }
 
-                    if (ready) {
-                        Log.i(TAG, "Server ready - showing CIRISApp")
-                        pythonReady = true
+                    if (pythonError != null) {
+                        statusMessage = pythonError!!
                     } else {
-                        statusMessage = "Server failed to start"
+                        statusMessage = "Server failed to start after 60s"
                     }
                 }
             }
@@ -320,31 +341,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private suspend fun waitForServer(): Boolean = withContext(Dispatchers.IO) {
-        var attempts = 0
-        val maxAttempts = 60
+    private suspend fun checkServerOnce(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("http://localhost:8080/v1/system/health")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 2000
+            connection.readTimeout = 2000
 
-        while (attempts < maxAttempts) {
-            delay(1000)
-            attempts++
-
-            try {
-                val url = URL("http://localhost:8080/v1/system/health")
-                val connection = url.openConnection() as HttpURLConnection
-                connection.connectTimeout = 2000
-                connection.readTimeout = 2000
-
-                if (connection.responseCode == 200) {
-                    connection.disconnect()
-                    Log.i(TAG, "Server ready after $attempts seconds")
-                    return@withContext true
-                }
-                connection.disconnect()
-            } catch (e: Exception) {
-                // Server not ready
-            }
+            val ready = connection.responseCode == 200
+            connection.disconnect()
+            return@withContext ready
+        } catch (e: Exception) {
+            return@withContext false
         }
-        return@withContext false
     }
 
     private suspend fun startLogcatReader() = withContext(Dispatchers.IO) {

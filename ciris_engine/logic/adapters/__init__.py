@@ -3,7 +3,12 @@ import logging
 
 from ciris_engine.protocols.runtime.base import BaseAdapterProtocol
 
-from .cirisnode_client import CIRISNodeClient
+# CIRISNodeClient moved to ciris_adapters.cirisnode.client
+# Keeping import for backwards compatibility but marking as deprecated
+try:
+    from ciris_adapters.cirisnode.client import CIRISNodeClient
+except ImportError:
+    CIRISNodeClient = None  # type: ignore[misc, assignment]
 
 OpenAICompatibleClient = None
 

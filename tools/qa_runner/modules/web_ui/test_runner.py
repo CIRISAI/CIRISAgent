@@ -132,10 +132,12 @@ class WebUITestRunner:
         server_config: Optional[ServerConfig] = None,
         browser_config: Optional[BrowserConfig] = None,
         test_config: Optional[WebUITestConfig] = None,
+        keep_open: bool = False,
     ):
         self.server_config = server_config or ServerConfig()
         self.browser_config = browser_config or BrowserConfig()
         self.test_config = test_config or WebUITestConfig.from_env()
+        self.keep_open = keep_open
 
         # Sync base URL
         self.test_config.base_url = f"http://{self.server_config.host}:{self.server_config.port}"
@@ -186,6 +188,17 @@ class WebUITestRunner:
 
     async def teardown(self) -> None:
         """Clean up test environment."""
+        if self.keep_open:
+            print("\n🔓 Keep-open mode: Browser and server will remain running")
+            print(f"   Server: http://{self.server_config.host}:{self.server_config.port}")
+            print("   Press Ctrl+C to stop when done")
+            try:
+                # Keep running until interrupted
+                while True:
+                    await asyncio.sleep(1)
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                print("\n🛑 Shutting down...")
+
         print("\n🧹 Cleaning up...")
 
         if self._browser:

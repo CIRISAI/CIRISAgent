@@ -149,6 +149,57 @@ class MobileTestRunner:
         self.ui: Optional[UIAutomator] = None
         self.logcat_process: Optional[subprocess.Popen] = None
 
+    def _start_emulator(self) -> bool:
+        """
+        Start Android emulator if none running.
+
+        Returns:
+            True if emulator started or already running.
+        """
+        import shutil
+
+        # Find emulator binary
+        emulator_path = shutil.which("emulator")
+        if not emulator_path:
+            android_home = os.environ.get("ANDROID_HOME") or os.path.expanduser("~/Android/Sdk")
+            emulator_path = os.path.join(android_home, "emulator", "emulator")
+            if not os.path.exists(emulator_path):
+                print("      ERROR: emulator binary not found")
+                return False
+
+        # List available AVDs
+        try:
+            result = subprocess.run(
+                [emulator_path, "-list-avds"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            avds = [a.strip() for a in result.stdout.strip().split("\n") if a.strip()]
+
+            if not avds:
+                print("      ERROR: No Android Virtual Devices found")
+                print("      Create one with: avdmanager create avd -n test -k 'system-images;...'")
+                return False
+
+            avd_name = avds[0]
+            print(f"      Starting emulator: {avd_name}")
+
+            # Start emulator in background
+            subprocess.Popen(
+                [emulator_path, "-avd", avd_name, "-no-snapshot-load"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            # Wait for device to be ready
+            print("      Waiting for emulator to boot (up to 60s)...")
+            return True
+
+        except Exception as e:
+            print(f"      ERROR: Failed to start emulator: {e}")
+            return False
+
     def setup(self) -> bool:
         """
         Set up test environment.
@@ -168,7 +219,21 @@ class MobileTestRunner:
 
             # Check device connection
             print("[2/4] Checking device connection...")
-            if not self.adb.wait_for_device(timeout=30):
+
+            # Quick check if any device connected
+            devices = self.adb.get_devices()
+            connected = [d for d in devices if d.state == "device"]
+
+            if not connected:
+                print("      No device connected, attempting to start emulator...")
+                if self._start_emulator():
+                    # Wait longer for emulator boot
+                    if not self.adb.wait_for_device(timeout=90):
+                        print("      ERROR: Emulator failed to boot in time")
+                        return False
+                else:
+                    return False
+            elif not self.adb.wait_for_device(timeout=30):
                 print("      ERROR: No device connected")
                 return False
 

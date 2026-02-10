@@ -145,6 +145,13 @@ Examples:
         help="Verbose output",
     )
 
+    # Keep open
+    parser.add_argument(
+        "--keep-open",
+        action="store_true",
+        help="Keep browser and server running after tests (for demos)",
+    )
+
     return parser.parse_args()
 
 
@@ -261,6 +268,7 @@ async def main() -> int:
         server_config=server_config,
         browser_config=browser_config,
         test_config=test_config,
+        keep_open=args.keep_open,
     )
 
     # Run tests

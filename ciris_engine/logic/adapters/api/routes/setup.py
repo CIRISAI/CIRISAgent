@@ -1424,7 +1424,8 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
     # Determine LLM provider type for env file generation
     llm_provider = setup.llm_provider
     llm_api_key = setup.llm_api_key
-    llm_base_url = setup.llm_base_url or ""
+    # Use provider default base URL if not explicitly provided
+    llm_base_url = _get_provider_base_url(setup.llm_provider, setup.llm_base_url) or ""
     llm_model = setup.llm_model or ""
 
     # Create .env file using existing wizard logic

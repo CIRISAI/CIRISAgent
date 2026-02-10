@@ -840,10 +840,12 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
         print("\n=== Test: Full Flow ===\n")
 
         # 1. Launch app
+        step_start = time.time()
         print("[Step 1/4] App Launch")
         result = test_app_launch(adb, ui, config)
         results.append(result)
         all_screenshots.extend(result.screenshots)
+        print(f"  ⏱️  Step 1 completed in {time.time() - step_start:.1f}s")
         if result.result != TestResult.PASSED:
             return TestReport(
                 name="test_full_flow",
@@ -854,10 +856,12 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
             )
 
         # 2. Google Sign-In
+        step_start = time.time()
         print("\n[Step 2/4] Google Sign-In")
         result = test_google_signin(adb, ui, config)
         results.append(result)
         all_screenshots.extend(result.screenshots)
+        print(f"  ⏱️  Step 2 completed in {time.time() - step_start:.1f}s")
         if result.result not in [TestResult.PASSED, TestResult.SKIPPED]:
             # Try local login as fallback
             print("  Google Sign-In failed, trying Local Login...")
@@ -876,10 +880,12 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
                 )
 
         # 3. Setup Wizard
+        step_start = time.time()
         print("\n[Step 3/4] Setup Wizard")
         result = test_setup_wizard(adb, ui, config)
         results.append(result)
         all_screenshots.extend(result.screenshots)
+        print(f"  ⏱️  Step 3 completed in {time.time() - step_start:.1f}s")
         if result.result != TestResult.PASSED:
             return TestReport(
                 name="test_full_flow",
@@ -890,10 +896,12 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
             )
 
         # 4. Chat Interaction
+        step_start = time.time()
         print("\n[Step 4/4] Chat Interaction")
         result = test_chat_interaction(adb, ui, config)
         results.append(result)
         all_screenshots.extend(result.screenshots)
+        print(f"  ⏱️  Step 4 completed in {time.time() - step_start:.1f}s")
         if result.result != TestResult.PASSED:
             return TestReport(
                 name="test_full_flow",

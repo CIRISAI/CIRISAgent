@@ -282,19 +282,8 @@ def action_selection(
         f"[MOCK_LLM] Action selection - forced_action: {forced_action}, user_speech: {user_speech}, command_from_context: {command_from_context}, is_followup_thought: {is_followup_thought}, multimodal_images: {multimodal_image_count}"
     )
 
-    # === EARLY EXIT FOR FOLLOW-UP THOUGHTS ===
-    # If this is a follow-up thought (detected via THOUGHT_TYPE=follow_up), complete the task
-    # This check MUST come before other logic to prevent follow-ups from looping
-    if is_followup_thought and not forced_action and not command_from_context:
-        logger.info("[MOCK_LLM] *** EARLY EXIT: Follow-up thought detected, returning TASK_COMPLETE ***")
-        action = HandlerActionType.TASK_COMPLETE
-        params = TaskCompleteParams(completion_reason="[MOCK LLM] Follow-up thought completed - task finished")
-        rationale = "[MOCK LLM] Completing follow-up thought (detected via THOUGHT_TYPE=follow_up)"
-        return ActionSelectionDMAResult(
-            selected_action=action,
-            action_parameters=params.model_dump(),
-            rationale=rationale,
-        )
+    # NOTE: Follow-up handling moved to line ~800 where SPEAK vs non-SPEAK follow-ups
+    # are properly differentiated. SPEAK follow-ups -> TASK_COMPLETE, other follow-ups -> SPEAK
 
     if forced_action:
         try:
@@ -799,36 +788,49 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
 
         if is_followup:
             # Check the content of the follow-up thought to determine if it's from a SPEAK handler
-            # Extract the thought content from the user message
+            # Extract thought content from context (seed_thought:) or user messages
             thought_content = ""
-            for msg in messages or []:
-                if isinstance(msg, dict) and msg.get("role") == "user":
-                    user_content = msg.get("content", "")
-                    # Look for "Original Thought:" pattern
-                    if "Original Thought:" in user_content:
-                        # Handle nested quotes by looking for the content between the first and last quotes
-                        # or use a more robust pattern that captures everything until the next field
-                        thought_match = re.search(r'Original Thought:\s*"(.*?)"(?:\n|$)', user_content, re.DOTALL)
-                        if thought_match:
-                            thought_content = thought_match.group(1)
-                            break
+
+            # First try to get from context items (more reliable for follow-ups)
+            for item in context:
+                if item.startswith("seed_thought:"):
+                    thought_content = item.split(":", 1)[1].strip()
+                    logger.info(f"[MOCK_LLM] Extracted thought_content from seed_thought: {thought_content[:80]}...")
+                    break
+
+            # Fallback: try user message with "Original Thought:" pattern
+            if not thought_content:
+                for msg in messages or []:
+                    if isinstance(msg, dict) and msg.get("role") == "user":
+                        user_content = msg.get("content", "")
+                        if "Original Thought:" in user_content:
+                            thought_match = re.search(r'Original Thought:\s*"(.*?)"(?:\n|$)', user_content, re.DOTALL)
+                            if thought_match:
+                                thought_content = thought_match.group(1)
+                                break
 
             # Check if this is a follow-up from SPEAK handler (usually contains specific patterns)
             # Most follow-ups from other handlers contain operation results that should be spoken
+            thought_lower = thought_content.lower()
+            logger.info(f"[MOCK_LLM] Checking for SPEAK follow-up patterns in: {thought_lower[:100]}...")
             is_speak_followup = any(
-                pattern in thought_content
+                pattern in thought_lower
                 for pattern in [
-                    "Message sent successfully to channel",
-                    "CIRIS_FOLLOW_UP_THOUGHT: Message sent successfully to channel",
-                    "NEXT ACTION IS ALMOST CERTAINLY TASK COMPLETE",
-                    "spoke in channel",
+                    "speak successful",
                     "message delivered",
+                    "message sent successfully",
+                    "next action is most likely task_complete",
+                    "speaking repeatedly on the same task is not useful",
+                    "spoke in channel",
                     "response sent",
                 ]
             )
 
+            logger.info(f"[MOCK_LLM] is_speak_followup={is_speak_followup}")
+
             if is_speak_followup:
                 # Follow-up from SPEAK handler → TASK_COMPLETE
+                logger.info("[MOCK_LLM] SPEAK follow-up detected → returning TASK_COMPLETE")
                 action = HandlerActionType.TASK_COMPLETE
                 params = TaskCompleteParams(completion_reason="[MOCK LLM] SPEAK operation completed")
                 rationale = "[MOCK LLM] Completing SPEAK follow-up thought"

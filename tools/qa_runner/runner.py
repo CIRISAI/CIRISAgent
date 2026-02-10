@@ -222,21 +222,9 @@ class QARunner:
         else:
             self.console.print("[dim]Skipping authentication for SETUP module (first-run mode)[/dim]")
 
-        # Initialize SSE monitoring helper for HANDLERS and FILTERS tests
-        # Both now use async /agent/message endpoint + SSE streaming
-        if QAModule.FILTERS in modules or QAModule.HANDLERS in modules:
-            self._filter_helper = FilterTestHelper(self.config.base_url, self.token, verbose=self.config.verbose)
-            try:
-                self._filter_helper.start_monitoring()
-                module_names = []
-                if QAModule.FILTERS in modules:
-                    module_names.append("filters")
-                if QAModule.HANDLERS in modules:
-                    module_names.append("handlers")
-                self.console.print(f"[green]✅ SSE monitoring started for {', '.join(module_names)} tests[/green]")
-            except Exception as e:
-                self.console.print(f"[yellow]⚠️  Failed to start SSE monitoring: {e}[/yellow]")
-                self._filter_helper = None
+        # Note: FILTERS and HANDLERS are now SDK-based and don't need SSE monitoring
+        # SSE monitoring only needed for any remaining HTTP-based async message tests
+        self._filter_helper = None
 
         # Separate SDK-based modules from HTTP test modules
         sdk_modules = [
@@ -268,6 +256,8 @@ class QARunner:
             QAModule.SOLITUDE_LIVE,
             QAModule.PLAY_LIVE,
             QAModule.DREAM_LIVE,
+            QAModule.FILTERS,
+            QAModule.HANDLERS,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -882,6 +872,8 @@ class QARunner:
         from .modules.dream_live_tests import DreamLiveTests
         from .modules.dsar_multi_source_tests import DSARMultiSourceTests
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
+        from .modules.filter_tests import FilterTestModule
+        from .modules.handler_tests import HandlerTestModule
         from .modules.hosted_tools_tests import HostedToolsTests
         from .modules.identity_update_tests import IdentityUpdateTests
         from .modules.mcp_tests import MCPTests
@@ -926,6 +918,8 @@ class QARunner:
             QAModule.SOLITUDE_LIVE: SolitudeLiveTests,
             QAModule.PLAY_LIVE: PlayLiveTests,
             QAModule.DREAM_LIVE: DreamLiveTests,
+            QAModule.FILTERS: FilterTestModule,
+            QAModule.HANDLERS: HandlerTestModule,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):
@@ -1067,27 +1061,8 @@ class QARunner:
                 if not passed:
                     all_passed = False
 
-                # FILTER & HANDLER TESTS: Wait for task completion between tests
-                # Each test creates a task that must complete before the next test
-                if test.module in (QAModule.FILTERS, QAModule.HANDLERS):
-                    if self._filter_helper:
-                        if self.config.verbose:
-                            self.console.print(f"[dim]⏳ Waiting for TASK_COMPLETE event via SSE...[/dim]")
-
-                        # Wait for task completion via SSE (30s timeout per test)
-                        completed = self._filter_helper.wait_for_task_complete(task_id=None, timeout=30.0)
-
-                        if not completed:
-                            self.console.print(f"[yellow]⚠️  Task did not complete within 30s for {test.name}[/yellow]")
-                            # Give extra buffer time
-                            time.sleep(2.0)
-                        elif self.config.verbose:
-                            self.console.print(f"[green]✅ Task completed for {test.name}[/green]")
-                    else:
-                        # Fallback to simple delay if SSE monitoring not available
-                        if self.config.verbose:
-                            self.console.print(f"[dim]⏳ Waiting for task completion (fallback delay)...[/dim]")
-                        time.sleep(2.0)
+                # Note: HANDLERS and FILTERS are now SDK-based and handled in _run_sdk_modules()
+                # No SSE waiting needed here anymore
 
                 progress.advance(task)
 

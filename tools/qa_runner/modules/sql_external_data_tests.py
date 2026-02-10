@@ -539,8 +539,20 @@ global_identifier_column: user_id
 
             await asyncio.sleep(2)
 
-            # Verify response received
-            if response:
+            # Verify response received and contains expected content
+            if not response:
+                return {
+                    "test": "find_user_data",
+                    "status": "❌ FAIL",
+                    "error": "No response from find user data tool",
+                }
+
+            # Response should contain indication of data locations found
+            response_text = str(response)
+            response_lower = response_text.lower()
+
+            # Check that response indicates data was found or processed
+            if any(word in response_lower for word in ["found", "user", "data", "table", "location", "record"]):
                 return {
                     "test": "find_user_data",
                     "status": "✅ PASS",
@@ -551,10 +563,11 @@ global_identifier_column: user_id
                         "user_found_in_sessions": len(sessions_before) > 0,
                     },
                 }
+
             return {
                 "test": "find_user_data",
-                "status": "⚠️  SKIPPED",
-                "error": "No response from find user data tool",
+                "status": "❌ FAIL",
+                "error": f"Response doesn't indicate data locations: {response_text[:100]}",
             }
 
         except Exception as e:
@@ -577,8 +590,19 @@ global_identifier_column: user_id
 
             await asyncio.sleep(3)
 
-            # Verify response received
-            if response:
+            # Verify response received and contains export confirmation
+            if not response:
+                return {
+                    "test": "export_user_data",
+                    "status": "❌ FAIL",
+                    "error": "No response from export tool",
+                }
+
+            # Response should indicate export was processed
+            response_text = str(response)
+            response_lower = response_text.lower()
+
+            if any(word in response_lower for word in ["export", "data", "user", "json", "complete", "success"]):
                 return {
                     "test": "export_user_data",
                     "status": "✅ PASS",
@@ -587,10 +611,11 @@ global_identifier_column: user_id
                         "note": "Export request processed",
                     },
                 }
+
             return {
                 "test": "export_user_data",
-                "status": "⚠️  SKIPPED",
-                "error": "No response from export tool",
+                "status": "❌ FAIL",
+                "error": f"Response doesn't indicate export: {response_text[:100]}",
             }
 
         except Exception as e:

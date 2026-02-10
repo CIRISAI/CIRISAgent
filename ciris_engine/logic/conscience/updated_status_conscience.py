@@ -93,8 +93,10 @@ class UpdatedStatusConscience(ConscienceInterface):
 
         # Check if updated_info_available flag is set
         updated_flag = getattr(task, "updated_info_available", False)
+        logger.info(f"[UPDATED_STATUS_CONSCIENCE] Task {task_id} updated_info_available={updated_flag}")
         if not updated_flag:
             # No update - pass
+            logger.info(f"[UPDATED_STATUS_CONSCIENCE] PASSED - no update detected for task {task_id}")
             return ConscienceCheckResult(
                 status=ConscienceStatus.PASSED,
                 passed=True,
@@ -104,7 +106,10 @@ class UpdatedStatusConscience(ConscienceInterface):
             )
 
         # Update detected! Clear the flag and force PONDER
+        logger.info(f"[UPDATED_STATUS_CONSCIENCE] FAILED - update detected for task {task_id}!")
+        logger.info(f"[UPDATED_STATUS_CONSCIENCE] Original action was: {action.selected_action}")
         updated_content = getattr(task, "updated_info_content", "New observation received")
+        logger.info(f"[UPDATED_STATUS_CONSCIENCE] Updated content: {updated_content[:100]}...")
 
         # Get the original action description and channel info
         original_action_desc = (

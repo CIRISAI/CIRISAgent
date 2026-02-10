@@ -237,12 +237,15 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                         is_followup = actual_thought_content.startswith("CIRIS_FOLLOW_UP_THOUGHT:")
 
                         # Also detect handler completion patterns (some handlers don't use prefix)
+                        # PONDER uses "=== PONDER ROUND n ===" format from PonderHandler
                         handler_completion_patterns = [
                             ("MEMORIZE COMPLETE", "memorize"),
                             ("MEMORIZE action", "memorize"),
                             ("FORGET COMPLETE", "forget"),
                             ("RECALL COMPLETE", "recall"),
                             ("Memory query", "recall"),
+                            ("=== PONDER ROUND", "ponder"),
+                            ("=== PREVIOUS CONTEXT", "ponder"),  # Accumulated ponder context
                         ]
                         detected_handler = None
                         for pattern, handler_type in handler_completion_patterns:
@@ -274,11 +277,16 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                                 logger.info("[MOCK_LLM] → SPEAK follow-up detected → should TASK_COMPLETE")
                                 context_items.append("followup_type:speak")
                                 context_items.append("should_task_complete:true")
+                            elif first_word.upper() == "PONDER":
+                                logger.info("[MOCK_LLM] → PONDER follow-up detected → should TASK_COMPLETE")
+                                context_items.append("followup_type:ponder")
+                                context_items.append("should_task_complete:true")
                             elif first_word.upper() in ["MEMORIZE", "RECALL", "FORGET", "TOOL", "OBSERVE"]:
                                 logger.info(
-                                    f"[MOCK_LLM] → {first_word.upper()} follow-up detected → should SPEAK result or TASK_COMPLETE"
+                                    f"[MOCK_LLM] → {first_word.upper()} follow-up detected → should TASK_COMPLETE"
                                 )
                                 context_items.append(f"followup_type:{first_word.lower()}")
+                                context_items.append("should_task_complete:true")
                             else:
                                 logger.info(f"[MOCK_LLM] → Unknown follow-up type: '{first_word}'")
                                 context_items.append(f"followup_type:unknown")

@@ -25,6 +25,7 @@ class FilterTestHelper:
         self.stream_error = threading.Event()
         self.stream_connected = threading.Event()
         self.current_response: Optional[Any] = None  # Track response for cleanup
+        self.task_complete_seen = False  # Track if TASK_COMPLETE action was seen
 
     def start_monitoring(self) -> None:
         """Start monitoring SSE stream for task completions."""
@@ -34,6 +35,7 @@ class FilterTestHelper:
         self.should_stop.clear()
         self.stream_error.clear()
         self.stream_connected.clear()
+        self.task_complete_seen = False  # Reset on start
         self.stream_thread = threading.Thread(target=self._monitor_stream, daemon=True)
         self.stream_thread.start()
 
@@ -141,7 +143,7 @@ class FilterTestHelper:
                             for event in events:
                                 event_type = event.get("event_type")
 
-                                # Look for action_result events (ANY action completes the thought)
+                                # Look for action_result events
                                 if event_type == "action_result":
                                     action_executed = event.get("action_executed", "")
                                     execution_success = event.get("execution_success", False)
@@ -150,16 +152,25 @@ class FilterTestHelper:
 
                                     if self.verbose:
                                         print(
-                                            f"[SSE] ACTION_RESULT: task={task_id[:8]}, thought={thought_id[:8]}, "
+                                            f"[SSE] ACTION_RESULT: task={task_id[:8] if task_id else 'N/A'}, "
+                                            f"thought={thought_id[:8] if thought_id else 'N/A'}, "
                                             f"action={action_executed}, success={execution_success}"
                                         )
 
-                                    # ANY action_result that succeeded indicates thought completion
-                                    # (speak, memorize, recall, task_complete, etc. all complete the thought)
+                                    # Check specifically for TASK_COMPLETE action
+                                    if action_executed and action_executed.upper() == "TASK_COMPLETE":
+                                        if execution_success:
+                                            if self.verbose:
+                                                print(
+                                                    f"[SSE] ✅ TASK_COMPLETE seen for task {task_id[:8] if task_id else 'N/A'}"
+                                                )
+                                            self.task_complete_seen = True
+
+                                    # Also track any successful action for general completion tracking
                                     if execution_success:
                                         if self.verbose:
                                             print(
-                                                f"[SSE] ✅ Action completed: {action_executed} for thought {thought_id[:8]}"
+                                                f"[SSE] ✅ Action completed: {action_executed} for thought {thought_id[:8] if thought_id else 'N/A'}"
                                             )
                                         # Use thought_id as the completion marker (not task_id which may be None)
                                         if thought_id and thought_id != "unknown":

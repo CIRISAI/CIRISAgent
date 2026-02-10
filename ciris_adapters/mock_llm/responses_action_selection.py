@@ -309,25 +309,29 @@ def action_selection(
     # If responses.py detected a follow-up thought, handle it immediately
     if is_followup_from_context:
         logger.info("[MOCK_LLM] === EARLY FOLLOW-UP RETURN ===")
-        if should_task_complete or followup_type == "speak":
-            # SPEAK follow-up -> TASK_COMPLETE (we're done, user was spoken to)
+        logger.info(f"[MOCK_LLM] followup_type={followup_type}, should_task_complete={should_task_complete}")
+
+        # Only SPEAK follow-ups go directly to TASK_COMPLETE
+        # All other handlers need to SPEAK their result first
+        if followup_type == "speak":
             logger.info("[MOCK_LLM] SPEAK follow-up → TASK_COMPLETE")
             return ActionSelectionDMAResult(
                 selected_action=HandlerActionType.TASK_COMPLETE,
                 action_parameters=TaskCompleteParams(
-                    summary=f"Task completed. {followup_content[:100]}",
+                    completion_reason=f"[MOCK LLM] Message delivered. {followup_content[:80]}",
                 ).model_dump(),
-                rationale=f"[MOCK LLM] SPEAK action completed successfully. {followup_content[:50]}",
+                rationale="[MOCK LLM] SPEAK completed successfully.",
             )
         else:
-            # Other follow-up (MEMORIZE, RECALL, etc.) -> SPEAK the result to user
-            logger.info(f"[MOCK_LLM] {followup_type.upper() if followup_type else 'UNKNOWN'} follow-up → SPEAK result")
+            # Other handlers (MEMORIZE, RECALL, FORGET, TOOL, OBSERVE, PONDER) → SPEAK the result
+            # This will create a SPEAK follow-up which then goes to TASK_COMPLETE
+            logger.info(f"[MOCK_LLM] {followup_type.upper() if followup_type else 'HANDLER'} follow-up → SPEAK result")
             return ActionSelectionDMAResult(
                 selected_action=HandlerActionType.SPEAK,
                 action_parameters=SpeakParams(
                     content=f"[{followup_type.upper() if followup_type else 'ACTION'}] {followup_content[:500]}",
                 ).model_dump(),
-                rationale=f"[MOCK LLM] {followup_type.upper() if followup_type else 'Action'} handler executed. Reporting result to user.",
+                rationale=f"[MOCK LLM] {followup_type.upper() if followup_type else 'Action'} completed. Reporting result.",
             )
 
     if forced_action:
@@ -890,8 +894,10 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
             ]
             is_speak_followup = any(p in thought_lower for p in speak_patterns)
 
-            # 2. PONDER follow-up patterns → analyze for next action
-            ponder_patterns = ["ponder round", "=== ponder", "conscience feedback"]
+            # 2. PONDER follow-up patterns → TASK_COMPLETE
+            # Deterministic format from PonderHandler._generate_ponder_follow_up_content():
+            # "=== PONDER ROUND {n} ===" and "Conscience feedback:"
+            ponder_patterns = ["=== ponder round", "conscience feedback:"]
             is_ponder_followup = any(p in thought_lower for p in ponder_patterns)
 
             # 3. MEMORIZE follow-up patterns → SPEAK result
@@ -933,22 +939,22 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                 rationale = "[MOCK LLM] SPEAK operation completed, task finished"
 
             elif is_ponder_followup:
-                # PONDER needs analysis - check depth and decide
-                # For mock LLM, default to SPEAK with summary or TASK_COMPLETE if deep
-                if "final action" in thought_lower or "round 7" in thought_lower:
-                    logger.info("[MOCK_LLM] PONDER at depth limit → TASK_COMPLETE")
-                    action = HandlerActionType.TASK_COMPLETE
-                    params = TaskCompleteParams(completion_reason="[MOCK LLM] Ponder depth limit reached")
-                    rationale = "[MOCK LLM] Completed pondering, finalizing task"
-                else:
-                    logger.info("[MOCK_LLM] PONDER follow-up → SPEAK summary")
-                    action = HandlerActionType.SPEAK
-                    params = SpeakParams(content="[MOCK LLM] After pondering, proceeding with task.")
-                    rationale = "[MOCK LLM] Sharing ponder conclusion"
+                # PONDER completed - SPEAK a summary, then TASK_COMPLETE on next follow-up
+                logger.info("[MOCK_LLM] PONDER follow-up → SPEAK conclusion")
+                action = HandlerActionType.SPEAK
+                params = SpeakParams(
+                    content="[PONDER] After pondering the questions, I have reached a conclusion and am ready to proceed."
+                )
+                rationale = "[MOCK LLM] Pondering complete. Sharing conclusion."
 
             elif is_memorize_followup or is_recall_followup or is_forget_followup or is_tool_followup:
                 # These operations completed - SPEAK the result to user
-                logger.info("[MOCK_LLM] Memory/Tool operation follow-up → SPEAK result")
+                op_type = (
+                    "memorize"
+                    if is_memorize_followup
+                    else "recall" if is_recall_followup else "forget" if is_forget_followup else "tool"
+                )
+                logger.info(f"[MOCK_LLM] {op_type.upper()} follow-up → SPEAK result")
                 action = HandlerActionType.SPEAK
 
                 # Extract meaningful content to speak
@@ -961,15 +967,16 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                 if len(content) > 500:
                     content = content[:500] + "..."
 
-                params = SpeakParams(content=f"[MOCK LLM] {content}")
-                rationale = "[MOCK LLM] Communicating operation result to user"
+                params = SpeakParams(content=f"[{op_type.upper()}] {content}")
+                rationale = f"[MOCK LLM] {op_type.capitalize()} operation completed. Reporting result."
 
             elif is_observe_followup:
-                # OBSERVE completed - might SPEAK summary or TASK_COMPLETE
-                logger.info("[MOCK_LLM] OBSERVE follow-up → SPEAK summary")
+                # OBSERVE completed - SPEAK the observation result
+                logger.info("[MOCK_LLM] OBSERVE follow-up → SPEAK result")
                 action = HandlerActionType.SPEAK
-                params = SpeakParams(content="[MOCK LLM] Observation completed.")
-                rationale = "[MOCK LLM] Communicating observation result"
+                content = thought_content[:500] if thought_content else "Observation completed."
+                params = SpeakParams(content=f"[OBSERVE] {content}")
+                rationale = "[MOCK LLM] Observation completed. Reporting result."
 
             elif is_failure:
                 # Something failed - SPEAK the error
@@ -980,14 +987,15 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                 rationale = "[MOCK LLM] Communicating error to user"
 
             else:
-                # Unknown follow-up type - default to SPEAK
-                logger.info("[MOCK_LLM] Unknown follow-up type → SPEAK content")
+                # Unknown follow-up type - SPEAK a summary
+                # The SPEAK will then create a follow-up that goes to TASK_COMPLETE
+                logger.info("[MOCK_LLM] Unknown follow-up type → SPEAK summary")
                 action = HandlerActionType.SPEAK
                 content = thought_content[:300] if thought_content else "Operation completed."
                 if content.startswith("CIRIS_FOLLOW_UP_THOUGHT:"):
                     content = content.replace("CIRIS_FOLLOW_UP_THOUGHT:", "").strip()
                 params = SpeakParams(content=f"[MOCK LLM] {content}")
-                rationale = "[MOCK LLM] Default response for unknown follow-up"
+                rationale = "[MOCK LLM] Unknown follow-up, reporting result"
         else:
             # Step 2: For initial thoughts, check USER message for commands
             command_found = False

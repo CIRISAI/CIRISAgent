@@ -154,10 +154,12 @@ class PlayLiveTests:
             status = await self.client.agent.get_status()
             current_state = getattr(status, "cognitive_state", "UNKNOWN")
 
-            if current_state == "PLAY":
-                self._record_result(test_name, True, details={"current_state": current_state})
+            # Handle both string and enum comparisons
+            state_str = str(current_state).replace("AgentState.", "").upper()
+            if state_str == "PLAY":
+                self._record_result(test_name, True, details={"current_state": state_str})
             else:
-                self._record_result(test_name, False, f"Expected PLAY, got {current_state}")
+                self._record_result(test_name, False, f"Expected PLAY, got {state_str}")
         except Exception as e:
             self._record_result(test_name, False, str(e))
 

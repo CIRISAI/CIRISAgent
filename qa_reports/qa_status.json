@@ -1,69 +1,69 @@
 {
-  "last_updated": "2026-02-10T23:27:33.459272+00:00",
+  "last_updated": "2026-02-10T23:37:18.104181+00:00",
   "version": "2.0.0-beta",
   "modules": {
     "_comment_core": "=== CORE API MODULES ===",
     "auth": {
-      "last_run": "2026-02-10T23:23:37.291131+00:00",
-      "passed": 3,
+      "last_run": "2026-02-10T23:29:46.115192+00:00",
+      "passed": 5,
       "failed": 0,
-      "total": 3,
+      "total": 5,
       "status": "passing",
-      "duration_seconds": 9.18,
+      "duration_seconds": 9.83,
       "context": null
     },
     "telemetry": {
-      "last_run": "2026-02-10T23:23:37.287558+00:00",
-      "passed": 5,
+      "last_run": "2026-02-10T23:29:46.115877+00:00",
+      "passed": 9,
       "failed": 0,
-      "total": 5,
+      "total": 9,
       "status": "passing",
-      "duration_seconds": 9.18,
+      "duration_seconds": 9.83,
       "context": null
     },
     "agent": {
-      "last_run": "2026-02-10T23:23:37.288837+00:00",
-      "passed": 4,
+      "last_run": "2026-02-10T23:29:46.124093+00:00",
+      "passed": 11,
       "failed": 0,
-      "total": 4,
+      "total": 11,
       "status": "passing",
-      "duration_seconds": 9.18,
+      "duration_seconds": 9.83,
       "context": null
     },
     "system": {
-      "last_run": "2026-02-10T23:23:37.279441+00:00",
+      "last_run": "2026-02-10T23:29:46.124842+00:00",
+      "passed": 10,
+      "failed": 0,
+      "total": 10,
+      "status": "passing",
+      "duration_seconds": 9.83,
+      "context": null
+    },
+    "memory": {
+      "last_run": "2026-02-10T23:29:46.125600+00:00",
+      "passed": 6,
+      "failed": 0,
+      "total": 6,
+      "status": "passing",
+      "duration_seconds": 9.83,
+      "context": null
+    },
+    "audit": {
+      "last_run": "2026-02-10T23:29:46.126239+00:00",
       "passed": 5,
       "failed": 0,
       "total": 5,
       "status": "passing",
-      "duration_seconds": 9.18,
-      "context": null
-    },
-    "memory": {
-      "last_run": "2026-02-10T23:23:37.288232+00:00",
-      "passed": 3,
-      "failed": 0,
-      "total": 3,
-      "status": "passing",
-      "duration_seconds": 9.18,
-      "context": null
-    },
-    "audit": {
-      "last_run": "2026-02-10T23:23:37.289448+00:00",
-      "passed": 3,
-      "failed": 0,
-      "total": 3,
-      "status": "passing",
-      "duration_seconds": 9.18,
+      "duration_seconds": 9.83,
       "context": null
     },
     "tools": {
-      "last_run": "2026-02-10T23:23:37.290494+00:00",
-      "passed": 1,
+      "last_run": "2026-02-10T23:29:46.126818+00:00",
+      "passed": 2,
       "failed": 0,
-      "total": 1,
+      "total": 2,
       "status": "passing",
-      "duration_seconds": 9.18,
+      "duration_seconds": 9.83,
       "context": null
     },
     "tasks": {
@@ -75,12 +75,12 @@
       "duration_seconds": 0
     },
     "guidance": {
-      "last_run": "2026-02-10T23:16:47.755852+00:00",
+      "last_run": "2026-02-10T23:29:46.127407+00:00",
       "passed": 2,
       "failed": 0,
       "total": 2,
       "status": "passing",
-      "duration_seconds": 9.14,
+      "duration_seconds": 9.83,
       "context": null
     },
     "setup": {
@@ -245,12 +245,12 @@
       "context": "Tests adapter persistence and auto-load functionality that allows dynamically loaded adapters to persist across server restarts, verifying config values are stored and returned correctly."
     },
     "adapter_manifest": {
-      "last_run": "2026-02-10T23:15:18.067353+00:00",
-      "passed": 310,
-      "failed": 3,
+      "last_run": "2026-02-10T23:37:18.104158+00:00",
+      "passed": 313,
+      "failed": 0,
       "total": 313,
-      "status": "failing",
-      "duration_seconds": 23.04,
+      "status": "passing",
+      "duration_seconds": 75.44,
       "context": "Validates all adapter manifests in ciris_adapters/ for valid JSON syntax, ServiceManifest schema conformance, importable service paths, available dependencies, and API loadability."
     },
     "adapter_availability": {
@@ -1078,8 +1078,8 @@
   },
   "summary": {
     "total_modules": 126,
-    "passing": 18,
-    "failing": 1,
+    "passing": 19,
+    "failing": 0,
     "not_run": 107
   }
 }

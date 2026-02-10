@@ -166,11 +166,16 @@ class FilterTestHelper:
                                                 )
                                             self.task_complete_seen = True
 
-                                    # Also track any successful action for general completion tracking
-                                    if execution_success:
+                                    # Only track TASK_COMPLETE as completion - other actions (SPEAK, MEMORIZE, etc.)
+                                    # are intermediate steps, not task completion
+                                    if (
+                                        action_executed
+                                        and action_executed.upper() == "TASK_COMPLETE"
+                                        and execution_success
+                                    ):
                                         if self.verbose:
                                             print(
-                                                f"[SSE] ✅ Action completed: {action_executed} for thought {thought_id[:8] if thought_id else 'N/A'}"
+                                                f"[SSE] ✅ TASK_COMPLETE for thought {thought_id[:8] if thought_id else 'N/A'}"
                                             )
                                         # Use thought_id as the completion marker (not task_id which may be None)
                                         if thought_id and thought_id != "unknown":

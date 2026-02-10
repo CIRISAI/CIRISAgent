@@ -16,6 +16,20 @@ from ciris_engine.schemas.actions import (
 )
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, ASPDMALLMResult
 
+from .response_packaging import (
+    defer_success,
+    forget_success,
+    memorize_success,
+    observe_success,
+    ponder_success,
+    recall_not_found,
+    recall_success,
+    reject_success,
+    speak_success,
+    task_complete_success,
+    tool_success,
+)
+
 # Union type for all action parameters - 100% schema compliant
 ActionParams = Union[
     SpeakParams,
@@ -318,20 +332,54 @@ def action_selection(
             return ActionSelectionDMAResult(
                 selected_action=HandlerActionType.TASK_COMPLETE,
                 action_parameters=TaskCompleteParams(
-                    completion_reason=f"[MOCK LLM] Message delivered. {followup_content[:80]}",
+                    completion_reason=task_complete_success("Message delivered successfully"),
                 ).model_dump(),
                 rationale="[MOCK LLM] SPEAK completed successfully.",
             )
         else:
             # Other handlers (MEMORIZE, RECALL, FORGET, TOOL, OBSERVE, PONDER) → SPEAK the result
             # This will create a SPEAK follow-up which then goes to TASK_COMPLETE
+            # Use deterministic packaged responses based on handler type
             logger.info(f"[MOCK_LLM] {followup_type.upper() if followup_type else 'HANDLER'} follow-up → SPEAK result")
+
+            # Generate packaged response based on handler type
+            handler_type = (followup_type or "action").upper()
+            if handler_type == "MEMORIZE":
+                # Extract node_id from followup_content if possible
+                node_match = re.search(r"'([^']+)'", followup_content)
+                node_id = node_match.group(1) if node_match else "unknown"
+                packaged_content = memorize_success(node_id=node_id, scope="LOCAL")
+            elif handler_type == "RECALL":
+                # Extract query from followup_content
+                query_match = re.search(r"query[:\s]+([^\|]+)", followup_content, re.IGNORECASE)
+                query = query_match.group(1).strip() if query_match else "unknown"
+                # Check if results were found
+                if "no memories found" in followup_content.lower() or "not found" in followup_content.lower():
+                    packaged_content = recall_not_found(query=query)
+                else:
+                    packaged_content = recall_success(query=query, results=[], value=followup_content[:200])
+            elif handler_type == "FORGET":
+                node_match = re.search(r"forgot[:\s]+([^\s]+)", followup_content, re.IGNORECASE)
+                node_id = node_match.group(1) if node_match else "unknown"
+                packaged_content = forget_success(node_id=node_id)
+            elif handler_type == "TOOL":
+                tool_match = re.search(r"tool[:\s]+([^\s]+)", followup_content, re.IGNORECASE)
+                tool_name = tool_match.group(1) if tool_match else "unknown"
+                packaged_content = tool_success(name=tool_name)
+            elif handler_type == "OBSERVE":
+                channel_match = re.search(r"channel[:\s]+([^\s]+)", followup_content, re.IGNORECASE)
+                channel = channel_match.group(1) if channel_match else "unknown"
+                packaged_content = observe_success(channel=channel)
+            elif handler_type == "PONDER":
+                packaged_content = ponder_success(questions=[], insights=followup_content[:200])
+            else:
+                # Generic fallback
+                packaged_content = speak_success(content=followup_content[:200])
+
             return ActionSelectionDMAResult(
                 selected_action=HandlerActionType.SPEAK,
-                action_parameters=SpeakParams(
-                    content=f"[{followup_type.upper() if followup_type else 'ACTION'}] {followup_content[:500]}",
-                ).model_dump(),
-                rationale=f"[MOCK LLM] {followup_type.upper() if followup_type else 'Action'} completed. Reporting result.",
+                action_parameters=SpeakParams(content=packaged_content).model_dump(),
+                rationale=f"[MOCK LLM] {handler_type} completed. Reporting result.",
             )
 
     if forced_action:
@@ -935,55 +983,66 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                 # SPEAK completed successfully → TASK_COMPLETE
                 logger.info("[MOCK_LLM] SPEAK follow-up → TASK_COMPLETE")
                 action = HandlerActionType.TASK_COMPLETE
-                params = TaskCompleteParams(completion_reason="[MOCK LLM] Message delivered successfully")
+                params = TaskCompleteParams(completion_reason=task_complete_success("Message delivered successfully"))
                 rationale = "[MOCK LLM] SPEAK operation completed, task finished"
 
             elif is_ponder_followup:
                 # PONDER completed - SPEAK a summary, then TASK_COMPLETE on next follow-up
                 logger.info("[MOCK_LLM] PONDER follow-up → SPEAK conclusion")
                 action = HandlerActionType.SPEAK
-                params = SpeakParams(
-                    content="[PONDER] After pondering the questions, I have reached a conclusion and am ready to proceed."
-                )
+                params = SpeakParams(content=ponder_success(questions=[], insights="Pondering complete"))
                 rationale = "[MOCK LLM] Pondering complete. Sharing conclusion."
 
             elif is_memorize_followup or is_recall_followup or is_forget_followup or is_tool_followup:
-                # These operations completed - SPEAK the result to user
-                op_type = (
-                    "memorize"
-                    if is_memorize_followup
-                    else "recall" if is_recall_followup else "forget" if is_forget_followup else "tool"
-                )
-                logger.info(f"[MOCK_LLM] {op_type.upper()} follow-up → SPEAK result")
+                # These operations completed - SPEAK the result to user with packaged response
+                logger.info(f"[MOCK_LLM] Handler follow-up → SPEAK packaged result")
                 action = HandlerActionType.SPEAK
 
-                # Extract meaningful content to speak
+                # Extract meaningful content
                 if thought_content.startswith("CIRIS_FOLLOW_UP_THOUGHT:"):
                     content = thought_content.replace("CIRIS_FOLLOW_UP_THOUGHT:", "").strip()
                 else:
                     content = thought_content
 
-                # Truncate if too long
-                if len(content) > 500:
-                    content = content[:500] + "..."
+                # Generate appropriate packaged response
+                if is_memorize_followup:
+                    node_match = re.search(r"'([^']+)'", content)
+                    node_id = node_match.group(1) if node_match else "unknown"
+                    packaged = memorize_success(node_id=node_id, scope="LOCAL")
+                elif is_recall_followup:
+                    query_match = re.search(r"query[:\s]+([^\|]+)", content, re.IGNORECASE)
+                    query = query_match.group(1).strip() if query_match else content[:50]
+                    if "no memories found" in content.lower() or "not found" in content.lower():
+                        packaged = recall_not_found(query=query)
+                    else:
+                        packaged = recall_success(query=query, results=[], value=content[:200])
+                elif is_forget_followup:
+                    node_match = re.search(r"forgot[:\s]+([^\s]+)", content, re.IGNORECASE)
+                    node_id = node_match.group(1) if node_match else "unknown"
+                    packaged = forget_success(node_id=node_id)
+                else:  # is_tool_followup
+                    tool_match = re.search(r"tool[:\s]+([^\s]+)", content, re.IGNORECASE)
+                    tool_name = tool_match.group(1) if tool_match else "unknown"
+                    packaged = tool_success(name=tool_name)
 
-                params = SpeakParams(content=f"[{op_type.upper()}] {content}")
-                rationale = f"[MOCK LLM] {op_type.capitalize()} operation completed. Reporting result."
+                params = SpeakParams(content=packaged)
+                rationale = "[MOCK LLM] Handler operation completed. Reporting packaged result."
 
             elif is_observe_followup:
                 # OBSERVE completed - SPEAK the observation result
                 logger.info("[MOCK_LLM] OBSERVE follow-up → SPEAK result")
                 action = HandlerActionType.SPEAK
-                content = thought_content[:500] if thought_content else "Observation completed."
-                params = SpeakParams(content=f"[OBSERVE] {content}")
+                channel_match = re.search(r"channel[:\s]+([^\s]+)", thought_content, re.IGNORECASE)
+                channel = channel_match.group(1) if channel_match else "unknown"
+                params = SpeakParams(content=observe_success(channel=channel))
                 rationale = "[MOCK LLM] Observation completed. Reporting result."
 
             elif is_failure:
-                # Something failed - SPEAK the error
+                # Something failed - SPEAK the error with packaged format
                 logger.info("[MOCK_LLM] Failure detected → SPEAK error")
                 action = HandlerActionType.SPEAK
                 content = thought_content[:300] if thought_content else "An error occurred."
-                params = SpeakParams(content=f"[MOCK LLM] {content}")
+                params = SpeakParams(content=speak_success(content=f"Error: {content}"))
                 rationale = "[MOCK LLM] Communicating error to user"
 
             else:
@@ -994,7 +1053,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                 content = thought_content[:300] if thought_content else "Operation completed."
                 if content.startswith("CIRIS_FOLLOW_UP_THOUGHT:"):
                     content = content.replace("CIRIS_FOLLOW_UP_THOUGHT:", "").strip()
-                params = SpeakParams(content=f"[MOCK LLM] {content}")
+                params = SpeakParams(content=speak_success(content=content))
                 rationale = "[MOCK LLM] Unknown follow-up, reporting result"
         else:
             # Step 2: For initial thoughts, check USER message for commands

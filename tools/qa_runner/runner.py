@@ -942,6 +942,14 @@ class QARunner:
                 # Special handling for CovenantMetricsTests - pass live_lens config
                 if module == QAModule.COVENANT_METRICS:
                     test_instance = test_class(client, self.console, live_lens=self.config.live_lens)
+                elif module == QAModule.FILTERS:
+                    # FilterTestModule inherits from BaseTestModule and supports fail_fast
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        fail_fast=self.config.fail_fast,
+                        test_timeout=self.config.test_timeout,
+                    )
                 else:
                     test_instance = test_class(client, self.console)
 

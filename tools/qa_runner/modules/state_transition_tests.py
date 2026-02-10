@@ -326,26 +326,27 @@ class StateTransitionTests:
             self._record_result(test_name, False, str(e))
 
     async def _test_template_loading_ally(self):
-        """Test ally.yaml template loads cognitive_state_behaviors correctly."""
+        """Test default.yaml (Ally) template loads cognitive_state_behaviors correctly."""
         test_name = "template_loading_ally"
         try:
             from pathlib import Path
 
             import yaml
 
+            # Ally is now the default template
             template_path = (
-                Path(__file__).parent.parent.parent.parent / "ciris_engine" / "ciris_templates" / "ally.yaml"
+                Path(__file__).parent.parent.parent.parent / "ciris_engine" / "ciris_templates" / "default.yaml"
             )
 
             with open(template_path) as f:
                 template = yaml.safe_load(f)
 
             # Verify cognitive_state_behaviors exists
-            assert "cognitive_state_behaviors" in template, "ally.yaml missing cognitive_state_behaviors"
+            assert "cognitive_state_behaviors" in template, "default.yaml missing cognitive_state_behaviors"
 
             csb = template["cognitive_state_behaviors"]
 
-            # Ally: wakeup disabled, conditional shutdown
+            # Ally (default): wakeup disabled, conditional shutdown
             assert csb["wakeup"]["enabled"] is False
             assert csb["wakeup"]["rationale"] is not None
             assert csb["shutdown"]["mode"] == "conditional"

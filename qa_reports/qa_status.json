@@ -1,63 +1,70 @@
 {
-  "last_updated": "2026-02-10T21:30:23.614322+00:00",
+  "last_updated": "2026-02-10T23:16:47.755860+00:00",
   "version": "2.0.0-beta",
   "modules": {
     "_comment_core": "=== CORE API MODULES ===",
     "auth": {
-      "last_run": null,
-      "passed": 0,
+      "last_run": "2026-02-10T23:16:47.750039+00:00",
+      "passed": 3,
       "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
+      "total": 3,
+      "status": "passing",
+      "duration_seconds": 9.14,
+      "context": null
     },
     "telemetry": {
-      "last_run": null,
-      "passed": 0,
+      "last_run": "2026-02-10T23:16:47.750685+00:00",
+      "passed": 4,
       "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
+      "total": 4,
+      "status": "passing",
+      "duration_seconds": 9.14,
+      "context": null
     },
     "agent": {
-      "last_run": null,
-      "passed": 0,
+      "last_run": "2026-02-10T23:16:47.752399+00:00",
+      "passed": 8,
       "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
+      "total": 8,
+      "status": "passing",
+      "duration_seconds": 9.14,
+      "context": null
     },
     "system": {
-      "last_run": null,
-      "passed": 0,
+      "last_run": "2026-02-10T23:16:47.753067+00:00",
+      "passed": 5,
       "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
+      "total": 5,
+      "status": "passing",
+      "duration_seconds": 9.14,
+      "context": null
     },
     "memory": {
-      "last_run": null,
-      "passed": 0,
+      "last_run": "2026-02-10T23:16:47.753733+00:00",
+      "passed": 3,
       "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
+      "total": 3,
+      "status": "passing",
+      "duration_seconds": 9.14,
+      "context": null
     },
     "audit": {
-      "last_run": null,
-      "passed": 0,
+      "last_run": "2026-02-10T23:16:47.754493+00:00",
+      "passed": 3,
       "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
+      "total": 3,
+      "status": "passing",
+      "duration_seconds": 9.14,
+      "context": null
     },
     "tools": {
-      "last_run": null,
-      "passed": 0,
+      "last_run": "2026-02-10T23:16:47.755240+00:00",
+      "passed": 1,
       "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
+      "total": 1,
+      "status": "passing",
+      "duration_seconds": 9.14,
+      "context": null
     },
     "tasks": {
       "last_run": null,
@@ -68,12 +75,13 @@
       "duration_seconds": 0
     },
     "guidance": {
-      "last_run": null,
-      "passed": 0,
+      "last_run": "2026-02-10T23:16:47.755852+00:00",
+      "passed": 2,
       "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
+      "total": 2,
+      "status": "passing",
+      "duration_seconds": 9.14,
+      "context": null
     },
     "setup": {
       "last_run": null,
@@ -155,12 +163,12 @@
       "duration_seconds": 0
     },
     "state_transitions": {
-      "last_run": "2026-02-10T16:51:15.056773+00:00",
-      "passed": 11,
-      "failed": 1,
+      "last_run": "2026-02-10T21:47:55.980561+00:00",
+      "passed": 12,
+      "failed": 0,
       "total": 12,
-      "status": "failing",
-      "duration_seconds": 19.53,
+      "status": "passing",
+      "duration_seconds": 13.02,
       "context": null
     },
     "solitude_live": {
@@ -237,12 +245,12 @@
       "context": "Tests adapter persistence and auto-load functionality that allows dynamically loaded adapters to persist across server restarts, verifying config values are stored and returned correctly."
     },
     "adapter_manifest": {
-      "last_run": "2026-02-10T16:50:46.114586+00:00",
+      "last_run": "2026-02-10T23:15:18.067353+00:00",
       "passed": 310,
       "failed": 3,
       "total": 313,
       "status": "failing",
-      "duration_seconds": 24.53,
+      "duration_seconds": 23.04,
       "context": "Validates all adapter manifests in ciris_adapters/ for valid JSON syntax, ServiceManifest schema conformance, importable service paths, available dependencies, and API loadability."
     },
     "adapter_availability": {
@@ -1041,21 +1049,21 @@
       "context": "Defines declarative API test cases for core endpoints including authentication, telemetry, agent interactions, system health, memory operations, audit trails, and guidance requests using QATestCase dataclass pattern."
     },
     "handlers": {
-      "last_run": "2026-02-10T21:30:23.614284+00:00",
+      "last_run": "2026-02-10T22:31:30.379211+00:00",
       "passed": 10,
       "failed": 0,
       "total": 10,
       "status": "passing",
-      "duration_seconds": 165.19,
+      "duration_seconds": 155.47,
       "context": null
     },
     "filters": {
-      "last_run": "2026-02-10T16:18:13.642117+00:00",
-      "passed": 8,
-      "failed": 20,
+      "last_run": "2026-02-10T23:14:36.063617+00:00",
+      "passed": 28,
+      "failed": 0,
       "total": 28,
-      "status": "failing",
-      "duration_seconds": 158.67,
+      "status": "passing",
+      "duration_seconds": 316.03,
       "context": null
     },
     "sdk": {
@@ -1070,8 +1078,8 @@
   },
   "summary": {
     "total_modules": 126,
-    "passing": 3,
-    "failing": 3,
-    "not_run": 120
+    "passing": 13,
+    "failing": 1,
+    "not_run": 112
   }
 }

@@ -161,6 +161,10 @@ class QAConfig:
     # When True, uses https://lens.ciris-services-1.ai/lens-api/api/v1 instead of mock logshipper
     live_lens: bool = False
 
+    # Fail-fast configuration
+    fail_fast: bool = True  # Exit on first test failure (use --proceed-anyway to disable)
+    test_timeout: float = 30.0  # Timeout for individual test interactions
+
     def get_module_tests(self, module: QAModule) -> List[QATestCase]:
         """Get test cases for a specific module."""
         from .modules import APITestModule, HandlerTestModule, SDKTestModule

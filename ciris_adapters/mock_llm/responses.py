@@ -287,6 +287,13 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                                 )
                                 context_items.append(f"followup_type:{first_word.lower()}")
                                 context_items.append("should_task_complete:true")
+                            elif first_word.upper() == "MEMORY":
+                                # "Memory query" from RecallResult → recall follow-up
+                                logger.info(
+                                    "[MOCK_LLM] → MEMORY query follow-up detected (RECALL) → should TASK_COMPLETE"
+                                )
+                                context_items.append("followup_type:recall")
+                                context_items.append("should_task_complete:true")
                             else:
                                 logger.info(f"[MOCK_LLM] → Unknown follow-up type: '{first_word}'")
                                 context_items.append(f"followup_type:unknown")

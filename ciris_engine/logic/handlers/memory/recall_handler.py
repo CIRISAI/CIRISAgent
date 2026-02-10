@@ -56,7 +56,7 @@ class RecallHandler(BaseActionHandler):
             memory_query = MemoryQuery(
                 node_id=params.node_id,
                 scope=scope,
-                type=NodeType(params.node_type) if params.node_type else None,
+                type=NodeType(params.node_type.lower()) if params.node_type else None,
                 include_edges=False,
                 depth=1,
             )
@@ -90,7 +90,7 @@ class RecallHandler(BaseActionHandler):
         wildcard_query = MemoryQuery(
             node_id="*",
             scope=scope,
-            type=NodeType(params.node_type),
+            type=NodeType(params.node_type.lower()) if params.node_type else None,
             include_edges=False,
             depth=1,
         )

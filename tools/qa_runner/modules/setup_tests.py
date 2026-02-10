@@ -63,28 +63,22 @@ def _validate_templates_response(response: Any, config: Any) -> Dict[str, Any]:
     template_ids = [t.get("id") for t in data]
 
     # Required templates that must be present
-    required_templates = ["default", "ally"]  # default.yaml=Datum, ally.yaml=Ally
+    # Note: "ally" is now the default template (default.yaml has name "Ally")
+    required_templates = ["default"]
 
     missing = [t for t in required_templates if t not in template_ids]
     if missing:
         errors.append(f"Missing required templates: {missing}. Found: {template_ids}")
 
-    # Verify default template has name "Datum"
+    # Verify default template has name "Ally" (ally is now the default)
     default_template = next((t for t in data if t.get("id") == "default"), None)
     if not default_template:
         errors.append("Default template not found in response")
-    elif default_template.get("name") != "Datum":
-        errors.append(f"Default template should have name 'Datum', got: {default_template.get('name')}")
-
-    # Verify ally template has name "Ally"
-    ally_template = next((t for t in data if t.get("id") == "ally"), None)
-    if not ally_template:
-        errors.append("Ally template not found in response")
-    elif ally_template.get("name") != "Ally":
-        errors.append(f"Ally template should have name 'Ally', got: {ally_template.get('name')}")
+    elif default_template.get("name") != "Ally":
+        errors.append(f"Default template should have name 'Ally', got: {default_template.get('name')}")
 
     # Verify minimum expected templates
-    expected_min_count = 5  # default, sage, scout, echo, ally at minimum
+    expected_min_count = 4  # default (Ally), sage, scout, echo at minimum
     if len(data) < expected_min_count:
         errors.append(f"Expected at least {expected_min_count} templates, got {len(data)}: {template_ids}")
 
@@ -243,7 +237,7 @@ class SetupTestModule:
                 method="GET",
                 expected_status=200,
                 requires_auth=False,
-                description="Get list of agent identity templates - must include default (Datum) and ally",
+                description="Get list of agent identity templates - must include default (Ally)",
                 custom_validation=_validate_templates_response,
             ),
             # GET /v1/setup/adapters - List available adapters

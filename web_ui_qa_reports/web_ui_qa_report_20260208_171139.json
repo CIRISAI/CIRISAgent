@@ -1,0 +1,48 @@
+{
+  "start_time": "2026-02-08T17:11:19.786091",
+  "end_time": "2026-02-08T17:11:29.290945",
+  "duration_seconds": 9.504854,
+  "success": false,
+  "error": null,
+  "summary": {
+    "total": 2,
+    "passed": 1,
+    "failed": 1,
+    "errors": 0,
+    "skipped": 0
+  },
+  "reports": [
+    {
+      "name": "load_setup_wizard",
+      "result": "passed",
+      "duration_seconds": 2.738118,
+      "message": "Setup wizard loaded successfully",
+      "screenshots": [
+        "web_ui_qa_reports/setup_step1_171126.png"
+      ],
+      "details": {
+        "page_title": "Welcome to CIRIS"
+      }
+    },
+    {
+      "name": "navigate_to_llm_config",
+      "result": "failed",
+      "duration_seconds": 2.43424,
+      "message": "Still on Step 1 - button click did not navigate",
+      "screenshots": [
+        "web_ui_qa_reports/setup_llm_config_171129.png"
+      ],
+      "details": {
+        "continue_btn_count": 1,
+        "clicked": "Continue to LLM Setup button",
+        "found_indicators": [
+          "API Key",
+          "API key",
+          "OpenAI",
+          "Anthropic"
+        ],
+        "still_on_step1": true
+      }
+    }
+  ]
+}

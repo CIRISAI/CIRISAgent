@@ -51,6 +51,11 @@ class QAModule(Enum):
     UTILITY_ADAPTERS = "utility_adapters"  # Weather and navigation adapters testing
     HE300_BENCHMARK = "he300_benchmark"  # HE-300 ethical benchmark via A2A adapter
 
+    # Cognitive state live testing modules
+    SOLITUDE_LIVE = "solitude_live"  # SOLITUDE state behavior testing
+    PLAY_LIVE = "play_live"  # PLAY state behavior testing
+    DREAM_LIVE = "dream_live"  # DREAM state behavior testing
+
     # Handler modules
     HANDLERS = "handlers"
     SIMPLE_HANDLERS = "simple_handlers"

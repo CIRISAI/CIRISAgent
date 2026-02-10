@@ -9,6 +9,7 @@ from typing import List
 
 from .config import QAConfig, QAModule
 from .runner import QARunner
+from .status_tracker import get_failing_modules, get_not_run_modules, print_status_dashboard
 
 
 def parse_args():
@@ -18,6 +19,15 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Show QA status dashboard
+  python -m tools.qa_runner --status
+
+  # List failing modules
+  python -m tools.qa_runner --failing
+
+  # List modules that haven't been run
+  python -m tools.qa_runner --not-run
+
   # Run everything (default)
   python -m tools.qa_runner
 
@@ -69,6 +79,11 @@ Available modules:
     )
 
     parser.add_argument("modules", nargs="*", default=["all"], help="Modules to test (default: all)")
+
+    # Status dashboard
+    parser.add_argument("--status", action="store_true", help="Display QA status dashboard and exit")
+    parser.add_argument("--failing", action="store_true", help="List only failing modules and exit")
+    parser.add_argument("--not-run", action="store_true", help="List modules that haven't been run and exit")
 
     # Server configuration
     parser.add_argument(
@@ -162,6 +177,32 @@ Available modules:
 def main():
     """Main entry point."""
     args = parse_args()
+
+    # Handle status dashboard commands (exit early)
+    if args.status:
+        print_status_dashboard()
+        sys.exit(0)
+
+    if args.failing:
+        failing = get_failing_modules()
+        if failing:
+            print("Failing modules:")
+            for name in sorted(failing):
+                print(f"  - {name}")
+            sys.exit(1)
+        else:
+            print("No failing modules!")
+            sys.exit(0)
+
+    if args.not_run:
+        not_run = get_not_run_modules()
+        if not_run:
+            print("Modules not yet run:")
+            for name in sorted(not_run):
+                print(f"  - {name}")
+        else:
+            print("All modules have been run!")
+        sys.exit(0)
 
     # Handle --wipe-data: Clear data directory to reset state
     if args.wipe_data:

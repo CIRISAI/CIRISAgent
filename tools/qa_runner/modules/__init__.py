@@ -14,6 +14,7 @@ from .consent_tests import ConsentTests
 from .context_enrichment_tests import ContextEnrichmentTests
 from .covenant_metrics_tests import CovenantMetricsTests
 from .covenant_tests import CovenantTestModule
+from .dream_live_tests import DreamLiveTests
 from .dsar_multi_source_tests import DSARMultiSourceTests
 from .dsar_tests import DSARTests
 from .dsar_ticket_workflow_tests import DSARTicketWorkflowTests
@@ -25,7 +26,9 @@ from .mcp_tests import MCPTests
 from .message_id_debug_test import MessageIDDebugTests
 from .multi_occurrence_tests import MultiOccurrenceTestModule
 from .partnership_tests import PartnershipTests
+from .play_live_tests import PlayLiveTests
 from .sdk_tests import SDKTestModule
+from .solitude_live_tests import SolitudeLiveTests
 from .sql_external_data_tests import SQLExternalDataTests
 from .state_transition_tests import StateTransitionTests
 from .utility_adapters_tests import UtilityAdaptersTests
@@ -42,9 +45,12 @@ __all__ = [
     "ContextEnrichmentTests",
     "CovenantMetricsTests",
     "CovenantTestModule",
+    "DreamLiveTests",
     "HandlerTestModule",
     "IdentityUpdateTests",
+    "PlayLiveTests",
     "SDKTestModule",
+    "SolitudeLiveTests",
     "ConsentTests",
     "DSARTests",
     "DSARMultiSourceTests",

@@ -1,0 +1,26 @@
+{
+  "start_time": "2026-02-08T17:12:03.852468",
+  "end_time": "2026-02-08T17:12:10.754770",
+  "duration_seconds": 6.902302,
+  "success": false,
+  "error": null,
+  "summary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "errors": 0,
+    "skipped": 0
+  },
+  "reports": [
+    {
+      "name": "load_setup_wizard",
+      "result": "failed",
+      "duration_seconds": 2.735263,
+      "message": "Setup wizard content not found",
+      "screenshots": [
+        "web_ui_qa_reports/setup_step1_171210.png"
+      ],
+      "details": {}
+    }
+  ]
+}

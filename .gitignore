@@ -58,7 +58,8 @@ data_backup_*
 # Log symlinks that change frequently
 logs/.current_log
 logs/.current_incident_log
-qa_reports/
+qa_reports/*
+!qa_reports/qa_status.json
 
 # Backup directories and temporary files
 CLAUDE_LOCAL_BACKUP*/

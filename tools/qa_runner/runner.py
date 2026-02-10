@@ -22,6 +22,7 @@ from rich.table import Table
 from .config import QAConfig, QAModule, QATestCase
 from .modules.filter_test_helper import FilterTestHelper
 from .server import APIServerManager
+from .status_tracker import update_module_status
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +265,9 @@ class QARunner:
             QAModule.SYSTEM_MESSAGES,
             QAModule.HOSTED_TOOLS,
             QAModule.UTILITY_ADAPTERS,
+            QAModule.SOLITUDE_LIVE,
+            QAModule.PLAY_LIVE,
+            QAModule.DREAM_LIVE,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -364,6 +368,9 @@ class QARunner:
         # Print summary
         elapsed = time.time() - start_time
         self._print_summary(elapsed, has_incidents)
+
+        # Update QA status tracker
+        self._update_status_tracker(elapsed)
 
         # Final incidents reminder - CANNOT be missed
         if has_incidents:
@@ -872,12 +879,15 @@ class QARunner:
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
         from .modules.covenant_metrics_tests import CovenantMetricsTests
+        from .modules.dream_live_tests import DreamLiveTests
         from .modules.dsar_multi_source_tests import DSARMultiSourceTests
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
         from .modules.hosted_tools_tests import HostedToolsTests
         from .modules.identity_update_tests import IdentityUpdateTests
         from .modules.mcp_tests import MCPTests
+        from .modules.play_live_tests import PlayLiveTests
         from .modules.reddit_tests import RedditTests
+        from .modules.solitude_live_tests import SolitudeLiveTests
         from .modules.sql_external_data_tests import SQLExternalDataTests
         from .modules.state_transition_tests import StateTransitionTests
         from .modules.system_messages_tests import SystemMessagesTests
@@ -913,6 +923,9 @@ class QARunner:
             QAModule.SYSTEM_MESSAGES: SystemMessagesTests,
             QAModule.HOSTED_TOOLS: HostedToolsTests,
             QAModule.UTILITY_ADAPTERS: UtilityAdaptersTests,
+            QAModule.SOLITUDE_LIVE: SolitudeLiveTests,
+            QAModule.PLAY_LIVE: PlayLiveTests,
+            QAModule.DREAM_LIVE: DreamLiveTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):
@@ -1677,6 +1690,40 @@ class QARunner:
             self.console.print("\n[bold green]✅ All tests passed![/bold green]")
         else:
             self.console.print(f"\n[bold red]❌ {summary['failed']} test(s) failed[/bold red]")
+
+    def _update_status_tracker(self, duration_seconds: float):
+        """Update the QA status tracker file with results from this run."""
+        # Group results by module
+        module_results: Dict[str, Dict] = {}
+
+        for key, result in self.results.items():
+            parts = key.split("::", 1)
+            module_name = parts[0]
+
+            if module_name not in module_results:
+                module_results[module_name] = {"passed": 0, "failed": 0, "total": 0}
+
+            module_results[module_name]["total"] += 1
+            if result.get("success", False):
+                module_results[module_name]["passed"] += 1
+            else:
+                module_results[module_name]["failed"] += 1
+
+        # Update each module's status
+        for module_name, stats in module_results.items():
+            try:
+                update_module_status(
+                    module_name=module_name,
+                    passed=stats["passed"],
+                    failed=stats["failed"],
+                    total=stats["total"],
+                    duration_seconds=duration_seconds / len(module_results) if module_results else duration_seconds,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to update status for module {module_name}: {e}")
+
+        if module_results:
+            self.console.print(f"[dim]📊 Updated QA status for {len(module_results)} module(s)[/dim]")
 
     def _run_multiple_backends(self, modules: List[QAModule]) -> bool:
         """Run QA tests against multiple database backends sequentially."""

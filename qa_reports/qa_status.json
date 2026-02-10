@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-02-10T16:18:13.642153+00:00",
+  "last_updated": "2026-02-10T17:15:03.488687+00:00",
   "version": "2.0.0-beta",
   "modules": {
     "_comment_core": "=== CORE API MODULES ===",
@@ -155,12 +155,13 @@
       "duration_seconds": 0
     },
     "state_transitions": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
+      "last_run": "2026-02-10T16:51:15.056773+00:00",
+      "passed": 11,
+      "failed": 1,
+      "total": 12,
+      "status": "failing",
+      "duration_seconds": 19.53,
+      "context": null
     },
     "solitude_live": {
       "last_run": null,
@@ -191,12 +192,12 @@
     },
     "_comment_covenant": "=== COVENANT & SAFETY ===",
     "covenant": {
-      "last_run": "2026-02-10T15:33:10.153917+00:00",
+      "last_run": "2026-02-10T16:49:45.093113+00:00",
       "passed": 13,
       "failed": 0,
       "total": 13,
       "status": "passing",
-      "duration_seconds": 10.51,
+      "duration_seconds": 17.02,
       "context": "Tests unfilterable covenant invocation (kill switch) system including Ed25519 key generation, mnemonic validation, payload serialization, signature verification, BIP39 word encoding, natural language extraction, verifier authority handling, timestamp windows, false positive prevention, steganographic v2 encoding, and actual SIGKILL shutdown test in subprocess."
     },
     "covenant_metrics": {
@@ -236,12 +237,12 @@
       "context": "Tests adapter persistence and auto-load functionality that allows dynamically loaded adapters to persist across server restarts, verifying config values are stored and returned correctly."
     },
     "adapter_manifest": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
+      "last_run": "2026-02-10T16:50:46.114586+00:00",
+      "passed": 310,
+      "failed": 3,
+      "total": 313,
+      "status": "failing",
+      "duration_seconds": 24.53,
       "context": "Validates all adapter manifests in ciris_adapters/ for valid JSON syntax, ServiceManifest schema conformance, importable service paths, available dependencies, and API loadability."
     },
     "adapter_availability": {
@@ -1040,12 +1041,12 @@
       "context": "Defines declarative API test cases for core endpoints including authentication, telemetry, agent interactions, system health, memory operations, audit trails, and guidance requests using QATestCase dataclass pattern."
     },
     "handlers": {
-      "last_run": "2026-02-10T15:59:23.269059+00:00",
-      "passed": 0,
-      "failed": 8,
-      "total": 8,
-      "status": "failing",
-      "duration_seconds": 1.6,
+      "last_run": "2026-02-10T17:15:03.488649+00:00",
+      "passed": 10,
+      "failed": 0,
+      "total": 10,
+      "status": "passing",
+      "duration_seconds": 94.59,
       "context": null
     },
     "filters": {
@@ -1056,12 +1057,21 @@
       "status": "failing",
       "duration_seconds": 158.67,
       "context": null
+    },
+    "sdk": {
+      "last_run": "2026-02-10T16:50:11.810939+00:00",
+      "passed": 8,
+      "failed": 0,
+      "total": 8,
+      "status": "passing",
+      "duration_seconds": 18.52,
+      "context": null
     }
   },
   "summary": {
-    "total_modules": 125,
-    "passing": 1,
-    "failing": 2,
-    "not_run": 122
+    "total_modules": 126,
+    "passing": 3,
+    "failing": 3,
+    "not_run": 120
   }
 }

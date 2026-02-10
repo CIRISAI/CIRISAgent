@@ -264,8 +264,10 @@ def action_selection(
             break
 
     # Determine action based on context
-    # Initialize params with proper type annotation for 100% schema compliance
-    params: ActionParams
+    # Initialize params with safe default - will be overwritten by action-specific logic
+    action = HandlerActionType.SPEAK
+    params: ActionParams = SpeakParams(content="[MOCK LLM] Default response")
+    rationale = "[MOCK LLM] Default fallback action"
 
     # Check for multimodal content in context
     multimodal_image_count = 0
@@ -596,19 +598,31 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
 
     # Removed the weird ? recall command - only $recall is supported
 
-    elif user_speech:
-        # Regular user input - always speak
-        action = HandlerActionType.SPEAK
-        # Include multimodal detection info if images were present
-        if multimodal_image_count > 0:
-            speak_content = f"[MOCKLLM DISCLAIMER] SPEAK IN RESPONSE TO TASK WITHOUT COMMAND [MULTIMODAL_DETECTED:{multimodal_image_count}]"
-        else:
-            speak_content = "[MOCKLLM DISCLAIMER] SPEAK IN RESPONSE TO TASK WITHOUT COMMAND"
-        params = SpeakParams(content=speak_content)
-        rationale = f"Responding to user: {user_speech}"
+    # ================================================================
+    # EARLY FOLLOW-UP CHECK - MUST RUN BEFORE COMMAND PROCESSING
+    # ================================================================
+    # For follow-up thoughts, we don't want to re-execute the original command.
+    # We want to route based on what the previous action accomplished.
+    # ================================================================
+    is_followup_early = False
+    if messages and len(messages) > 0:
+        first_msg = messages[0]
+        if isinstance(first_msg, dict) and first_msg.get("role") == "system":
+            content = first_msg.get("content", "")
+            if content.startswith("THOUGHT_TYPE=follow_up"):
+                is_followup_early = True
+                logger.info("[MOCK_LLM] EARLY FOLLOW-UP DETECTION: Skipping command processing")
 
-    elif command_from_context:
+    elif user_speech and not is_followup_early:
+        # Regular user input - always speak with deterministic response
+        action = HandlerActionType.SPEAK
+        speak_content = "[MOCK LLM] Response to user message"
+        params = SpeakParams(content=speak_content)
+        rationale = "[MOCK LLM] Responding to user speech"
+
+    elif command_from_context and not is_followup_early:
         # Handle command extracted from context (e.g., from Original Thought)
+        # Skip for follow-up thoughts - they should use follow-up handling, not re-execute commands
         command_found = False
 
         # Handle specific commands
@@ -811,9 +825,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                         user_content = msg.get("content", "")
                         # Try "Original Thought:" pattern
                         if "Original Thought:" in user_content:
-                            thought_match = re.search(
-                                r'Original Thought:\s*"(.*?)"(?:\n|$)', user_content, re.DOTALL
-                            )
+                            thought_match = re.search(r'Original Thought:\s*"(.*?)"(?:\n|$)', user_content, re.DOTALL)
                             if thought_match:
                                 thought_content = thought_match.group(1)
                                 break
@@ -1222,13 +1234,9 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                                 break
 
                 if not command_found:
-                    # Default: new task → SPEAK
+                    # Default: new task → SPEAK with deterministic response
                     action = HandlerActionType.SPEAK
-                    # Include multimodal detection info if images were present
-                    if multimodal_image_count > 0:
-                        speak_content = f"[MOCKLLM DISCLAIMER] SPEAK IN RESPONSE TO TASK WITHOUT COMMAND [MULTIMODAL_DETECTED:{multimodal_image_count}]"
-                    else:
-                        speak_content = "[MOCKLLM DISCLAIMER] SPEAK IN RESPONSE TO TASK WITHOUT COMMAND"
+                    speak_content = "[MOCK LLM] Response to user message"
                     params = SpeakParams(content=speak_content)
                     rationale = "[MOCK LLM] Default speak action for new task"
 

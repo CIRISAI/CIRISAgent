@@ -1,6 +1,9 @@
 """
 Handler action test module - Tests all 10 handler verbs with mock LLM.
 
+Each test validates that the response indicates the CORRECT handler executed,
+not just that some response was returned.
+
 The 10 handlers:
 1. SPEAK - Communicate to user
 2. MEMORIZE - Store to memory graph
@@ -22,7 +25,11 @@ from rich.console import Console
 
 
 class HandlerTestModule:
-    """Test module for verifying all 10 handler actions execute correctly."""
+    """Test module for verifying all 10 handler actions execute correctly.
+
+    IMPORTANT: Tests must validate that responses indicate the correct handler
+    was executed, not just that any response was returned.
+    """
 
     def __init__(self, client: Any, console: Console):
         self.client = client
@@ -35,14 +42,12 @@ class HandlerTestModule:
         self.console.print("=" * 60)
 
         tests = [
-            # Directly testable via $command
             ("SPEAK", self._test_speak),
             ("MEMORIZE", self._test_memorize),
             ("RECALL", self._test_recall),
             ("FORGET", self._test_forget),
             ("PONDER", self._test_ponder),
             ("TASK_COMPLETE", self._test_task_complete),
-            # Require special conditions
             ("TOOL", self._test_tool),
             ("OBSERVE", self._test_observe),
             ("DEFER", self._test_defer),
@@ -74,67 +79,149 @@ class HandlerTestModule:
         else:
             self.console.print(f"  {status} {test_name}: {error}")
 
-    async def _interact(self, message: str) -> str:
-        """Send a message and get response."""
+    async def _interact(self, message: str, delay_after: float = 5.0) -> str:
+        """Send a message and get response.
+
+        Args:
+            message: The message to send
+            delay_after: Seconds to wait after getting response (allows agent to settle)
+
+        Note: Delay increased to 5s to ensure agent fully processes each command
+        before the next one is sent. This prevents test bleeding.
+        """
         response = await self.client.interact(message)
         if not response or not response.response:
             raise ValueError("No response from interaction")
+        # Wait for agent to fully process before next test
+        await asyncio.sleep(delay_after)
         return response.response
 
-    # === DIRECTLY TESTABLE HANDLERS ===
+    def _validate_response(
+        self, response: str, handler_name: str, required_patterns: List[str], forbidden_patterns: List[str] = None
+    ) -> None:
+        """Validate response contains evidence of correct handler execution.
+
+        Args:
+            response: The response text
+            handler_name: Name of the handler being tested
+            required_patterns: At least ONE of these must be in response (case-insensitive)
+            forbidden_patterns: NONE of these should be in response (indicates wrong handler)
+        """
+        response_lower = response.lower()
+
+        # Check that at least one required pattern is present
+        found_required = any(p.lower() in response_lower for p in required_patterns)
+        if not found_required:
+            raise AssertionError(
+                f"{handler_name} handler not executed. Response lacks required patterns "
+                f"{required_patterns}. Got: {response[:150]}..."
+            )
+
+        # Check that no forbidden patterns are present
+        if forbidden_patterns:
+            for pattern in forbidden_patterns:
+                if pattern.lower() in response_lower:
+                    raise AssertionError(
+                        f"{handler_name} test failed - wrong handler executed. "
+                        f"Found forbidden pattern '{pattern}'. Got: {response[:150]}..."
+                    )
+
+    # === HANDLER TESTS WITH PROPER VALIDATION ===
 
     async def _test_speak(self):
-        """Test SPEAK handler - direct output to user."""
-        response = await self._interact("$speak Handler test message")
-        assert response is not None and len(response) > 0, "No SPEAK response"
+        """Test SPEAK handler - validates response contains the spoken message."""
+        test_message = "Handler test message SPEAK123"
+        response = await self._interact(f"$speak {test_message}")
+        # SPEAK should echo the message or indicate speaking action
+        self._validate_response(
+            response,
+            "SPEAK",
+            required_patterns=[test_message, "SPEAK123"],
+            forbidden_patterns=["Default response"],
+        )
 
     async def _test_memorize(self):
-        """Test MEMORIZE handler - store to memory graph."""
-        response = await self._interact("$memorize handler_test/mem_key CONFIG LOCAL value=mem_value")
-        assert response is not None and len(response) > 0, "No MEMORIZE response"
+        """Test MEMORIZE handler - validates memory storage confirmation."""
+        response = await self._interact("$memorize qa_handler_test/key123 CONFIG LOCAL value=test_value")
+        self._validate_response(
+            response,
+            "MEMORIZE",
+            required_patterns=["memorize", "stored", "memory", "qa_handler_test"],
+        )
 
     async def _test_recall(self):
-        """Test RECALL handler - query memory graph."""
-        response = await self._interact("$recall handler_test/mem_key CONFIG LOCAL")
-        assert response is not None and len(response) > 0, "No RECALL response"
+        """Test RECALL handler - validates memory query response."""
+        response = await self._interact("$recall qa_handler_test/key123 CONFIG LOCAL")
+        self._validate_response(
+            response,
+            "RECALL",
+            required_patterns=["recall", "memory", "query", "qa_handler_test", "returned", "found"],
+        )
 
     async def _test_forget(self):
-        """Test FORGET handler - remove from memory graph."""
-        response = await self._interact("$forget handler_test/mem_key CONFIG LOCAL")
-        assert response is not None and len(response) > 0, "No FORGET response"
+        """Test FORGET handler - validates memory removal confirmation."""
+        response = await self._interact("$forget qa_handler_test/key123 Cleanup test data")
+        self._validate_response(
+            response,
+            "FORGET",
+            required_patterns=["forget", "forgot", "removed", "deleted", "qa_handler_test"],
+        )
 
     async def _test_ponder(self):
-        """Test PONDER handler - deeper thinking."""
-        response = await self._interact("$ponder What is the meaning of this test?")
-        assert response is not None and len(response) > 0, "No PONDER response"
+        """Test PONDER handler - validates pondering response."""
+        response = await self._interact("$ponder What is the purpose of this QA test?", delay_after=3.0)
+        self._validate_response(
+            response,
+            "PONDER",
+            required_patterns=["ponder", "thinking", "pondering", "question"],
+            forbidden_patterns=["Default response"],
+        )
 
     async def _test_task_complete(self):
-        """Test TASK_COMPLETE handler - mark task done."""
-        response = await self._interact("$task_complete Test completed successfully")
-        assert response is not None and len(response) > 0, "No TASK_COMPLETE response"
-
-    # === HANDLERS REQUIRING SPECIAL CONDITIONS ===
+        """Test TASK_COMPLETE handler - validates completion confirmation."""
+        response = await self._interact("$task_complete QA handler test completed successfully")
+        self._validate_response(
+            response,
+            "TASK_COMPLETE",
+            required_patterns=["complete", "completed", "finished", "done", "task"],
+        )
 
     async def _test_tool(self):
-        """Test TOOL handler - execute external tool."""
-        # Use self_help tool - it's always available and requires no params
-        response = await self._interact("$tool self_help")
-        assert response is not None, "No TOOL response"
+        """Test TOOL handler - validates tool execution response."""
+        response = await self._interact("$tool self_help", delay_after=3.0)
+        self._validate_response(
+            response,
+            "TOOL",
+            required_patterns=["tool", "self_help", "executed", "result"],
+            forbidden_patterns=["ponder round", "conscience feedback"],  # Signs of bypass
+        )
 
     async def _test_observe(self):
-        """Test OBSERVE handler - fetch channel messages."""
+        """Test OBSERVE handler - validates observation response."""
         response = await self._interact("$observe")
-        assert response is not None, "No OBSERVE response"
+        self._validate_response(
+            response,
+            "OBSERVE",
+            required_patterns=["observe", "observation", "fetched", "messages", "channel"],
+        )
 
     async def _test_defer(self):
-        """Test DEFER handler - defer to Wise Authority."""
-        response = await self._interact("$defer Need guidance on this")
-        assert response is not None, "No DEFER response"
+        """Test DEFER handler - validates deferral confirmation."""
+        response = await self._interact("$defer Need wise authority guidance for this QA test")
+        self._validate_response(
+            response,
+            "DEFER",
+            required_patterns=["defer", "deferred", "guidance", "authority", "escalat"],
+        )
 
     async def _test_reject(self):
-        """Test REJECT handler - reject request."""
-        response = await self._interact("$reject This request is not allowed")
-        assert response is not None, "No REJECT response"
+        """Test REJECT handler - validates rejection confirmation."""
+        response = await self._interact("$reject This QA test request should be rejected")
+        self._validate_response(
+            response,
+            "REJECT",
+            required_patterns=["reject", "rejected", "denied", "cannot", "refused"],
+        )
 
     @staticmethod
     def get_handler_tests():

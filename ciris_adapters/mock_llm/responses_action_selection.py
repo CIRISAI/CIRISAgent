@@ -253,6 +253,27 @@ def action_selection(
             custom_rationale = item.split(":", 1)[1]
             break
 
+    # === NEW: Extract follow-up context from responses.py ===
+    is_followup_from_context = False
+    followup_type = None
+    should_task_complete = False
+    followup_content = ""
+    for item in context:
+        if item == "is_followup:true":
+            is_followup_from_context = True
+        elif item.startswith("followup_type:"):
+            followup_type = item.split(":", 1)[1]
+        elif item == "should_task_complete:true":
+            should_task_complete = True
+        elif item.startswith("followup_content:"):
+            followup_content = item.split(":", 1)[1]
+
+    if is_followup_from_context:
+        logger.info(f"[MOCK_LLM] === FOLLOW-UP DETECTED FROM CONTEXT ===")
+        logger.info(f"[MOCK_LLM] followup_type: {followup_type}")
+        logger.info(f"[MOCK_LLM] should_task_complete: {should_task_complete}")
+        logger.info(f"[MOCK_LLM] followup_content: {followup_content[:100]}...")
+
     # Initialize rationale with default - should be overridden by specific logic paths
     rationale = "[MOCK LLM] Action selection (no specific rationale provided)"
 
@@ -284,8 +305,30 @@ def action_selection(
         f"[MOCK_LLM] Action selection - forced_action: {forced_action}, user_speech: {user_speech}, command_from_context: {command_from_context}, is_followup_thought: {is_followup_thought}, multimodal_images: {multimodal_image_count}"
     )
 
-    # NOTE: Follow-up handling moved to line ~800 where SPEAK vs non-SPEAK follow-ups
-    # are properly differentiated. SPEAK follow-ups -> TASK_COMPLETE, other follow-ups -> SPEAK
+    # === EARLY FOLLOW-UP HANDLING ===
+    # If responses.py detected a follow-up thought, handle it immediately
+    if is_followup_from_context:
+        logger.info("[MOCK_LLM] === EARLY FOLLOW-UP RETURN ===")
+        if should_task_complete or followup_type == "speak":
+            # SPEAK follow-up -> TASK_COMPLETE (we're done, user was spoken to)
+            logger.info("[MOCK_LLM] SPEAK follow-up → TASK_COMPLETE")
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.TASK_COMPLETE,
+                action_parameters=TaskCompleteParams(
+                    summary=f"Task completed. {followup_content[:100]}",
+                ).model_dump(),
+                rationale=f"[MOCK LLM] SPEAK action completed successfully. {followup_content[:50]}",
+            )
+        else:
+            # Other follow-up (MEMORIZE, RECALL, etc.) -> SPEAK the result to user
+            logger.info(f"[MOCK_LLM] {followup_type.upper() if followup_type else 'UNKNOWN'} follow-up → SPEAK result")
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.SPEAK,
+                action_parameters=SpeakParams(
+                    content=f"[{followup_type.upper() if followup_type else 'ACTION'}] {followup_content[:500]}",
+                ).model_dump(),
+                rationale=f"[MOCK LLM] {followup_type.upper() if followup_type else 'Action'} handler executed. Reporting result to user.",
+            )
 
     if forced_action:
         try:

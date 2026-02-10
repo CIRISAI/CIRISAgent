@@ -251,6 +251,33 @@ jobs:
         run: |
           python -m twine upload dist/*.whl
 
+      - name: Build and publish alias packages
+        if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          # Build and publish alias packages (depend on ciris-agent)
+          for pkg in packages/ciris-engine packages/cirisagent packages/cirisai packages/ciris-ai; do
+            if [ -d "$pkg" ]; then
+              echo "Building $pkg..."
+              cd "$pkg"
+              python -m build --wheel
+              python -m twine upload dist/*.whl --skip-existing || true
+              cd ../..
+            fi
+          done
+
+      - name: Build and publish SDK
+        if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          cd ciris_sdk
+          python -m build --wheel
+          python -m twine upload dist/*.whl --skip-existing || true
+
   build:
     name: Build Docker Images
     needs: test

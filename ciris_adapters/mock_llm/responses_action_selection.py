@@ -787,64 +787,152 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
             logger.info("[MOCK_LLM] No messages available for THOUGHT_TYPE check")
 
         if is_followup:
-            # Check the content of the follow-up thought to determine if it's from a SPEAK handler
-            # Extract thought content from context (seed_thought:) or user messages
-            thought_content = ""
+            # ================================================================
+            # COMPREHENSIVE FOLLOW-UP HANDLING FOR ALL 10 VERBS
+            # ================================================================
+            # Terminal actions (DEFER, REJECT, TASK_COMPLETE) don't create follow-ups.
+            # Non-terminal actions create follow-ups that need routing:
+            #   - SPEAK follow-up → TASK_COMPLETE
+            #   - MEMORIZE/RECALL/FORGET/TOOL/OBSERVE follow-up → SPEAK result
+            #   - PONDER follow-up → analyze context for next action
+            # ================================================================
 
-            # First try to get from context items (more reliable for follow-ups)
+            # Extract thought content from context (seed_thought:) - most reliable
+            thought_content = ""
             for item in context:
                 if item.startswith("seed_thought:"):
                     thought_content = item.split(":", 1)[1].strip()
-                    logger.info(f"[MOCK_LLM] Extracted thought_content from seed_thought: {thought_content[:80]}...")
                     break
 
-            # Fallback: try user message with "Original Thought:" pattern
+            # Fallback: try user message patterns
             if not thought_content:
                 for msg in messages or []:
                     if isinstance(msg, dict) and msg.get("role") == "user":
                         user_content = msg.get("content", "")
+                        # Try "Original Thought:" pattern
                         if "Original Thought:" in user_content:
-                            thought_match = re.search(r'Original Thought:\s*"(.*?)"(?:\n|$)', user_content, re.DOTALL)
+                            thought_match = re.search(
+                                r'Original Thought:\s*"(.*?)"(?:\n|$)', user_content, re.DOTALL
+                            )
                             if thought_match:
                                 thought_content = thought_match.group(1)
                                 break
+                        # Also check raw content for CIRIS_FOLLOW_UP_THOUGHT
+                        elif "CIRIS_FOLLOW_UP_THOUGHT:" in user_content:
+                            thought_content = user_content
+                            break
 
-            # Check if this is a follow-up from SPEAK handler (usually contains specific patterns)
-            # Most follow-ups from other handlers contain operation results that should be spoken
             thought_lower = thought_content.lower()
-            logger.info(f"[MOCK_LLM] Checking for SPEAK follow-up patterns in: {thought_lower[:100]}...")
-            is_speak_followup = any(
-                pattern in thought_lower
-                for pattern in [
-                    "speak successful",
-                    "message delivered",
-                    "message sent successfully",
-                    "next action is most likely task_complete",
-                    "speaking repeatedly on the same task is not useful",
-                    "spoke in channel",
-                    "response sent",
-                ]
+            logger.info(f"[MOCK_LLM] Follow-up content (first 150 chars): {thought_lower[:150]}...")
+
+            # === PATTERN DETECTION FOR EACH VERB ===
+
+            # 1. SPEAK follow-up patterns → TASK_COMPLETE
+            speak_patterns = [
+                "speak successful",
+                "message delivered",
+                "speaking repeatedly on the same task is not useful",
+            ]
+            is_speak_followup = any(p in thought_lower for p in speak_patterns)
+
+            # 2. PONDER follow-up patterns → analyze for next action
+            ponder_patterns = ["ponder round", "=== ponder", "conscience feedback"]
+            is_ponder_followup = any(p in thought_lower for p in ponder_patterns)
+
+            # 3. MEMORIZE follow-up patterns → SPEAK result
+            memorize_patterns = ["memorize complete", "stored observation", "stored config", "stored identity"]
+            is_memorize_followup = any(p in thought_lower for p in memorize_patterns)
+
+            # 4. RECALL follow-up patterns → SPEAK result
+            recall_patterns = ["memory query", "returned:", "no memories found"]
+            is_recall_followup = any(p in thought_lower for p in recall_patterns)
+
+            # 5. FORGET follow-up patterns → SPEAK result
+            forget_patterns = ["successfully forgot key", "forget action", "failed to forget"]
+            is_forget_followup = any(p in thought_lower for p in forget_patterns)
+
+            # 6. TOOL follow-up patterns → SPEAK result
+            tool_patterns = ["tool action", "executed for thought", "awaiting tool results"]
+            is_tool_followup = any(p in thought_lower for p in tool_patterns)
+
+            # 7. OBSERVE follow-up patterns → SPEAK result or TASK_COMPLETE
+            observe_patterns = ["observe action completed", "fetched", "messages from"]
+            is_observe_followup = any(p in thought_lower for p in observe_patterns)
+
+            # 8. Failure patterns → SPEAK the error
+            failure_patterns = ["failed", "error", "denied", "invalid"]
+            is_failure = any(p in thought_lower for p in failure_patterns)
+
+            # === ROUTING LOGIC ===
+            logger.info(
+                f"[MOCK_LLM] Follow-up detection: speak={is_speak_followup}, ponder={is_ponder_followup}, "
+                f"memorize={is_memorize_followup}, recall={is_recall_followup}, forget={is_forget_followup}, "
+                f"tool={is_tool_followup}, observe={is_observe_followup}, failure={is_failure}"
             )
 
-            logger.info(f"[MOCK_LLM] is_speak_followup={is_speak_followup}")
-
             if is_speak_followup:
-                # Follow-up from SPEAK handler → TASK_COMPLETE
-                logger.info("[MOCK_LLM] SPEAK follow-up detected → returning TASK_COMPLETE")
+                # SPEAK completed successfully → TASK_COMPLETE
+                logger.info("[MOCK_LLM] SPEAK follow-up → TASK_COMPLETE")
                 action = HandlerActionType.TASK_COMPLETE
-                params = TaskCompleteParams(completion_reason="[MOCK LLM] SPEAK operation completed")
-                rationale = "[MOCK LLM] Completing SPEAK follow-up thought"
-            else:
-                # Follow-up from other handlers (RECALL, MEMORIZE, etc.) → SPEAK the result
-                action = HandlerActionType.SPEAK
-                # Extract the actual content to speak from the follow-up thought
-                if thought_content.startswith("CIRIS_FOLLOW_UP_THOUGHT:"):
-                    content_to_speak = thought_content.replace("CIRIS_FOLLOW_UP_THOUGHT:", "").strip()
-                else:
-                    content_to_speak = thought_content
+                params = TaskCompleteParams(completion_reason="[MOCK LLM] Message delivered successfully")
+                rationale = "[MOCK LLM] SPEAK operation completed, task finished"
 
-                params = SpeakParams(content=f"[MOCK LLM] {content_to_speak}")
-                rationale = "[MOCK LLM] Speaking operation result from follow-up thought"
+            elif is_ponder_followup:
+                # PONDER needs analysis - check depth and decide
+                # For mock LLM, default to SPEAK with summary or TASK_COMPLETE if deep
+                if "final action" in thought_lower or "round 7" in thought_lower:
+                    logger.info("[MOCK_LLM] PONDER at depth limit → TASK_COMPLETE")
+                    action = HandlerActionType.TASK_COMPLETE
+                    params = TaskCompleteParams(completion_reason="[MOCK LLM] Ponder depth limit reached")
+                    rationale = "[MOCK LLM] Completed pondering, finalizing task"
+                else:
+                    logger.info("[MOCK_LLM] PONDER follow-up → SPEAK summary")
+                    action = HandlerActionType.SPEAK
+                    params = SpeakParams(content="[MOCK LLM] After pondering, proceeding with task.")
+                    rationale = "[MOCK LLM] Sharing ponder conclusion"
+
+            elif is_memorize_followup or is_recall_followup or is_forget_followup or is_tool_followup:
+                # These operations completed - SPEAK the result to user
+                logger.info("[MOCK_LLM] Memory/Tool operation follow-up → SPEAK result")
+                action = HandlerActionType.SPEAK
+
+                # Extract meaningful content to speak
+                if thought_content.startswith("CIRIS_FOLLOW_UP_THOUGHT:"):
+                    content = thought_content.replace("CIRIS_FOLLOW_UP_THOUGHT:", "").strip()
+                else:
+                    content = thought_content
+
+                # Truncate if too long
+                if len(content) > 500:
+                    content = content[:500] + "..."
+
+                params = SpeakParams(content=f"[MOCK LLM] {content}")
+                rationale = "[MOCK LLM] Communicating operation result to user"
+
+            elif is_observe_followup:
+                # OBSERVE completed - might SPEAK summary or TASK_COMPLETE
+                logger.info("[MOCK_LLM] OBSERVE follow-up → SPEAK summary")
+                action = HandlerActionType.SPEAK
+                params = SpeakParams(content="[MOCK LLM] Observation completed.")
+                rationale = "[MOCK LLM] Communicating observation result"
+
+            elif is_failure:
+                # Something failed - SPEAK the error
+                logger.info("[MOCK_LLM] Failure detected → SPEAK error")
+                action = HandlerActionType.SPEAK
+                content = thought_content[:300] if thought_content else "An error occurred."
+                params = SpeakParams(content=f"[MOCK LLM] {content}")
+                rationale = "[MOCK LLM] Communicating error to user"
+
+            else:
+                # Unknown follow-up type - default to SPEAK
+                logger.info("[MOCK_LLM] Unknown follow-up type → SPEAK content")
+                action = HandlerActionType.SPEAK
+                content = thought_content[:300] if thought_content else "Operation completed."
+                if content.startswith("CIRIS_FOLLOW_UP_THOUGHT:"):
+                    content = content.replace("CIRIS_FOLLOW_UP_THOUGHT:", "").strip()
+                params = SpeakParams(content=f"[MOCK LLM] {content}")
+                rationale = "[MOCK LLM] Default response for unknown follow-up"
         else:
             # Step 2: For initial thoughts, check USER message for commands
             command_found = False

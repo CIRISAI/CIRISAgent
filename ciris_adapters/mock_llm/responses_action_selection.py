@@ -376,6 +376,10 @@ def action_selection(
                 # Generic fallback
                 packaged_content = speak_success(content=followup_content[:200])
 
+            # Add multimodal marker if images were detected (for vision testing)
+            if multimodal_image_count > 0:
+                packaged_content = f"[MULTIMODAL_DETECTED:{multimodal_image_count}] {packaged_content}"
+
             return ActionSelectionDMAResult(
                 selected_action=HandlerActionType.SPEAK,
                 action_parameters=SpeakParams(content=packaged_content).model_dump(),
@@ -700,10 +704,15 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                 is_followup_early = True
                 logger.info("[MOCK_LLM] EARLY FOLLOW-UP DETECTION: Skipping command processing")
 
-    elif user_speech and not is_followup_early:
+    # IMPORTANT: This must be a separate if block, not elif attached to the messages check above
+    if user_speech and not is_followup_early:
         # Regular user input - always speak with deterministic response
         action = HandlerActionType.SPEAK
-        speak_content = "[MOCK LLM] Response to user message"
+        # Include multimodal detection marker if images were found
+        if multimodal_image_count > 0:
+            speak_content = f"[MULTIMODAL_DETECTED:{multimodal_image_count}] [MOCK LLM] I can see you've shared {multimodal_image_count} image(s). Response to user message"
+        else:
+            speak_content = "[MOCK LLM] Response to user message"
         params = SpeakParams(content=speak_content)
         rationale = "[MOCK LLM] Responding to user speech"
 

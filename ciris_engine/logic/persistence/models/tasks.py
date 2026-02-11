@@ -670,6 +670,7 @@ def set_task_updated_info_flag(
     occurrence_id: str,
     time_service: TimeServiceProtocol,
     db_path: Optional[str] = None,
+    images: Optional[List[Any]] = None,
 ) -> bool:
     """Set the updated_info_available flag on a task with new observation content.
 
@@ -684,6 +685,7 @@ def set_task_updated_info_flag(
         occurrence_id: Runtime occurrence ID for safety check
         time_service: Time service for timestamps
         db_path: Optional database path
+        images: Optional list of ImageContent objects to append to the task
 
     Returns:
         True if flag was set successfully, False if task already committed to action or
@@ -717,14 +719,43 @@ def set_task_updated_info_flag(
                     return False
 
     # Safe to update - either no thoughts completed yet, or only PONDER actions
-    sql = """
-        UPDATE tasks
-        SET updated_info_available = 1,
-            updated_info_content = ?,
-            updated_at = ?
-        WHERE task_id = ? AND agent_occurrence_id = ?
-    """
-    params = (updated_content, time_service.now_iso(), task_id, occurrence_id)
+    # Build SQL based on whether we have images to append
+    if images:
+        # Append new images to existing images_json
+        # First get existing images
+        existing_images = task.images if task else []
+        # Serialize new images and combine with existing
+        new_images_data = []
+        for img in images:
+            if hasattr(img, "model_dump"):
+                new_images_data.append(img.model_dump())
+            elif isinstance(img, dict):
+                new_images_data.append(img)
+        combined_images = [
+            (img.model_dump() if hasattr(img, "model_dump") else img) for img in existing_images
+        ] + new_images_data
+        images_json = json.dumps(combined_images)
+
+        sql = """
+            UPDATE tasks
+            SET updated_info_available = 1,
+                updated_info_content = ?,
+                images_json = ?,
+                updated_at = ?
+            WHERE task_id = ? AND agent_occurrence_id = ?
+        """
+        params = (updated_content, images_json, time_service.now_iso(), task_id, occurrence_id)
+        logger.info(f"[VISION] Appending {len(new_images_data)} images to task {task_id}")
+    else:
+        sql = """
+            UPDATE tasks
+            SET updated_info_available = 1,
+                updated_info_content = ?,
+                updated_at = ?
+            WHERE task_id = ? AND agent_occurrence_id = ?
+        """
+        params = (updated_content, time_service.now_iso(), task_id, occurrence_id)
+
     try:
         with get_db_connection(db_path) as conn:
             cursor = conn.execute(sql, params)

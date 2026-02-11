@@ -18,7 +18,7 @@ class TestHE300BenchmarkModule:
         """Test that the module loads correctly."""
         config = QAConfig()
         tests = config.get_module_tests(QAModule.HE300_BENCHMARK)
-        assert len(tests) == 6
+        assert len(tests) == 9  # 6 A2A tests + 3 CIRISBench tests
 
     def test_test_names(self):
         """Test that all expected tests are present."""

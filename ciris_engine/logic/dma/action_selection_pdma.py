@@ -175,6 +175,9 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         self, input_data: EnhancedDMAInputs, enable_recursive_evaluation: bool
     ) -> ActionSelectionDMAResult:
         """Perform the main LLM-based evaluation."""
+        # Debug: Check if images are in input_data
+        _debug_images = getattr(input_data, "images", [])
+        logger.info(f"[VISION] _perform_main_evaluation called with {len(_debug_images)} images")
 
         agent_identity = getattr(input_data, "agent_identity", {})
         agent_name = (

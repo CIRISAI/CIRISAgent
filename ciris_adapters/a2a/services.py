@@ -24,7 +24,7 @@ class A2AService(Service):
     def __init__(
         self,
         runtime: Optional[Any] = None,
-        timeout_seconds: float = 60.0,
+        timeout_seconds: float = 120.0,  # 2 minutes for full DMA chain with live LLM
         **kwargs: Any,
     ) -> None:
         """Initialize A2A service.

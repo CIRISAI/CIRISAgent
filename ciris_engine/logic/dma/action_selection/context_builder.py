@@ -243,16 +243,26 @@ Action Selection Instructions:
 Based on the DMA results, ORIGINAL TASK, and current thought, select the most appropriate handler action.
 CRITICAL: The ORIGINAL TASK is what the user actually requested. Your action MUST work toward completing that task.
 
-Your response MUST be a JSON object with exactly these three keys:
-1. 'selected_action': Choose from {action_options_str}
-2. 'action_parameters': Parameters matching the schema for your selected_action
+Your response MUST be a JSON object with FLAT fields (NO nested action_parameters):
+- 'selected_action': Choose from {action_options_str}
+- 'rationale': Explain why this action is optimal
+- Then include the FLAT fields for your chosen action:
+  - SPEAK: 'speak_content' (string with your response)
+  - PONDER: 'ponder_questions' (list of strings)
+  - TASK_COMPLETE: 'completion_reason' (string)
+  - MEMORIZE: 'memorize_node_type', 'memorize_content', 'memorize_scope'
+  - RECALL: 'recall_query', 'recall_node_type', 'recall_scope', 'recall_limit'
+  - FORGET: 'forget_node_id', 'forget_reason'
+  - DEFER: 'defer_reason', 'defer_until'
+  - REJECT: 'reject_reason', 'reject_create_filter'
+  - TOOL: 'tool_name'
+  - OBSERVE: 'observe_active'
     {action_parameters_speak_csdma_guidance}
     {action_parameters_ponder_guidance}
     {action_parameters_observe_guidance}
-3. 'rationale': Explain why this action is optimal given the DMA evaluations and CIRIS principles
     {rationale_csdma_guidance}
 
-IMPORTANT: Return ONLY a JSON object with these exact keys: selected_action, action_parameters, rationale.
+CRITICAL: Return a FLAT JSON object. Example for SPEAK: {{"selected_action": "speak", "speak_content": "Your answer here", "rationale": "..."}}
 
 === ORIGINAL TASK (What the user requested) ===
 {original_task_str}

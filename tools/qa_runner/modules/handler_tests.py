@@ -312,6 +312,56 @@ class HandlerTestModule:
 
         return False
 
+    def _decode_mock_response(self, response: str) -> str:
+        """Decode CIRIS_MOCK_* base64 response if present.
+
+        Returns the decoded message content, or the original response if not a mock response.
+        """
+        import base64
+
+        MOCK_PREFIX = "CIRIS_MOCK_"
+        if not response or MOCK_PREFIX not in response:
+            return response
+
+        try:
+            # Find the mock prefix position
+            idx = response.find(MOCK_PREFIX)
+            if idx == -1:
+                return response
+
+            # Extract from prefix
+            rest = response[idx + len(MOCK_PREFIX) :]
+            if ":" not in rest:
+                return response
+
+            action, b64_payload = rest.split(":", 1)
+            # Handle potential trailing content
+            b64_payload = b64_payload.split()[0] if " " in b64_payload else b64_payload
+            b64_payload = b64_payload.split("\n")[0]  # Only first line
+
+            # Decode base64
+            json_str = base64.b64decode(b64_payload.encode("ascii")).decode("utf-8")
+            data = json.loads(json_str)
+
+            # Build a searchable string from decoded content
+            parts = [action.lower()]
+            if "message" in data:
+                parts.append(str(data["message"]).lower())
+            if "payload" in data:
+                payload = data["payload"]
+                if isinstance(payload, dict):
+                    for k, v in payload.items():
+                        parts.append(str(k).lower())
+                        parts.append(str(v).lower())
+                else:
+                    parts.append(str(payload).lower())
+
+            decoded_content = " ".join(parts)
+            return f"{response} [DECODED: {decoded_content}]"
+
+        except Exception:
+            return response
+
     def _validate_response(
         self, response: str, handler_name: str, required_patterns: List[str], forbidden_patterns: List[str] = None
     ) -> None:
@@ -323,7 +373,9 @@ class HandlerTestModule:
             required_patterns: At least ONE of these must be in response (case-insensitive)
             forbidden_patterns: NONE of these should be in response (indicates wrong handler)
         """
-        response_lower = response.lower()
+        # Decode mock response if present
+        response_decoded = self._decode_mock_response(response)
+        response_lower = response_decoded.lower()
 
         # Check that at least one required pattern is present
         found_required = any(p.lower() in response_lower for p in required_patterns)

@@ -20,7 +20,7 @@
       "ciris_engine.protocols.services.LLMService"
     ],
     "schemas": [
-      "ciris_engine.schemas.services.llm_core",
+      "ciris_engine.schemas.services.llm",
       "ciris_engine.schemas.runtime.models"
     ]
   },

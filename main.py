@@ -345,7 +345,9 @@ async def _load_app_config(config_file_path: Optional[str], template: str) -> An
         raise SystemExit(1)
 
     cli_overrides: dict[str, Any] = {}
-    if template and template != "default":
+    if template:
+        # Always set CLI override when --template is provided
+        # This ensures CLI takes priority over environment variables
         cli_overrides["default_template"] = template
 
     return await load_config(config_file_path, cli_overrides)
@@ -732,7 +734,7 @@ def main(
             discord_bot_token=discord_bot_token,
             modules=modules_to_load,
             identity_update=identity_update,
-            template_name=template if template != "default" else None,
+            template_name=template,  # Always pass template so CLI takes priority over env vars
         )
         await runtime.initialize()
         setup_signal_handlers(runtime)

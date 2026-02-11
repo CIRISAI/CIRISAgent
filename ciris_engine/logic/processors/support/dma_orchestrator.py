@@ -326,7 +326,11 @@ class DMAOrchestrator:
     ) -> ActionSelectionDMAResult:
         """Run ActionSelectionPDMAEvaluator sequentially after DMAs."""
         # Create properly typed EnhancedDMAInputs
-        # Pass images from thought_item (ProcessingQueueItem) for multimodal support
+        # Pass images from thought_item (ProcessingQueueItem from processing_queue.py) for multimodal support
+        # ProcessingQueueItem inherits images from task via from_thought()
+        thought_images = thought_item.images
+        if thought_images:
+            logger.info(f"[VISION] DMA Orchestrator passing {len(thought_images)} images to ActionSelectionPDMA")
         triaged = EnhancedDMAInputs(
             original_thought=actual_thought,
             processing_context=processing_context,
@@ -338,7 +342,7 @@ class DMAOrchestrator:
             max_rounds=5,  # Default max rounds
             faculty_enhanced=False,
             recursive_evaluation=False,
-            images=thought_item.images,  # Pass images for ActionSelectionPDMA vision
+            images=thought_item.images,  # Pass images from ProcessingQueueItem for ActionSelectionPDMA vision
         )
 
         # Check if this is a conscience retry from the context

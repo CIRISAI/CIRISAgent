@@ -32,14 +32,52 @@ except ImportError:
     class LicenseStatus:
         UNLICENSED_COMMUNITY = 200
 
+        def allows_licensed_operation(self) -> bool:
+            return False
+
     class LicenseTier:
         COMMUNITY = 0
+        PROFESSIONAL_FULL = 2
 
     class HardwareType:
         SOFTWARE_ONLY = "software_only"
 
     class DisclosureSeverity:
         WARNING = "warning"
+
+    # Stub Pydantic models for type hints
+    class LicenseStatusResponse:
+        """Stub for when ciris_verify not installed."""
+
+        status: Any = None
+        license: Any = None
+        mandatory_disclosure: Any = None
+
+        def allows_licensed_operation(self) -> bool:
+            return False
+
+    class CapabilityCheckResult:
+        """Stub for when ciris_verify not installed."""
+
+        capability: str = ""
+        allowed: bool = False
+        reason: str = ""
+
+    class MandatoryDisclosure:
+        """Stub for when ciris_verify not installed."""
+
+        text: str = ""
+        severity: str = "warning"
+
+    class BinaryNotFoundError(Exception):
+        """Stub exception."""
+
+        pass
+
+    class BinaryTamperedError(Exception):
+        """Stub exception."""
+
+        pass
 
 
 logger = logging.getLogger(__name__)

@@ -18,20 +18,22 @@ The verification service provides:
 - Agent tier detection based on license level
 """
 
+import asyncio
 import logging
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ciris_engine.logic.adapters.base_adapter import BaseAdapterProtocol
-from ciris_engine.schemas.adapter_schemas import AdapterMetadata, AdapterServiceRegistration
-from ciris_engine.schemas.foundational_schemas import Priority, ServiceType
+from ciris_engine.logic.adapters.base import Service
+from ciris_engine.logic.registries.base import Priority
+from ciris_engine.schemas.adapters import AdapterServiceRegistration
+from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, RuntimeAdapterStatus
+from ciris_engine.schemas.runtime.enums import ServiceType
 
 from .service import CIRISVerifyService, VerificationConfig
 
 logger = logging.getLogger(__name__)
 
 
-class CIRISVerifyAdapter(BaseAdapterProtocol):
+class CIRISVerifyAdapter(Service):
     """Adapter for CIRISVerify license verification.
 
     This adapter:
@@ -53,15 +55,21 @@ class CIRISVerifyAdapter(BaseAdapterProtocol):
         use_mock: Use mock for testing (default: false)
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, runtime: Any, context: Optional[Any] = None, **kwargs: Any) -> None:
         """Initialize the CIRISVerify adapter.
 
         Args:
-            config: Optional configuration dictionary.
+            runtime: The CIRIS runtime instance.
+            context: Optional adapter startup context.
+            **kwargs: Additional configuration including adapter_config.
         """
-        self.config = config or {}
+        super().__init__(config=kwargs.get("adapter_config"))
+        self.runtime = runtime
+        self.context = context
+        self._config = kwargs.get("adapter_config") or {}
         self._service: Optional[CIRISVerifyService] = None
         self._started = False
+        self._lifecycle_task: Optional[asyncio.Task[None]] = None
 
     @property
     def name(self) -> str:
@@ -72,21 +80,6 @@ class CIRISVerifyAdapter(BaseAdapterProtocol):
     def version(self) -> str:
         """Adapter version."""
         return "0.1.0"
-
-    def get_metadata(self) -> AdapterMetadata:
-        """Get adapter metadata."""
-        return AdapterMetadata(
-            name=self.name,
-            version=self.version,
-            description="Hardware-rooted license verification for CIRIS agents",
-            author="CIRIS Engineering",
-            capabilities=[
-                "license:verify",
-                "license:check_capability",
-                "license:get_disclosure",
-                "license:get_tier",
-            ],
-        )
 
     def get_services_to_register(self) -> List[AdapterServiceRegistration]:
         """Get services to register with the service registry.
@@ -99,7 +92,7 @@ class CIRISVerifyAdapter(BaseAdapterProtocol):
 
         return [
             AdapterServiceRegistration(
-                service_type=ServiceType.VERIFICATION,
+                service_type=ServiceType.TOOL,  # License verification is a tool service
                 provider=self._service,
                 priority=Priority.HIGH,  # License checks are critical
                 capabilities=[
@@ -120,11 +113,11 @@ class CIRISVerifyAdapter(BaseAdapterProtocol):
 
         # Build service config
         service_config = VerificationConfig(
-            binary_path=self.config.get("binary_path"),
-            cache_ttl_seconds=self.config.get("cache_ttl_seconds", 300),
-            timeout_seconds=self.config.get("timeout_seconds", 10.0),
-            require_hardware=self.config.get("require_hardware", False),
-            use_mock=self.config.get("use_mock", False),
+            binary_path=self._config.get("binary_path"),
+            cache_ttl_seconds=self._config.get("cache_ttl_seconds", 300),
+            timeout_seconds=self._config.get("timeout_seconds", 10.0),
+            require_hardware=self._config.get("require_hardware", False),
+            use_mock=self._config.get("use_mock", False),
         )
 
         self._service = CIRISVerifyService(service_config)
@@ -155,6 +148,13 @@ class CIRISVerifyAdapter(BaseAdapterProtocol):
 
         logger.info("Stopping CIRISVerify adapter")
 
+        if self._lifecycle_task and not self._lifecycle_task.done():
+            self._lifecycle_task.cancel()
+            try:
+                await self._lifecycle_task
+            except asyncio.CancelledError:
+                pass
+
         if self._service:
             await self._service.shutdown()
             self._service = None
@@ -165,27 +165,47 @@ class CIRISVerifyAdapter(BaseAdapterProtocol):
     async def run_lifecycle(self, agent_task: Any) -> None:
         """Run the adapter lifecycle.
 
-        The CIRISVerify adapter doesn't have long-running operations,
-        so this method just ensures the service stays initialized.
+        The CIRISVerify adapter periodically refreshes license status.
 
         Args:
             agent_task: The main agent task (for coordination).
         """
-        # Periodically refresh license status in background
-        import asyncio
-
-        while self._started:
-            try:
-                await asyncio.sleep(self.config.get("cache_ttl_seconds", 300) / 2)
+        logger.info("CIRISVerify adapter lifecycle started")
+        try:
+            while self._started:
+                await asyncio.sleep(self._config.get("cache_ttl_seconds", 300) / 2)
 
                 if self._service:
                     # Refresh license status
                     await self._service.get_license_status(force_refresh=True)
 
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Error in CIRISVerify lifecycle: {e}")
+        except asyncio.CancelledError:
+            logger.info("CIRISVerify adapter lifecycle cancelled")
+        finally:
+            await self.stop()
+
+    def get_config(self) -> AdapterConfig:
+        """Get adapter configuration."""
+        return AdapterConfig(
+            adapter_type="ciris_verify",
+            enabled=self._started,
+            settings={
+                "cache_ttl_seconds": self._config.get("cache_ttl_seconds", 300),
+                "timeout_seconds": self._config.get("timeout_seconds", 10.0),
+                "require_hardware": self._config.get("require_hardware", False),
+                "use_mock": self._config.get("use_mock", False),
+            },
+        )
+
+    def get_status(self) -> RuntimeAdapterStatus:
+        """Get adapter status."""
+        return RuntimeAdapterStatus(
+            adapter_id="ciris_verify",
+            adapter_type="ciris_verify",
+            is_running=self._started,
+            loaded_at=None,
+            error=None,
+        )
 
     # =========================================================================
     # Public API for Licensed Module Consumers
@@ -272,3 +292,7 @@ class CIRISVerifyAdapter(BaseAdapterProtocol):
         if not self._service:
             return False
         return self._service.is_licensed()
+
+
+# Export as Adapter for load_adapter() compatibility
+Adapter = CIRISVerifyAdapter

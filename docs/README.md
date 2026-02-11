@@ -23,7 +23,7 @@ Welcome to the CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and 
 - [Memory System](IDENTITY_AS_GRAPH.md) - Memory management and cognitive recursion
 - [Thought Model](DMA_CREATION_GUIDE.md) - Deep reasoning system (DMAs, ASPDMA)
 - [Mock LLM](MOCK_LLM.md) - Development and testing with mock LLM providers
-- [Type Safety Progress](TYPE_SAFETY_PROGRESS.md) - Dict[str, Any] cleanup progress
+- [2.0 Beta Features](CIRIS_2.0_BETA_FEATURES.md) - Complete feature list with QA coverage
 - [Dream State Tasks](DREAM_STATE_TASKS.md) - Agent cognitive states and behaviors
 
 ### Three-Legged Stool Architecture

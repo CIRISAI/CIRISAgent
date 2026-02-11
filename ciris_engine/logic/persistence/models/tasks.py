@@ -754,7 +754,7 @@ def set_task_updated_info_flag(
                 updated_at = ?
             WHERE task_id = ? AND agent_occurrence_id = ?
         """
-        params = (updated_content, time_service.now_iso(), task_id, occurrence_id)
+        params = (updated_content, time_service.now_iso(), task_id, occurrence_id)  # type: ignore[assignment]
 
     try:
         with get_db_connection(db_path) as conn:

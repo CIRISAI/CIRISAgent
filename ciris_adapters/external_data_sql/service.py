@@ -120,8 +120,7 @@ class SQLToolService(BaseService, ToolService):
         # Note: BaseService doesn't have initialize(), but this is required by framework
         # await super().initialize()  # Skip if not implemented
 
-        # TODO: Move to debug level after tool registration is confirmed working
-        self._logger.info(
+        self._logger.debug(
             f"SQLToolService initializing with config: {self._config.connector_id if self._config else 'None'}"
         )
         self._logger.info(f"SQLToolService has {len(self._tool_schemas)} tool schemas ready")
@@ -155,8 +154,7 @@ class SQLToolService(BaseService, ToolService):
             # Connect to database
             await self._connect()
 
-            # TODO: Move to debug level after tool registration is confirmed working
-            self._logger.info(f"SQLToolService initialized successfully - tools: {await self.list_tools()}")
+            self._logger.debug(f"SQLToolService initialized successfully - tools: {await self.list_tools()}")
 
     async def _connect(self) -> None:
         """Establish database connection."""
@@ -218,8 +216,7 @@ class SQLToolService(BaseService, ToolService):
         Returns:
             List of generic SQL tool names
         """
-        # TODO: Move to debug level after tool registration is confirmed working
-        self._logger.info(f"list_tools() called on SQLToolService")
+        self._logger.debug(f"list_tools() called on SQLToolService")
         tools = [
             "initialize_sql_connector",
             "get_sql_service_metadata",
@@ -231,8 +228,7 @@ class SQLToolService(BaseService, ToolService):
             "sql_get_stats",
             "sql_query",
         ]
-        # TODO: Move to debug level after tool registration is confirmed working
-        self._logger.info(f"list_tools() returning {len(tools)} tools: {tools}")
+        self._logger.debug(f"list_tools() returning {len(tools)} tools: {tools}")
         return tools
 
     async def execute_tool(self, tool_name: str, parameters: JSONDict) -> ToolExecutionResult:
@@ -245,8 +241,7 @@ class SQLToolService(BaseService, ToolService):
         Returns:
             Tool execution result
         """
-        # TODO: Move to debug level after tool registration is confirmed working
-        self._logger.info(f"execute_tool() called with tool_name={tool_name}, parameters={list(parameters.keys())}")
+        self._logger.debug(f"execute_tool() called with tool_name={tool_name}, parameters={list(parameters.keys())}")
 
         # Extract or generate correlation ID for result tracking
         import uuid
@@ -351,8 +346,7 @@ class SQLToolService(BaseService, ToolService):
         Returns:
             ToolExecutionResult with connector configuration details
         """
-        # TODO: Move to debug level after tool registration is confirmed working
-        self._logger.info(f"_initialize_connector called with parameters: {list(parameters.keys())}")
+        self._logger.debug(f"_initialize_connector called with parameters: {list(parameters.keys())}")
 
         # Extract or generate correlation ID
         import uuid
@@ -494,8 +488,7 @@ class SQLToolService(BaseService, ToolService):
         Returns:
             ToolExecutionResult with connector metadata
         """
-        # TODO: Move to debug level after tool registration is confirmed working
-        self._logger.info(f"_get_sql_metadata called with parameters: {list(parameters.keys())}")
+        self._logger.debug(f"_get_sql_metadata called with parameters: {list(parameters.keys())}")
 
         # Extract or generate correlation ID
         import uuid

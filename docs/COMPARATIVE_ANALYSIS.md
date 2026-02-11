@@ -4,7 +4,7 @@
 
 This document provides a comprehensive, fact-checked comparison of leading AI agent frameworks as of February 2026. Through systematic research and verification, we analyze ten major frameworks: CIRIS, AG2, LangChain, LangGraph, CrewAI, AutoGPT, Microsoft Agent Framework, Google ADK, and OpenClaw.
 
-**Key Finding**: CIRIS 2.0 is the only framework implementing all seven requirements for ethical AI governance with cryptographic guarantees, while maintaining extreme resource efficiency (228MB RAM) verified in production.
+**Key Finding**: CIRIS 2.0 is the only framework implementing all seven requirements for ethical AI governance with cryptographic guarantees, while maintaining resource efficiency (250-600MB RAM depending on platform and adapters) verified in production.
 
 ## The Seven Requirements for Ethical AI
 
@@ -100,7 +100,7 @@ CIRIS implements seven non-negotiable requirements that distinguish ethical AI f
 | Feature | CIRIS 2.0 | AG2 | LangChain | LangGraph | CrewAI | AutoGPT | MS Agent | Google ADK | OpenClaw |
 |---------|-----------|-----|-----------|-----------|--------|---------|----------|------------|----------|
 | **Production Ready** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ⚠️ Beta | ⚠️ Preview | ✅ Yes | ✅ Yes |
-| **Resource Usage** | ✅ 228MB | ⚠️ Moderate | ❌ GB+ | ⚠️ Variable | ⚠️ Moderate | ❌ 16GB+ | ⚠️ Variable | ⚠️ Cloud | ⚠️ Node.js |
+| **Resource Usage** | ✅ 250-600MB | ⚠️ Moderate | ❌ GB+ | ⚠️ Variable | ⚠️ Moderate | ❌ 16GB+ | ⚠️ Variable | ⚠️ Cloud | ⚠️ Node.js |
 | **Runtime Conscience** | ✅ [4-gate](ADAPTIVE_FILTERING.md) | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None |
 | **Safety Guardrails** | ✅ + Ethics | ✅ Regex/LLM | ⚠️ Middleware | ⚠️ Middleware | ⚠️ Enterprise | ❌ Minimal | ⚠️ Filters | ⚠️ Bedrock | ❌ **Warned** |
 | **Human Oversight** | ✅ [Crypto WA](WISE_AUTHORITIES.md) | ✅ HITL modes | ⚠️ Manual | ⚠️ Hooks | ❌ Manual | ⚠️ HITL UI | ✅ HITL | ⚠️ Manual | ❌ None |
@@ -211,7 +211,7 @@ OpenClaw represents a significant security concern in the 2026 landscape:
 
 | Framework | Verified Usage | Notes |
 |-----------|---------------|-------|
-| **CIRIS 2.0** | 228MB RAM | Proven in production, 4GB target for edge |
+| **CIRIS 2.0** | 250-600MB RAM | Varies by platform/adapters, 4GB target for edge |
 | **OpenClaw** | Variable | Node.js + integrations |
 | **Google ADK** | Cloud-based | Vertex AI Agent Engine |
 | **AG2** | Efficient | Minimal dependencies |
@@ -271,7 +271,7 @@ OpenClaw represents a significant security concern in the 2026 landscape:
 
 ### For Offline/Constrained Environments
 **Recommended**: CIRIS 2.0
-- 228MB with Mock LLM
+- 250-600MB depending on adapters
 - Local-first processing
 - No external server dependency
 - **Documentation**: [MOCK_LLM.md](MOCK_LLM.md)

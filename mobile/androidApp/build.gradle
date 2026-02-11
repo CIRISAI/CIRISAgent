@@ -17,9 +17,9 @@ android {
         versionName "1.9.9"
 
         ndk {
-            // ARM only - developing markets optimization
-            // x86_64 added in debug buildType for emulator testing
-            abiFilters "arm64-v8a", "armeabi-v7a"
+            // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
+            // Release builds use App Bundle which splits by ABI automatically
+            abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"
         }
 
         // Chaquopy Python configuration
@@ -97,10 +97,6 @@ android {
         debug {
             debuggable true
             // Use default debug signing config
-            // Add x86_64 for emulator testing (not in release)
-            ndk {
-                abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"
-            }
         }
     }
 
@@ -205,6 +201,21 @@ Tag: cp310-cp310-android_24_x86_64
                     delete commonPydanticCore
                     delete commonDistInfo
                     println "pydantic_core moved to ${x86_64Dir}"
+                }
+
+                // Extract x86_64 native library from wheel for debug builds (emulator testing)
+                def x86_64Wheel = file("${rootDir}/../android/app/wheels/pydantic_core-2.23.4-cp310-cp310-android_24_x86_64.whl")
+                def x86_64PydanticCoreDir = file("${x86_64Dir}/pydantic_core")
+                def x86_64SoFile = file("${x86_64PydanticCoreDir}/_pydantic_core.cpython-310-x86_64-linux-android.so")
+
+                if (x86_64Wheel.exists() && x86_64PydanticCoreDir.exists() && !x86_64SoFile.exists()) {
+                    println "Extracting x86_64 native library from wheel..."
+                    copy {
+                        from zipTree(x86_64Wheel)
+                        into x86_64Dir
+                        include "pydantic_core/*.so"
+                    }
+                    println "x86_64 native library extracted to ${x86_64PydanticCoreDir}"
                 }
 
                 // Copy to ARM architectures (same logic as original)

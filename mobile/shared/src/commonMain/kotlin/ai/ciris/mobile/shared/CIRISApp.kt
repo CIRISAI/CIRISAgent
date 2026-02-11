@@ -38,7 +38,10 @@ import ai.ciris.mobile.shared.viewmodels.UsersViewModel
 import ai.ciris.mobile.shared.viewmodels.WiseAuthorityViewModel
 import ai.ciris.mobile.shared.ui.screens.graph.GraphMemoryScreen
 import androidx.compose.foundation.layout.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.MoreVert
@@ -54,8 +57,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * Main CIRIS app entry point
@@ -637,6 +638,7 @@ fun CIRISApp(
                     onSetupComplete = {
                         platformLog(TAG, "[INFO] onSetupComplete called - exchanging tokens...")
                         // After setup completes, exchange OAuth ID token for CIRIS access token
+                        // Run on IO dispatcher to avoid blocking main thread during network/file operations
                         coroutineScope.launch {
                             try {
                                 val idToken = pendingIdToken
@@ -644,29 +646,34 @@ fun CIRISApp(
                                 val provider = pendingProvider
 
                                 if (idToken != null) {
-                                    println("[$TAG][INFO] Exchanging OAuth ID token for CIRIS access token (provider=$provider)")
-                                    val authResponse = apiClient.nativeAuth(idToken, userId, provider)
-                                    val cirisToken = authResponse.access_token
-                                    println("[$TAG][INFO] Got CIRIS access token: ${cirisToken.take(8)}...${cirisToken.takeLast(4)}")
+                                    // Network and file operations on IO dispatcher
+                                    val cirisToken = withContext(Dispatchers.IO) {
+                                        println("[$TAG][INFO] Exchanging OAuth ID token for CIRIS access token (provider=$provider)")
+                                        val authResponse = apiClient.nativeAuth(idToken, userId, provider)
+                                        val token = authResponse.access_token
+                                        println("[$TAG][INFO] Got CIRIS access token: ${token.take(8)}...${token.takeLast(4)}")
 
-                                    // Set the token on the API client
+                                        // Store token for future sessions
+                                        secureStorage.saveAccessToken(token)
+                                            .onSuccess { println("[$TAG][INFO] Token saved to secure storage") }
+                                            .onFailure { e -> println("[$TAG][WARN] Failed to save token to secure storage: ${e.message}") }
+
+                                        // Update .env file with fresh OAuth ID token for billing
+                                        println("[$TAG][INFO] Writing OAuth ID token to .env for Python billing...")
+                                        envFileUpdater.updateEnvWithToken(idToken)
+                                            .onSuccess { updated ->
+                                                if (updated) println("[$TAG][INFO] .env updated, .config_reload signal written")
+                                            }
+                                            .onFailure { e -> println("[$TAG][ERROR] Failed to update .env: ${e.message}") }
+
+                                        token
+                                    }
+
+                                    // UI updates on main thread
                                     apiClient.setAccessToken(cirisToken)
                                     onTokenUpdated?.invoke(cirisToken) // Notify MainActivity for BillingManager
                                     currentAccessToken = cirisToken
                                     apiClient.logTokenState() // Debug: confirm token was set
-
-                                    // Store token for future sessions
-                                    secureStorage.saveAccessToken(cirisToken)
-                                        .onSuccess { println("[$TAG][INFO] Token saved to secure storage") }
-                                        .onFailure { e -> println("[$TAG][WARN] Failed to save token to secure storage: ${e.message}") }
-
-                                    // Update .env file with fresh OAuth ID token for billing
-                                    println("[$TAG][INFO] Writing OAuth ID token to .env for Python billing...")
-                                    envFileUpdater.updateEnvWithToken(idToken)
-                                        .onSuccess { updated ->
-                                            if (updated) println("[$TAG][INFO] .env updated, .config_reload signal written")
-                                        }
-                                        .onFailure { e -> println("[$TAG][ERROR] Failed to update .env: ${e.message}") }
 
                                     // Wait for Python to detect .config_reload and reload .env
                                     println("[$TAG][INFO] Waiting 1.5s for Python to reload billing token...")

@@ -326,12 +326,6 @@ class APITestModule:
         ]
 
     @staticmethod
-    def get_task_tests() -> List[QATestCase]:
-        """Get task management test cases."""
-        # Tasks API doesn't exist - returning empty list
-        return []
-
-    @staticmethod
     def get_guidance_tests() -> List[QATestCase]:
         """Get guidance system test cases."""
         return [

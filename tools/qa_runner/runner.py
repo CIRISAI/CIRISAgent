@@ -2008,6 +2008,65 @@ class QARunner:
         conn.close()
         return results
 
+    def query_all_wakeup_tasks_db(self) -> List[Dict]:
+        """Query ALL wakeup tasks from PostgreSQL database (any occurrence).
+
+        Returns:
+            List of wakeup task dictionaries
+        """
+        from urllib.parse import urlparse
+
+        import psycopg2
+
+        # Parse postgres URL
+        parsed = urlparse(self.config.postgres_url)
+
+        conn = psycopg2.connect(
+            host=parsed.hostname,
+            port=parsed.port or 5432,
+            database=parsed.path.lstrip("/"),
+            user=parsed.username,
+            password=parsed.password,
+        )
+
+        cursor = conn.cursor()
+
+        # Debug: Count ALL tasks first
+        cursor.execute("SELECT COUNT(*) FROM tasks")
+        total_tasks = cursor.fetchone()[0]
+        self.console.print(f"[dim]DEBUG: Total tasks in database: {total_tasks}[/dim]")
+
+        # Debug: Show sample task_ids if any exist
+        cursor.execute("SELECT task_id, agent_occurrence_id, status FROM tasks LIMIT 10")
+        sample = cursor.fetchall()
+        if sample:
+            self.console.print(f"[dim]DEBUG: Sample tasks: {sample}[/dim]")
+
+        cursor.execute(
+            """
+            SELECT task_id, agent_occurrence_id, description, status, created_at
+            FROM tasks
+            WHERE task_id LIKE 'WAKEUP%'
+            ORDER BY created_at DESC
+        """
+        )
+
+        results = []
+        for row in cursor.fetchall():
+            results.append(
+                {
+                    "task_id": row[0],
+                    "occurrence_id": row[1],
+                    "description": row[2],
+                    "status": row[3],
+                    "created_at": row[4],
+                }
+            )
+
+        cursor.close()
+        conn.close()
+        return results
+
     def query_thoughts_by_occurrence_db(self) -> Dict[str, int]:
         """Query thought counts grouped by occurrence from PostgreSQL.
 

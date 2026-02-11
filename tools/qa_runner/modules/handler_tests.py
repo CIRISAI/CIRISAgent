@@ -536,11 +536,6 @@ class HandlerTestModule:
         """Legacy method - returns empty list."""
         return []
 
-    @staticmethod
-    def get_simple_handler_tests():
-        """Legacy method - returns empty list."""
-        return []
-
 
 def run_handler_tests_sync(client: Any, console: Console = None) -> List[Dict]:
     """Run handler tests synchronously."""

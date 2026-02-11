@@ -19,7 +19,6 @@ class QAModule(Enum):
     MEMORY = "memory"
     AUDIT = "audit"
     TOOLS = "tools"
-    TASKS = "tasks"
     GUIDANCE = "guidance"
     CONSENT = "consent"
     DSAR = "dsar"  # DSAR automation testing
@@ -58,7 +57,6 @@ class QAModule(Enum):
 
     # Handler modules
     HANDLERS = "handlers"
-    SIMPLE_HANDLERS = "simple_handlers"
 
     # Filter modules
     FILTERS = "filters"
@@ -75,7 +73,6 @@ class QAModule(Enum):
 
     # Full suites
     API_FULL = "api_full"
-    HANDLERS_FULL = "handlers_full"
     ALL = "all"
 
 
@@ -190,8 +187,6 @@ class QAConfig:
             return APITestModule.get_audit_tests()
         elif module == QAModule.TOOLS:
             return APITestModule.get_tool_tests()
-        elif module == QAModule.TASKS:
-            return APITestModule.get_task_tests()
         elif module == QAModule.GUIDANCE:
             return APITestModule.get_guidance_tests()
         elif module == QAModule.SETUP:
@@ -275,8 +270,6 @@ class QAConfig:
         # Handler test modules
         elif module == QAModule.HANDLERS:
             return HandlerTestModule.get_handler_tests()
-        elif module == QAModule.SIMPLE_HANDLERS:
-            return HandlerTestModule.get_simple_handler_tests()
 
         # Filter test modules
         elif module == QAModule.FILTERS:
@@ -319,15 +312,8 @@ class QAConfig:
                 QAModule.MEMORY,
                 QAModule.AUDIT,
                 QAModule.TOOLS,
-                QAModule.TASKS,
                 QAModule.GUIDANCE,
             ]:
-                tests.extend(self.get_module_tests(m))
-            return tests
-
-        elif module == QAModule.HANDLERS_FULL:
-            tests = []
-            for m in [QAModule.HANDLERS, QAModule.SIMPLE_HANDLERS]:
                 tests.extend(self.get_module_tests(m))
             return tests
 
@@ -345,7 +331,6 @@ class QAConfig:
                 QAModule.MEMORY,
                 QAModule.AUDIT,
                 QAModule.TOOLS,
-                QAModule.TASKS,
                 QAModule.GUIDANCE,
                 QAModule.CONSENT,
                 QAModule.DSAR,
@@ -357,7 +342,6 @@ class QAConfig:
                 QAModule.MULTI_OCCURRENCE,
                 # Handler modules
                 QAModule.HANDLERS,
-                QAModule.SIMPLE_HANDLERS,
                 # Filter modules
                 QAModule.FILTERS,
                 # SDK modules

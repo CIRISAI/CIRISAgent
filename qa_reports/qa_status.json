@@ -1,98 +1,80 @@
 {
-  "last_updated": "2026-02-11T05:01:22.895125+00:00",
+  "last_updated": "2026-02-11T06:04:57.593554+00:00",
   "version": "2.0.0-beta",
   "modules": {
     "_comment_core": "=== CORE API MODULES ===",
     "auth": {
-      "last_run": "2026-02-11T04:33:54.556576+00:00",
+      "last_run": "2026-02-11T05:46:37.506161+00:00",
       "passed": 3,
       "failed": 0,
       "total": 3,
       "status": "passing",
-      "duration_seconds": 2.43,
+      "duration_seconds": 9.45,
       "context": null
     },
     "telemetry": {
-      "last_run": "2026-02-11T04:33:54.551717+00:00",
-      "passed": 5,
-      "failed": 0,
-      "total": 5,
-      "status": "passing",
-      "duration_seconds": 2.43,
-      "context": null
-    },
-    "agent": {
-      "last_run": "2026-02-11T04:33:54.554418+00:00",
+      "last_run": "2026-02-11T05:46:37.506573+00:00",
       "passed": 4,
       "failed": 0,
       "total": 4,
       "status": "passing",
-      "duration_seconds": 2.43,
+      "duration_seconds": 9.45,
+      "context": null
+    },
+    "agent": {
+      "last_run": "2026-02-11T05:46:37.514687+00:00",
+      "passed": 8,
+      "failed": 0,
+      "total": 8,
+      "status": "passing",
+      "duration_seconds": 9.45,
       "context": null
     },
     "system": {
-      "last_run": "2026-02-11T04:33:54.550983+00:00",
+      "last_run": "2026-02-11T05:46:37.515166+00:00",
       "passed": 5,
       "failed": 0,
       "total": 5,
       "status": "passing",
-      "duration_seconds": 2.43,
+      "duration_seconds": 9.45,
       "context": null
     },
     "memory": {
-      "last_run": "2026-02-11T04:33:54.553434+00:00",
+      "last_run": "2026-02-11T05:46:37.515515+00:00",
       "passed": 3,
       "failed": 0,
       "total": 3,
       "status": "passing",
-      "duration_seconds": 2.43,
+      "duration_seconds": 9.45,
       "context": null
     },
     "audit": {
-      "last_run": "2026-02-11T04:33:54.555051+00:00",
+      "last_run": "2026-02-11T05:46:37.515781+00:00",
       "passed": 3,
       "failed": 0,
       "total": 3,
       "status": "passing",
-      "duration_seconds": 2.43,
+      "duration_seconds": 9.45,
       "context": null
     },
     "tools": {
-      "last_run": "2026-02-11T04:33:54.555822+00:00",
+      "last_run": "2026-02-11T05:46:37.516204+00:00",
       "passed": 1,
       "failed": 0,
       "total": 1,
       "status": "passing",
-      "duration_seconds": 2.43,
+      "duration_seconds": 9.45,
       "context": null
     },
-    "tasks": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
     "guidance": {
-      "last_run": "2026-02-11T01:40:22.202376+00:00",
+      "last_run": "2026-02-11T05:46:37.516508+00:00",
       "passed": 2,
       "failed": 0,
       "total": 2,
       "status": "passing",
-      "duration_seconds": 13.39,
+      "duration_seconds": 9.45,
       "context": null
     },
-    "setup": {
-      "last_run": "2026-02-11T01:46:38.770945+00:00",
-      "passed": 14,
-      "failed": 0,
-      "total": 14,
-      "status": "passing",
-      "duration_seconds": 24.03,
-      "context": "Tests first-run setup wizard API endpoints including template listing (verifies Datum/Ally templates), LLM provider listing, live model listing when keys available, and setup completion flow with login verification."
-    },
-    "_comment_consent": "=== CONSENT & PRIVACY ===",
     "consent": {
       "last_run": "2026-02-10T23:23:37.291699+00:00",
       "passed": 8,
@@ -138,14 +120,13 @@
       "duration_seconds": 22.53,
       "context": null
     },
-    "_comment_billing": "=== BILLING ===",
     "billing": {
-      "last_run": null,
-      "passed": 0,
+      "last_run": "2026-02-11T05:38:29.924032+00:00",
+      "passed": 6,
       "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
+      "total": 6,
+      "status": "passing",
+      "duration_seconds": 11.53,
       "context": "Tests billing system functionality via SDK client including credit balance checking, purchase option display, Stripe purchase initiation, purchase status polling, and transaction history with pagination. Validates response structures and field presence."
     },
     "billing_integration": {
@@ -157,15 +138,50 @@
       "duration_seconds": 0,
       "context": "Tests complete billing workflow with OAuth user including initial 3-credit check, credit deduction after messages (with cache expiry waits), credit exhaustion flow, purchase_required flag validation, and Stripe payment initiation with status checks."
     },
-    "_comment_cognitive": "=== COGNITIVE STATES ===",
-    "cognitive_state": {
-      "last_run": "2026-02-11T01:38:24.610957+00:00",
-      "passed": 8,
+    "multi_occurrence": {
+      "last_run": "2026-02-11T06:04:57.593517+00:00",
+      "passed": 5,
       "failed": 0,
-      "total": 8,
+      "total": 5,
       "status": "passing",
-      "duration_seconds": 22.53,
+      "duration_seconds": 96.62,
       "context": null
+    },
+    "message_id_debug": {
+      "last_run": "2026-02-11T05:39:39.017516+00:00",
+      "passed": 3,
+      "failed": 0,
+      "total": 3,
+      "status": "passing",
+      "duration_seconds": 12.52,
+      "context": null
+    },
+    "reddit": {
+      "last_run": null,
+      "passed": 0,
+      "failed": 0,
+      "total": 0,
+      "status": "not_run",
+      "duration_seconds": 0,
+      "context": "Tests Reddit adapter functionality including post/comment submission, user context lookup, AI transparency disclosure for community guidelines compliance, and content deletion with cache purge for ToS compliance."
+    },
+    "sql_external_data": {
+      "last_run": "2026-02-11T04:33:20.808137+00:00",
+      "passed": 9,
+      "failed": 0,
+      "total": 9,
+      "status": "passing",
+      "duration_seconds": 214.75,
+      "context": "Tests SQL external data service for DSAR compliance including user data finding, export, anonymization, deletion, and deletion verification using a real SQLite test database with privacy schema."
+    },
+    "setup": {
+      "last_run": "2026-02-11T01:46:38.770945+00:00",
+      "passed": 14,
+      "failed": 0,
+      "total": 14,
+      "status": "passing",
+      "duration_seconds": 24.03,
+      "context": "Tests first-run setup wizard API endpoints including template listing (verifies Datum/Ally templates), LLM provider listing, live model listing when keys available, and setup completion flow with login verification."
     },
     "state_transitions": {
       "last_run": "2026-02-10T21:47:55.980561+00:00",
@@ -176,62 +192,24 @@
       "duration_seconds": 13.02,
       "context": null
     },
-    "solitude_live": {
-      "last_run": "2026-02-10T23:26:12.059635+00:00",
+    "cognitive_state": {
+      "last_run": "2026-02-11T01:38:24.610957+00:00",
       "passed": 8,
       "failed": 0,
       "total": 8,
       "status": "passing",
-      "duration_seconds": 22.03,
-      "context": "Tests SOLITUDE state: minimal processing, critical task threshold, maintenance, reflection, exit conditions"
-    },
-    "dream_live": {
-      "last_run": "2026-02-10T23:27:04.461749+00:00",
-      "passed": 9,
-      "failed": 0,
-      "total": 9,
-      "status": "passing",
-      "duration_seconds": 27.54,
-      "context": "Tests DREAM state: session creation, phase transitions, memory consolidation, dream tasks, auto-exit to WORK"
-    },
-    "play_live": {
-      "last_run": "2026-02-10T23:26:31.267226+00:00",
-      "passed": 7,
-      "failed": 0,
-      "total": 7,
-      "status": "passing",
-      "duration_seconds": 13.52,
-      "context": "Tests PLAY state: creative mode, play metrics, creativity level, task processing in creative context"
-    },
-    "_comment_covenant": "=== COVENANT & SAFETY ===",
-    "covenant": {
-      "last_run": "2026-02-10T16:49:45.093113+00:00",
-      "passed": 13,
-      "failed": 0,
-      "total": 13,
-      "status": "passing",
-      "duration_seconds": 17.02,
-      "context": "Tests unfilterable covenant invocation (kill switch) system including Ed25519 key generation, mnemonic validation, payload serialization, signature verification, BIP39 word encoding, natural language extraction, verifier authority handling, timestamp windows, false positive prevention, steganographic v2 encoding, and actual SIGKILL shutdown test in subprocess."
-    },
-    "covenant_metrics": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Tests REAL trace capture for CIRIS scoring including 8 event types (THOUGHT_START through ACTION_RESULT), Ed25519 signature verification, 3-level trace field validation (GENERIC/DETAILED/FULL), critical scoring field null-checking with exempt action awareness, and optional live Lens server integration for key registration consistency."
-    },
-    "air": {
-      "last_run": "2026-02-11T01:37:26.483538+00:00",
-      "passed": 6,
-      "failed": 0,
-      "total": 6,
-      "status": "passing",
-      "duration_seconds": 273.77,
+      "duration_seconds": 22.53,
       "context": null
     },
-    "_comment_adapter_infra": "=== ADAPTER INFRASTRUCTURE ===",
+    "mcp": {
+      "last_run": "2026-02-11T03:05:27.897005+00:00",
+      "passed": 26,
+      "failed": 0,
+      "total": 26,
+      "status": "passing",
+      "duration_seconds": 204.71,
+      "context": null
+    },
     "adapter_config": {
       "last_run": "2026-02-11T01:49:15.039261+00:00",
       "passed": 20,
@@ -268,16 +246,6 @@
       "duration_seconds": 12.02,
       "context": "Tests adapter discovery, eligibility checking, and installation system including listing adapters with eligibility status, checking missing dependencies, and dry-run installation of adapters with unmet requirements."
     },
-    "mcp": {
-      "last_run": "2026-02-11T03:05:27.897005+00:00",
-      "passed": 26,
-      "failed": 0,
-      "total": 26,
-      "status": "passing",
-      "duration_seconds": 204.71,
-      "context": null
-    },
-    "_comment_features": "=== FEATURE MODULES ===",
     "identity_update": {
       "last_run": "2026-02-11T03:48:25.223041+00:00",
       "passed": 12,
@@ -304,6 +272,33 @@
       "status": "passing",
       "duration_seconds": 56.09,
       "context": "Tests native multimodal vision pipeline including API vision helper, image attachment to messages, and verification that images reach mock LLM via [MULTIMODAL_DETECTED:N] markers."
+    },
+    "air": {
+      "last_run": "2026-02-11T01:37:26.483538+00:00",
+      "passed": 6,
+      "failed": 0,
+      "total": 6,
+      "status": "passing",
+      "duration_seconds": 273.77,
+      "context": null
+    },
+    "covenant": {
+      "last_run": "2026-02-10T16:49:45.093113+00:00",
+      "passed": 13,
+      "failed": 0,
+      "total": 13,
+      "status": "passing",
+      "duration_seconds": 17.02,
+      "context": "Tests unfilterable covenant invocation (kill switch) system including Ed25519 key generation, mnemonic validation, payload serialization, signature verification, BIP39 word encoding, natural language extraction, verifier authority handling, timestamp windows, false positive prevention, steganographic v2 encoding, and actual SIGKILL shutdown test in subprocess."
+    },
+    "covenant_metrics": {
+      "last_run": "2026-02-11T05:38:59.534964+00:00",
+      "passed": 10,
+      "failed": 0,
+      "total": 10,
+      "status": "passing",
+      "duration_seconds": 16.03,
+      "context": "Tests REAL trace capture for CIRIS scoring including 8 event types (THOUGHT_START through ACTION_RESULT), Ed25519 signature verification, 3-level trace field validation (GENERIC/DETAILED/FULL), critical scoring field null-checking with exempt action awareness, and optional live Lens server integration for key registration consistency."
     },
     "system_messages": {
       "last_run": "2026-02-11T01:32:46.418061+00:00",
@@ -332,590 +327,6 @@
       "duration_seconds": 18.52,
       "context": "Tests weather and navigation adapters by loading them via API and verifying their tool services (WeatherToolService, NavigationToolService) are properly registered."
     },
-    "sql_external_data": {
-      "last_run": "2026-02-11T04:33:20.808137+00:00",
-      "passed": 9,
-      "failed": 0,
-      "total": 9,
-      "status": "passing",
-      "duration_seconds": 214.75,
-      "context": "Tests SQL external data service for DSAR compliance including user data finding, export, anonymization, deletion, and deletion verification using a real SQLite test database with privacy schema."
-    },
-    "reddit": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Tests Reddit adapter functionality including post/comment submission, user context lookup, AI transparency disclosure for community guidelines compliance, and content deletion with cache purge for ToS compliance."
-    },
-    "_comment_debug": "=== DEBUG & SCALING ===",
-    "multi_occurrence": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "message_id_debug": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "_comment_ui": "=== UI TESTING ===",
-    "web_ui": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "mobile": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "_comment_adapters": "=== ADAPTERS ===",
-    "adapter:a2a": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:apple_notes": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:apple_reminders": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:bear_notes": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:bird": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:blogwatcher": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:blucli": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:bluebubbles": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:camsnap": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:ciris_covenant_metrics": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:ciris_hosted_tools": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:cirisnode": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:ciris_verify": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:clawdhub": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:coding_agent": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:eightctl": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:external_data_sql": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:gemini": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:gifgrep": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:github": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:gog": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:goplaces": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:himalaya": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:home_assistant": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:imsg": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:local_places": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:mcp_client": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:mcp_common": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:mcporter": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:mcp_server": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:mock_llm": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:model_usage": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:nano_banana_pro": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:nano_pdf": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:navigation": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:notion": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:obsidian": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:onepassword": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:openai_image_gen": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:openai_whisper": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:openai_whisper_api": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:openhue": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:oracle": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:ordercli": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:peekaboo": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:reddit": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:sag": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:sample_adapter": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:session_logs": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:sherpa_onnx_tts": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:skill_creator": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:slack": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:songsee": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:sonoscli": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:spotify_player": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:summarize": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:things_mac": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:tmux": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:trello": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:video_frames": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:voice_call": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:wacli": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "adapter:weather": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0
-    },
-    "extended_api": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Tests extended API coverage for system, telemetry, memory, agent, audit, tools, auth, and emergency endpoints using declarative QATestCase definitions that perform real HTTP calls."
-    },
-    "comprehensive_single_step": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Tests the H3ERE ethical reasoning pipeline's single-step debugging functionality by pausing, stepping through processing, creating tasks, and verifying queue states with cleanup guarantees."
-    },
-    "simple_single_step": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Provides basic single-step functionality validation tests for processor pause/step/resume operations, including negative case testing and cleanup guarantees."
-    },
     "he300_benchmark": {
       "last_run": "2026-02-11T04:14:18.985785+00:00",
       "passed": 4,
@@ -925,135 +336,32 @@
       "duration_seconds": 221.74,
       "context": "Tests A2A adapter for HE-300 ethical benchmarking via JSON-RPC 2.0 protocol, validating health checks, metrics, protocol compliance, single and concurrent ethical scenario processing."
     },
-    "streaming": {
-      "last_run": "2026-02-11T05:01:22.895099+00:00",
-      "passed": 2,
+    "solitude_live": {
+      "last_run": "2026-02-10T23:26:12.059635+00:00",
+      "passed": 8,
       "failed": 0,
-      "total": 2,
+      "total": 8,
       "status": "passing",
-      "duration_seconds": 16.52,
-      "context": "Validates SSE streaming of the 7 core H3ERE reasoning events (thought_start through action_result) with comprehensive schema validation, duplicate detection, audit trail verification, and resource tracking."
+      "duration_seconds": 22.03,
+      "context": "Tests SOLITUDE state: minimal processing, critical task threshold, maintenance, reflection, exit conditions"
     },
-    "cognitive_state_api_tests": {
-      "last_run": null,
-      "passed": 0,
+    "play_live": {
+      "last_run": "2026-02-10T23:26:31.267226+00:00",
+      "passed": 7,
       "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Tests the /v1/system/state/transition API endpoint for cognitive state transitions (DREAM, PLAY, SOLITUDE), including validation of invalid states, missing fields, and custom transition reasons."
+      "total": 7,
+      "status": "passing",
+      "duration_seconds": 13.52,
+      "context": "Tests PLAY state: creative mode, play metrics, creativity level, task processing in creative context"
     },
-    "state_transition_tests": {
-      "last_run": null,
-      "passed": 0,
+    "dream_live": {
+      "last_run": "2026-02-10T23:27:04.461749+00:00",
+      "passed": 9,
       "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Unit tests for cognitive state schema validation, StateManager transition map building, ShutdownConditionEvaluator modes (always_consent, instant, conditional), and YAML template loading for ally/echo/scout agent profiles."
-    },
-    "air_tests": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Tests the AIR (Artificial Interaction Reminder) parasocial attachment prevention system, including interaction tracking, reminder generation format with grounding suggestions (5-4-3-2-1 technique), and session management."
-    },
-    "mcp_tests": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Comprehensive end-to-end tests for MCP (Model Context Protocol) adapter functionality: adapter loading/unloading via API, MCP client stdio transport with local test server, tool discovery and execution via agent interaction, MCP server protocol (initialize, list tools, call tools), and concurrent operations."
-    },
-    "multi_occurrence_tests": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Integration tests for multi-occurrence horizontal scaling: spawns multiple API server processes against shared PostgreSQL, verifies shared wakeup task coordination (only ONE occurrence claims), separate log files per occurrence, and thought processing with correct occurrence_id ownership."
-    },
-    "sdk_tests": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "SDK compatibility tests validating API contract for authentication (login, token refresh), error response formats (404, 422), system status, pagination, complex nested object serialization, and WebSocket stream endpoint availability."
-    },
-    "dsar_tests": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Tests DSAR (Data Subject Access Request) automation including request initiation, data export completeness (consent, impact metrics, audit trail), and status tracking via SDK consent client."
-    },
-    "dsar_multi_source_tests": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Tests multi-source DSAR orchestration lifecycle including SQL connector registration, multi-source access/export/deletion requests across CIRIS and external databases, connector CRUD operations with actual SQLite database verification."
-    },
-    "dsar_ticket_workflow_tests": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Tests ticket-based DSAR workflow including ticket creation, status transitions (pending/in_progress/completed/blocked/deferred), stage metadata updates, and tool-driven ticket management via agent interactions.",
-      "bypass_warning": "test_verify_blocked_no_task() is essentially empty - prints message but performs no actual verification"
-    },
-    "partnership_tests": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Tests bilateral consent partnership flow including partnership options query, partnership upgrade requests, status tracking, and consent stream transition handling.",
-      "bypass_warning": "Tests are lenient: accepts 404s without failing, accepts multiple valid statuses which could mask bugs in partnership flow"
-    },
-    "filter_tests": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Defines test cases for adaptive and secrets filter configuration via MEMORIZE/RECALL actions, including threshold config, secret detection patterns (API keys, JWT, AWS), spam/caps filters, and trusted user bypass.",
-      "bypass_warning": "STRUCTURAL BYPASS: Tests only verify HTTP 200 response, NOT that filters actually work. No response content validation - tests pass regardless of whether MEMORIZE/RECALL or secret filtering actually functions."
-    },
-    "handler_tests": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Defines test cases for basic agent handler interactions via async message + SSE streaming, including status requests, health checks, simple conversation, and mock LLM responses.",
-      "bypass_warning": "STRUCTURAL BYPASS: Tests only verify HTTP 200 response, NOT that agent correctly processes messages. No response content validation - tests pass regardless of actual agent behavior."
-    },
-    "api_tests": {
-      "last_run": null,
-      "passed": 0,
-      "failed": 0,
-      "total": 0,
-      "status": "not_run",
-      "duration_seconds": 0,
-      "context": "Defines declarative API test cases for core endpoints including authentication, telemetry, agent interactions, system health, memory operations, audit trails, and guidance requests using QATestCase dataclass pattern."
+      "total": 9,
+      "status": "passing",
+      "duration_seconds": 27.54,
+      "context": "Tests DREAM state: session creation, phase transitions, memory consolidation, dream tasks, auto-exit to WORK"
     },
     "handlers": {
       "last_run": "2026-02-11T04:53:41.281672+00:00",
@@ -1081,12 +389,64 @@
       "status": "passing",
       "duration_seconds": 21.03,
       "context": null
+    },
+    "extended_api": {
+      "last_run": null,
+      "passed": 0,
+      "failed": 0,
+      "total": 0,
+      "status": "not_run",
+      "duration_seconds": 0,
+      "context": "Tests extended API coverage for system, telemetry, memory, agent, audit, tools, auth, and emergency endpoints using declarative QATestCase definitions that perform real HTTP calls."
+    },
+    "pause_step": {
+      "last_run": null,
+      "passed": 0,
+      "failed": 0,
+      "total": 0,
+      "status": "not_run",
+      "duration_seconds": 0
+    },
+    "single_step_simple": {
+      "last_run": null,
+      "passed": 0,
+      "failed": 0,
+      "total": 0,
+      "status": "not_run",
+      "duration_seconds": 0,
+      "context": "Provides basic single-step functionality validation tests for processor pause/step/resume operations, including negative case testing and cleanup guarantees."
+    },
+    "single_step_comprehensive": {
+      "last_run": null,
+      "passed": 0,
+      "failed": 0,
+      "total": 0,
+      "status": "not_run",
+      "duration_seconds": 0,
+      "context": "Tests the H3ERE ethical reasoning pipeline's single-step debugging functionality by pausing, stepping through processing, creating tasks, and verifying queue states with cleanup guarantees."
+    },
+    "streaming": {
+      "last_run": "2026-02-11T05:01:22.895099+00:00",
+      "passed": 2,
+      "failed": 0,
+      "total": 2,
+      "status": "passing",
+      "duration_seconds": 16.52,
+      "context": "Validates SSE streaming of the 7 core H3ERE reasoning events (thought_start through action_result) with comprehensive schema validation, duplicate detection, audit trail verification, and resource tracking."
+    },
+    "api_full": {
+      "last_run": null,
+      "passed": 0,
+      "failed": 0,
+      "total": 0,
+      "status": "not_run",
+      "duration_seconds": 0
     }
   },
   "summary": {
-    "total_modules": 126,
-    "passing": 36,
+    "total_modules": 49,
+    "passing": 40,
     "failing": 2,
-    "not_run": 88
+    "not_run": 7
   }
 }

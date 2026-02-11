@@ -256,6 +256,33 @@ When a DSAR request is received, the Consent Service:
 - Specifies data retention timelines
 - Lists applicable data categories
 
+### Tool Service Metadata Discovery
+
+The DSAR orchestrator discovers external data sources via `ToolBus.get_tools_by_metadata()`. All tool services implement `get_service_metadata()` to declare their data access patterns:
+
+```python
+# Discover all data sources for DSAR export
+data_sources = await tool_bus.get_tools_by_metadata({"data_source": True})
+
+# Find GDPR-applicable sources for deletion
+gdpr_sources = await tool_bus.get_tools_by_metadata({
+    "data_source": True,
+    "gdpr_applicable": True,
+    "contains_pii": True
+})
+```
+
+**Metadata Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `data_source` | `bool` | Whether service accesses external data |
+| `data_source_type` | `str` | Type: `"api"`, `"file"`, `"rest"`, `"secrets"`, `"sql"` |
+| `contains_pii` | `bool` | Whether data source contains PII |
+| `gdpr_applicable` | `bool` | Whether GDPR compliance is required |
+| `connector_id` | `str` | Unique connector identifier |
+
+See `ciris_adapters/README.md` for implementation details
+
 ## Data Lifecycle Management
 
 ### Automatic Expiry (TEMPORARY)

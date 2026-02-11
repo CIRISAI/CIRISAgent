@@ -211,7 +211,7 @@ OpenClaw represents a significant security concern in the 2026 landscape:
 
 | Framework | Verified Usage | Notes |
 |-----------|---------------|-------|
-| **CIRIS 2.0** | 250-600MB RAM | Varies by platform/adapters, 4GB target for edge |
+| **CIRIS 2.0** | 250-600MB RAM | Baseline: ~207MB (CLI + Mock LLM, 22 services). Production: [scout.ciris.ai](https://scout.ciris.ai) shows 545MB (33 services, multi-occurrence, llama4scout). Run `python3 tools/introspect_memory.py` for local profiling. |
 | **OpenClaw** | Variable | Node.js + integrations |
 | **Google ADK** | Cloud-based | Vertex AI Agent Engine |
 | **AG2** | Efficient | Minimal dependencies |
@@ -338,6 +338,12 @@ The AI agent framework landscape has matured significantly:
 - [QUICKSTART.md](QUICKSTART.md) - Getting started
 - [FOR_NERDS.md](FOR_NERDS.md) - Developer guide
 - [MOCK_LLM.md](MOCK_LLM.md) - Testing without LLM
+
+### Performance Analysis
+- [tools/introspect_memory.py](../tools/introspect_memory.py) - RSS memory profiling during agent lifecycle
+  - Baseline (CLI + Mock LLM): ~207MB peak, stable after 2.3s startup
+  - Run: `python3 tools/introspect_memory.py --duration 30`
+- Production reference: [scout.ciris.ai](https://scout.ciris.ai) - Multi-occurrence agent (545MB, 33 services)
 
 ## Methodology
 

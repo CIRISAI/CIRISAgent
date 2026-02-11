@@ -42,7 +42,12 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         bus_manager: Optional[Any] = None,
     ) -> None:
         # Initialize BaseScheduledService with hourly maintenance interval
-        super().__init__(time_service=time_service, run_interval_seconds=3600)  # Run every hour
+        # Use 60s first_run_delay to ensure adapters are registered before notifications
+        super().__init__(
+            time_service=time_service,
+            run_interval_seconds=3600,  # Run every hour
+            first_run_delay_seconds=60.0,  # Wait 60s before first run to avoid startup race conditions
+        )
         self.time_service = time_service
         self.archive_dir = Path(archive_dir_path)
         self.archive_older_than_hours = archive_older_than_hours
@@ -722,6 +727,14 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         # Skip internal/system channels
         if channel_id.startswith("__") or channel_id == "system":
+            return
+
+        # Check if communication service is available (prevents race condition during startup)
+        if not self.bus_manager.communication.has_service_for_channel(channel_id):
+            logger.debug(
+                f"No communication service available for channel {channel_id} - "
+                "skipping stale task notification (adapter may not be initialized yet)"
+            )
             return
 
         try:

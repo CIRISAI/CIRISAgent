@@ -286,7 +286,12 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         - SPEAK: Ask user for clarification
         - PONDER: Reconsider the approach
         """
-        thought_content_str = str(original_thought.content)
+        # Access the text content directly from ThoughtContent, not str() which gives repr
+        thought_content_str = (
+            original_thought.content.text
+            if hasattr(original_thought.content, "text")
+            else str(original_thought.content)
+        )
 
         messages = self._create_tsaspdma_messages(
             tool_name=tool_name,

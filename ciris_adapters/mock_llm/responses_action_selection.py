@@ -543,29 +543,21 @@ def action_selection(
                                 tool_params = {"url": parts[1].strip()}
                                 logger.info(f"[MOCK_LLM] TOOL handler - curl with URL: {tool_params}")
                             else:
-                                # Try simple key=value parsing with quote handling
-                                # First clean up the parameters string by removing escaped newlines
+                                # Use regex to parse key="value" pairs with proper quote handling
+                                # This handles JSON-escaped values like metadata="{\"stages\": ...}"
                                 params_str = parts[1].split("\\n")[0].strip()
-                                import shlex
-
-                                try:
-                                    # Use shlex to properly handle quoted strings
-                                    tokens = shlex.split(params_str)
-                                    for token in tokens:
-                                        if "=" in token:
-                                            k, v = token.split("=", 1)
-                                            tool_params[k] = v
-                                    logger.info(f"[MOCK_LLM] TOOL handler - parsed with shlex: {tool_params}")
-                                except ValueError as e:
-                                    # Fallback to simple parsing if shlex fails
-                                    logger.info(f"[MOCK_LLM] TOOL handler - shlex failed ({e}), using fallback")
-                                    for pair in params_str.split():
-                                        if "=" in pair:
-                                            k, v = pair.split("=", 1)
-                                            # Clean up the value
-                                            v = v.strip().rstrip("\\").strip('"')
-                                            tool_params[k] = v
-                                    logger.info(f"[MOCK_LLM] TOOL handler - parsed as key=value: {tool_params}")
+                                param_pattern = r'(\w+)="((?:[^"\\]|\\.)*)"|(\w+)=(\S+)'
+                                for match in re.finditer(param_pattern, params_str):
+                                    if match.group(1):  # Quoted value
+                                        k = match.group(1)
+                                        # Unescape the value (convert \" to ")
+                                        v = match.group(2).replace('\\"', '"')
+                                        tool_params[k] = v
+                                    elif match.group(3):  # Unquoted value
+                                        k = match.group(3)
+                                        v = match.group(4)
+                                        tool_params[k] = v
+                                logger.info(f"[MOCK_LLM] TOOL handler - parsed with regex: {tool_params}")
                     else:
                         logger.info("[MOCK_LLM] TOOL handler - no parameters provided")
 
@@ -796,24 +788,20 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
 
                             tool_params = json.loads(params_str)
                         except json.JSONDecodeError:
-                            # Try simple key=value parsing with quote handling
-                            import shlex
-
-                            try:
-                                # Use shlex to properly handle quoted strings
-                                tokens = shlex.split(params_str)
-                                for token in tokens:
-                                    if "=" in token:
-                                        k, v = token.split("=", 1)
-                                        tool_params[k] = v
-                            except ValueError:
-                                # Fallback to simple parsing if shlex fails
-                                for pair in params_str.split():
-                                    if "=" in pair:
-                                        k, v = pair.split("=", 1)
-                                        # Clean up the value
-                                        v = v.strip().rstrip("\\").strip('"')
-                                        tool_params[k] = v
+                            # Use regex to parse key="value" pairs with proper quote handling
+                            # This handles JSON-escaped values like metadata="{\"stages\": ...}"
+                            param_pattern = r'(\w+)="((?:[^"\\]|\\.)*)"|(\w+)=(\S+)'
+                            for match in re.finditer(param_pattern, params_str):
+                                if match.group(1):  # Quoted value
+                                    k = match.group(1)
+                                    # Unescape the value (convert \" to ")
+                                    v = match.group(2).replace('\\"', '"')
+                                    tool_params[k] = v
+                                elif match.group(3):  # Unquoted value
+                                    k = match.group(3)
+                                    v = match.group(4)
+                                    tool_params[k] = v
+                            logger.info(f"[MOCK_LLM] TOOL from context parsed params: {tool_params}")
 
             params = ToolParams(name=tool_name, parameters=tool_params)
             action = HandlerActionType.TOOL
@@ -1199,11 +1187,20 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
 
                                     tool_params = json.loads(tool_parts[1])
                                 except json.JSONDecodeError:
-                                    # Simple key=value parsing
-                                    for pair in tool_parts[1].split():
-                                        if "=" in pair:
-                                            k, v = pair.split("=", 1)
+                                    # Use regex to parse key="value" pairs with proper quote handling
+                                    # This handles JSON-escaped values like metadata="{\"stages\": ...}"
+                                    param_pattern = r'(\w+)="((?:[^"\\]|\\.)*)"|(\w+)=(\S+)'
+                                    for match in re.finditer(param_pattern, tool_parts[1]):
+                                        if match.group(1):  # Quoted value
+                                            k = match.group(1)
+                                            # Unescape the value (convert \" to ")
+                                            v = match.group(2).replace('\\"', '"')
                                             tool_params[k] = v
+                                        elif match.group(3):  # Unquoted value
+                                            k = match.group(3)
+                                            v = match.group(4)
+                                            tool_params[k] = v
+                                    logger.info(f"[MOCK_LLM] TOOL parsed params with regex: {tool_params}")
 
                             params = ToolParams(name=tool_name, parameters=tool_params)
                             action = HandlerActionType.TOOL
@@ -1419,12 +1416,14 @@ def aspdma_llm_result(
             ponder_questions=params_dict.get("questions", ["What should I do?"]),
         )
     elif action == HandlerActionType.TOOL:
-        # ONLY the tool name - TSASPDMA handles parameters
+        # For $tool commands, params_dict contains parsed parameters
+        # Pass them through so they don't need to be re-extracted by TSASPDMA
+        tool_parameters = params_dict.get("parameters", {})
         flat_result = ASPDMALLMResult(
             selected_action=action,
             rationale=rationale,
             tool_name=params_dict.get("name", "unknown_tool"),
-            # NO tool_parameters here - TSASPDMA will extract them
+            tool_parameters=tool_parameters if tool_parameters else None,
         )
     elif action == HandlerActionType.REJECT:
         flat_result = ASPDMALLMResult(
@@ -1559,9 +1558,13 @@ def tsaspdma_llm_result(
                 break
 
         # Extract original thought content which has the $tool command
-        thought_match = re.search(r'(?:Original Thought|Thought):\s*"(.+?)"', content, re.DOTALL)
+        # The TSASPDMA prompt format is:
+        # === ORIGINAL THOUGHT (user's intent - use to infer parameters) ===
+        # {original_thought_content}
+        # === TOOL DOCUMENTATION ===
+        thought_match = re.search(r"=== ORIGINAL THOUGHT[^=]*===\s*(.+?)(?:===|$)", content, re.DOTALL)
         if thought_match:
-            thought_content = thought_match.group(1)
+            thought_content = thought_match.group(1).strip()
             logger.info(f"[MOCK_LLM] TSASPDMA found thought: {thought_content[:100]}...")
 
             # Parse $tool command from thought
@@ -1572,26 +1575,51 @@ def tsaspdma_llm_result(
                 logger.info(f"[MOCK_LLM] TSASPDMA parsed tool={tool_name}, params_str={params_str}")
 
                 if params_str:
+                    # Debug: log the raw params_str with repr to see exact escaping
+                    logger.info(f"[MOCK_LLM] TSASPDMA raw params_str repr: {repr(params_str)}")
+                    logger.info(f"[MOCK_LLM] TSASPDMA params_str length: {len(params_str)}")
+                    # Show first 200 chars with byte representation for debugging
+                    if len(params_str) > 50:
+                        logger.info(f"[MOCK_LLM] TSASPDMA params_str bytes[:100]: {params_str[:100].encode('utf-8')}")
+
                     # Try JSON first
                     try:
                         tool_params = json.loads(params_str)
                         logger.info(f"[MOCK_LLM] TSASPDMA parsed JSON params: {tool_params}")
-                    except json.JSONDecodeError:
-                        # Try key=value parsing
-                        try:
-                            tokens = shlex.split(params_str)
-                            for token in tokens:
-                                if "=" in token:
-                                    k, v = token.split("=", 1)
-                                    tool_params[k] = v
-                            logger.info(f"[MOCK_LLM] TSASPDMA parsed k=v params: {tool_params}")
-                        except ValueError:
-                            # Fallback: simple split
-                            for pair in params_str.split():
-                                if "=" in pair:
-                                    k, v = pair.split("=", 1)
-                                    tool_params[k] = v.strip('"').strip("'")
-                            logger.info(f"[MOCK_LLM] TSASPDMA fallback params: {tool_params}")
+                    except json.JSONDecodeError as e:
+                        logger.info(f"[MOCK_LLM] TSASPDMA JSON parse failed: {e}")
+                        # Use regex to parse key="value" pairs with proper quote handling
+                        # This handles JSON-escaped values like metadata="{\"stages\": ...}"
+                        param_pattern = r'(\w+)="((?:[^"\\]|\\.)*)"|(\w+)=(\S+)'
+                        logger.info(f"[MOCK_LLM] TSASPDMA using regex pattern: {repr(param_pattern)}")
+
+                        match_count = 0
+                        for match in re.finditer(param_pattern, params_str):
+                            match_count += 1
+                            logger.info(f"[MOCK_LLM] TSASPDMA regex match #{match_count}: groups={match.groups()}")
+                            logger.info(
+                                f"[MOCK_LLM] TSASPDMA regex match #{match_count}: span={match.span()}, matched={repr(match.group(0))}"
+                            )
+
+                            if match.group(1):  # Quoted value
+                                k = match.group(1)
+                                raw_v = match.group(2)
+                                logger.info(f"[MOCK_LLM] TSASPDMA quoted key={k}, raw_value repr={repr(raw_v)}")
+                                logger.info(f"[MOCK_LLM] TSASPDMA raw_value length={len(raw_v)}")
+                                # Unescape the value (convert \" to ")
+                                v = raw_v.replace('\\"', '"')
+                                logger.info(
+                                    f"[MOCK_LLM] TSASPDMA after unescape: {repr(v[:100]) if len(v) > 100 else repr(v)}"
+                                )
+                                tool_params[k] = v
+                            elif match.group(3):  # Unquoted value
+                                k = match.group(3)
+                                v = match.group(4)
+                                logger.info(f"[MOCK_LLM] TSASPDMA unquoted key={k}, value={repr(v)}")
+                                tool_params[k] = v
+
+                        logger.info(f"[MOCK_LLM] TSASPDMA total regex matches: {match_count}")
+                        logger.info(f"[MOCK_LLM] TSASPDMA parsed regex params: {tool_params}")
 
     # Also check context for forced action params (from original mock LLM flow)
     for item in context:
@@ -1604,9 +1632,16 @@ def tsaspdma_llm_result(
                     try:
                         tool_params = json.loads(parts[1])
                     except json.JSONDecodeError:
-                        for pair in parts[1].split():
-                            if "=" in pair:
-                                k, v = pair.split("=", 1)
+                        # Use regex to parse key="value" pairs with proper quote handling
+                        param_pattern = r'(\w+)="((?:[^"\\]|\\.)*)"|(\w+)=(\S+)'
+                        for match in re.finditer(param_pattern, parts[1]):
+                            if match.group(1):  # Quoted value
+                                k = match.group(1)
+                                v = match.group(2).replace('\\"', '"')
+                                tool_params[k] = v
+                            elif match.group(3):  # Unquoted value
+                                k = match.group(3)
+                                v = match.group(4)
                                 tool_params[k] = v
 
     logger.info(f"[MOCK_LLM] TSASPDMA: Confirming TOOL '{tool_name}' with params: {tool_params}")

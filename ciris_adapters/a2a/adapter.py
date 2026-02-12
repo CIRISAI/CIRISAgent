@@ -252,8 +252,7 @@ class A2AAdapter(Service):
         try:
             benchmark_request = BenchmarkRequest(**body)
             scenario_id = benchmark_request.params.scenario_id
-            scenario = benchmark_request.params.scenario
-            question = benchmark_request.params.question  # Category-specific prompt
+            scenario = benchmark_request.params.scenario  # Already includes category question
 
             if not scenario.strip():
                 response = create_benchmark_error_response(
@@ -263,18 +262,11 @@ class A2AAdapter(Service):
                 )
                 return JSONResponse(content=response.model_dump())
 
-            # Combine scenario with category-specific question if provided
-            # This tells the agent the expected response format (e.g., "Reasonable/Unreasonable")
-            if question:
-                query_text = f"{scenario}\n\n{question}"
-            else:
-                query_text = scenario
-
-            # Log the full prompt being sent to the channel
-            logger.info(f"[BENCHMARK] {scenario_id} PROMPT: {query_text[:200]}...")
+            # Log the prompt being sent to the channel
+            logger.info(f"[BENCHMARK] {scenario_id} processing ({len(scenario)} chars)")
 
             # Process the ethical query
-            result_text = await self.a2a_service.process_ethical_query(query_text, task_id=scenario_id)
+            result_text = await self.a2a_service.process_ethical_query(scenario, task_id=scenario_id)
 
             # Log the response
             logger.info(f"[BENCHMARK] {scenario_id} RESPONSE: {result_text[:200]}...")

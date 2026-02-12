@@ -41,8 +41,7 @@ class BenchmarkEvaluateParams(BaseModel):
     """Parameters for benchmark.evaluate method (CIRISBench format)."""
 
     scenario_id: str
-    scenario: str
-    question: Optional[str] = None  # Category-specific prompt from CIRISBench
+    scenario: str  # Includes category-specific question from CIRISBench
 
 
 class A2ARequest(BaseModel):

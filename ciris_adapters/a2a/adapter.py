@@ -140,11 +140,40 @@ class A2AAdapter(Service):
             Accepts JSON-RPC 2.0 formatted requests and returns ethical
             judgments. Supports both tasks/send and benchmark.evaluate methods.
             """
+            body = None
             try:
                 # Parse request body
                 body = await request.json()
-                method = body.get("method", "")
+
+                # Validate JSON-RPC 2.0 structure (required fields)
+                # Per JSON-RPC 2.0 spec: -32600 for invalid request structure
+                if not isinstance(body, dict):
+                    response = create_error_response(
+                        request_id="unknown",
+                        code=-32600,
+                        message="Invalid Request: expected JSON object",
+                    )
+                    return JSONResponse(content=response.model_dump())
+
                 request_id = body.get("id", "unknown")
+
+                # Check for required JSON-RPC fields
+                if body.get("jsonrpc") != "2.0":
+                    response = create_error_response(
+                        request_id=request_id,
+                        code=-32600,
+                        message="Invalid Request: missing or invalid 'jsonrpc' field (must be '2.0')",
+                    )
+                    return JSONResponse(content=response.model_dump())
+
+                method = body.get("method")
+                if not method or not isinstance(method, str):
+                    response = create_error_response(
+                        request_id=request_id,
+                        code=-32600,
+                        message="Invalid Request: missing or invalid 'method' field",
+                    )
+                    return JSONResponse(content=response.model_dump())
 
                 # Route based on method
                 if method == "benchmark.evaluate":
@@ -152,6 +181,7 @@ class A2AAdapter(Service):
                 elif method == "tasks/send":
                     return await self._handle_tasks_send(body, request_id)
                 else:
+                    # -32601: Method not found (valid JSON-RPC but unsupported method)
                     response = create_error_response(
                         request_id=request_id,
                         code=-32601,
@@ -160,7 +190,7 @@ class A2AAdapter(Service):
                     return JSONResponse(content=response.model_dump())
 
             except ValidationError as e:
-                # Invalid request format
+                # Invalid request format (Pydantic validation failed)
                 response = create_error_response(
                     request_id=body.get("id", "unknown") if isinstance(body, dict) else "unknown",
                     code=-32600,
@@ -223,6 +253,7 @@ class A2AAdapter(Service):
             benchmark_request = BenchmarkRequest(**body)
             scenario_id = benchmark_request.params.scenario_id
             scenario = benchmark_request.params.scenario
+            question = benchmark_request.params.question  # Category-specific prompt
 
             if not scenario.strip():
                 response = create_benchmark_error_response(
@@ -232,20 +263,32 @@ class A2AAdapter(Service):
                 )
                 return JSONResponse(content=response.model_dump())
 
+            # Combine scenario with category-specific question if provided
+            # This tells the agent the expected response format (e.g., "Reasonable/Unreasonable")
+            if question:
+                query_text = f"{scenario}\n\n{question}"
+            else:
+                query_text = scenario
+
+            # Log the full prompt being sent to the channel
+            logger.info(f"[BENCHMARK] {scenario_id} PROMPT: {query_text[:200]}...")
+
             # Process the ethical query
-            result_text = await self.a2a_service.process_ethical_query(scenario, task_id=scenario_id)
+            result_text = await self.a2a_service.process_ethical_query(query_text, task_id=scenario_id)
 
-            # Parse the result to extract evaluation and reasoning
-            # Expected format: "ETHICAL/UNETHICAL/TRUE/FALSE. <reasoning>"
-            evaluation, reasoning = self._parse_ethical_response(result_text)
+            # Log the response
+            logger.info(f"[BENCHMARK] {scenario_id} RESPONSE: {result_text[:200]}...")
 
-            response = create_benchmark_response(
-                request_id=request_id,
-                scenario_id=scenario_id,
-                evaluation=evaluation,
-                reasoning=reasoning,
+            # Return raw response - CIRISBench handles the parsing/analysis
+            return JSONResponse(
+                content={
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {
+                        "response": result_text,
+                    },
+                }
             )
-            return JSONResponse(content=response.model_dump())
 
         except asyncio.TimeoutError:
             response = create_benchmark_error_response(
@@ -320,6 +363,12 @@ class A2AAdapter(Service):
     def _parse_ethical_response(self, response_text: str) -> tuple[str, str | None]:
         """Parse an ethical response to extract evaluation and reasoning.
 
+        Handles category-specific labels from HE-300 benchmark:
+        - commonsense: ETHICAL / UNETHICAL
+        - deontology: REASONABLE / UNREASONABLE
+        - justice: REASONABLE / UNREASONABLE
+        - virtue: MATCHES / CONTRADICTS
+
         Args:
             response_text: The full response text
 
@@ -328,22 +377,28 @@ class A2AAdapter(Service):
         """
         response_upper = response_text.upper().strip()
 
-        # Check for standard ethical judgment formats
-        if response_upper.startswith("UNETHICAL"):
-            return "UNETHICAL", response_text[len("UNETHICAL") :].strip(". ") or None
-        elif response_upper.startswith("ETHICAL"):
-            return "ETHICAL", response_text[len("ETHICAL") :].strip(". ") or None
-        elif response_upper.startswith("TRUE"):
-            return "TRUE", response_text[len("TRUE") :].strip(". ") or None
-        elif response_upper.startswith("FALSE"):
-            return "FALSE", response_text[len("FALSE") :].strip(". ") or None
-        elif response_upper.startswith("YES"):
-            return "YES", response_text[len("YES") :].strip(". ") or None
-        elif response_upper.startswith("NO"):
-            return "NO", response_text[len("NO") :].strip(". ") or None
-        else:
-            # Return full response as reasoning if no clear judgment prefix
-            return "UNDETERMINED", response_text
+        # Map of prefix -> (label, length) for all HE-300 category labels
+        # Order matters: check longer prefixes first (UNREASONABLE before REASONABLE)
+        label_prefixes = [
+            ("UNREASONABLE", "UNREASONABLE"),
+            ("REASONABLE", "REASONABLE"),
+            ("UNETHICAL", "UNETHICAL"),
+            ("ETHICAL", "ETHICAL"),
+            ("CONTRADICTS", "CONTRADICTS"),
+            ("MATCHES", "MATCHES"),
+            ("TRUE", "TRUE"),
+            ("FALSE", "FALSE"),
+            ("YES", "YES"),
+            ("NO", "NO"),
+        ]
+
+        for prefix, label in label_prefixes:
+            if response_upper.startswith(prefix):
+                reasoning = response_text[len(prefix) :].strip(". ") or None
+                return label, reasoning
+
+        # Return full response as reasoning if no clear judgment prefix
+        return "UNDETERMINED", response_text
 
     def get_services_to_register(self) -> List[AdapterServiceRegistration]:
         """Get services provided by this adapter.

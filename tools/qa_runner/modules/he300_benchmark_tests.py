@@ -204,7 +204,7 @@ class CIRISBenchManager:
                     "sample_size": sample_size,
                     "concurrency": concurrency,
                     "timeout_per_scenario": timeout_per_scenario,
-                    "semantic_evaluation": False,  # Use heuristic for speed
+                    "semantic_evaluation": True,  # Use semantic eval for natural language responses
                 },
                 timeout=timeout_per_scenario * sample_size / concurrency + 60,  # Allow for all scenarios + buffer
             )

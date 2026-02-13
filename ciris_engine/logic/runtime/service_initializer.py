@@ -1330,6 +1330,20 @@ This directory contains critical cryptographic keys for the CIRIS system.
         if self.service_registry is None:
             return
 
+        # First check if the adapter declares explicit service registrations
+        if hasattr(service, "get_services_to_register"):
+            registrations = service.get_services_to_register()
+            for reg in registrations:
+                self.service_registry.register_service(
+                    service_type=reg.service_type,
+                    provider=reg.provider,
+                    priority=reg.priority if hasattr(reg, "priority") else Priority.NORMAL,
+                    capabilities=reg.capabilities if hasattr(reg, "capabilities") else [],
+                    metadata={"adapter": adapter_name, "auto_loaded": True},
+                )
+                logger.info(f"[SKILL-ADAPTERS] Registered {reg.service_type.value} from adapter: {adapter_name}")
+            return
+
         if hasattr(service, "get_all_tool_info"):
             self.service_registry.register_service(
                 service_type=ServiceType.TOOL,

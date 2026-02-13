@@ -131,12 +131,25 @@ class CIRISNodeClient:
     # =========================================================================
 
     async def wbd_submit(
-        self, agent_task_id: str, payload: str, domain_hint: Optional[str] = None
+        self,
+        agent_task_id: str,
+        payload: str,
+        domain_hint: Optional[str] = None,
+        signature: Optional[str] = None,
+        signature_key_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Submit a WBD task for review."""
+        """Submit a signed WBD deferral task for review.
+
+        The deferral must be signed with the agent's Ed25519 key
+        (registered via CIRISPortal/CIRISRegistry).
+        """
         data: Dict[str, Any] = {"agent_task_id": agent_task_id, "payload": payload}
         if domain_hint:
             data["domain_hint"] = domain_hint
+        if signature:
+            data["signature"] = signature
+        if signature_key_id:
+            data["signature_key_id"] = signature_key_id
         return await self._request("POST", "/api/v1/wbd/submit", json_data=data)
 
     async def wbd_get_task(self, task_id: str) -> Dict[str, Any]:
@@ -161,23 +174,23 @@ class CIRISNodeClient:
     # =========================================================================
 
     async def post_covenant_events(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Post a batch of covenant trace events in Lens format.
+        """Post a batch of Ed25519-signed covenant trace events in Lens format.
 
-        Args:
-            payload: Batch payload with events, batch_timestamp, trace_level
+        Auth: Traces carry inline Ed25519 signatures verified by CIRISNode
+        against public keys registered via CIRISPortal/CIRISRegistry.
+        No header-based auth required.
         """
         return await self._request(
             "POST",
             "/api/v1/covenant/events",
             json_data=payload,
-            use_agent_token=True,
         )
 
     async def register_public_key(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Register agent's Ed25519 public key with CIRISNode.
 
-        Args:
-            payload: Key registration with key_id, public_key_base64, algorithm
+        The key is cross-validated against CIRISRegistry if org_id is provided.
+        Agent token used if available (optional).
         """
         return await self._request(
             "POST",

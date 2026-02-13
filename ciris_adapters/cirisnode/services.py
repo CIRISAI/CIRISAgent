@@ -5,13 +5,19 @@ Provides:
 1. WiseBus-compatible interface for receiving deferrals (send_deferral)
 2. Polls CIRISNode for WBD resolution status
 3. Subscribes to reasoning_event_stream for trace capture
-4. Batches and forwards traces to CIRISNode in Lens format (no signing — uses X-Agent-Token auth)
+4. Batches and forwards Ed25519-signed traces to CIRISNode in Lens format
+5. Signs deferrals with agent's Ed25519 key for CIRISNode signature-based auth
+
+Auth model: All data sent to CIRISNode is signed with the agent's Ed25519 key.
+Keys are registered via CIRISPortal (portal.ciris.ai) → CIRISRegistry.
+CIRISNode verifies signatures against registry-verified keys (no header auth).
 """
 
 import asyncio
 import hashlib
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -74,8 +80,8 @@ class CIRISNodeService:
         self._batch_size = int(self.config.get("batch_size", 10))
         self._flush_interval = float(self.config.get("flush_interval", 60))
 
-        # Trace detail level
-        level_str = str(self.config.get("trace_level", "generic")).lower()
+        # Trace detail level — check env var first, then config
+        level_str = str(os.environ.get("CIRISNODE_TRACE_LEVEL", "") or self.config.get("trace_level", "generic")).lower()
         try:
             self._trace_level = TraceDetailLevel(level_str)
         except ValueError:
@@ -201,7 +207,12 @@ class CIRISNodeService:
         )
 
     async def send_deferral(self, request: DeferralRequest) -> str:
-        """Forward deferral to CIRISNode via WBD submit."""
+        """Forward deferral to CIRISNode via signed WBD submit.
+
+        The deferral payload is signed with the agent's Ed25519 key
+        (registered via CIRISPortal/CIRISRegistry). CIRISNode verifies
+        the signature against the registered key before accepting.
+        """
         if not self._client:
             return "CIRISNode client not started - deferral not forwarded"
 
@@ -215,11 +226,34 @@ class CIRISNodeService:
 
         domain_hint = request.context.get("domain_hint") if request.context else None
 
+        # Sign the deferral with the agent's Ed25519 key
+        signature = None
+        signature_key_id = None
+        try:
+            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+
+            unified_key = get_unified_signing_key()
+            # Canonical message: same fields that CIRISNode will reconstruct
+            signed_payload: dict = {
+                "agent_task_id": request.thought_id,
+                "payload": payload,
+            }
+            if domain_hint:
+                signed_payload["domain_hint"] = domain_hint
+            message = json.dumps(signed_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            signature = unified_key.sign_base64(message)
+            signature_key_id = unified_key.key_id
+            logger.debug(f"Deferral signed with key_id={signature_key_id}")
+        except Exception as e:
+            logger.warning(f"Could not sign deferral: {e}")
+
         try:
             result = await self._client.wbd_submit(
                 agent_task_id=request.thought_id,
                 payload=payload,
                 domain_hint=domain_hint,
+                signature=signature,
+                signature_key_id=signature_key_id,
             )
 
             task_id = result.get("task_id") or result.get("id", "unknown")
@@ -227,7 +261,7 @@ class CIRISNodeService:
 
             logger.info(
                 f"Deferral forwarded to CIRISNode: thought={request.thought_id} "
-                f"-> task_id={task_id} (reason: {request.reason[:80]})"
+                f"-> task_id={task_id} signed_by={signature_key_id} (reason: {request.reason[:80]})"
             )
             return f"Submitted to CIRISNode: task_id={task_id}"
 

@@ -285,21 +285,15 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 return False
 
             # Look up the WA certificate by key ID
-            auth_services = self.service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
+            # AuthenticationService registers as WISE_AUTHORITY and has _get_wa_by_kid
+            wa_services = self.service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
             wa_cert = None
 
-            # Try to find auth service to look up the WA cert
-            from ciris_engine.schemas.runtime.enums import ServiceType as ST
-
-            infra_services = self.service_registry.get_services_by_type(ST.AUTHENTICATION)
-            if infra_services:
-                auth_service = infra_services[0]
-                if hasattr(auth_service, "_get_wa_by_kid"):
-                    wa_cert = await auth_service._get_wa_by_kid(signing_key_id)
-                elif hasattr(auth_service, "get_wa"):
-                    # Fallback: search by key_id pattern
-                    # jwt_kid format is "wa-jwt-XXXXXX" where XXXXXX is last 6 of wa_id
-                    wa_cert = None  # Cannot look up by key_id without _get_wa_by_kid
+            # Try to find a service with _get_wa_by_kid to look up the WA cert
+            for service in wa_services:
+                if hasattr(service, "_get_wa_by_kid"):
+                    wa_cert = await service._get_wa_by_kid(signing_key_id)
+                    break
 
             if not wa_cert:
                 logger.error(
@@ -337,8 +331,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 public_key.verify(signature_bytes, canonical_json)
 
                 logger.info(
-                    f"Covenant invocation signature verified from {wa_cert.wa_id} "
-                    f"(role: {wa_cert.role.value})"
+                    f"Covenant invocation signature verified from {wa_cert.wa_id} " f"(role: {wa_cert.role.value})"
                 )
             except Exception as sig_err:
                 logger.error(

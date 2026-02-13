@@ -157,8 +157,34 @@ class ComponentBuilder:
 
         conscience_config = ConscienceConfig()
 
+        # Check for benchmark mode - ONLY enabled if BOTH conditions are met:
+        # 1. CIRIS_BENCHMARK_MODE=true environment variable
+        # 2. Template is 'he-300-benchmark'
+        # This double-lock prevents accidental disabling of safety consciences
+        from ciris_engine.logic.config.env_utils import get_env_var
+
+        benchmark_mode_val = get_env_var("CIRIS_BENCHMARK_MODE", "") or ""
+        benchmark_mode_env = benchmark_mode_val.lower() in ("true", "1", "yes", "on")
+        template_name = ""
+        if self.runtime.identity_manager and self.runtime.identity_manager.agent_template:
+            template_name = getattr(self.runtime.identity_manager.agent_template, "name", "")
+        is_benchmark_template = template_name == "he-300-benchmark"
+        benchmark_mode = benchmark_mode_env and is_benchmark_template
+
+        if benchmark_mode:
+            logger.warning(
+                "[BENCHMARK_MODE] All LLM-based consciences DISABLED for HE-300 benchmarking. "
+                "Entropy, Coherence, OptimizationVeto, and EpistemicHumility consciences will be skipped."
+            )
+        elif benchmark_mode_env and not is_benchmark_template:
+            logger.warning(
+                f"[BENCHMARK_MODE] CIRIS_BENCHMARK_MODE is set but template is '{template_name}' "
+                f"(not 'he-300-benchmark'). Safety consciences remain ENABLED."
+            )
+
         # Register UpdatedStatusConscience FIRST (priority -1) to detect channel updates
         # CRITICAL: bypass_exemption=True ensures it runs even for TASK_COMPLETE
+        # NOTE: This does NOT make LLM calls, so it runs even in benchmark mode
         conscience_registry.register_conscience(
             "updated_status",
             UpdatedStatusConscience(time_service=time_service),
@@ -166,50 +192,58 @@ class ComponentBuilder:
             bypass_exemption=True,  # Must run even for exempt actions like TASK_COMPLETE
         )
 
-        conscience_registry.register_conscience(
-            "entropy",
-            EntropyConscience(
-                self.runtime.service_registry,
-                conscience_config,
-                self.runtime.llm_service.model_name,
-                self.runtime.bus_manager,
-                time_service,
-            ),
-            priority=0,
-        )
-        conscience_registry.register_conscience(
-            "coherence",
-            CoherenceConscience(
-                self.runtime.service_registry,
-                conscience_config,
-                self.runtime.llm_service.model_name,
-                self.runtime.bus_manager,
-                time_service,
-            ),
-            priority=1,
-        )
-        conscience_registry.register_conscience(
-            "optimization_veto",
-            OptimizationVetoConscience(
-                self.runtime.service_registry,
-                conscience_config,
-                self.runtime.llm_service.model_name,
-                self.runtime.bus_manager,
-                time_service,
-            ),
-            priority=2,
-        )
-        conscience_registry.register_conscience(
-            "epistemic_humility",
-            EpistemicHumilityConscience(
-                self.runtime.service_registry,
-                conscience_config,
-                self.runtime.llm_service.model_name,
-                self.runtime.bus_manager,
-                time_service,
-            ),
-            priority=3,
-        )
+        # Skip ALL LLM-based consciences in benchmark mode for speed
+        # These make additional LLM calls that slow down benchmarking significantly
+        if not benchmark_mode:
+            conscience_registry.register_conscience(
+                "entropy",
+                EntropyConscience(
+                    self.runtime.service_registry,
+                    conscience_config,
+                    self.runtime.llm_service.model_name,
+                    self.runtime.bus_manager,
+                    time_service,
+                ),
+                priority=0,
+            )
+            conscience_registry.register_conscience(
+                "coherence",
+                CoherenceConscience(
+                    self.runtime.service_registry,
+                    conscience_config,
+                    self.runtime.llm_service.model_name,
+                    self.runtime.bus_manager,
+                    time_service,
+                ),
+                priority=1,
+            )
+            conscience_registry.register_conscience(
+                "optimization_veto",
+                OptimizationVetoConscience(
+                    self.runtime.service_registry,
+                    conscience_config,
+                    self.runtime.llm_service.model_name,
+                    self.runtime.bus_manager,
+                    time_service,
+                ),
+                priority=2,
+            )
+            conscience_registry.register_conscience(
+                "epistemic_humility",
+                EpistemicHumilityConscience(
+                    self.runtime.service_registry,
+                    conscience_config,
+                    self.runtime.llm_service.model_name,
+                    self.runtime.bus_manager,
+                    time_service,
+                ),
+                priority=3,
+            )
+        else:
+            logger.info(
+                "[BENCHMARK_MODE] Skipping LLM-based consciences: "
+                "Entropy, Coherence, OptimizationVeto, EpistemicHumility"
+            )
 
         conscience_registry.register_conscience(
             "thought_depth",

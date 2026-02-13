@@ -98,6 +98,9 @@ CIRISAgent (local)
 2. **Key registration timing**: Public key registered at adapter `start()` — runtime identity must be initialized before this
 3. **Agent ID hash**: First 16 chars of SHA-256 of agent_id, used for trace anonymization
 4. **WBD polling continues until stop()**: Pending deferrals logged as warning if adapter stops before resolution
+5. **Private key provisioning gap**: Portal's `generateKeyPair()` generates Ed25519 keys but drops the private key (only stores public key in Registry). No private key export mechanism exists yet. **Workaround**: Generate Ed25519 key locally, place raw 32-byte private key in `data/agent_signing.key`. The adapter auto-loads it at startup and derives the key_id as `agent-{sha256(pubkey)[:12]}`.
+6. **Missing org_id in key registration**: `_register_public_key()` does not pass `org_id` to CIRISNode. This prevents CIRISNode from cross-validating the key against Registry by organization. The key must be admin-verified manually via `PATCH /api/v1/covenant/public-keys/{key_id}` until this is resolved.
+7. **CIRISNode SQLite ephemeral**: Agent tokens and registered keys are lost on CIRISNode container restart. Agent must re-register its key (happens automatically at adapter `start()`), but the key needs admin re-verification each time.
 
 ## Development
 

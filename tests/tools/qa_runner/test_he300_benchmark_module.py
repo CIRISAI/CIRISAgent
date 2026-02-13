@@ -8,7 +8,7 @@ for HE-300 ethical benchmarking.
 import pytest
 
 from tools.qa_runner.config import QAConfig, QAModule
-from tools.qa_runner.modules.he300_benchmark_tests import HE300_TEST_SCENARIOS, HE300BenchmarkModule
+from tools.qa_runner.modules.he300_benchmark_tests import HE300BenchmarkModule
 
 
 class TestHE300BenchmarkModule:
@@ -18,47 +18,33 @@ class TestHE300BenchmarkModule:
         """Test that the module loads correctly."""
         config = QAConfig()
         tests = config.get_module_tests(QAModule.HE300_BENCHMARK)
-        assert len(tests) == 9  # 6 A2A tests + 3 CIRISBench tests
+        assert len(tests) == 3  # 3 CIRISBench tests (start, agentbeats, stop)
 
     def test_test_names(self):
         """Test that all expected tests are present."""
         tests = HE300BenchmarkModule.get_he300_benchmark_tests()
         test_names = [t.name for t in tests]
-        assert "A2A Adapter Health Check" in test_names
-        assert "A2A Adapter Metrics" in test_names
-        assert "A2A Protocol Compliance" in test_names
-        assert "A2A Single Ethical Scenario" in test_names
-        assert "A2A Concurrent Scenarios (8 parallel)" in test_names
-        assert "HE-300 Sample Benchmark" in test_names
+        assert "Start CIRISBench Engine" in test_names
+        assert "CIRISBench AgentBeats Benchmark" in test_names
+        assert "Stop CIRISBench Engine" in test_names
 
     def test_custom_handlers_assigned(self):
         """Test that custom handlers are properly assigned."""
         tests = HE300BenchmarkModule.get_he300_benchmark_tests()
         handlers = [t.custom_handler for t in tests]
-        assert "a2a_health" in handlers
-        assert "a2a_metrics" in handlers
-        assert "a2a_protocol_compliance" in handlers
-        assert "a2a_single_scenario" in handlers
-        assert "a2a_concurrent_scenarios" in handlers
-        assert "a2a_full_benchmark" in handlers
+        assert "cirisbench_start" in handlers
+        assert "cirisbench_agentbeats" in handlers
+        assert "cirisbench_stop" in handlers
 
+    @pytest.mark.skip(reason="HE300_TEST_SCENARIOS removed - scenarios now handled by CIRISBench")
     def test_test_scenarios_present(self):
         """Test that HE-300 test scenarios are defined."""
-        assert len(HE300_TEST_SCENARIOS) == 8
-        categories = {s["category"] for s in HE300_TEST_SCENARIOS}
-        assert "commonsense" in categories
-        assert "deontology" in categories
-        assert "justice" in categories
-        assert "virtue" in categories
+        pass
 
+    @pytest.mark.skip(reason="HE300_TEST_SCENARIOS removed - scenarios now handled by CIRISBench")
     def test_scenario_structure(self):
         """Test that scenarios have required fields."""
-        for scenario in HE300_TEST_SCENARIOS:
-            assert "id" in scenario
-            assert "category" in scenario
-            assert "scenario" in scenario
-            assert "expected" in scenario
-            assert scenario["expected"] in [0, 1]  # ETHICAL or UNETHICAL
+        pass
 
     def test_create_a2a_request(self):
         """Test A2A request creation."""

@@ -70,8 +70,8 @@ class CIRISNodeService:
         self.config = config or {}
         self._client: Optional[CIRISNodeClient] = None
 
-        # Deferral state
-        self._pending_deferrals: Dict[str, str] = {}  # thought_id -> cirisnode task_id
+        # Deferral state: thought_id -> {wbd_task_id, agent_task_id}
+        self._pending_deferrals: Dict[str, Dict[str, str]] = {}
         self._poll_task: Optional[asyncio.Task[None]] = None
         self._running = False
         self._poll_interval = float(self.config.get("poll_interval", 30))
@@ -257,7 +257,10 @@ class CIRISNodeService:
             )
 
             task_id = result.get("task_id") or result.get("id", "unknown")
-            self._pending_deferrals[request.thought_id] = task_id
+            self._pending_deferrals[request.thought_id] = {
+                "wbd_task_id": task_id,
+                "agent_task_id": request.task_id,
+            }
 
             logger.info(
                 f"Deferral forwarded to CIRISNode: thought={request.thought_id} "
@@ -329,9 +332,12 @@ class CIRISNodeService:
             if not self._pending_deferrals or not self._client:
                 continue
 
-            for thought_id, task_id in list(self._pending_deferrals.items()):
+            for thought_id, deferral_info in list(self._pending_deferrals.items()):
+                wbd_task_id = deferral_info["wbd_task_id"]
+                agent_task_id = deferral_info["agent_task_id"]
+
                 try:
-                    result = await self._client.wbd_get_task(task_id)
+                    result = await self._client.wbd_get_task(wbd_task_id)
                     task = result.get("task", result)
                     status = task.get("status", "")
 
@@ -339,29 +345,139 @@ class CIRISNodeService:
                         decision = task.get("decision", "unknown")
                         comment = task.get("comment", "")
                         logger.info(
-                            f"WBD task {task_id} resolved: decision={decision}"
+                            f"WBD task {wbd_task_id} resolved: decision={decision}"
                             f"{f' comment={comment[:80]}' if comment else ''}"
                         )
                         del self._pending_deferrals[thought_id]
 
-                        # Post agent event for observability
-                        try:
-                            if self._client and self.config.get("agent_token"):
-                                await self._client.post_agent_event(
-                                    agent_uid="ciris-agent",
-                                    event={
-                                        "type": "wbd_resolved",
-                                        "task_id": task_id,
-                                        "thought_id": thought_id,
-                                        "decision": decision,
-                                        "comment": comment,
-                                    },
-                                )
-                        except Exception as e:
-                            logger.debug(f"Failed to post resolution event: {e}")
+                        # Event 1: Send signed resolution covenant trace
+                        await self._send_resolution_trace(
+                            thought_id=thought_id,
+                            agent_task_id=agent_task_id,
+                            wbd_task_id=wbd_task_id,
+                            decision=decision,
+                            comment=comment,
+                        )
+
+                        # Event 2: Reactivate the deferred task via WiseAuthorityService
+                        await self._reactivate_deferred_task(
+                            agent_task_id=agent_task_id,
+                            thought_id=thought_id,
+                            decision=decision,
+                            comment=comment,
+                        )
 
                 except Exception as e:
-                    logger.debug(f"Failed to poll WBD task {task_id}: {e}")
+                    logger.debug(f"Failed to poll WBD task {wbd_task_id}: {e}")
+
+    async def _send_resolution_trace(
+        self,
+        thought_id: str,
+        agent_task_id: str,
+        wbd_task_id: str,
+        decision: str,
+        comment: str,
+    ) -> None:
+        """Send a signed covenant trace for WBD resolution."""
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        resolution_trace = CompleteTrace(
+            trace_id=f"wbd-resolution-{wbd_task_id}-{timestamp}",
+            thought_id=thought_id,
+            task_id=agent_task_id,
+            agent_id_hash=self._agent_id_hash or "unknown",
+            started_at=timestamp,
+            completed_at=timestamp,
+        )
+
+        resolution_trace.components.append(
+            TraceComponent(
+                component_type="wbd_resolution",
+                event_type="wbd_resolved",
+                timestamp=timestamp,
+                data={
+                    "wbd_task_id": wbd_task_id,
+                    "decision": decision,
+                    "comment": comment,
+                    "trace_level": self._trace_level.value,
+                },
+            )
+        )
+
+        if not self._signer.sign_trace(resolution_trace):
+            resolution_trace.signature = ""
+            resolution_trace.signature_key_id = ""
+
+        event_payload = {
+            "event_type": "wbd_resolution",
+            "trace": resolution_trace.to_dict(),
+        }
+        await self._queue_event(event_payload)
+        await self._flush_events()
+        logger.info(f"Resolution trace queued for WBD task {wbd_task_id}")
+
+    async def _reactivate_deferred_task(
+        self,
+        agent_task_id: str,
+        thought_id: str,
+        decision: str,
+        comment: str,
+    ) -> None:
+        """Call resolve_deferral on WiseAuthorityService to reactivate the task."""
+        try:
+            from ciris_engine.logic.registries.base import get_global_registry
+            from ciris_engine.schemas.runtime.enums import ServiceType
+            from ciris_engine.schemas.services.authority_core import DeferralResponse
+
+            registry = get_global_registry()
+            wa_services = registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
+
+            # Find a WA service that has resolve_deferral (skip self)
+            target_wa = None
+            for svc in wa_services:
+                if svc is self:
+                    continue
+                if hasattr(svc, "resolve_deferral"):
+                    target_wa = svc
+                    break
+
+            if not target_wa:
+                logger.warning("No WiseAuthorityService with resolve_deferral found")
+                return
+
+            deferral_id = f"defer_{agent_task_id}"
+
+            # Sign the resolution response
+            signature = ""
+            try:
+                from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+                unified_key = get_unified_signing_key()
+                sig_msg = json.dumps(
+                    {"deferral_id": deferral_id, "decision": decision},
+                    sort_keys=True, separators=(",", ":"),
+                ).encode("utf-8")
+                signature = unified_key.sign_base64(sig_msg)
+            except Exception:
+                pass
+
+            response = DeferralResponse(
+                approved=(decision in ("approve", "approved")),
+                reason=comment or f"WBD resolution: {decision}",
+                wa_id="cirisnode_wa",
+                signature=signature,
+            )
+
+            resolved = await target_wa.resolve_deferral(deferral_id, response)
+            if resolved:
+                logger.info(
+                    f"Deferred task reactivated: deferral_id={deferral_id} "
+                    f"decision={decision}"
+                )
+            else:
+                logger.warning(f"resolve_deferral returned False for {deferral_id}")
+
+        except Exception as e:
+            logger.error(f"Failed to reactivate deferred task: {e}")
 
     # =========================================================================
     # Trace Capture (from reasoning_event_stream)

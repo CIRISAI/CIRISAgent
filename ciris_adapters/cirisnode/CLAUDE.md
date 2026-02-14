@@ -92,6 +92,14 @@ CIRISAgent (local)
 | POST | `/api/v1/covenant/public-keys` | X-Agent-Token (optional) | Register signing key |
 | POST | `/api/v1/agent/events` | X-Agent-Token | Post agent events |
 
+## WBD Resolution Flow (FIXED 2026-02-13)
+
+When a WBD task is resolved on CIRISNode, the adapter:
+1. **Sends signed resolution covenant trace** — `CompleteTrace` with `wbd_resolution` component, Ed25519 signed, sent via `post_covenant_events()` (no header auth)
+2. **Reactivates the deferred task** — calls `WiseAuthorityService.resolve_deferral()` via global service registry, which creates a new guidance task. Agent processes it automatically through the normal reasoning pipeline, generating standard reasoning traces that are also forwarded to CIRISNode.
+
+Auth is ALWAYS Ed25519 signature-based. No token-based auth (`X-Agent-Token`) is used for trace/resolution data.
+
 ## Known Issues (E2E QA 2026-02-13)
 
 1. **Trace level convention**: Set `CIRISNODE_TRACE_LEVEL=full_traces` for Node, covenant_metrics uses `detailed` for Lens

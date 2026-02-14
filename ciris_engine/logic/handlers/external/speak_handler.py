@@ -225,7 +225,38 @@ class SpeakHandler(BaseActionHandler):
     def _complete_speak_action(
         self, thought: Thought, result: ActionSelectionDMAResult, channel_id: str, success: bool
     ) -> str:
-        """Complete the speak action and create follow-up thought."""
+        """Complete the speak action and create follow-up thought (or auto-complete in benchmark mode)."""
+        from ciris_engine.logic.config.env_utils import get_env_var
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+
+        # Check for benchmark mode - skip follow-up and auto-complete parent task
+        benchmark_mode_val = get_env_var("CIRIS_BENCHMARK_MODE", "") or ""
+        benchmark_mode = benchmark_mode_val.lower() in ("true", "1", "yes", "on")
+
+        if benchmark_mode and success:
+            # In benchmark mode, auto-complete the parent task after SPEAK
+            logger.info(f"[BENCHMARK_MODE] SPEAK successful, auto-completing task {thought.source_task_id}")
+
+            # Mark the thought as completed
+            persistence.update_thought_status(
+                thought_id=thought.thought_id,
+                status=ThoughtStatus.COMPLETED,
+                final_action=result.model_dump(),
+            )
+
+            # Mark the parent task as completed
+            if thought.source_task_id:
+                persistence.update_task_status(
+                    thought.source_task_id,
+                    TaskStatus.COMPLETED,
+                    thought.agent_occurrence_id,
+                    self.time_service,
+                )
+
+            self._update_trace_correlation(True, f"[BENCHMARK] Message sent to {channel_id}, task auto-completed")
+            return f"benchmark_complete_{thought.thought_id}"
+
+        # Normal mode: create follow-up thought
         if success:
             follow_up_text = (
                 f"CIRIS_FOLLOW_UP_THOUGHT: SPEAK SUCCESSFUL! Message delivered to channel {channel_id}. "

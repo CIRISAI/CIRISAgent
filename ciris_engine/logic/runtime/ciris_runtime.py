@@ -549,12 +549,17 @@ class CIRISRuntime(ServicePropertyMixin):
         )
 
         # Phase 5: SERVICES
+        # Use longer timeout on mobile platforms (90s) as they can be slower
+        from ciris_engine.logic.utils.path_resolution import is_android, is_ios
+
+        core_services_timeout = 90.0 if (is_android() or is_ios()) else 30.0
         init_manager.register_step(
             phase=InitializationPhase.SERVICES,
             name="Core Services",
             handler=self._initialize_services,
             verifier=self._verify_core_services,
             critical=True,
+            timeout=core_services_timeout,
         )
 
         init_manager.register_step(

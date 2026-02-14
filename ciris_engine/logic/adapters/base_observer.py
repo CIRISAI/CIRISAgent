@@ -606,8 +606,16 @@ class BaseObserver(Generic[MessageT], ABC):
             if existing_task and self.time_service:
                 # Try to update the existing task with new observation
                 update_content = f"@{msg.author_name} (ID: {msg.author_id}): {formatted_passive_content}"  # type: ignore[attr-defined]
+                # Also extract images from the new message to append to the task
+                update_images = getattr(msg, "images", []) or []
+                if update_images:
+                    logger.info(f"[VISION] Task update includes {len(update_images)} images from message")
                 success = set_task_updated_info_flag(
-                    existing_task.task_id, update_content, self.agent_occurrence_id, self.time_service
+                    existing_task.task_id,
+                    update_content,
+                    self.agent_occurrence_id,
+                    self.time_service,
+                    images=update_images,
                 )
                 if success:
                     logger.info(

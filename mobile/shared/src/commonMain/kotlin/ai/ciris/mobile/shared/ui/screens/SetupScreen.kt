@@ -9,7 +9,10 @@ import ai.ciris.mobile.shared.viewmodels.SetupStep
 import ai.ciris.mobile.shared.viewmodels.SetupFormState
 import ai.ciris.mobile.shared.viewmodels.SetupViewModel
 import androidx.compose.animation.AnimatedVisibility
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -189,10 +192,14 @@ fun SetupScreen(
                         coroutineScope.launch {
                             println("[SetupScreen] Coroutine started - calling viewModel.completeSetup")
                             try {
-                                val result = viewModel.completeSetup { request ->
-                                    // Make API call to /v1/setup/complete
-                                    println("[SetupScreen] Calling apiClient.completeSetup with provider=${request.llm_provider}")
-                                    apiClient.completeSetup(request)
+                                // Run API call on IO dispatcher to avoid blocking main thread
+                                // Setup can take 20+ seconds as Python initializes services
+                                val result = withContext(Dispatchers.IO) {
+                                    viewModel.completeSetup { request ->
+                                        // Make API call to /v1/setup/complete
+                                        println("[SetupScreen] Calling apiClient.completeSetup with provider=${request.llm_provider}")
+                                        apiClient.completeSetup(request)
+                                    }
                                 }
                                 println("[SetupScreen] completeSetup returned: success=${result.success}, error=${result.error}")
                                 if (result.success) {

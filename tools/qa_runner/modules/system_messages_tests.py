@@ -173,27 +173,35 @@ class SystemMessagesTests:
                 raise ValueError(f"User message has is_agent=True (should be False)")
 
     async def test_system_message_on_error(self):
-        """Test that system/error messages appear when errors occur."""
-        # This test verifies the infrastructure exists for system messages
-        # We can't easily trigger errors in a controlled way, so we just
-        # verify that the history can contain system/error messages
-
+        """Test that history API can return all message types and infrastructure is valid."""
+        # Get history and verify all expected message types are supported
         history = await self.client.agent.get_history(limit=100)
 
         messages = history if isinstance(history, list) else getattr(history, "messages", [])
 
         # Count message types
-        type_counts = {"user": 0, "agent": 0, "system": 0, "error": 0}
+        type_counts = {"user": 0, "agent": 0, "system": 0, "error": 0, "unknown": 0}
         for msg in messages:
             msg_type = msg.get("message_type") if isinstance(msg, dict) else getattr(msg, "message_type", None)
             if msg_type in type_counts:
                 type_counts[msg_type] += 1
+            else:
+                type_counts["unknown"] += 1
 
-        # Log the counts (informational - not a failure if no system messages yet)
+        # Log the counts
         self.console.print(f"     [dim]Message type counts: {type_counts}[/dim]")
 
-        # Test passes if we can count message types without error
-        # Actual system messages will appear when LLM errors occur
+        # Verify we got a valid history response with messages
+        if not messages:
+            raise ValueError("History is empty - expected at least some messages after QA interactions")
+
+        # Verify at least user and agent messages exist from our QA interactions
+        if type_counts["user"] == 0 and type_counts["agent"] == 0:
+            raise ValueError("Expected at least one user or agent message in history")
+
+        # Verify no unknown message types
+        if type_counts["unknown"] > 0:
+            raise ValueError(f"Found {type_counts['unknown']} messages with unknown type")
 
     def _print_summary(self):
         """Print test summary table."""

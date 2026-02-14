@@ -534,8 +534,22 @@ class ToolBus(BaseBus[ToolService]):
         matching_services = []
 
         for provider in self._get_all_tool_services():
-            # Get service metadata
-            metadata = provider.get_service_metadata()
+            # Get service metadata - skip providers that don't implement this method
+            provider_name = getattr(provider, "__class__", type(provider)).__name__
+            if not hasattr(provider, "get_service_metadata"):
+                logger.warning(
+                    f"[TOOL_BUS] Provider {provider_name} does not implement get_service_metadata() - "
+                    "skipping for metadata-based discovery. This provider will not be discoverable by DSAR orchestrator."
+                )
+                continue
+            try:
+                metadata = provider.get_service_metadata()
+            except Exception as e:
+                logger.error(
+                    f"[TOOL_BUS] Provider {provider_name} failed to return metadata: {e} - "
+                    "skipping for metadata-based discovery"
+                )
+                continue
 
             # Check if all filter criteria match
             matches = all(metadata.get(key) == value for key, value in metadata_filter.items())

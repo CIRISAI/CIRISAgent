@@ -1009,3 +1009,83 @@ async def reasoning_stream(request: Request, auth: AuthObserverDep) -> Any:
             "Access-Control-Allow-Headers": "Cache-Control",
         },
     )
+
+
+# ============================================================================
+# Covenant Invocation System (CIS) Endpoint
+# ============================================================================
+
+
+class CovenantInvocationEvent(BaseModel):
+    """Covenant invocation event from CIRISNode."""
+
+    signing_key_id: str = Field(..., description="JWT key ID of the signing WA")
+    signature: str = Field(..., description="Hex-encoded Ed25519 signature over canonical payload")
+    payload: Dict[str, Any] = Field(..., description="Signed covenant invocation payload")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class CovenantInvocationResponse(BaseModel):
+    """Response to covenant invocation."""
+
+    accepted: bool = Field(..., description="Whether the invocation was accepted and validated")
+    message: str = Field(..., description="Status message")
+
+
+@router.post("/covenant-invocation", responses=RESPONSES_500_503)
+async def receive_covenant_invocation(
+    body: CovenantInvocationEvent, request: Request, auth: AuthAdminDep
+) -> SuccessResponse[CovenantInvocationResponse]:
+    """
+    Receive a Covenant Invocation System (CIS) event.
+
+    This endpoint receives signed shutdown directives from CIRISNode.
+    The event's Ed25519 signature is verified against the signing WA's
+    public key. Only ROOT or AUTHORITY WAs can issue covenant invocations.
+
+    Requires ADMIN role for the API call, plus valid Ed25519 signature
+    from an authorized WA certificate.
+    """
+    runtime = getattr(request.app.state, "runtime", None)
+    if not runtime:
+        raise HTTPException(status_code=503, detail="Agent runtime not available")
+
+    try:
+        # Get the WiseBus from runtime's service registry
+        wise_bus = None
+        if hasattr(runtime, "service_registry"):
+            from ciris_engine.schemas.runtime.enums import ServiceType
+
+            # Access the wise bus through the processor services
+            if hasattr(runtime, "agent_processor") and hasattr(runtime.agent_processor, "services"):
+                wise_bus = runtime.agent_processor.services.wise_bus
+
+        if not wise_bus:
+            raise HTTPException(status_code=503, detail="WiseBus not available")
+
+        # Delegate to WiseBus for signature verification and shutdown
+        result = await wise_bus.handle_covenant_invocation({
+            "signing_key_id": body.signing_key_id,
+            "signature": body.signature,
+            "payload": body.payload,
+        })
+
+        if result:
+            return SuccessResponse(
+                data=CovenantInvocationResponse(
+                    accepted=True,
+                    message="Covenant invocation accepted — shutdown initiated",
+                )
+            )
+        else:
+            raise HTTPException(
+                status_code=403,
+                detail="Covenant invocation rejected — signature verification failed",
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing covenant invocation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

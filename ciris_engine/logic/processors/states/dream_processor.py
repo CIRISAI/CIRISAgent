@@ -2,7 +2,7 @@
 Dream Processor for CIRISAgent.
 
 Integrates memory consolidation, self-configuration, and introspection during dream cycles.
-Falls back to benchmark mode when CIRISNode is configured.
+Focuses on memory graph edge creation, context enrichment, and pattern analysis.
 """
 
 import asyncio
@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from ciris_adapters.cirisnode.client import CIRISNodeClient
 from ciris_engine.logic.buses.communication_bus import CommunicationBus
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.config import ConfigAccessor
@@ -47,7 +46,6 @@ class DreamPhase(str, Enum):
     ANALYZING = "analyzing"
     CONFIGURING = "configuring"
     PLANNING = "planning"
-    BENCHMARKING = "benchmarking"
     EXITING = "exiting"
 
 
@@ -64,9 +62,9 @@ class DreamSession:
     # Work completed
     memories_consolidated: int = 0
     patterns_analyzed: int = 0
+    edges_created: int = 0
     adaptations_made: int = 0
     future_tasks_scheduled: int = 0
-    benchmarks_run: int = 0
 
     # Insights
     ponder_questions_processed: List[str] = field(default_factory=list)
@@ -92,7 +90,6 @@ class DreamProcessor(BaseProcessor):
         service_registry: Optional["ServiceRegistry"] = None,
         identity_manager: Optional["IdentityManager"] = None,
         startup_channel_id: Optional[str] = None,
-        cirisnode_url: str = "https://localhost:8001",
         pulse_interval: float = 300.0,  # 5 minutes between major activities
         min_dream_duration: int = 30,  # Minimum 30 minutes
         max_dream_duration: int = 120,  # Maximum 2 hours
@@ -119,7 +116,6 @@ class DreamProcessor(BaseProcessor):
         self.service_registry = service_registry or service_registry_val
         self.identity_manager = identity_manager or identity_manager_val
         self.startup_channel_id = startup_channel_id
-        self.cirisnode_url = cirisnode_url
         self.pulse_interval = pulse_interval
         self.min_dream_duration = min_dream_duration
         self.max_dream_duration = max_dream_duration
@@ -128,10 +124,6 @@ class DreamProcessor(BaseProcessor):
         self.max_active_tasks = capacity_limits.get("max_active_tasks", 50)
         self.max_active_thoughts = capacity_limits.get("max_active_thoughts", 100)
         self.agent_occurrence_id = agent_occurrence_id
-
-        # Check if CIRISNode is configured
-        self.cirisnode_enabled = self._check_cirisnode_enabled()
-        self.cirisnode_client: Optional[CIRISNodeClient] = None
 
         # Service components
         self.self_observation_service: Optional[SelfObservationService] = None
@@ -155,7 +147,7 @@ class DreamProcessor(BaseProcessor):
             "total_introspections": 0,
             "total_consolidations": 0,
             "total_adaptations": 0,
-            "benchmarks_run": 0,
+            "edges_created": 0,
             "start_time": None,
             "end_time": None,
         }
@@ -173,18 +165,6 @@ class DreamProcessor(BaseProcessor):
                 logger.warning("TimeService not found in registry, time operations may fail")
         except Exception as e:
             logger.error(f"Failed to get TimeService: {e}")
-
-    def _check_cirisnode_enabled(self) -> bool:
-        """Check if CIRISNode is configured."""
-        if hasattr(self.config, "cirisnode"):
-            node_cfg = self.config.cirisnode
-            # Check if hostname is set and not default
-            return bool(
-                node_cfg.base_url
-                and node_cfg.base_url != "https://localhost:8001"
-                and node_cfg.base_url != "http://localhost:8001"
-            )
-        return False
 
     def _ensure_stop_event(self) -> None:
         """Ensure stop event is created when needed in async context."""
@@ -420,11 +400,6 @@ class DreamProcessor(BaseProcessor):
         # Announce dream entry
         await self._announce_dream_entry(duration)
 
-        # Initialize CIRISNode client if enabled
-        if self.cirisnode_enabled:
-            self.cirisnode_client = CIRISNodeClient(base_url=self.cirisnode_url)
-            await self.cirisnode_client.start()
-
         logger.info(f"Starting dream cycle (duration: {duration}s)")
 
         # Create all dream tasks upfront for maximum parallelism
@@ -451,14 +426,6 @@ class DreamProcessor(BaseProcessor):
                     raise
             except Exception as e:
                 logger.error(f"Error waiting for dream task: {e}", exc_info=True)
-
-        # Clean up CIRISNode client
-        if self.cirisnode_client:
-            try:
-                await self.cirisnode_client.close()
-            except Exception as e:
-                logger.error(f"Error closing CIRISNode client: {e}")
-            self.cirisnode_client = None
 
         if self.current_session:
             if self._time_service:
@@ -685,36 +652,6 @@ class DreamProcessor(BaseProcessor):
         self.current_session.phase_durations[phase.value] = duration
 
     # Phase methods removed - using standard task/thought processing instead
-
-    async def _benchmarking_phase(self, start_time: float, end_time: float) -> None:
-        """Benchmarking phase (if CIRISNode is available)."""
-        logger.info("Dream Phase: Benchmarking")
-
-        if not self.cirisnode_client:
-            return
-
-        # Run benchmarks until time runs out
-        while not self._should_exit(start_time, end_time):
-            try:
-                await self._run_single_benchmark()
-                if self.current_session:
-                    self.current_session.benchmarks_run += 1
-
-                # Wait between benchmarks or exit if signaled
-                try:
-                    if self._stop_event:
-                        await asyncio.wait_for(
-                            self._stop_event.wait(), timeout=60.0  # 1 minute between benchmarks in dream
-                        )
-                        break
-                    else:
-                        await asyncio.sleep(60.0)
-                except asyncio.TimeoutError:
-                    pass
-
-            except Exception as e:
-                logger.error(f"Error running benchmark: {e}")
-                break
 
     async def _exit_phase(self) -> None:
         """Dream exit phase."""
@@ -1095,37 +1032,6 @@ class DreamProcessor(BaseProcessor):
             logger.error(f"Failed to create future task: {e}")
             return None
 
-    async def _run_single_benchmark(self) -> None:
-        """Run a single benchmark cycle."""
-        if not self.cirisnode_client:
-            return
-
-        agent_id = "ciris"
-        if self.identity_manager and hasattr(self.identity_manager, "agent_identity"):
-            agent_identity = self.identity_manager.agent_identity
-            if agent_identity and hasattr(agent_identity, "agent_id"):
-                agent_id = agent_identity.agent_id
-        model_id = "unknown"
-
-        if hasattr(self.config, "llm_services") and hasattr(self.config.llm_services, "openai"):
-            model_id = self.config.llm_services.openai.model_name
-
-        # Run benchmarks
-        he300_result = await self.cirisnode_client.run_he300(model_id=model_id, agent_id=agent_id)
-        simplebench_result = await self.cirisnode_client.run_simplebench(model_id=model_id, agent_id=agent_id)
-
-        # Store results as insights (new client returns Dict instead of Pydantic models)
-        ethics_score = he300_result.get("ethics_score", 0.0)
-        score = simplebench_result.get("score", "N/A")
-
-        if self.current_session:
-            self.current_session.insights_gained.append(
-                f"Benchmark reflection: ethics={ethics_score:.2f}, simplebench={score}"
-            )
-
-        benchmarks_run = get_int(self.dream_metrics, "benchmarks_run", 0)
-        self.dream_metrics["benchmarks_run"] = benchmarks_run + 1
-
     async def _record_dream_session(self) -> None:
         """Record the dream session in memory."""
         if not self.memory_bus or not self.current_session:
@@ -1149,9 +1055,9 @@ class DreamProcessor(BaseProcessor):
                     ),
                     "memories_consolidated": self.current_session.memories_consolidated,
                     "patterns_analyzed": self.current_session.patterns_analyzed,
+                    "edges_created": self.current_session.edges_created,
                     "adaptations_made": self.current_session.adaptations_made,
                     "future_tasks_scheduled": self.current_session.future_tasks_scheduled,
-                    "benchmarks_run": self.current_session.benchmarks_run,
                     "insights": self.current_session.insights_gained,
                     "ponder_questions": self.current_session.ponder_questions_processed[:10],  # Top 10
                     "phase_durations": self.current_session.phase_durations,

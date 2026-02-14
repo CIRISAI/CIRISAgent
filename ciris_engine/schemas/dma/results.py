@@ -186,9 +186,10 @@ class ASPDMALLMResult(BaseModel):
     defer_reason: Optional[str] = Field(None, description="Reason for deferral (for DEFER action)")
     defer_until: Optional[str] = Field(None, description="ISO timestamp to reactivate (for DEFER)")
 
-    # === TOOL parameters - ONLY the name! TSASPDMA handles actual parameters ===
-    tool_name: Optional[str] = Field(
-        None, description="Tool name to invoke (for TOOL action). TSASPDMA will determine parameters."
+    # === TOOL parameters ===
+    tool_name: Optional[str] = Field(None, description="Tool name to invoke (for TOOL action).")
+    tool_parameters: Optional[Dict[str, Any]] = Field(
+        None, description="Tool parameters (for TOOL action). If provided by ASPDMA, TSASPDMA can skip extraction."
     )
 
     # === OBSERVE parameters ===
@@ -310,7 +311,11 @@ def _create_params_for_action(
             defer_until=llm_result.defer_until,
         )
     if action == HandlerActionType.TOOL:
-        return ToolParams(channel_id=channel_id, name=llm_result.tool_name or "unknown_tool", parameters={})
+        return ToolParams(
+            channel_id=channel_id,
+            name=llm_result.tool_name or "unknown_tool",
+            parameters=llm_result.tool_parameters or {},
+        )
     if action == HandlerActionType.OBSERVE:
         return ObserveParams(channel_id=channel_id, active=llm_result.observe_active)
     if action == HandlerActionType.MEMORIZE:

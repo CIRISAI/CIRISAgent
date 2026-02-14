@@ -383,6 +383,62 @@ def _handle_partnership_defer(
 router = APIRouter(prefix="/partnership", tags=["Partnership"])
 
 
+@router.get("/options")
+async def get_partnership_options(
+    req: Request,
+    current_user: Annotated[TokenData, Depends(get_current_user)],
+) -> StandardResponse:
+    """
+    Get available partnership options and requirements.
+
+    Returns information about what partnership entails, including:
+    - Required consent categories
+    - Approval process description
+    - Benefits and responsibilities
+    - Example use cases
+
+    This endpoint helps users understand what partnered status means
+    before they request it.
+    """
+    from ciris_engine.schemas.consent.core import ConsentCategory
+
+    options = {
+        "required_categories": [
+            ConsentCategory.INTERACTION.value,
+            ConsentCategory.PREFERENCE.value,
+            ConsentCategory.IMPROVEMENT.value,
+        ],
+        "optional_categories": [
+            ConsentCategory.RESEARCH.value,
+            ConsentCategory.SHARING.value,
+        ],
+        "approval_process": (
+            "Partnership requests require bilateral consent. After you request "
+            "partnership, the agent will review your request and may accept, "
+            "reject, or defer based on the relationship context and mutual benefit."
+        ),
+        "benefits": [
+            "Deeper personalization based on preference learning",
+            "Contribution to model improvement through feedback",
+            "Access to advanced features requiring higher trust",
+            "Long-term relationship continuity without session expiry",
+        ],
+        "responsibilities": [
+            "Provide honest feedback to help the agent improve",
+            "Report any concerning behaviors through proper channels",
+            "Respect the bilateral nature of the partnership",
+        ],
+        "revocation": (
+            "Either party can revoke partnership at any time. " "Data handling follows consent decay protocols."
+        ),
+    }
+
+    return create_partnership_response(
+        data=options,
+        message="Partnership options retrieved",
+    )
+
+
 @router.get("/pending")
 async def list_pending_partnerships(
     req: Request,

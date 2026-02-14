@@ -165,7 +165,6 @@ class AgentProcessor:
             service_registry=service_registry_typed,
             identity_manager=identity_manager_typed,
             startup_channel_id=startup_channel_id,
-            cirisnode_url="https://localhost:8001",  # Default since cirisnode config not in essential
             agent_occurrence_id=agent_occurrence_id,
         )
 

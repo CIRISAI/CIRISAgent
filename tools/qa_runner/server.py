@@ -592,6 +592,11 @@ class APIServerManager:
             env["CIRIS_SQL_EXTERNAL_DATA_CONFIG"] = str(self._sql_config_path)
             self.console.print(f"[dim]Configured SQL external data service: {self._sql_config_path}[/dim]")
 
+        # HE-300 benchmark: Use the he-300-benchmark template (limits actions, no ponder)
+        if any(m == QAModule.HE300_BENCHMARK for m in self.modules):
+            env["CIRIS_TEMPLATE"] = "he-300-benchmark"
+            self.console.print("[dim]Using he-300-benchmark template (limited actions: speak, task_complete)[/dim]")
+
         # Enable covenant_metrics adapter with consent for trace capture tests
         # Also enable when --live-lens is used to send traces to production Lens
         if any(m == QAModule.COVENANT_METRICS for m in self.modules) or self.config.live_lens:

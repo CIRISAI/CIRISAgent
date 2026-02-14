@@ -164,6 +164,17 @@ Available modules:
     parser.add_argument("--workers", type=int, default=4, help="Number of parallel workers (default: 4)")
     parser.add_argument("--timeout", type=float, default=300.0, help="Total timeout in seconds (default: 300)")
     parser.add_argument("--retry", type=int, default=3, help="Number of retries for failed tests (default: 3)")
+    parser.add_argument(
+        "--proceed-anyway",
+        action="store_true",
+        help="Continue running tests after first failure (default: fail-fast)",
+    )
+    parser.add_argument(
+        "--test-timeout",
+        type=float,
+        default=30.0,
+        help="Timeout for individual test interactions in seconds (default: 30)",
+    )
 
     # Output configuration
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
@@ -286,6 +297,9 @@ def main():
         live_base_url=live_base_url,
         # Live Lens configuration (for covenant_metrics tests)
         live_lens=args.live_lens,
+        # Fail-fast configuration
+        fail_fast=not args.proceed_anyway,
+        test_timeout=args.test_timeout,
     )
 
     # Create and run runner

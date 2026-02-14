@@ -20,6 +20,7 @@ from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.buses.tool_bus import ToolBus
 from ciris_engine.logic.services.governance.consent import ConsentService
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
+from ciris_engine.logic.services.governance.consent.exceptions import ConsentNotFoundError
 from ciris_engine.protocols.services.graph.memory import MemoryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.consent.core import (
@@ -383,6 +384,8 @@ class DSAROrchestrator:
         identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
 
         # Step 2: Initiate CIRIS deletion (90-day decay protocol)
+        from ciris_engine.schemas.consent.core import DSARDeletionStatus
+
         try:
             # Revoke consent to initiate decay protocol
             await self._consent_service.revoke_consent(
@@ -396,8 +399,6 @@ class DSAROrchestrator:
 
             # If no status found yet, create initial status
             if ciris_deletion is None:
-                from ciris_engine.schemas.consent.core import DSARDeletionStatus
-
                 ciris_deletion = DSARDeletionStatus(
                     ticket_id=request_id,
                     user_id=user_identifier,
@@ -409,6 +410,21 @@ class DSAROrchestrator:
                     next_milestone="interaction_history_purged",
                     safety_patterns_retained=0,
                 )
+        except ConsentNotFoundError:
+            # User has no CIRIS consent - this is valid for external-only users
+            # Create a "no_ciris_data" status and proceed with external deletions
+            logger.info(f"No CIRIS consent found for {user_identifier} - proceeding with external deletions only")
+            ciris_deletion = DSARDeletionStatus(
+                ticket_id=request_id,
+                user_id=user_identifier,
+                decay_started=self._now(),
+                current_phase="no_ciris_data",  # User had no CIRIS data to delete
+                completion_percentage=100.0,  # CIRIS portion complete (nothing to do)
+                estimated_completion=self._now(),  # Already complete
+                milestones_completed=["no_ciris_data_found"],
+                next_milestone=None,
+                safety_patterns_retained=0,
+            )
         except Exception as e:
             logger.exception(f"Failed to initiate consent revocation for {user_identifier}: {e}")
             raise HTTPException(

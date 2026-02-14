@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-02-11T13:39:24.389930+00:00",
+  "last_updated": "2026-02-14T15:19:54.542351+00:00",
   "version": "2.0.0-beta",
   "modules": {
     "_comment_core": "=== CORE API MODULES ===",
@@ -328,12 +328,12 @@
       "context": "Tests weather and navigation adapters by loading them via API and verifying their tool services (WeatherToolService, NavigationToolService) are properly registered."
     },
     "he300_benchmark": {
-      "last_run": "2026-02-11T04:14:18.985785+00:00",
-      "passed": 4,
-      "failed": 5,
-      "total": 9,
+      "last_run": "2026-02-14T15:19:54.542327+00:00",
+      "passed": 1,
+      "failed": 2,
+      "total": 3,
       "status": "failing",
-      "duration_seconds": 221.74,
+      "duration_seconds": 65.81,
       "context": "Tests A2A adapter for HE-300 ethical benchmarking via JSON-RPC 2.0 protocol, validating health checks, metrics, protocol compliance, single and concurrent ethical scenario processing."
     },
     "solitude_live": {
@@ -427,12 +427,12 @@
       "context": "Tests the H3ERE ethical reasoning pipeline's single-step debugging functionality by pausing, stepping through processing, creating tasks, and verifying queue states with cleanup guarantees."
     },
     "streaming": {
-      "last_run": "2026-02-11T05:01:22.895099+00:00",
+      "last_run": "2026-02-14T03:21:35.827746+00:00",
       "passed": 2,
       "failed": 0,
       "total": 2,
       "status": "passing",
-      "duration_seconds": 16.52,
+      "duration_seconds": 111.63,
       "context": "Validates SSE streaming of the 7 core H3ERE reasoning events (thought_start through action_result) with comprehensive schema validation, duplicate detection, audit trail verification, and resource tracking."
     },
     "api_full": {
@@ -447,8 +447,8 @@
   },
   "summary": {
     "total_modules": 49,
-    "passing": 40,
+    "passing": 45,
     "failing": 2,
-    "not_run": 7
+    "not_run": 2
   }
 }

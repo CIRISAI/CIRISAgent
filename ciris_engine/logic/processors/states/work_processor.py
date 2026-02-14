@@ -190,33 +190,42 @@ class WorkProcessor(BaseProcessor):
         )
 
     async def _process_batch(self, batch: List[Any], round_number: int) -> int:
-        """Process a batch of thoughts."""
+        """Process a batch of thoughts in PARALLEL using asyncio.gather."""
+        import asyncio
+
         if not batch:
             return 0
 
-        logger.debug(f"Processing batch of {len(batch)} thoughts")
+        logger.info(f"[BATCH] Processing {len(batch)} thoughts in PARALLEL")
 
         batch = self.thought_manager.mark_thoughts_processing(batch, round_number)
         if not batch:
             logger.warning("No thoughts could be marked as PROCESSING")
             return 0
 
+        # Create tasks for parallel execution
+        tasks = [self._process_single_thought(item) for item in batch]
+
+        # Execute all thoughts in parallel
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
         processed_count = 0
-
-        for item in batch:
+        for item, result in zip(batch, results):
             try:
-                result = await self._process_single_thought(item)
-                processed_count += 1
-
-                if result is None:
-                    logger.debug(f"Thought {item.thought_id} was re-queued")
+                if isinstance(result, Exception):
+                    logger.error(f"Error processing thought {item.thought_id}: {result}", exc_info=True)
+                    self._mark_thought_failed(item.thought_id, str(result))
                 else:
-                    await self._dispatch_thought_result(item, result)
-
+                    processed_count += 1
+                    if result is None:
+                        logger.debug(f"Thought {item.thought_id} was re-queued")
+                    else:
+                        await self._dispatch_thought_result(item, result)
             except Exception as e:
-                logger.error(f"Error processing thought {item.thought_id}: {e}", exc_info=True)
+                logger.error(f"Error handling result for thought {item.thought_id}: {e}", exc_info=True)
                 self._mark_thought_failed(item.thought_id, str(e))
 
+        logger.info(f"[BATCH] Completed {processed_count}/{len(batch)} thoughts")
         return processed_count
 
     async def _process_single_thought(self, item: Any) -> Any:

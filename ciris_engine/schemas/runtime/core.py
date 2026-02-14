@@ -26,6 +26,7 @@ class CoreProfile(BaseModel):
     # Behavioral customization
     dsdma_prompt_template: Optional[str] = Field(None, description="Custom DSDMA prompt template")
     csdma_overrides: Dict[str, str] = Field(default_factory=dict, description="Common sense overrides")
+    pdma_overrides: Dict[str, str] = Field(default_factory=dict, description="Ethical PDMA overrides")
     action_selection_pdma_overrides: Dict[str, str] = Field(
         default_factory=dict, description="Action selection overrides"
     )

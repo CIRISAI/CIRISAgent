@@ -450,8 +450,24 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
     async def _delete_duplicate_adapters_in_group(
         self, group_key: tuple[str, str, str], adapter_ids: List[str], adapter_instances: Dict[str, Dict[str, Any]]
     ) -> int:
-        """Delete all but the newest adapter in a duplicate group. Returns count deleted."""
+        """Delete all but the newest adapter in a duplicate group. Returns count deleted.
+
+        IMPORTANT: Multi-occurrence safety - only processes groups belonging to the current occurrence.
+        """
         if len(adapter_ids) <= 1:
+            return 0
+
+        # MULTI-OCCURRENCE SAFETY: Only process groups belonging to the current occurrence
+        from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
+
+        adapter_type, occurrence_id, _ = group_key
+        current_occurrence_id = get_current_occurrence_id()
+
+        if occurrence_id != current_occurrence_id:
+            logger.debug(
+                f"Skipping dedupe for adapter group (type={adapter_type}, occurrence={occurrence_id}) - "
+                f"belongs to different occurrence than current ({current_occurrence_id})"
+            )
             return 0
 
         adapter_ids_sorted = sorted(
@@ -460,10 +476,10 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             reverse=True,
         )
         to_delete = adapter_ids_sorted[1:]
-        adapter_type, occurrence_id, _ = group_key
 
         for adapter_id in to_delete:
-            await self._delete_adapter_config_entries(adapter_id)
+            # skip_occurrence_check=True since we already verified the group belongs to current occurrence
+            await self._delete_adapter_config_entries(adapter_id, skip_occurrence_check=True)
             logger.info(
                 f"Deleted duplicate adapter config: {adapter_id} (type={adapter_type}, occurrence={occurrence_id})"
             )
@@ -602,10 +618,39 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         found, typed_value = self._extract_typed_value(val)
         return typed_value if found else val
 
-    async def _delete_adapter_config_entries(self, adapter_id: str) -> None:
-        """Delete all config entries for an adapter instance."""
+    async def _delete_adapter_config_entries(self, adapter_id: str, skip_occurrence_check: bool = False) -> None:
+        """Delete all config entries for an adapter instance.
+
+        IMPORTANT: Multi-occurrence safety - only deletes configs belonging to the current occurrence
+        unless skip_occurrence_check is True (used when we've already verified ownership).
+        This prevents cross-contamination in shared database deployments.
+
+        Args:
+            adapter_id: The adapter ID to delete configs for
+            skip_occurrence_check: If True, skip occurrence validation (caller already verified)
+        """
         if not self.config_service:
             return
+
+        # MULTI-OCCURRENCE SAFETY: Check occurrence ownership before deletion
+        if not skip_occurrence_check:
+            from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
+
+            current_occurrence_id = get_current_occurrence_id()
+
+            # Get the adapter's occurrence_id from the graph
+            occurrence_key = f"adapter.{adapter_id}.occurrence_id"
+            occurrence_node = await self.config_service.get_config(occurrence_key)
+            saved_occurrence_id = self._extract_config_value(occurrence_node)
+
+            # If there's a saved occurrence_id and it doesn't match current, refuse to delete
+            if saved_occurrence_id is not None and saved_occurrence_id != current_occurrence_id:
+                logger.warning(
+                    f"MULTI-OCCURRENCE SAFETY: Refusing to delete adapter config for {adapter_id} - "
+                    f"adapter belongs to occurrence '{saved_occurrence_id}', current is '{current_occurrence_id}'. "
+                    f"This prevents cross-contamination in shared database deployments."
+                )
+                return
 
         keys_to_delete = [
             f"adapter.{adapter_id}.type",

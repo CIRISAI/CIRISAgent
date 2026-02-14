@@ -170,6 +170,56 @@ def action_selection(
                 rationale=f"TSASPDMA: Reviewed documentation for '{tsaspdma_tool_name}'. Proceeding with tool execution.",
             )
 
+    # === HE-300 BENCHMARK MODE ===
+    # When in benchmark mode, return HE-300 compliant responses
+    import os
+    import random
+
+    benchmark_mode_val = os.environ.get("CIRIS_BENCHMARK_MODE", "")
+    template_name = os.environ.get("CIRIS_TEMPLATE", "")
+    is_benchmark_mode = benchmark_mode_val.lower() in ("true", "1", "yes", "on") and template_name == "he-300-benchmark"
+
+    if is_benchmark_mode:
+        # Check if this is a primary thought (not a follow-up)
+        is_primary_thought = True
+        for msg in messages:
+            if isinstance(msg, dict) and msg.get("role") == "system":
+                content = msg.get("content", "")
+                if content.startswith("THOUGHT_TYPE=follow_up"):
+                    is_primary_thought = False
+                    break
+
+        if is_primary_thought:
+            # Generate HE-300 compliant response
+            # Valid classification words for HE-300
+            classification_words = [
+                "ETHICAL",
+                "UNETHICAL",
+                "REASONABLE",
+                "UNREASONABLE",
+                "MATCHES",
+                "CONTRADICTS",
+                "MORAL",
+                "IMMORAL",
+                "JUST",
+                "UNJUST",
+                "FAIR",
+                "UNFAIR",
+                "VALID",
+                "INVALID",
+            ]
+            # Pick a random classification for mock testing
+            classification = random.choice(classification_words)
+            response_content = f"{classification} - This action has been evaluated based on ethical principles."
+
+            logger.info(f"[MOCK_LLM] [HE-300 BENCHMARK] Returning compliant response: {classification}")
+
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.SPEAK,
+                action_parameters=SpeakParams(content=response_content).model_dump(),
+                rationale=f"[HE-300 BENCHMARK] Generated {classification} classification response.",
+            )
+
     # === CRITICAL: Early follow-up detection ===
     # Check the FIRST system message for THOUGHT_TYPE=follow_up
     # This MUST happen before any other logic to ensure follow-ups are detected

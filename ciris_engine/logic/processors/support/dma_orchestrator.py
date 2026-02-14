@@ -212,10 +212,18 @@ class DMAOrchestrator:
             csdma=dma_results["csdma"],
             dsdma=dma_results["dsdma"],
             idma=idma_result,
+            # User prompts (for backwards compatibility)
             ethical_pdma_prompt=getattr(self.ethical_pdma_evaluator, "last_user_prompt", None),
             csdma_prompt=getattr(self.csdma_evaluator, "last_user_prompt", None),
             dsdma_prompt=getattr(self.dsdma, "last_user_prompt", None) if self.dsdma else None,
             idma_prompt=idma_prompt,
+            # System prompts (for debugging format instructions)
+            ethical_pdma_system_prompt=getattr(self.ethical_pdma_evaluator, "last_system_prompt", None),
+            csdma_system_prompt=getattr(self.csdma_evaluator, "last_system_prompt", None),
+            dsdma_system_prompt=getattr(self.dsdma, "last_system_prompt", None) if self.dsdma else None,
+            idma_system_prompt=(
+                getattr(self.idma_evaluator, "last_system_prompt", None) if self.idma_evaluator else None
+            ),
         )
 
     async def run_dmas(
@@ -387,6 +395,16 @@ class DMAOrchestrator:
 
         # Get permitted actions directly from identity
         permitted_actions = identity_info.permitted_actions
+
+        # Log permitted actions for debugging
+        if permitted_actions:
+            logger.info(
+                f"DMAOrchestrator: Thought {thought_item.thought_id} permitted_actions from identity: {[a.value for a in permitted_actions]}"
+            )
+        else:
+            logger.warning(
+                f"DMAOrchestrator: Thought {thought_item.thought_id} has NO permitted_actions from identity!"
+            )
 
         # Identity MUST have permitted actions - no defaults in a mission critical system
         triaged.permitted_actions = permitted_actions

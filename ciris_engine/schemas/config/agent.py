@@ -72,6 +72,7 @@ class AgentTemplate(BaseModel):
     # DMA overrides
     dsdma_kwargs: Optional["DSDMAConfiguration"] = Field(None, description="Domain-specific DMA configuration")
     csdma_overrides: Optional["CSDMAOverrides"] = Field(None, description="Common sense DMA prompt overrides")
+    pdma_overrides: Optional["PDMAOverrides"] = Field(None, description="Ethical PDMA prompt overrides")
     action_selection_pdma_overrides: Optional["ActionSelectionOverrides"] = Field(
         None, description="Action selection prompt overrides"
     )
@@ -129,6 +130,16 @@ class AgentTemplate(BaseModel):
         if isinstance(v, dict):
             return CSDMAOverrides(**v)
         return v  # type: ignore[no-any-return]  # Already a CSDMAOverrides instance
+
+    @field_validator("pdma_overrides", mode="before")
+    @classmethod
+    def convert_pdma_overrides(cls, v: Any) -> Optional["PDMAOverrides"]:
+        """Convert dict to PDMAOverrides if needed."""
+        if v is None:
+            return None
+        if isinstance(v, dict):
+            return PDMAOverrides(**v)
+        return v  # type: ignore[no-any-return]  # Already a PDMAOverrides instance
 
     @field_validator("action_selection_pdma_overrides", mode="before")
     @classmethod
@@ -237,6 +248,14 @@ class DSDMAConfiguration(BaseModel):
 
 class CSDMAOverrides(BaseModel):
     """Common Sense DMA prompt overrides."""
+
+    system_prompt: Optional[str] = Field(None, description="Override system prompt")
+    user_prompt_template: Optional[str] = Field(None, description="Override user prompt template")
+    model_config = ConfigDict(defer_build=True, extra="forbid")  # Strict validation
+
+
+class PDMAOverrides(BaseModel):
+    """Ethical PDMA prompt overrides."""
 
     system_prompt: Optional[str] = Field(None, description="Override system prompt")
     user_prompt_template: Optional[str] = Field(None, description="Override user prompt template")

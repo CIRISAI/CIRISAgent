@@ -63,8 +63,9 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         self.prompt_loader = get_prompt_loader()
         self.prompt_template_data = self.prompt_loader.load_prompt_template("idma")
 
-        # Store last user prompt for debugging/streaming
+        # Store last prompts for debugging/streaming
         self.last_user_prompt: Optional[str] = None
+        self.last_system_prompt: Optional[str] = None
 
         logger.info(f"IDMAEvaluator initialized with model: {self.model_name}")
 
@@ -216,7 +217,9 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
             images=thought_images,
         )
 
-        # Store user prompt for streaming/debugging
+        # Store prompts for streaming/debugging
+        system_messages = [m for m in messages if m.get("role") == "system"]
+        self.last_system_prompt = "\n\n".join(str(m.get("content", "")) for m in system_messages)
         user_messages = [m for m in messages if m.get("role") == "user"]
         content = user_messages[-1]["content"] if user_messages else None
         self.last_user_prompt = str(content) if content is not None else None

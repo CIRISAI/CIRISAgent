@@ -58,8 +58,9 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         self.prompt_loader = get_prompt_loader()
         self.prompt_template_data = self.prompt_loader.load_prompt_template("csdma_common_sense")
 
-        # Store last user prompt for debugging/streaming
+        # Store last prompts for debugging/streaming
         self.last_user_prompt: Optional[str] = None
+        self.last_system_prompt: Optional[str] = None
 
         # Client will be retrieved from the service registry during evaluation
 
@@ -77,15 +78,30 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         user_profiles_block: str,
         images: Optional[List[ImageContent]] = None,
     ) -> List[JSONDict]:
-        """Assemble prompt messages using canonical formatting utilities and prompt loader."""
+        """Assemble prompt messages using canonical formatting utilities and prompt loader.
+
+        Template overrides (from agent template's csdma_overrides) take precedence:
+        - system_prompt: Overrides the system message from YAML
+        - user_prompt_template: Overrides the user message from YAML
+        """
         messages: List[JSONDict] = []
 
         if self.prompt_loader.uses_covenant_header(self.prompt_template_data):
             messages.append({"role": "system", "content": COVENANT_TEXT})
 
-        system_message = self.prompt_loader.get_system_message(
-            self.prompt_template_data, context_summary=context_summary, original_thought_content=thought_content
-        )
+        # Check for template override of system_prompt (e.g., HE-300 format instructions)
+        template_system_override = None
+        if isinstance(self.prompts, dict):
+            template_system_override = self.prompts.get("system_prompt")
+
+        if template_system_override:
+            # Use template override directly - these contain critical format instructions
+            system_message = template_system_override
+            logger.debug(f"CSDMA using template system_prompt override ({len(system_message)} chars)")
+        else:
+            system_message = self.prompt_loader.get_system_message(
+                self.prompt_template_data, context_summary=context_summary, original_thought_content=thought_content
+            )
 
         formatted_system = format_system_prompt_blocks(
             identity_context_block,
@@ -97,16 +113,29 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         )
         messages.append({"role": "system", "content": formatted_system})
 
-        user_message_text = self.prompt_loader.get_user_message(
-            self.prompt_template_data, context_summary=context_summary, original_thought_content=thought_content
-        )
+        # Check for template override of user_prompt_template
+        template_user_override = None
+        if isinstance(self.prompts, dict):
+            template_user_override = self.prompts.get("user_prompt_template")
 
-        if not user_message_text or user_message_text == f"Thought to evaluate: {thought_content}":
-            user_message_text = format_user_prompt_blocks(
-                format_parent_task_chain([]),
-                format_thoughts_chain([{"content": thought_content}]),
-                None,
+        if template_user_override:
+            # Use template override with thought_content substitution
+            user_message_text = template_user_override.format(
+                thought_content=thought_content,
+                context_summary=context_summary,
             )
+            logger.debug(f"CSDMA using template user_prompt_template override ({len(user_message_text)} chars)")
+        else:
+            user_message_text = self.prompt_loader.get_user_message(
+                self.prompt_template_data, context_summary=context_summary, original_thought_content=thought_content
+            )
+
+            if not user_message_text or user_message_text == f"Thought to evaluate: {thought_content}":
+                user_message_text = format_user_prompt_blocks(
+                    format_parent_task_chain([]),
+                    format_thoughts_chain([{"content": thought_content}]),
+                    None,
+                )
 
         # Build multimodal content if images are present
         images_list = images or []
@@ -187,7 +216,9 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             images=thought_images,
         )
 
-        # Store user prompt for streaming/debugging
+        # Store prompts for streaming/debugging
+        system_messages = [m for m in messages if m.get("role") == "system"]
+        self.last_system_prompt = "\n\n".join(str(m.get("content", "")) for m in system_messages)
         user_messages = [m for m in messages if m.get("role") == "user"]
         content = user_messages[-1]["content"] if user_messages else None
         self.last_user_prompt = str(content) if content is not None else None

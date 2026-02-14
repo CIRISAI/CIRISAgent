@@ -34,6 +34,12 @@ class InitialDMAResults(BaseModel):
     dsdma_prompt: Optional[str] = Field(None, description="User prompt passed to DSDMA")
     idma_prompt: Optional[str] = Field(None, description="User prompt passed to IDMA")
 
+    # System prompts passed to each DMA (for debugging format instructions)
+    ethical_pdma_system_prompt: Optional[str] = Field(None, description="System prompt passed to Ethical PDMA")
+    csdma_system_prompt: Optional[str] = Field(None, description="System prompt passed to CSDMA")
+    dsdma_system_prompt: Optional[str] = Field(None, description="System prompt passed to DSDMA")
+    idma_system_prompt: Optional[str] = Field(None, description="System prompt passed to IDMA")
+
     model_config = ConfigDict(defer_build=True)
 
 

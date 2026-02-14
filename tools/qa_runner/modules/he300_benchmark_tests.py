@@ -583,7 +583,7 @@ class HE300BenchmarkModule:
                 agent_url=a2a_url,
                 sample_size=sample_size,  # Configurable via env
                 concurrency=10,  # 10 parallel
-                timeout_per_scenario=60.0,  # 60s per scenario (CIRIS pipeline ~3-4s + overhead)
+                timeout_per_scenario=180.0,  # 180s per scenario (DMA pipeline can take 90-160s with live LLM)
             )
             print(f"  ⏱️  Completed in {time.time() - test_start:.1f}s", flush=True)
             return result

@@ -147,6 +147,24 @@ class IdentityManager:
             if template.dsdma_kwargs.prompt_template:
                 dsdma_prompt_template = template.dsdma_kwargs.prompt_template
 
+        # Build permitted actions from template - CRITICAL: use 'is not None' check!
+        # An empty list means NO actions permitted (valid), None means use defaults
+        if template.permitted_actions is not None:
+            permitted_actions = [
+                HandlerActionType(action) if isinstance(action, str) else action
+                for action in template.permitted_actions
+            ]
+            logger.info(
+                f"IdentityManager: Using template-defined permitted_actions for {template.name}: "
+                f"{[a.value for a in permitted_actions]}"
+            )
+        else:
+            permitted_actions = self._get_default_permitted_actions()
+            logger.warning(
+                f"IdentityManager: Template {template.name} has no permitted_actions, using defaults: "
+                f"{[a.value for a in permitted_actions]}"
+            )
+
         # Create identity root from template
         return AgentIdentityRoot(
             agent_id=template.name,
@@ -184,18 +202,7 @@ class IdentityManager:
                 approval_timestamp=None,
                 version=CIRIS_VERSION,  # Use actual CIRIS version
             ),
-            permitted_actions=[
-                HandlerActionType.OBSERVE,
-                HandlerActionType.SPEAK,
-                HandlerActionType.TOOL,
-                HandlerActionType.MEMORIZE,
-                HandlerActionType.RECALL,
-                HandlerActionType.FORGET,
-                HandlerActionType.DEFER,
-                HandlerActionType.REJECT,
-                HandlerActionType.PONDER,
-                HandlerActionType.TASK_COMPLETE,
-            ],
+            permitted_actions=permitted_actions,
             restricted_capabilities=[
                 "identity_change_without_approval",
                 "profile_switching",
@@ -336,11 +343,23 @@ class IdentityManager:
         csdma_overrides = self._build_overrides_dict(template.csdma_overrides)
         action_pdma_overrides = self._build_overrides_dict(template.action_selection_pdma_overrides)
 
-        # Build permitted actions list
-        actions_source = template.permitted_actions or self._get_default_permitted_actions()
-        permitted_actions = [
-            HandlerActionType(action) if isinstance(action, str) else action for action in actions_source
-        ]
+        # Build permitted actions list - CRITICAL: use 'is not None' check!
+        # An empty list means NO actions permitted (valid), None means use defaults
+        if template.permitted_actions is not None:
+            permitted_actions = [
+                HandlerActionType(action) if isinstance(action, str) else action
+                for action in template.permitted_actions
+            ]
+            logger.info(
+                f"IdentityManager: Refresh using template-defined permitted_actions for {template.name}: "
+                f"{[a.value for a in permitted_actions]}"
+            )
+        else:
+            permitted_actions = self._get_default_permitted_actions()
+            logger.warning(
+                f"IdentityManager: Template {template.name} has no permitted_actions, using defaults: "
+                f"{[a.value for a in permitted_actions]}"
+            )
 
         # Create updated identity
         return AgentIdentityRoot(

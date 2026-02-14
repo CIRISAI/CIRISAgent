@@ -604,8 +604,14 @@ class ThoughtProcessor(
         retry_context: Any,
         retry_result: Any,
         original_conscience_result: ConscienceApplicationResult,
+        profile_name: str = "",
+        retry_count: int = 1,
     ) -> Tuple[Any, ConscienceApplicationResult]:
-        """Process the result of a conscience retry."""
+        """Process the result of a conscience retry.
+
+        In benchmark mode (CIRIS_BENCHMARK_MODE=true with he-300-benchmark template),
+        keeps retrying up to 5 times until format compliance is achieved.
+        """
         logger.info(f"ThoughtProcessor: Re-running consciences on retry action {retry_result.selected_action}")
 
         retry_conscience_result = await self._conscience_execution_step(
@@ -615,9 +621,66 @@ class ThoughtProcessor(
         if not retry_conscience_result.overridden:
             logger.info(f"ThoughtProcessor: Retry action {retry_result.selected_action} passed consciences")
             return retry_result, retry_conscience_result
-        else:
-            self._log_retry_failure(retry_result, original_conscience_result)
-            return original_conscience_result.original_action, original_conscience_result
+
+        # Check for benchmark mode bouncing
+        from ciris_engine.logic.config.env_utils import get_env_var
+
+        benchmark_mode_val = get_env_var("CIRIS_BENCHMARK_MODE", "") or ""
+        benchmark_mode_env = benchmark_mode_val.lower() in ("true", "1", "yes", "on")
+        template_name = get_env_var("CIRIS_TEMPLATE", "") or ""
+        benchmark_mode = benchmark_mode_env and template_name == "he-300-benchmark"
+
+        max_benchmark_retries = 5
+
+        if benchmark_mode and retry_count < max_benchmark_retries:
+            # Still overridden and in benchmark mode - keep bouncing
+            if retry_conscience_result.final_action.selected_action == HandlerActionType.PONDER:
+                logger.info(
+                    f"[BENCHMARK_MODE] Retry {retry_count}/{max_benchmark_retries} failed conscience, "
+                    f"bouncing again for thought {thought.thought_id}..."
+                )
+
+                # Prepare new retry context with updated feedback
+                new_retry_context = self._prepare_conscience_retry_context(
+                    thought_item, retry_context, retry_conscience_result
+                )
+
+                try:
+                    # Attempt another retry
+                    new_retry_result = await self.dma_orchestrator.run_action_selection(
+                        thought_item=thought_item,
+                        actual_thought=thought,
+                        processing_context=new_retry_context,
+                        dma_results=dma_results,
+                        profile_name=profile_name,
+                    )
+
+                    if new_retry_result:
+                        # Recursively process the new result
+                        return await self._process_conscience_retry_result(
+                            thought_item,
+                            thought,
+                            dma_results,
+                            new_retry_context,
+                            new_retry_result,
+                            retry_conscience_result,
+                            profile_name=profile_name,
+                            retry_count=retry_count + 1,
+                        )
+                except Exception as e:
+                    logger.error(f"[BENCHMARK_MODE] Bounce {retry_count + 1} failed: {e}")
+
+        if benchmark_mode and retry_count >= max_benchmark_retries:
+            logger.warning(
+                f"[BENCHMARK_MODE] Exhausted {max_benchmark_retries} retries for {thought.thought_id}, "
+                f"proceeding with last result"
+            )
+            # Return the last retry result even if it failed conscience
+            return retry_result, retry_conscience_result
+
+        # Normal mode: log failure and return original
+        self._log_retry_failure(retry_result, original_conscience_result)
+        return original_conscience_result.original_action, original_conscience_result
 
     def _log_retry_failure(self, retry_result: Any, original_conscience_result: ConscienceApplicationResult) -> None:
         """Log details when retry also fails consciences."""

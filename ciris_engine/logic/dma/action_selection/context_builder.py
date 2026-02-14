@@ -329,14 +329,26 @@ Adhere strictly to the schema for your JSON output.
             HandlerActionType.TASK_COMPLETE,
         ]
 
-        permitted_actions = triaged_inputs.permitted_actions or default_permitted_actions
+        original_thought = triaged_inputs.original_thought
+
+        # CRITICAL: Use 'is not None' check, NOT truthiness check!
+        # An empty list [] should not fall back to defaults - it means NO actions permitted.
+        # Only fall back if the value is actually None (not provided).
+        if triaged_inputs.permitted_actions is not None:
+            permitted_actions = triaged_inputs.permitted_actions
+            logger.info(
+                f"ActionSelectionPDMA: Using template-defined permitted_actions for thought {original_thought.thought_id}: {[a.value for a in permitted_actions]}"
+            )
+        else:
+            permitted_actions = default_permitted_actions
+            logger.warning(
+                f"ActionSelectionPDMA: 'permitted_actions' is None for thought {original_thought.thought_id}. Using default permitted actions: {[a.value for a in permitted_actions]}"
+            )
 
         if not permitted_actions:
-            original_thought = triaged_inputs.original_thought
-            logger.warning(
-                f"ActionSelectionPDMA: 'permitted_actions' in triaged_inputs is empty for thought {original_thought.thought_id}. Falling back to default."
+            logger.error(
+                f"ActionSelectionPDMA: 'permitted_actions' is EMPTY for thought {original_thought.thought_id}. This should never happen - check template configuration."
             )
-            permitted_actions = default_permitted_actions
 
         # Return the permitted actions - they MUST be HandlerActionType enums
         return list(permitted_actions)

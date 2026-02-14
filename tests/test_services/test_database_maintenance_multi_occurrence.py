@@ -1168,6 +1168,7 @@ class TestAdapterDeduplication:
     ):
         """Test that only the newest adapter is kept when deduplicating."""
         from datetime import datetime, timezone
+        from unittest.mock import patch
 
         database_maintenance_service.config_service = mock_config_service
 
@@ -1180,9 +1181,14 @@ class TestAdapterDeduplication:
         group_key = ("discord", "node1", "abc123")
         adapter_ids = ["old_adapter", "newer_adapter", "newest_adapter"]
 
-        deleted_count = await database_maintenance_service._delete_duplicate_adapters_in_group(
-            group_key, adapter_ids, adapter_instances
-        )
+        # Mock current occurrence to match the group's occurrence_id for multi-occurrence safety
+        with patch(
+            "ciris_engine.logic.utils.occurrence_utils.get_current_occurrence_id",
+            return_value="node1",
+        ):
+            deleted_count = await database_maintenance_service._delete_duplicate_adapters_in_group(
+                group_key, adapter_ids, adapter_instances
+            )
 
         # Should delete 2 (keep newest_adapter)
         assert deleted_count == 2

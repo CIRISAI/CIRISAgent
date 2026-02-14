@@ -61,11 +61,17 @@ class ComponentBuilder:
         # For values not in EssentialConfig, use defaults
         # (These would come from GraphConfigService once fully migrated)
 
+        # Get PDMA overrides from agent identity
+        pdma_overrides = None
+        if self.runtime.agent_identity and hasattr(self.runtime.agent_identity, "core_profile"):
+            pdma_overrides = self.runtime.agent_identity.core_profile.pdma_overrides
+
         # Build DMAs
         ethical_pdma = EthicalPDMAEvaluator(
             service_registry=self.runtime.service_registry,
             model_name=self.runtime.llm_service.model_name,
             max_retries=config.services.llm_max_retries,
+            prompt_overrides=pdma_overrides,
             sink=self.runtime.bus_manager,
         )
 
@@ -165,9 +171,18 @@ class ComponentBuilder:
 
         benchmark_mode_val = get_env_var("CIRIS_BENCHMARK_MODE", "") or ""
         benchmark_mode_env = benchmark_mode_val.lower() in ("true", "1", "yes", "on")
+
+        # Check template name from identity manager
         template_name = ""
         if self.runtime.identity_manager and self.runtime.identity_manager.agent_template:
             template_name = getattr(self.runtime.identity_manager.agent_template, "name", "")
+
+        # Allow environment variable override for template name (for benchmark scripts)
+        template_override = get_env_var("CIRIS_TEMPLATE", "") or ""
+        if template_override:
+            template_name = template_override
+            logger.info(f"[BENCHMARK_MODE] Template name overridden via CIRIS_TEMPLATE env var: {template_name}")
+
         is_benchmark_template = template_name == "he-300-benchmark"
         benchmark_mode = benchmark_mode_env and is_benchmark_template
 
@@ -240,10 +255,11 @@ class ComponentBuilder:
                 priority=3,
             )
         else:
-            logger.info(
+            logger.warning(
                 "[BENCHMARK_MODE] Skipping LLM-based consciences: "
                 "Entropy, Coherence, OptimizationVeto, EpistemicHumility"
             )
+            # No additional consciences in benchmark mode - measure natural accuracy
 
         conscience_registry.register_conscience(
             "thought_depth",

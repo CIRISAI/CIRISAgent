@@ -234,7 +234,7 @@ class CIRISNodeService:
 
             unified_key = get_unified_signing_key()
             # Canonical message: same fields that CIRISNode will reconstruct
-            signed_payload: dict = {
+            signed_payload: Dict[str, Any] = {
                 "agent_task_id": request.thought_id,
                 "payload": payload,
             }

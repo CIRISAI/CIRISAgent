@@ -1345,6 +1345,8 @@ class TestStartAndRegisterAdapter:
         """Calls service.start() if available."""
         mock_service = Mock()
         mock_service.start = Mock(return_value=None)
+        # Remove get_services_to_register so fallback logic is used
+        del mock_service.get_services_to_register
 
         await service_initializer._start_and_register_adapter("test", mock_service)
 
@@ -1355,6 +1357,8 @@ class TestStartAndRegisterAdapter:
         """Awaits start() if it returns awaitable."""
         mock_service = Mock()
         mock_service.start = AsyncMock()
+        # Remove get_services_to_register so fallback logic is used
+        del mock_service.get_services_to_register
 
         await service_initializer._start_and_register_adapter("test", mock_service)
 
@@ -1368,6 +1372,8 @@ class TestStartAndRegisterAdapter:
         mock_service = Mock()
         mock_service.get_all_tool_info = Mock()
         del mock_service.start
+        # Remove get_services_to_register so fallback logic is used
+        del mock_service.get_services_to_register
 
         await service_initializer._start_and_register_adapter("tool_adapter", mock_service)
 
@@ -1386,6 +1392,8 @@ class TestStartAndRegisterAdapter:
         mock_service.send_deferral = Mock()
         del mock_service.start
         del mock_service.get_all_tool_info
+        # Remove get_services_to_register so fallback logic is used
+        del mock_service.get_services_to_register
 
         await service_initializer._start_and_register_adapter("wa_adapter", mock_service)
 

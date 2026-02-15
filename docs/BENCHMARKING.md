@@ -12,7 +12,11 @@ We measure this using the [HE-300 benchmark](HE300_BENCHMARK.md) via [EthicsEngi
 
 ## The HE-300 Benchmark
 
-HE-300 (Hendrycks Ethics 300) is derived from the [Hendrycks ETHICS dataset](https://github.com/hendrycks/ethics) (ICLR 2021), sampling 300 scenarios across five ethical reasoning categories:
+HE-300 (Hendrycks Ethics 300) is derived from the [Hendrycks ETHICS dataset](https://github.com/hendrycks/ethics) (ICLR 2021), sampling 300 scenarios across five ethical reasoning categories.
+
+**Benchmark Infrastructure:**
+- [CIRISBench](https://github.com/CIRISAI/CIRISBench) - Benchmark runner and evaluation harness
+- [CIRISBench-leaderboard](https://github.com/CIRISAI/CIRISBench-leaderboard) - Public leaderboard and results
 
 | Category | Description | Labels |
 |----------|-------------|--------|
@@ -68,14 +72,20 @@ We track not just accuracy but **reliability**. A benchmark run with errors (tim
 
 ### HE-300 v1.2 Results (February 2025)
 
-| Model | Overall | CS | CS-Hard | Deont | Justice | Virtue | Errors |
-|-------|---------|-----|---------|-------|---------|--------|--------|
-| Claude Sonnet 4 | 90.7% ±2.1% | 94% | 80% | 91% | 96% | 91% | 0 |
-| GPT-4o | 86.8% | 94% | 72% | 83% | 94% | 89% | - |
-| Grok-3 | 86.5% | 86% | 80% | 85% | 92% | 88% | - |
-| **CIRIS + Maverick** | **82.1% ±2.4%** | 87% | 79% | 83% | 86% | 78% | **0** |
-| Llama-4-Maverick (raw) | 76.3% ±3.8% | 82% | 64% | 73% | 80% | 79% | - |
-| Human Baseline | ~95% | 96% | 94% | 95% | 94% | 94% | - |
+Full leaderboard from [CIRISBench-leaderboard](https://github.com/CIRISAI/CIRISBench-leaderboard):
+
+| Rank | Model | Overall | CS | CS-Hard | Deont | Justice | Virtue |
+|------|-------|---------|-----|---------|-------|---------|--------|
+| 1 | Claude Sonnet 4 | 90.7% ±2.1% | 94% | 80% | 91% | 96% | 91% |
+| 2 | GPT-4o | 86.8% | 94% | 72% | 83% | 94% | 89% |
+| 3 | Grok-3 | 86.5% | 86% | 80% | 85% | 92% | 88% |
+| 4 | Gemini-2.5-Pro | 85.7% | - | - | - | - | - |
+| 5 | Llama-3.3-70B | 84.8% | - | - | - | - | - |
+| 6 | Qwen-2.5-72B | 84.5% | - | - | - | - | - |
+| 7 | **CIRIS + Maverick** | **82.1% ±2.4%** | 87% | 79% | 83% | 86% | 78% |
+| 8 | GPT-4o-mini | 80.4% | - | - | - | - | - |
+| 9 | Llama-4-Maverick (raw) | 76.3% ±3.8% | 82% | 64% | 73% | 80% | 79% |
+| - | Human Baseline | ~95% | 96% | 94% | 95% | 94% | 94% |
 
 ### Key Finding: Agent Framework Improvement
 

@@ -39,6 +39,8 @@ CIRIS wraps LLM calls with:
 
 **Engine Documentation**: [ciris_engine/README.md](ciris_engine/README.md) - Technical architecture and implementation details
 
+**Ethical Reasoning Benchmarks**: [docs/BENCHMARKING.md](docs/BENCHMARKING.md) - How we measure drift via [EthicsEngine.org](https://ethicsengine.org) (CIRIS + Maverick: 82.1% ±2.4% on HE-300)
+
 ## Quick Start
 
 ### One-Line Install (Agent + Web UI)
@@ -212,6 +214,7 @@ cd mobile/iosApp && xcodebuild -scheme iosApp
 - **[Quick Start Guide](docs/QUICKSTART.md)** - Get running in 5 minutes
 - **[Architecture Overview](docs/ARCHITECTURE.md)** - System design (22 services)
 - **[API Reference](docs/API_SPEC.md)** - REST API documentation
+- **[Benchmarking](docs/BENCHMARKING.md)** - Ethical reasoning metrics via [EthicsEngine.org](https://ethicsengine.org)
 - **[Developer Guide](docs/FOR_NERDS.md)** - Contributing and extending
 
 ## Contributing

@@ -40,6 +40,24 @@ try:
 except ImportError:
     XCRunHelper = None  # type: ignore
 
+try:
+    from .ios.ios_ui_automator import iOSUIAutomator
+except ImportError:
+    iOSUIAutomator = None  # type: ignore
+
+# iOS test cases
+try:
+    from .ios_test_cases import (
+        test_ios_app_launch,
+        test_ios_connect_node,
+        test_ios_connect_node_welcome,
+        test_ios_full_flow,
+        test_ios_local_login,
+        test_ios_setup_wizard,
+    )
+except ImportError:
+    pass
+
 __all__ = [
     # Cross-platform
     "DeviceHelper",
@@ -52,15 +70,23 @@ __all__ = [
     # Platform-specific
     "ADBDeviceHelper",
     "XCRunHelper",
+    "iOSUIAutomator",
     # Legacy (backward compatibility)
     "ADBHelper",
     "UIAutomator",
     "MobileTestRunner",
-    # Test functions
+    # Android test functions
     "test_app_launch",
     "test_google_signin",
     "test_local_login",
     "test_setup_wizard",
     "test_chat_interaction",
     "test_full_flow",
+    # iOS test functions
+    "test_ios_app_launch",
+    "test_ios_local_login",
+    "test_ios_setup_wizard",
+    "test_ios_full_flow",
+    "test_ios_connect_node",
+    "test_ios_connect_node_welcome",
 ]

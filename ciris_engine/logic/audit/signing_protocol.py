@@ -324,6 +324,35 @@ class UnifiedSigningKey:
 
         self._initialized = True
 
+    def load_provisioned_key(self, ed25519_private_key_b64: str, save_path: Optional[Path] = None) -> None:
+        """Load a Registry-provisioned Ed25519 key instead of self-generating.
+
+        Used by the 'Connect to Node' device auth flow, where CIRISRegistry
+        issues the signing key rather than the agent generating one locally.
+
+        Args:
+            ed25519_private_key_b64: Base64-encoded 32-byte Ed25519 private key
+            save_path: Where to save the key file (defaults to DEFAULT_KEY_PATH)
+        """
+        import base64
+
+        from cryptography.hazmat.primitives.asymmetric import ed25519
+
+        private_bytes = base64.b64decode(ed25519_private_key_b64)
+        if len(private_bytes) != 32:
+            raise ValueError(f"Expected 32-byte Ed25519 private key, got {len(private_bytes)} bytes")
+
+        self._signer = Ed25519Signer()
+        self._signer._private_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_bytes)
+        self._signer._public_key = self._signer._private_key.public_key()
+        self._signer._key_id = self._signer._compute_key_id(self._signer.public_key_bytes)
+
+        path = save_path or self.DEFAULT_KEY_PATH
+        self._signer._save_keypair(path)
+        self._key_path = path
+        self._initialized = True
+        logger.info(f"Loaded Registry-provisioned Ed25519 key (key_id={self._signer._key_id})")
+
     def sign(self, data: bytes) -> bytes:
         """Sign data and return signature bytes."""
         return self.signer.sign(data)

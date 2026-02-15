@@ -743,6 +743,114 @@ class CIRISApiClient(
         }
     }
 
+    // ========== Connect to Node (Device Auth Flow) ==========
+
+    /**
+     * Initiate device auth with a CIRISNode.
+     * Calls POST /v1/setup/connect-node on the local agent API.
+     */
+    suspend fun connectToNode(nodeUrl: String): ConnectNodeResult {
+        val method = "connectToNode"
+        logInfo(method, "Initiating device auth for node: $nodeUrl")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30000
+                connectTimeoutMillis = 15000
+            }
+        }
+
+        return try {
+            val response = client.post("$baseUrl/v1/setup/connect-node") {
+                contentType(ContentType.Application.Json)
+                setBody(mapOf("node_url" to nodeUrl))
+            }
+
+            if (response.status != HttpStatusCode.OK) {
+                // Try to extract detail from error response
+                val errorDetail = try {
+                    val errBody = response.body<JsonObject>()
+                    (errBody["detail"] as? JsonPrimitive)?.content
+                } catch (_: Exception) { null }
+                throw Exception(errorDetail ?: "Connect-node failed: HTTP ${response.status}")
+            }
+
+            val body = response.body<JsonObject>()
+            val data = body["data"] as? JsonObject
+                ?: throw Exception("Invalid response format")
+
+            // Extract portal URL from the node manifest
+            val manifest = data["node_manifest"] as? JsonObject
+            val provisioning = manifest?.get("provisioning") as? JsonObject
+            val portalUrl = (provisioning?.get("portal_url") as? JsonPrimitive)?.content ?: ""
+
+            ConnectNodeResult(
+                verificationUriComplete = (data["verification_uri_complete"] as? JsonPrimitive)?.content ?: "",
+                deviceCode = (data["device_code"] as? JsonPrimitive)?.content ?: "",
+                userCode = (data["user_code"] as? JsonPrimitive)?.content ?: "",
+                portalUrl = portalUrl,
+                expiresIn = (data["expires_in"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 900,
+                interval = (data["interval"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 5
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Poll device auth status.
+     * Calls GET /v1/setup/connect-node/status on the local agent API.
+     */
+    suspend fun pollNodeAuthStatus(deviceCode: String, portalUrl: String): NodeAuthPollResult {
+        val method = "pollNodeAuthStatus"
+        logDebug(method, "Polling device auth status")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.get("$baseUrl/v1/setup/connect-node/status") {
+                parameter("device_code", deviceCode)
+                parameter("portal_url", portalUrl)
+            }
+
+            if (response.status != HttpStatusCode.OK) {
+                throw Exception("Poll failed: HTTP ${response.status}")
+            }
+
+            val body = response.body<JsonObject>()
+            val data = body["data"] as? JsonObject
+                ?: throw Exception("Invalid response format")
+
+            val status = (data["status"] as? JsonPrimitive)?.content ?: "error"
+
+            NodeAuthPollResult(
+                status = status,
+                template = (data["template"] as? JsonPrimitive)?.content,
+                adapters = null, // TODO: Parse adapters list from JSON array. MVP: null.
+                orgId = (data["org_id"] as? JsonPrimitive)?.content,
+                signingKeyB64 = (data["signing_key_b64"] as? JsonPrimitive)?.content,
+                keyId = (data["key_id"] as? JsonPrimitive)?.content,
+                stewardshipTier = (data["stewardship_tier"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                error = (data["error"] as? JsonPrimitive)?.content
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
     override suspend fun completeSetup(request: CompleteSetupRequest): SetupCompletionResult {
         val method = "completeSetup"
         logInfo(method, "Completing setup: provider=${request.llm_provider}, template=${request.template_id}, username=${request.admin_username}")

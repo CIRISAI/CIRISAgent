@@ -203,6 +203,29 @@ class SetupCompleteRequest(BaseModel):
     # Application Configuration
     agent_port: int = Field(default=8080, description="Agent API port")
 
+    # Node Connection (set by "Connect to Node" device auth flow)
+    node_url: Optional[str] = Field(None, description="CIRISNode URL (e.g., https://node.ciris.ai)")
+    identity_template: Optional[str] = Field(None, description="Registry-provisioned identity template ID")
+    stewardship_tier: Optional[int] = Field(None, ge=1, le=5, description="Stewardship tier from provisioned template")
+    approved_adapters: Optional[List[str]] = Field(None, description="Registry-approved adapter list")
+    org_id: Optional[str] = Field(None, description="Organization ID from Portal ABAC resolution")
+    signing_key_provisioned: bool = Field(
+        default=False,
+        description="If true, signing key was provisioned by Registry (skip local key generation)",
+    )
+    provisioned_signing_key_b64: Optional[str] = Field(
+        None,
+        description="Base64-encoded Ed25519 private key from Registry (consumed and cleared after save)",
+    )
+
+    # Licensed module package (set by download-package flow)
+    licensed_package_path: Optional[str] = Field(None, description="Path to installed licensed module package")
+    licensed_modules_path: Optional[str] = Field(None, description="Path to licensed modules directory within package")
+
+    # CIRISVerify (optional, set by node flow)
+    verify_binary_path: Optional[str] = Field(None, description="Path to CIRISVerify binary")
+    verify_require_hardware: bool = Field(default=False, description="Require hardware attestation for CIRISVerify")
+
 
 class SetupConfigResponse(BaseModel):
     """Current setup configuration."""
@@ -1474,6 +1497,38 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
             if setup.backup_llm_model:
                 f.write(f'CIRIS_OPENAI_MODEL_NAME_2="{setup.backup_llm_model}"\n')
 
+        # CIRISNode Connection (set by "Connect to Node" device auth flow)
+        if setup.node_url:
+            f.write("\n# ============================================================================\n")
+            f.write("# CIRISNode Connection (provisioned via device auth)\n")
+            f.write("# ============================================================================\n")
+            f.write(f'CIRISNODE_BASE_URL="{setup.node_url}"\n')
+            if setup.identity_template:
+                f.write(f'CIRIS_IDENTITY_TEMPLATE="{setup.identity_template}"\n')
+            if setup.stewardship_tier is not None:
+                f.write(f"CIRIS_STEWARDSHIP_TIER={setup.stewardship_tier}\n")
+            if setup.approved_adapters:
+                f.write(f'CIRIS_APPROVED_ADAPTERS="{",".join(setup.approved_adapters)}"\n')
+            if setup.org_id:
+                f.write(f'CIRIS_ORG_ID="{setup.org_id}"\n')
+
+        # Licensed module package (set by download-package flow)
+        if setup.licensed_package_path:
+            f.write("\n# ============================================================================\n")
+            f.write("# Licensed Module Package\n")
+            f.write("# ============================================================================\n")
+            f.write(f'CIRIS_LICENSED_PACKAGE_PATH="{setup.licensed_package_path}"\n')
+            if setup.licensed_modules_path:
+                f.write(f'CIRIS_MODULE_PATH="{setup.licensed_modules_path}"\n')
+
+        # CIRISVerify (optional, set by node flow)
+        if setup.verify_binary_path:
+            f.write("\n# ============================================================================\n")
+            f.write("# CIRISVerify\n")
+            f.write("# ============================================================================\n")
+            f.write(f'CIRIS_VERIFY_BINARY_PATH="{setup.verify_binary_path}"\n')
+            f.write(f"CIRIS_VERIFY_REQUIRE_HARDWARE={'true' if setup.verify_require_hardware else 'false'}\n")
+
     return config_path
 
 
@@ -1766,6 +1821,331 @@ async def list_models(config: LLMValidationRequest) -> SuccessResponse[ListModel
     return SuccessResponse(data=result)
 
 
+# ============================================================================
+# Connect to Node (Device Auth Flow)
+# ============================================================================
+
+
+class ConnectNodeRequest(BaseModel):
+    """Request to initiate device auth via CIRISPortal."""
+
+    node_url: str = Field(..., description="Portal URL (e.g., https://portal.ciris.ai)")
+
+
+class ConnectNodeResponse(BaseModel):
+    """Response from device auth initiation."""
+
+    verification_uri_complete: str = Field(..., description="URL for user to open in browser")
+    device_code: str = Field(..., description="Device code for polling")
+    user_code: str = Field(..., description="Human-readable code")
+    expires_in: int = Field(..., description="Seconds until device code expires")
+    interval: int = Field(..., description="Polling interval in seconds")
+    node_manifest: Dict[str, Any] = Field(default_factory=dict, description="Node manifest from /.well-known/agent.json")
+
+
+class ConnectNodeStatusResponse(BaseModel):
+    """Response from device auth status polling."""
+
+    status: str = Field(..., description="pending, complete, or error")
+    # Fields below are only set when status == 'complete'
+    template: Optional[str] = Field(None, description="Provisioned identity template ID")
+    adapters: Optional[List[str]] = Field(None, description="Approved adapter list")
+    org_id: Optional[str] = Field(None, description="Organization ID")
+    signing_key_b64: Optional[str] = Field(None, description="Base64-encoded Ed25519 private key (one-time)")
+    key_id: Optional[str] = Field(None, description="Key ID from Registry")
+    stewardship_tier: Optional[int] = Field(None, description="Stewardship tier from template")
+    # Licensed package info — agent downloads this after provisioning
+    package_download_url: Optional[str] = Field(None, description="URL to download licensed module package zip")
+    package_template_id: Optional[str] = Field(None, description="Template ID within the licensed package")
+
+
+@router.post("/connect-node", responses=RESPONSES_500)
+async def connect_node(req: ConnectNodeRequest) -> SuccessResponse[ConnectNodeResponse]:
+    """Initiate device auth via CIRISPortal.
+
+    The user provides a Portal URL directly. This endpoint:
+    1. Normalizes the Portal URL (adds https:// if needed)
+    2. Calls Portal's POST /api/device/authorize with agent info
+    3. Returns verification URL for user to open in browser
+
+    The flow contacts CIRISPortal (for device auth/OAuth) and CIRISRegistry
+    (for agent registration + key issuance). CIRISNode is NOT involved
+    in the provisioning flow.
+
+    This endpoint is accessible without authentication during first-run.
+    """
+    import httpx
+
+    portal_url = req.node_url.strip().rstrip("/")
+    # Normalize URL — add https:// if no scheme provided
+    if not portal_url.startswith("http://") and not portal_url.startswith("https://"):
+        portal_url = f"https://{portal_url}"
+
+    device_auth_endpoint = "/api/device/authorize"
+
+    # TODO: Include real agent info (hash, public key) from current agent state.
+    # MVP: send empty agent_info since we're provisioning a new agent.
+    agent_info: Dict[str, Any] = {}
+
+    # Call Portal's device authorize endpoint directly
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            auth_resp = await client.post(
+                f"{portal_url}{device_auth_endpoint}",
+                json={
+                    "portal_url": portal_url,
+                    "agent_info": agent_info,
+                },
+            )
+            auth_resp.raise_for_status()
+            auth_data = auth_resp.json()
+    except httpx.HTTPError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to initiate device auth with Portal at {portal_url}: {e}",
+        )
+
+    return SuccessResponse(
+        data=ConnectNodeResponse(
+            verification_uri_complete=auth_data["verification_uri_complete"],
+            device_code=auth_data["device_code"],
+            user_code=auth_data.get("user_code", ""),
+            expires_in=auth_data.get("expires_in", 900),
+            interval=auth_data.get("interval", 5),
+            node_manifest={},  # No node manifest in direct Portal flow
+        )
+    )
+
+
+@router.get("/connect-node/status", responses=RESPONSES_500)
+async def connect_node_status(device_code: str, portal_url: str) -> SuccessResponse[ConnectNodeStatusResponse]:
+    """Poll device auth status.
+
+    Called periodically by the setup wizard to check if the user has
+    completed the device auth flow in the Portal browser UI.
+
+    Args:
+        device_code: Opaque device code from /connect-node
+        portal_url: Portal URL to poll (from node manifest)
+
+    Returns:
+        Status: pending (keep polling), complete (key ready), or error.
+    """
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            token_resp = await client.post(
+                f"{portal_url.rstrip('/')}/api/device/token",
+                json={"device_code": device_code},
+            )
+
+            # 428 = authorization_pending (RFC 8628)
+            if token_resp.status_code == 428:
+                return SuccessResponse(data=ConnectNodeStatusResponse(status="pending"))
+
+            if token_resp.status_code == 403:
+                return SuccessResponse(data=ConnectNodeStatusResponse(status="error"))
+
+            if token_resp.status_code != 200:
+                body = token_resp.json() if token_resp.headers.get("content-type", "").startswith("application/json") else {}
+                error_desc = body.get("error_description", body.get("error", f"HTTP {token_resp.status_code}"))
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Portal token endpoint error: {error_desc}",
+                )
+
+            data = token_resp.json()
+    except httpx.HTTPError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to poll Portal token endpoint: {e}",
+        )
+
+    # Success — extract provisioned data
+    signing_key = data.get("signing_key", {})
+    agent_record = data.get("agent_record", {})
+    licensed_package = data.get("licensed_package") or {}
+
+    # Save the provisioned signing key immediately
+    # TODO: Consider deferring key save to /complete for atomicity.
+    # MVP: save key on first successful poll so it's available immediately.
+    private_key_b64 = signing_key.get("ed25519_private_key", "")
+    if private_key_b64:
+        try:
+            from ciris_engine.logic.audit.signing_protocol import UnifiedSigningKey
+
+            provisioned_key = UnifiedSigningKey()
+            provisioned_key.load_provisioned_key(private_key_b64)
+            logger.info("[Connect Node] Saved Registry-provisioned signing key")
+        except Exception as e:
+            logger.error(f"[Connect Node] Failed to save provisioned key: {e}")
+
+    return SuccessResponse(
+        data=ConnectNodeStatusResponse(
+            status="complete",
+            template=agent_record.get("identity_template"),
+            adapters=agent_record.get("approved_adapters"),
+            org_id=signing_key.get("org_id"),
+            signing_key_b64=private_key_b64,
+            key_id=signing_key.get("key_id"),
+            stewardship_tier=agent_record.get("stewardship_tier"),
+            package_download_url=licensed_package.get("download_url"),
+            package_template_id=licensed_package.get("template_id"),
+        )
+    )
+
+
+# ============================================================================
+# Licensed Package Download + Configure
+# ============================================================================
+
+
+class DownloadPackageRequest(BaseModel):
+    """Request to download and install a licensed module package."""
+
+    package_download_url: str = Field(..., description="Portal URL to download the package zip")
+    portal_session_cookie: Optional[str] = Field(None, description="Portal session cookie for auth (from device auth)")
+
+
+class DownloadPackageResponse(BaseModel):
+    """Response from package download + install."""
+
+    status: str = Field(..., description="success or error")
+    package_path: str = Field(default="", description="Path where package was installed")
+    template_file: Optional[str] = Field(None, description="Path to the identity template YAML")
+    modules_path: Optional[str] = Field(None, description="Path to the modules directory")
+    config_path: Optional[str] = Field(None, description="Path to the config directory")
+    checksum: Optional[str] = Field(None, description="SHA-256 checksum of downloaded zip")
+    error: Optional[str] = Field(None, description="Error message if status is error")
+
+
+@router.post("/download-package", responses=RESPONSES_500)
+async def download_package(req: DownloadPackageRequest) -> SuccessResponse[DownloadPackageResponse]:
+    """Download and install a licensed module package from Portal.
+
+    1. Downloads the zip from the Portal package endpoint
+    2. Verifies checksum from response headers
+    3. Unzips to the agent's licensed_modules/ directory
+    4. Returns paths for template, modules, and config
+
+    This endpoint is accessible without authentication during first-run.
+    """
+    import hashlib
+    import shutil
+    import tempfile
+    import zipfile
+
+    import httpx
+
+    # Determine install directory
+    data_dir = Path(os.environ.get("CIRIS_DATA_DIR", "."))
+    licensed_modules_dir = data_dir / "licensed_modules"
+
+    try:
+        # Download the zip from Portal
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            headers: Dict[str, str] = {}
+            if req.portal_session_cookie:
+                headers["Cookie"] = req.portal_session_cookie
+
+            dl_resp = await client.get(req.package_download_url, headers=headers)
+            dl_resp.raise_for_status()
+
+        # Get checksum from response header
+        expected_checksum = dl_resp.headers.get("x-package-checksum", "")
+        package_id = dl_resp.headers.get("x-package-id", "unknown")
+        package_version = dl_resp.headers.get("x-package-version", "0.0.0")
+
+        # Verify checksum
+        actual_checksum = hashlib.sha256(dl_resp.content).hexdigest()
+        if expected_checksum and actual_checksum != expected_checksum:
+            return SuccessResponse(
+                data=DownloadPackageResponse(
+                    status="error",
+                    error=f"Checksum mismatch: expected {expected_checksum}, got {actual_checksum}",
+                )
+            )
+
+        # Save zip to temp file
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+            tmp.write(dl_resp.content)
+            tmp_path = tmp.name
+
+        # Create install directory
+        install_dir = licensed_modules_dir / package_id
+        if install_dir.exists():
+            # Remove old version
+            shutil.rmtree(install_dir)
+        install_dir.mkdir(parents=True, exist_ok=True)
+
+        # Unzip
+        with zipfile.ZipFile(tmp_path, "r") as zf:
+            zf.extractall(install_dir)
+
+        # Cleanup temp file
+        os.unlink(tmp_path)
+
+        logger.info(
+            f"[Package Download] Installed {package_id} v{package_version} to {install_dir}"
+        )
+
+        # Find key paths within the extracted package
+        template_file = None
+        modules_path = None
+        config_path = None
+
+        templates_dir = install_dir / "templates"
+        if templates_dir.exists():
+            yamls = list(templates_dir.glob("*.yaml"))
+            if yamls:
+                template_file = str(yamls[0])
+
+        mods_dir = install_dir / "modules"
+        if mods_dir.exists():
+            modules_path = str(mods_dir)
+
+        cfg_dir = install_dir / "config"
+        if cfg_dir.exists():
+            config_path = str(cfg_dir)
+
+        return SuccessResponse(
+            data=DownloadPackageResponse(
+                status="success",
+                package_path=str(install_dir),
+                template_file=template_file,
+                modules_path=modules_path,
+                config_path=config_path,
+                checksum=actual_checksum,
+            )
+        )
+
+    except httpx.HTTPError as e:
+        logger.error(f"[Package Download] HTTP error: {e}")
+        return SuccessResponse(
+            data=DownloadPackageResponse(
+                status="error",
+                error=f"Failed to download package: {e}",
+            )
+        )
+    except zipfile.BadZipFile:
+        logger.error("[Package Download] Invalid zip file received")
+        return SuccessResponse(
+            data=DownloadPackageResponse(
+                status="error",
+                error="Downloaded file is not a valid zip archive",
+            )
+        )
+    except Exception as e:
+        logger.error(f"[Package Download] Unexpected error: {e}")
+        return SuccessResponse(
+            data=DownloadPackageResponse(
+                status="error",
+                error=f"Package installation failed: {e}",
+            )
+        )
+
+
 @router.post("/complete", responses=RESPONSES_400_403_500)
 async def complete_setup(setup: SetupCompleteRequest, request: Request) -> SuccessResponse[Dict[str, str]]:
     """Complete initial setup.
@@ -1796,6 +2176,17 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
     try:
         # Save configuration and reload environment variables
         config_path = _save_and_reload_config(setup)
+
+        # If a Registry-provisioned signing key was provided (Connect to Node flow),
+        # save it now so the agent uses the Registry-issued key instead of self-generating.
+        if setup.signing_key_provisioned and setup.provisioned_signing_key_b64:
+            from ciris_engine.logic.audit.signing_protocol import UnifiedSigningKey
+
+            provisioned_key = UnifiedSigningKey()
+            provisioned_key.load_provisioned_key(setup.provisioned_signing_key_b64)
+            logger.info("[Setup Complete] Saved Registry-provisioned signing key")
+            # Clear the key from the request to avoid logging it
+            setup.provisioned_signing_key_b64 = None
 
         # Get runtime and database path from the running application
         runtime = getattr(request.app.state, "runtime", None)

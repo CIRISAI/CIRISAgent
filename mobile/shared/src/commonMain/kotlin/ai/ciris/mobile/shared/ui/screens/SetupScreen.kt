@@ -5,12 +5,14 @@ import ai.ciris.mobile.shared.models.Platform
 import ai.ciris.mobile.shared.models.SetupMode
 import ai.ciris.mobile.shared.models.filterAdaptersForPlatform
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
+import ai.ciris.mobile.shared.viewmodels.DeviceAuthStatus
 import ai.ciris.mobile.shared.viewmodels.SetupStep
 import ai.ciris.mobile.shared.viewmodels.SetupFormState
 import ai.ciris.mobile.shared.viewmodels.SetupViewModel
 import androidx.compose.animation.AnimatedVisibility
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.background
@@ -26,6 +28,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -116,6 +120,7 @@ fun SetupScreen(
             // Step indicators at top
             StepIndicators(
                 currentStep = state.currentStep,
+                isNodeFlow = state.isNodeFlow,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 16.dp, horizontal = 24.dp)
@@ -129,11 +134,15 @@ fun SetupScreen(
             ) {
                 when (state.currentStep) {
                     SetupStep.WELCOME -> WelcomeStep(
-                        isGoogleAuth = state.isGoogleAuth
+                        viewModel = viewModel,
+                        state = state,
+                        apiClient = apiClient
                     )
+                    SetupStep.NODE_AUTH -> NodeAuthStep(viewModel, state, apiClient)
                     SetupStep.LLM_CONFIGURATION -> LlmConfigurationStep(viewModel, state)
                     SetupStep.OPTIONAL_FEATURES -> OptionalFeaturesStep(viewModel, state)
                     SetupStep.ACCOUNT_AND_CONFIRMATION -> AccountConfirmationStep(viewModel, state)
+                    SetupStep.VERIFY_SETUP -> VerifySetupStep(viewModel, state)
                     SetupStep.COMPLETE -> CompleteStep(onSetupComplete)
                 }
             }
@@ -233,14 +242,24 @@ fun SetupScreen(
 @Composable
 private fun StepIndicators(
     currentStep: SetupStep,
+    isNodeFlow: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val steps = listOf(
-        SetupStep.WELCOME to "1",
-        SetupStep.LLM_CONFIGURATION to "2",
-        SetupStep.OPTIONAL_FEATURES to "3",
-        SetupStep.ACCOUNT_AND_CONFIRMATION to "4"
-    )
+    val steps = if (isNodeFlow) {
+        listOf(
+            SetupStep.WELCOME to "1",
+            SetupStep.NODE_AUTH to "2",
+            SetupStep.LLM_CONFIGURATION to "3",
+            SetupStep.VERIFY_SETUP to "4"
+        )
+    } else {
+        listOf(
+            SetupStep.WELCOME to "1",
+            SetupStep.LLM_CONFIGURATION to "2",
+            SetupStep.OPTIONAL_FEATURES to "3",
+            SetupStep.ACCOUNT_AND_CONFIRMATION to "4"
+        )
+    }
 
     Row(
         modifier = modifier,
@@ -287,10 +306,15 @@ private fun StepIndicators(
 // This screen shows different cards based on whether user already signed in with Google
 @Composable
 private fun WelcomeStep(
-    isGoogleAuth: Boolean,
+    viewModel: SetupViewModel,
+    state: SetupFormState,
+    apiClient: CIRISApiClient,
     modifier: Modifier = Modifier
 ) {
+    val isGoogleAuth = state.isGoogleAuth
     var detailsExpanded by remember { mutableStateOf(false) }
+    var showNodeConnect by remember { mutableStateOf(false) }
+    val nodeUrlFocusRequester = remember { FocusRequester() }
 
     Column(
         modifier = modifier
@@ -453,6 +477,467 @@ private fun WelcomeStep(
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Acquire License card (device auth via Portal/Registry)
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = Color(0xFFF0FDF4), // Light green
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Color(0xFF86EFAC), RoundedCornerShape(12.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showNodeConnect = !showNodeConnect }
+                ) {
+                    Text(
+                        text = if (showNodeConnect) "▼" else "▶",
+                        color = SetupColors.SuccessDark,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text(
+                        text = "Acquire a License",
+                        color = SetupColors.SuccessDark,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Text(
+                    text = "Acquire a license for Medical, Legal, or Financial agent deployment",
+                    color = SetupColors.SuccessText,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .clickable { showNodeConnect = !showNodeConnect }
+                )
+
+                AnimatedVisibility(visible = showNodeConnect) {
+                    // Auto-focus the text field when the card expands
+                    LaunchedEffect(Unit) {
+                        delay(300) // Wait for animation
+                        nodeUrlFocusRequester.requestFocus()
+                    }
+                    Column(modifier = Modifier.padding(top = 12.dp)) {
+                        OutlinedTextField(
+                            value = state.deviceAuth.nodeUrl,
+                            onValueChange = { viewModel.updateNodeUrl(it) },
+                            label = { Text("Portal URL (e.g., portal.ciris.ai)") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(nodeUrlFocusRequester),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = SetupColors.SuccessDark,
+                                focusedLabelColor = SetupColors.SuccessDark
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = { viewModel.enterNodeFlow() },
+                            enabled = state.deviceAuth.nodeUrl.isNotBlank(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SetupColors.SuccessDark
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Connect", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ========== License Auth Step (Device Authorization via Portal/Registry) ==========
+@Composable
+private fun NodeAuthStep(
+    viewModel: SetupViewModel,
+    state: SetupFormState,
+    apiClient: CIRISApiClient,
+    modifier: Modifier = Modifier
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val deviceAuth = state.deviceAuth
+
+    // Start connection when entering this step if not yet started
+    LaunchedEffect(Unit) {
+        if (deviceAuth.status == DeviceAuthStatus.IDLE) {
+            // TODO: Wire to actual API call via apiClient.
+            // MVP: The startNodeConnection method accepts a lambda for platform-specific HTTP.
+            viewModel.startNodeConnection { nodeUrl ->
+                apiClient.connectToNode(nodeUrl)
+            }
+        }
+    }
+
+    // Poll for completion while waiting
+    LaunchedEffect(deviceAuth.status) {
+        if (deviceAuth.status == DeviceAuthStatus.WAITING) {
+            while (true) {
+                kotlinx.coroutines.delay(deviceAuth.interval.toLong() * 1000)
+                viewModel.pollNodeAuthStatus { deviceCode, portalUrl ->
+                    apiClient.pollNodeAuthStatus(deviceCode, portalUrl)
+                }
+                // Break if no longer waiting
+                if (viewModel.state.value.deviceAuth.status != DeviceAuthStatus.WAITING) break
+            }
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Acquire License",
+            color = SetupColors.TextPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        Text(
+            text = "Authorizing via ${deviceAuth.nodeUrl}",
+            color = SetupColors.TextSecondary,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 24.dp)
+        )
+
+        when (deviceAuth.status) {
+            DeviceAuthStatus.IDLE, DeviceAuthStatus.CONNECTING -> {
+                CircularProgressIndicator(
+                    color = SetupColors.Primary,
+                    modifier = Modifier.padding(16.dp)
+                )
+                Text(
+                    text = "Connecting to portal...",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 14.sp
+                )
+            }
+
+            DeviceAuthStatus.WAITING -> {
+                // Verification URL card
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SetupColors.InfoLight,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Open this URL in your browser:",
+                            color = SetupColors.InfoDark,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color.White,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = deviceAuth.verificationUri,
+                                color = SetupColors.Primary,
+                                fontSize = 14.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                        if (deviceAuth.userCode.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Code: ${deviceAuth.userCode}",
+                                color = SetupColors.InfoDark,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Polling spinner
+                CircularProgressIndicator(
+                    color = SetupColors.Primary,
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Waiting for authorization...",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 14.sp
+                )
+            }
+
+            DeviceAuthStatus.COMPLETE -> {
+                // Success card
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SetupColors.SuccessLight,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = "✓ Agent Authorized",
+                            color = SetupColors.SuccessDark,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                        deviceAuth.provisionedTemplate?.let {
+                            Text(
+                                text = "Template: $it",
+                                color = SetupColors.SuccessText,
+                                fontSize = 14.sp
+                            )
+                        }
+                        if (deviceAuth.provisionedAdapters.isNotEmpty()) {
+                            Text(
+                                text = "Adapters: ${deviceAuth.provisionedAdapters.joinToString(", ")}",
+                                color = SetupColors.SuccessText,
+                                fontSize = 14.sp
+                            )
+                        }
+                        deviceAuth.orgId?.let {
+                            Text(
+                                text = "Organization: $it",
+                                color = SetupColors.SuccessText,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Tap Continue to configure your LLM provider.",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            DeviceAuthStatus.ERROR -> {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFFEE2E2),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = "Connection Failed",
+                            color = Color(0xFF991B1B),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        Text(
+                            text = deviceAuth.error ?: "Unknown error",
+                            color = Color(0xFFDC2626),
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            viewModel.startNodeConnection { nodeUrl ->
+                                apiClient.connectToNode(nodeUrl)
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SetupColors.Primary)
+                ) {
+                    Text("Retry")
+                }
+            }
+        }
+    }
+}
+
+// ========== CIRISVerify Setup Step ==========
+@Composable
+private fun VerifySetupStep(
+    viewModel: SetupViewModel,
+    state: SetupFormState,
+    modifier: Modifier = Modifier
+) {
+    val verifyState = state.verifySetup
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "CIRISVerify",
+            color = SetupColors.TextPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        Text(
+            text = "CIRISVerify provides hardware-rooted license verification for your agent.",
+            color = SetupColors.TextSecondary,
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(bottom = 24.dp)
+        )
+
+        // Enable toggle
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = if (verifyState.enabled) SetupColors.SuccessLight else SetupColors.GrayLight,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { viewModel.setVerifyEnabled(!verifyState.enabled) }
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Install CIRISVerify",
+                        color = SetupColors.TextPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Enables hardware attestation and license verification",
+                        color = SetupColors.TextSecondary,
+                        fontSize = 13.sp
+                    )
+                }
+                Switch(
+                    checked = verifyState.enabled,
+                    onCheckedChange = { viewModel.setVerifyEnabled(it) },
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = SetupColors.SuccessDark
+                    )
+                )
+            }
+        }
+
+        if (verifyState.enabled) {
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Download status
+            if (verifyState.downloaded) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SetupColors.SuccessLight,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "✓ CIRISVerify Installed",
+                            color = SetupColors.SuccessDark,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        verifyState.version?.let {
+                            Text(
+                                text = "Version: $it",
+                                color = SetupColors.SuccessText,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+            } else if (verifyState.downloading) {
+                CircularProgressIndicator(
+                    color = SetupColors.Primary,
+                    modifier = Modifier.padding(16.dp)
+                )
+                Text(
+                    text = "Downloading CIRISVerify...",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 14.sp
+                )
+            } else {
+                // TODO: Wire download button to actual POST /v1/setup/verify/download.
+                // MVP: Placeholder button (download func not yet implemented).
+                Button(
+                    onClick = { /* TODO: Implement download */ },
+                    colors = ButtonDefaults.buttonColors(containerColor = SetupColors.Primary),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Download CIRISVerify", fontWeight = FontWeight.Bold)
+                }
+            }
+
+            // Hardware requirement toggle
+            Spacer(modifier = Modifier.height(16.dp))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = SetupColors.GrayLight,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { viewModel.setVerifyRequireHardware(!verifyState.requireHardware) }
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Require Hardware Attestation",
+                            color = SetupColors.TextPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Requires TPM or Secure Enclave for verification",
+                            color = SetupColors.TextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
+                    Switch(
+                        checked = verifyState.requireHardware,
+                        onCheckedChange = { viewModel.setVerifyRequireHardware(it) }
+                    )
+                }
+            }
+
+            verifyState.error?.let { error ->
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = error,
+                    color = Color(0xFFDC2626),
+                    fontSize = 13.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "You can skip this step and configure CIRISVerify later.",
+            color = SetupColors.TextSecondary,
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center
+        )
     }
 }
 

@@ -23,8 +23,15 @@ import kotlinx.serialization.Serializable
 enum class SetupStep {
     /**
      * Step 1: Welcome screen with introduction.
+     * In node flow, includes "Connect to Node" option.
      */
     WELCOME,
+
+    /**
+     * Step 1b (Node flow only): Device auth with CIRISPortal.
+     * Agent polls while user authenticates in browser and selects template.
+     */
+    NODE_AUTH,
 
     /**
      * Step 2: LLM mode selection (CIRIS_PROXY vs BYOK) and configuration.
@@ -42,10 +49,67 @@ enum class SetupStep {
     ACCOUNT_AND_CONFIRMATION,
 
     /**
+     * Step 4b (Node flow only): Optional CIRISVerify download and configuration.
+     */
+    VERIFY_SETUP,
+
+    /**
      * Final step: Setup is complete.
      */
     COMPLETE
 }
+
+/**
+ * Device auth state for the "Connect to Node" flow.
+ * Tracks the RFC 8628 device authorization session.
+ */
+@Serializable
+data class DeviceAuthState(
+    val nodeUrl: String = "",
+    val verificationUri: String = "",
+    val deviceCode: String = "",
+    val userCode: String = "",
+    val portalUrl: String = "",
+    val status: DeviceAuthStatus = DeviceAuthStatus.IDLE,
+    val expiresIn: Int = 900,
+    val interval: Int = 5,
+    // Provisioned data (set after user completes in Portal)
+    val provisionedTemplate: String? = null,
+    val provisionedAdapters: List<String> = emptyList(),
+    val signingKeyB64: String? = null,
+    val keyId: String? = null,
+    val orgId: String? = null,
+    val stewardshipTier: Int? = null,
+    val error: String? = null,
+    // Node manifest for display
+    val nodeManifest: Map<String, String> = emptyMap()
+)
+
+/**
+ * Device auth flow status.
+ */
+@Serializable
+enum class DeviceAuthStatus {
+    IDLE,           // Not started
+    CONNECTING,     // Fetching node manifest + initiating device auth
+    WAITING,        // Waiting for user to complete in browser
+    COMPLETE,       // User completed, key provisioned
+    ERROR           // Something went wrong
+}
+
+/**
+ * CIRISVerify setup state for the optional verification step.
+ */
+@Serializable
+data class VerifySetupState(
+    val enabled: Boolean = false,
+    val downloading: Boolean = false,
+    val downloaded: Boolean = false,
+    val binaryPath: String? = null,
+    val version: String? = null,
+    val requireHardware: Boolean = false,
+    val error: String? = null
+)
 
 /**
  * Form state for the setup wizard.
@@ -57,6 +121,16 @@ enum class SetupStep {
 data class SetupFormState(
     // Current step in the wizard
     val currentStep: SetupStep = SetupStep.WELCOME,
+
+    // Node flow flag: when true, step sequence is modified
+    // WELCOME → NODE_AUTH → LLM_CONFIGURATION → VERIFY_SETUP → COMPLETE
+    val isNodeFlow: Boolean = false,
+
+    // Device auth state (Connect to Node flow)
+    val deviceAuth: DeviceAuthState = DeviceAuthState(),
+
+    // CIRISVerify setup state (node flow only)
+    val verifySetup: VerifySetupState = VerifySetupState(),
 
     // Google OAuth state
     val isGoogleAuth: Boolean = false,
@@ -129,6 +203,11 @@ data class SetupFormState(
         return when (currentStep) {
             SetupStep.WELCOME -> true
 
+            SetupStep.NODE_AUTH -> {
+                // Can proceed when device auth is complete
+                deviceAuth.status == DeviceAuthStatus.COMPLETE
+            }
+
             SetupStep.LLM_CONFIGURATION -> {
                 if (setupMode == SetupMode.CIRIS_PROXY) {
                     // CIRIS proxy mode - need Google auth token
@@ -160,6 +239,11 @@ data class SetupFormState(
                 }
             }
 
+            SetupStep.VERIFY_SETUP -> {
+                // CIRISVerify setup is optional — always can proceed
+                true
+            }
+
             SetupStep.COMPLETE -> true
         }
     }
@@ -171,6 +255,16 @@ data class SetupFormState(
     fun getStepValidationError(): String? {
         return when (currentStep) {
             SetupStep.WELCOME -> null
+
+            SetupStep.NODE_AUTH -> {
+                when (deviceAuth.status) {
+                    DeviceAuthStatus.ERROR -> deviceAuth.error ?: "Device authorization failed"
+                    DeviceAuthStatus.IDLE -> "Enter a node URL to connect"
+                    DeviceAuthStatus.CONNECTING -> "Connecting to node..."
+                    DeviceAuthStatus.WAITING -> "Waiting for authorization in browser..."
+                    DeviceAuthStatus.COMPLETE -> null
+                }
+            }
 
             SetupStep.LLM_CONFIGURATION -> {
                 when {
@@ -200,6 +294,8 @@ data class SetupFormState(
                     null
                 }
             }
+
+            SetupStep.VERIFY_SETUP -> null
 
             SetupStep.COMPLETE -> null
         }

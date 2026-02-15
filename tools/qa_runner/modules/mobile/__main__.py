@@ -554,8 +554,172 @@ def build_command(args) -> int:
         return 1
 
 
+def test_ios_command(args) -> int:
+    """Handle iOS simulator test execution."""
+    from .ios.ios_ui_automator import iOSUIAutomator
+    from .ios.xcrun_helper import XCRunHelper
+    from .ios_test_cases import (
+        test_ios_app_launch,
+        test_ios_connect_node,
+        test_ios_connect_node_auth,
+        test_ios_connect_node_error,
+        test_ios_connect_node_welcome,
+        test_ios_full_flow,
+        test_ios_local_login,
+        test_ios_setup_wizard,
+    )
+    from .test_cases import TestReport, TestResult
+
+    print("\n" + "=" * 60)
+    print("CIRIS Mobile QA Runner — iOS Simulator")
+    print("=" * 60)
+
+    # Initialize iOS helpers
+    try:
+        xcrun = XCRunHelper(device_id=args.device)
+    except RuntimeError as e:
+        print(f"\n[ERROR] {e}")
+        return 1
+
+    # Verify simulator is booted
+    if not xcrun.is_device_connected():
+        print("\n[INFO] No booted simulator found, attempting to boot one...")
+        devices = xcrun.get_devices()
+        available = [d for d in devices if d.state == "shutdown"]
+        if available:
+            # Prefer iPhone Pro models
+            target = next(
+                (d for d in available if "Pro" in (d.name or "") and "Max" not in (d.name or "")),
+                available[0],
+            )
+            print(f"[INFO] Booting {target.name} ({target.identifier[:8]}...)...")
+            xcrun.boot_device(target.identifier)
+            if not xcrun.wait_for_device(timeout=60):
+                print("[ERROR] Simulator failed to boot")
+                return 1
+        else:
+            print("[ERROR] No simulators available. Create one in Xcode.")
+            return 1
+
+    devices = xcrun.get_devices()
+    booted = [d for d in devices if d.state == "booted"]
+    if booted:
+        d = booted[0]
+        print(f"\n[INFO] Simulator: {d.name} (iOS {d.os_version}, {d.identifier[:8]}...)")
+
+    ios_ui = iOSUIAutomator(xcrun)
+
+    # Available iOS tests
+    ios_tests = {
+        "app_launch": test_ios_app_launch,
+        "local_login": test_ios_local_login,
+        "setup_wizard": test_ios_setup_wizard,
+        "full_flow": test_ios_full_flow,
+        "connect_node": test_ios_connect_node,
+        "connect_node_welcome": test_ios_connect_node_welcome,
+        "connect_node_auth": test_ios_connect_node_auth,
+        "connect_node_error": test_ios_connect_node_error,
+    }
+
+    # Load secrets
+    llm_api_key = args.llm_key or load_secret_file(args.llm_key_file)
+
+    # Build test config dict
+    test_config = {
+        "llm_api_key": llm_api_key,
+        "llm_provider": args.llm_provider,
+        "node_url": getattr(args, "node_url", "https://node.ciris.ai"),
+        "wait_for_portal_auth": getattr(args, "wait_portal", False),
+        "portal_auth_timeout": getattr(args, "portal_timeout", 300),
+    }
+
+    print(f"\nTests: {', '.join(args.tests)}")
+    if llm_api_key:
+        print(f"LLM key: {'*' * 8}")
+    if "connect_node" in args.tests or "connect_node_auth" in args.tests:
+        print(f"Node URL: {test_config['node_url']}")
+
+    # Create output directory
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Run tests
+    print("\n" + "=" * 60)
+    print("Running iOS Tests")
+    print("=" * 60)
+
+    reports = []
+    for test_name in args.tests:
+        if test_name not in ios_tests:
+            print(f"\n[WARN] Unknown iOS test: {test_name}")
+            print(f"  Available: {', '.join(ios_tests.keys())}")
+            continue
+
+        test_func = ios_tests[test_name]
+        print(f"\n--- Test: {test_name} ---")
+
+        try:
+            report = test_func(xcrun, ios_ui, test_config)
+            reports.append(report)
+
+            status_icon = {
+                TestResult.PASSED: "PASS",
+                TestResult.FAILED: "FAIL",
+                TestResult.SKIPPED: "SKIP",
+                TestResult.ERROR: "ERR!",
+            }
+            print(f"\n  [{status_icon.get(report.result, '????')}] {report.name} ({report.duration:.1f}s)")
+            if report.message:
+                print(f"        {report.message}")
+
+        except Exception as e:
+            error_report = TestReport(
+                name=test_name,
+                result=TestResult.ERROR,
+                duration=0.0,
+                message=f"Exception: {str(e)}",
+            )
+            reports.append(error_report)
+            print(f"\n  [ERR!] {test_name}: {e}")
+
+    # Summary
+    passed = sum(1 for r in reports if r.result == TestResult.PASSED)
+    failed = sum(1 for r in reports if r.result == TestResult.FAILED)
+    errors = sum(1 for r in reports if r.result == TestResult.ERROR)
+
+    print("\n" + "=" * 60)
+    print("iOS Test Summary")
+    print("=" * 60)
+    print(f"  Total:   {len(reports)}")
+    print(f"  Passed:  {passed}")
+    print(f"  Failed:  {failed}")
+    print(f"  Errors:  {errors}")
+    print("=" * 60 + "\n")
+
+    # Save results
+    import json
+    results_path = output_dir / f"ios_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    with open(results_path, "w") as f:
+        json.dump({
+            "platform": "ios",
+            "reports": [
+                {"name": r.name, "result": r.result.value, "duration": r.duration, "message": r.message}
+                for r in reports
+            ],
+            "summary": {"total": len(reports), "passed": passed, "failed": failed, "errors": errors},
+        }, f, indent=2)
+    print(f"Results: {results_path}")
+
+    return 0 if (failed == 0 and errors == 0) else 1
+
+
 def test_command(args) -> int:
     """Handle the test subcommand."""
+    # Route to iOS if platform is ios
+    platform = getattr(args, "platform", "android")
+    if platform == "ios":
+        return test_ios_command(args)
+
     print("\n" + "=" * 60)
     print("CIRIS Mobile QA Runner")
     print("=" * 60)
@@ -764,7 +928,7 @@ Notes:
         help="Run UI automation tests",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Available tests:
+Available tests (Android):
   app_launch        - Test that app launches and shows login screen
   google_signin     - Test Google Sign-In flow with test account
   local_login       - Test local login (BYOK mode)
@@ -772,9 +936,26 @@ Available tests:
   chat_interaction  - Test sending a message and receiving response
   full_flow         - Run complete end-to-end flow (default)
 
+Available tests (iOS - use --platform ios):
+  app_launch              - Test that app launches and shows login screen
+  local_login             - Test local login flow
+  setup_wizard            - Test completing the setup wizard
+  full_flow               - Run complete end-to-end flow
+  connect_node            - Full Create Licensed Agent device auth flow
+  connect_node_welcome    - Verify Create Licensed Agent card on WELCOME screen
+  connect_node_auth       - Enter node URL and verify auth screen
+  connect_node_error      - Test error handling for invalid node URL
+
 Examples:
+  # Android tests (default)
   python -m tools.qa_runner.modules.mobile test full_flow
   python -m tools.qa_runner.modules.mobile test app_launch --no-reinstall
+
+  # iOS simulator tests
+  python -m tools.qa_runner.modules.mobile test app_launch --platform ios
+  python -m tools.qa_runner.modules.mobile test connect_node --platform ios
+  python -m tools.qa_runner.modules.mobile test connect_node --platform ios --node-url https://node.ciris.ai
+  python -m tools.qa_runner.modules.mobile test connect_node --platform ios --wait-portal
 """,
     )
     test_parser.add_argument(
@@ -783,8 +964,15 @@ Examples:
         default=["full_flow"],
         help="Tests to run (default: full_flow)",
     )
-    test_parser.add_argument("--device", "-d", help="Device serial number (uses default if not specified)")
-    test_parser.add_argument("--adb-path", help="Path to adb binary")
+    test_parser.add_argument(
+        "--platform",
+        "-p",
+        choices=["android", "ios"],
+        default="android",
+        help="Target platform (default: android)",
+    )
+    test_parser.add_argument("--device", "-d", help="Device serial/UDID (uses default if not specified)")
+    test_parser.add_argument("--adb-path", help="Path to adb binary (Android only)")
     test_parser.add_argument(
         "--apk",
         default="mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk",
@@ -824,6 +1012,24 @@ Examples:
     test_parser.add_argument("--build", "-b", action="store_true", help="Build APK before running tests")
     test_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     test_parser.add_argument("--keep-open", action="store_true", help="Keep app running after tests (don't force-stop)")
+
+    # Create Licensed Agent options (iOS)
+    test_parser.add_argument(
+        "--node-url",
+        default="https://node.ciris.ai",
+        help="CIRISNode URL for connect_node tests (default: https://node.ciris.ai)",
+    )
+    test_parser.add_argument(
+        "--wait-portal",
+        action="store_true",
+        help="Wait for user to complete Portal auth (connect_node tests)",
+    )
+    test_parser.add_argument(
+        "--portal-timeout",
+        type=int,
+        default=300,
+        help="Portal auth timeout in seconds (default: 300)",
+    )
 
     args = parser.parse_args()
 

@@ -1893,7 +1893,7 @@ async def connect_node(req: ConnectNodeRequest) -> SuccessResponse[ConnectNodeRe
             auth_resp = await client.post(
                 f"{portal_url}{device_auth_endpoint}",
                 json={
-                    "portal_url": portal_url,
+                    "node_url": portal_url,
                     "agent_info": agent_info,
                 },
             )

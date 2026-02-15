@@ -48,11 +48,11 @@ class SetupViewModel {
             googleIdToken = idToken,
             googleEmail = email,
             googleUserId = userId,
-            // Default to CIRIS proxy if Google auth available and no mode selected yet
-            setupMode = if (isAuth && _state.value.setupMode == null) {
-                SetupMode.CIRIS_PROXY
-            } else {
-                _state.value.setupMode
+            // Default mode: CIRIS_PROXY for Google auth, BYOK for local credentials
+            setupMode = when {
+                _state.value.setupMode != null -> _state.value.setupMode
+                isAuth -> SetupMode.CIRIS_PROXY
+                else -> SetupMode.BYOK
             }
         )
     }

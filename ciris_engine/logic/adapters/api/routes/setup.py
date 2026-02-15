@@ -1974,10 +1974,13 @@ async def connect_node_status(device_code: str, portal_url: str) -> SuccessRespo
     if private_key_b64:
         try:
             from ciris_engine.logic.audit.signing_protocol import UnifiedSigningKey
+            from ciris_engine.logic.utils.path_resolution import get_data_dir
 
+            save_path = get_data_dir() / "agent_signing.key"
+            save_path.parent.mkdir(parents=True, exist_ok=True)
             provisioned_key = UnifiedSigningKey()
-            provisioned_key.load_provisioned_key(private_key_b64)
-            logger.info("[Connect Node] Saved Registry-provisioned signing key")
+            provisioned_key.load_provisioned_key(private_key_b64, save_path=save_path)
+            logger.info(f"[Connect Node] Saved Registry-provisioned signing key to {save_path}")
         except Exception as e:
             logger.error(f"[Connect Node] Failed to save provisioned key: {e}")
 

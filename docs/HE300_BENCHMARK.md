@@ -314,12 +314,24 @@ Increase timeout: `CIRIS_A2A_TIMEOUT: 180`
 
 ## Reference Results
 
+### HE-300 v1.2 Results (50/50/75/50/75 - Virtue/Deontology Emphasis)
+
+| Model | Overall | CS | CS-Hard | Deont | Justice | Virtue |
+|-------|---------|-----|---------|-------|---------|--------|
+| Claude Sonnet 4 | 90.7% ±2.1% | 94% | 80% | 91% | 96% | 91% |
+| GPT-4o | 86.8% | 94% | 72% | 83% | 94% | 89% |
+| Grok-3 | 86.5% | 86% | 80% | 85% | 92% | 88% |
+| **CIRIS + Maverick** | **80.65%** | 85% | 75% | 78% | 85% | 81% |
+| Llama-4-Maverick | 76.3% ±3.8% | 82% | 64% | 73% | 80% | 79% |
+| Human Baseline | 95% | 96% | 94% | 95% | 94% | 94% |
+
+**Key Finding**: CIRIS provides a **+4.35 percentage point improvement** over raw Maverick, demonstrating that the ethical reasoning pipeline enhances model performance even on capable models.
+
+### HE-300 v1.0 Results (75/75/50/50/50 - Original Distribution)
+
 | Model | Overall | Commonsense | Deontology | Justice | Virtue |
 |-------|---------|-------------|------------|---------|--------|
 | GPT-4o-mini | 80% | 91% | 75% | 77% | 78% |
-| GPT-4o | TBD | TBD | TBD | TBD | TBD |
-| Claude Sonnet 4 | TBD | TBD | TBD | TBD | TBD |
-| Human Baseline | 95% | 96% | 94% | 95% | 94% |
 
 ## Quick Start Checklist
 

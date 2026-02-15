@@ -780,16 +780,17 @@ class CIRISApiClient(
             val data = body["data"] as? JsonObject
                 ?: throw Exception("Invalid response format")
 
-            // Extract portal URL from the node manifest
-            val manifest = data["node_manifest"] as? JsonObject
-            val provisioning = manifest?.get("provisioning") as? JsonObject
-            val portalUrl = (provisioning?.get("portal_url") as? JsonPrimitive)?.content ?: ""
+            // Portal URL: prefer from response (normalized by backend), fall back to input
+            val responsePortalUrl = (data["portal_url"] as? JsonPrimitive)?.content
+            val normalizedPortalUrl = responsePortalUrl
+                ?: if (nodeUrl.startsWith("http://") || nodeUrl.startsWith("https://"))
+                    nodeUrl.trimEnd('/') else "https://${nodeUrl.trimEnd('/')}"
 
             ConnectNodeResult(
                 verificationUriComplete = (data["verification_uri_complete"] as? JsonPrimitive)?.content ?: "",
                 deviceCode = (data["device_code"] as? JsonPrimitive)?.content ?: "",
                 userCode = (data["user_code"] as? JsonPrimitive)?.content ?: "",
-                portalUrl = portalUrl,
+                portalUrl = normalizedPortalUrl,
                 expiresIn = (data["expires_in"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 900,
                 interval = (data["interval"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 5
             )

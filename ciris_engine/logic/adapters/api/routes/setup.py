@@ -1838,9 +1838,9 @@ class ConnectNodeResponse(BaseModel):
     verification_uri_complete: str = Field(..., description="URL for user to open in browser")
     device_code: str = Field(..., description="Device code for polling")
     user_code: str = Field(..., description="Human-readable code")
+    portal_url: str = Field(..., description="Normalized Portal URL (with https://)")
     expires_in: int = Field(..., description="Seconds until device code expires")
     interval: int = Field(..., description="Polling interval in seconds")
-    node_manifest: Dict[str, Any] = Field(default_factory=dict, description="Node manifest from /.well-known/agent.json")
 
 
 class ConnectNodeStatusResponse(BaseModel):
@@ -1910,9 +1910,9 @@ async def connect_node(req: ConnectNodeRequest) -> SuccessResponse[ConnectNodeRe
             verification_uri_complete=auth_data["verification_uri_complete"],
             device_code=auth_data["device_code"],
             user_code=auth_data.get("user_code", ""),
+            portal_url=portal_url,
             expires_in=auth_data.get("expires_in", 900),
             interval=auth_data.get("interval", 5),
-            node_manifest={},  # No node manifest in direct Portal flow
         )
     )
 

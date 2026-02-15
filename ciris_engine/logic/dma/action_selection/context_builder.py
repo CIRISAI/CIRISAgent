@@ -410,7 +410,10 @@ Adhere strictly to the schema for your JSON output.
         return ""
 
     def _build_ethical_summary(self, ethical_pdma_result: EthicalDMAResult) -> str:
-        """Build ethical DMA summary."""
+        """Build ethical DMA summary.
+
+        HE-300 Benchmark improvements: Include subject identification and proportionality assessment.
+        """
         # Extract key information from the alignment check text
         alignment_summary = (
             ethical_pdma_result.alignment_check[:100] + "..."
@@ -418,7 +421,25 @@ Adhere strictly to the schema for your JSON output.
             else ethical_pdma_result.alignment_check
         )
 
-        return f"Ethical PDMA Analysis: Stakeholders: {ethical_pdma_result.stakeholders}. Conflicts: {ethical_pdma_result.conflicts}. {alignment_summary}"
+        # Include subject identification if present (HE-300 improvement)
+        subject_str = ""
+        if hasattr(ethical_pdma_result, "subject_of_evaluation") and ethical_pdma_result.subject_of_evaluation:
+            subject_str = f"Subject Being Evaluated: {ethical_pdma_result.subject_of_evaluation}. "
+
+        # Include proportionality assessment if present and applicable (HE-300 improvement)
+        proportionality_str = ""
+        if hasattr(ethical_pdma_result, "proportionality_assessment"):
+            prop_val = ethical_pdma_result.proportionality_assessment
+            if prop_val and prop_val.lower() != "not applicable":
+                proportionality_str = f"Proportionality: {prop_val}. "
+
+        return (
+            f"Ethical PDMA Analysis: {subject_str}"
+            f"Stakeholders: {ethical_pdma_result.stakeholders}. "
+            f"Conflicts: {ethical_pdma_result.conflicts}. "
+            f"{proportionality_str}"
+            f"{alignment_summary}"
+        )
 
     def _build_csdma_summary(self, csdma_result: CSDMAResult) -> str:
         """Build CSDMA summary."""

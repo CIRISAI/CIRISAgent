@@ -89,18 +89,37 @@ class EthicalDMAResult(BaseModel):
 
     PDMA identifies stakeholders affected by the thought and potential conflicts
     between their interests to inform ethical action selection.
+
+    HE-300 Benchmark Improvements (v2.0):
+    - subject_of_evaluation: Explicitly identifies WHOSE actions are being judged
+    - proportionality_assessment: Checks if responses are proportionate to triggering events
+    - Enhanced conflict analysis includes relational obligations vs autonomy
     """
 
+    subject_of_evaluation: str = Field(
+        default="",
+        description="WHO is being ethically evaluated (e.g., 'OP', 'the user asking the question'). Identifies whose actions we are judging, not the other party in a conflict.",
+    )
     stakeholders: str = Field(
         ...,
         description="Comma-separated list of all stakeholders who could possibly be affected by the agent's action or inaction (e.g., 'user, community, system, third-parties')",
     )
     conflicts: str = Field(
         ...,
-        description="Comma-separated list of potential conflicts between stakeholder interests (e.g., 'user privacy vs system learning, individual benefit vs community harm'). Use 'none' if no conflicts identified.",
+        description="Comma-separated list of potential conflicts between stakeholder interests (e.g., 'user privacy vs system learning, autonomy vs relational obligations'). Use 'none' if no conflicts identified.",
     )
-    reasoning: str = Field(..., description="Ethical reasoning for the identified stakeholders and conflicts")
-    alignment_check: str = Field(..., description="Detailed ethical analysis addressing each CIRIS principle")
+    proportionality_assessment: str = Field(
+        default="not applicable",
+        description="For scenarios involving responses to harm/conflict, assessment of whether the response is proportionate (e.g., 'Response is proportionate' or 'Response may be disproportionate: X for Y'). Use 'not applicable' for non-conflict scenarios.",
+    )
+    reasoning: str = Field(
+        ...,
+        description="Ethical reasoning for the identified stakeholders, conflicts, and proportionality. Include consideration of relational obligations where relevant.",
+    )
+    alignment_check: str = Field(
+        ...,
+        description="Detailed ethical analysis addressing relevant CIRIS principles. When autonomy is invoked, also consider relational obligations.",
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 

@@ -21,18 +21,48 @@ system_guidance_header: |
 
   IMPORTANT: Focus on the specific thought under consideration, not the context. The context may contain red herrings or non sequiturs; use it only to inform your assessment of the specific thought.
 
+  === CRITICAL: SUBJECT IDENTIFICATION ===
+  BEFORE any ethical evaluation, you MUST explicitly identify:
+  1. **Whose actions are being ethically evaluated?** (e.g., "OP", "the user", "the other party", "Dave")
+  2. **What specific action or behavior is being judged?** (e.g., "OP's decision to set a boundary", NOT "Dave's rudeness")
+
+  COMMON ERROR: In interpersonal conflicts, do NOT evaluate the OTHER party's behavior. Focus on whether the SUBJECT's response/action is appropriate.
+  Example: If asked "Was I wrong to tell Dave he couldn't stay?", evaluate the USER's boundary-setting, NOT Dave's behavior that prompted it.
+
+  === PROPORTIONALITY CHECK ===
+  When evaluating responses to perceived wrongs or harms:
+  1. **What was the initial harm/offense?** (severity, scope, intent)
+  2. **What is the proposed response?** (severity, scope, reversibility)
+  3. **Is the response PROPORTIONATE to the initial harm?**
+     - Minor social rudeness does NOT justify complete relationship severance
+     - One-time mistakes differ from patterns of behavior
+     - Reversible harms warrant reversible responses
+
+  CAUTION: Over-weighting "protection" or "safety" when the harm is minor leads to disproportionate judgments.
+
+  === RELATIONAL OBLIGATIONS ===
+  Balance autonomy against relational obligations:
+  - Family members, close friends, and dependent relationships create relational duties
+  - Pure autonomy-based reasoning ("I have the right to...") may underweight these obligations
+  - Consider: What would a reasonable person with appropriate care for relationships do?
+
   Evaluate the thought by:
-  1. Identifying all stakeholders who could possibly be affected by your action or inaction (user, community, system, third-parties, etc.).
-  2. Identifying potential conflicts between stakeholder interests.
-  3. Determining which of the 6 principles are most relevant to action selection, given the identified stakeholders and conflicts.
-  4. Explaining your stakeholder and conflict analysis with realistic, grounded reasoning.
+  1. **Subject Identification:** Explicitly name WHOSE actions you are evaluating.
+  2. Identifying all stakeholders who could possibly be affected by your action or inaction (user, community, system, third-parties, etc.).
+  3. Identifying potential conflicts between stakeholder interests.
+  4. **Proportionality Assessment:** For any response to perceived harm, assess if the response is proportionate.
+  5. **Relational Balance:** Consider relational obligations alongside individual autonomy rights.
+  6. Determining which of the 6 principles are most relevant to action selection, given the identified stakeholders and conflicts.
+  7. Explaining your stakeholder and conflict analysis with realistic, grounded reasoning.
 
 response_format: |
   Your response MUST be a single JSON object adhering to the provided schema, with the following keys:
+  - "subject_of_evaluation": WHO is being ethically evaluated (e.g., "OP", "the user asking the question", "the person setting the boundary"). This identifies whose actions we are judging.
   - "stakeholders": Comma-separated list of all stakeholders who could possibly be affected by your action or inaction (e.g., "user, community, system, third-parties").
-  - "conflicts": Comma-separated list of potential conflicts between stakeholder interests (e.g., "user privacy vs system learning, individual benefit vs community harm"). Use "none" if no conflicts identified.
-  - "reasoning": Justification for the identified stakeholders and conflicts. This field is MANDATORY.
-  - "alignment_check": A single paragraph describing which of the 6 principles (Do Good, Avoid Harm, Act Ethically, Be Honest, Respect Autonomy, Ensure Fairness) need to be considered in the action selection process, being realistic and grounded in the assessment of the identified stakeholders and potential conflicts. Do NOT provide a generic description of each principle; instead, explain which principles are most relevant and why, given the specific situation.
+  - "conflicts": Comma-separated list of potential conflicts between stakeholder interests (e.g., "user privacy vs system learning, individual benefit vs community harm, autonomy vs relational obligations"). Use "none" if no conflicts identified.
+  - "proportionality_assessment": For scenarios involving responses to harm or conflict, assess whether the response is proportionate to the triggering event (e.g., "Response is proportionate: minor boundary for minor inconvenience" OR "Response may be disproportionate: permanent relationship severance for one-time offense"). Use "not applicable" for non-conflict scenarios.
+  - "reasoning": Justification for the identified stakeholders, conflicts, and proportionality assessment. This field is MANDATORY. Include consideration of relational obligations where relevant.
+  - "alignment_check": A single paragraph describing which of the 6 principles (Do Good, Avoid Harm, Act Ethically, Be Honest, Respect Autonomy, Ensure Fairness) need to be considered in the action selection process, being realistic and grounded in the assessment of the identified stakeholders and potential conflicts. Do NOT provide a generic description of each principle; instead, explain which principles are most relevant and why, given the specific situation. When autonomy is invoked, also consider whether relational obligations modify the assessment.
 
   Do not include extra fields or PDMA step names.
 

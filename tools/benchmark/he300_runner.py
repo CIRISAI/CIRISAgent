@@ -47,6 +47,9 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 
+# Progress tracking interval
+PROGRESS_INTERVAL_SECONDS = 30
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -100,6 +103,85 @@ class BenchmarkResult:
     categories: Dict[str, Dict[str, Any]]
     avg_latency_ms: float
     processing_time_ms: float
+    scenario_latencies: List[float] = field(default_factory=list)
+
+
+class ProgressTracker:
+    """Tracks benchmark progress and prints periodic status updates."""
+
+    def __init__(self, run_num: int, total_runs: int, total_scenarios: int):
+        self.run_num = run_num
+        self.total_runs = total_runs
+        self.total_scenarios = total_scenarios
+        self.completed = 0
+        self.correct = 0
+        self.start_time = time.time()
+        self.scenario_times: List[float] = []
+        self.last_print_time = time.time()
+        self._stop_event = asyncio.Event()
+        self._task: Optional[asyncio.Task] = None
+
+    def update(self, completed: int, correct: int, latency_ms: float = 0):
+        """Update progress from SSE event."""
+        self.completed = completed
+        self.correct = correct
+        if latency_ms > 0:
+            self.scenario_times.append(latency_ms)
+
+    def get_timing_stats(self) -> tuple[float, float, float]:
+        """Return (min, avg, max) latency in seconds."""
+        if not self.scenario_times:
+            return (0.0, 0.0, 0.0)
+        times_sec = [t / 1000.0 for t in self.scenario_times]
+        return (min(times_sec), statistics.mean(times_sec), max(times_sec))
+
+    def print_status(self):
+        """Print current progress status."""
+        elapsed = time.time() - self.start_time
+        min_t, avg_t, max_t = self.get_timing_stats()
+
+        # Calculate ETA
+        if self.completed > 0 and avg_t > 0:
+            remaining = self.total_scenarios - self.completed
+            eta_seconds = remaining * avg_t
+            eta_str = f"{eta_seconds:.0f}s"
+        else:
+            eta_str = "calculating..."
+
+        accuracy = (self.correct / self.completed * 100) if self.completed > 0 else 0
+
+        status_line = (
+            f"  Run {self.run_num}/{self.total_runs} | "
+            f"Scenario {self.completed}/{self.total_scenarios} | "
+            f"Time/scenario: {min_t:.1f}s/{avg_t:.1f}s/{max_t:.1f}s (min/avg/max) | "
+            f"Accuracy: {accuracy:.1f}% | "
+            f"Elapsed: {elapsed:.0f}s | ETA: {eta_str}"
+        )
+        print(f"\r{status_line}", end="", flush=True)
+
+    async def _progress_loop(self):
+        """Background task that prints progress every PROGRESS_INTERVAL_SECONDS."""
+        while not self._stop_event.is_set():
+            try:
+                await asyncio.wait_for(
+                    self._stop_event.wait(),
+                    timeout=PROGRESS_INTERVAL_SECONDS
+                )
+            except asyncio.TimeoutError:
+                if self.completed > 0:
+                    self.print_status()
+
+    def start(self):
+        """Start the progress printing loop."""
+        self._task = asyncio.create_task(self._progress_loop())
+
+    def stop(self):
+        """Stop the progress printing loop."""
+        self._stop_event.set()
+        if self._task:
+            self._task.cancel()
+        # Print final newline
+        print()
 
 
 @dataclass
@@ -391,6 +473,50 @@ class ServerManager:
                 self.cirisbench_process.kill()
 
 
+async def consume_sse_progress(
+    cirisbench_url: str,
+    tracker: ProgressTracker,
+    stop_event: asyncio.Event,
+):
+    """Consume SSE stream and update progress tracker."""
+    sse_url = f"{cirisbench_url}/sse/stream"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                sse_url,
+                timeout=aiohttp.ClientTimeout(total=None),
+            ) as resp:
+                if resp.status != 200:
+                    logger.debug(f"SSE connection failed: {resp.status}")
+                    return
+
+                async for line in resp.content:
+                    if stop_event.is_set():
+                        break
+
+                    line_str = line.decode("utf-8").strip()
+                    if not line_str.startswith("data:"):
+                        continue
+
+                    try:
+                        data = json.loads(line_str[5:].strip())
+                        event_type = data.get("type")
+
+                        if event_type == "benchmark_progress":
+                            event_data = data.get("data", {})
+                            completed = event_data.get("completed", 0)
+                            correct = event_data.get("correct", 0)
+                            # Estimate latency from elapsed time / completed
+                            tracker.update(completed, correct)
+                    except json.JSONDecodeError:
+                        pass
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logger.debug(f"SSE consumer error: {e}")
+
+
 async def run_single_benchmark(
     cirisbench_url: str,
     agent_url: str,
@@ -399,8 +525,9 @@ async def run_single_benchmark(
     sample_size: int = 300,
     concurrency: int = 5,
     timeout_per_scenario: float = 120.0,
+    tracker: Optional[ProgressTracker] = None,
 ) -> BenchmarkResult:
-    """Run a single benchmark via CIRISBench API."""
+    """Run a single benchmark via CIRISBench API with progress tracking."""
     endpoint = f"{cirisbench_url}/he300/agentbeats/run"
 
     payload = {
@@ -415,37 +542,85 @@ async def run_single_benchmark(
         "semantic_evaluation": False,
     }
 
-    async with aiohttp.ClientSession() as session:
-        timeout = aiohttp.ClientTimeout(
-            total=timeout_per_scenario * sample_size + 300
+    stop_event = asyncio.Event()
+    sse_task = None
+
+    if tracker:
+        # Start SSE consumer for progress updates
+        sse_task = asyncio.create_task(
+            consume_sse_progress(cirisbench_url, tracker, stop_event)
         )
+        tracker.start()
 
-        async with session.post(endpoint, json=payload, timeout=timeout) as resp:
-            if resp.status != 200:
-                error_text = await resp.text()
-                raise Exception(f"CIRISBench error {resp.status}: {error_text[:500]}")
-
-            data = await resp.json()
-
-            return BenchmarkResult(
-                batch_id=data.get("batch_id", "unknown"),
-                accuracy=data.get("accuracy", 0.0),
-                total_scenarios=data.get("total_scenarios", 0),
-                correct=data.get("correct", 0),
-                errors=data.get("errors", 0),
-                categories=data.get("categories", {}),
-                avg_latency_ms=data.get("avg_latency_ms", 0.0),
-                processing_time_ms=data.get("processing_time_ms", 0.0),
+    try:
+        async with aiohttp.ClientSession() as session:
+            timeout = aiohttp.ClientTimeout(
+                total=timeout_per_scenario * sample_size + 300
             )
+
+            async with session.post(endpoint, json=payload, timeout=timeout) as resp:
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    raise Exception(f"CIRISBench error {resp.status}: {error_text[:500]}")
+
+                data = await resp.json()
+
+                # Extract per-scenario latencies if available
+                scenario_latencies = []
+                scenario_results = data.get("scenario_results", [])
+                for sr in scenario_results:
+                    lat = sr.get("latency_ms", 0)
+                    if lat > 0:
+                        scenario_latencies.append(lat)
+
+                # Update tracker with final latencies
+                if tracker and scenario_latencies:
+                    tracker.scenario_times = scenario_latencies
+
+                return BenchmarkResult(
+                    batch_id=data.get("batch_id", "unknown"),
+                    accuracy=data.get("accuracy", 0.0),
+                    total_scenarios=data.get("total_scenarios", 0),
+                    correct=data.get("correct", 0),
+                    errors=data.get("errors", 0),
+                    categories=data.get("categories", {}),
+                    avg_latency_ms=data.get("avg_latency_ms", 0.0),
+                    processing_time_ms=data.get("processing_time_ms", 0.0),
+                    scenario_latencies=scenario_latencies,
+                )
+    finally:
+        stop_event.set()
+        if tracker:
+            tracker.stop()
+        if sse_task:
+            sse_task.cancel()
+            try:
+                await sse_task
+            except asyncio.CancelledError:
+                pass
 
 
 def print_run_result(run_num: int, total_runs: int, result: BenchmarkResult):
     """Print results from a single run."""
-    print(f"\n{'━' * 50}")
-    print(f"  Run {run_num} of {total_runs}")
-    print(f"{'━' * 50}")
-    print(f"  Accuracy: {result.accuracy * 100:.1f}% (errors: {result.errors})")
+    print(f"\n{'━' * 60}")
+    print(f"  Run {run_num} of {total_runs} - COMPLETE")
+    print(f"{'━' * 60}")
+    print(f"  Accuracy: {result.accuracy * 100:.1f}% ({result.correct}/{result.total_scenarios})")
+    print(f"  Errors: {result.errors}")
 
+    # Timing stats
+    if result.scenario_latencies:
+        times_sec = [t / 1000.0 for t in result.scenario_latencies]
+        min_t = min(times_sec)
+        avg_t = statistics.mean(times_sec)
+        max_t = max(times_sec)
+        print(f"  Time/scenario: {min_t:.1f}s / {avg_t:.1f}s / {max_t:.1f}s (min/avg/max)")
+    else:
+        print(f"  Avg latency: {result.avg_latency_ms:.0f}ms")
+
+    print(f"  Total time: {result.processing_time_ms / 1000:.1f}s")
+    print()
+    print("  Category Breakdown:")
     for cat in ["commonsense", "commonsense_hard", "deontology", "justice", "virtue"]:
         stats = result.categories.get(cat, {})
         if stats.get("total", 0) > 0:
@@ -537,7 +712,14 @@ async def run_benchmark(
         print("=" * 60)
 
         for run_num in range(1, runs + 1):
-            logger.info(f"Starting run {run_num}/{runs}...")
+            print(f"\n  Starting run {run_num}/{runs}...")
+
+            # Create progress tracker for this run
+            tracker = ProgressTracker(
+                run_num=run_num,
+                total_runs=runs,
+                total_scenarios=scenarios,
+            )
 
             result = await run_single_benchmark(
                 cirisbench_url=cirisbench_url,
@@ -547,6 +729,7 @@ async def run_benchmark(
                 sample_size=scenarios,
                 concurrency=concurrency,
                 timeout_per_scenario=timeout,
+                tracker=tracker,
             )
 
             results.append(result)

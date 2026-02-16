@@ -7,7 +7,7 @@ Handles loading, creating, and persisting agent identity.
 import hashlib
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from ciris_engine.constants import CIRIS_VERSION
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -121,25 +121,25 @@ class IdentityManager:
             logger.error(f"Failed to save identity to persistence: {e}")
             raise
 
-    def _extract_domain_knowledge(self, template: AgentTemplate) -> dict:
+    def _extract_domain_knowledge(self, template: AgentTemplate) -> Dict[str, str]:
         """Extract and normalize domain knowledge from template."""
         import json
 
         if not template.dsdma_kwargs or not template.dsdma_kwargs.domain_specific_knowledge:
             return {}
 
-        domain_knowledge = {}
+        domain_knowledge: Dict[str, str] = {}
         for key, value in template.dsdma_kwargs.domain_specific_knowledge.items():
             domain_knowledge[key] = json.dumps(value) if isinstance(value, dict) else str(value)
         return domain_knowledge
 
-    def _extract_overrides(self, overrides_obj: Any) -> dict:
+    def _extract_overrides(self, overrides_obj: Any) -> Dict[str, Any]:
         """Extract non-None values from an overrides object."""
         if not overrides_obj:
             return {}
         return {k: v for k, v in overrides_obj.__dict__.items() if v is not None}
 
-    def _resolve_permitted_actions(self, template: AgentTemplate) -> list:
+    def _resolve_permitted_actions(self, template: AgentTemplate) -> List[HandlerActionType]:
         """Resolve permitted actions from template or defaults."""
         if template.permitted_actions is not None:
             actions = [

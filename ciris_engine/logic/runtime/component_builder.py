@@ -5,7 +5,7 @@ Handles the construction of all processing components.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 from ciris_engine.logic.conscience import (
     CoherenceConscience,
@@ -141,7 +141,7 @@ class ComponentBuilder:
         registry.register_conscience("optimization_veto", OptimizationVetoConscience(*conscience_args), priority=2)
         registry.register_conscience("epistemic_humility", EpistemicHumilityConscience(*conscience_args), priority=3)
 
-    def _build_dma_evaluators(self, config: Any) -> tuple:
+    def _build_dma_evaluators(self, config: Any) -> Tuple[Any, Any, Any, Any, Any, Any]:
         """Build all DMA evaluators.
 
         Returns:

@@ -43,7 +43,7 @@ class TestDMAOrchestrator:
         assert dma_orchestrator.action_selection_pdma_evaluator is not None
         assert dma_orchestrator.time_service is not None
         assert dma_orchestrator.retry_limit == 3
-        assert dma_orchestrator.timeout_seconds == 30.0
+        assert dma_orchestrator.timeout_seconds == 90.0
 
     def test_circuit_breakers_initialized(self, dma_orchestrator):
         """Test that circuit breakers are initialized for all DMA types."""
@@ -405,4 +405,4 @@ class TestDMAOrchestrator:
         )
 
         assert orchestrator.retry_limit == 3
-        assert orchestrator.timeout_seconds == 30.0
+        assert orchestrator.timeout_seconds == 90.0

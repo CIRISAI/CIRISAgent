@@ -224,7 +224,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
         system_message = self._build_system_message(input_data)
 
-        # Prepend thought type to covenant for rock-solid follow-up detection
+        # Covenant is always included - core ethical framework
         covenant_with_metadata = COVENANT_TEXT
         if original_thought and hasattr(original_thought, "thought_type"):
             covenant_with_metadata = f"THOUGHT_TYPE={original_thought.thought_type.value}\n\n{COVENANT_TEXT}"
@@ -236,11 +236,11 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             logger.info(f"[VISION] ActionSelectionPDMA building multimodal content with {len(input_images)} images")
         user_content = self.build_multimodal_content(main_user_content, input_images)
 
-        messages: List[JSONDict] = [
-            {"role": "system", "content": covenant_with_metadata},
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": user_content},
-        ]
+        messages: List[JSONDict] = []
+        if covenant_with_metadata:
+            messages.append({"role": "system", "content": covenant_with_metadata})
+        messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": user_content})
 
         # Store prompts for streaming/debugging
         self.last_system_prompt = system_message

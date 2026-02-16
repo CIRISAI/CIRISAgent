@@ -81,7 +81,9 @@ class CIRISNodeService:
         self._flush_interval = float(self.config.get("flush_interval", 60))
 
         # Trace detail level — check env var first, then config
-        level_str = str(os.environ.get("CIRISNODE_TRACE_LEVEL", "") or self.config.get("trace_level", "generic")).lower()
+        level_str = str(
+            os.environ.get("CIRISNODE_TRACE_LEVEL", "") or self.config.get("trace_level", "generic")
+        ).lower()
         try:
             self._trace_level = TraceDetailLevel(level_str)
         except ValueError:
@@ -166,6 +168,7 @@ class CIRISNodeService:
         if self._reasoning_queue:
             try:
                 from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
+
                 reasoning_event_stream.unsubscribe(self._reasoning_queue)
             except Exception:
                 pass
@@ -187,13 +190,8 @@ class CIRISNodeService:
             self._client = None
 
         if self._pending_deferrals:
-            logger.warning(
-                f"CIRISNodeService stopped with {len(self._pending_deferrals)} pending deferrals"
-            )
-        logger.info(
-            f"CIRISNodeService stopped (traces={self._traces_completed}, "
-            f"events_sent={self._events_sent})"
-        )
+            logger.warning(f"CIRISNodeService stopped with {len(self._pending_deferrals)} pending deferrals")
+        logger.info(f"CIRISNodeService stopped (traces={self._traces_completed}, " f"events_sent={self._events_sent})")
 
     # =========================================================================
     # WiseBus Interface (Duck-typed)
@@ -216,13 +214,15 @@ class CIRISNodeService:
         if not self._client:
             return "CIRISNode client not started - deferral not forwarded"
 
-        payload = json.dumps({
-            "reason": request.reason,
-            "task_id": request.task_id,
-            "thought_id": request.thought_id,
-            "defer_until": request.defer_until.isoformat() if request.defer_until else None,
-            "context": request.context,
-        })
+        payload = json.dumps(
+            {
+                "reason": request.reason,
+                "task_id": request.task_id,
+                "thought_id": request.thought_id,
+                "defer_until": request.defer_until.isoformat() if request.defer_until else None,
+                "context": request.context,
+            }
+        )
 
         domain_hint = request.context.get("domain_hint") if request.context else None
 
@@ -451,10 +451,12 @@ class CIRISNodeService:
             signature = ""
             try:
                 from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+
                 unified_key = get_unified_signing_key()
                 sig_msg = json.dumps(
                     {"deferral_id": deferral_id, "decision": decision},
-                    sort_keys=True, separators=(",", ":"),
+                    sort_keys=True,
+                    separators=(",", ":"),
                 ).encode("utf-8")
                 signature = unified_key.sign_base64(sig_msg)
             except Exception:
@@ -469,10 +471,7 @@ class CIRISNodeService:
 
             resolved = await target_wa.resolve_deferral(deferral_id, response)
             if resolved:
-                logger.info(
-                    f"Deferred task reactivated: deferral_id={deferral_id} "
-                    f"decision={decision}"
-                )
+                logger.info(f"Deferred task reactivated: deferral_id={deferral_id} " f"decision={decision}")
             else:
                 logger.warning(f"resolve_deferral returned False for {deferral_id}")
 
@@ -562,6 +561,7 @@ class CIRISNodeService:
         """
         try:
             from ciris_adapters.ciris_covenant_metrics.services import CovenantMetricsService
+
             # Use a throwaway instance to access _extract_component_data
             # This is a classmethod-like pattern — the method only uses self._trace_level
             extractor = CovenantMetricsService.__new__(CovenantMetricsService)

@@ -11,7 +11,7 @@ database:
 services:
   llm_endpoint: "https://api.openai.com/v1"
   llm_model: "gpt-4o-mini"
-  llm_timeout: 30
+  llm_timeout: 60
   llm_max_retries: 3
 
 # Security and audit settings
@@ -26,10 +26,10 @@ security:
 limits:
   max_active_tasks: 10
   max_active_thoughts: 50
-  round_delay_seconds: 5.0
+  round_delay_seconds: 0.5
   mock_llm_round_delay: 0.1
   dma_retry_limit: 3
-  dma_timeout_seconds: 30.0
+  dma_timeout_seconds: 120.0
   conscience_retry_limit: 2
 
 # Telemetry (disabled by default)

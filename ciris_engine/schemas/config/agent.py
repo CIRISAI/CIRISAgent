@@ -251,6 +251,7 @@ class CSDMAOverrides(BaseModel):
 
     system_prompt: Optional[str] = Field(None, description="Override system prompt")
     user_prompt_template: Optional[str] = Field(None, description="Override user prompt template")
+    covenant_header: Optional[str] = Field(None, description="Whether to include covenant text in prompts ('true' or 'false')")
     model_config = ConfigDict(defer_build=True, extra="forbid")  # Strict validation
 
 
@@ -259,6 +260,7 @@ class PDMAOverrides(BaseModel):
 
     system_prompt: Optional[str] = Field(None, description="Override system prompt")
     user_prompt_template: Optional[str] = Field(None, description="Override user prompt template")
+    covenant_header: Optional[str] = Field(None, description="Whether to include covenant text in prompts ('true' or 'false')")
     model_config = ConfigDict(defer_build=True, extra="forbid")  # Strict validation
 
 
@@ -268,6 +270,7 @@ class ActionSelectionOverrides(BaseModel):
     system_prompt: Optional[str] = Field(None, description="Override system prompt")
     user_prompt_template: Optional[str] = Field(None, description="Override user prompt template")
     action_descriptions: Optional[Dict[str, str]] = Field(None, description="Override action descriptions")
+    covenant_header: Optional[str] = Field(None, description="Whether to include covenant text in prompts ('true' or 'false')")
     model_config = ConfigDict(defer_build=True, extra="allow")  # Allow for additional, template-specific guidance
 
 

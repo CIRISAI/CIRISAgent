@@ -354,11 +354,11 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             )
         user_content = self.build_multimodal_content(user_message_content, thought_images)
 
-        messages: List[JSONDict] = [
-            {"role": "system", "content": COVENANT_TEXT},
-            {"role": "system", "content": system_message_content},
-            {"role": "user", "content": user_content},
-        ]
+        # Covenant is always included - core ethical framework
+        messages: List[JSONDict] = []
+        messages.append({"role": "system", "content": COVENANT_TEXT})
+        messages.append({"role": "system", "content": system_message_content})
+        messages.append({"role": "user", "content": user_content})
 
         try:
             llm_eval_data, _ = await self.call_llm_structured(

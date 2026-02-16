@@ -91,6 +91,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         prompt_start = time.time()
         messages: List[JSONDict] = []
 
+        # Covenant is always included - core ethical framework
         if self.prompt_loader.uses_covenant_header(self.prompt_template_data):
             messages.append({"role": "system", "content": COVENANT_TEXT})
 

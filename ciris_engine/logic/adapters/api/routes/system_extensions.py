@@ -1065,11 +1065,13 @@ async def receive_covenant_invocation(
             raise HTTPException(status_code=503, detail="WiseBus not available")
 
         # Delegate to WiseBus for signature verification and shutdown
-        result = await wise_bus.handle_covenant_invocation({
-            "signing_key_id": body.signing_key_id,
-            "signature": body.signature,
-            "payload": body.payload,
-        })
+        result = await wise_bus.handle_covenant_invocation(
+            {
+                "signing_key_id": body.signing_key_id,
+                "signature": body.signature,
+                "payload": body.payload,
+            }
+        )
 
         if result:
             return SuccessResponse(

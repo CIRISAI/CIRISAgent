@@ -16,10 +16,10 @@ from uvicorn import Server
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters.base import Service
-from ciris_engine.logic.utils.platform_detection import is_ios
 from ciris_engine.logic.persistence.models.correlations import get_active_channels_by_adapter, is_admin_channel
 from ciris_engine.logic.registries.base import Priority
 from ciris_engine.logic.services.runtime.adapter_configuration import AdapterConfigurationService
+from ciris_engine.logic.utils.platform_detection import is_ios
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import IncomingMessage, MessageHandlingResult

@@ -81,7 +81,7 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         """Assemble prompt messages for IDMA evaluation."""
         messages: List[JSONDict] = []
 
-        # Add covenant if configured
+        # Covenant is always included - core ethical framework
         if self.prompt_loader.uses_covenant_header(self.prompt_template_data):
             messages.append({"role": "system", "content": COVENANT_TEXT})
 

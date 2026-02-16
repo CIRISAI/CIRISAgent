@@ -30,9 +30,7 @@ class CIRISNodeClient:
         max_retries: int = 3,
     ) -> None:
         self.base_url: str = (
-            base_url
-            or os.getenv("CIRISNODE_BASE_URL", "https://node.ciris.ai")
-            or "https://node.ciris.ai"
+            base_url or os.getenv("CIRISNODE_BASE_URL", "https://node.ciris.ai") or "https://node.ciris.ai"
         )
         self.auth_token = auth_token or os.getenv("CIRISNODE_AUTH_TOKEN")
         self.agent_token = agent_token or os.getenv("CIRISNODE_AGENT_TOKEN")

@@ -66,11 +66,12 @@ class DMAOrchestrator:
         self.retry_limit = getattr(app_config.workflow, "DMA_RETRY_LIMIT", 3) if app_config else 3
         # DMA timeout can be overridden via environment variable for slow LLM providers
         # Should be higher than CIRIS_LLM_TIMEOUT to allow for retries
+        # Default 90s matches dma_executor.py: 20s LLM timeout × 2 retries × 2 providers = 80s + buffer
         dma_timeout_env = os.environ.get("CIRIS_DMA_TIMEOUT")
         if dma_timeout_env:
             self.timeout_seconds = float(dma_timeout_env)
         else:
-            self.timeout_seconds = getattr(app_config.workflow, "DMA_TIMEOUT_SECONDS", 30.0) if app_config else 30.0
+            self.timeout_seconds = getattr(app_config.workflow, "DMA_TIMEOUT_SECONDS", 90.0) if app_config else 90.0
 
         self._circuit_breakers: Dict[str, CircuitBreaker] = {
             "ethical_pdma": CircuitBreaker("ethical_pdma"),

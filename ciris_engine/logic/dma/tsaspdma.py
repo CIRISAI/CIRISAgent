@@ -229,7 +229,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         """
         messages: List[JSONDict] = []
 
-        # Add covenant (always included for DMAs)
+        # Covenant is always included - core ethical framework
         if self.prompt_loader.uses_covenant_header(self.prompt_template_data):
             messages.append({"role": "system", "content": COVENANT_TEXT})
 

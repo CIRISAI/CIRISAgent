@@ -72,7 +72,7 @@ class A2AAdapter(Service):
         # Default values
         default_host = "0.0.0.0"
         default_port = 8100
-        default_timeout = 60.0
+        default_timeout = 120.0
 
         # Get from adapter_config first
         if isinstance(adapter_config, dict):

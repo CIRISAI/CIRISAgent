@@ -310,8 +310,8 @@ class TestA2AConcurrency:
     @pytest.fixture
     def mock_runtime(self):
         """Create mock runtime with pipeline support that simulates response event."""
-        from ciris_engine.logic.adapters.api.routes.agent import _message_responses, _response_events
         import ciris_adapters.a2a.services as a2a_services
+        from ciris_engine.logic.adapters.api.routes.agent import _message_responses, _response_events
 
         # Reset the global request counter for deterministic test results
         a2a_services._request_counter = 0

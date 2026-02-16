@@ -325,7 +325,9 @@ class AdapterDiscoveryService:
                     logger.info(f"[AUTO-LOAD] Eligible adapter: {adapter_name}")
                 elif ineligible_info:
                     ineligible_adapters.append(ineligible_info)
-                    logger.info(f"[AUTO-LOAD] Adapter '{adapter_name}' not eligible: {ineligible_info.eligibility.reason}")
+                    logger.info(
+                        f"[AUTO-LOAD] Adapter '{adapter_name}' not eligible: {ineligible_info.eligibility.reason}"
+                    )
             except Exception as e:
                 logger.debug(f"[AUTO-LOAD] Failed to check adapter '{adapter_name}': {e}")
 

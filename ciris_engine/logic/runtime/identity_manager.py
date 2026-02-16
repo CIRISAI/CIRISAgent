@@ -180,6 +180,11 @@ class IdentityManager:
                     for k, v in (template.csdma_overrides.__dict__ if template.csdma_overrides else {}).items()
                     if v is not None
                 },
+                pdma_overrides={
+                    k: v
+                    for k, v in (template.pdma_overrides.__dict__ if template.pdma_overrides else {}).items()
+                    if v is not None
+                },
                 action_selection_pdma_overrides={
                     k: v
                     for k, v in (
@@ -341,6 +346,7 @@ class IdentityManager:
 
         # Build overrides using helper
         csdma_overrides = self._build_overrides_dict(template.csdma_overrides)
+        pdma_overrides = self._build_overrides_dict(template.pdma_overrides)
         action_pdma_overrides = self._build_overrides_dict(template.action_selection_pdma_overrides)
 
         # Build permitted actions list - CRITICAL: use 'is not None' check!
@@ -372,6 +378,7 @@ class IdentityManager:
                 auto_load_adapters=template.auto_load_adapters,
                 dsdma_prompt_template=dsdma_prompt_template,
                 csdma_overrides=csdma_overrides,
+                pdma_overrides=pdma_overrides,
                 action_selection_pdma_overrides=action_pdma_overrides,
                 last_shutdown_memory=current_identity.core_profile.last_shutdown_memory,
             ),

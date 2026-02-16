@@ -1639,7 +1639,7 @@ def tsaspdma_llm_result(
                     logger.info(f"[MOCK_LLM] TSASPDMA params_str length: {len(params_str)}")
                     # Show first 200 chars with byte representation for debugging
                     if len(params_str) > 50:
-                        logger.info(f"[MOCK_LLM] TSASPDMA params_str bytes[:100]: {params_str[:100].encode('utf-8')}")
+                        logger.info(f"[MOCK_LLM] TSASPDMA params_str bytes[:100]: {params_str[:100].encode('utf-8')!r}")
 
                     # Try JSON first
                     try:

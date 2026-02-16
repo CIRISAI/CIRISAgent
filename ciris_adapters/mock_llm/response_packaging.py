@@ -18,7 +18,7 @@ import base64
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +134,7 @@ def memorize_error(reason: str, **extra: Any) -> str:
 
 def recall_success(
     query: str,
-    results: Optional[list] = None,
+    results: Optional[List[Any]] = None,
     value: Optional[str] = None,
     **extra: Any,
 ) -> str:
@@ -204,7 +204,7 @@ def observe_success(channel: str, message_count: int = 0, **extra: Any) -> str:
     )
 
 
-def ponder_success(questions: list, insights: str = "", **extra: Any) -> str:
+def ponder_success(questions: List[str], insights: str = "", **extra: Any) -> str:
     """Create a successful PONDER response."""
     return encode_response(
         action="PONDER",

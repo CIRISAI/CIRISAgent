@@ -29,24 +29,24 @@ except ImportError:
     CIRIS_VERIFY_AVAILABLE = False
 
     # Define stub types for when package not installed
-    class LicenseStatus:
+    class LicenseStatus:  # type: ignore[no-redef]
         UNLICENSED_COMMUNITY = 200
 
         def allows_licensed_operation(self) -> bool:
             return False
 
-    class LicenseTier:
+    class LicenseTier:  # type: ignore[no-redef]
         COMMUNITY = 0
         PROFESSIONAL_FULL = 2
 
-    class HardwareType:
+    class HardwareType:  # type: ignore[no-redef]
         SOFTWARE_ONLY = "software_only"
 
-    class DisclosureSeverity:
+    class DisclosureSeverity:  # type: ignore[no-redef]
         WARNING = "warning"
 
     # Stub Pydantic models for type hints
-    class LicenseStatusResponse:
+    class LicenseStatusResponse:  # type: ignore[no-redef]
         """Stub for when ciris_verify not installed."""
 
         status: Any = None
@@ -56,25 +56,25 @@ except ImportError:
         def allows_licensed_operation(self) -> bool:
             return False
 
-    class CapabilityCheckResult:
+    class CapabilityCheckResult:  # type: ignore[no-redef]
         """Stub for when ciris_verify not installed."""
 
         capability: str = ""
         allowed: bool = False
         reason: str = ""
 
-    class MandatoryDisclosure:
+    class MandatoryDisclosure:  # type: ignore[no-redef]
         """Stub for when ciris_verify not installed."""
 
         text: str = ""
         severity: str = "warning"
 
-    class BinaryNotFoundError(Exception):
+    class BinaryNotFoundError(Exception):  # type: ignore[no-redef]
         """Stub exception."""
 
         pass
 
-    class BinaryTamperedError(Exception):
+    class BinaryTamperedError(Exception):  # type: ignore[no-redef]
         """Stub exception."""
 
         pass
@@ -209,6 +209,7 @@ class CIRISVerifyService:
             self._last_nonce = nonce
 
             try:
+                assert self._client is not None, "Client not initialized"
                 response = await self._client.get_license_status(
                     challenge_nonce=nonce,
                 )
@@ -245,6 +246,7 @@ class CIRISVerifyService:
                 return {"capability": capability, "allowed": False, "reason": "Service unavailable"}
 
         try:
+            assert self._client is not None, "Client not initialized"
             return await self._client.check_capability(capability)
         except Exception as e:
             logger.error(f"Capability check failed: {e}")

@@ -5,7 +5,7 @@ Handles JWT validation and security checks for the MCP server.
 """
 
 import logging
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import jwt
 
@@ -25,7 +25,7 @@ class MCPServerSecurity:
         """
         self.config = config
 
-    def _decode_token(self, token: str) -> Optional[dict]:
+    def _decode_token(self, token: str) -> Optional[Dict[str, Any]]:
         """Decode a JWT token.
 
         Args:
@@ -38,11 +38,12 @@ class MCPServerSecurity:
             return None
 
         try:
-            return jwt.decode(
+            result: Dict[str, Any] = jwt.decode(
                 token,
                 self.config.jwt_secret,
                 algorithms=[self.config.jwt_algorithm],
             )
+            return result
         except jwt.PyJWTError as e:
             logger.warning(f"JWT validation failed: {e}")
             return None

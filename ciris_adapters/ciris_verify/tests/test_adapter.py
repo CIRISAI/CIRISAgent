@@ -12,13 +12,16 @@ class TestCIRISVerifyAdapter:
     """Tests for CIRISVerifyAdapter."""
 
     @pytest.fixture
-    def adapter(self):
-        return CIRISVerifyAdapter(config={"use_mock": True})
+    def adapter(self) -> CIRISVerifyAdapter:
+        mock_runtime = MagicMock()
+        return CIRISVerifyAdapter(runtime=mock_runtime, adapter_config={"use_mock": True})
 
     @pytest.fixture
-    def adapter_with_config(self):
+    def adapter_with_config(self) -> CIRISVerifyAdapter:
+        mock_runtime = MagicMock()
         return CIRISVerifyAdapter(
-            config={
+            runtime=mock_runtime,
+            adapter_config={
                 "use_mock": True,
                 "cache_ttl_seconds": 60,
                 "timeout_seconds": 5.0,

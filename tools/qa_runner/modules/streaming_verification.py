@@ -820,6 +820,10 @@ class StreamingVerificationModule:
                                         "csdma_prompt",
                                         "dsdma_prompt",
                                         "pdma_prompt",
+                                        # System prompts for debugging (v2.0.0+)
+                                        "csdma_system_prompt",
+                                        "dsdma_system_prompt",
+                                        "pdma_system_prompt",
                                     },  # DMA results + optional prompt fields
                                     "idma_result": {
                                         # IDMA epistemic evaluation fields (v1.9.3)

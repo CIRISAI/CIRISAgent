@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Union, cast
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils.constants import COVENANT_TEXT
+from ciris_engine.logic.utils.constants import COVENANT_TEXT, COVENANT_TEXT_COMPRESSED
 from ciris_engine.protocols.dma.base import ActionSelectionDMAProtocol
 from ciris_engine.protocols.faculties import EpistemicFaculty
 from ciris_engine.schemas.actions.parameters import PonderParams
@@ -228,10 +228,18 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
         system_message = self._build_system_message(input_data)
 
-        # Covenant is always included - core ethical framework
-        covenant_with_metadata = COVENANT_TEXT
-        if original_thought and hasattr(original_thought, "thought_type"):
-            covenant_with_metadata = f"THOUGHT_TYPE={original_thought.thought_type.value}\n\n{COVENANT_TEXT}"
+        # Get covenant based on mode - 'full', 'compressed', or 'none'
+        covenant_mode = self.get_covenant_mode()
+        covenant_text = ""
+        if covenant_mode == "full":
+            covenant_text = COVENANT_TEXT
+        elif covenant_mode == "compressed":
+            covenant_text = COVENANT_TEXT_COMPRESSED
+
+        # Add thought type metadata if applicable
+        covenant_with_metadata = covenant_text
+        if covenant_text and original_thought and hasattr(original_thought, "thought_type"):
+            covenant_with_metadata = f"THOUGHT_TYPE={original_thought.thought_type.value}\n\n{covenant_text}"
 
         # Build user message content - supports multimodal if input has images
         # Images come from input_data (EnhancedDMAInputs) which gets them from ProcessingQueueItem

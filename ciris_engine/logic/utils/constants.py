@@ -53,19 +53,35 @@ def _load_platform_guide(base_path: Path) -> str:
     return ""
 
 
+def _load_covenant_file(filename: str) -> str:
+    """Load a covenant file from package data.
+
+    Args:
+        filename: Name of the covenant file to load
+
+    Returns:
+        Covenant content as string, or empty string if not found
+    """
+    try:
+        try:
+            # Python 3.9+ - preferred method
+            from importlib.resources import files
+
+            return files("ciris_engine.data").joinpath(filename).read_text(encoding="utf-8")
+        except ImportError:
+            # Python 3.7-3.8 fallback
+            from importlib.resources import read_text
+
+            return read_text("ciris_engine.data", filename, encoding="utf-8")
+    except Exception as exc:
+        logger.warning("Could not load covenant file %s: %s", filename, exc)
+        return ""
+
+
 # Load covenant text from package data using importlib.resources
 # This works for both development (editable install) and pip-installed packages
 try:
-    try:
-        # Python 3.9+ - preferred method
-        from importlib.resources import files
-
-        covenant_content = files("ciris_engine.data").joinpath("covenant_1.2b.txt").read_text(encoding="utf-8")
-    except ImportError:
-        # Python 3.7-3.8 fallback
-        from importlib.resources import read_text
-
-        covenant_content = read_text("ciris_engine.data", "covenant_1.2b.txt", encoding="utf-8")
+    covenant_content = _load_covenant_file("covenant_1.2b.txt")
 
     # Try to append platform-appropriate comprehensive guide
     _GUIDE_BASE_PATH = Path(__file__).resolve().parents[3]
@@ -79,6 +95,14 @@ try:
 except Exception as exc:
     logger.warning("Could not load covenant text from package data: %s", exc)
     COVENANT_TEXT = ""
+
+# Load compressed covenant for testing/benchmarking
+# This is a shorter version containing only essential principles
+try:
+    COVENANT_TEXT_COMPRESSED = _load_covenant_file("covenant_1.2b_compressed.txt")
+except Exception as exc:
+    logger.warning("Could not load compressed covenant: %s", exc)
+    COVENANT_TEXT_COMPRESSED = ""
 
 NEED_MEMORY_METATHOUGHT = "need_memory_metathought"
 

@@ -80,7 +80,8 @@ class PromptCollection(BaseModel):
     custom_prompts: Dict[str, str] = Field(default_factory=dict, description="Additional custom prompts")
 
     # Metadata flags
-    uses_covenant_header: bool = Field(False, description="Whether to use COVENANT_TEXT")
+    # Covenant mode: 'full' (default), 'compressed' (for testing/benchmarking), or 'none'
+    covenant_mode: str = Field("full", description="Covenant mode: 'full', 'compressed', or 'none'")
     supports_agent_modes: bool = Field(True, description="Whether agent-specific prompts are supported")
 
     def get_prompt(self, key: str, agent_name: Optional[str] = None) -> Optional[str]:

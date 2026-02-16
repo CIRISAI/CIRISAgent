@@ -11,6 +11,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
 from ciris_engine.schemas.config.tickets import TicketsConfig
 
+# Field description constants to avoid duplication
+_DESC_SYSTEM_PROMPT = "Override system prompt"
+_DESC_USER_PROMPT_TEMPLATE = "Override user prompt template"
+_DESC_COVENANT_HEADER = "Covenant mode: 'full' (default), 'compressed' (for testing/benchmarking), or 'none'"
+
 
 class StewardshipCalculation(BaseModel):
     """Schema for the Stewardship Tier calculation details."""
@@ -249,28 +254,28 @@ class DSDMAConfiguration(BaseModel):
 class CSDMAOverrides(BaseModel):
     """Common Sense DMA prompt overrides."""
 
-    system_prompt: Optional[str] = Field(None, description="Override system prompt")
-    user_prompt_template: Optional[str] = Field(None, description="Override user prompt template")
-    covenant_header: Optional[str] = Field(None, description="Whether to include covenant text in prompts ('true' or 'false')")
+    system_prompt: Optional[str] = Field(None, description=_DESC_SYSTEM_PROMPT)
+    user_prompt_template: Optional[str] = Field(None, description=_DESC_USER_PROMPT_TEMPLATE)
+    covenant_header: Optional[str] = Field(None, description=_DESC_COVENANT_HEADER)
     model_config = ConfigDict(defer_build=True, extra="forbid")  # Strict validation
 
 
 class PDMAOverrides(BaseModel):
     """Ethical PDMA prompt overrides."""
 
-    system_prompt: Optional[str] = Field(None, description="Override system prompt")
-    user_prompt_template: Optional[str] = Field(None, description="Override user prompt template")
-    covenant_header: Optional[str] = Field(None, description="Whether to include covenant text in prompts ('true' or 'false')")
+    system_prompt: Optional[str] = Field(None, description=_DESC_SYSTEM_PROMPT)
+    user_prompt_template: Optional[str] = Field(None, description=_DESC_USER_PROMPT_TEMPLATE)
+    covenant_header: Optional[str] = Field(None, description=_DESC_COVENANT_HEADER)
     model_config = ConfigDict(defer_build=True, extra="forbid")  # Strict validation
 
 
 class ActionSelectionOverrides(BaseModel):
     """Action selection prompt overrides."""
 
-    system_prompt: Optional[str] = Field(None, description="Override system prompt")
-    user_prompt_template: Optional[str] = Field(None, description="Override user prompt template")
+    system_prompt: Optional[str] = Field(None, description=_DESC_SYSTEM_PROMPT)
+    user_prompt_template: Optional[str] = Field(None, description=_DESC_USER_PROMPT_TEMPLATE)
     action_descriptions: Optional[Dict[str, str]] = Field(None, description="Override action descriptions")
-    covenant_header: Optional[str] = Field(None, description="Whether to include covenant text in prompts ('true' or 'false')")
+    covenant_header: Optional[str] = Field(None, description=_DESC_COVENANT_HEADER)
     model_config = ConfigDict(defer_build=True, extra="allow")  # Allow for additional, template-specific guidance
 
 

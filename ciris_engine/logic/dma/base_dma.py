@@ -105,6 +105,23 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
         else:
             self.prompts = defaults
 
+    def get_covenant_mode(self) -> str:
+        """Get the covenant mode from prompts configuration.
+
+        Returns:
+            'full' (default), 'compressed', or 'none'
+        """
+        if isinstance(self.prompts, PromptCollection):
+            return getattr(self.prompts, "covenant_mode", "full")
+        elif isinstance(self.prompts, dict):
+            # Check for covenant_header key (legacy) or covenant_mode
+            covenant_value = self.prompts.get("covenant_header", self.prompts.get("covenant_mode", "full"))
+            if isinstance(covenant_value, bool):
+                # Legacy boolean - True means 'full', False means 'none'
+                return "full" if covenant_value else "none"
+            return str(covenant_value) if covenant_value else "full"
+        return "full"
+
     async def get_llm_service(self) -> Optional[LLMService]:
         """Return the LLM service for this DMA from the service registry."""
         service = await self.service_registry.get_service(

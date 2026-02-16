@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import COVENANT_TEXT
+from ciris_engine.logic.utils import COVENANT_TEXT, COVENANT_TEXT_COMPRESSED
 from ciris_engine.protocols.dma.base import IDMAProtocol
 from ciris_engine.schemas.dma.results import IDMAResult
 from ciris_engine.schemas.runtime.models import ImageContent
@@ -81,9 +81,12 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         """Assemble prompt messages for IDMA evaluation."""
         messages: List[JSONDict] = []
 
-        # Covenant is always included - core ethical framework
-        if self.prompt_loader.uses_covenant_header(self.prompt_template_data):
+        # Add covenant based on mode - 'full', 'compressed', or 'none'
+        covenant_mode = self.prompt_loader.get_covenant_mode(self.prompt_template_data)
+        if covenant_mode == "full":
             messages.append({"role": "system", "content": COVENANT_TEXT})
+        elif covenant_mode == "compressed":
+            messages.append({"role": "system", "content": COVENANT_TEXT_COMPRESSED})
 
         # Get system message from prompt template
         system_message = self.prompt_loader.get_system_message(

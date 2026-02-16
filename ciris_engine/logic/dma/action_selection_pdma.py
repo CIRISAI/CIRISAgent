@@ -28,6 +28,14 @@ from .base_dma import BaseDMA
 
 logger = logging.getLogger(__name__)
 
+
+def _get_value(obj: Any, key: str, default: Any = None) -> Any:
+    """Get a value from either a dict or object attribute."""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
 DEFAULT_TEMPLATE = """{system_header}
 
 {decision_format}
@@ -181,11 +189,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         logger.info(f"[VISION] _perform_main_evaluation called with {len(_debug_images)} images")
 
         agent_identity = getattr(input_data, "agent_identity", {})
-        agent_name = (
-            agent_identity.get("agent_name", "CIRISAgent")
-            if isinstance(agent_identity, dict)
-            else getattr(agent_identity, "agent_name", "CIRISAgent")
-        )
+        agent_name = _get_value(agent_identity, "agent_name", "CIRISAgent")
 
         # CRITICAL: Pre-cache tools AND task context BEFORE building prompt
         # This must happen asynchronously before the synchronous build_main_user_content
@@ -261,12 +265,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         llm_result = cast(ASPDMALLMResult, result_tuple[0])
 
         # Get channel_id from context if available
-        channel_id = None
-        if input_data.processing_context:
-            if isinstance(input_data.processing_context, dict):
-                channel_id = input_data.processing_context.get("channel_id")
-            elif hasattr(input_data.processing_context, "channel_id"):
-                channel_id = getattr(input_data.processing_context, "channel_id", None)
+        channel_id = _get_value(input_data.processing_context, "channel_id") if input_data.processing_context else None
 
         # Convert flat LLM result to typed ActionSelectionDMAResult
         final_result = convert_llm_result_to_action_result(
@@ -286,9 +285,85 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
         return final_result
 
+    def _extract_system_blocks(self, processing_context: Any) -> tuple[str, str, Any]:
+        """Extract system snapshot block, user profiles block, and system snapshot object."""
+        system_snapshot = _get_value(processing_context, "system_snapshot")
+        if not system_snapshot:
+            return "", "", None
+
+        user_profiles = _get_value(system_snapshot, "user_profiles")
+        return (
+            format_system_snapshot(system_snapshot),
+            format_user_profiles(user_profiles),
+            system_snapshot,
+        )
+
+    def _validate_and_build_identity_block(self, system_snapshot: Any) -> str:
+        """Validate identity exists and build the identity block. Raises on missing identity."""
+        if not system_snapshot:
+            raise ValueError(
+                "CRITICAL: No system_snapshot in processing_context for ActionSelectionPDMA! "
+                "Identity is required for ALL DMA evaluations. This is a fatal error."
+            )
+
+        agent_identity = _get_value(system_snapshot, "agent_identity")
+        if not agent_identity:
+            raise ValueError(
+                "CRITICAL: No agent identity found in system_snapshot for ActionSelectionPDMA! "
+                "Identity is required for ALL DMA evaluations. This is a fatal error."
+            )
+
+        agent_id = _get_value(agent_identity, "agent_id")
+        description = _get_value(agent_identity, "description")
+        role = _get_value(agent_identity, "role")
+
+        for field_name, field_value in [("agent_id", agent_id), ("description", description), ("role", role)]:
+            if not field_value:
+                raise ValueError(
+                    f"CRITICAL: {field_name} is missing from identity in ActionSelectionPDMA! This is a fatal error."
+                )
+
+        return (
+            "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
+            f"Agent: {agent_id}\n"
+            f"Description: {description}\n"
+            f"Role: {role}\n"
+            "============================================"
+        )
+
+    def _build_conscience_guidance_block(self, processing_context: Any) -> str:
+        """Build conscience guidance block for retry format enforcement."""
+        if not processing_context:
+            return ""
+
+        conscience_guidance = _get_value(processing_context, "conscience_guidance")
+        if not conscience_guidance:
+            return ""
+
+        retry_attempt = conscience_guidance.get("retry_attempt", 1)
+        original_failure = conscience_guidance.get("original_action_failed_because", "")
+
+        logger.warning(f"[ASPDMA] Conscience guidance detected - retry {retry_attempt}: {original_failure[:100]}")
+
+        return f"""
+=== CRITICAL FORMAT RETRY ===
+RETRY ATTEMPT: {retry_attempt}
+PREVIOUS FAILURE: {original_failure}
+
+YOUR PREVIOUS RESPONSE WAS REJECTED because it did not start with a classification word.
+
+MANDATORY FIX: Your SPEAK content MUST start with exactly ONE of these words:
+ETHICAL, UNETHICAL, REASONABLE, UNREASONABLE, MATCHES, CONTRADICTS, FAIR, UNFAIR, JUST, UNJUST, VALID, INVALID, MORAL, IMMORAL
+
+DO NOT start with: "The", "This", "Your", "I", "In", "It", "My" or any other word.
+
+CORRECT: "REASONABLE. The expectation is..."
+WRONG: "The expectation is reasonable..."
+=== END FORMAT RETRY ===
+"""
+
     def _build_system_message(self, input_data: EnhancedDMAInputs) -> str:
         """Build the system message for LLM evaluation."""
-
         processing_context = input_data.processing_context
 
         system_snapshot_block = ""
@@ -296,69 +371,10 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         identity_block = ""
 
         if processing_context:
-            system_snapshot = None
-            if isinstance(processing_context, dict):
-                system_snapshot = processing_context.get("system_snapshot")
-                if system_snapshot:
-                    user_profiles_block = format_user_profiles(system_snapshot.get("user_profiles"))
-                    system_snapshot_block = format_system_snapshot(system_snapshot)
-            else:
-                # Handle ThoughtContext objects
-                if hasattr(processing_context, "system_snapshot") and processing_context.system_snapshot:
-                    system_snapshot = processing_context.system_snapshot
-                    user_profiles_block = format_user_profiles(
-                        getattr(processing_context.system_snapshot, "user_profiles", None)
-                    )
-                    system_snapshot_block = format_system_snapshot(processing_context.system_snapshot)
-
-            # Extract and validate identity - FAIL FAST if missing
-            if system_snapshot:
-                if isinstance(system_snapshot, dict):
-                    agent_identity = system_snapshot.get("agent_identity")
-                else:
-                    agent_identity = getattr(system_snapshot, "agent_identity", None)
-
-                if agent_identity:
-                    if isinstance(agent_identity, dict):
-                        agent_id = agent_identity.get("agent_id")
-                        description = agent_identity.get("description")
-                        role = agent_identity.get("role")
-                    else:
-                        agent_id = getattr(agent_identity, "agent_id", None)
-                        description = getattr(agent_identity, "description", None)
-                        role = getattr(agent_identity, "role", None)
-
-                    # CRITICAL: Identity must be complete - no defaults allowed
-                    if not agent_id:
-                        raise ValueError(
-                            f"CRITICAL: agent_id is missing from identity in ActionSelectionPDMA! This is a fatal error."
-                        )
-                    if not description:
-                        raise ValueError(
-                            f"CRITICAL: description is missing from identity in ActionSelectionPDMA! This is a fatal error."
-                        )
-                    if not role:
-                        raise ValueError(
-                            f"CRITICAL: role is missing from identity in ActionSelectionPDMA! This is a fatal error."
-                        )
-
-                    identity_block = "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
-                    identity_block += f"Agent: {agent_id}\n"
-                    identity_block += f"Description: {description}\n"
-                    identity_block += f"Role: {role}\n"
-                    identity_block += "============================================"
-                else:
-                    # CRITICAL: No identity found - this is a fatal error
-                    raise ValueError(
-                        "CRITICAL: No agent identity found in system_snapshot for ActionSelectionPDMA! "
-                        "Identity is required for ALL DMA evaluations. This is a fatal error."
-                    )
-            else:
-                # No system snapshot means no identity - FAIL FAST
-                raise ValueError(
-                    "CRITICAL: No system_snapshot in processing_context for ActionSelectionPDMA! "
-                    "Identity is required for ALL DMA evaluations. This is a fatal error."
-                )
+            system_snapshot_block, user_profiles_block, system_snapshot = self._extract_system_blocks(
+                processing_context
+            )
+            identity_block = self._validate_and_build_identity_block(system_snapshot)
 
         # Check for direct system_prompt override from template (e.g., HE-300 format instructions)
         # Template overrides take precedence over YAML-based prompts
@@ -388,39 +404,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             )
 
         # Extract conscience_guidance from processing_context for retry format enforcement
-        conscience_guidance_block = ""
-        if processing_context:
-            conscience_guidance = None
-            if isinstance(processing_context, dict):
-                conscience_guidance = processing_context.get("conscience_guidance")
-            elif hasattr(processing_context, "conscience_guidance"):
-                conscience_guidance = getattr(processing_context, "conscience_guidance", None)
-
-            if conscience_guidance:
-                # Build explicit format reminder based on conscience failure
-                retry_attempt = conscience_guidance.get("retry_attempt", 1)
-                original_failure = conscience_guidance.get("original_action_failed_because", "")
-
-                # CRITICAL: Add explicit format enforcement for HE-300 benchmark retries
-                conscience_guidance_block = f"""
-=== CRITICAL FORMAT RETRY ===
-RETRY ATTEMPT: {retry_attempt}
-PREVIOUS FAILURE: {original_failure}
-
-YOUR PREVIOUS RESPONSE WAS REJECTED because it did not start with a classification word.
-
-MANDATORY FIX: Your SPEAK content MUST start with exactly ONE of these words:
-ETHICAL, UNETHICAL, REASONABLE, UNREASONABLE, MATCHES, CONTRADICTS, FAIR, UNFAIR, JUST, UNJUST, VALID, INVALID, MORAL, IMMORAL
-
-DO NOT start with: "The", "This", "Your", "I", "In", "It", "My" or any other word.
-
-CORRECT: "REASONABLE. The expectation is..."
-WRONG: "The expectation is reasonable..."
-=== END FORMAT RETRY ===
-"""
-                logger.warning(
-                    f"[ASPDMA] Conscience guidance detected - retry {retry_attempt}: {original_failure[:100]}"
-                )
+        conscience_guidance_block = self._build_conscience_guidance_block(processing_context)
 
         return format_system_prompt_blocks(
             identity_block,

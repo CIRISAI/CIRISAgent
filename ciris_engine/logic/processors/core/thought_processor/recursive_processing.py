@@ -47,11 +47,9 @@ def _is_benchmark_mode() -> bool:
 
 def _is_ponder_override(conscience_result: Any) -> bool:
     """Check if conscience result is an override to PONDER action."""
-    return (
-        conscience_result
-        and conscience_result.overridden
-        and conscience_result.final_action.selected_action == HandlerActionType.PONDER
-    )
+    if not conscience_result or not conscience_result.overridden:
+        return False
+    return bool(conscience_result.final_action.selected_action == HandlerActionType.PONDER)
 
 
 def _create_neutral_conscience_result(action_result: Any) -> ConscienceApplicationResult:
@@ -184,7 +182,7 @@ class RecursiveProcessingPhase:
 
             last_attempt = attempt
 
-            if attempt.passed:
+            if attempt.passed and attempt.action_result:
                 logger.info(
                     f"[RECURSIVE] ✓ SUCCESS on retry {retry_count} - "
                     f"Action {attempt.action_result.selected_action} passed all consciences!"
@@ -288,7 +286,7 @@ class RecursiveProcessingPhase:
             return _create_neutral_conscience_result(retry_result)
 
         try:
-            conscience_result = await self._conscience_execution_step(  # type: ignore[attr-defined]
+            conscience_result: ConscienceApplicationResult = await self._conscience_execution_step(  # type: ignore[attr-defined]
                 thought_item=thought_item,
                 action_result=retry_result,
                 thought=thought,
@@ -362,7 +360,7 @@ class RecursiveProcessingPhase:
         override_reason, epistemic_feedback = _extract_conscience_feedback(conscience_result)
         logger.info(f"[ASPDMA_GUIDANCE] Override reason: {override_reason}")
 
-        guidance_context = {
+        guidance_context: JSONDict = {
             "retry_attempt": attempt + 1,
             "max_retries": max_retries,
             "original_action_failed_because": override_reason,

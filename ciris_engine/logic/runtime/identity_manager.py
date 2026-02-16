@@ -121,51 +121,57 @@ class IdentityManager:
             logger.error(f"Failed to save identity to persistence: {e}")
             raise
 
-    def _create_identity_from_template(self, template: AgentTemplate) -> AgentIdentityRoot:
-        """Create initial identity from template (first run only)."""
-        # Generate deterministic identity hash
-        identity_string = f"{template.name}:{template.description}:{template.role_description}"
-        identity_hash = hashlib.sha256(identity_string.encode()).hexdigest()
+    def _extract_domain_knowledge(self, template: AgentTemplate) -> dict:
+        """Extract and normalize domain knowledge from template."""
+        import json
 
-        # Extract DSDMA configuration from template
+        if not template.dsdma_kwargs or not template.dsdma_kwargs.domain_specific_knowledge:
+            return {}
+
         domain_knowledge = {}
-        dsdma_prompt_template = None
+        for key, value in template.dsdma_kwargs.domain_specific_knowledge.items():
+            domain_knowledge[key] = json.dumps(value) if isinstance(value, dict) else str(value)
+        return domain_knowledge
 
-        if template.dsdma_kwargs:
-            # Extract domain knowledge from typed model
-            if template.dsdma_kwargs.domain_specific_knowledge:
-                for key, value in template.dsdma_kwargs.domain_specific_knowledge.items():
-                    if isinstance(value, dict):
-                        # Convert nested dicts to JSON strings
-                        import json
+    def _extract_overrides(self, overrides_obj: Any) -> dict:
+        """Extract non-None values from an overrides object."""
+        if not overrides_obj:
+            return {}
+        return {k: v for k, v in overrides_obj.__dict__.items() if v is not None}
 
-                        domain_knowledge[key] = json.dumps(value)
-                    else:
-                        domain_knowledge[key] = str(value)
-
-            # Extract prompt template
-            if template.dsdma_kwargs.prompt_template:
-                dsdma_prompt_template = template.dsdma_kwargs.prompt_template
-
-        # Build permitted actions from template - CRITICAL: use 'is not None' check!
-        # An empty list means NO actions permitted (valid), None means use defaults
+    def _resolve_permitted_actions(self, template: AgentTemplate) -> list:
+        """Resolve permitted actions from template or defaults."""
         if template.permitted_actions is not None:
-            permitted_actions = [
+            actions = [
                 HandlerActionType(action) if isinstance(action, str) else action
                 for action in template.permitted_actions
             ]
             logger.info(
                 f"IdentityManager: Using template-defined permitted_actions for {template.name}: "
-                f"{[a.value for a in permitted_actions]}"
+                f"{[a.value for a in actions]}"
             )
-        else:
-            permitted_actions = self._get_default_permitted_actions()
-            logger.warning(
-                f"IdentityManager: Template {template.name} has no permitted_actions, using defaults: "
-                f"{[a.value for a in permitted_actions]}"
-            )
+            return actions
 
-        # Create identity root from template
+        actions = self._get_default_permitted_actions()
+        logger.warning(
+            f"IdentityManager: Template {template.name} has no permitted_actions, using defaults: "
+            f"{[a.value for a in actions]}"
+        )
+        return actions
+
+    def _create_identity_from_template(self, template: AgentTemplate) -> AgentIdentityRoot:
+        """Create initial identity from template (first run only)."""
+        identity_string = f"{template.name}:{template.description}:{template.role_description}"
+        identity_hash = hashlib.sha256(identity_string.encode()).hexdigest()
+
+        # Extract DSDMA configuration
+        domain_knowledge = self._extract_domain_knowledge(template)
+        dsdma_prompt_template = None
+        if template.dsdma_kwargs and template.dsdma_kwargs.prompt_template:
+            dsdma_prompt_template = template.dsdma_kwargs.prompt_template
+
+        permitted_actions = self._resolve_permitted_actions(template)
+
         return AgentIdentityRoot(
             agent_id=template.name,
             identity_hash=identity_hash,
@@ -175,25 +181,9 @@ class IdentityManager:
                 domain_specific_knowledge=domain_knowledge,
                 auto_load_adapters=template.auto_load_adapters,
                 dsdma_prompt_template=dsdma_prompt_template,
-                csdma_overrides={
-                    k: v
-                    for k, v in (template.csdma_overrides.__dict__ if template.csdma_overrides else {}).items()
-                    if v is not None
-                },
-                pdma_overrides={
-                    k: v
-                    for k, v in (template.pdma_overrides.__dict__ if template.pdma_overrides else {}).items()
-                    if v is not None
-                },
-                action_selection_pdma_overrides={
-                    k: v
-                    for k, v in (
-                        template.action_selection_pdma_overrides.__dict__
-                        if template.action_selection_pdma_overrides
-                        else {}
-                    ).items()
-                    if v is not None
-                },
+                csdma_overrides=self._extract_overrides(template.csdma_overrides),
+                pdma_overrides=self._extract_overrides(template.pdma_overrides),
+                action_selection_pdma_overrides=self._extract_overrides(template.action_selection_pdma_overrides),
                 last_shutdown_memory=None,
             ),
             identity_metadata=IdentityMetadata(

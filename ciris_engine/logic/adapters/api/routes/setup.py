@@ -1435,6 +1435,61 @@ def _save_and_reload_config(setup: SetupCompleteRequest) -> Path:
     return config_path
 
 
+def _write_section_header(f: Any, title: str) -> None:
+    """Write a section header with separators to the config file."""
+    f.write("\n# ============================================================================\n")
+    f.write(f"# {title}\n")
+    f.write("# ============================================================================\n")
+
+
+def _write_backup_llm_config(f: Any, setup: SetupCompleteRequest) -> None:
+    """Write backup/secondary LLM configuration if provided."""
+    if not setup.backup_llm_api_key:
+        return
+    f.write("\n# Backup/Secondary LLM Configuration\n")
+    f.write(f'CIRIS_OPENAI_API_KEY_2="{setup.backup_llm_api_key}"\n')
+    if setup.backup_llm_base_url:
+        f.write(f'CIRIS_OPENAI_API_BASE_2="{setup.backup_llm_base_url}"\n')
+    if setup.backup_llm_model:
+        f.write(f'CIRIS_OPENAI_MODEL_NAME_2="{setup.backup_llm_model}"\n')
+
+
+def _write_node_connection_config(f: Any, setup: SetupCompleteRequest) -> None:
+    """Write CIRISNode connection configuration if provided."""
+    if not setup.node_url:
+        return
+    _write_section_header(f, "CIRISNode Connection (provisioned via device auth)")
+    f.write(f'CIRISNODE_BASE_URL="{setup.node_url}"\n')
+    if setup.identity_template:
+        f.write(f'CIRIS_IDENTITY_TEMPLATE="{setup.identity_template}"\n')
+    if setup.stewardship_tier is not None:
+        f.write(f"CIRIS_STEWARDSHIP_TIER={setup.stewardship_tier}\n")
+    if setup.approved_adapters:
+        f.write(f'CIRIS_APPROVED_ADAPTERS="{",".join(setup.approved_adapters)}"\n')
+    if setup.org_id:
+        f.write(f'CIRIS_ORG_ID="{setup.org_id}"\n')
+
+
+def _write_licensed_package_config(f: Any, setup: SetupCompleteRequest) -> None:
+    """Write licensed module package configuration if provided."""
+    if not setup.licensed_package_path:
+        return
+    _write_section_header(f, "Licensed Module Package")
+    f.write(f'CIRIS_LICENSED_PACKAGE_PATH="{setup.licensed_package_path}"\n')
+    if setup.licensed_modules_path:
+        f.write(f'CIRIS_MODULE_PATH="{setup.licensed_modules_path}"\n')
+
+
+def _write_verify_config(f: Any, setup: SetupCompleteRequest) -> None:
+    """Write CIRISVerify configuration if provided."""
+    if not setup.verify_binary_path:
+        return
+    _write_section_header(f, "CIRISVerify")
+    f.write(f'CIRIS_VERIFY_BINARY_PATH="{setup.verify_binary_path}"\n')
+    require_hw = "true" if setup.verify_require_hardware else "false"
+    f.write(f"CIRIS_VERIFY_REQUIRE_HARDWARE={require_hw}\n")
+
+
 def _save_setup_config(setup: SetupCompleteRequest) -> Path:
     """Save setup configuration to .env file.
 
@@ -1444,43 +1499,30 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
     Returns:
         Path where config was saved
     """
-    # Determine LLM provider type for env file generation
-    llm_provider = setup.llm_provider
-    llm_api_key = setup.llm_api_key
-    # Use provider default base URL if not explicitly provided
     llm_base_url = _get_provider_base_url(setup.llm_provider, setup.llm_base_url) or ""
-    llm_model = setup.llm_model or ""
-
-    # Create .env file using existing wizard logic
-    # Path is determined internally by get_default_config_path()
     config_path = create_env_file(
-        llm_provider=llm_provider,
-        llm_api_key=llm_api_key,
+        llm_provider=setup.llm_provider,
+        llm_api_key=setup.llm_api_key,
         llm_base_url=llm_base_url,
-        llm_model=llm_model,
+        llm_model=setup.llm_model or "",
         agent_port=setup.agent_port,
     )
 
-    # Append template and adapter configuration
     with open(config_path, "a") as f:
-        # Template selection
+        # Template and adapter configuration
         f.write("\n# Agent Template\n")
         f.write(f"CIRIS_TEMPLATE={setup.template_id}\n")
-
-        # Adapter configuration
         f.write("\n# Enabled Adapters\n")
-        adapters_str = ",".join(setup.enabled_adapters)
-        f.write(f"CIRIS_ADAPTER={adapters_str}\n")
+        f.write(f"CIRIS_ADAPTER={','.join(setup.enabled_adapters)}\n")
 
-        # Handle covenant metrics consent - if enabled, set consent timestamp
+        # Covenant metrics consent
         if "ciris_covenant_metrics" in setup.enabled_adapters:
             from datetime import datetime, timezone
-
             consent_timestamp = datetime.now(timezone.utc).isoformat()
             f.write("\n# Covenant Metrics Consent (auto-set when adapter enabled)\n")
             f.write("CIRIS_COVENANT_METRICS_CONSENT=true\n")
             f.write(f"CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP={consent_timestamp}\n")
-            logger.info(f"[SETUP] Covenant metrics consent enabled with timestamp: {consent_timestamp}")
+            logger.info(f"[SETUP] Covenant metrics consent enabled: {consent_timestamp}")
 
         # Adapter-specific environment variables
         if setup.adapter_config:
@@ -1488,46 +1530,11 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
             for key, value in setup.adapter_config.items():
                 f.write(f"{key}={value}\n")
 
-        # Backup/Secondary LLM Configuration (Optional)
-        if setup.backup_llm_api_key:
-            f.write("\n# Backup/Secondary LLM Configuration\n")
-            f.write(f'CIRIS_OPENAI_API_KEY_2="{setup.backup_llm_api_key}"\n')
-            if setup.backup_llm_base_url:
-                f.write(f'CIRIS_OPENAI_API_BASE_2="{setup.backup_llm_base_url}"\n')
-            if setup.backup_llm_model:
-                f.write(f'CIRIS_OPENAI_MODEL_NAME_2="{setup.backup_llm_model}"\n')
-
-        # CIRISNode Connection (set by "Connect to Node" device auth flow)
-        if setup.node_url:
-            f.write("\n# ============================================================================\n")
-            f.write("# CIRISNode Connection (provisioned via device auth)\n")
-            f.write("# ============================================================================\n")
-            f.write(f'CIRISNODE_BASE_URL="{setup.node_url}"\n')
-            if setup.identity_template:
-                f.write(f'CIRIS_IDENTITY_TEMPLATE="{setup.identity_template}"\n')
-            if setup.stewardship_tier is not None:
-                f.write(f"CIRIS_STEWARDSHIP_TIER={setup.stewardship_tier}\n")
-            if setup.approved_adapters:
-                f.write(f'CIRIS_APPROVED_ADAPTERS="{",".join(setup.approved_adapters)}"\n')
-            if setup.org_id:
-                f.write(f'CIRIS_ORG_ID="{setup.org_id}"\n')
-
-        # Licensed module package (set by download-package flow)
-        if setup.licensed_package_path:
-            f.write("\n# ============================================================================\n")
-            f.write("# Licensed Module Package\n")
-            f.write("# ============================================================================\n")
-            f.write(f'CIRIS_LICENSED_PACKAGE_PATH="{setup.licensed_package_path}"\n')
-            if setup.licensed_modules_path:
-                f.write(f'CIRIS_MODULE_PATH="{setup.licensed_modules_path}"\n')
-
-        # CIRISVerify (optional, set by node flow)
-        if setup.verify_binary_path:
-            f.write("\n# ============================================================================\n")
-            f.write("# CIRISVerify\n")
-            f.write("# ============================================================================\n")
-            f.write(f'CIRIS_VERIFY_BINARY_PATH="{setup.verify_binary_path}"\n')
-            f.write(f"CIRIS_VERIFY_REQUIRE_HARDWARE={'true' if setup.verify_require_hardware else 'false'}\n")
+        # Write optional configuration sections
+        _write_backup_llm_config(f, setup)
+        _write_node_connection_config(f, setup)
+        _write_licensed_package_config(f, setup)
+        _write_verify_config(f, setup)
 
     return config_path
 

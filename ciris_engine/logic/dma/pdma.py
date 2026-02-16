@@ -47,6 +47,60 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
 
         logger.info(f"EthicalPDMAEvaluator initialized with model: {self.model_name}")
 
+    def _build_context_strings(self, context: Any) -> tuple[str, str]:
+        """Extract system snapshot and user profile context strings."""
+        if not context:
+            return "", ""
+
+        system_snapshot_str = ""
+        user_profile_str = ""
+
+        if hasattr(context, "system_snapshot") and context.system_snapshot:
+            system_snapshot_str = format_system_snapshot(context.system_snapshot)
+            if hasattr(context.system_snapshot, "user_profiles") and context.system_snapshot.user_profiles:
+                user_profile_str = format_user_profiles(context.system_snapshot.user_profiles)
+        elif hasattr(context, "user_profiles") and context.user_profiles:
+            user_profile_str = format_user_profiles(context.user_profiles)
+
+        return system_snapshot_str, user_profile_str
+
+    def _get_template_override(self, key: str) -> Optional[str]:
+        """Get a template override value if prompts is a dict."""
+        if isinstance(self.prompts, dict):
+            return self.prompts.get(key)
+        return None
+
+    def _build_system_message_text(self, original_thought_content: str, full_context_str: str) -> str:
+        """Build system message, using template override if available."""
+        template_override = self._get_template_override("system_prompt")
+        if template_override:
+            logger.debug(f"PDMA using template system_prompt override ({len(template_override)} chars)")
+            return template_override
+
+        return self.prompt_loader.get_system_message(
+            self.prompt_template_data,
+            original_thought_content=original_thought_content,
+            full_context_str=full_context_str,
+        )
+
+    def _build_user_message_text(self, original_thought_content: str, full_context_str: str) -> str:
+        """Build user message, using template override if available."""
+        template_override = self._get_template_override("user_prompt_template")
+        if template_override:
+            text = template_override.format(
+                original_thought_content=original_thought_content,
+                thought_content=original_thought_content,
+                full_context_str=full_context_str,
+            )
+            logger.debug(f"PDMA using template user_prompt_template override ({len(text)} chars)")
+            return text
+
+        return self.prompt_loader.get_user_message(
+            self.prompt_template_data,
+            original_thought_content=original_thought_content,
+            full_context_str=full_context_str,
+        )
+
     async def evaluate(self, *args: Any, **kwargs: Any) -> EthicalDMAResult:  # type: ignore[override]
         import time
 
@@ -70,70 +124,27 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         task_context_str = self.format_task_context(original_task, thought_depth)
         logger.info(f"[PDMA-TIMING] {input_data.thought_id} fetch_task took {(time.time()-fetch_start)*1000:.0f}ms")
 
+        # Build context strings
         context_start = time.time()
-        system_snapshot_context_str = ""
-        user_profile_context_str = ""
-        if context and hasattr(context, "system_snapshot") and context.system_snapshot:
-            system_snapshot_context_str = format_system_snapshot(context.system_snapshot)
-            if hasattr(context.system_snapshot, "user_profiles") and context.system_snapshot.user_profiles:
-                user_profile_context_str = format_user_profiles(context.system_snapshot.user_profiles)
-        elif context and hasattr(context, "user_profiles") and context.user_profiles:
-            user_profile_context_str = format_user_profiles(context.user_profiles)
+        system_snapshot_str, user_profile_str = self._build_context_strings(context)
+        full_context_str = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n{system_snapshot_str}{user_profile_str}"
+        logger.info(f"[PDMA-TIMING] {input_data.thought_id} build_context took {(time.time()-context_start)*1000:.0f}ms")
 
-        # Include task context in the full context
-        full_context_str = (
-            f"=== ORIGINAL TASK ===\n{task_context_str}\n\n" + system_snapshot_context_str + user_profile_context_str
-        )
-        logger.info(
-            f"[PDMA-TIMING] {input_data.thought_id} build_context took {(time.time()-context_start)*1000:.0f}ms"
-        )
-
+        # Build messages
         prompt_start = time.time()
         messages: List[JSONDict] = []
 
-        # Add covenant based on mode - 'full', 'compressed', or 'none'
+        # Add covenant based on mode
         covenant_mode = self.prompt_loader.get_covenant_mode(self.prompt_template_data)
         if covenant_mode == "full":
             messages.append({"role": "system", "content": COVENANT_TEXT})
         elif covenant_mode == "compressed":
             messages.append({"role": "system", "content": COVENANT_TEXT_COMPRESSED})
 
-        # Check for template override of system_prompt (e.g., HE-300 format instructions)
-        template_system_override = None
-        if isinstance(self.prompts, dict):
-            template_system_override = self.prompts.get("system_prompt")
-
-        if template_system_override:
-            # Use template override directly - these contain critical format instructions
-            system_message = template_system_override
-            logger.debug(f"PDMA using template system_prompt override ({len(system_message)} chars)")
-        else:
-            system_message = self.prompt_loader.get_system_message(
-                self.prompt_template_data,
-                original_thought_content=original_thought_content,
-                full_context_str=full_context_str,
-            )
+        system_message = self._build_system_message_text(original_thought_content, full_context_str)
         messages.append({"role": "system", "content": system_message})
 
-        # Check for template override of user_prompt_template
-        template_user_override = None
-        if isinstance(self.prompts, dict):
-            template_user_override = self.prompts.get("user_prompt_template")
-
-        if template_user_override:
-            # Use template override with substitution
-            user_message_text = template_user_override.format(
-                original_thought_content=original_thought_content,
-                thought_content=original_thought_content,
-                full_context_str=full_context_str,
-            )
-            logger.debug(f"PDMA using template user_prompt_template override ({len(user_message_text)} chars)")
-        else:
-            user_message_text = self.prompt_loader.get_user_message(
-                self.prompt_template_data,
-                original_thought_content=original_thought_content,
-                full_context_str=full_context_str,
-            )
+        user_message_text = self._build_user_message_text(original_thought_content, full_context_str)
         # Build multimodal content if images are present
         input_images = getattr(input_data, "images", []) or []
         if input_images:

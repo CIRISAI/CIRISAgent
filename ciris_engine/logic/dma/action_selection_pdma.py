@@ -180,70 +180,65 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
         return None
 
-    async def _perform_main_evaluation(
-        self, input_data: EnhancedDMAInputs, enable_recursive_evaluation: bool
-    ) -> ActionSelectionDMAResult:
-        """Perform the main LLM-based evaluation."""
-        # Debug: Check if images are in input_data
-        _debug_images = getattr(input_data, "images", [])
-        logger.info(f"[VISION] _perform_main_evaluation called with {len(_debug_images)} images")
-
-        agent_identity = getattr(input_data, "agent_identity", {})
-        agent_name = _get_value(agent_identity, "agent_name", "CIRISAgent")
-
-        # CRITICAL: Pre-cache tools AND task context BEFORE building prompt
-        # This must happen asynchronously before the synchronous build_main_user_content
-        # pre_cache_context() caches both tools AND the original task for follow-through
-        original_thought = input_data.original_thought
-        await self.context_builder.pre_cache_context(original_thought)
-
-        # Check for user_prompt_template override from template (e.g., HE-300 format instructions)
-        template_user_override = None
-        if isinstance(self.prompts, dict):
-            template_user_override = self.prompts.get("user_prompt_template")
+    def _build_main_user_content(self, input_data: EnhancedDMAInputs, agent_name: str) -> str:
+        """Build main user content, using template override if available."""
+        template_user_override = self.prompts.get("user_prompt_template") if isinstance(self.prompts, dict) else None
 
         if template_user_override:
-            # Use template user_prompt_template - contains critical format instructions
-            # Substitute available placeholders
             thought_content = str(input_data.original_thought.content) if input_data.original_thought else ""
             available_actions = (
                 ", ".join(a.value for a in input_data.permitted_actions)
                 if input_data.permitted_actions
                 else "speak, task_complete"
             )
-            main_user_content = template_user_override.format(
-                thought_content=thought_content,
-                available_actions=available_actions,
+            content = template_user_override.format(
+                thought_content=thought_content, available_actions=available_actions
             )
-            logger.debug(f"ASPDMA using template user_prompt_template override ({len(main_user_content)} chars)")
-        else:
-            main_user_content = self.context_builder.build_main_user_content(input_data, agent_name)
+            logger.debug(f"ASPDMA using template user_prompt_template override ({len(content)} chars)")
+            return content
 
-        # Get faculty evaluations from typed input
-        faculty_evaluations = input_data.faculty_evaluations
+        return self.context_builder.build_main_user_content(input_data, agent_name)
 
-        if faculty_evaluations and self.faculty_integration:
-            faculty_insights = self.faculty_integration.build_faculty_insights_string(faculty_evaluations)
-            main_user_content += faculty_insights
-
-        system_message = self._build_system_message(input_data)
-
-        # Get covenant based on mode - 'full', 'compressed', or 'none'
+    def _build_covenant_with_metadata(self, original_thought: Any) -> str:
+        """Build covenant text with thought type metadata."""
         covenant_mode = self.get_covenant_mode()
-        covenant_text = ""
         if covenant_mode == "full":
             covenant_text = COVENANT_TEXT
         elif covenant_mode == "compressed":
             covenant_text = COVENANT_TEXT_COMPRESSED
+        else:
+            return ""
 
-        # Add thought type metadata if applicable
-        covenant_with_metadata = covenant_text
-        if covenant_text and original_thought and hasattr(original_thought, "thought_type"):
-            covenant_with_metadata = f"THOUGHT_TYPE={original_thought.thought_type.value}\n\n{covenant_text}"
+        if original_thought and hasattr(original_thought, "thought_type"):
+            return f"THOUGHT_TYPE={original_thought.thought_type.value}\n\n{covenant_text}"
+        return covenant_text
 
-        # Build user message content - supports multimodal if input has images
-        # Images come from input_data (EnhancedDMAInputs) which gets them from ProcessingQueueItem
+    async def _perform_main_evaluation(
+        self, input_data: EnhancedDMAInputs, enable_recursive_evaluation: bool
+    ) -> ActionSelectionDMAResult:
+        """Perform the main LLM-based evaluation."""
         input_images = getattr(input_data, "images", []) or []
+        logger.info(f"[VISION] _perform_main_evaluation called with {len(input_images)} images")
+
+        agent_identity = getattr(input_data, "agent_identity", {})
+        agent_name = _get_value(agent_identity, "agent_name", "CIRISAgent")
+        original_thought = input_data.original_thought
+
+        # Pre-cache tools AND task context BEFORE building prompt
+        await self.context_builder.pre_cache_context(original_thought)
+
+        # Build main user content
+        main_user_content = self._build_main_user_content(input_data, agent_name)
+
+        # Append faculty insights if available
+        if input_data.faculty_evaluations and self.faculty_integration:
+            faculty_insights = self.faculty_integration.build_faculty_insights_string(input_data.faculty_evaluations)
+            main_user_content += faculty_insights
+
+        # Build messages
+        system_message = self._build_system_message(input_data)
+        covenant_with_metadata = self._build_covenant_with_metadata(original_thought)
+
         if input_images:
             logger.info(f"[VISION] ActionSelectionPDMA building multimodal content with {len(input_images)} images")
         user_content = self.build_multimodal_content(main_user_content, input_images)

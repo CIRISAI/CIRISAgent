@@ -2045,16 +2045,34 @@ async def download_package(req: DownloadPackageRequest) -> SuccessResponse[Downl
 
     This endpoint is accessible without authentication during first-run.
     """
+    import asyncio
     import hashlib
     import shutil
     import tempfile
     import zipfile
+    from urllib.parse import urlparse
 
     import httpx
 
     # Determine install directory
     data_dir = Path(os.environ.get("CIRIS_DATA_DIR", "."))
     licensed_modules_dir = data_dir / "licensed_modules"
+
+    # Validate URL is from trusted Portal domains only (security: prevent SSRF)
+    ALLOWED_PORTAL_HOSTS = {
+        "portal.ciris-services-1.ai",
+        "portal.ciris-services-2.ai",
+        "localhost",
+        "127.0.0.1",
+    }
+    parsed_url = urlparse(req.package_download_url)
+    if parsed_url.hostname not in ALLOWED_PORTAL_HOSTS:
+        return SuccessResponse(
+            data=DownloadPackageResponse(
+                status="error",
+                error=f"Invalid package URL: host '{parsed_url.hostname}' not in allowed Portal domains",
+            )
+        )
 
     try:
         # Download the zip from Portal
@@ -2081,10 +2099,13 @@ async def download_package(req: DownloadPackageRequest) -> SuccessResponse[Downl
                 )
             )
 
-        # Save zip to temp file
-        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-            tmp.write(dl_resp.content)
-            tmp_path = tmp.name
+        # Save zip to temp file (run sync I/O in thread to avoid blocking event loop)
+        def _write_temp_file(content: bytes) -> str:
+            with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+                tmp.write(content)
+                return tmp.name
+
+        tmp_path = await asyncio.to_thread(_write_temp_file, dl_resp.content)
 
         # Create install directory
         install_dir = licensed_modules_dir / package_id

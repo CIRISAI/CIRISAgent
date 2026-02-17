@@ -100,20 +100,24 @@ jobs:
       - name: Find Next.js app directory
         id: find_app
         run: |
-          # Find the directory containing package.json and next.config.mjs
-          GUI_DIR=$(find cirisgui -name "package.json" -type f -exec dirname {} \; | head -1)
+          # Find the directory containing next.config.js or next.config.mjs (the actual Next.js app)
+          GUI_DIR=$(find cirisgui -name "next.config.*" -type f -exec dirname {} \; | head -1)
           if [ -z "$GUI_DIR" ]; then
-            echo "❌ Could not find package.json in CIRISGUI-Standalone repo"
+            echo "❌ Could not find next.config.js/mjs in CIRISGUI-Standalone repo"
             exit 1
           fi
           echo "Found Next.js app in: $GUI_DIR"
           echo "gui_dir=$GUI_DIR" >> $GITHUB_OUTPUT
 
-          # Verify next.config.mjs exists
-          if [ ! -f "$GUI_DIR/next.config.mjs" ]; then
-            echo "⚠️  Warning: next.config.mjs not found in $GUI_DIR"
-          else
+          # Verify next.config exists (either .js or .mjs)
+          if [ -f "$GUI_DIR/next.config.js" ]; then
+            echo "✅ next.config.js found"
+            echo "next_config=$GUI_DIR/next.config.js" >> $GITHUB_OUTPUT
+          elif [ -f "$GUI_DIR/next.config.mjs" ]; then
             echo "✅ next.config.mjs found"
+            echo "next_config=$GUI_DIR/next.config.mjs" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  Warning: no next.config found in $GUI_DIR"
           fi
 
       - name: Set up Node.js
@@ -126,19 +130,26 @@ jobs:
       - name: Configure for static export
         run: |
           cd ${{ steps.find_app.outputs.gui_dir }}
-          # Ensure next.config.mjs has output: 'export'
-          if [ -f next.config.mjs ]; then
-            if ! grep -q "output.*:.*['\"]export['\"]" next.config.mjs 2>/dev/null; then
-              echo "⚠️  Warning: next.config.mjs may need output: 'export' configuration"
+          # Find the next.config file (either .js or .mjs)
+          CONFIG_FILE=""
+          if [ -f next.config.js ]; then
+            CONFIG_FILE="next.config.js"
+          elif [ -f next.config.mjs ]; then
+            CONFIG_FILE="next.config.mjs"
+          fi
+
+          if [ -n "$CONFIG_FILE" ]; then
+            if ! grep -q "output.*:.*['\"]export['\"]" "$CONFIG_FILE" 2>/dev/null; then
+              echo "⚠️  Warning: $CONFIG_FILE may need output: 'export' configuration"
               echo "Attempting to add it..."
               # Backup original
-              cp next.config.mjs next.config.mjs.bak
+              cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
               # Add output export if not present (simple approach)
-              sed -i "s/const nextConfig = {/const nextConfig = {\n  output: 'export',/" next.config.mjs || true
+              sed -i "s/const nextConfig = {/const nextConfig = {\n  output: 'export',/" "$CONFIG_FILE" || true
             fi
-            echo "✅ Static export configuration verified"
+            echo "✅ Static export configuration verified in $CONFIG_FILE"
           else
-            echo "⚠️  Skipping next.config.mjs configuration (file not found)"
+            echo "⚠️  Skipping next.config configuration (file not found)"
           fi
 
       - name: Install dependencies

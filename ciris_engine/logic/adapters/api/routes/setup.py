@@ -2058,19 +2058,27 @@ async def download_package(req: DownloadPackageRequest) -> SuccessResponse[Downl
     data_dir = Path(os.environ.get("CIRIS_DATA_DIR", "."))
     licensed_modules_dir = data_dir / "licensed_modules"
 
-    # Validate URL is from trusted Portal domains only (security: prevent SSRF)
+    # Validate URL is from trusted Portal domains and paths only (security: prevent SSRF)
     ALLOWED_PORTAL_HOSTS = {
         "portal.ciris-services-1.ai",
         "portal.ciris-services-2.ai",
         "localhost",
         "127.0.0.1",
     }
+    ALLOWED_PATH_PREFIXES = ("/api/", "/v1/")  # Only allow API endpoints
     parsed_url = urlparse(req.package_download_url)
     if parsed_url.hostname not in ALLOWED_PORTAL_HOSTS:
         return SuccessResponse(
             data=DownloadPackageResponse(
                 status="error",
                 error=f"Invalid package URL: host '{parsed_url.hostname}' not in allowed Portal domains",
+            )
+        )
+    if not any(parsed_url.path.startswith(prefix) for prefix in ALLOWED_PATH_PREFIXES):
+        return SuccessResponse(
+            data=DownloadPackageResponse(
+                status="error",
+                error=f"Invalid package URL: path must start with /api/ or /v1/",
             )
         )
 

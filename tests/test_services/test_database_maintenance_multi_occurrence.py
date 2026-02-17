@@ -9,6 +9,7 @@ These tests verify that the maintenance service properly handles:
 """
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock
 
 import pytest
 
@@ -1321,3 +1322,78 @@ class TestAdapterPersistence:
 
         assert deleted == 0
         assert "marked for persistence, keeping" in caplog.text
+
+
+class TestStaleTaskHelpers:
+    """Tests for helper methods used in stale task cleanup."""
+
+    @pytest.fixture
+    def database_maintenance_service(self, tmp_path):
+        """Create a DatabaseMaintenanceService for testing."""
+        from unittest.mock import Mock
+
+        from ciris_engine.logic.services.infrastructure.database_maintenance.service import DatabaseMaintenanceService
+
+        service = DatabaseMaintenanceService.__new__(DatabaseMaintenanceService)
+        service.db_path = str(tmp_path / "test.db")
+        service.time_service = Mock()
+        return service
+
+    def test_is_wakeup_or_shutdown_task_wakeup(self, database_maintenance_service):
+        """Test _is_wakeup_or_shutdown_task returns True for wakeup tasks."""
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("WAKEUP_123") is True
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("VERIFY_IDENTITY_456") is True
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("VALIDATE_INTEGRITY_789") is True
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("EVALUATE_RESILIENCE_abc") is True
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("ACCEPT_INCOMPLETENESS_def") is True
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("EXPRESS_GRATITUDE_ghi") is True
+
+    def test_is_wakeup_or_shutdown_task_shutdown(self, database_maintenance_service):
+        """Test _is_wakeup_or_shutdown_task returns True for shutdown tasks."""
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("shutdown_123") is True
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("SHUTDOWN_456") is True
+
+    def test_is_wakeup_or_shutdown_task_other(self, database_maintenance_service):
+        """Test _is_wakeup_or_shutdown_task returns False for other tasks."""
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("regular_task_123") is False
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("user_request_456") is False
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("task_WAKEUP_789") is False
+
+    def test_get_task_age_seconds_with_datetime(self, database_maintenance_service):
+        """Test _get_task_age_seconds with datetime object."""
+        from datetime import datetime, timedelta, timezone
+
+        current_time = datetime.now(timezone.utc)
+        task = Mock()
+        task.created_at = current_time - timedelta(seconds=300)
+
+        age = database_maintenance_service._get_task_age_seconds(task, current_time)
+
+        assert age == pytest.approx(300, abs=1)
+
+    def test_get_task_age_seconds_with_string(self, database_maintenance_service):
+        """Test _get_task_age_seconds with ISO string timestamp."""
+        from datetime import datetime, timedelta, timezone
+
+        current_time = datetime.now(timezone.utc)
+        created_at = current_time - timedelta(seconds=600)
+        task = Mock()
+        task.created_at = created_at.isoformat()
+
+        age = database_maintenance_service._get_task_age_seconds(task, current_time)
+
+        assert age == pytest.approx(600, abs=1)
+
+    def test_get_task_age_seconds_with_z_suffix(self, database_maintenance_service):
+        """Test _get_task_age_seconds handles Z suffix in ISO string."""
+        from datetime import datetime, timedelta, timezone
+
+        current_time = datetime.now(timezone.utc)
+        created_at = current_time - timedelta(seconds=120)
+        task = Mock()
+        # Some systems use Z suffix
+        task.created_at = created_at.strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+
+        age = database_maintenance_service._get_task_age_seconds(task, current_time)
+
+        assert age == pytest.approx(120, abs=1)

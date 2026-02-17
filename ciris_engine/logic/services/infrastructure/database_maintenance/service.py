@@ -796,6 +796,47 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         except Exception as e:
             logger.warning(f"Failed to send stale task notification to {channel_id}: {e}")
 
+    def _is_wakeup_or_shutdown_task(self, task_id: str) -> bool:
+        """Check if a task ID matches wakeup or shutdown patterns."""
+        prefixes = (
+            "WAKEUP_",
+            "VERIFY_IDENTITY_",
+            "VALIDATE_INTEGRITY_",
+            "EVALUATE_RESILIENCE_",
+            "ACCEPT_INCOMPLETENESS_",
+            "EXPRESS_GRATITUDE_",
+            "shutdown_",
+            "SHUTDOWN_",
+        )
+        return any(task_id.startswith(prefix) for prefix in prefixes)
+
+    def _get_task_age_seconds(self, task: Any, current_time: Any) -> float:
+        """Get task age in seconds, handling string timestamps."""
+        if isinstance(task.created_at, str):
+            from datetime import datetime
+
+            task_created = datetime.fromisoformat(task.created_at.replace("Z", UTC_TIMEZONE_SUFFIX))
+        else:
+            task_created = task.created_at
+        return float((current_time - task_created).total_seconds())
+
+    def _collect_stale_items_from_task(
+        self, task: Any, stale_task_ids: List[str], stale_thought_ids: List[str]
+    ) -> None:
+        """Collect stale thought IDs and task IDs from an old task."""
+        thoughts = get_thoughts_by_task_id(task.task_id, task.agent_occurrence_id, db_path=self.db_path)
+        for thought in thoughts:
+            if thought.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING]:
+                logger.info(
+                    f"Found stale wakeup thought from old task {task.task_id}: "
+                    f"{thought.thought_id} (status: {thought.status})"
+                )
+                stale_thought_ids.append(thought.thought_id)
+
+        if task.status in [TaskStatus.PENDING, TaskStatus.ACTIVE]:
+            logger.info(f"Found stale {task.status} wakeup task from previous run: {task.task_id}")
+            stale_task_ids.append(task.task_id)
+
     async def _cleanup_stale_wakeup_tasks(self) -> None:
         """
         Clean up stale wakeup and shutdown thoughts from previous runs while preserving completed tasks for history.
@@ -805,69 +846,27 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         """
         try:
             logger.info("Checking for stale wakeup and shutdown tasks from previous runs")
-
-            # Get current time for comparison
             current_time = self.time_service.now()
 
             # Get all wakeup and shutdown related tasks from __shared__ occurrence
-            # Wakeup tasks are always in the shared namespace
             all_tasks = get_all_tasks("__shared__", db_path=self.db_path)
-            stale_tasks = []
-            for task in all_tasks:
-                if not hasattr(task, "task_id"):
-                    continue
-                # Check for wakeup and shutdown tasks by ID pattern
-                if (
-                    task.task_id.startswith("WAKEUP_")
-                    or task.task_id.startswith("VERIFY_IDENTITY_")
-                    or task.task_id.startswith("VALIDATE_INTEGRITY_")
-                    or task.task_id.startswith("EVALUATE_RESILIENCE_")
-                    or task.task_id.startswith("ACCEPT_INCOMPLETENESS_")
-                    or task.task_id.startswith("EXPRESS_GRATITUDE_")
-                    or task.task_id.startswith("shutdown_")
-                    or task.task_id.startswith("SHUTDOWN_")  # Also match uppercase SHUTDOWN_ tasks
-                ):
-                    stale_tasks.append(task)
+            stale_tasks = [
+                task
+                for task in all_tasks
+                if hasattr(task, "task_id") and self._is_wakeup_or_shutdown_task(task.task_id)
+            ]
 
-            # Clean up thoughts and interfering tasks from old wakeup runs
-            stale_task_ids = []  # For PENDING/ACTIVE tasks that would interfere
-            stale_thought_ids = []
+            stale_task_ids: List[str] = []
+            stale_thought_ids: List[str] = []
 
             for task in stale_tasks:
-                # Check if this task is from a previous run (more than 5 minutes old)
-                # Convert string timestamp to datetime if needed
-                if isinstance(task.created_at, str):
-                    from datetime import datetime
+                if self._get_task_age_seconds(task, current_time) > 300:  # 5 minutes
+                    self._collect_stale_items_from_task(task, stale_task_ids, stale_thought_ids)
 
-                    task_created = datetime.fromisoformat(task.created_at.replace("Z", UTC_TIMEZONE_SUFFIX))
-                else:
-                    task_created = task.created_at
-
-                task_age = current_time - task_created
-                is_old_task = task_age.total_seconds() > 300  # 5 minutes
-
-                if is_old_task:
-                    # For old tasks, clean up any pending/processing thoughts
-                    # CRITICAL: Pass task's occurrence_id to fetch thoughts in same namespace
-                    thoughts = get_thoughts_by_task_id(task.task_id, task.agent_occurrence_id, db_path=self.db_path)
-                    for thought in thoughts:
-                        if thought.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING]:
-                            logger.info(
-                                f"Found stale wakeup thought from old task {task.task_id}: {thought.thought_id} (status: {thought.status})"
-                            )
-                            stale_thought_ids.append(thought.thought_id)
-
-                    # Delete old PENDING or ACTIVE tasks as they would interfere
-                    if task.status in [TaskStatus.PENDING, TaskStatus.ACTIVE]:
-                        logger.info(f"Found stale {task.status} wakeup task from previous run: {task.task_id}")
-                        stale_task_ids.append(task.task_id)
-
-            # Delete stale thoughts first
             if stale_thought_ids:
                 deleted_thoughts = delete_thoughts_by_ids(stale_thought_ids, db_path=self.db_path)
                 logger.info(f"Deleted {deleted_thoughts} stale wakeup thoughts from previous runs")
 
-            # Then delete stale active tasks (only ACTIVE ones from interrupted startups)
             if stale_task_ids:
                 deleted_tasks = delete_tasks_by_ids(stale_task_ids, db_path=self.db_path)
                 logger.info(f"Deleted {deleted_tasks} stale active wakeup tasks from interrupted startups")

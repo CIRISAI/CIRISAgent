@@ -55,5 +55,39 @@
       "default": "generic",
       "description": "Trace detail level: generic, detailed, or full_traces"
     }
+  },
+  "interactive_config": {
+    "required": true,
+    "workflow_type": "wizard",
+    "steps": [
+      {
+        "step_id": "select_region",
+        "step_type": "discovery",
+        "title": "Select CIRISNode Region",
+        "description": "Choose a CIRISNode region to connect to, or enter a custom Portal URL.",
+        "discovery_method": "regions"
+      },
+      {
+        "step_id": "device_auth",
+        "step_type": "device_auth",
+        "title": "Authorize with CIRISPortal",
+        "description": "Complete device authorization to connect your agent to CIRISNode.",
+        "device_auth_config": {
+          "provider_name": "CIRISPortal",
+          "device_authorize_path": "/api/device/authorize",
+          "device_token_path": "/api/device/token",
+          "poll_interval": 5,
+          "expires_in": 900
+        }
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Review Configuration",
+        "description": "Review the provisioned configuration before applying.",
+        "action": "test_connection"
+      }
+    ],
+    "completion_method": "apply_config"
   }
 }

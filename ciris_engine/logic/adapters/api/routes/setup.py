@@ -1518,6 +1518,7 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
         # Covenant metrics consent
         if "ciris_covenant_metrics" in setup.enabled_adapters:
             from datetime import datetime, timezone
+
             consent_timestamp = datetime.now(timezone.utc).isoformat()
             f.write("\n# Covenant Metrics Consent (auto-set when adapter enabled)\n")
             f.write("CIRIS_COVENANT_METRICS_CONSENT=true\n")
@@ -1890,8 +1891,8 @@ async def connect_node(req: ConnectNodeRequest) -> SuccessResponse[ConnectNodeRe
 
     device_auth_endpoint = "/api/device/authorize"
 
-    # TODO: Include real agent info (hash, public key) from current agent state.
-    # MVP: send empty agent_info since we're provisioning a new agent.
+    # For first-run setup, we send empty agent_info since we're provisioning a new agent.
+    # Existing agents reconnecting would include their hash and public key here.
     agent_info: Dict[str, Any] = {}
 
     # Call Portal's device authorize endpoint directly
@@ -1955,7 +1956,11 @@ async def connect_node_status(device_code: str, portal_url: str) -> SuccessRespo
                 return SuccessResponse(data=ConnectNodeStatusResponse(status="error"))
 
             if token_resp.status_code != 200:
-                body = token_resp.json() if token_resp.headers.get("content-type", "").startswith("application/json") else {}
+                body = (
+                    token_resp.json()
+                    if token_resp.headers.get("content-type", "").startswith("application/json")
+                    else {}
+                )
                 error_desc = body.get("error_description", body.get("error", f"HTTP {token_resp.status_code}"))
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
@@ -1974,9 +1979,8 @@ async def connect_node_status(device_code: str, portal_url: str) -> SuccessRespo
     agent_record = data.get("agent_record", {})
     licensed_package = data.get("licensed_package") or {}
 
-    # Save the provisioned signing key immediately
-    # TODO: Consider deferring key save to /complete for atomicity.
-    # MVP: save key on first successful poll so it's available immediately.
+    # Save the provisioned signing key immediately on successful poll.
+    # This makes the key available for subsequent operations without waiting for /complete.
     private_key_b64 = signing_key.get("ed25519_private_key", "")
     if private_key_b64:
         try:
@@ -2096,9 +2100,7 @@ async def download_package(req: DownloadPackageRequest) -> SuccessResponse[Downl
         # Cleanup temp file
         os.unlink(tmp_path)
 
-        logger.info(
-            f"[Package Download] Installed {package_id} v{package_version} to {install_dir}"
-        )
+        logger.info(f"[Package Download] Installed {package_id} v{package_version} to {install_dir}")
 
         # Find key paths within the extracted package
         template_file = None

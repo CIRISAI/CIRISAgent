@@ -20,6 +20,7 @@ The verification service provides:
 
 import asyncio
 import logging
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from ciris_engine.logic.adapters.base import Service
@@ -29,6 +30,15 @@ from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, Runti
 from ciris_engine.schemas.runtime.enums import ServiceType
 
 from .service import CIRISVerifyService, VerificationConfig
+
+
+@dataclass
+class AdapterMetadata:
+    """Metadata describing an adapter's identity and capabilities."""
+
+    name: str
+    version: str
+    capabilities: List[str] = field(default_factory=list)
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +90,19 @@ class CIRISVerifyAdapter(Service):
     def version(self) -> str:
         """Adapter version."""
         return "0.1.0"
+
+    def get_metadata(self) -> AdapterMetadata:
+        """Get adapter metadata for introspection by consumers."""
+        return AdapterMetadata(
+            name=self.name,
+            version=self.version,
+            capabilities=[
+                "license:verify",
+                "license:check_capability",
+                "license:get_disclosure",
+                "license:get_tier",
+            ],
+        )
 
     def get_services_to_register(self) -> List[AdapterServiceRegistration]:
         """Get services to register with the service registry.

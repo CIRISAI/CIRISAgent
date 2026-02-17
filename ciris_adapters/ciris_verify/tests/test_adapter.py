@@ -118,7 +118,7 @@ class TestCIRISVerifyAdapter:
 
         services = adapter.get_services_to_register()
         assert len(services) == 1
-        assert services[0].service_type.value == "verification"
+        assert services[0].service_type.value == "tool"
 
         await adapter.stop()
 

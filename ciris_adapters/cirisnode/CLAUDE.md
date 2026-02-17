@@ -2,13 +2,15 @@
 
 ## Role
 
-CIRISNode oversight adapter — routes deferrals and forwards Ed25519-signed covenant traces to CIRISNode (node.ciris.ai). Registers as `WISE_AUTHORITY` on the WiseBus.
+CIRISNode oversight adapter — routes deferrals and forwards Ed25519-signed covenant traces to CIRISNode. Registers as `WISE_AUTHORITY` on the WiseBus.
+
+**FOR AUTHORIZED PARTNERS ONLY**: Partners must register agents via CIRISPortal (portal.ciris.ai) → CIRISRegistry to obtain signing keys and access to CIRISNode deferral management.
 
 ## Architecture
 
 ```
 CIRISAgent (local)
-  ├─ cirisnode adapter (this) ──► CIRISNode (node.ciris.ai)
+  ├─ cirisnode adapter (this) ──► CIRISNode (node.ciris-services-1.ai)
   │   ├─ WBD deferrals (signed)     ├─ Verifies sigs against Registry
   │   ├─ Covenant traces (signed)    ├─ Stores full traces
   │   └─ Public key registration     └─ Routes WBD to Wise Authorities
@@ -42,8 +44,12 @@ CIRISAgent (local)
 
 | Key | Env Var | Default | Description |
 |-----|---------|---------|-------------|
-| `base_url` | `CIRISNODE_BASE_URL` | `https://node.ciris.ai` | CIRISNode API URL |
+| `base_url` | `CIRISNODE_BASE_URL` | `https://node.ciris-services-1.ai` | CIRISNode API URL (US default) |
 | `agent_token` | `CIRISNODE_AGENT_TOKEN` | *(empty)* | Optional bootstrap token for key registration |
+
+**Regional Servers:**
+- **US**: `https://node.ciris-services-1.ai` (default)
+- **EU**: `https://node.ciris-services-2.ai`
 | `trace_level` | `CIRISNODE_TRACE_LEVEL` | `generic` | `generic`, `detailed`, or `full_traces` |
 | `poll_interval` | — | `30` | Seconds between WBD resolution polls |
 | `batch_size` | — | `10` | Trace events per batch |
@@ -113,11 +119,13 @@ Auth is ALWAYS Ed25519 signature-based. No token-based auth (`X-Agent-Token`) is
 ## Development
 
 ```bash
-# Enable adapter in agent config or template
-# Template "echo" auto-enables cirisnode adapter
+# CIRISNode is for AUTHORIZED PARTNERS ONLY
+# Partners must register agents via CIRISPortal (portal.ciris.ai) → CIRISRegistry
+# This grants access to manage deferrals via CIRISNode
 
-# Environment for local testing
-export CIRISNODE_BASE_URL=https://node.ciris.ai
+# Enable adapter manually in agent config (NOT auto-enabled by any template)
+# Environment for testing (requires valid registration)
+export CIRISNODE_BASE_URL=https://node.ciris-services-1.ai
 export CIRISNODE_TRACE_LEVEL=full_traces
 export CIRISNODE_AGENT_TOKEN=<optional-bootstrap-token>
 

@@ -260,7 +260,7 @@ class RecursiveProcessingPhase:
 
         try:
             # Re-run action selection with guidance about why previous action failed
-            logger.info(f"[RECURSIVE_ASPDMA] Calling _perform_aspdma_with_guidance...")
+            logger.info("[RECURSIVE_ASPDMA] Calling _perform_aspdma_with_guidance...")
             retry_result = await self._perform_aspdma_with_guidance(
                 thought, thought_context, dma_results, override_reason, max_retries=3
             )

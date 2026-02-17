@@ -2078,7 +2078,7 @@ async def download_package(req: DownloadPackageRequest) -> SuccessResponse[Downl
         return SuccessResponse(
             data=DownloadPackageResponse(
                 status="error",
-                error=f"Invalid package URL: path must start with /api/ or /v1/",
+                error="Invalid package URL: path must start with /api/ or /v1/",
             )
         )
 

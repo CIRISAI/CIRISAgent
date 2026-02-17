@@ -13,7 +13,7 @@ using convert_llm_result_to_action_result().
 
 import logging
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -312,39 +312,46 @@ ActionParams = (
 def _create_params_for_action(
     action: HandlerActionType, llm_result: "ASPDMALLMResult", channel_id: Optional[str]
 ) -> ActionParams:
-    """Create the appropriate params object based on action type."""
-    if action == HandlerActionType.SPEAK:
-        return SpeakParams(channel_id=channel_id, content=llm_result.speak_content or "")
-    if action == HandlerActionType.PONDER:
-        return PonderParams(channel_id=channel_id, questions=llm_result.ponder_questions or ["What should I consider?"])
-    if action == HandlerActionType.REJECT:
-        return RejectParams(
+    """Create the appropriate params object based on action type.
+
+    Uses dispatch dict pattern for reduced cognitive complexity.
+    """
+    # Dispatch table mapping action types to param creators
+    dispatch: dict[HandlerActionType, Callable[[], ActionParams]] = {
+        HandlerActionType.SPEAK: lambda: SpeakParams(
+            channel_id=channel_id, content=llm_result.speak_content or ""
+        ),
+        HandlerActionType.PONDER: lambda: PonderParams(
+            channel_id=channel_id, questions=llm_result.ponder_questions or ["What should I consider?"]
+        ),
+        HandlerActionType.REJECT: lambda: RejectParams(
             channel_id=channel_id,
             reason=llm_result.reject_reason or "Request rejected",
             create_filter=llm_result.reject_create_filter,
-        )
-    if action == HandlerActionType.DEFER:
-        return DeferParams(
+        ),
+        HandlerActionType.DEFER: lambda: DeferParams(
             channel_id=channel_id,
             reason=llm_result.defer_reason or "Deferring for later",
             defer_until=llm_result.defer_until,
-        )
-    if action == HandlerActionType.TOOL:
-        return ToolParams(
+        ),
+        HandlerActionType.TOOL: lambda: ToolParams(
             channel_id=channel_id,
             name=llm_result.tool_name or "unknown_tool",
             parameters=llm_result.tool_parameters or {},
-        )
-    if action == HandlerActionType.OBSERVE:
-        return ObserveParams(channel_id=channel_id, active=llm_result.observe_active)
-    if action == HandlerActionType.MEMORIZE:
-        return _create_memorize_params(llm_result, channel_id)
-    if action == HandlerActionType.RECALL:
-        return _create_recall_params(llm_result, channel_id)
-    if action == HandlerActionType.FORGET:
-        return _create_forget_params(llm_result, channel_id)
-    if action == HandlerActionType.TASK_COMPLETE:
-        return _create_task_complete_params(llm_result, channel_id)
+        ),
+        HandlerActionType.OBSERVE: lambda: ObserveParams(
+            channel_id=channel_id, active=llm_result.observe_active
+        ),
+        HandlerActionType.MEMORIZE: lambda: _create_memorize_params(llm_result, channel_id),
+        HandlerActionType.RECALL: lambda: _create_recall_params(llm_result, channel_id),
+        HandlerActionType.FORGET: lambda: _create_forget_params(llm_result, channel_id),
+        HandlerActionType.TASK_COMPLETE: lambda: _create_task_complete_params(llm_result, channel_id),
+    }
+
+    creator = dispatch.get(action)
+    if creator:
+        return creator()
+
     # Fallback to PONDER for unknown actions
     logger.warning(f"Unknown action type: {action}, falling back to PONDER")
     return PonderParams(channel_id=channel_id, questions=[f"Unknown action {action} - what should I do?"])

@@ -480,6 +480,8 @@ class CovenantMetricsService:
 
         # Agent ID for anonymization (set during start)
         self._agent_id_hash: Optional[str] = None
+        # Agent name (human-readable identifier for traces at all levels)
+        self._agent_name: Optional[str] = str(self._config.get("agent_name", "") or "")
 
         # Reasoning event stream subscription
         self._reasoning_queue: Optional[asyncio.Queue[Any]] = None
@@ -1108,10 +1110,12 @@ class CovenantMetricsService:
             if hasattr(snapshot, "model_dump"):
                 snapshot = snapshot.model_dump()
 
-            # GENERIC: Minimal - just cognitive state identifier
+            # GENERIC: Minimal - agent_name + cognitive state identifier
+            # agent_name is REQUIRED at all 3 levels for CIRISLens correlation
             # cognitive_state might be at top level or in snapshot
             cognitive_state = event.get("cognitive_state") or snapshot.get("cognitive_state")
             data = {
+                "agent_name": self._agent_name,
                 "cognitive_state": cognitive_state,
             }
             # DETAILED: Add service list and system health info
@@ -1577,7 +1581,10 @@ class CovenantMetricsService:
             logger.warning(f"Invalid agent_id type: {type(agent_id).__name__}, skipping")
             return
         self._agent_id_hash = self._anonymize_agent_id(agent_id)
-        logger.debug(f"Agent ID hash set: {self._agent_id_hash}")
+        # Set agent_name to agent_id if not already configured
+        if not self._agent_name:
+            self._agent_name = agent_id
+        logger.debug(f"Agent ID hash set: {self._agent_id_hash}, agent_name: {self._agent_name}")
 
     def get_metrics(self) -> Dict[str, Any]:
         """Get service metrics for telemetry.

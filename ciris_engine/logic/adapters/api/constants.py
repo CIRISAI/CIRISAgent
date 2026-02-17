@@ -37,6 +37,7 @@ DESC_END_TIME = "End of time range"
 DESC_SEARCH_TEXT = "Search text"
 DESC_HUMAN_READABLE_STATUS = "Human-readable status message"
 DESC_CURRENT_COGNITIVE_STATE = "Current cognitive state"
+DESC_STATUS_MESSAGE = "Status message"
 
 # Common Field Descriptions for Path Parameters
 DESC_ID_PARAM = "{} ID"

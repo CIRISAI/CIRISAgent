@@ -24,6 +24,7 @@ from ciris_engine.schemas.types import JSONDict
 from ..constants import (
     DESC_CURRENT_COGNITIVE_STATE,
     DESC_HUMAN_READABLE_STATUS,
+    DESC_STATUS_MESSAGE,
     ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE,
 )
 from ._common import RESPONSES_500_503, AuthAdminDep, AuthObserverDep
@@ -381,7 +382,7 @@ class ServicePriorityUpdateResponse(BaseModel):
     new_priority_group: Optional[int] = Field(None, description="New priority group")
     old_strategy: Optional[str] = Field(None, description="Previous selection strategy")
     new_strategy: Optional[str] = Field(None, description="New selection strategy")
-    message: str = Field(..., description="Status message")
+    message: str = Field(..., description=DESC_STATUS_MESSAGE)
 
 
 @router.put("/services/{provider_name}/priority", responses=RESPONSES_500_503)
@@ -437,7 +438,7 @@ class CircuitBreakerResetResponse(BaseModel):
     service_type: Optional[str] = Field(None, description="Service type that was reset")
     reset_count: int = Field(..., description="Number of circuit breakers reset")
     services_affected: List[str] = Field(default_factory=list, description="List of affected services")
-    message: str = Field(..., description="Status message")
+    message: str = Field(..., description=DESC_STATUS_MESSAGE)
 
 
 @router.post("/services/circuit-breakers/reset", responses=RESPONSES_500_503)
@@ -1030,7 +1031,7 @@ class CovenantInvocationResponse(BaseModel):
     """Response to covenant invocation."""
 
     accepted: bool = Field(..., description="Whether the invocation was accepted and validated")
-    message: str = Field(..., description="Status message")
+    message: str = Field(..., description=DESC_STATUS_MESSAGE)
 
 
 @router.post("/covenant-invocation", responses=RESPONSES_500_503)

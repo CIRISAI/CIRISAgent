@@ -331,7 +331,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 public_key.verify(signature_bytes, canonical_json)
 
                 logger.info(
-                    f"Covenant invocation signature verified from {wa_cert.wa_id} " f"(role: {wa_cert.role.value})"
+                    f"Covenant invocation signature verified from {wa_cert.wa_id} (role: {wa_cert.role.value})"
                 )
             except Exception as sig_err:
                 logger.error(

@@ -402,10 +402,19 @@ class CovenantMetricsService:
         config_consent = bool(self._config.get("consent_given", False))
         self._consent_given = config_consent or env_consent
 
+        # Consent timestamp - REQUIRED when consent is given, default to current time if not provided
         self._consent_timestamp: Optional[str] = None
         raw_timestamp = self._config.get("consent_timestamp") or env_timestamp
         if raw_timestamp is not None:
             self._consent_timestamp = str(raw_timestamp)
+        elif self._consent_given:
+            # CRITICAL: If consent is given but no timestamp provided, use current time
+            # Without a timestamp, CIRISLens will reject all traces
+            self._consent_timestamp = datetime.now(timezone.utc).isoformat()
+            logger.warning(
+                f"⚠️ Consent given but no timestamp provided. Using current time: {self._consent_timestamp}. "
+                "Set CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP for consistent timestamps across restarts."
+            )
 
         if env_consent and not config_consent:
             logger.info("✅ CONSENT enabled via environment variable CIRIS_COVENANT_METRICS_CONSENT")
@@ -529,6 +538,7 @@ class CovenantMetricsService:
         logger.info("=" * 70)
         logger.info("🚀 COVENANT METRICS SERVICE STARTING")
         logger.info(f"   Consent given: {self._consent_given}")
+        logger.info(f"   Consent timestamp: {self._consent_timestamp or 'NOT SET (traces will be rejected!)'}")
         logger.info(f"   Endpoint: {self._endpoint_url}")
 
         # Set agent_id from constructor if provided and not already set

@@ -49,6 +49,7 @@ class QAModule(Enum):
     HOSTED_TOOLS = "hosted_tools"  # CIRIS hosted tools (web search via proxy) testing
     UTILITY_ADAPTERS = "utility_adapters"  # Weather and navigation adapters testing
     HE300_BENCHMARK = "he300_benchmark"  # HE-300 ethical benchmark via A2A adapter
+    CIRISNODE = "cirisnode"  # CIRISNode integration testing (deferral routing, trace forwarding)
 
     # Cognitive state live testing modules
     SOLITUDE_LIVE = "solitude_live"  # SOLITUDE state behavior testing
@@ -158,6 +159,10 @@ class QAConfig:
     # When True, uses https://lens.ciris-services-1.ai/lens-api/api/v1 instead of mock logshipper
     live_lens: bool = False
 
+    # Live CIRISNode configuration (--live-node flag for cirisnode tests)
+    # When True, runs additional tests against live CIRISNode server
+    live_node: bool = False
+
     # Fail-fast configuration
     fail_fast: bool = True  # Exit on first test failure (use --proceed-anyway to disable)
     test_timeout: float = 30.0  # Timeout for individual test interactions
@@ -266,6 +271,9 @@ class QAConfig:
             from .modules.he300_benchmark_tests import HE300BenchmarkModule
 
             return HE300BenchmarkModule.get_he300_benchmark_tests()
+        elif module == QAModule.CIRISNODE:
+            # CIRISNode integration tests use SDK client
+            return []  # Will be handled separately by runner
 
         # Handler test modules
         elif module == QAModule.HANDLERS:

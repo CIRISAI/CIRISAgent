@@ -253,6 +253,7 @@ class QARunner:
             QAModule.SYSTEM_MESSAGES,
             QAModule.HOSTED_TOOLS,
             QAModule.UTILITY_ADAPTERS,
+            QAModule.CIRISNODE,
             QAModule.SOLITUDE_LIVE,
             QAModule.PLAY_LIVE,
             QAModule.DREAM_LIVE,
@@ -866,6 +867,7 @@ class QARunner:
         from .modules.adapter_config_tests import AdapterConfigTests
         from .modules.adapter_manifest_tests import AdapterManifestTests
         from .modules.billing_integration_tests import BillingIntegrationTests
+        from .modules.cirisnode_tests import CIRISNodeTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
         from .modules.covenant_metrics_tests import CovenantMetricsTests
@@ -915,6 +917,7 @@ class QARunner:
             QAModule.SYSTEM_MESSAGES: SystemMessagesTests,
             QAModule.HOSTED_TOOLS: HostedToolsTests,
             QAModule.UTILITY_ADAPTERS: UtilityAdaptersTests,
+            QAModule.CIRISNODE: CIRISNodeTests,
             QAModule.SOLITUDE_LIVE: SolitudeLiveTests,
             QAModule.PLAY_LIVE: PlayLiveTests,
             QAModule.DREAM_LIVE: DreamLiveTests,
@@ -942,6 +945,9 @@ class QARunner:
                 # Special handling for CovenantMetricsTests - pass live_lens config
                 if module == QAModule.COVENANT_METRICS:
                     test_instance = test_class(client, self.console, live_lens=self.config.live_lens)
+                # Special handling for CIRISNodeTests - pass live_node config
+                elif module == QAModule.CIRISNODE:
+                    test_instance = test_class(client, self.console, live_node=getattr(self.config, "live_node", False))
                 elif module == QAModule.FILTERS:
                     # FilterTestModule inherits from BaseTestModule and supports fail_fast
                     test_instance = test_class(

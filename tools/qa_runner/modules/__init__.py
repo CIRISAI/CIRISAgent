@@ -9,6 +9,7 @@ from .adapter_manifest_tests import AdapterManifestTests
 from .air_tests import AIRTests
 from .api_tests import APITestModule
 from .billing_tests import BillingTests
+from .cirisnode_tests import CIRISNodeTests
 from .cognitive_state_api_tests import CognitiveStateAPITests
 from .consent_tests import ConsentTests
 from .context_enrichment_tests import ContextEnrichmentTests
@@ -41,6 +42,7 @@ __all__ = [
     "AdapterManifestTests",
     "AIRTests",
     "APITestModule",
+    "CIRISNodeTests",
     "CognitiveStateAPITests",
     "ContextEnrichmentTests",
     "CovenantMetricsTests",

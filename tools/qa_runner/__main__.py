@@ -72,6 +72,8 @@ Available modules:
   pause_step      - Enhanced single-step/pause debugging
   single_step_comprehensive - Complete 17-phase COVENANT single-step validation
   covenant        - Covenant invocation system (kill switch) tests
+  covenant_metrics - Covenant metrics trace capture and signing
+  cirisnode       - CIRISNode integration (deferral routing, trace forwarding)
   api_full        - All API modules
   handlers_full   - All handler modules
   all             - Everything
@@ -119,6 +121,13 @@ Available modules:
         "--live-lens",
         action="store_true",
         help="Use real Lens server (https://lens.ciris-services-1.ai/lens-api/api/v1) instead of mock logshipper for covenant_metrics tests",
+    )
+
+    # Live CIRISNode configuration (for cirisnode tests)
+    parser.add_argument(
+        "--live-node",
+        action="store_true",
+        help="Run additional tests against live CIRISNode server (node.ciris-services-1.ai) for cirisnode tests",
     )
 
     # Database backend configuration
@@ -328,6 +337,8 @@ def main():
         live_base_url=live_base_url,
         # Live Lens configuration (for covenant_metrics tests)
         live_lens=args.live_lens,
+        # Live CIRISNode configuration (for cirisnode tests)
+        live_node=args.live_node,
         # Fail-fast configuration
         fail_fast=not args.proceed_anyway,
         test_timeout=args.test_timeout,

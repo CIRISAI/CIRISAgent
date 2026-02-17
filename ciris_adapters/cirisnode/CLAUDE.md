@@ -4,7 +4,15 @@
 
 CIRISNode oversight adapter — routes deferrals and forwards Ed25519-signed covenant traces to CIRISNode. Registers as `WISE_AUTHORITY` on the WiseBus.
 
-**FOR AUTHORIZED PARTNERS ONLY**: Partners must register agents via CIRISPortal (portal.ciris.ai) → CIRISRegistry to obtain signing keys and access to CIRISNode deferral management.
+**Registration Required**: Agents must register via CIRISPortal (portal.ciris.ai) → CIRISRegistry to obtain signing keys and access CIRISNode deferral management.
+
+## Open Source Ecosystem
+
+All components are open source:
+- **CIRISNode** - Oversight node for deferral routing and trace storage
+- **CIRISPortal** - Web UI for agent registration and key management
+- **CIRISPortal-api** - API backend for portal operations
+- **CIRISRegistry** - Central registry for agent keys and verification
 
 ## Architecture
 

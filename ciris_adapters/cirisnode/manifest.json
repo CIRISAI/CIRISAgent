@@ -2,7 +2,7 @@
   "module": {
     "name": "cirisnode",
     "version": "2.0.0",
-    "description": "CIRISNode oversight adapter for authorized partners — deferral routing and trace forwarding (requires CIRISPortal registration)",
+    "description": "CIRISNode oversight adapter — deferral routing and trace forwarding (requires CIRISPortal registration)",
     "author": "CIRIS Team",
     "auto_load": false
   },

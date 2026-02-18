@@ -256,8 +256,8 @@ class CIRISVerifySigner(BaseSigner):
 
     def __init__(self) -> None:
         self._algorithm = SigningAlgorithm.ED25519  # Updated after init
-        self._key_id = None
-        self._client = None
+        self._key_id: Optional[str] = None
+        self._client: Any = None  # CIRISVerify client, typed as Any to avoid import
         self._public_key_cache: Optional[bytes] = None
         self._algo_name: Optional[str] = None
 
@@ -283,9 +283,11 @@ class CIRISVerifySigner(BaseSigner):
                 # We're in an async context — use thread to avoid deadlock
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                     future = pool.submit(asyncio.run, self._client.sign(data))
-                    return future.result(timeout=10.0)
+                    result: bytes = future.result(timeout=10.0)
+                    return result
             else:
-                return asyncio.run(self._client.sign(data))
+                result = asyncio.run(self._client.sign(data))
+                return bytes(result)
         except Exception as e:
             raise RuntimeError(f"CIRISVerify signing failed: {e}") from e
 

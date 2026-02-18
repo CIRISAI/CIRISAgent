@@ -28,8 +28,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -313,8 +311,6 @@ private fun WelcomeStep(
 ) {
     val isGoogleAuth = state.isGoogleAuth
     var detailsExpanded by remember { mutableStateOf(false) }
-    var showNodeConnect by remember { mutableStateOf(false) }
-    val nodeUrlFocusRequester = remember { FocusRequester() }
 
     Column(
         modifier = modifier
@@ -336,6 +332,65 @@ private fun WelcomeStep(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
+        }
+
+        // Register Your Agent card — always visible, above the fold
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = Color(0xFFF0FDF4), // Light green
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+                .border(1.dp, Color(0xFF86EFAC), RoundedCornerShape(12.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Register Your Agent",
+                    color = SetupColors.SuccessDark,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Validate and register your agent HW and SW occurrence for \$1.00 bond and \$0.50 processing fee to support open source AGI alignment infrastructure",
+                    color = SetupColors.SuccessText,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                )
+
+                OutlinedTextField(
+                    value = state.deviceAuth.nodeUrl,
+                    onValueChange = { viewModel.updateNodeUrl(it) },
+                    label = { Text("Portal URL (e.g., portal.ciris.ai)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = SetupColors.SuccessDark,
+                        focusedLabelColor = SetupColors.SuccessDark
+                    )
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = { viewModel.enterNodeFlow() },
+                    enabled = state.deviceAuth.nodeUrl.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SetupColors.SuccessDark
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Connect", fontWeight = FontWeight.Bold)
+                }
+
+                Text(
+                    text = "For licensed deployment, contact sales@ciris.ai",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                )
+            }
         }
 
         // Main description
@@ -477,82 +532,6 @@ private fun WelcomeStep(
                 )
             }
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Acquire License card (device auth via Portal/Registry)
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = Color(0xFFF0FDF4), // Light green
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, Color(0xFF86EFAC), RoundedCornerShape(12.dp))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showNodeConnect = !showNodeConnect }
-                ) {
-                    Text(
-                        text = if (showNodeConnect) "▼" else "▶",
-                        color = SetupColors.SuccessDark,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                    Text(
-                        text = "Acquire a License",
-                        color = SetupColors.SuccessDark,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Text(
-                    text = "Acquire a license for Medical, Legal, or Financial agent deployment",
-                    color = SetupColors.SuccessText,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    modifier = Modifier
-                        .padding(top = 4.dp)
-                        .clickable { showNodeConnect = !showNodeConnect }
-                )
-
-                AnimatedVisibility(visible = showNodeConnect) {
-                    // Auto-focus the text field when the card expands
-                    LaunchedEffect(Unit) {
-                        delay(300) // Wait for animation
-                        nodeUrlFocusRequester.requestFocus()
-                    }
-                    Column(modifier = Modifier.padding(top = 12.dp)) {
-                        OutlinedTextField(
-                            value = state.deviceAuth.nodeUrl,
-                            onValueChange = { viewModel.updateNodeUrl(it) },
-                            label = { Text("Portal URL (e.g., portal.ciris.ai)") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(nodeUrlFocusRequester),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = SetupColors.SuccessDark,
-                                focusedLabelColor = SetupColors.SuccessDark
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = { viewModel.enterNodeFlow() },
-                            enabled = state.deviceAuth.nodeUrl.isNotBlank(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = SetupColors.SuccessDark
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Connect", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -600,7 +579,7 @@ private fun NodeAuthStep(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "Acquire License",
+            text = "Register Agent",
             color = SetupColors.TextPrimary,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
@@ -608,7 +587,7 @@ private fun NodeAuthStep(
         )
 
         Text(
-            text = "Authorizing via ${deviceAuth.nodeUrl}",
+            text = "Registering via ${deviceAuth.nodeUrl}",
             color = SetupColors.TextSecondary,
             fontSize = 14.sp,
             modifier = Modifier.padding(bottom = 24.dp)

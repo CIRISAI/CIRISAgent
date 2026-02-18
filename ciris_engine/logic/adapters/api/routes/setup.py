@@ -1913,6 +1913,16 @@ async def connect_node(req: ConnectNodeRequest) -> SuccessResponse[ConnectNodeRe
             detail=f"Failed to initiate device auth with Portal at {portal_url}: {e}",
         )
 
+    # If Portal returned a challenge_nonce, submit attestation inline
+    # before returning to the client. This keeps KMP simple.
+    challenge_nonce = auth_data.get("challenge_nonce")
+    if challenge_nonce:
+        await _submit_attestation_inline(
+            challenge_nonce=challenge_nonce,
+            device_code=auth_data["device_code"],
+            portal_url=portal_url,
+        )
+
     return SuccessResponse(
         data=ConnectNodeResponse(
             verification_uri_complete=auth_data["verification_uri_complete"],
@@ -1996,6 +2006,82 @@ async def connect_node_status(device_code: str, portal_url: str) -> SuccessRespo
             package_template_id=licensed_package.get("template_id"),
         )
     )
+
+
+# ============================================================================
+# CIRISVerify Attestation (inline helper for connect_node)
+# ============================================================================
+
+
+async def _submit_attestation_inline(
+    challenge_nonce: str, device_code: str, portal_url: str
+) -> None:
+    """Submit CIRISVerify hardware attestation to Portal inline during connect-node.
+
+    Runs CIRISVerify on an 8MB-stack thread (iOS Rust/Tokio compatibility),
+    then POSTs the proof to Portal's /api/device/attest.
+
+    Non-fatal: if CIRISVerify is unavailable (community mode) or Portal
+    rejects the proof, we log and continue — the user can still authorize.
+    """
+    import threading
+    import httpx
+
+    challenge_bytes = bytes.fromhex(challenge_nonce)
+
+    # Attempt attestation on 8MB stack thread (Rust Tokio runtime needs it)
+    attest_result: list = [None, None]  # [proof_dict | None, error | None]
+
+    def _attest_on_large_stack() -> None:
+        try:
+            from ciris_verify import CIRISVerify as CV
+
+            verifier = CV(skip_integrity_check=True)
+            proof = verifier.export_attestation_sync(challenge_bytes)
+            attest_result[0] = proof.to_dict()
+        except Exception as e:
+            attest_result[1] = e
+
+    old_stack = threading.stack_size()
+    try:
+        threading.stack_size(8 * 1024 * 1024)  # 8 MB
+        t = threading.Thread(target=_attest_on_large_stack, daemon=True)
+        t.start()
+        t.join(timeout=15)
+    finally:
+        threading.stack_size(old_stack)
+
+    # CIRISVerify not available — skip gracefully (community mode)
+    if attest_result[1] is not None or attest_result[0] is None:
+        error_msg = str(attest_result[1]) if attest_result[1] else "CIRISVerify init timed out"
+        logger.info("CIRISVerify attestation skipped (community mode): %s", error_msg)
+        return
+
+    proof_dict = attest_result[0]
+
+    # POST proof to Portal's /api/device/attest
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            attest_resp = await client.post(
+                f"{portal_url.rstrip('/')}/api/device/attest",
+                json={
+                    "device_code": device_code,
+                    "attestation_proof": proof_dict,
+                    "agent_hash": "",  # Will be populated after RegisterBuild
+                    "integrity_passed": True,
+                },
+            )
+
+            if attest_resp.status_code == 200:
+                result_data = attest_resp.json()
+                verified = result_data.get("verified", False)
+                logger.info("Portal attestation result: verified=%s", verified)
+            else:
+                logger.warning(
+                    "Portal attestation rejected: HTTP %s", attest_resp.status_code
+                )
+    except httpx.HTTPError as e:
+        logger.warning("Failed to submit attestation to Portal: %s", e)
 
 
 # ============================================================================

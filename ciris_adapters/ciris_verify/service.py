@@ -333,9 +333,12 @@ class _FallbackMockClient:
             "license": None,
             "mandatory_disclosure": {
                 "text": (
-                    "NOTICE: This is an unlicensed community agent. " "Professional capabilities are NOT available."
+                    "COMMUNITY MODE: This is an unlicensed community agent. "
+                    "Professional capabilities are NOT available. "
+                    "Reason: ciris-verify package not installed — "
+                    "using fallback mock client."
                 ),
-                "severity": "info",
+                "severity": "warning",
             },
             "hardware_type": "software_only",
             "cached": False,

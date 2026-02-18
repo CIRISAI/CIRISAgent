@@ -21,6 +21,11 @@
     "send_deferral",
     "cirisnode_traces"
   ],
+  "dependencies": {
+    "protocols": [],
+    "schemas": [],
+    "internal": ["ciris_verify"]
+  },
   "configuration": {
     "base_url": {
       "type": "string",

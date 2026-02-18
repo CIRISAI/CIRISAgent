@@ -69,7 +69,13 @@ class CIRISNodeAdapter(Service):
         ]
 
     async def start(self) -> None:
-        """Start the adapter and its service."""
+        """Start the adapter and its service.
+
+        Requires ciris_verify adapter to be loaded (provides license verification).
+        """
+        # Verify ciris_verify dependency is available
+        self._verify_ciris_verify_dependency()
+
         # Re-set agent ID now that identity should be fully initialized
         if self.runtime and hasattr(self.runtime, "agent_identity") and self.runtime.agent_identity:
             self.service.set_agent_id(self.runtime.agent_identity.agent_id)
@@ -80,6 +86,37 @@ class CIRISNodeAdapter(Service):
         self._running = True
         self._started_at = datetime.now(timezone.utc)
         logger.info("CIRISNodeAdapter started")
+
+    def _verify_ciris_verify_dependency(self) -> None:
+        """Verify that the ciris_verify adapter is loaded.
+
+        CIRISNode requires CIRISVerify for license verification and
+        capability gating. If ciris_verify is not available, log a warning
+        but allow startup (it will operate in community/degraded mode).
+        """
+        # Check service registry for license:verify capability
+        if self.runtime and hasattr(self.runtime, "service_registry") and self.runtime.service_registry:
+            from ciris_engine.schemas.runtime.enums import ServiceType
+            providers = self.runtime.service_registry.get_providers(ServiceType.TOOL)
+            has_verify = any(
+                hasattr(p, "adapter_id") and p.adapter_id == "ciris_verify"
+                or (hasattr(p, "__class__") and "CIRISVerify" in p.__class__.__name__)
+                for p in providers
+            )
+            if has_verify:
+                logger.info("CIRISNode: ciris_verify adapter detected in service registry")
+                return
+
+        # Fallback: check if the package is importable
+        try:
+            from ciris_verify import CIRISVerify  # noqa: F401
+            logger.info("CIRISNode: ciris-verify package available")
+        except ImportError:
+            logger.warning(
+                "CIRISNode: ciris_verify adapter not detected. "
+                "License verification will not be available. "
+                "Install ciris-verify: pip install ciris-verify"
+            )
 
     async def run_lifecycle(self, agent_task: Any) -> None:
         """Run the adapter lifecycle — wait for agent task to complete."""

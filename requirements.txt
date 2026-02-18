@@ -33,6 +33,7 @@ cryptography>=41.0.0,<46.0.0
 PyJWT[crypto]>=2.8.0,<3.0.0
 bcrypt>=4.0.0,<5.0.0
 PyNaCl>=1.5.0,<2.0.0
+ciris-verify>=0.1.0  # Hardware-rooted license verification (CIRISVerify FFI bindings)
 
 # Web Framework (API)
 fastapi>=0.111.0,<1.0.0

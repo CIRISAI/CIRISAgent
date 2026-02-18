@@ -237,6 +237,119 @@ class Ed25519Signer(BaseSigner):
         logger.info(f"Saved Ed25519 keypair to {key_path}")
 
 
+class CIRISVerifySigner(BaseSigner):
+    """Signing implementation that delegates to CIRISVerify hardware vault.
+
+    When the ciris-verify package is installed and the binary is available,
+    this signer delegates all signing operations to the hardware security
+    module via FFI. The private key never leaves the secure hardware.
+
+    This integrates CIRISVerify as a "path" in the unified signing protocol:
+    - If CIRISVerify binary is available → use hardware-bound key
+    - If not → fall back to software Ed25519
+
+    The algorithm depends on the hardware platform:
+    - Mobile HSMs: ECDSA P-256
+    - TPM/SGX: ECDSA P-256 or Ed25519
+    - Software fallback: Ed25519
+    """
+
+    def __init__(self) -> None:
+        self._algorithm = SigningAlgorithm.ED25519  # Updated after init
+        self._key_id = None
+        self._client = None
+        self._public_key_cache: Optional[bytes] = None
+        self._algo_name: Optional[str] = None
+
+    @property
+    def public_key_bytes(self) -> bytes:
+        if self._public_key_cache is None:
+            raise RuntimeError(SIGNER_NOT_INITIALIZED)
+        return self._public_key_cache
+
+    def sign(self, data: bytes) -> bytes:
+        """Sign data via CIRISVerify FFI (blocking wrapper around async)."""
+        if not self._client:
+            raise RuntimeError(SIGNER_NOT_INITIALIZED)
+        import asyncio
+        import concurrent.futures
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        try:
+            if loop and loop.is_running():
+                # We're in an async context — use thread to avoid deadlock
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(asyncio.run, self._client.sign(data))
+                    return future.result(timeout=10.0)
+            else:
+                return asyncio.run(self._client.sign(data))
+        except Exception as e:
+            raise RuntimeError(f"CIRISVerify signing failed: {e}") from e
+
+    def verify(self, data: bytes, signature: bytes) -> bool:
+        """Verify signature using the cached public key."""
+        if self._algo_name and "Ed25519" in self._algo_name:
+            try:
+                from cryptography.hazmat.primitives.asymmetric import ed25519
+                pub = ed25519.Ed25519PublicKey.from_public_bytes(self.public_key_bytes)
+                pub.verify(signature, data)
+                return True
+            except Exception:
+                return False
+        elif self._algo_name and "P256" in self._algo_name:
+            try:
+                from cryptography.hazmat.primitives.asymmetric import ec, utils
+                from cryptography.hazmat.primitives import hashes
+                pub = ec.EllipticCurvePublicKey.from_encoded_point(
+                    ec.SECP256R1(), self.public_key_bytes
+                )
+                # ECDSA P-256 signature is r||s (32+32 bytes)
+                r = int.from_bytes(signature[:32], "big")
+                s = int.from_bytes(signature[32:], "big")
+                der_sig = utils.encode_dss_signature(r, s)
+                pub.verify(der_sig, data, ec.ECDSA(hashes.SHA256()))
+                return True
+            except Exception:
+                return False
+        return False
+
+    def _generate_keypair(self) -> None:
+        """Not applicable — key is managed by hardware."""
+        raise RuntimeError("CIRISVerify manages keys in hardware — cannot generate locally")
+
+    def _load_keypair(self, key_path: Path) -> bool:
+        """Load CIRISVerify client and fetch public key."""
+        try:
+            from ciris_verify import CIRISVerify
+            self._client = CIRISVerify(skip_integrity_check=True)
+
+            # Fetch public key (blocking)
+            import asyncio
+            key_bytes, algo = asyncio.run(self._client.get_public_key())
+            self._public_key_cache = key_bytes
+            self._algo_name = algo
+            self._key_id = self._compute_key_id(key_bytes)
+
+            # Map algorithm
+            if "Ed25519" in algo:
+                self._algorithm = SigningAlgorithm.ED25519
+
+            logger.info(
+                f"CIRISVerify vault signer loaded (algo={algo}, key_id={self._key_id})"
+            )
+            return True
+        except Exception as e:
+            logger.debug(f"CIRISVerify not available: {e}")
+            return False
+
+    def _save_keypair(self, key_path: Path) -> None:
+        """Not applicable — key lives in hardware."""
+        pass
+
+
 class UnifiedSigningKey:
     """Unified signing key management for audit and covenant metrics.
 
@@ -286,13 +399,34 @@ class UnifiedSigningKey:
         return self.signer.algorithm
 
     def initialize(self) -> None:
-        """Initialize the signing key (load existing or generate new)."""
+        """Initialize the signing key.
+
+        Tries paths in order:
+        1. CIRISVerify hardware vault (if ciris-verify package available)
+        2. Existing Ed25519 key file
+        3. Generate new Ed25519 key
+        """
         if self._initialized:
             return
 
+        # Path 1: Try CIRISVerify hardware vault
+        if not self._key_path:  # Only if no explicit key path was given
+            try:
+                verify_signer = CIRISVerifySigner()
+                if verify_signer._load_keypair(Path("__ciris_verify__")):
+                    self._signer = verify_signer
+                    self._initialized = True
+                    logger.info(
+                        f"Using CIRISVerify hardware vault for signing "
+                        f"(key_id={verify_signer.key_id})"
+                    )
+                    return
+            except Exception as e:
+                logger.debug(f"CIRISVerify vault not available: {e}")
+
+        # Path 2: Try existing Ed25519 key file
         self._signer = Ed25519Signer()
 
-        # Try to load from configured or default locations
         key_locations = []
         if self._key_path:
             key_locations.append(self._key_path)
@@ -309,7 +443,7 @@ class UnifiedSigningKey:
                 self._initialized = True
                 return
 
-        # No existing key found - generate new one
+        # Path 3: No existing key found - generate new one
         logger.info("No unified signing key found, generating new Ed25519 keypair...")
         self._signer._generate_keypair()
 

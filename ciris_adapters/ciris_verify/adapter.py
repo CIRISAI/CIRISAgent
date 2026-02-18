@@ -21,13 +21,20 @@ The verification service provides:
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.registries.base import Priority
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, RuntimeAdapterStatus
 from ciris_engine.schemas.runtime.enums import ServiceType
+
+from ciris_verify import (
+    CapabilityCheckResult,
+    DisclosureSeverity,
+    LicenseStatusResponse,
+    MandatoryDisclosure,
+)
 
 from .service import CIRISVerifyService, VerificationConfig
 
@@ -52,17 +59,14 @@ class CIRISVerifyAdapter(Service):
     3. Manages mandatory disclosure display
     4. Caches verification results for performance
 
-    The adapter automatically falls back to community mode if:
-    - CIRISVerify binary is not installed
-    - Hardware security is unavailable
-    - License verification fails
+    CIRISVerify handles its own fallback to software-only signing
+    when hardware security is unavailable (community mode).
 
     Configuration (via config dict):
         binary_path: Optional path to CIRISVerify binary
         cache_ttl_seconds: Cache duration (default: 300)
         timeout_seconds: Verification timeout (default: 10.0)
         require_hardware: Require hardware HSM (default: false)
-        use_mock: Use mock for testing (default: false)
     """
 
     def __init__(self, runtime: Any, context: Optional[Any] = None, **kwargs: Any) -> None:
@@ -140,7 +144,6 @@ class CIRISVerifyAdapter(Service):
             cache_ttl_seconds=self._config.get("cache_ttl_seconds", 300),
             timeout_seconds=self._config.get("timeout_seconds", 10.0),
             require_hardware=self._config.get("require_hardware", False),
-            use_mock=self._config.get("use_mock", False),
         )
 
         self._service = CIRISVerifyService(service_config)
@@ -152,14 +155,11 @@ class CIRISVerifyAdapter(Service):
             # Log initial license status
             status = await self._service.get_license_status()
             if status:
-                if hasattr(status, "status"):
-                    logger.info(f"License status: {status.status}")
-                    if status.allows_licensed_operation():
-                        logger.info("Running in LICENSED mode")
-                    else:
-                        logger.info("Running in COMMUNITY mode")
+                logger.info("License status: %s", status.status)
+                if status.allows_licensed_operation():
+                    logger.info("Running in LICENSED mode")
                 else:
-                    logger.info(f"License status: {status.get('status', 'unknown')}")
+                    logger.info("Running in COMMUNITY mode")
         else:
             logger.warning("CIRISVerify initialization failed - operating in community mode")
             self._started = True  # Still mark as started, just in degraded mode
@@ -216,7 +216,6 @@ class CIRISVerifyAdapter(Service):
                 "cache_ttl_seconds": self._config.get("cache_ttl_seconds", 300),
                 "timeout_seconds": self._config.get("timeout_seconds", 10.0),
                 "require_hardware": self._config.get("require_hardware", False),
-                "use_mock": self._config.get("use_mock", False),
             },
         )
 
@@ -257,7 +256,7 @@ class CIRISVerifyAdapter(Service):
     #
     # =========================================================================
 
-    async def get_license_status(self, force_refresh: bool = False) -> Optional[Any]:
+    async def get_license_status(self, force_refresh: bool = False) -> Optional[LicenseStatusResponse]:
         """Get current license status.
 
         Args:
@@ -270,7 +269,7 @@ class CIRISVerifyAdapter(Service):
             return None
         return await self._service.get_license_status(force_refresh)
 
-    async def check_capability(self, capability: str) -> Any:
+    async def check_capability(self, capability: str) -> CapabilityCheckResult:
         """Check if a capability is allowed.
 
         Args:
@@ -280,20 +279,24 @@ class CIRISVerifyAdapter(Service):
             CapabilityCheckResult.
         """
         if not self._service:
-            return {"capability": capability, "allowed": False, "reason": "Service not available"}
+            return CapabilityCheckResult(
+                capability=capability,
+                allowed=False,
+                reason="Service not available",
+            )
         return await self._service.check_capability(capability)
 
-    async def get_mandatory_disclosure(self) -> Any:
+    async def get_mandatory_disclosure(self) -> MandatoryDisclosure:
         """Get mandatory disclosure for current status.
 
         Returns:
             MandatoryDisclosure that MUST be shown to users.
         """
         if not self._service:
-            return {
-                "text": "NOTICE: License verification unavailable.",
-                "severity": "warning",
-            }
+            return MandatoryDisclosure(
+                text="NOTICE: License verification unavailable.",
+                severity=DisclosureSeverity.WARNING,
+            )
         return await self._service.get_mandatory_disclosure()
 
     def get_agent_tier(self) -> int:

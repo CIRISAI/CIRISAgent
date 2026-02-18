@@ -37,26 +37,28 @@ class BillingViewModel(
         private const val TAG = "BillingViewModel"
         private const val BALANCE_POLL_INTERVAL_MS = 30000L // Poll every 30 seconds
 
-        // Product catalog - must match server-side configuration
-        // These are the default credit packages available
+        // Product catalog - must match store configuration
+        // Google Play: credits_100, credits_250, credits_600
+        // App Store: credits_100_v1, credits_250_v1, credits_600_v1
+        // Pricing: $0.10/credit
         val DEFAULT_PRODUCTS = listOf(
             CreditProduct(
                 productId = "credits_100",
-                credits = 100,
-                price = "$0.99",
-                description = "Starter pack - great for trying out CIRIS"
+                credits = 99,
+                price = "$9.99",
+                description = "99 credits for CIRIS Agent AI interactions ($0.10/credit)"
             ),
             CreditProduct(
                 productId = "credits_250",
-                credits = 250,
-                price = "$1.99",
-                description = "Standard pack - best value for regular use"
+                credits = 249,
+                price = "$24.99",
+                description = "249 credits for CIRIS Agent AI interactions ($0.10/credit)"
             ),
             CreditProduct(
                 productId = "credits_600",
-                credits = 600,
-                price = "$3.99",
-                description = "Power user pack - maximum savings"
+                credits = 599,
+                price = "$59.99",
+                description = "599 credits for CIRIS Agent AI interactions ($0.10/credit)"
             )
         )
     }

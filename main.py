@@ -299,7 +299,8 @@ def _categorize_adapters(
     adapter_types: list[str], adapter_map: dict[str, Any]
 ) -> tuple[list[str], list[tuple[str, Any]]]:
     """Categorize adapters into built-in and modular services."""
-    builtin_adapters = ["cli", "api", "discord"]
+    # ciris_verify is always loaded at bootstrap — treat it as built-in
+    builtin_adapters = ["cli", "api", "discord", "ciris_verify"]
     final_adapter_types = []
     adapters_to_load = []
 

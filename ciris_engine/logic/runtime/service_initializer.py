@@ -1406,6 +1406,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
             return
 
         for adapter_name, service in eligible.items():
+            # ciris_verify is always loaded at bootstrap — skip to avoid double-load
+            if adapter_name == "ciris_verify":
+                continue
             try:
                 await self._start_and_register_adapter(adapter_name, service)
             except Exception as e:

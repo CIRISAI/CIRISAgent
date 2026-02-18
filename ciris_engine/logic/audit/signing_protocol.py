@@ -16,7 +16,7 @@ import logging
 from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional, Protocol, runtime_checkable
+from typing import Any, Dict, Optional, Protocol, cast, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
@@ -272,7 +272,7 @@ class CIRISVerifySigner(BaseSigner):
         if not self._client:
             raise RuntimeError(SIGNER_NOT_INITIALIZED)
         try:
-            return self._client.sign_sync(data)
+            return cast(bytes, self._client.sign_sync(data))
         except Exception as e:
             raise RuntimeError(f"CIRISVerify signing failed: {e}") from e
 
@@ -281,6 +281,7 @@ class CIRISVerifySigner(BaseSigner):
         if self._algo_name and "Ed25519" in self._algo_name:
             try:
                 from cryptography.hazmat.primitives.asymmetric import ed25519
+
                 pub = ed25519.Ed25519PublicKey.from_public_bytes(self.public_key_bytes)
                 pub.verify(signature, data)
                 return True
@@ -288,11 +289,10 @@ class CIRISVerifySigner(BaseSigner):
                 return False
         elif self._algo_name and "P256" in self._algo_name:
             try:
-                from cryptography.hazmat.primitives.asymmetric import ec, utils
                 from cryptography.hazmat.primitives import hashes
-                ec_pub = ec.EllipticCurvePublicKey.from_encoded_point(
-                    ec.SECP256R1(), self.public_key_bytes
-                )
+                from cryptography.hazmat.primitives.asymmetric import ec, utils
+
+                ec_pub = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), self.public_key_bytes)
                 # ECDSA P-256 signature is r||s (32+32 bytes)
                 r = int.from_bytes(signature[:32], "big")
                 s = int.from_bytes(signature[32:], "big")
@@ -317,7 +317,7 @@ class CIRISVerifySigner(BaseSigner):
         """
         import threading
 
-        result: list = [None, None, None, None]  # [client, key_bytes, algo, error]
+        result: list[Any] = [None, None, None, None]  # [client, key_bytes, algo, error]
 
         def _init_on_large_stack() -> None:
             try:
@@ -356,9 +356,7 @@ class CIRISVerifySigner(BaseSigner):
         if self._algo_name and "Ed25519" in self._algo_name:
             self._algorithm = SigningAlgorithm.ED25519
 
-        logger.info(
-            f"CIRISVerify vault signer loaded (algo={self._algo_name}, key_id={self._key_id})"
-        )
+        logger.info(f"CIRISVerify vault signer loaded (algo={self._algo_name}, key_id={self._key_id})")
         return True
 
     def _save_keypair(self, key_path: Path) -> None:
@@ -432,10 +430,7 @@ class UnifiedSigningKey:
                 if verify_signer._load_keypair(Path("__ciris_verify__")):
                     self._signer = verify_signer
                     self._initialized = True
-                    logger.info(
-                        f"Using CIRISVerify hardware vault for signing "
-                        f"(key_id={verify_signer.key_id})"
-                    )
+                    logger.info(f"Using CIRISVerify hardware vault for signing " f"(key_id={verify_signer.key_id})")
                     return
             except Exception as e:
                 logger.debug(f"CIRISVerify vault not available: {e}")
@@ -497,12 +492,14 @@ class UnifiedSigningKey:
 
         if not save_path:
             from ciris_engine.logic.utils.path_resolution import get_data_dir
+
             save_path = get_data_dir() / "agent_signing.key"
 
         try:
             save_path.parent.mkdir(parents=True, exist_ok=True)
             save_path.write_bytes(private_bytes)
             import os
+
             os.chmod(save_path, 0o600)
             logger.info(f"Saved provisioned key fallback to {save_path}")
         except OSError as e:
@@ -514,10 +511,7 @@ class UnifiedSigningKey:
             if verify_signer._load_keypair(Path("__ciris_verify__")):
                 self._signer = verify_signer
                 self._initialized = True
-                logger.info(
-                    f"Using CIRISVerify vault for provisioned agent "
-                    f"(key_id={verify_signer.key_id})"
-                )
+                logger.info(f"Using CIRISVerify vault for provisioned agent " f"(key_id={verify_signer.key_id})")
                 return
         except Exception as e:
             logger.debug(f"CIRISVerify vault not available for provisioned key: {e}")

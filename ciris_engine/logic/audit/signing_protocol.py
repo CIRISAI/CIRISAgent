@@ -303,14 +303,14 @@ class CIRISVerifySigner(BaseSigner):
             try:
                 from cryptography.hazmat.primitives.asymmetric import ec, utils
                 from cryptography.hazmat.primitives import hashes
-                pub = ec.EllipticCurvePublicKey.from_encoded_point(
+                ec_pub = ec.EllipticCurvePublicKey.from_encoded_point(
                     ec.SECP256R1(), self.public_key_bytes
                 )
                 # ECDSA P-256 signature is r||s (32+32 bytes)
                 r = int.from_bytes(signature[:32], "big")
                 s = int.from_bytes(signature[32:], "big")
                 der_sig = utils.encode_dss_signature(r, s)
-                pub.verify(der_sig, data, ec.ECDSA(hashes.SHA256()))
+                ec_pub.verify(der_sig, data, ec.ECDSA(hashes.SHA256()))
                 return True
             except Exception:
                 return False
@@ -324,11 +324,12 @@ class CIRISVerifySigner(BaseSigner):
         """Load CIRISVerify client and fetch public key."""
         try:
             from ciris_verify import CIRISVerify
-            self._client = CIRISVerify(skip_integrity_check=True)
+            client = CIRISVerify(skip_integrity_check=True)
+            self._client = client
 
             # Fetch public key (blocking)
             import asyncio
-            key_bytes, algo = asyncio.run(self._client.get_public_key())
+            key_bytes, algo = asyncio.run(client.get_public_key())
             self._public_key_cache = key_bytes
             self._algo_name = algo
             self._key_id = self._compute_key_id(key_bytes)
@@ -373,11 +374,11 @@ class UnifiedSigningKey:
             key_path: Custom key path (defaults to data/agent_signing.key)
         """
         self._key_path = key_path
-        self._signer: Optional[Ed25519Signer] = None
+        self._signer: Optional[BaseSigner] = None
         self._initialized = False
 
     @property
-    def signer(self) -> Ed25519Signer:
+    def signer(self) -> BaseSigner:
         if not self._signer:
             raise RuntimeError("UnifiedSigningKey not initialized")
         return self._signer

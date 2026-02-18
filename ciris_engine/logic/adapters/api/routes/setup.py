@@ -2030,14 +2030,14 @@ async def _submit_attestation_inline(
     challenge_bytes = bytes.fromhex(challenge_nonce)
 
     # Attempt attestation on 8MB stack thread (Rust Tokio runtime needs it)
-    attest_result: list = [None, None]  # [proof_dict | None, error | None]
+    attest_result: list[Any] = [None, None]  # [proof_dict | None, error | None]
 
     def _attest_on_large_stack() -> None:
         try:
             from ciris_verify import CIRISVerify as CV
 
             verifier = CV(skip_integrity_check=True)
-            proof = verifier.export_attestation_sync(challenge_bytes)
+            proof = verifier.export_attestation_sync(challenge_bytes)  # type: ignore[attr-defined, unused-ignore]
             attest_result[0] = proof.to_dict()
         except Exception as e:
             attest_result[1] = e

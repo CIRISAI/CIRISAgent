@@ -324,7 +324,7 @@ class CIRISVerifySigner(BaseSigner):
                 from ciris_verify import CIRISVerify
 
                 client = CIRISVerify(skip_integrity_check=True)
-                key_bytes, algo = client.get_public_key_sync()
+                key_bytes, algo = client.get_public_key_sync()  # type: ignore[attr-defined, unused-ignore]
                 result[0] = client
                 result[1] = key_bytes
                 result[2] = algo

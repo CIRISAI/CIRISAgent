@@ -554,6 +554,23 @@ def build_command(args) -> int:
         return 1
 
 
+def portal_command(args) -> int:
+    """Handle the portal subcommand."""
+    from .portal_registration import run_portal_registration
+
+    return run_portal_registration(
+        base_url=args.api_url,
+        portal_url=args.portal_url,
+        username=args.username,
+        password=args.password,
+        wait=args.wait,
+        poll_timeout=args.timeout,
+        poll_interval=args.interval,
+        output_dir=args.output_dir,
+        verbose=args.verbose,
+    )
+
+
 def test_ios_command(args) -> int:
     """Handle iOS simulator test execution."""
     from .ios.ios_ui_automator import iOSUIAutomator
@@ -922,6 +939,77 @@ Notes:
     build_parser.add_argument("--adb-path", help="Path to adb binary (Android only)")
     build_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
+    # ========== portal subcommand ==========
+    portal_parser = subparsers.add_parser(
+        "portal",
+        help="Test portal.ciris.ai device auth registration flow",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Tests the RFC 8628 device authorization flow against portal.ciris.ai:
+  1. Health check on CIRIS API
+  2. Login to CIRIS API
+  3. POST /v1/setup/connect-node → device code + verification URL
+  4. Poll /v1/setup/connect-node/status
+
+Examples:
+  # Initiate only (print device code, don't wait)
+  python -m tools.qa_runner.modules.mobile portal
+
+  # Initiate and wait for user to complete Portal auth
+  python -m tools.qa_runner.modules.mobile portal --wait
+
+  # Custom Portal URL and timeout
+  python -m tools.qa_runner.modules.mobile portal --portal-url https://portal.ciris.ai --wait --timeout 600
+
+  # Connect to CIRIS API on a different port
+  python -m tools.qa_runner.modules.mobile portal --api-url http://localhost:9000
+""",
+    )
+    portal_parser.add_argument(
+        "--portal-url",
+        default="https://portal.ciris.ai",
+        help="Portal URL for device auth (default: https://portal.ciris.ai)",
+    )
+    portal_parser.add_argument(
+        "--api-url",
+        default="http://localhost:8080",
+        help="CIRIS API base URL (default: http://localhost:8080)",
+    )
+    portal_parser.add_argument(
+        "--username",
+        default="admin",
+        help="CIRIS API username (default: admin)",
+    )
+    portal_parser.add_argument(
+        "--password",
+        default="ciris_admin_password",
+        help="CIRIS API password (default: ciris_admin_password)",
+    )
+    portal_parser.add_argument(
+        "--wait", "-w",
+        action="store_true",
+        help="Wait for user to complete Portal authorization (polls until done)",
+    )
+    portal_parser.add_argument(
+        "--timeout",
+        type=int,
+        default=300,
+        help="Polling timeout in seconds (default: 300)",
+    )
+    portal_parser.add_argument(
+        "--interval",
+        type=int,
+        default=5,
+        help="Polling interval in seconds (default: 5)",
+    )
+    portal_parser.add_argument(
+        "--output-dir",
+        "-o",
+        default="mobile_qa_reports",
+        help="Directory for test reports (default: mobile_qa_reports)",
+    )
+    portal_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+
     # ========== test subcommand ==========
     test_parser = subparsers.add_parser(
         "test",
@@ -1016,8 +1104,8 @@ Examples:
     # Create Licensed Agent options (iOS)
     test_parser.add_argument(
         "--node-url",
-        default="https://node.ciris.ai",
-        help="CIRISNode URL for connect_node tests (default: https://node.ciris.ai)",
+        default="https://portal.ciris.ai",
+        help="Portal URL for connect_node tests (default: https://portal.ciris.ai)",
     )
     test_parser.add_argument(
         "--wait-portal",
@@ -1059,6 +1147,8 @@ Examples:
         return build_command(args)
     elif args.command == "test":
         return test_command(args)
+    elif args.command == "portal":
+        return portal_command(args)
     else:
         parser.print_help()
         return 0

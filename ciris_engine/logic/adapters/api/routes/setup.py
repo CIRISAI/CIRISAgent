@@ -2060,6 +2060,7 @@ async def download_package(req: DownloadPackageRequest) -> SuccessResponse[Downl
 
     # Validate URL is from trusted Portal domains and paths only (security: prevent SSRF)
     ALLOWED_PORTAL_HOSTS = {
+        "portal.ciris.ai",
         "portal.ciris-services-1.ai",
         "portal.ciris-services-2.ai",
         "localhost",

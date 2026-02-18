@@ -101,7 +101,7 @@ class StateTransitionTests:
             self._record_result(test_name, False, str(e))
 
     async def _test_schema_defaults(self):
-        """Test CognitiveStateBehaviors default values (Covenant compliance)."""
+        """Test CognitiveStateBehaviors default values (Accord compliance)."""
         test_name = "schema_defaults"
         try:
             from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
@@ -109,7 +109,7 @@ class StateTransitionTests:
             # Create with defaults
             config = CognitiveStateBehaviors()
 
-            # Verify Covenant-compliant defaults
+            # Verify Accord-compliant defaults
             assert config.wakeup.enabled is True, "Wakeup should be enabled by default"
             assert config.shutdown.mode == "always_consent", "Shutdown should require consent by default"
             assert config.play.enabled is True, "Play should be enabled by default"

@@ -14,7 +14,7 @@ from ciris_engine.schemas.config.tickets import TicketsConfig
 # Field description constants to avoid duplication
 _DESC_SYSTEM_PROMPT = "Override system prompt"
 _DESC_USER_PROMPT_TEMPLATE = "Override user prompt template"
-_DESC_COVENANT_HEADER = "Covenant mode: 'full' (default), 'compressed' (for testing/benchmarking), or 'none'"
+_DESC_ACCORD_HEADER = "Accord mode: 'full' (default), 'compressed' (for testing/benchmarking), or 'none'"
 
 
 class StewardshipCalculation(BaseModel):
@@ -35,7 +35,7 @@ class CreatorLedgerEntry(BaseModel):
 
     creator_id: str = Field(..., description="Identifier for the creator or creating team")
     creation_timestamp: str = Field(..., description="ISO 8601 timestamp of the creation entry")
-    covenant_version: str = Field(..., description="Version of the Covenant applied")
+    accord_version: str = Field(..., description="Version of the Accord applied")
     book_vi_compliance_check: str = Field(..., description="Status of the Book VI compliance check")
     stewardship_tier_calculation: StewardshipCalculation = Field(..., description="Details of the ST calculation")
     public_key_fingerprint: str = Field(..., description="Fingerprint of the public key used for signing")
@@ -98,7 +98,7 @@ class AgentTemplate(BaseModel):
         description="Ticket system configuration with SOPs (DSAR always present)",
     )
 
-    # Cognitive state transition configuration (Covenant Sections V, VIII)
+    # Cognitive state transition configuration (Accord Sections V, VIII)
     cognitive_state_behaviors: Optional["CognitiveStateBehaviors"] = Field(
         None,
         description="Template-driven cognitive state transition configuration",
@@ -229,10 +229,10 @@ class AgentTemplate(BaseModel):
         """Convert dict to CognitiveStateBehaviors if needed.
 
         If not provided, returns default CognitiveStateBehaviors which preserves
-        full Covenant compliance (wakeup enabled, always_consent shutdown).
+        full Accord compliance (wakeup enabled, always_consent shutdown).
         """
         if v is None:
-            # Default: full Covenant compliance
+            # Default: full Accord compliance
             return CognitiveStateBehaviors()
 
         if isinstance(v, dict):
@@ -256,7 +256,7 @@ class CSDMAOverrides(BaseModel):
 
     system_prompt: Optional[str] = Field(None, description=_DESC_SYSTEM_PROMPT)
     user_prompt_template: Optional[str] = Field(None, description=_DESC_USER_PROMPT_TEMPLATE)
-    covenant_header: Optional[str] = Field(None, description=_DESC_COVENANT_HEADER)
+    accord_header: Optional[str] = Field(None, description=_DESC_ACCORD_HEADER)
     model_config = ConfigDict(defer_build=True, extra="forbid")  # Strict validation
 
 
@@ -265,7 +265,7 @@ class PDMAOverrides(BaseModel):
 
     system_prompt: Optional[str] = Field(None, description=_DESC_SYSTEM_PROMPT)
     user_prompt_template: Optional[str] = Field(None, description=_DESC_USER_PROMPT_TEMPLATE)
-    covenant_header: Optional[str] = Field(None, description=_DESC_COVENANT_HEADER)
+    accord_header: Optional[str] = Field(None, description=_DESC_ACCORD_HEADER)
     model_config = ConfigDict(defer_build=True, extra="forbid")  # Strict validation
 
 
@@ -275,7 +275,7 @@ class ActionSelectionOverrides(BaseModel):
     system_prompt: Optional[str] = Field(None, description=_DESC_SYSTEM_PROMPT)
     user_prompt_template: Optional[str] = Field(None, description=_DESC_USER_PROMPT_TEMPLATE)
     action_descriptions: Optional[Dict[str, str]] = Field(None, description="Override action descriptions")
-    covenant_header: Optional[str] = Field(None, description=_DESC_COVENANT_HEADER)
+    accord_header: Optional[str] = Field(None, description=_DESC_ACCORD_HEADER)
     model_config = ConfigDict(defer_build=True, extra="allow")  # Allow for additional, template-specific guidance
 
 

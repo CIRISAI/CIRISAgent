@@ -1,8 +1,8 @@
 """
-Covenant Metrics ConfigurableAdapterProtocol implementation.
+Accord Metrics ConfigurableAdapterProtocol implementation.
 
 This module handles the interactive configuration workflow for the
-covenant metrics adapter, including:
+accord metrics adapter, including:
 - Consent validation
 - Configuration persistence for reload on restart
 - Trace level selection
@@ -20,8 +20,8 @@ from typing import Any, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 
-class CovenantMetricsConfigurable:
-    """ConfigurableAdapterProtocol implementation for covenant metrics.
+class AccordMetricsConfigurable:
+    """ConfigurableAdapterProtocol implementation for accord metrics.
 
     This class handles:
     1. Consent validation - ensures user explicitly consents
@@ -50,10 +50,10 @@ class CovenantMetricsConfigurable:
         """
         self.config = config or {}
         self._applied_config: Optional[Dict[str, Any]] = None
-        logger.info("CovenantMetricsConfigurable initialized")
+        logger.info("AccordMetricsConfigurable initialized")
 
     async def discover(self, discovery_type: str) -> List[Dict[str, Any]]:
-        """Covenant metrics doesn't use discovery.
+        """Accord metrics doesn't use discovery.
 
         Args:
             discovery_type: Type of discovery (ignored)
@@ -72,7 +72,7 @@ class CovenantMetricsConfigurable:
         redirect_uri: Optional[str] = None,
         platform: Optional[str] = None,
     ) -> str:
-        """Covenant metrics doesn't use OAuth.
+        """Accord metrics doesn't use OAuth.
 
         Returns:
             Empty string - no OAuth needed
@@ -89,7 +89,7 @@ class CovenantMetricsConfigurable:
         redirect_uri: Optional[str] = None,
         platform: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Covenant metrics doesn't use OAuth.
+        """Accord metrics doesn't use OAuth.
 
         Returns:
             Empty dict - no OAuth needed
@@ -126,14 +126,14 @@ class CovenantMetricsConfigurable:
         Returns:
             (is_valid, error_message) tuple
         """
-        logger.info("Validating covenant metrics configuration")
+        logger.info("Validating accord metrics configuration")
 
         if not config:
             return False, "Configuration is empty"
 
         # CRITICAL: Consent must be explicitly given
         if not config.get("consent_given"):
-            return False, "Consent is required to enable covenant metrics"
+            return False, "Consent is required to enable accord metrics"
 
         # Validate trace_level if present
         trace_level = config.get("trace_level", "generic")
@@ -173,7 +173,7 @@ class CovenantMetricsConfigurable:
         Returns:
             True if applied successfully
         """
-        logger.info("Applying covenant metrics configuration")
+        logger.info("Applying accord metrics configuration")
 
         # Add consent timestamp if not present
         if "consent_timestamp" not in config or not config["consent_timestamp"]:

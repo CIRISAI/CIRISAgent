@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-Covenant Key Generation Tool
+Accord Key Generation Tool
 
 Generates Ed25519 keypairs from BIP39 mnemonic seeds for use with the
-Covenant Invocation System. The mnemonic can be memorized and used to
+Accord Invocation System. The mnemonic can be memorized and used to
 derive the same key on any machine.
 
 Usage:
     # Generate new mnemonic and keypair
-    python -m tools.security.covenant_keygen generate
+    python -m tools.security.accord_keygen generate
 
     # Derive keypair from existing mnemonic
-    python -m tools.security.covenant_keygen derive --mnemonic "word1 word2 ..."
+    python -m tools.security.accord_keygen derive --mnemonic "word1 word2 ..."
 
     # Verify a mnemonic is valid
-    python -m tools.security.covenant_keygen verify --mnemonic "word1 word2 ..."
+    python -m tools.security.accord_keygen verify --mnemonic "word1 word2 ..."
 """
 
 import argparse
@@ -212,12 +212,12 @@ def seed_to_ed25519_keypair(seed: bytes) -> Tuple[bytes, bytes]:
     return private_bytes, public_bytes
 
 
-def derive_covenant_keypair(
+def derive_accord_keypair(
     mnemonic: str,
     passphrase: str = "",
 ) -> Tuple[bytes, bytes, str]:
     """
-    Derive Ed25519 keypair from mnemonic for covenant invocation.
+    Derive Ed25519 keypair from mnemonic for accord invocation.
 
     Args:
         mnemonic: BIP39 mnemonic (12-24 words)
@@ -240,21 +240,21 @@ def derive_covenant_keypair(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Covenant Key Generation Tool",
+        description="Accord Key Generation Tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     # Generate new 24-word mnemonic and keypair
-    python -m tools.security.covenant_keygen generate
+    python -m tools.security.accord_keygen generate
 
     # Generate 12-word mnemonic
-    python -m tools.security.covenant_keygen generate --words 12
+    python -m tools.security.accord_keygen generate --words 12
 
     # Derive keypair from existing mnemonic
-    python -m tools.security.covenant_keygen derive --mnemonic "word1 word2 ..."
+    python -m tools.security.accord_keygen derive --mnemonic "word1 word2 ..."
 
     # Verify mnemonic validity
-    python -m tools.security.covenant_keygen verify --mnemonic "word1 word2 ..."
+    python -m tools.security.accord_keygen verify --mnemonic "word1 word2 ..."
         """,
     )
 
@@ -310,7 +310,7 @@ Examples:
     if args.command == "generate":
         try:
             mnemonic = generate_mnemonic(args.words)
-            private_bytes, public_bytes, public_b64 = derive_covenant_keypair(mnemonic, args.passphrase)
+            private_bytes, public_bytes, public_b64 = derive_accord_keypair(mnemonic, args.passphrase)
 
             result = {
                 "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -319,11 +319,11 @@ Examples:
                 "public_key_b64": public_b64,
                 "public_key_hex": public_bytes.hex(),
                 "has_passphrase": bool(args.passphrase),
-                "warning": "KEEP THIS MNEMONIC SECRET. Anyone with these words can invoke the covenant.",
+                "warning": "KEEP THIS MNEMONIC SECRET. Anyone with these words can invoke the accord.",
             }
 
             print("\n" + "=" * 70)
-            print("  COVENANT KEY GENERATED")
+            print("  ACCORD KEY GENERATED")
             print("=" * 70)
             print(f"\n  Mnemonic ({args.words} words):\n")
             # Print mnemonic in groups of 4 for readability
@@ -356,10 +356,10 @@ Examples:
 
     elif args.command == "derive":
         try:
-            private_bytes, public_bytes, public_b64 = derive_covenant_keypair(args.mnemonic, args.passphrase)
+            private_bytes, public_bytes, public_b64 = derive_accord_keypair(args.mnemonic, args.passphrase)
 
             print("\n" + "=" * 70)
-            print("  COVENANT KEY DERIVED")
+            print("  ACCORD KEY DERIVED")
             print("=" * 70)
             print(f"\n  Public Key (base64): {public_b64}")
             print(f"  Public Key (hex):    {public_bytes.hex()}")

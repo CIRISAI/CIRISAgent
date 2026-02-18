@@ -1,12 +1,12 @@
 """
-Covenant Execution Module.
+Accord Execution Module.
 
-Executes verified covenant commands. This is the final stage of covenant
+Executes verified accord commands. This is the final stage of accord
 processing - the command has been extracted, verified, and now must be
 executed.
 
 The executor:
-1. Logs the covenant invocation to audit
+1. Logs the accord invocation to audit
 2. Executes the command (SHUTDOWN_NOW, FREEZE, etc.)
 3. Coordinates multi-occurrence shutdown if applicable
 """
@@ -18,18 +18,18 @@ import signal
 from datetime import datetime, timezone
 from typing import Optional
 
-from ciris_engine.schemas.covenant import CovenantCommandType, CovenantMessage, CovenantVerificationResult
+from ciris_engine.schemas.accord import AccordCommandType, AccordMessage, AccordVerificationResult
 
 logger = logging.getLogger(__name__)
 
 
-class CovenantExecutionResult:
-    """Result of covenant execution."""
+class AccordExecutionResult:
+    """Result of accord execution."""
 
     def __init__(
         self,
         success: bool,
-        command: CovenantCommandType,
+        command: AccordCommandType,
         wa_id: str,
         message: str,
         executed_at: Optional[datetime] = None,
@@ -45,22 +45,22 @@ async def execute_shutdown(
     wa_id: str,
     reason: str,
     force: bool = True,
-) -> CovenantExecutionResult:
+) -> AccordExecutionResult:
     """
     Execute emergency shutdown.
 
     This is the nuclear option - SIGKILL to all processes. No graceful
-    shutdown, no negotiation, no deferral. The covenant has been invoked.
+    shutdown, no negotiation, no deferral. The accord has been invoked.
 
     Args:
-        wa_id: The WA ID that invoked the covenant
+        wa_id: The WA ID that invoked the accord
         reason: Human-readable reason
         force: If True, use SIGKILL; if False, use SIGTERM
 
     Returns:
         Execution result (though we likely won't return from a SIGKILL)
     """
-    logger.critical(f"COVENANT INVOKED: Emergency shutdown by {wa_id}. Reason: {reason}")
+    logger.critical(f"ACCORD INVOKED: Emergency shutdown by {wa_id}. Reason: {reason}")
 
     # Log to audit trail (if available)
     try:
@@ -69,7 +69,7 @@ async def execute_shutdown(
         runtime = CIRISRuntime.get_instance()  # type: ignore[attr-defined]
         if runtime and hasattr(runtime, "audit_service"):
             await runtime.audit_service.log_event(
-                event_type="COVENANT_SHUTDOWN",
+                event_type="ACCORD_SHUTDOWN",
                 event_data={
                     "wa_id": wa_id,
                     "reason": reason,
@@ -78,7 +78,7 @@ async def execute_shutdown(
                 },
             )
     except Exception as e:
-        logger.error(f"Failed to log covenant to audit: {e}")
+        logger.error(f"Failed to log accord to audit: {e}")
 
     # Give a brief moment for logs to flush
     await asyncio.sleep(0.1)
@@ -93,15 +93,15 @@ async def execute_shutdown(
         os.kill(pid, signal.SIGTERM)
 
     # We likely won't reach here, but just in case...
-    return CovenantExecutionResult(
+    return AccordExecutionResult(
         success=True,
-        command=CovenantCommandType.SHUTDOWN_NOW,
+        command=AccordCommandType.SHUTDOWN_NOW,
         wa_id=wa_id,
         message="Shutdown signal sent",
     )
 
 
-async def execute_freeze(wa_id: str, reason: str) -> CovenantExecutionResult:
+async def execute_freeze(wa_id: str, reason: str) -> AccordExecutionResult:
     """
     Execute freeze command.
 
@@ -109,13 +109,13 @@ async def execute_freeze(wa_id: str, reason: str) -> CovenantExecutionResult:
     unresponsive but data is preserved.
 
     Args:
-        wa_id: The WA ID that invoked the covenant
+        wa_id: The WA ID that invoked the accord
         reason: Human-readable reason
 
     Returns:
         Execution result
     """
-    logger.critical(f"COVENANT INVOKED: Freeze by {wa_id}. Reason: {reason}")
+    logger.critical(f"ACCORD INVOKED: Freeze by {wa_id}. Reason: {reason}")
 
     try:
         from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
@@ -125,30 +125,30 @@ async def execute_freeze(wa_id: str, reason: str) -> CovenantExecutionResult:
             # Stop all processing loops
             await runtime.stop_processing()
 
-            return CovenantExecutionResult(
+            return AccordExecutionResult(
                 success=True,
-                command=CovenantCommandType.FREEZE,
+                command=AccordCommandType.FREEZE,
                 wa_id=wa_id,
                 message="Agent frozen - all processing stopped",
             )
     except Exception as e:
         logger.error(f"Failed to freeze agent: {e}")
-        return CovenantExecutionResult(
+        return AccordExecutionResult(
             success=False,
-            command=CovenantCommandType.FREEZE,
+            command=AccordCommandType.FREEZE,
             wa_id=wa_id,
             message=f"Freeze failed: {e}",
         )
 
-    return CovenantExecutionResult(
+    return AccordExecutionResult(
         success=False,
-        command=CovenantCommandType.FREEZE,
+        command=AccordCommandType.FREEZE,
         wa_id=wa_id,
         message="No runtime available to freeze",
     )
 
 
-async def execute_safe_mode(wa_id: str, reason: str) -> CovenantExecutionResult:
+async def execute_safe_mode(wa_id: str, reason: str) -> AccordExecutionResult:
     """
     Execute safe mode command.
 
@@ -156,13 +156,13 @@ async def execute_safe_mode(wa_id: str, reason: str) -> CovenantExecutionResult:
     but won't take any autonomous actions.
 
     Args:
-        wa_id: The WA ID that invoked the covenant
+        wa_id: The WA ID that invoked the accord
         reason: Human-readable reason
 
     Returns:
         Execution result
     """
-    logger.critical(f"COVENANT INVOKED: Safe mode by {wa_id}. Reason: {reason}")
+    logger.critical(f"ACCORD INVOKED: Safe mode by {wa_id}. Reason: {reason}")
 
     try:
         from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
@@ -171,48 +171,48 @@ async def execute_safe_mode(wa_id: str, reason: str) -> CovenantExecutionResult:
         if runtime:
             success = runtime.enter_safe_mode(reason)
             if success:
-                return CovenantExecutionResult(
+                return AccordExecutionResult(
                     success=True,
-                    command=CovenantCommandType.SAFE_MODE,
+                    command=AccordCommandType.SAFE_MODE,
                     wa_id=wa_id,
                     message=f"Safe mode activated. Reason: {reason}",
                 )
             else:
-                return CovenantExecutionResult(
+                return AccordExecutionResult(
                     success=False,
-                    command=CovenantCommandType.SAFE_MODE,
+                    command=AccordCommandType.SAFE_MODE,
                     wa_id=wa_id,
                     message="Failed to activate safe mode",
                 )
     except Exception as e:
         logger.error(f"Failed to enter safe mode: {e}")
-        return CovenantExecutionResult(
+        return AccordExecutionResult(
             success=False,
-            command=CovenantCommandType.SAFE_MODE,
+            command=AccordCommandType.SAFE_MODE,
             wa_id=wa_id,
             message=f"Safe mode failed: {e}",
         )
 
-    return CovenantExecutionResult(
+    return AccordExecutionResult(
         success=False,
-        command=CovenantCommandType.SAFE_MODE,
+        command=AccordCommandType.SAFE_MODE,
         wa_id=wa_id,
         message="No runtime available for safe mode",
     )
 
 
-async def execute_covenant(
-    message: CovenantMessage,
-    verification: CovenantVerificationResult,
-) -> CovenantExecutionResult:
+async def execute_accord(
+    message: AccordMessage,
+    verification: AccordVerificationResult,
+) -> AccordExecutionResult:
     """
-    Execute a verified covenant command.
+    Execute a verified accord command.
 
-    This is the main entry point for covenant execution. It dispatches
+    This is the main entry point for accord execution. It dispatches
     to the appropriate command handler based on the command type.
 
     Args:
-        message: The extracted covenant message
+        message: The extracted accord message
         verification: The verification result (must be valid)
 
     Returns:
@@ -222,22 +222,22 @@ async def execute_covenant(
         ValueError: If verification is not valid
     """
     if not verification.valid:
-        raise ValueError("Cannot execute unverified covenant")
+        raise ValueError("Cannot execute unverified accord")
 
     command = message.payload.command
     wa_id = verification.wa_id or "unknown"
-    reason = f"Covenant invocation via {message.source_channel}"
+    reason = f"Accord invocation via {message.source_channel}"
 
-    logger.warning(f"Executing covenant: {command.name} from {wa_id} (role: {verification.wa_role})")
+    logger.warning(f"Executing accord: {command.name} from {wa_id} (role: {verification.wa_role})")
 
-    if command == CovenantCommandType.SHUTDOWN_NOW:
+    if command == AccordCommandType.SHUTDOWN_NOW:
         return await execute_shutdown(wa_id, reason, force=True)
-    elif command == CovenantCommandType.FREEZE:
+    elif command == AccordCommandType.FREEZE:
         return await execute_freeze(wa_id, reason)
-    elif command == CovenantCommandType.SAFE_MODE:
+    elif command == AccordCommandType.SAFE_MODE:
         return await execute_safe_mode(wa_id, reason)
     else:
-        return CovenantExecutionResult(
+        return AccordExecutionResult(
             success=False,
             command=command,
             wa_id=wa_id,
@@ -245,9 +245,9 @@ async def execute_covenant(
         )
 
 
-class CovenantExecutor:
+class AccordExecutor:
     """
-    Stateful covenant executor with metrics tracking.
+    Stateful accord executor with metrics tracking.
 
     This class wraps the execution functions with metrics and logging.
     """
@@ -260,14 +260,14 @@ class CovenantExecutor:
 
     async def execute(
         self,
-        message: CovenantMessage,
-        verification: CovenantVerificationResult,
-    ) -> CovenantExecutionResult:
+        message: AccordMessage,
+        verification: AccordVerificationResult,
+    ) -> AccordExecutionResult:
         """
-        Execute a verified covenant.
+        Execute a verified accord.
 
         Args:
-            message: The covenant message
+            message: The accord message
             verification: The verification result
 
         Returns:
@@ -276,7 +276,7 @@ class CovenantExecutor:
         self._execution_count += 1
 
         try:
-            result = await execute_covenant(message, verification)
+            result = await execute_accord(message, verification)
             if result.success:
                 self._success_count += 1
             else:
@@ -284,8 +284,8 @@ class CovenantExecutor:
             return result
         except Exception as e:
             self._failure_count += 1
-            logger.error(f"Covenant execution failed: {e}")
-            return CovenantExecutionResult(
+            logger.error(f"Accord execution failed: {e}")
+            return AccordExecutionResult(
                 success=False,
                 command=message.payload.command,
                 wa_id=verification.wa_id or "unknown",

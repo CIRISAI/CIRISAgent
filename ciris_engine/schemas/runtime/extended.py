@@ -53,7 +53,7 @@ class IdentityRoot(BaseModel):
     purpose: str = Field(..., description="Clear, concise statement of agent's reason for existence")
     description: str = Field(..., description="Detailed description of role and function")
     lineage: IdentityLineage = Field(..., description="Creation provenance")
-    covenant_hash: str = Field(..., description="SHA-256 hash of covenant at creation time")
+    accord_hash: str = Field(..., description="SHA-256 hash of accord at creation time")
     creation_timestamp: datetime = Field(..., description="Timestamp of creation")
 
     # Evolution Tracking

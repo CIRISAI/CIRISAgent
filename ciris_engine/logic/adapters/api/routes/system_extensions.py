@@ -1013,37 +1013,37 @@ async def reasoning_stream(request: Request, auth: AuthObserverDep) -> Any:
 
 
 # ============================================================================
-# Covenant Invocation System (CIS) Endpoint
+# Accord Invocation System (CIS) Endpoint
 # ============================================================================
 
 
-class CovenantInvocationEvent(BaseModel):
-    """Covenant invocation event from CIRISNode."""
+class AccordInvocationEvent(BaseModel):
+    """Accord invocation event from CIRISNode."""
 
     signing_key_id: str = Field(..., description="JWT key ID of the signing WA")
     signature: str = Field(..., description="Hex-encoded Ed25519 signature over canonical payload")
-    payload: Dict[str, Any] = Field(..., description="Signed covenant invocation payload")
+    payload: Dict[str, Any] = Field(..., description="Signed accord invocation payload")
 
     model_config = ConfigDict(extra="forbid")
 
 
-class CovenantInvocationResponse(BaseModel):
-    """Response to covenant invocation."""
+class AccordInvocationResponse(BaseModel):
+    """Response to accord invocation."""
 
     accepted: bool = Field(..., description="Whether the invocation was accepted and validated")
     message: str = Field(..., description=DESC_STATUS_MESSAGE)
 
 
-@router.post("/covenant-invocation", responses=RESPONSES_500_503)
-async def receive_covenant_invocation(
-    body: CovenantInvocationEvent, request: Request, auth: AuthAdminDep
-) -> SuccessResponse[CovenantInvocationResponse]:
+@router.post("/accord-invocation", responses=RESPONSES_500_503)
+async def receive_accord_invocation(
+    body: AccordInvocationEvent, request: Request, auth: AuthAdminDep
+) -> SuccessResponse[AccordInvocationResponse]:
     """
-    Receive a Covenant Invocation System (CIS) event.
+    Receive a Accord Invocation System (CIS) event.
 
     This endpoint receives signed shutdown directives from CIRISNode.
     The event's Ed25519 signature is verified against the signing WA's
-    public key. Only ROOT or AUTHORITY WAs can issue covenant invocations.
+    public key. Only ROOT or AUTHORITY WAs can issue accord invocations.
 
     Requires ADMIN role for the API call, plus valid Ed25519 signature
     from an authorized WA certificate.
@@ -1066,7 +1066,7 @@ async def receive_covenant_invocation(
             raise HTTPException(status_code=503, detail="WiseBus not available")
 
         # Delegate to WiseBus for signature verification and shutdown
-        result = await wise_bus.handle_covenant_invocation(
+        result = await wise_bus.handle_accord_invocation(
             {
                 "signing_key_id": body.signing_key_id,
                 "signature": body.signature,
@@ -1076,19 +1076,19 @@ async def receive_covenant_invocation(
 
         if result:
             return SuccessResponse(
-                data=CovenantInvocationResponse(
+                data=AccordInvocationResponse(
                     accepted=True,
-                    message="Covenant invocation accepted — shutdown initiated",
+                    message="Accord invocation accepted — shutdown initiated",
                 )
             )
         else:
             raise HTTPException(
                 status_code=403,
-                detail="Covenant invocation rejected — signature verification failed",
+                detail="Accord invocation rejected — signature verification failed",
             )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error processing covenant invocation: {e}", exc_info=True)
+        logger.error(f"Error processing accord invocation: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

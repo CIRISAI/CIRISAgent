@@ -1,8 +1,8 @@
 """
-Covenant Verification Module.
+Accord Verification Module.
 
-Verifies covenant signatures against known authority public keys.
-Only ROOT and SYSTEM_ADMIN (via ROOT WA role) can invoke covenants.
+Verifies accord signatures against known authority public keys.
+Only ROOT and SYSTEM_ADMIN (via ROOT WA role) can invoke accords.
 
 The verifier:
 1. Checks the signature against all known authority keys
@@ -18,11 +18,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from ciris_engine.schemas.covenant import (
-    CovenantMessage,
-    CovenantPayload,
-    CovenantVerificationResult,
-    verify_covenant_signature,
+from ciris_engine.schemas.accord import (
+    AccordMessage,
+    AccordPayload,
+    AccordVerificationResult,
+    verify_accord_signature,
 )
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ def _decode_public_key(key: str) -> Optional[bytes]:
 
 
 class TrustedAuthority:
-    """A trusted authority that can invoke covenants."""
+    """A trusted authority that can invoke accords."""
 
     def __init__(
         self,
@@ -105,15 +105,15 @@ class TrustedAuthority:
         self.wa_id_hash = _compute_wa_id_hash(wa_id)
 
 
-def verify_covenant(
-    payload: CovenantPayload,
+def verify_accord(
+    payload: AccordPayload,
     trusted_authorities: list[TrustedAuthority],
-) -> CovenantVerificationResult:
+) -> AccordVerificationResult:
     """
-    Verify a covenant payload against trusted authorities.
+    Verify an accord payload against trusted authorities.
 
     Args:
-        payload: The covenant payload to verify
+        payload: The accord payload to verify
         trusted_authorities: List of trusted authorities to check against
 
     Returns:
@@ -121,7 +121,7 @@ def verify_covenant(
     """
     # Check timestamp validity first
     if not payload.is_timestamp_valid():
-        return CovenantVerificationResult(
+        return AccordVerificationResult(
             valid=False,
             rejection_reason="Timestamp outside valid window (expired or future)",
         )
@@ -133,9 +133,9 @@ def verify_covenant(
             continue
 
         # WA ID matches - verify signature
-        if verify_covenant_signature(payload, authority.public_key):
+        if verify_accord_signature(payload, authority.public_key):
             # Valid signature from this authority
-            return CovenantVerificationResult(
+            return AccordVerificationResult(
                 valid=True,
                 command=payload.command,
                 wa_id=authority.wa_id,
@@ -143,7 +143,7 @@ def verify_covenant(
             )
 
     # No matching authority found
-    return CovenantVerificationResult(
+    return AccordVerificationResult(
         valid=False,
         rejection_reason="No matching trusted authority found for signature",
     )
@@ -166,7 +166,7 @@ def load_seed_key() -> Optional[tuple[str, str, str]]:
                 pubkey = data.get("pubkey")
                 role = data.get("role", "ROOT").upper()
                 if pubkey:
-                    logger.info(f"Loaded covenant seed key from {path}: {wa_id}")
+                    logger.info(f"Loaded accord seed key from {path}: {wa_id}")
                     return (wa_id, pubkey, role)
         except Exception as e:
             logger.debug(f"Could not load seed key from {path}: {e}")
@@ -174,9 +174,9 @@ def load_seed_key() -> Optional[tuple[str, str, str]]:
     return None
 
 
-class CovenantVerifier:
+class AccordVerifier:
     """
-    Stateful covenant verifier with authority management.
+    Stateful accord verifier with authority management.
 
     This class manages the list of trusted authorities and provides
     verification with caching and metrics.
@@ -201,7 +201,7 @@ class CovenantVerifier:
         """
         Load default authorities from seed file and hardcoded fallbacks.
 
-        This ensures the ROOT seed key is always available for covenant
+        This ensures the ROOT seed key is always available for accord
         verification, even if no explicit configuration is provided.
 
         Returns:
@@ -232,12 +232,12 @@ class CovenantVerifier:
             import signal
 
             logger.critical(
-                "CRITICAL FAILURE: No covenant authorities loaded! "
+                "CRITICAL FAILURE: No accord authorities loaded! "
                 "Agent cannot operate without a functioning kill switch. TERMINATING."
             )
             os.kill(os.getpid(), signal.SIGKILL)
         else:
-            logger.info(f"Loaded {loaded} covenant authorities")
+            logger.info(f"Loaded {loaded} accord authorities")
 
         return loaded
 
@@ -324,30 +324,30 @@ class CovenantVerifier:
 
     def verify(
         self,
-        message: CovenantMessage,
-    ) -> CovenantVerificationResult:
+        message: AccordMessage,
+    ) -> AccordVerificationResult:
         """
-        Verify a covenant message.
+        Verify an accord message.
 
         Args:
-            message: The extracted covenant message
+            message: The extracted accord message
 
         Returns:
             Verification result
         """
         self._verification_count += 1
 
-        result = verify_covenant(message.payload, self._authorities)
+        result = verify_accord(message.payload, self._authorities)
 
         if result.valid:
             self._valid_count += 1
             logger.warning(
-                f"COVENANT VERIFIED: {result.command.name if result.command else 'unknown'} "
+                f"ACCORD VERIFIED: {result.command.name if result.command else 'unknown'} "
                 f"from {result.wa_id} ({result.wa_role}) via {message.source_channel}"
             )
         else:
             self._rejected_count += 1
-            logger.debug(f"Covenant rejected: {result.rejection_reason}")
+            logger.debug(f"Accord rejected: {result.rejection_reason}")
 
         return result
 
@@ -363,12 +363,12 @@ class CovenantVerifier:
 
     @property
     def valid_count(self) -> int:
-        """Number of valid covenants."""
+        """Number of valid accords."""
         return self._valid_count
 
     @property
     def rejected_count(self) -> int:
-        """Number of rejected covenants."""
+        """Number of rejected accords."""
         return self._rejected_count
 
     def list_authorities(self) -> list[dict[str, Any]]:

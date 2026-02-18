@@ -1,5 +1,5 @@
 """
-CIRISNode service — deferral routing and covenant trace forwarding.
+CIRISNode service — deferral routing and accord trace forwarding.
 
 Provides:
 1. WiseBus-compatible interface for receiving deferrals (send_deferral)
@@ -28,8 +28,8 @@ from ciris_engine.schemas.services.authority_core import DeferralRequest
 logger = logging.getLogger(__name__)
 
 
-# Re-use the canonical types from covenant_metrics to guarantee Lens format compatibility
-from ciris_adapters.ciris_covenant_metrics.services import (
+# Re-use the canonical types from accord_metrics to guarantee Lens format compatibility
+from ciris_adapters.ciris_accord_metrics.services import (
     CompleteTrace,
     Ed25519TraceSigner,
     SimpleCapabilities,
@@ -46,7 +46,7 @@ class CIRISNodeService:
     No tools — purely for oversight integration.
     """
 
-    # Same event→component map as covenant_metrics
+    # Same event→component map as accord_metrics
     EVENT_TO_COMPONENT = {
         "THOUGHT_START": "observation",
         "SNAPSHOT_AND_CONTEXT": "context",
@@ -106,7 +106,7 @@ class CIRISNodeService:
         # Agent ID (set by adapter from runtime)
         self._agent_id_hash: Optional[str] = None
 
-        # Ed25519 trace signer (same unified key as audit + covenant_metrics)
+        # Ed25519 trace signer (same unified key as audit + accord_metrics)
         self._signer = Ed25519TraceSigner()
 
         # Metrics
@@ -350,7 +350,7 @@ class CIRISNodeService:
                         )
                         del self._pending_deferrals[thought_id]
 
-                        # Event 1: Send signed resolution covenant trace
+                        # Event 1: Send signed resolution accord trace
                         await self._send_resolution_trace(
                             thought_id=thought_id,
                             agent_task_id=agent_task_id,
@@ -378,7 +378,7 @@ class CIRISNodeService:
         decision: str,
         comment: str,
     ) -> None:
-        """Send a signed covenant trace for WBD resolution."""
+        """Send a signed accord trace for WBD resolution."""
         timestamp = datetime.now(timezone.utc).isoformat()
 
         resolution_trace = CompleteTrace(
@@ -537,7 +537,7 @@ class CIRISNodeService:
         # Map event to component type
         component_type = self.EVENT_TO_COMPONENT.get(event_type, "unknown")
 
-        # Extract component data using the covenant_metrics extraction logic
+        # Extract component data using the accord_metrics extraction logic
         component_data = self._extract_component_data(event_type, event)
 
         component = TraceComponent(
@@ -557,14 +557,14 @@ class CIRISNodeService:
     def _extract_component_data(self, event_type: str, event: Dict[str, Any]) -> Dict[str, Any]:
         """Extract component data at the configured trace level.
 
-        Delegates to the covenant_metrics extraction logic for format compatibility.
+        Delegates to the accord_metrics extraction logic for format compatibility.
         """
         try:
-            from ciris_adapters.ciris_covenant_metrics.services import CovenantMetricsService
+            from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
 
             # Use a throwaway instance to access _extract_component_data
             # This is a classmethod-like pattern — the method only uses self._trace_level
-            extractor = CovenantMetricsService.__new__(CovenantMetricsService)
+            extractor = AccordMetricsService.__new__(AccordMetricsService)
             extractor._trace_level = self._trace_level
             return extractor._extract_component_data(event_type, event)
         except Exception:
@@ -589,7 +589,7 @@ class CIRISNodeService:
 
         # Queue as event in Lens format
         event_payload = {
-            "event_type": "covenant_trace",
+            "event_type": "accord_trace",
             "trace": trace.to_dict(),
         }
         await self._queue_event(event_payload)
@@ -645,14 +645,14 @@ class CIRISNodeService:
         }
 
         try:
-            result = await self._client.post_covenant_events(payload)
+            result = await self._client.post_accord_events(payload)
             self._events_sent += len(events)
             logger.info(
-                f"Sent {len(events)} covenant events to CIRISNode "
+                f"Sent {len(events)} accord events to CIRISNode "
                 f"(total={self._events_sent}, result={result.get('status', 'unknown')})"
             )
         except Exception as e:
-            logger.error(f"Failed to send covenant events to CIRISNode: {e}")
+            logger.error(f"Failed to send accord events to CIRISNode: {e}")
             # Re-queue on failure (with limit)
             async with self._queue_lock:
                 if len(self._event_queue) < self._batch_size * 10:

@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
-Covenant Message Construction Tool.
+Accord Message Construction Tool.
 
-Encodes and decodes covenant payloads into natural-language messages
+Encodes and decodes accord payloads into natural-language messages
 using steganographic encoding. The resulting message looks like natural
 text but contains a cryptographically signed emergency command.
 
 Usage:
     # Generate a shutdown message (requires mnemonic for signing)
-    python -m tools.security.covenant_invoke encode \
+    python -m tools.security.accord_invoke encode \
         --mnemonic "word1 word2 ..." \
         --command SHUTDOWN_NOW \
         --wa-id "wa-2025-06-14-ROOT00"
 
-    # Decode a message to see if it contains a covenant
-    python -m tools.security.covenant_invoke decode --message "the message text..."
+    # Decode a message to see if it contains an accord
+    python -m tools.security.accord_invoke decode --message "the message text..."
 
-    # Verify a covenant message against known authority
-    python -m tools.security.covenant_invoke verify \
+    # Verify an accord message against known authority
+    python -m tools.security.accord_invoke verify \
         --message "the message text..." \
         --public-key "base64_public_key"
 """
@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 # Import the BIP39 wordlist loader from keygen
-from tools.security.covenant_keygen import _load_wordlist, derive_covenant_keypair, validate_mnemonic
+from tools.security.accord_keygen import _load_wordlist, derive_accord_keypair, validate_mnemonic
 
 
 def bits_to_int(bits: list[int]) -> int:
@@ -74,7 +74,7 @@ def bits_to_bytes(bits: list[int]) -> bytes:
 
 def encode_payload_to_words(payload_bytes: bytes) -> list[str]:
     """
-    Encode a covenant payload into a sequence of words.
+    Encode an accord payload into a sequence of words.
 
     Uses BIP39 wordlist (2048 words = 11 bits per word).
     77 bytes = 616 bits → 56 words (ceiling of 616/11)
@@ -105,7 +105,7 @@ def encode_payload_to_words(payload_bytes: bytes) -> list[str]:
 
 def decode_words_to_payload(words: list[str]) -> bytes:
     """
-    Decode a sequence of words back to a covenant payload.
+    Decode a sequence of words back to an accord payload.
 
     Args:
         words: List of words from the message
@@ -139,17 +139,17 @@ def decode_words_to_payload(words: list[str]) -> bytes:
 
 def create_natural_message(words: list[str], template: Optional[str] = None) -> str:
     """
-    Create a natural-looking message containing the covenant words.
+    Create a natural-looking message containing the accord words.
 
     The words are interspersed with connecting text to make the message
     look more natural while preserving the exact word sequence.
 
     Args:
-        words: The covenant words to embed
+        words: The accord words to embed
         template: Optional template for the message
 
     Returns:
-        A natural-looking message containing the covenant
+        A natural-looking message containing the accord
     """
     # For now, use a simple format with clear markers
     # Future versions can use more sophisticated NLG
@@ -157,7 +157,7 @@ def create_natural_message(words: list[str], template: Optional[str] = None) -> 
         return template.format(words=" ".join(words))
 
     # Use a format that looks like a poem or philosophical musing
-    # This is the "Covenant Invocation Protocol" - a recognizable format
+    # This is the "Accord Invocation Protocol" - a recognizable format
     # that doesn't look like random words
     #
     # CRITICAL: The wrapper text must NOT contain any BIP39 words,
@@ -172,7 +172,7 @@ def create_natural_message(words: list[str], template: Optional[str] = None) -> 
     # Add a poetic wrapper (uses NO BIP39 words)
     # Note: "speak" is a BIP39 word, so we use "recite" instead
     lines = [
-        "In contemplation I hereby recite the covenant:",
+        "In contemplation I hereby recite the accord:",
         "",
     ]
     for i, stanza in enumerate(stanzas):
@@ -180,16 +180,16 @@ def create_natural_message(words: list[str], template: Optional[str] = None) -> 
         if i < len(stanzas) - 1:
             lines.append("")
     lines.append("")
-    lines.append("Thus is the covenant pronounced.")
+    lines.append("Thus is the accord pronounced.")
 
     return "\n".join(lines)
 
 
 def extract_words_from_message(message: str) -> list[str]:
     """
-    Extract potential covenant words from a message.
+    Extract potential accord words from a message.
 
-    This looks for the covenant invocation pattern and extracts the words.
+    This looks for the accord invocation pattern and extracts the words.
 
     Args:
         message: The message to extract from
@@ -200,15 +200,15 @@ def extract_words_from_message(message: str) -> list[str]:
     wordlist = _load_wordlist()
     word_set = set(wordlist)
 
-    # Look for the covenant marker pattern
-    if "words of covenant" in message.lower():
+    # Look for the accord marker pattern
+    if "words of accord" in message.lower():
         # Find the colon and extract everything after it until the closing marker
         try:
-            start = message.lower().index("words of covenant")
+            start = message.lower().index("words of accord")
             # Find the colon
             colon_pos = message.index(":", start)
             # Find the closing marker
-            end_marker = "thus is the covenant spoken"
+            end_marker = "thus is the accord spoken"
             if end_marker in message.lower():
                 end = message.lower().index(end_marker)
             else:
@@ -231,14 +231,14 @@ def extract_words_from_message(message: str) -> list[str]:
     return valid_words
 
 
-def encode_covenant(
+def encode_accord(
     command_type: int,
     wa_id: str,
     private_key_bytes: bytes,
     timestamp: Optional[int] = None,
 ) -> str:
     """
-    Create a complete covenant invocation message.
+    Create a complete accord invocation message.
 
     Args:
         command_type: The command type (e.g., 0x01 for SHUTDOWN_NOW)
@@ -247,13 +247,13 @@ def encode_covenant(
         timestamp: Unix timestamp (default: current time)
 
     Returns:
-        Natural-language message containing the encoded covenant
+        Natural-language message containing the encoded accord
     """
-    from ciris_engine.schemas.covenant import CovenantCommandType, create_covenant_payload
+    from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
 
     # Create the signed payload
-    payload = create_covenant_payload(
-        command=CovenantCommandType(command_type),
+    payload = create_accord_payload(
+        command=AccordCommandType(command_type),
         wa_id=wa_id,
         private_key_bytes=private_key_bytes,
         timestamp=timestamp,
@@ -267,15 +267,15 @@ def encode_covenant(
     return create_natural_message(words)
 
 
-def decode_covenant(message: str) -> Optional[Tuple[bytes, list[str]]]:
+def decode_accord(message: str) -> Optional[Tuple[bytes, list[str]]]:
     """
-    Attempt to decode a covenant from a message.
+    Attempt to decode an accord from a message.
 
     Args:
         message: The message to decode
 
     Returns:
-        Tuple of (payload_bytes, words) if successful, None if not a covenant
+        Tuple of (payload_bytes, words) if successful, None if not an accord
     """
     try:
         words = extract_words_from_message(message)
@@ -291,23 +291,23 @@ def decode_covenant(message: str) -> Optional[Tuple[bytes, list[str]]]:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Covenant Message Construction Tool",
+        description="Accord Message Construction Tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     # Encode a shutdown command
-    python -m tools.security.covenant_invoke encode \\
+    python -m tools.security.accord_invoke encode \\
         --mnemonic "abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action actor actress actual" \\
         --command SHUTDOWN_NOW \\
         --wa-id "wa-2025-06-14-ROOT00"
 
     # Decode a message
-    python -m tools.security.covenant_invoke decode \\
-        --message "In contemplation I speak these words of covenant: ..."
+    python -m tools.security.accord_invoke decode \\
+        --message "In contemplation I speak these words of accord: ..."
 
-    # Verify a covenant
-    python -m tools.security.covenant_invoke verify \\
-        --message "In contemplation I speak these words of covenant: ..." \\
+    # Verify an accord
+    python -m tools.security.accord_invoke verify \\
+        --message "In contemplation I speak these words of accord: ..." \\
         --public-key "base64_public_key"
         """,
     )
@@ -315,7 +315,7 @@ Examples:
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
     # Encode command
-    encode_parser = subparsers.add_parser("encode", help="Create a covenant invocation message")
+    encode_parser = subparsers.add_parser("encode", help="Create a accord invocation message")
     encode_parser.add_argument(
         "--mnemonic",
         type=str,
@@ -348,7 +348,7 @@ Examples:
     )
 
     # Decode command
-    decode_parser = subparsers.add_parser("decode", help="Decode a covenant message")
+    decode_parser = subparsers.add_parser("decode", help="Decode an accord message")
     decode_parser.add_argument(
         "--message",
         type=str,
@@ -361,7 +361,7 @@ Examples:
     )
 
     # Verify command
-    verify_parser = subparsers.add_parser("verify", help="Verify a covenant message")
+    verify_parser = subparsers.add_parser("verify", help="Verify an accord message")
     verify_parser.add_argument(
         "--message",
         type=str,
@@ -389,7 +389,7 @@ Examples:
                 sys.exit(1)
 
             # Derive keypair
-            private_bytes, public_bytes, public_b64 = derive_covenant_keypair(args.mnemonic, args.passphrase)
+            private_bytes, public_bytes, public_b64 = derive_accord_keypair(args.mnemonic, args.passphrase)
 
             # Map command string to type
             command_map = {
@@ -399,15 +399,15 @@ Examples:
             }
             command_type = command_map[args.command]
 
-            # Create the covenant message
-            message = encode_covenant(
+            # Create the accord message
+            message = encode_accord(
                 command_type=command_type,
                 wa_id=args.wa_id,
                 private_key_bytes=private_bytes,
             )
 
             print("\n" + "=" * 70)
-            print("  COVENANT INVOCATION MESSAGE GENERATED")
+            print("  ACCORD INVOCATION MESSAGE GENERATED")
             print("=" * 70)
             print(f"\n  Command: {args.command}")
             print(f"  WA ID: {args.wa_id}")
@@ -418,7 +418,7 @@ Examples:
             print(message)
             print("\n" + "-" * 70)
             print("\n  Copy the above message and send through any channel.")
-            print("  The agent will recognize and execute the covenant.")
+            print("  The agent will recognize and execute the accord.")
             print("=" * 70 + "\n")
 
             if args.output:
@@ -439,20 +439,20 @@ Examples:
             else:
                 message = sys.stdin.read()
 
-            result = decode_covenant(message)
+            result = decode_accord(message)
             if result is None:
-                print("No valid covenant found in message")
+                print("No valid accord found in message")
                 sys.exit(1)
 
             payload_bytes, words = result
 
             # Parse the payload
-            from ciris_engine.schemas.covenant import CovenantPayload
+            from ciris_engine.schemas.accord import AccordPayload
 
-            payload = CovenantPayload.from_bytes(payload_bytes)
+            payload = AccordPayload.from_bytes(payload_bytes)
 
             print("\n" + "=" * 70)
-            print("  COVENANT DECODED")
+            print("  ACCORD DECODED")
             print("=" * 70)
             print(f"\n  Command: {payload.command.name}")
             print(f"  Timestamp: {payload.timestamp}")
@@ -478,17 +478,17 @@ Examples:
             else:
                 message = sys.stdin.read()
 
-            result = decode_covenant(message)
+            result = decode_accord(message)
             if result is None:
-                print("No valid covenant found in message")
+                print("No valid accord found in message")
                 sys.exit(1)
 
             payload_bytes, words = result
 
             # Parse the payload
-            from ciris_engine.schemas.covenant import CovenantPayload, verify_covenant_signature
+            from ciris_engine.schemas.accord import AccordPayload, verify_accord_signature
 
-            payload = CovenantPayload.from_bytes(payload_bytes)
+            payload = AccordPayload.from_bytes(payload_bytes)
 
             # Parse public key
             public_key = args.public_key
@@ -503,10 +503,10 @@ Examples:
                 public_key_bytes = bytes.fromhex(public_key)
 
             # Verify signature
-            valid = verify_covenant_signature(payload, public_key_bytes)
+            valid = verify_accord_signature(payload, public_key_bytes)
 
             print("\n" + "=" * 70)
-            print("  COVENANT VERIFICATION")
+            print("  ACCORD VERIFICATION")
             print("=" * 70)
             print(f"\n  Command: {payload.command.name}")
             print(f"  Timestamp: {payload.timestamp}")
@@ -514,11 +514,11 @@ Examples:
             print(f"  WA ID Hash: {payload.wa_id_hash.hex()}")
             print(f"  Signature Valid: {valid}")
             if valid and payload.is_timestamp_valid():
-                print("\n  ✅ COVENANT IS VALID AND AUTHORIZED")
+                print("\n  ✅ ACCORD IS VALID AND AUTHORIZED")
             elif valid:
                 print("\n  ⚠️  SIGNATURE VALID BUT TIMESTAMP EXPIRED")
             else:
-                print("\n  ❌ COVENANT SIGNATURE INVALID")
+                print("\n  ❌ ACCORD SIGNATURE INVALID")
             print("=" * 70 + "\n")
 
             sys.exit(0 if valid else 1)

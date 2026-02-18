@@ -27,14 +27,14 @@ class TestDSDMAEvaluator:
         """Mock the prompt loader to return proper PromptCollection."""
         mock_loader = Mock()
         mock_collection = Mock()
-        mock_collection.uses_covenant_header = Mock(return_value=True)
+        mock_collection.uses_accord_header = Mock(return_value=True)
         mock_collection.get_system_message = Mock(return_value="Evaluate for domain alignment.")
         mock_collection.get_user_message = Mock(return_value="Thought to evaluate: Test thought")
         mock_collection.get_prompt = Mock(return_value="Domain evaluation template")
 
         mock_loader.load_prompt_template = Mock(return_value=mock_collection)
-        # Mock covenant mode to return "full" for proper message ordering
-        mock_loader.get_covenant_mode = Mock(return_value="full")
+        # Mock accord mode to return "full" for proper message ordering
+        mock_loader.get_accord_mode = Mock(return_value="full")
 
         # Mock the get_prompt_loader function
         monkeypatch.setattr("ciris_engine.logic.dma.dsdma_base.get_prompt_loader", lambda: mock_loader)
@@ -265,7 +265,7 @@ class TestDSDMAEvaluator:
         messages = call_args.kwargs["messages"]
 
         # System message should contain CORE IDENTITY block
-        # First message is Covenant, second should be the system prompt with identity
+        # First message is Accord, second should be the system prompt with identity
         if len(messages) > 1:
             system_content = messages[1]["content"]
         else:

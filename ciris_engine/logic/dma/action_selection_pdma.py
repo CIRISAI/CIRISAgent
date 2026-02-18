@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Union, cast
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils.constants import COVENANT_TEXT, COVENANT_TEXT_COMPRESSED
+from ciris_engine.logic.utils.constants import ACCORD_TEXT, ACCORD_TEXT_COMPRESSED
 from ciris_engine.protocols.dma.base import ActionSelectionDMAProtocol
 from ciris_engine.protocols.faculties import EpistemicFaculty
 from ciris_engine.schemas.actions.parameters import PonderParams
@@ -199,19 +199,19 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
         return self.context_builder.build_main_user_content(input_data, agent_name)
 
-    def _build_covenant_with_metadata(self, original_thought: Any) -> str:
-        """Build covenant text with thought type metadata."""
-        covenant_mode = self.get_covenant_mode()
-        if covenant_mode == "full":
-            covenant_text = COVENANT_TEXT
-        elif covenant_mode == "compressed":
-            covenant_text = COVENANT_TEXT_COMPRESSED
+    def _build_accord_with_metadata(self, original_thought: Any) -> str:
+        """Build accord text with thought type metadata."""
+        accord_mode = self.get_accord_mode()
+        if accord_mode == "full":
+            accord_text = ACCORD_TEXT
+        elif accord_mode == "compressed":
+            accord_text = ACCORD_TEXT_COMPRESSED
         else:
             return ""
 
         if original_thought and hasattr(original_thought, "thought_type"):
-            return f"THOUGHT_TYPE={original_thought.thought_type.value}\n\n{covenant_text}"
-        return covenant_text
+            return f"THOUGHT_TYPE={original_thought.thought_type.value}\n\n{accord_text}"
+        return accord_text
 
     async def _perform_main_evaluation(
         self, input_data: EnhancedDMAInputs, enable_recursive_evaluation: bool
@@ -237,15 +237,15 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
         # Build messages
         system_message = self._build_system_message(input_data)
-        covenant_with_metadata = self._build_covenant_with_metadata(original_thought)
+        accord_with_metadata = self._build_accord_with_metadata(original_thought)
 
         if input_images:
             logger.info(f"[VISION] ActionSelectionPDMA building multimodal content with {len(input_images)} images")
         user_content = self.build_multimodal_content(main_user_content, input_images)
 
         messages: List[JSONDict] = []
-        if covenant_with_metadata:
-            messages.append({"role": "system", "content": covenant_with_metadata})
+        if accord_with_metadata:
+            messages.append({"role": "system", "content": accord_with_metadata})
         messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": user_content})
 

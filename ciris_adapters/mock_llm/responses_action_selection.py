@@ -929,7 +929,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
         # Step 1: Check if this is a follow-up thought by looking at the THOUGHT_TYPE in the system message
         is_followup = False
 
-        # The first message should be the system message with covenant
+        # The first message should be the system message with accord
         if messages and len(messages) > 0:
             first_msg = messages[0]
             if isinstance(first_msg, dict) and first_msg.get("role") == "system":

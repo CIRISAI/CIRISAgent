@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import COVENANT_TEXT, COVENANT_TEXT_COMPRESSED
+from ciris_engine.logic.utils import ACCORD_TEXT, ACCORD_TEXT_COMPRESSED
 from ciris_engine.protocols.dma.tsaspdma import TSASPDMAProtocol
 from ciris_engine.schemas.actions.parameters import PonderParams, SpeakParams, ToolParams
 from ciris_engine.schemas.adapters.tools import ToolDocumentation, ToolInfo
@@ -229,12 +229,12 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         """
         messages: List[JSONDict] = []
 
-        # Add covenant based on mode - 'full', 'compressed', or 'none'
-        covenant_mode = self.prompt_loader.get_covenant_mode(self.prompt_template_data)
-        if covenant_mode == "full":
-            messages.append({"role": "system", "content": COVENANT_TEXT})
-        elif covenant_mode == "compressed":
-            messages.append({"role": "system", "content": COVENANT_TEXT_COMPRESSED})
+        # Add accord based on mode - 'full', 'compressed', or 'none'
+        accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
+        if accord_mode == "full":
+            messages.append({"role": "system", "content": ACCORD_TEXT})
+        elif accord_mode == "compressed":
+            messages.append({"role": "system", "content": ACCORD_TEXT_COMPRESSED})
 
         # Get system message from prompt template
         system_message = self.prompt_loader.get_system_message(

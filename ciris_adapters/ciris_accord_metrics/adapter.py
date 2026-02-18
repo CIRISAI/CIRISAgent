@@ -1,7 +1,7 @@
 """
-CIRIS Covenant Metrics Adapter.
+CIRIS Accord Metrics Adapter.
 
-This adapter provides covenant compliance metrics collection for CIRISLens,
+This adapter provides accord compliance metrics collection for CIRISLens,
 reporting WBD (Wisdom-Based Deferral) events and PDMA decision events.
 
 CRITICAL: This adapter requires EXPLICIT opt-in via the setup wizard.
@@ -21,14 +21,14 @@ from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, Runti
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.types import JSONDict
 
-from .services import CovenantMetricsService
+from .services import AccordMetricsService
 
 logger = logging.getLogger(__name__)
 
 
-class CovenantMetricsAdapter(Service):
+class AccordMetricsAdapter(Service):
     """
-    CIRIS Covenant Metrics Adapter.
+    CIRIS Accord Metrics Adapter.
 
     This adapter:
     1. Registers a WiseAuthority service to receive WBD events
@@ -36,7 +36,7 @@ class CovenantMetricsAdapter(Service):
     3. Batches and sends events to CIRISLens API
 
     IMPORTANT: This adapter is NOT auto-loaded. It must be:
-    1. Explicitly added via --adapter ciris_covenant_metrics
+    1. Explicitly added via --adapter ciris_accord_metrics
     2. Configured via the setup wizard with EXPLICIT consent
 
     No data is sent until the user completes the consent flow.
@@ -48,7 +48,7 @@ class CovenantMetricsAdapter(Service):
         context: Optional[Any] = None,
         **kwargs: Any,
     ) -> None:
-        """Initialize Covenant Metrics adapter.
+        """Initialize Accord Metrics adapter.
 
         Args:
             runtime: CIRIS runtime instance
@@ -63,8 +63,8 @@ class CovenantMetricsAdapter(Service):
         adapter_config = kwargs.get("adapter_config", {})
 
         # Check consent state from config OR environment variables (for QA testing)
-        env_consent = os.environ.get("CIRIS_COVENANT_METRICS_CONSENT", "").lower() == "true"
-        env_timestamp = os.environ.get("CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP")
+        env_consent = os.environ.get("CIRIS_ACCORD_METRICS_CONSENT", "").lower() == "true"
+        env_timestamp = os.environ.get("CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP")
 
         self._consent_given = adapter_config.get("consent_given", False) or env_consent
         self._consent_timestamp = adapter_config.get("consent_timestamp") or env_timestamp
@@ -73,13 +73,13 @@ class CovenantMetricsAdapter(Service):
         # CONSENT STATE LOGGING - Make it OBVIOUS what's happening
         # =====================================================================
         logger.info("=" * 70)
-        logger.info("📊 COVENANT METRICS ADAPTER INITIALIZING")
+        logger.info("📊 ACCORD METRICS ADAPTER INITIALIZING")
         logger.info(f"   Config consent_given: {adapter_config.get('consent_given', False)}")
         logger.info(
-            f"   Env CIRIS_COVENANT_METRICS_CONSENT: {os.environ.get('CIRIS_COVENANT_METRICS_CONSENT', 'not set')}"
+            f"   Env CIRIS_ACCORD_METRICS_CONSENT: {os.environ.get('CIRIS_ACCORD_METRICS_CONSENT', 'not set')}"
         )
         logger.info(
-            f"   Env CIRIS_COVENANT_METRICS_ENDPOINT: {os.environ.get('CIRIS_COVENANT_METRICS_ENDPOINT', 'not set')}"
+            f"   Env CIRIS_ACCORD_METRICS_ENDPOINT: {os.environ.get('CIRIS_ACCORD_METRICS_ENDPOINT', 'not set')}"
         )
 
         if env_consent:
@@ -92,14 +92,14 @@ class CovenantMetricsAdapter(Service):
 
         if not self._consent_given:
             logger.warning("❌ CONSENT NOT GIVEN - traces will NOT be captured")
-            logger.warning("   Set CIRIS_COVENANT_METRICS_CONSENT=true or complete setup wizard")
+            logger.warning("   Set CIRIS_ACCORD_METRICS_CONSENT=true or complete setup wizard")
         else:
             logger.info(f"✅ CONSENT GIVEN - traces WILL be captured and sent")
 
         logger.info("=" * 70)
 
         # Create the underlying service with config
-        self.metrics_service = CovenantMetricsService(config=adapter_config)
+        self.metrics_service = AccordMetricsService(config=adapter_config)
 
         # Set agent ID if available from runtime
         # Try agent_identity first (new pattern), then fall back to direct agent_id (legacy/mocks)
@@ -116,7 +116,7 @@ class CovenantMetricsAdapter(Service):
         self._lifecycle_task: Optional[asyncio.Task[None]] = None
         self._started_at: Optional[datetime] = None
 
-        logger.info(f"CovenantMetricsAdapter initialized (consent={self._consent_given})")
+        logger.info(f"AccordMetricsAdapter initialized (consent={self._consent_given})")
 
     def get_services_to_register(self) -> List[AdapterServiceRegistration]:
         """Get services provided by this adapter.
@@ -125,7 +125,7 @@ class CovenantMetricsAdapter(Service):
             List of service registrations for WiseAuthority bus
         """
         logger.info("=" * 70)
-        logger.info("📋 COVENANT METRICS - get_services_to_register() called")
+        logger.info("📋 ACCORD METRICS - get_services_to_register() called")
         logger.info(f"   Current consent state: {self._consent_given}")
 
         registrations = []
@@ -140,23 +140,23 @@ class CovenantMetricsAdapter(Service):
                     priority=Priority.LOW,  # Low priority - observational only
                     capabilities=[
                         "send_deferral",  # Receive WBD events
-                        "covenant_metrics",
+                        "accord_metrics",
                     ],
                 )
             )
-            logger.info("✅ REGISTERED CovenantMetricsService on WiseAuthority bus")
-            logger.info("   Capabilities: send_deferral, covenant_metrics")
+            logger.info("✅ REGISTERED AccordMetricsService on WiseAuthority bus")
+            logger.info("   Capabilities: send_deferral, accord_metrics")
         else:
             logger.warning("❌ NOT REGISTERED - consent required")
-            logger.warning("   Set CIRIS_COVENANT_METRICS_CONSENT=true to enable")
+            logger.warning("   Set CIRIS_ACCORD_METRICS_CONSENT=true to enable")
 
         logger.info("=" * 70)
         return registrations
 
     async def start(self) -> None:
-        """Start the Covenant Metrics adapter."""
+        """Start the Accord Metrics adapter."""
         logger.info("=" * 70)
-        logger.info("🚀 COVENANT METRICS ADAPTER STARTING")
+        logger.info("🚀 ACCORD METRICS ADAPTER STARTING")
         logger.info(f"   Consent: {self._consent_given}")
         logger.info("=" * 70)
 
@@ -178,13 +178,13 @@ class CovenantMetricsAdapter(Service):
         self._started_at = datetime.now(timezone.utc)
 
         if self._consent_given:
-            logger.info("✅ CovenantMetricsAdapter STARTED - collecting metrics")
+            logger.info("✅ AccordMetricsAdapter STARTED - collecting metrics")
         else:
-            logger.warning("⚠️  CovenantMetricsAdapter started WITHOUT consent - NO metrics collected")
+            logger.warning("⚠️  AccordMetricsAdapter started WITHOUT consent - NO metrics collected")
 
     async def stop(self) -> None:
-        """Stop the Covenant Metrics adapter."""
-        logger.info("Stopping CovenantMetricsAdapter")
+        """Stop the Accord Metrics adapter."""
+        logger.info("Stopping AccordMetricsAdapter")
         self._running = False
 
         # Cancel lifecycle task if running
@@ -197,22 +197,22 @@ class CovenantMetricsAdapter(Service):
 
         await self.metrics_service.stop()
 
-        logger.info("CovenantMetricsAdapter stopped")
+        logger.info("AccordMetricsAdapter stopped")
 
     async def run_lifecycle(self, agent_task: Any) -> None:
         """Run the adapter lifecycle.
 
-        For the covenant metrics adapter, we just wait for the agent task
+        For the accord metrics adapter, we just wait for the agent task
         to complete since it passively receives events.
 
         Args:
             agent_task: The main agent task (signals shutdown when complete)
         """
-        logger.info("CovenantMetricsAdapter lifecycle started")
+        logger.info("AccordMetricsAdapter lifecycle started")
         try:
             await agent_task
         except asyncio.CancelledError:
-            logger.info("CovenantMetricsAdapter lifecycle cancelled")
+            logger.info("AccordMetricsAdapter lifecycle cancelled")
         finally:
             await self.stop()
 
@@ -225,7 +225,7 @@ class CovenantMetricsAdapter(Service):
         metrics = self.metrics_service.get_metrics()
 
         return AdapterConfig(
-            adapter_type="ciris_covenant_metrics",
+            adapter_type="ciris_accord_metrics",
             enabled=self._running and self._consent_given,
             settings={
                 "consent_given": self._consent_given,
@@ -246,12 +246,12 @@ class CovenantMetricsAdapter(Service):
         metrics = self.metrics_service.get_metrics()
 
         return RuntimeAdapterStatus(
-            adapter_id="ciris_covenant_metrics",
-            adapter_type="ciris_covenant_metrics",
+            adapter_id="ciris_accord_metrics",
+            adapter_type="ciris_accord_metrics",
             is_running=self._running,
             loaded_at=self._started_at or datetime.now(timezone.utc),
             config_params=AdapterConfig(
-                adapter_type="ciris_covenant_metrics",
+                adapter_type="ciris_accord_metrics",
                 enabled=self._running and self._consent_given,
                 settings={
                     "consent_given": self._consent_given,
@@ -280,9 +280,9 @@ class CovenantMetricsAdapter(Service):
         self.metrics_service.set_consent(consent_given, self._consent_timestamp)
 
         if consent_given:
-            logger.info(f"Consent GRANTED for covenant metrics collection " f"at {self._consent_timestamp}")
+            logger.info(f"Consent GRANTED for accord metrics collection " f"at {self._consent_timestamp}")
         else:
-            logger.info(f"Consent REVOKED for covenant metrics collection " f"at {self._consent_timestamp}")
+            logger.info(f"Consent REVOKED for accord metrics collection " f"at {self._consent_timestamp}")
 
     def is_consent_given(self) -> bool:
         """Check if consent has been given.
@@ -295,4 +295,4 @@ class CovenantMetricsAdapter(Service):
 
 # Export as Adapter for load_adapter() compatibility
 # This is the critical line that allows RuntimeAdapterManager to find the adapter
-Adapter = CovenantMetricsAdapter
+Adapter = AccordMetricsAdapter

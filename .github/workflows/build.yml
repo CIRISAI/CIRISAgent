@@ -247,7 +247,7 @@ jobs:
         run: |
           WHEEL_FILE=$(ls dist/*.whl)
           echo "Checking contents of $WHEEL_FILE"
-          unzip -l "$WHEEL_FILE" | grep -E "(gui_static|covenant|main\.py)" | head -20 || echo "Pattern not found"
+          unzip -l "$WHEEL_FILE" | grep -E "(gui_static|accord|main\.py)" | head -20 || echo "Pattern not found"
           echo ""
           echo "Total files in wheel:"
           unzip -l "$WHEEL_FILE" | tail -1

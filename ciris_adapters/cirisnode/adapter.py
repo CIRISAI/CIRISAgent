@@ -25,7 +25,7 @@ class CIRISNodeAdapter(Service):
 
     Registers CIRISNodeService as WISE_AUTHORITY for:
     - Deferral routing (send_deferral -> WBD submit)
-    - Trace forwarding (reasoning events -> covenant/events endpoint)
+    - Trace forwarding (reasoning events -> accord/events endpoint)
     """
 
     def __init__(

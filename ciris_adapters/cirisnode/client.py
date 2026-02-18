@@ -18,7 +18,7 @@ class CIRISNodeClient:
     """Async HTTP client for CIRISNode API.
 
     Provides WBD deferral submission/polling, agent event posting,
-    and covenant trace batch forwarding.
+    and accord trace batch forwarding.
     """
 
     def __init__(
@@ -170,11 +170,11 @@ class CIRISNodeClient:
         )
 
     # =========================================================================
-    # Covenant Trace Events (Lens format)
+    # Accord Trace Events (Lens format)
     # =========================================================================
 
-    async def post_covenant_events(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Post a batch of Ed25519-signed covenant trace events in Lens format.
+    async def post_accord_events(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Post a batch of Ed25519-signed accord trace events in Lens format.
 
         Auth: Traces carry inline Ed25519 signatures verified by CIRISNode
         against public keys registered via CIRISPortal/CIRISRegistry.
@@ -182,7 +182,7 @@ class CIRISNodeClient:
         """
         return await self._request(
             "POST",
-            "/api/v1/covenant/events",
+            "/api/v1/accord/events",
             json_data=payload,
         )
 
@@ -194,7 +194,7 @@ class CIRISNodeClient:
         """
         return await self._request(
             "POST",
-            "/api/v1/covenant/public-keys",
+            "/api/v1/accord/public-keys",
             json_data=payload,
             use_agent_token=True,
         )

@@ -266,7 +266,7 @@ class TestSingleStepHangValidation:
         # ACT: Call single_step
         result = await agent_processor.single_step()
 
-        # ASSERT: COVENANT compliance - PDMA must step through transparently even with no thoughts
+        # ASSERT: ACCORD compliance - PDMA must step through transparently even with no thoughts
         assert result.success is True
         # SUT currently returns hardcoded "no_work" string (not in StepPoint enum)
         # This is what the current implementation actually does

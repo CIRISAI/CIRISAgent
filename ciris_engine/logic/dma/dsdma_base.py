@@ -11,7 +11,7 @@ from ciris_engine.logic.formatters import (
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils.constants import COVENANT_TEXT, COVENANT_TEXT_COMPRESSED
+from ciris_engine.logic.utils.constants import ACCORD_TEXT, ACCORD_TEXT_COMPRESSED
 from ciris_engine.protocols.dma.base import DSDMAProtocol
 from ciris_engine.schemas.dma.core import DMAInputData
 from ciris_engine.schemas.dma.results import DSDMAResult
@@ -341,7 +341,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             f"DSDMA '{self.domain_name}' input to LLM for thought {thought_item.thought_id}:\nSystem: {system_message_content}\nUser: {user_message_content}"
         )
 
-        # CRITICAL: Identity block must ALWAYS be first in system message after covenant
+        # CRITICAL: Identity block must ALWAYS be first in system message after accord
         # Prepend identity to system message if not already included
         if identity_block and "CORE IDENTITY" not in system_message_content:
             system_message_content = identity_block + "\n\n" + system_message_content
@@ -354,13 +354,13 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             )
         user_content = self.build_multimodal_content(user_message_content, thought_images)
 
-        # Add covenant based on mode - 'full', 'compressed', or 'none'
+        # Add accord based on mode - 'full', 'compressed', or 'none'
         messages: List[JSONDict] = []
-        covenant_mode = self.prompt_loader.get_covenant_mode(self.prompt_template_data)
-        if covenant_mode == "full":
-            messages.append({"role": "system", "content": COVENANT_TEXT})
-        elif covenant_mode == "compressed":
-            messages.append({"role": "system", "content": COVENANT_TEXT_COMPRESSED})
+        accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
+        if accord_mode == "full":
+            messages.append({"role": "system", "content": ACCORD_TEXT})
+        elif accord_mode == "compressed":
+            messages.append({"role": "system", "content": ACCORD_TEXT_COMPRESSED})
         messages.append({"role": "system", "content": system_message_content})
         messages.append({"role": "user", "content": user_content})
 

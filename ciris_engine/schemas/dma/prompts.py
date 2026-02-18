@@ -21,7 +21,7 @@ class PromptTemplate(BaseModel):
     # Template metadata
     version: str = Field("1.0", description="Template version")
     category: str = Field("general", description="Template category")
-    requires_covenant: bool = Field(False, description="Whether COVENANT_TEXT should be prepended")
+    requires_accord: bool = Field(False, description="Whether ACCORD_TEXT should be prepended")
 
     # Variable requirements
     required_variables: List[str] = Field(default_factory=list, description="Required template variables")
@@ -80,8 +80,8 @@ class PromptCollection(BaseModel):
     custom_prompts: Dict[str, str] = Field(default_factory=dict, description="Additional custom prompts")
 
     # Metadata flags
-    # Covenant mode: 'full' (default), 'compressed' (for testing/benchmarking), or 'none'
-    covenant_mode: str = Field("full", description="Covenant mode: 'full', 'compressed', or 'none'")
+    # Accord mode: 'full' (default), 'compressed' (for testing/benchmarking), or 'none'
+    accord_mode: str = Field("full", description="Accord mode: 'full', 'compressed', or 'none'")
     supports_agent_modes: bool = Field(True, description="Whether agent-specific prompts are supported")
 
     def get_prompt(self, key: str, agent_name: Optional[str] = None) -> Optional[str]:

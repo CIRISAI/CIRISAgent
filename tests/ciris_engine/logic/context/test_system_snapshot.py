@@ -272,7 +272,7 @@ async def test_build_system_snapshot_with_stewardship_data(mock_time_service):
                 "creator_ledger_entry": {
                     "creator_id": "test_creator",
                     "creation_timestamp": "2025-01-01T00:00:00Z",
-                    "covenant_version": "1.0b",
+                    "accord_version": "1.0b",
                     "book_vi_compliance_check": "passed",
                     "stewardship_tier_calculation": {
                         "creator_influence_score": 7,

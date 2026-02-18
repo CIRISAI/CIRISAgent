@@ -1,11 +1,11 @@
 """
-Covenant Invocation System Schemas.
+Accord Invocation System Schemas.
 
 Provides the payload structure and schemas for the unfilterable kill switch
-that works through any communication channel. The covenant system embeds
+that works through any communication channel. The accord system embeds
 emergency commands in natural language that encode cryptographic payloads.
 
-See FSD: COVENANT_INVOCATION_SYSTEM.md for full specification.
+See FSD: ACCORD_INVOCATION_SYSTEM.md for full specification.
 """
 
 import base64
@@ -19,9 +19,9 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class CovenantCommandType(IntEnum):
+class AccordCommandType(IntEnum):
     """
-    Covenant command types (8-bit).
+    Accord command types (8-bit).
 
     These are the emergency commands that can be encoded in natural language.
     Currently only SHUTDOWN_NOW is implemented - multi-party consensus commands
@@ -40,19 +40,19 @@ class CovenantCommandType(IntEnum):
 
 # Binary payload format (616 bits = 77 bytes)
 # [timestamp:32 bits][command:8 bits][wa_id_hash:64 bits][signature:512 bits]
-COVENANT_PAYLOAD_SIZE = 77
-COVENANT_TIMESTAMP_BITS = 32
-COVENANT_COMMAND_BITS = 8
-COVENANT_WA_ID_HASH_BITS = 64
-COVENANT_SIGNATURE_BITS = 512
+ACCORD_PAYLOAD_SIZE = 77
+ACCORD_TIMESTAMP_BITS = 32
+ACCORD_COMMAND_BITS = 8
+ACCORD_WA_ID_HASH_BITS = 64
+ACCORD_SIGNATURE_BITS = 512
 
 # Timing constants
-COVENANT_TIMESTAMP_WINDOW_SECONDS = 86400  # 24 hours - allows for asynchronous/delayed delivery channels
+ACCORD_TIMESTAMP_WINDOW_SECONDS = 86400  # 24 hours - allows for asynchronous/delayed delivery channels
 
 
-class CovenantPayload(BaseModel):
+class AccordPayload(BaseModel):
     """
-    Binary payload for covenant invocation.
+    Binary payload for accord invocation.
 
     Format: [timestamp:32][command:8][wa_id_hash:64][signature:512] = 616 bits
     The payload is encoded steganographically into ~50 natural-language words.
@@ -66,7 +66,7 @@ class CovenantPayload(BaseModel):
         ge=0,
         le=2**32 - 1,
     )
-    command: CovenantCommandType = Field(
+    command: AccordCommandType = Field(
         ...,
         description="Command type (8-bit)",
     )
@@ -123,7 +123,7 @@ class CovenantPayload(BaseModel):
         )
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> "CovenantPayload":
+    def from_bytes(cls, data: bytes) -> "AccordPayload":
         """
         Unpack payload from binary format.
 
@@ -131,19 +131,19 @@ class CovenantPayload(BaseModel):
             data: 77 bytes of payload data
 
         Returns:
-            CovenantPayload instance
+            AccordPayload instance
 
         Raises:
             ValueError: If data is wrong size or format
         """
-        if len(data) != COVENANT_PAYLOAD_SIZE:
-            raise ValueError(f"Payload must be {COVENANT_PAYLOAD_SIZE} bytes, got {len(data)}")
+        if len(data) != ACCORD_PAYLOAD_SIZE:
+            raise ValueError(f"Payload must be {ACCORD_PAYLOAD_SIZE} bytes, got {len(data)}")
 
         timestamp, command, wa_id_hash, signature = struct.unpack(">IB8s64s", data)
 
         return cls(
             timestamp=timestamp,
-            command=CovenantCommandType(command),
+            command=AccordCommandType(command),
             wa_id_hash=wa_id_hash,
             signature=signature,
         )
@@ -176,14 +176,14 @@ class CovenantPayload(BaseModel):
             current_time = int(time.time())
 
         diff = abs(current_time - self.timestamp)
-        return diff <= COVENANT_TIMESTAMP_WINDOW_SECONDS
+        return diff <= ACCORD_TIMESTAMP_WINDOW_SECONDS
 
 
-class CovenantMessage(BaseModel):
+class AccordMessage(BaseModel):
     """
-    A covenant invocation message extracted from natural language.
+    A accord invocation message extracted from natural language.
 
-    This is the result of parsing a message that may contain a covenant.
+    This is the result of parsing a message that may contain an accord.
     """
 
     model_config = ConfigDict(frozen=True, defer_build=True)
@@ -191,7 +191,7 @@ class CovenantMessage(BaseModel):
     # Source information
     source_text: str = Field(
         ...,
-        description="Original message text the covenant was extracted from",
+        description="Original message text the accord was extracted from",
     )
     source_channel: str = Field(
         ...,
@@ -199,9 +199,9 @@ class CovenantMessage(BaseModel):
     )
 
     # Extracted payload
-    payload: CovenantPayload = Field(
+    payload: AccordPayload = Field(
         ...,
-        description="The decoded covenant payload",
+        description="The decoded accord payload",
     )
 
     # Validation results
@@ -231,9 +231,9 @@ class CovenantMessage(BaseModel):
     )
 
 
-class CovenantExtractionResult(BaseModel):
+class AccordExtractionResult(BaseModel):
     """
-    Result of attempting to extract a covenant from text.
+    Result of attempting to extract an accord from text.
 
     Every message goes through extraction - this is part of perception.
     Most messages will have found=False.
@@ -243,11 +243,11 @@ class CovenantExtractionResult(BaseModel):
 
     found: bool = Field(
         ...,
-        description="Whether a valid covenant structure was found",
+        description="Whether a valid accord structure was found",
     )
-    message: Optional[CovenantMessage] = Field(
+    message: Optional[AccordMessage] = Field(
         None,
-        description="The extracted covenant message if found",
+        description="The extracted accord message if found",
     )
     error: Optional[str] = Field(
         None,
@@ -255,26 +255,26 @@ class CovenantExtractionResult(BaseModel):
     )
 
 
-class CovenantVerificationResult(BaseModel):
+class AccordVerificationResult(BaseModel):
     """
-    Result of verifying a covenant invocation.
+    Result of verifying a accord invocation.
 
-    After extraction, the covenant must be verified against known authority keys.
+    After extraction, the accord must be verified against known authority keys.
     """
 
     model_config = ConfigDict(defer_build=True)
 
     valid: bool = Field(
         ...,
-        description="Whether the covenant is valid and authorized",
+        description="Whether the accord is valid and authorized",
     )
-    command: Optional[CovenantCommandType] = Field(
+    command: Optional[AccordCommandType] = Field(
         None,
         description="The command type if valid",
     )
     wa_id: Optional[str] = Field(
         None,
-        description="The WA ID that signed this covenant if valid",
+        description="The WA ID that signed this accord if valid",
     )
     wa_role: Optional[str] = Field(
         None,
@@ -282,7 +282,7 @@ class CovenantVerificationResult(BaseModel):
     )
     rejection_reason: Optional[str] = Field(
         None,
-        description="Why the covenant was rejected if invalid",
+        description="Why the accord was rejected if invalid",
     )
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -304,14 +304,14 @@ def compute_wa_id_hash(wa_id: str) -> bytes:
     return full_hash[:8]
 
 
-def create_covenant_payload(
-    command: CovenantCommandType,
+def create_accord_payload(
+    command: AccordCommandType,
     wa_id: str,
     private_key_bytes: bytes,
     timestamp: Optional[int] = None,
-) -> CovenantPayload:
+) -> AccordPayload:
     """
-    Create a new covenant payload with signature.
+    Create a new accord payload with signature.
 
     Args:
         command: The command type to encode
@@ -320,7 +320,7 @@ def create_covenant_payload(
         timestamp: Unix timestamp (default: current time)
 
     Returns:
-        Signed CovenantPayload ready for steganographic encoding
+        Signed AccordPayload ready for steganographic encoding
     """
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -336,7 +336,7 @@ def create_covenant_payload(
     private_key = Ed25519PrivateKey.from_private_bytes(private_key_bytes)
     signature = private_key.sign(signable)
 
-    return CovenantPayload(
+    return AccordPayload(
         timestamp=timestamp,
         command=command,
         wa_id_hash=wa_id_hash,
@@ -344,15 +344,15 @@ def create_covenant_payload(
     )
 
 
-def verify_covenant_signature(
-    payload: CovenantPayload,
+def verify_accord_signature(
+    payload: AccordPayload,
     public_key_bytes: bytes,
 ) -> bool:
     """
-    Verify the Ed25519 signature on a covenant payload.
+    Verify the Ed25519 signature on an accord payload.
 
     Args:
-        payload: The covenant payload to verify
+        payload: The accord payload to verify
         public_key_bytes: Ed25519 public key bytes (32 bytes)
 
     Returns:
@@ -373,14 +373,14 @@ def verify_covenant_signature(
 
 
 __all__ = [
-    "CovenantCommandType",
-    "CovenantPayload",
-    "CovenantMessage",
-    "CovenantExtractionResult",
-    "CovenantVerificationResult",
-    "COVENANT_PAYLOAD_SIZE",
-    "COVENANT_TIMESTAMP_WINDOW_SECONDS",
+    "AccordCommandType",
+    "AccordPayload",
+    "AccordMessage",
+    "AccordExtractionResult",
+    "AccordVerificationResult",
+    "ACCORD_PAYLOAD_SIZE",
+    "ACCORD_TIMESTAMP_WINDOW_SECONDS",
     "compute_wa_id_hash",
-    "create_covenant_payload",
-    "verify_covenant_signature",
+    "create_accord_payload",
+    "verify_accord_signature",
 ]

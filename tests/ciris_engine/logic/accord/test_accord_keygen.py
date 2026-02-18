@@ -1,5 +1,5 @@
 """
-Tests for covenant key generation tool.
+Tests for accord key generation tool.
 
 Tests BIP39 mnemonic generation, validation, and Ed25519 key derivation.
 """
@@ -14,7 +14,7 @@ class TestBIP39Wordlist:
 
     def test_wordlist_loads(self):
         """Wordlist should load from bundled file."""
-        from tools.security.covenant_keygen import _load_wordlist
+        from tools.security.accord_keygen import _load_wordlist
 
         wordlist = _load_wordlist()
         assert len(wordlist) == 2048
@@ -23,7 +23,7 @@ class TestBIP39Wordlist:
 
     def test_wordlist_cached(self):
         """Wordlist should be cached after first load."""
-        from tools.security.covenant_keygen import BIP39_ENGLISH, _load_wordlist
+        from tools.security.accord_keygen import BIP39_ENGLISH, _load_wordlist
 
         wordlist1 = _load_wordlist()
         wordlist2 = _load_wordlist()
@@ -35,7 +35,7 @@ class TestMnemonicGeneration:
 
     def test_generate_24_word_mnemonic(self):
         """Should generate valid 24-word mnemonic."""
-        from tools.security.covenant_keygen import generate_mnemonic, validate_mnemonic
+        from tools.security.accord_keygen import generate_mnemonic, validate_mnemonic
 
         mnemonic = generate_mnemonic(24)
         words = mnemonic.split()
@@ -44,7 +44,7 @@ class TestMnemonicGeneration:
 
     def test_generate_12_word_mnemonic(self):
         """Should generate valid 12-word mnemonic."""
-        from tools.security.covenant_keygen import generate_mnemonic, validate_mnemonic
+        from tools.security.accord_keygen import generate_mnemonic, validate_mnemonic
 
         mnemonic = generate_mnemonic(12)
         words = mnemonic.split()
@@ -53,7 +53,7 @@ class TestMnemonicGeneration:
 
     def test_generate_15_word_mnemonic(self):
         """Should generate valid 15-word mnemonic."""
-        from tools.security.covenant_keygen import generate_mnemonic, validate_mnemonic
+        from tools.security.accord_keygen import generate_mnemonic, validate_mnemonic
 
         mnemonic = generate_mnemonic(15)
         words = mnemonic.split()
@@ -62,7 +62,7 @@ class TestMnemonicGeneration:
 
     def test_generate_18_word_mnemonic(self):
         """Should generate valid 18-word mnemonic."""
-        from tools.security.covenant_keygen import generate_mnemonic, validate_mnemonic
+        from tools.security.accord_keygen import generate_mnemonic, validate_mnemonic
 
         mnemonic = generate_mnemonic(18)
         words = mnemonic.split()
@@ -71,7 +71,7 @@ class TestMnemonicGeneration:
 
     def test_generate_21_word_mnemonic(self):
         """Should generate valid 21-word mnemonic."""
-        from tools.security.covenant_keygen import generate_mnemonic, validate_mnemonic
+        from tools.security.accord_keygen import generate_mnemonic, validate_mnemonic
 
         mnemonic = generate_mnemonic(21)
         words = mnemonic.split()
@@ -80,7 +80,7 @@ class TestMnemonicGeneration:
 
     def test_invalid_word_count_raises(self):
         """Invalid word counts should raise ValueError."""
-        from tools.security.covenant_keygen import generate_mnemonic
+        from tools.security.accord_keygen import generate_mnemonic
 
         with pytest.raises(ValueError, match="Word count must be"):
             generate_mnemonic(13)
@@ -90,7 +90,7 @@ class TestMnemonicGeneration:
 
     def test_mnemonics_are_random(self):
         """Each generation should produce different mnemonics."""
-        from tools.security.covenant_keygen import generate_mnemonic
+        from tools.security.accord_keygen import generate_mnemonic
 
         mnemonics = [generate_mnemonic(24) for _ in range(5)]
         assert len(set(mnemonics)) == 5  # All unique
@@ -101,7 +101,7 @@ class TestMnemonicValidation:
 
     def test_valid_mnemonic_passes(self):
         """Valid mnemonic should pass validation."""
-        from tools.security.covenant_keygen import validate_mnemonic
+        from tools.security.accord_keygen import validate_mnemonic
 
         # Known valid test vector
         mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
@@ -109,21 +109,21 @@ class TestMnemonicValidation:
 
     def test_invalid_word_fails(self):
         """Mnemonic with invalid word should fail."""
-        from tools.security.covenant_keygen import validate_mnemonic
+        from tools.security.accord_keygen import validate_mnemonic
 
         mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon notaword"
         assert not validate_mnemonic(mnemonic)
 
     def test_wrong_word_count_fails(self):
         """Wrong word count should fail."""
-        from tools.security.covenant_keygen import validate_mnemonic
+        from tools.security.accord_keygen import validate_mnemonic
 
         mnemonic = "abandon abandon abandon"  # Only 3 words
         assert not validate_mnemonic(mnemonic)
 
     def test_invalid_checksum_fails(self):
         """Mnemonic with invalid checksum should fail."""
-        from tools.security.covenant_keygen import validate_mnemonic
+        from tools.security.accord_keygen import validate_mnemonic
 
         # Valid words but wrong checksum
         mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
@@ -131,13 +131,13 @@ class TestMnemonicValidation:
 
     def test_empty_mnemonic_fails(self):
         """Empty mnemonic should fail."""
-        from tools.security.covenant_keygen import validate_mnemonic
+        from tools.security.accord_keygen import validate_mnemonic
 
         assert not validate_mnemonic("")
 
     def test_case_insensitive(self):
         """Validation should be case insensitive."""
-        from tools.security.covenant_keygen import validate_mnemonic
+        from tools.security.accord_keygen import validate_mnemonic
 
         mnemonic = "ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABOUT"
         assert validate_mnemonic(mnemonic)
@@ -148,7 +148,7 @@ class TestSeedDerivation:
 
     def test_seed_derivation_deterministic(self):
         """Same mnemonic should produce same seed."""
-        from tools.security.covenant_keygen import mnemonic_to_seed
+        from tools.security.accord_keygen import mnemonic_to_seed
 
         mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
         seed1 = mnemonic_to_seed(mnemonic)
@@ -157,7 +157,7 @@ class TestSeedDerivation:
 
     def test_seed_is_64_bytes(self):
         """Seed should be 64 bytes."""
-        from tools.security.covenant_keygen import mnemonic_to_seed
+        from tools.security.accord_keygen import mnemonic_to_seed
 
         mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
         seed = mnemonic_to_seed(mnemonic)
@@ -165,7 +165,7 @@ class TestSeedDerivation:
 
     def test_passphrase_changes_seed(self):
         """Different passphrase should produce different seed."""
-        from tools.security.covenant_keygen import mnemonic_to_seed
+        from tools.security.accord_keygen import mnemonic_to_seed
 
         mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
         seed1 = mnemonic_to_seed(mnemonic, "")
@@ -174,7 +174,7 @@ class TestSeedDerivation:
 
     def test_known_test_vector(self):
         """Test against known BIP39 test vector."""
-        from tools.security.covenant_keygen import mnemonic_to_seed
+        from tools.security.accord_keygen import mnemonic_to_seed
 
         # BIP39 test vector
         mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
@@ -188,7 +188,7 @@ class TestEd25519KeyDerivation:
 
     def test_keypair_derivation(self):
         """Should derive valid Ed25519 keypair."""
-        from tools.security.covenant_keygen import mnemonic_to_seed, seed_to_ed25519_keypair
+        from tools.security.accord_keygen import mnemonic_to_seed, seed_to_ed25519_keypair
 
         mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
         seed = mnemonic_to_seed(mnemonic)
@@ -199,7 +199,7 @@ class TestEd25519KeyDerivation:
 
     def test_keypair_deterministic(self):
         """Same seed should produce same keypair."""
-        from tools.security.covenant_keygen import mnemonic_to_seed, seed_to_ed25519_keypair
+        from tools.security.accord_keygen import mnemonic_to_seed, seed_to_ed25519_keypair
 
         mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
         seed = mnemonic_to_seed(mnemonic)
@@ -214,7 +214,7 @@ class TestEd25519KeyDerivation:
         """Derived keys should work for signing and verification."""
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
-        from tools.security.covenant_keygen import mnemonic_to_seed, seed_to_ed25519_keypair
+        from tools.security.accord_keygen import mnemonic_to_seed, seed_to_ed25519_keypair
 
         mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
         seed = mnemonic_to_seed(mnemonic)
@@ -230,15 +230,15 @@ class TestEd25519KeyDerivation:
         public_key.verify(signature, message)  # Should not raise
 
 
-class TestCovenantKeypairDerivation:
-    """Tests for the high-level covenant keypair derivation."""
+class TestAccordKeypairDerivation:
+    """Tests for the high-level accord keypair derivation."""
 
-    def test_derive_covenant_keypair(self):
-        """Should derive complete covenant keypair."""
-        from tools.security.covenant_keygen import derive_covenant_keypair
+    def test_derive_accord_keypair(self):
+        """Should derive complete accord keypair."""
+        from tools.security.accord_keygen import derive_accord_keypair
 
         mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-        private_bytes, public_bytes, public_b64 = derive_covenant_keypair(mnemonic)
+        private_bytes, public_bytes, public_b64 = derive_accord_keypair(mnemonic)
 
         assert len(private_bytes) == 32
         assert len(public_bytes) == 32
@@ -247,19 +247,19 @@ class TestCovenantKeypairDerivation:
 
     def test_invalid_mnemonic_raises(self):
         """Invalid mnemonic should raise ValueError."""
-        from tools.security.covenant_keygen import derive_covenant_keypair
+        from tools.security.accord_keygen import derive_accord_keypair
 
         with pytest.raises(ValueError, match="Invalid mnemonic"):
-            derive_covenant_keypair("not a valid mnemonic")
+            derive_accord_keypair("not a valid mnemonic")
 
     def test_base64_encoding(self):
         """Public key should be valid base64."""
         import base64
 
-        from tools.security.covenant_keygen import derive_covenant_keypair
+        from tools.security.accord_keygen import derive_accord_keypair
 
         mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-        _, public_bytes, public_b64 = derive_covenant_keypair(mnemonic)
+        _, public_bytes, public_b64 = derive_accord_keypair(mnemonic)
 
         # Add padding and decode
         padded = public_b64 + "=" * (4 - len(public_b64) % 4) if len(public_b64) % 4 else public_b64
@@ -268,9 +268,9 @@ class TestCovenantKeypairDerivation:
 
     def test_passphrase_changes_keys(self):
         """Different passphrase should produce different keys."""
-        from tools.security.covenant_keygen import derive_covenant_keypair
+        from tools.security.accord_keygen import derive_accord_keypair
 
         mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-        _, pub1, _ = derive_covenant_keypair(mnemonic, "")
-        _, pub2, _ = derive_covenant_keypair(mnemonic, "password")
+        _, pub1, _ = derive_accord_keypair(mnemonic, "")
+        _, pub2, _ = derive_accord_keypair(mnemonic, "password")
         assert pub1 != pub2

@@ -1,7 +1,7 @@
 """
-CIRIS Covenant Metrics Adapter.
+CIRIS Accord Metrics Adapter.
 
-This adapter provides covenant compliance metrics collection for CIRISLens,
+This adapter provides accord compliance metrics collection for CIRISLens,
 reporting WBD (Wisdom-Based Deferral) events and PDMA decision events.
 
 CRITICAL REQUIREMENTS:
@@ -10,28 +10,28 @@ CRITICAL REQUIREMENTS:
 3. No data sent without consent
 
 Usage:
-    # Load the covenant metrics adapter
-    python main.py --adapter api --adapter ciris_covenant_metrics
+    # Load the accord metrics adapter
+    python main.py --adapter api --adapter ciris_accord_metrics
 
     # Then complete the setup wizard to grant consent
 
 Example importing for custom usage:
-    from ciris_adapters.ciris_covenant_metrics import (
+    from ciris_adapters.ciris_accord_metrics import (
         Adapter,  # BaseAdapterProtocol-compliant wrapper
-        CovenantMetricsAdapter,
-        CovenantMetricsService,
+        AccordMetricsAdapter,
+        AccordMetricsService,
     )
 """
 
-from .adapter import CovenantMetricsAdapter
-from .services import CovenantMetricsService, TraceDetailLevel
+from .adapter import AccordMetricsAdapter
+from .services import AccordMetricsService, TraceDetailLevel
 
 # Export as Adapter for load_adapter() compatibility
-Adapter = CovenantMetricsAdapter
+Adapter = AccordMetricsAdapter
 
 __all__ = [
     "Adapter",  # Primary export for dynamic loading
-    "CovenantMetricsAdapter",
-    "CovenantMetricsService",
+    "AccordMetricsAdapter",
+    "AccordMetricsService",
     "TraceDetailLevel",
 ]

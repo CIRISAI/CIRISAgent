@@ -381,8 +381,8 @@ class ComponentBuilder:
         except Exception as e:
             logger.warning(f"[COGNITIVE_LOAD] Failed to get cognitive behaviors from graph: {e}")
 
-        # Fallback: return default (full Covenant compliance)
+        # Fallback: return default (full Accord compliance)
         logger.info(
-            "[COGNITIVE_LOAD] No cognitive behaviors in graph - using Covenant-compliant defaults (wakeup.enabled=True)"
+            "[COGNITIVE_LOAD] No cognitive behaviors in graph - using Accord-compliant defaults (wakeup.enabled=True)"
         )
         return CognitiveStateBehaviors()

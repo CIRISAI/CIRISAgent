@@ -225,7 +225,7 @@ async def migrate_cognitive_state_behaviors_to_graph(runtime: Any, force_from_te
 
     Pre-1.7 agents get:
     - Wakeup: enabled (full identity ceremony)
-    - Shutdown: always_consent (Covenant compliance)
+    - Shutdown: always_consent (Accord compliance)
     - Play/Dream/Solitude: DISABLED (these states didn't exist pre-1.7)
 
     After migration, StateManager retrieves config from graph, not template.
@@ -256,12 +256,12 @@ async def migrate_cognitive_state_behaviors_to_graph(runtime: Any, force_from_te
     # Try to get cognitive behaviors from template
     cognitive_behaviors = get_cognitive_behaviors_from_template(runtime)
 
-    # If no template available, use Covenant-compliant defaults (all states enabled)
+    # If no template available, use Accord-compliant defaults (all states enabled)
     # This applies to fresh installs without templates (e.g., QA testing, API-only mode)
     if not cognitive_behaviors:
         from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
 
-        logger.info("[COGNITIVE_MIGRATION] No template - using Covenant-compliant defaults (all states enabled)")
+        logger.info("[COGNITIVE_MIGRATION] No template - using Accord-compliant defaults (all states enabled)")
         cognitive_behaviors = CognitiveStateBehaviors()
 
     try:

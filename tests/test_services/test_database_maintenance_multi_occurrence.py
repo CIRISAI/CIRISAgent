@@ -896,7 +896,7 @@ class TestConfigPreservationLogic:
     def test_is_runtime_config_matches_adapter_pattern(self, database_maintenance_service):
         """Test that adapter.* patterns are recognized as runtime configs."""
         assert database_maintenance_service._is_runtime_config("adapter.my_adapter.config") is True
-        assert database_maintenance_service._is_runtime_config("adapter.covenant_abc123.type") is True
+        assert database_maintenance_service._is_runtime_config("adapter.accord_abc123.type") is True
 
     def test_is_runtime_config_matches_runtime_pattern(self, database_maintenance_service):
         """Test that runtime.* patterns are recognized as runtime configs."""
@@ -936,7 +936,7 @@ class TestConfigPreservationLogic:
             updated_by = "runtime_adapter_manager"
 
         should_preserve, reason = database_maintenance_service._should_preserve_config(
-            "adapter.covenant_metrics_abc123.config", MockConfigNode()
+            "adapter.accord_metrics_abc123.config", MockConfigNode()
         )
         assert should_preserve is True
         assert "persist check" in reason.lower()

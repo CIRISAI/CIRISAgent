@@ -22,12 +22,12 @@ from rich.console import Console
 from .config import QAConfig
 
 # ============================================================================
-# Mock Logshipper Server - Receives covenant traces from agents
+# Mock Logshipper Server - Receives accord traces from agents
 # ============================================================================
 
 
 class MockLogshipperHandler(BaseHTTPRequestHandler):
-    """HTTP handler for mock logshipper that receives covenant traces."""
+    """HTTP handler for mock logshipper that receives accord traces."""
 
     # Class-level storage for received traces
     received_traces: List[Dict[str, Any]] = []
@@ -38,8 +38,8 @@ class MockLogshipperHandler(BaseHTTPRequestHandler):
         pass
 
     def do_POST(self) -> None:
-        """Handle POST requests to /v1/covenant/events or /covenant/events."""
-        if self.path in ("/v1/covenant/events", "/covenant/events"):
+        """Handle POST requests to /v1/accord/events or /accord/events."""
+        if self.path in ("/v1/accord/events", "/accord/events"):
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
 
@@ -116,7 +116,7 @@ class MockLogshipperHandler(BaseHTTPRequestHandler):
 
 
 class MockLogshipperServer:
-    """Mock logshipper server that receives and saves covenant traces."""
+    """Mock logshipper server that receives and saves accord traces."""
 
     def __init__(self, port: int = 18080, output_dir: Optional[Path] = None):
         """Initialize mock server.
@@ -493,12 +493,12 @@ class APIServerManager:
                 self.console.print("[red]❌ Failed to start PostgreSQL - cannot proceed[/red]")
                 return False
 
-        # Start mock logshipper to receive covenant traces (unless using live lens)
+        # Start mock logshipper to receive accord traces (unless using live lens)
         if self.config.live_lens:
             self.console.print(
                 "[cyan]📡 Using LIVE Lens server: https://lens.ciris-services-1.ai/lens-api/api/v1[/cyan]"
             )
-            self.console.print("[cyan]📊 Enabling covenant_metrics adapter for live trace capture[/cyan]")
+            self.console.print("[cyan]📊 Enabling accord_metrics adapter for live trace capture[/cyan]")
             self.mock_logshipper = None
         else:
             self.mock_logshipper = MockLogshipperServer(port=18080)
@@ -539,9 +539,9 @@ class APIServerManager:
             env["OPENAI_MODEL_NAME"] = self.config.live_model
             self.console.print(f"[cyan]🤖 Live LLM: OPENAI_MODEL_NAME={self.config.live_model}[/cyan]")
 
-        # Configure covenant_metrics adapter to use mock logshipper
+        # Configure accord_metrics adapter to use mock logshipper
         if self.mock_logshipper:
-            env["CIRIS_COVENANT_METRICS_ENDPOINT"] = self.mock_logshipper.endpoint_url
+            env["CIRIS_ACCORD_METRICS_ENDPOINT"] = self.mock_logshipper.endpoint_url
 
         # Force first-run mode for SETUP module tests
         from .config import QAModule
@@ -614,21 +614,21 @@ class APIServerManager:
             self.console.print(f"[dim]   CIRIS_MOCK_LLM env: {env.get('CIRIS_MOCK_LLM', 'Not set')}[/dim]")
             self.console.print(f"[dim]   CIRIS_LLM_PROVIDER env: {env.get('CIRIS_LLM_PROVIDER', 'Not set')}[/dim]")
 
-        # Enable covenant_metrics adapter with consent for trace capture tests
+        # Enable accord_metrics adapter with consent for trace capture tests
         # Also enable when --live-lens is used to send traces to production Lens
-        if any(m == QAModule.COVENANT_METRICS for m in self.modules) or self.config.live_lens:
-            # Load base covenant_metrics adapter alongside the main adapter
-            if "ciris_covenant_metrics" not in env.get("CIRIS_ADAPTER", ""):
+        if any(m == QAModule.ACCORD_METRICS for m in self.modules) or self.config.live_lens:
+            # Load base accord_metrics adapter alongside the main adapter
+            if "ciris_accord_metrics" not in env.get("CIRIS_ADAPTER", ""):
                 current_adapter = env.get("CIRIS_ADAPTER", "api")
-                env["CIRIS_ADAPTER"] = f"{current_adapter},ciris_covenant_metrics"
+                env["CIRIS_ADAPTER"] = f"{current_adapter},ciris_accord_metrics"
             # Enable consent for trace capture
-            env["CIRIS_COVENANT_METRICS_CONSENT"] = "true"
-            env["CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP"] = "2025-01-01T00:00:00Z"
+            env["CIRIS_ACCORD_METRICS_CONSENT"] = "true"
+            env["CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP"] = "2025-01-01T00:00:00Z"
             # Use short flush interval for QA (5 seconds instead of 60)
-            env["CIRIS_COVENANT_METRICS_FLUSH_INTERVAL"] = "5"
-            # Set detailed trace level (actionable identifiers) - covenant_metrics tests load generic/full
-            env["CIRIS_COVENANT_METRICS_TRACE_LEVEL"] = "detailed"
-            self.console.print("[dim]Enabling covenant_metrics adapter with consent for trace capture (detailed)[/dim]")
+            env["CIRIS_ACCORD_METRICS_FLUSH_INTERVAL"] = "5"
+            # Set detailed trace level (actionable identifiers) - accord_metrics tests load generic/full
+            env["CIRIS_ACCORD_METRICS_TRACE_LEVEL"] = "detailed"
+            self.console.print("[dim]Enabling accord_metrics adapter with consent for trace capture (detailed)[/dim]")
 
         # Load Reddit credentials if Reddit adapter is being used
         if "reddit" in self.config.adapter.lower():

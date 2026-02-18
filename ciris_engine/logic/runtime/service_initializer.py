@@ -1358,7 +1358,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 service_type=ServiceType.WISE_AUTHORITY,
                 provider=service,
                 priority=Priority.NORMAL,
-                capabilities=["send_deferral", "covenant_metrics"],
+                capabilities=["send_deferral", "accord_metrics"],
                 metadata={"adapter": adapter_name, "auto_loaded": True},
             )
             logger.info(f"[SKILL-ADAPTERS] Registered wisdom adapter: {adapter_name}")

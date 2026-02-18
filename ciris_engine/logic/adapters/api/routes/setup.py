@@ -491,7 +491,7 @@ def _get_agent_templates() -> List[AgentTemplate]:
 
 
 # Constants for adapter filtering
-_SKIP_ADAPTERS = {"ciris_covenant_metrics"}  # Handled by consent checkbox
+_SKIP_ADAPTERS = {"ciris_accord_metrics"}  # Handled by consent checkbox
 _CIRIS_SERVICES_ADAPTERS = {"ciris_hosted_tools"}  # Require Google sign-in
 
 
@@ -1515,15 +1515,15 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
         f.write("\n# Enabled Adapters\n")
         f.write(f"CIRIS_ADAPTER={','.join(setup.enabled_adapters)}\n")
 
-        # Covenant metrics consent
-        if "ciris_covenant_metrics" in setup.enabled_adapters:
+        # Accord metrics consent
+        if "ciris_accord_metrics" in setup.enabled_adapters:
             from datetime import datetime, timezone
 
             consent_timestamp = datetime.now(timezone.utc).isoformat()
-            f.write("\n# Covenant Metrics Consent (auto-set when adapter enabled)\n")
-            f.write("CIRIS_COVENANT_METRICS_CONSENT=true\n")
-            f.write(f"CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP={consent_timestamp}\n")
-            logger.info(f"[SETUP] Covenant metrics consent enabled: {consent_timestamp}")
+            f.write("\n# Accord Metrics Consent (auto-set when adapter enabled)\n")
+            f.write("CIRIS_ACCORD_METRICS_CONSENT=true\n")
+            f.write(f"CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={consent_timestamp}\n")
+            logger.info(f"[SETUP] Accord metrics consent enabled: {consent_timestamp}")
 
         # Adapter-specific environment variables
         if setup.adapter_config:
@@ -1979,21 +1979,9 @@ async def connect_node_status(device_code: str, portal_url: str) -> SuccessRespo
     agent_record = data.get("agent_record", {})
     licensed_package = data.get("licensed_package") or {}
 
-    # Save the provisioned signing key immediately on successful poll.
-    # This makes the key available for subsequent operations without waiting for /complete.
+    # Extract the provisioned signing key — it will be saved during /complete setup.
+    # We don't eagerly save here to avoid filesystem issues (e.g., iOS read-only bundles).
     private_key_b64 = signing_key.get("ed25519_private_key", "")
-    if private_key_b64:
-        try:
-            from ciris_engine.logic.audit.signing_protocol import UnifiedSigningKey
-            from ciris_engine.logic.utils.path_resolution import get_data_dir
-
-            save_path = get_data_dir() / "agent_signing.key"
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-            provisioned_key = UnifiedSigningKey()
-            provisioned_key.load_provisioned_key(private_key_b64, save_path=save_path)
-            logger.info(f"[Connect Node] Saved Registry-provisioned signing key to {save_path}")
-        except Exception as e:
-            logger.error(f"[Connect Node] Failed to save provisioned key: {e}")
 
     return SuccessResponse(
         data=ConnectNodeStatusResponse(

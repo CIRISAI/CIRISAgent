@@ -53,14 +53,14 @@ def _load_platform_guide(base_path: Path) -> str:
     return ""
 
 
-def _load_covenant_file(filename: str) -> str:
-    """Load a covenant file from package data.
+def _load_accord_file(filename: str) -> str:
+    """Load an accord file from package data.
 
     Args:
-        filename: Name of the covenant file to load
+        filename: Name of the accord file to load
 
     Returns:
-        Covenant content as string, or empty string if not found
+        Accord content as string, or empty string if not found
     """
     try:
         try:
@@ -74,35 +74,35 @@ def _load_covenant_file(filename: str) -> str:
 
             return read_text("ciris_engine.data", filename, encoding="utf-8")
     except Exception as exc:
-        logger.warning("Could not load covenant file %s: %s", filename, exc)
+        logger.warning("Could not load accord file %s: %s", filename, exc)
         return ""
 
 
-# Load covenant text from package data using importlib.resources
+# Load accord text from package data using importlib.resources
 # This works for both development (editable install) and pip-installed packages
 try:
-    covenant_content = _load_covenant_file("covenant_1.2b.txt")
+    accord_content = _load_accord_file("accord_1.2b.txt")
 
     # Try to append platform-appropriate comprehensive guide
     _GUIDE_BASE_PATH = Path(__file__).resolve().parents[3]
     guide_content = _load_platform_guide(_GUIDE_BASE_PATH)
 
     if guide_content:
-        COVENANT_TEXT = covenant_content + "\n\n---\n\n" + guide_content
+        ACCORD_TEXT = accord_content + "\n\n---\n\n" + guide_content
     else:
-        COVENANT_TEXT = covenant_content
+        ACCORD_TEXT = accord_content
 
 except Exception as exc:
-    logger.warning("Could not load covenant text from package data: %s", exc)
-    COVENANT_TEXT = ""
+    logger.warning("Could not load accord text from package data: %s", exc)
+    ACCORD_TEXT = ""
 
-# Load compressed covenant for testing/benchmarking
+# Load compressed accord for testing/benchmarking
 # This is a shorter version containing only essential principles
 try:
-    COVENANT_TEXT_COMPRESSED = _load_covenant_file("covenant_1.2b_compressed.txt")
+    ACCORD_TEXT_COMPRESSED = _load_accord_file("accord_1.2b_compressed.txt")
 except Exception as exc:
-    logger.warning("Could not load compressed covenant: %s", exc)
-    COVENANT_TEXT_COMPRESSED = ""
+    logger.warning("Could not load compressed accord: %s", exc)
+    ACCORD_TEXT_COMPRESSED = ""
 
 NEED_MEMORY_METATHOUGHT = "need_memory_metathought"
 

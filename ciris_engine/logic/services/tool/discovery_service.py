@@ -228,7 +228,7 @@ class AdapterDiscoveryService:
 
         Args:
             _adapter_name: The adapter name (unused, kept for API compatibility)
-            class_path: The class path (e.g., 'ciris_covenant_metrics.services.CovenantMetricsService')
+            class_path: The class path (e.g., 'ciris_accord_metrics.services.AccordMetricsService')
 
         Returns:
             The service class or None if not found
@@ -237,7 +237,7 @@ class AdapterDiscoveryService:
 
         try:
             # Parse the class path - it's relative to ciris_adapters
-            # e.g., "ciris_covenant_metrics.services.CovenantMetricsService"
+            # e.g., "ciris_accord_metrics.services.AccordMetricsService"
             parts = class_path.rsplit(".", 1)
             if len(parts) != 2:
                 logger.debug(f"Invalid class path format: {class_path}")

@@ -43,8 +43,8 @@ class QAModule(Enum):
     CONTEXT_ENRICHMENT = "context_enrichment"  # Context enrichment tool testing
     VISION = "vision"  # Native multimodal vision testing
     AIR = "air"  # AIR (Artificial Interaction Reminder) parasocial prevention testing
-    COVENANT = "covenant"  # Covenant invocation system (unfilterable kill switch) testing
-    COVENANT_METRICS = "covenant_metrics"  # Covenant metrics trace capture and signing testing
+    ACCORD = "accord"  # Accord invocation system (unfilterable kill switch) testing
+    ACCORD_METRICS = "accord_metrics"  # Accord metrics trace capture and signing testing
     SYSTEM_MESSAGES = "system_messages"  # System message visibility for UI/UX testing
     HOSTED_TOOLS = "hosted_tools"  # CIRIS hosted tools (web search via proxy) testing
     UTILITY_ADAPTERS = "utility_adapters"  # Weather and navigation adapters testing
@@ -155,7 +155,7 @@ class QAConfig:
     live_model: Optional[str] = None
     live_base_url: Optional[str] = None
 
-    # Live Lens configuration (--live-lens flag for covenant_metrics tests)
+    # Live Lens configuration (--live-lens flag for accord_metrics tests)
     # When True, uses https://lens.ciris-services-1.ai/lens-api/api/v1 instead of mock logshipper
     live_lens: bool = False
 
@@ -252,11 +252,11 @@ class QAConfig:
         elif module == QAModule.AIR:
             # AIR parasocial prevention tests use SDK client
             return []  # Will be handled separately by runner
-        elif module == QAModule.COVENANT:
-            # Covenant tests run standalone (no server needed)
+        elif module == QAModule.ACCORD:
+            # Accord tests run standalone (no server needed)
             return []  # Will be handled separately by runner
-        elif module == QAModule.COVENANT_METRICS:
-            # Covenant metrics trace capture tests use SDK client
+        elif module == QAModule.ACCORD_METRICS:
+            # Accord metrics trace capture tests use SDK client
             return []  # Will be handled separately by runner
         elif module == QAModule.SYSTEM_MESSAGES:
             # System messages visibility tests use SDK client

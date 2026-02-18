@@ -259,9 +259,9 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         return await self.send_deferral(context, handler_name)
 
-    async def handle_covenant_invocation(self, event: Dict[str, Any]) -> bool:
+    async def handle_accord_invocation(self, event: Dict[str, Any]) -> bool:
         """
-        Handle a Covenant Invocation System (CIS) event.
+        Handle a Accord Invocation System (CIS) event.
 
         Validates the Ed25519 signature against the signing WA's public key,
         checks the WA certificate has ROOT or AUTHORITY role and is active,
@@ -281,7 +281,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             payload = event.get("payload", {})
 
             if not signing_key_id or not signature_hex or not payload:
-                logger.error("SECURITY ALERT: Malformed covenant invocation event — missing fields")
+                logger.error("SECURITY ALERT: Malformed accord invocation event — missing fields")
                 return False
 
             # Look up the WA certificate by key ID
@@ -297,7 +297,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
             if not wa_cert:
                 logger.error(
-                    f"SECURITY ALERT: Covenant invocation from unknown key_id '{signing_key_id}' — "
+                    f"SECURITY ALERT: Accord invocation from unknown key_id '{signing_key_id}' — "
                     "WA certificate not found or not active"
                 )
                 return False
@@ -307,7 +307,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
             if wa_cert.role not in (WARole.ROOT, WARole.AUTHORITY):
                 logger.error(
-                    f"SECURITY ALERT: Covenant invocation from {wa_cert.wa_id} "
+                    f"SECURITY ALERT: Accord invocation from {wa_cert.wa_id} "
                     f"with role {wa_cert.role.value} — DENIED (requires ROOT or AUTHORITY)"
                 )
                 return False
@@ -331,11 +331,11 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 public_key.verify(signature_bytes, canonical_json)
 
                 logger.info(
-                    f"Covenant invocation signature verified from {wa_cert.wa_id} (role: {wa_cert.role.value})"
+                    f"Accord invocation signature verified from {wa_cert.wa_id} (role: {wa_cert.role.value})"
                 )
             except Exception as sig_err:
                 logger.error(
-                    f"SECURITY ALERT: Covenant invocation signature verification FAILED "
+                    f"SECURITY ALERT: Accord invocation signature verification FAILED "
                     f"from {wa_cert.wa_id}: {sig_err}"
                 )
                 return False
@@ -343,18 +343,18 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             # Signature valid — initiate shutdown
             target_agent_id = payload.get("target_agent_id", "unknown")
             directive = payload.get("directive", "CEASE_ALL_OPERATIONS")
-            reason = payload.get("reason", "Covenant invocation")
+            reason = payload.get("reason", "Accord invocation")
             incident_id = payload.get("incident_id", "")
 
             logger.warning(
-                f"COVENANT INVOCATION: {directive} from {wa_cert.wa_id} "
+                f"ACCORD INVOCATION: {directive} from {wa_cert.wa_id} "
                 f"targeting {target_agent_id}, reason: {reason}, incident: {incident_id}"
             )
 
             # Set ALL capabilities as prohibited (total lockdown)
             # This effectively blocks all agent operations
             for category, caps in PROHIBITED_CAPABILITIES.items():
-                logger.info(f"Covenant lockdown: prohibiting {category} ({len(caps)} capabilities)")
+                logger.info(f"Accord lockdown: prohibiting {category} ({len(caps)} capabilities)")
 
             # Trigger shutdown via runtime control
             runtime_services = self.service_registry.get_services_by_type(ServiceType.RUNTIME_CONTROL)
@@ -362,30 +362,30 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 runtime_control = runtime_services[0]
                 if hasattr(runtime_control, "request_shutdown"):
                     await runtime_control.request_shutdown(
-                        reason=f"Covenant invocation: {reason} (incident: {incident_id})",
+                        reason=f"Accord invocation: {reason} (incident: {incident_id})",
                         force=True,
                         requester_wa_id=wa_cert.wa_id,
-                        mode="covenant_invocation",
+                        mode="accord_invocation",
                     )
-                    logger.info("Shutdown requested via runtime control (covenant_invocation mode)")
+                    logger.info("Shutdown requested via runtime control (accord_invocation mode)")
                     return True
                 elif hasattr(runtime_control, "emit_event"):
                     from ciris_engine.schemas.services.core.runtime import RuntimeEvent
 
                     shutdown_event = RuntimeEvent(
-                        event_type="covenant_shutdown",
-                        source=f"wise_bus:covenant_invocation:{wa_cert.wa_id}",
+                        event_type="accord_shutdown",
+                        source=f"wise_bus:accord_invocation:{wa_cert.wa_id}",
                         details={
                             "directive": directive,
                             "reason": reason,
                             "incident_id": incident_id,
                             "authority_wa_id": wa_cert.wa_id,
-                            "mode": "covenant_invocation",
+                            "mode": "accord_invocation",
                         },
                         severity="critical",
                     )
                     runtime_control.emit_event(shutdown_event)
-                    logger.info("Covenant shutdown event emitted")
+                    logger.info("Accord shutdown event emitted")
                     return True
 
             # Fallback: use shutdown manager directly
@@ -393,14 +393,14 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
             shutdown_manager = get_shutdown_manager()
             shutdown_manager.request_shutdown(
-                reason=f"Covenant invocation: {reason}",
+                reason=f"Accord invocation: {reason}",
                 force=True,
             )
             logger.info("Shutdown requested via shutdown manager (fallback)")
             return True
 
         except Exception as e:
-            logger.error(f"SECURITY ALERT: Covenant invocation handler error: {e}", exc_info=True)
+            logger.error(f"SECURITY ALERT: Accord invocation handler error: {e}", exc_info=True)
             return False
 
     def _validate_capability(self, capability: Optional[str], agent_tier: int = 1) -> None:

@@ -290,7 +290,7 @@ class CIRISRuntime(ServicePropertyMixin):
 
                     task = asyncio.create_task(
                         audit_service.log_event(
-                            event_type="covenant_safe_mode",
+                            event_type="accord_safe_mode",
                             event_data={"reason": reason, "activated": True},
                         )
                     )
@@ -330,7 +330,7 @@ class CIRISRuntime(ServicePropertyMixin):
 
                     task = asyncio.create_task(
                         audit_service.log_event(
-                            event_type="covenant_safe_mode",
+                            event_type="accord_safe_mode",
                             event_data={
                                 "reason": previous_reason,
                                 "activated": False,

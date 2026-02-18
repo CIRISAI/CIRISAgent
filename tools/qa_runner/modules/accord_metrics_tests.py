@@ -1,8 +1,8 @@
 """
-Covenant Metrics Trace Capture Tests.
+Accord Metrics Trace Capture Tests.
 
 Tests REAL 8-event-type trace capture and Ed25519 signing functionality
-for the ciris_covenant_metrics adapter.
+for the ciris_accord_metrics adapter.
 
 Event Types (8 total - 7 core + 1 optional):
 - THOUGHT_START: Thought begins processing
@@ -40,8 +40,8 @@ logger = logging.getLogger(__name__)
 LENS_SERVER_URL = "https://lens.ciris-services-1.ai/lens-api/api/v1"
 
 
-class CovenantMetricsTests:
-    """Test module for covenant metrics trace capture and signing.
+class AccordMetricsTests:
+    """Test module for accord metrics trace capture and signing.
 
     Follows the SDK test module interface pattern used by the QA runner.
     """
@@ -256,7 +256,7 @@ class CovenantMetricsTests:
         self.live_lens = live_lens or os.environ.get("CIRIS_LIVE_LENS", "").lower() == "true"
 
     async def run(self) -> List[Dict[str, Any]]:
-        """Run all covenant metrics tests.
+        """Run all accord metrics tests.
 
         Returns:
             List of test results
@@ -399,7 +399,7 @@ class CovenantMetricsTests:
             trace_files = list(qa_reports.glob("trace_*.json"))
 
             if not trace_files:
-                return False, "No trace files found in qa_reports/ - is covenant_metrics adapter loaded?"
+                return False, "No trace files found in qa_reports/ - is accord_metrics adapter loaded?"
 
             # Validate at least one trace
             validation_errors: List[str] = []
@@ -943,7 +943,7 @@ class CovenantMetricsTests:
             trace_files = list(qa_reports.glob("trace_*.json"))
 
             if not trace_files:
-                return False, "No traces captured - covenant_metrics adapter may not be loaded"
+                return False, "No traces captured - accord_metrics adapter may not be loaded"
 
             # Summarize captured traces
             signed_count = 0
@@ -986,7 +986,7 @@ class CovenantMetricsTests:
         """
         try:
             async with aiohttp.ClientSession() as session:
-                url = f"{LENS_SERVER_URL}/covenant/public-keys"
+                url = f"{LENS_SERVER_URL}/accord/public-keys"
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
                     if response.status != 200:
                         error_text = await response.text()
@@ -1020,7 +1020,7 @@ class CovenantMetricsTests:
         try:
             async with aiohttp.ClientSession() as session:
                 # 1. Get registered keys
-                keys_url = f"{LENS_SERVER_URL}/covenant/public-keys"
+                keys_url = f"{LENS_SERVER_URL}/accord/public-keys"
                 async with session.get(keys_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
                     if response.status != 200:
                         return False, f"Cannot fetch keys: HTTP {response.status}"
@@ -1032,7 +1032,7 @@ class CovenantMetricsTests:
                     return False, "No registered keys to compare against"
 
                 # 2. Get recent traces
-                traces_url = f"{LENS_SERVER_URL}/covenant/traces"
+                traces_url = f"{LENS_SERVER_URL}/accord/traces"
                 params = {"limit": 10}  # Last 10 traces
                 async with session.get(traces_url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
                     if response.status == 404:
@@ -1080,11 +1080,11 @@ class CovenantMetricsTests:
             return False, str(e)
 
     async def _test_load_multi_level_adapters(self) -> tuple[bool, str]:
-        """Load covenant_metrics adapters at all 3 trace levels via API.
+        """Load accord_metrics adapters at all 3 trace levels via API.
 
         Creates adapters:
-        - covenant_detailed: trace_level=detailed (includes PDMA text fields)
-        - covenant_full: trace_level=full_traces (includes reasoning text)
+        - accord_detailed: trace_level=detailed (includes PDMA text fields)
+        - accord_full: trace_level=full_traces (includes reasoning text)
 
         The default adapter loaded at startup uses trace_level=generic.
         """
@@ -1103,8 +1103,8 @@ class CovenantMetricsTests:
             # Define adapters to load with their trace levels
             # Default QA adapter uses 'detailed', so we load generic and full here
             adapters_to_load = [
-                ("covenant_generic", "generic"),
-                ("covenant_full", "full_traces"),
+                ("accord_generic", "generic"),
+                ("accord_full", "full_traces"),
             ]
 
             loaded = []
@@ -1113,7 +1113,7 @@ class CovenantMetricsTests:
 
                 for adapter_id, trace_level in adapters_to_load:
                     # Load adapter via API
-                    url = f"{base_url}/v1/system/adapters/ciris_covenant_metrics?adapter_id={adapter_id}"
+                    url = f"{base_url}/v1/system/adapters/ciris_accord_metrics?adapter_id={adapter_id}"
                     payload = {
                         "config": {
                             "adapter_id": adapter_id,  # For logging which instance sends which level
@@ -1163,7 +1163,7 @@ class CovenantMetricsTests:
         try:
             async with aiohttp.ClientSession() as session:
                 # Get recent traces
-                traces_url = f"{LENS_SERVER_URL}/covenant/traces"
+                traces_url = f"{LENS_SERVER_URL}/accord/traces"
                 params = {"limit": 20, "trace_level": "detailed"}
                 async with session.get(traces_url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
                     if response.status == 404:

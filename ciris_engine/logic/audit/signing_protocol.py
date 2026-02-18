@@ -137,7 +137,7 @@ class BaseSigner(ABC):
         """Compute key ID from public key bytes.
 
         Format: agent-{sha256(pubkey)[:12]}
-        This matches the covenant metrics key_id format.
+        This matches the accord metrics key_id format.
         """
         return f"agent-{hashlib.sha256(public_key_bytes).hexdigest()[:12]}"
 
@@ -268,26 +268,11 @@ class CIRISVerifySigner(BaseSigner):
         return self._public_key_cache
 
     def sign(self, data: bytes) -> bytes:
-        """Sign data via CIRISVerify FFI (blocking wrapper around async)."""
+        """Sign data via CIRISVerify FFI (direct sync call, no asyncio)."""
         if not self._client:
             raise RuntimeError(SIGNER_NOT_INITIALIZED)
-        import asyncio
-        import concurrent.futures
         try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-
-        try:
-            if loop and loop.is_running():
-                # We're in an async context — use thread to avoid deadlock
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                    future = pool.submit(asyncio.run, self._client.sign(data))
-                    result: bytes = future.result(timeout=10.0)
-                    return result
-            else:
-                result = asyncio.run(self._client.sign(data))
-                return bytes(result)
+            return self._client.sign_sync(data)
         except Exception as e:
             raise RuntimeError(f"CIRISVerify signing failed: {e}") from e
 
@@ -323,30 +308,58 @@ class CIRISVerifySigner(BaseSigner):
         raise RuntimeError("CIRISVerify manages keys in hardware — cannot generate locally")
 
     def _load_keypair(self, key_path: Path) -> bool:
-        """Load CIRISVerify client and fetch public key."""
+        """Load CIRISVerify client and fetch public key.
+
+        Runs initialization on a dedicated 8MB-stack thread because the Rust
+        ciris_verify_init → LicenseEngine::with_config → Tokio runtime needs
+        far more stack than the 544K iOS CIRISRuntime thread provides.
+        After init, the client handle is safe for lightweight sign_sync() calls.
+        """
+        import threading
+
+        result: list = [None, None, None, None]  # [client, key_bytes, algo, error]
+
+        def _init_on_large_stack() -> None:
+            try:
+                from ciris_verify import CIRISVerify
+
+                client = CIRISVerify(skip_integrity_check=True)
+                key_bytes, algo = client.get_public_key_sync()
+                result[0] = client
+                result[1] = key_bytes
+                result[2] = algo
+            except Exception as e:
+                result[3] = e
+
+        # Spawn a helper thread with 8MB stack for the heavy Rust/Tokio init.
+        old_stack_size = threading.stack_size()
         try:
-            from ciris_verify import CIRISVerify
-            client = CIRISVerify(skip_integrity_check=True)
-            self._client = client
+            threading.stack_size(8 * 1024 * 1024)  # 8MB
+            t = threading.Thread(target=_init_on_large_stack, daemon=True)
+            t.start()
+            t.join(timeout=15)
+        finally:
+            threading.stack_size(old_stack_size)
 
-            # Fetch public key (blocking)
-            import asyncio
-            key_bytes, algo = asyncio.run(client.get_public_key())
-            self._public_key_cache = key_bytes
-            self._algo_name = algo
-            self._key_id = self._compute_key_id(key_bytes)
-
-            # Map algorithm
-            if "Ed25519" in algo:
-                self._algorithm = SigningAlgorithm.ED25519
-
-            logger.info(
-                f"CIRISVerify vault signer loaded (algo={algo}, key_id={self._key_id})"
-            )
-            return True
-        except Exception as e:
-            logger.debug(f"CIRISVerify not available: {e}")
+        if result[3] is not None:
+            logger.debug(f"CIRISVerify not available: {result[3]}")
             return False
+        if result[0] is None:
+            logger.debug("CIRISVerify initialization timed out")
+            return False
+
+        self._client = result[0]
+        self._public_key_cache = result[1]
+        self._algo_name = result[2]
+        self._key_id = self._compute_key_id(result[1])
+
+        if self._algo_name and "Ed25519" in self._algo_name:
+            self._algorithm = SigningAlgorithm.ED25519
+
+        logger.info(
+            f"CIRISVerify vault signer loaded (algo={self._algo_name}, key_id={self._key_id})"
+        )
+        return True
 
     def _save_keypair(self, key_path: Path) -> None:
         """Not applicable — key lives in hardware."""
@@ -354,11 +367,11 @@ class CIRISVerifySigner(BaseSigner):
 
 
 class UnifiedSigningKey:
-    """Unified signing key management for audit and covenant metrics.
+    """Unified signing key management for audit and accord metrics.
 
     Manages a single Ed25519 key used for:
     1. Audit trail signing
-    2. Covenant metrics trace signing
+    2. Accord metrics trace signing
     3. Future: any other cryptographic signing needs
 
     The key is stored at: data/agent_signing.key (32-byte raw Ed25519 private key)
@@ -462,33 +475,61 @@ class UnifiedSigningKey:
         self._initialized = True
 
     def load_provisioned_key(self, ed25519_private_key_b64: str, save_path: Optional[Path] = None) -> None:
-        """Load a Registry-provisioned Ed25519 key instead of self-generating.
+        """Load signing key for a Registry-provisioned agent.
 
-        Used by the 'Connect to Node' device auth flow, where CIRISRegistry
-        issues the signing key rather than the agent generating one locally.
+        Tries CIRISVerify hardware/software vault first (sync FFI — no asyncio
+        overhead). When CIRISVerify is available, it manages the signing key
+        via Secure Enclave or software vault. The Registry-provisioned key is
+        saved to disk as fallback only.
 
         Args:
             ed25519_private_key_b64: Base64-encoded 32-byte Ed25519 private key
-            save_path: Where to save the key file (defaults to DEFAULT_KEY_PATH)
+            save_path: Where to save the fallback key (uses get_data_dir() if None)
         """
         import base64
 
+        # Always save the provisioned key as fallback (uses writable path)
         from cryptography.hazmat.primitives.asymmetric import ed25519
 
         private_bytes = base64.b64decode(ed25519_private_key_b64)
         if len(private_bytes) != 32:
             raise ValueError(f"Expected 32-byte Ed25519 private key, got {len(private_bytes)} bytes")
 
+        if not save_path:
+            from ciris_engine.logic.utils.path_resolution import get_data_dir
+            save_path = get_data_dir() / "agent_signing.key"
+
+        try:
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            save_path.write_bytes(private_bytes)
+            import os
+            os.chmod(save_path, 0o600)
+            logger.info(f"Saved provisioned key fallback to {save_path}")
+        except OSError as e:
+            logger.warning(f"Could not save provisioned key to {save_path}: {e}")
+
+        # Path 1: Try CIRISVerify vault (preferred — uses sync FFI, safe for iOS threads)
+        try:
+            verify_signer = CIRISVerifySigner()
+            if verify_signer._load_keypair(Path("__ciris_verify__")):
+                self._signer = verify_signer
+                self._initialized = True
+                logger.info(
+                    f"Using CIRISVerify vault for provisioned agent "
+                    f"(key_id={verify_signer.key_id})"
+                )
+                return
+        except Exception as e:
+            logger.debug(f"CIRISVerify vault not available for provisioned key: {e}")
+
+        # Path 2: Ed25519 fallback with the provisioned key
         self._signer = Ed25519Signer()
         self._signer._private_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_bytes)
         self._signer._public_key = self._signer._private_key.public_key()
         self._signer._key_id = self._signer._compute_key_id(self._signer.public_key_bytes)
-
-        path = save_path or self.DEFAULT_KEY_PATH
-        self._signer._save_keypair(path)
-        self._key_path = path
+        self._key_path = save_path
         self._initialized = True
-        logger.info(f"Loaded Registry-provisioned Ed25519 key (key_id={self._signer._key_id})")
+        logger.info(f"Using Ed25519 fallback for provisioned key (key_id={self._signer._key_id})")
 
     def sign(self, data: bytes) -> bytes:
         """Sign data and return signature bytes."""
@@ -515,7 +556,7 @@ class UnifiedSigningKey:
     def get_registration_payload(self, description: str = "") -> Dict[str, Any]:
         """Get payload for registering public key with CIRISLens.
 
-        Returns dict suitable for POST to /api/v1/covenant/public-keys
+        Returns dict suitable for POST to /api/v1/accord/public-keys
         """
         return {
             "key_id": self.key_id,
@@ -532,7 +573,7 @@ _unified_key: Optional[UnifiedSigningKey] = None
 def get_unified_signing_key() -> UnifiedSigningKey:
     """Get the global unified signing key instance.
 
-    This ensures all components (audit, covenant metrics, etc.)
+    This ensures all components (audit, accord metrics, etc.)
     use the same signing key.
     """
     global _unified_key

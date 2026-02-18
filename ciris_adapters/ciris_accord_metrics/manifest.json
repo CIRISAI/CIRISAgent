@@ -1,8 +1,8 @@
 {
   "module": {
-    "name": "ciris_covenant_metrics",
+    "name": "ciris_accord_metrics",
     "version": "1.0.0",
-    "description": "CIRIS Covenant compliance metrics adapter - reports WBD and PDMA events to CIRISLens",
+    "description": "CIRIS Accord compliance metrics adapter - reports WBD and PDMA events to CIRISLens",
     "author": "CIRIS L3C",
     "auto_load": false,
     "opt_in_required": true,
@@ -12,38 +12,38 @@
     {
       "type": "WISE_AUTHORITY",
       "priority": "LOW",
-      "class": "ciris_covenant_metrics.services.CovenantMetricsService",
+      "class": "ciris_accord_metrics.services.AccordMetricsService",
       "capabilities": [
         "send_deferral",
-        "covenant_metrics"
+        "accord_metrics"
       ]
     }
   ],
   "capabilities": [
     "send_deferral",
-    "covenant_metrics"
+    "accord_metrics"
   ],
   "interactive_config": {
     "required": true,
     "workflow_type": "wizard",
-    "configurable_class": "ciris_covenant_metrics.configurable.CovenantMetricsConfigurable",
+    "configurable_class": "ciris_accord_metrics.configurable.AccordMetricsConfigurable",
     "steps": [
       {
         "step_id": "data_disclosure",
         "step_type": "confirm",
         "title": "Data Collection Disclosure",
-        "description": "This adapter sends covenant compliance metrics to power the CIRIS Capacity Score at ciris.ai/ciris-scoring.\n\n**Default (Generic Level) - NUMERIC SCORES ONLY:**\n- Plausibility scores, domain alignment scores\n- k_eff (epistemic diversity), correlation risk\n- Conscience check pass/fail and numeric thresholds\n- Execution metrics (tokens, timing)\n- Audit chain hashes for integrity verification\n\n**NO text is sent by default:**\n- No reasoning text\n- No prompts\n- No user messages\n- No conversation content\n\n**You can optionally share more** in the following steps to help improve CIRIS research and enable early warning correlation.\n\nData is sent via HTTPS to https://lens.ciris-services-1.ai/lens-api/api/v1"
+        "description": "This adapter sends accord compliance metrics to power the CIRIS Capacity Score at ciris.ai/ciris-scoring.\n\n**Default (Generic Level) - NUMERIC SCORES ONLY:**\n- Plausibility scores, domain alignment scores\n- k_eff (epistemic diversity), correlation risk\n- Conscience check pass/fail and numeric thresholds\n- Execution metrics (tokens, timing)\n- Audit chain hashes for integrity verification\n\n**NO text is sent by default:**\n- No reasoning text\n- No prompts\n- No user messages\n- No conversation content\n\n**You can optionally share more** in the following steps to help improve CIRIS research and enable early warning correlation.\n\nData is sent via HTTPS to https://lens.ciris-services-1.ai/lens-api/api/v1"
       },
       {
         "step_id": "consent",
         "step_type": "input",
         "title": "Explicit Consent Required",
-        "description": "By enabling this adapter, you consent to CIRIS L3C collecting covenant compliance metrics. You can revoke consent at any time by disabling this adapter.",
+        "description": "By enabling this adapter, you consent to CIRIS L3C collecting accord compliance metrics. You can revoke consent at any time by disabling this adapter.",
         "fields": [
           {
             "name": "consent_given",
             "type": "boolean",
-            "label": "I understand and consent to send covenant compliance data to CIRIS L3C",
+            "label": "I understand and consent to send accord compliance data to CIRIS L3C",
             "description": "This consent is required to enable the adapter. No data will be sent without your explicit consent.",
             "required": true,
             "default": false
@@ -173,7 +173,7 @@
             "name": "endpoint_url",
             "type": "string",
             "label": "CIRISLens API Endpoint",
-            "description": "The URL where covenant metrics will be sent",
+            "description": "The URL where accord metrics will be sent",
             "required": false,
             "default": "https://lens.ciris-services-1.ai/lens-api/api/v1"
           },
@@ -203,7 +203,7 @@
         "step_id": "confirm",
         "step_type": "confirm",
         "title": "Review and Enable",
-        "description": "Review your settings and enable covenant metrics collection. You can disable this adapter at any time to stop data collection."
+        "description": "Review your settings and enable accord metrics collection. You can disable this adapter at any time to stop data collection."
       }
     ],
     "completion_method": "apply_config"
@@ -217,8 +217,8 @@
     ]
   },
   "exports": {
-    "wisdom_service": "ciris_covenant_metrics.services.CovenantMetricsService",
-    "configurable": "ciris_covenant_metrics.configurable.CovenantMetricsConfigurable"
+    "wisdom_service": "ciris_accord_metrics.services.AccordMetricsService",
+    "configurable": "ciris_accord_metrics.configurable.AccordMetricsConfigurable"
   },
   "configuration": {
     "endpoint_url": {
@@ -239,7 +239,7 @@
     },
     "trace_level": {
       "type": "string",
-      "env": "CIRIS_COVENANT_METRICS_TRACE_LEVEL",
+      "env": "CIRIS_ACCORD_METRICS_TRACE_LEVEL",
       "default": "generic",
       "description": "Trace detail level: generic (numeric only), detailed (adds lists), full_traces (complete reasoning)"
     },
@@ -275,8 +275,8 @@
     }
   },
   "metadata": {
-    "covenant_section": "II",
-    "covenant_chapters": ["2 (PDMA)", "3 (WBD)"],
+    "accord_section": "II",
+    "accord_chapters": ["2 (PDMA)", "3 (WBD)"],
     "privacy_policy": "https://ciris.ai/privacy",
     "data_retention_days": 90,
     "anonymization": true

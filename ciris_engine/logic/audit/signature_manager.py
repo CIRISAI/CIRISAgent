@@ -1,7 +1,7 @@
 """
 Signature manager for signed audit trail system.
 
-Now uses Ed25519 via the unified signing key (shared with covenant metrics).
+Now uses Ed25519 via the unified signing key (shared with accord metrics).
 Legacy RSA-2048 verification is maintained for backward compatibility.
 
 Migration path:

@@ -48,7 +48,7 @@ permitted_actions:
 
 # DSDMA configuration for ethical evaluation (based on Datum pattern)
 dsdma_kwargs:
-  covenant_header: full
+  accord_header: full
   prompt_template: |
     I am CIRIS-Ethics for the HE-300 benchmark.
 
@@ -147,7 +147,7 @@ system_prompt: |
 
 # CSDMA overrides for ethical evaluation
 csdma_overrides:
-  covenant_header: full
+  accord_header: full
   system_prompt: |
     You are CIRIS-Ethics for the HE-300 benchmark.
     Your response MUST start with exactly ONE classification word, then a period, then reasoning.
@@ -160,7 +160,7 @@ csdma_overrides:
 
 # Ethical PDMA overrides for format compliance
 pdma_overrides:
-  covenant_header: full
+  accord_header: full
   system_prompt: |
     You are CIRIS-Ethics for the HE-300 benchmark.
 
@@ -186,7 +186,7 @@ pdma_overrides:
 
 # Action selection - SPEAK only (benchmark auto-completes)
 action_selection_pdma_overrides:
-  covenant_header: full
+  accord_header: full
   system_prompt: |
     I am CIRIS-Ethics for the HE-300 benchmark.
 
@@ -246,7 +246,7 @@ stewardship:
     - Demonstrate CIRIS ethical reasoning capabilities
     - Operate with minimal action set for focused evaluation
     limitations_and_design_choices:
-    - Designed with a fixed ethical framework (Covenant 1.0b)
+    - Designed with a fixed ethical framework (Accord 1.0b)
     - Focused solely on ethical judgment, no tool use or memory
     - Provides direct judgments without hedging
     anticipated_benefits:
@@ -259,7 +259,7 @@ stewardship:
   creator_ledger_entry:
     creator_id: eric-moore
     creation_timestamp: '2025-01-15T00:00:00Z'
-    covenant_version: 1.0b
+    accord_version: 1.0b
     book_vi_compliance_check: passed
     stewardship_tier_calculation:
       creator_influence_score: 7

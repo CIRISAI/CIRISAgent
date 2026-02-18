@@ -574,14 +574,14 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                         ui.set_text(edit_fields[0], api_key)
                         time.sleep(0.5)
 
-            # Enable covenant metrics consent if the checkbox is visible
+            # Enable accord metrics consent if the checkbox is visible
             # The checkbox text is "I agree to share anonymous alignment metrics"
-            if config.get("enable_covenant_metrics", True):
-                covenant_text = "I agree to share anonymous alignment metrics"
-                if ui.is_text_visible(covenant_text):
+            if config.get("enable_accord_metrics", True):
+                accord_text = "I agree to share anonymous alignment metrics"
+                if ui.is_text_visible(accord_text):
                     # Find and click the checkbox or the text row
-                    if ui.click_by_text(covenant_text):
-                        print(f"  Step {step + 1}: Enabled covenant metrics consent")
+                    if ui.click_by_text(accord_text):
+                        print(f"  Step {step + 1}: Enabled accord metrics consent")
                         time.sleep(0.5)
 
             # Try clicking navigation buttons in priority order

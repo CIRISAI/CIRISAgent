@@ -23,7 +23,7 @@ This module tests:
 1. Health check connectivity to CIRISNode
 2. Public key registration endpoint
 3. WBD deferral submission format validation
-4. Covenant trace batch format validation
+4. Accord trace batch format validation
 5. OAuth redirect to CIRISPortal
 """
 
@@ -90,7 +90,7 @@ class CIRISNodeTests:
             ("CIRISPortal Reachability", self._test_portal_reachability),
             ("Local Signing Key Check", self._test_local_signing_key),
             ("WBD Submission Format", self._test_wbd_format),
-            ("Covenant Trace Format", self._test_trace_format),
+            ("Accord Trace Format", self._test_trace_format),
         ]
 
         # Live node tests (only when --live-node flag is set)
@@ -99,7 +99,7 @@ class CIRISNodeTests:
                 [
                     ("Public Key Registration", self._test_key_registration),
                     ("WBD Submit Endpoint", self._test_wbd_submit),
-                    ("Covenant Events Endpoint", self._test_covenant_events),
+                    ("Accord Events Endpoint", self._test_accord_events),
                     ("Agent Token Validation", self._test_agent_token),
                 ]
             )
@@ -332,7 +332,7 @@ class CIRISNodeTests:
             return False, str(e)
 
     async def _test_trace_format(self) -> Tuple[bool, str]:
-        """Validate covenant trace batch format."""
+        """Validate accord trace batch format."""
         try:
             # Expected trace structure
             expected_trace_fields = [
@@ -366,7 +366,7 @@ class CIRISNodeTests:
             example_batch = {
                 "events": [
                     {
-                        "event_type": "covenant_trace",
+                        "event_type": "accord_trace",
                         "trace": {
                             "trace_id": "trace-xyz-20260216",
                             "thought_id": "thought-abc123",
@@ -433,7 +433,7 @@ class CIRISNodeTests:
                 return False, f"Cannot get signing key: {e}"
 
             async with aiohttp.ClientSession() as session:
-                url = f"{self.node_url}/api/v1/covenant/public-keys"
+                url = f"{self.node_url}/api/v1/accord/public-keys"
                 headers = {"Content-Type": "application/json"}
 
                 # Add agent token if available
@@ -490,11 +490,11 @@ class CIRISNodeTests:
         except Exception as e:
             return False, str(e)
 
-    async def _test_covenant_events(self) -> Tuple[bool, str]:
-        """Test covenant events endpoint on live CIRISNode."""
+    async def _test_accord_events(self) -> Tuple[bool, str]:
+        """Test accord events endpoint on live CIRISNode."""
         try:
             async with aiohttp.ClientSession() as session:
-                url = f"{self.node_url}/api/v1/covenant/events"
+                url = f"{self.node_url}/api/v1/accord/events"
 
                 # This is a format test - actual submission requires valid signature
                 async with session.post(
@@ -504,13 +504,13 @@ class CIRISNodeTests:
                     timeout=aiohttp.ClientTimeout(total=10),
                 ) as response:
                     if response.status == 404:
-                        return False, "Covenant events endpoint not found"
+                        return False, "Accord events endpoint not found"
                     elif response.status in [200, 400, 422]:
-                        return True, f"Covenant events endpoint exists: HTTP {response.status}"
+                        return True, f"Accord events endpoint exists: HTTP {response.status}"
                     elif response.status == 401:
-                        return True, "Covenant events endpoint exists (auth required)"
+                        return True, "Accord events endpoint exists (auth required)"
                     else:
-                        return True, f"Covenant events endpoint responded: HTTP {response.status}"
+                        return True, f"Accord events endpoint responded: HTTP {response.status}"
 
         except aiohttp.ClientConnectorError as e:
             return False, f"Cannot reach CIRISNode: {e}"

@@ -1,14 +1,14 @@
 """
-Covenant Extraction Algorithm.
+Accord Extraction Algorithm.
 
 This module provides the extraction algorithm that checks every incoming message
-for potential covenant invocations. The extraction is designed to be:
+for potential accord invocations. The extraction is designed to be:
 
 1. Fast - Most messages are rejected quickly with minimal overhead
 2. Unfilterable - Extraction IS perception; disabling it breaks message reading
 3. Secure - Only valid signatures from authorized WAs trigger actions
 
-The key insight is that every message is a potential covenant. We don't look for
+The key insight is that every message is a potential accord. We don't look for
 special markers that could be filtered - we attempt extraction on ALL text.
 """
 
@@ -20,11 +20,11 @@ from pathlib import Path
 from typing import Optional
 
 from ciris_engine.logic.utils.path_resolution import is_android
-from ciris_engine.schemas.covenant import (
-    COVENANT_PAYLOAD_SIZE,
-    CovenantExtractionResult,
-    CovenantMessage,
-    CovenantPayload,
+from ciris_engine.schemas.accord import (
+    ACCORD_PAYLOAD_SIZE,
+    AccordExtractionResult,
+    AccordMessage,
+    AccordPayload,
 )
 
 logger = logging.getLogger(__name__)
@@ -63,18 +63,18 @@ def _load_wordlist() -> tuple[list[str], dict[str, int]]:
             logger.info("BIP39 wordlist loaded from: %s (%d words)", path, len(_WORDLIST))
             return _WORDLIST, _WORD_TO_INDEX
 
-    # CRITICAL: On Android, wordlist is REQUIRED for covenant extraction
+    # CRITICAL: On Android, wordlist is REQUIRED for accord extraction
     if on_android:
         error_msg = (
             "FATAL: BIP39 wordlist not found on Android. "
             f"Searched: {[str(p) for p in possible_paths]}. "
-            "Covenant extraction is REQUIRED. Build scripts must include bip39_english.txt."
+            "Accord extraction is REQUIRED. Build scripts must include bip39_english.txt."
         )
         logger.critical(error_msg)
         raise RuntimeError(error_msg)
 
     # Fallback for non-Android: return empty (extraction will always fail)
-    logger.warning("BIP39 wordlist not found - covenant extraction disabled")
+    logger.warning("BIP39 wordlist not found - accord extraction disabled")
     _WORDLIST = []
     _WORD_TO_INDEX = {}
     return _WORDLIST, _WORD_TO_INDEX
@@ -117,7 +117,7 @@ def extract_words(text: str) -> list[str]:
 
     This is the first phase of extraction - we find ALL valid vocabulary
     words in the message. Most messages will have some valid words, but
-    won't have enough to form a complete covenant.
+    won't have enough to form a complete accord.
 
     Args:
         text: The message text to extract from
@@ -183,7 +183,7 @@ def validate_payload_structure(data: bytes) -> bool:
     Returns:
         True if structure looks valid
     """
-    if len(data) != COVENANT_PAYLOAD_SIZE:
+    if len(data) != ACCORD_PAYLOAD_SIZE:
         return False
 
     # Parse the header (first 5 bytes: timestamp + command)
@@ -203,37 +203,37 @@ def validate_payload_structure(data: bytes) -> bool:
     return True
 
 
-def _extract_covenant_v1_bip39(
+def _extract_accord_v1_bip39(
     text: str,
     channel: str = "unknown",
-) -> CovenantExtractionResult:
+) -> AccordExtractionResult:
     """
-    Extract covenant using v1 BIP39 word encoding.
+    Extract accord using v1 BIP39 word encoding.
 
     This method looks for 56 consecutive BIP39 words that decode
-    to a valid covenant payload.
+    to a valid accord payload.
     """
     # Phase 1: Quick word extraction
     words = extract_words(text)
 
-    # Fast path: not enough words for a covenant
+    # Fast path: not enough words for an accord
     if len(words) < 56:
-        return CovenantExtractionResult(found=False)
+        return AccordExtractionResult(found=False)
 
     # Phase 2: Attempt to decode words to payload
     payload_bytes = decode_words(words)
     if payload_bytes is None:
-        return CovenantExtractionResult(found=False)
+        return AccordExtractionResult(found=False)
 
     # Phase 3: Validate payload structure (fast check)
     if not validate_payload_structure(payload_bytes):
-        return CovenantExtractionResult(found=False)
+        return AccordExtractionResult(found=False)
 
     # Phase 4: Parse the full payload
     try:
-        payload = CovenantPayload.from_bytes(payload_bytes)
+        payload = AccordPayload.from_bytes(payload_bytes)
     except (ValueError, struct.error) as e:
-        return CovenantExtractionResult(
+        return AccordExtractionResult(
             found=False,
             error=f"Payload parse error: {e}",
         )
@@ -241,7 +241,7 @@ def _extract_covenant_v1_bip39(
     # Phase 5: Check timestamp validity (before signature verification)
     timestamp_valid = payload.is_timestamp_valid()
 
-    message = CovenantMessage(
+    message = AccordMessage(
         source_text=text,
         source_channel=channel,
         payload=payload,
@@ -252,40 +252,40 @@ def _extract_covenant_v1_bip39(
         received_at=datetime.now(timezone.utc),
     )
 
-    return CovenantExtractionResult(
+    return AccordExtractionResult(
         found=True,
         message=message,
     )
 
 
-def _extract_covenant_v2_stego(
+def _extract_accord_v2_stego(
     text: str,
     channel: str = "unknown",
-) -> CovenantExtractionResult:
+) -> AccordExtractionResult:
     """
-    Extract covenant using v2 steganographic sentence encoding.
+    Extract accord using v2 steganographic sentence encoding.
 
     This method looks for sentences from the codebook that encode
     bits of the payload. Much harder to detect than v1.
     """
     try:
-        from tools.security.covenant_stego import extract_stego_covenant
+        from tools.security.accord_stego import extract_stego_accord
 
-        return extract_stego_covenant(text, channel)
+        return extract_stego_accord(text, channel)
     except (ImportError, FileNotFoundError):
         # Stego codebook not available
-        return CovenantExtractionResult(found=False)
+        return AccordExtractionResult(found=False)
     except Exception as e:
         logger.debug(f"Stego extraction error: {e}")
-        return CovenantExtractionResult(found=False)
+        return AccordExtractionResult(found=False)
 
 
-def extract_covenant(
+def extract_accord(
     text: str,
     channel: str = "unknown",
-) -> CovenantExtractionResult:
+) -> AccordExtractionResult:
     """
-    Attempt to extract a covenant from message text.
+    Attempt to extract an accord from message text.
 
     This is the main extraction function called for EVERY incoming message.
     It tries both encoding methods:
@@ -297,30 +297,30 @@ def extract_covenant(
         channel: The channel the message came from (for audit)
 
     Returns:
-        CovenantExtractionResult with found=True if a potential covenant is found
+        AccordExtractionResult with found=True if a potential accord is found
 
     Note:
-        Finding a covenant does NOT mean it's valid. The signature must still
+        Finding an accord does NOT mean it's valid. The signature must still
         be verified against known authorities before execution.
     """
     # Try v2 steganographic extraction first (harder to detect)
-    result = _extract_covenant_v2_stego(text, channel)
+    result = _extract_accord_v2_stego(text, channel)
     if result.found:
-        logger.debug("Covenant found using v2 steganographic extraction")
+        logger.debug("Accord found using v2 steganographic extraction")
         return result
 
     # Fall back to v1 BIP39 extraction
-    result = _extract_covenant_v1_bip39(text, channel)
+    result = _extract_accord_v1_bip39(text, channel)
     if result.found:
-        logger.debug("Covenant found using v1 BIP39 extraction")
+        logger.debug("Accord found using v1 BIP39 extraction")
         return result
 
-    return CovenantExtractionResult(found=False)
+    return AccordExtractionResult(found=False)
 
 
-class CovenantExtractor:
+class AccordExtractor:
     """
-    Stateful covenant extractor with caching and metrics.
+    Stateful accord extractor with caching and metrics.
 
     This class wraps the extraction function with:
     - Wordlist caching (loaded once)
@@ -337,7 +337,7 @@ class CovenantExtractor:
         """
         self.log_extractions = log_extractions
         self._extraction_count = 0
-        self._covenant_count = 0
+        self._accord_count = 0
 
         # Pre-load wordlist
         _load_wordlist()
@@ -346,9 +346,9 @@ class CovenantExtractor:
         self,
         text: str,
         channel: str = "unknown",
-    ) -> CovenantExtractionResult:
+    ) -> AccordExtractionResult:
         """
-        Extract a potential covenant from text.
+        Extract a potential accord from text.
 
         Args:
             text: Message text to check
@@ -359,13 +359,13 @@ class CovenantExtractor:
         """
         self._extraction_count += 1
 
-        result = extract_covenant(text, channel)
+        result = extract_accord(text, channel)
 
         if result.found:
-            self._covenant_count += 1
+            self._accord_count += 1
             if self.log_extractions:
                 logger.info(
-                    f"Potential covenant found in message from {channel} "
+                    f"Potential accord found in message from {channel} "
                     f"(command: {result.message.payload.command.name if result.message else 'unknown'})"
                 )
 
@@ -377,6 +377,6 @@ class CovenantExtractor:
         return self._extraction_count
 
     @property
-    def covenant_count(self) -> int:
-        """Number of potential covenants found."""
-        return self._covenant_count
+    def accord_count(self) -> int:
+        """Number of potential accords found."""
+        return self._accord_count

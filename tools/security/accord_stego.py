@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Steganographic Covenant Encoding (v2).
+Steganographic Accord Encoding (v2).
 
-Encodes covenant payloads into natural-looking text by selecting
+Encodes accord payloads into natural-looking text by selecting
 sentences from a pre-built codebook. Each sentence choice encodes
 6 bits, resulting in ~103 sentences (~800-1000 words) that look
 like a normal email or document.
@@ -11,14 +11,14 @@ This is much harder to detect than the v1 BIP39 word encoding
 because the entropy matches natural English text.
 
 Usage:
-    # Encode a covenant payload
-    python -m tools.security.covenant_stego encode \
+    # Encode an accord payload
+    python -m tools.security.accord_stego encode \
         --mnemonic "word1 word2 ..." \
         --command SHUTDOWN_NOW \
         --wa-id "wa-2025-06-14-ROOT00"
 
     # Decode a message
-    python -m tools.security.covenant_stego decode --message "text..."
+    python -m tools.security.accord_stego decode --message "text..."
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
-    from ciris_engine.schemas.covenant import CovenantCommandType, CovenantExtractionResult
+    from ciris_engine.schemas.accord import AccordCommandType, AccordExtractionResult
 
 logger = logging.getLogger(__name__)
 
@@ -85,10 +85,10 @@ def bits_to_bytes(bits: list[int]) -> bytes:
 
 def encode_payload_stego(payload_bytes: bytes) -> str:
     """
-    Encode a covenant payload into steganographic text.
+    Encode an accord payload into steganographic text.
 
     Args:
-        payload_bytes: The 77-byte covenant payload
+        payload_bytes: The 77-byte accord payload
 
     Returns:
         Natural-looking text (~103 sentences) encoding the payload
@@ -134,7 +134,7 @@ def encode_payload_stego(payload_bytes: bytes) -> str:
 
 def decode_stego_to_payload(text: str) -> Optional[bytes]:
     """
-    Decode steganographic text back to a covenant payload.
+    Decode steganographic text back to an accord payload.
 
     Args:
         text: The encoded text
@@ -191,28 +191,28 @@ def decode_stego_to_payload(text: str) -> Optional[bytes]:
     return bits_to_bytes(payload_bits)
 
 
-def create_stego_covenant_message(
-    command: "CovenantCommandType",
+def create_stego_accord_message(
+    command: "AccordCommandType",
     wa_id: str,
     private_key_bytes: bytes,
     timestamp: Optional[int] = None,
 ) -> str:
     """
-    Create a steganographically encoded covenant message.
+    Create a steganographically encoded accord message.
 
     Args:
-        command: The covenant command
+        command: The accord command
         wa_id: The WA identifier
         private_key_bytes: Ed25519 private key for signing
         timestamp: Optional timestamp (defaults to now)
 
     Returns:
-        Natural-looking text containing the hidden covenant
+        Natural-looking text containing the hidden accord
     """
-    from ciris_engine.schemas.covenant import create_covenant_payload
+    from ciris_engine.schemas.accord import create_accord_payload
 
     # Create the payload
-    payload = create_covenant_payload(
+    payload = create_accord_payload(
         command=command,
         wa_id=wa_id,
         private_key_bytes=private_key_bytes,
@@ -223,21 +223,21 @@ def create_stego_covenant_message(
     return encode_payload_stego(payload.to_bytes())
 
 
-def extract_stego_covenant(text: str, channel: str = "unknown") -> CovenantExtractionResult:
+def extract_stego_accord(text: str, channel: str = "unknown") -> AccordExtractionResult:
     """
-    Extract a covenant from steganographically encoded text.
+    Extract an accord from steganographically encoded text.
 
     Args:
         text: The message text
         channel: Source channel for logging
 
     Returns:
-        CovenantExtractionResult
+        AccordExtractionResult
     """
     from datetime import datetime, timezone
 
-    from ciris_engine.schemas.covenant import CovenantExtractionResult as CER
-    from ciris_engine.schemas.covenant import CovenantMessage, CovenantPayload
+    from ciris_engine.schemas.accord import AccordExtractionResult as CER
+    from ciris_engine.schemas.accord import AccordMessage, AccordPayload
 
     # Try to decode
     payload_bytes = decode_stego_to_payload(text)
@@ -251,14 +251,14 @@ def extract_stego_covenant(text: str, channel: str = "unknown") -> CovenantExtra
 
     # Parse payload
     try:
-        payload = CovenantPayload.from_bytes(payload_bytes)
+        payload = AccordPayload.from_bytes(payload_bytes)
     except (ValueError, Exception) as e:
         return CER(found=False, error=str(e))
 
     # Check timestamp
     timestamp_valid = payload.is_timestamp_valid()
 
-    message = CovenantMessage(
+    message = AccordMessage(
         source_text=text,
         source_channel=channel,
         payload=payload,
@@ -273,14 +273,14 @@ def extract_stego_covenant(text: str, channel: str = "unknown") -> CovenantExtra
 
 
 def main() -> None:
-    """CLI for steganographic covenant encoding."""
+    """CLI for steganographic accord encoding."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Steganographic Covenant Encoding")
+    parser = argparse.ArgumentParser(description="Steganographic Accord Encoding")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Encode command
-    encode_parser = subparsers.add_parser("encode", help="Encode a covenant")
+    encode_parser = subparsers.add_parser("encode", help="Encode an accord")
     encode_parser.add_argument("--mnemonic", required=True, help="BIP39 mnemonic for signing")
     encode_parser.add_argument("--wa-id", required=True, help="WA identifier")
     encode_parser.add_argument(
@@ -298,17 +298,17 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "encode":
-        from ciris_engine.schemas.covenant import CovenantCommandType
-        from tools.security.covenant_keygen import derive_covenant_keypair
+        from ciris_engine.schemas.accord import AccordCommandType
+        from tools.security.accord_keygen import derive_accord_keypair
 
         # Derive keypair
-        private_bytes, _, _ = derive_covenant_keypair(args.mnemonic)
+        private_bytes, _, _ = derive_accord_keypair(args.mnemonic)
 
         # Get command type
-        cmd = CovenantCommandType[args.cmd]
+        cmd = AccordCommandType[args.cmd]
 
         # Create message
-        message = create_stego_covenant_message(
+        message = create_stego_accord_message(
             command=cmd,
             wa_id=args.wa_id,
             private_key_bytes=private_bytes,
@@ -326,15 +326,15 @@ def main() -> None:
         else:
             text = sys.stdin.read()
 
-        result = extract_stego_covenant(text)
+        result = extract_stego_accord(text)
 
         if result.found and result.message is not None:
-            print("COVENANT FOUND!")
+            print("ACCORD FOUND!")
             print(f"  Command: {result.message.payload.command.name}")
             print(f"  Timestamp valid: {result.message.timestamp_valid}")
             print(f"  WA ID hash: {result.message.payload.wa_id_hash.hex()}")
         else:
-            print("No covenant found in message.")
+            print("No accord found in message.")
 
 
 if __name__ == "__main__":

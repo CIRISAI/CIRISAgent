@@ -11,7 +11,7 @@ from ciris_engine.logic.formatters import (
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import COVENANT_TEXT, COVENANT_TEXT_COMPRESSED
+from ciris_engine.logic.utils import ACCORD_TEXT, ACCORD_TEXT_COMPRESSED
 from ciris_engine.protocols.dma.base import CSDMAProtocol
 from ciris_engine.schemas.dma.results import CSDMAResult
 from ciris_engine.schemas.runtime.models import ImageContent
@@ -86,12 +86,12 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         """
         messages: List[JSONDict] = []
 
-        # Add covenant based on mode - 'full', 'compressed', or 'none'
-        covenant_mode = self.prompt_loader.get_covenant_mode(self.prompt_template_data)
-        if covenant_mode == "full":
-            messages.append({"role": "system", "content": COVENANT_TEXT})
-        elif covenant_mode == "compressed":
-            messages.append({"role": "system", "content": COVENANT_TEXT_COMPRESSED})
+        # Add accord based on mode - 'full', 'compressed', or 'none'
+        accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
+        if accord_mode == "full":
+            messages.append({"role": "system", "content": ACCORD_TEXT})
+        elif accord_mode == "compressed":
+            messages.append({"role": "system", "content": ACCORD_TEXT_COMPRESSED})
 
         # Check for template override of system_prompt (e.g., HE-300 format instructions)
         template_system_override = None

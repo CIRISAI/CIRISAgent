@@ -1,5 +1,5 @@
 """
-Comprehensive tests for CovenantMetricsAdapter.
+Comprehensive tests for AccordMetricsAdapter.
 
 Tests cover:
 - Initialization with/without consent
@@ -15,8 +15,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ciris_adapters.ciris_covenant_metrics.adapter import Adapter, CovenantMetricsAdapter
-from ciris_adapters.ciris_covenant_metrics.services import CovenantMetricsService
+from ciris_adapters.ciris_accord_metrics.adapter import Adapter, AccordMetricsAdapter
+from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.authority_core import DeferralRequest
 
@@ -61,27 +61,27 @@ def mock_context():
     return context
 
 
-class TestCovenantMetricsAdapterExports:
+class TestAccordMetricsAdapterExports:
     """Tests for adapter exports."""
 
     def test_adapter_alias_export(self):
         """Test Adapter is exported for dynamic loading."""
-        assert Adapter is CovenantMetricsAdapter
+        assert Adapter is AccordMetricsAdapter
 
     def test_imports_from_package(self):
         """Test imports from package __init__."""
-        from ciris_adapters.ciris_covenant_metrics import Adapter, CovenantMetricsAdapter, CovenantMetricsService
+        from ciris_adapters.ciris_accord_metrics import Adapter, AccordMetricsAdapter, AccordMetricsService
 
-        assert Adapter is CovenantMetricsAdapter
-        assert CovenantMetricsService is not None
+        assert Adapter is AccordMetricsAdapter
+        assert AccordMetricsService is not None
 
 
-class TestCovenantMetricsAdapterInit:
+class TestAccordMetricsAdapterInit:
     """Tests for adapter initialization."""
 
     def test_init_without_consent(self, mock_runtime):
         """Test adapter initializes without consent."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
         )
@@ -93,7 +93,7 @@ class TestCovenantMetricsAdapterInit:
 
     def test_init_with_consent(self, mock_runtime):
         """Test adapter initializes with consent."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
             adapter_config={
@@ -107,7 +107,7 @@ class TestCovenantMetricsAdapterInit:
 
     def test_init_sets_agent_id_from_runtime(self, mock_runtime):
         """Test agent ID is set from runtime."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
         )
@@ -117,7 +117,7 @@ class TestCovenantMetricsAdapterInit:
 
     def test_init_sets_agent_id_from_context(self, mock_runtime_no_agent_id, mock_context):
         """Test agent ID is set from context if runtime lacks it."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime_no_agent_id,
             context=mock_context,
         )
@@ -125,12 +125,12 @@ class TestCovenantMetricsAdapterInit:
         assert adapter.metrics_service._agent_id_hash is not None
 
 
-class TestCovenantMetricsAdapterServiceRegistration:
+class TestAccordMetricsAdapterServiceRegistration:
     """Tests for service registration behavior."""
 
     def test_get_services_without_consent(self, mock_runtime):
         """Test no services registered without consent."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
             adapter_config={"consent_given": False},
@@ -142,7 +142,7 @@ class TestCovenantMetricsAdapterServiceRegistration:
 
     def test_get_services_with_consent(self, mock_runtime):
         """Test service registered with consent."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
             adapter_config={"consent_given": True},
@@ -154,11 +154,11 @@ class TestCovenantMetricsAdapterServiceRegistration:
         reg = registrations[0]
         assert reg.service_type == ServiceType.WISE_AUTHORITY
         assert "send_deferral" in reg.capabilities
-        assert "covenant_metrics" in reg.capabilities
+        assert "accord_metrics" in reg.capabilities
 
     def test_service_provider_is_metrics_service(self, mock_runtime):
         """Test registered provider is the metrics service."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
             adapter_config={"consent_given": True},
@@ -169,12 +169,12 @@ class TestCovenantMetricsAdapterServiceRegistration:
         assert registrations[0].provider is adapter.metrics_service
 
 
-class TestCovenantMetricsAdapterConsent:
+class TestAccordMetricsAdapterConsent:
     """Tests for consent management."""
 
     def test_is_consent_given_false(self, mock_runtime):
         """Test is_consent_given returns False without consent."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
         )
@@ -183,7 +183,7 @@ class TestCovenantMetricsAdapterConsent:
 
     def test_is_consent_given_true(self, mock_runtime):
         """Test is_consent_given returns True with consent."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
             adapter_config={"consent_given": True},
@@ -193,7 +193,7 @@ class TestCovenantMetricsAdapterConsent:
 
     def test_update_consent_grant(self, mock_runtime):
         """Test granting consent updates state."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
         )
@@ -209,7 +209,7 @@ class TestCovenantMetricsAdapterConsent:
 
     def test_update_consent_revoke(self, mock_runtime):
         """Test revoking consent updates state."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
             adapter_config={"consent_given": True},
@@ -221,12 +221,12 @@ class TestCovenantMetricsAdapterConsent:
         assert adapter.metrics_service._consent_given is False
 
 
-class TestCovenantMetricsAdapterConfig:
+class TestAccordMetricsAdapterConfig:
     """Tests for configuration reporting."""
 
     def test_get_config(self, mock_runtime):
         """Test getting adapter configuration."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
             adapter_config={
@@ -238,14 +238,14 @@ class TestCovenantMetricsAdapterConfig:
 
         config = adapter.get_config()
 
-        assert config.adapter_type == "ciris_covenant_metrics"
+        assert config.adapter_type == "ciris_accord_metrics"
         assert config.enabled is True
         assert config.settings["consent_given"] is True
         assert config.settings["consent_timestamp"] == "2025-01-01T00:00:00Z"
 
     def test_get_config_disabled_without_consent(self, mock_runtime):
         """Test config shows disabled without consent."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
         )
@@ -257,7 +257,7 @@ class TestCovenantMetricsAdapterConfig:
 
     def test_get_config_includes_metrics(self, mock_runtime):
         """Test config includes event metrics."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
             adapter_config={"consent_given": True},
@@ -271,12 +271,12 @@ class TestCovenantMetricsAdapterConfig:
         assert "events_queued" in config.settings
 
 
-class TestCovenantMetricsAdapterStatus:
+class TestAccordMetricsAdapterStatus:
     """Tests for status reporting."""
 
     def test_get_status(self, mock_runtime):
         """Test getting adapter status."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
             adapter_config={"consent_given": True},
@@ -285,14 +285,14 @@ class TestCovenantMetricsAdapterStatus:
 
         status = adapter.get_status()
 
-        assert status.adapter_id == "ciris_covenant_metrics"
-        assert status.adapter_type == "ciris_covenant_metrics"
+        assert status.adapter_id == "ciris_accord_metrics"
+        assert status.adapter_type == "ciris_accord_metrics"
         assert status.is_running is True
         assert status.config_params is not None
 
     def test_get_status_not_running(self, mock_runtime):
         """Test status shows not running."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
         )
@@ -302,13 +302,13 @@ class TestCovenantMetricsAdapterStatus:
         assert status.is_running is False
 
 
-class TestCovenantMetricsAdapterLifecycle:
+class TestAccordMetricsAdapterLifecycle:
     """Tests for adapter lifecycle (start/stop)."""
 
     @pytest.mark.asyncio
     async def test_start_without_consent(self, mock_runtime):
         """Test adapter starts without consent."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
         )
@@ -321,7 +321,7 @@ class TestCovenantMetricsAdapterLifecycle:
     @pytest.mark.asyncio
     async def test_start_with_consent(self, mock_runtime):
         """Test adapter starts with consent."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
             adapter_config={"consent_given": True},
@@ -338,7 +338,7 @@ class TestCovenantMetricsAdapterLifecycle:
     @pytest.mark.asyncio
     async def test_stop(self, mock_runtime):
         """Test adapter stops cleanly."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
             adapter_config={"consent_given": True},
@@ -353,7 +353,7 @@ class TestCovenantMetricsAdapterLifecycle:
     @pytest.mark.asyncio
     async def test_run_lifecycle(self, mock_runtime):
         """Test run_lifecycle waits for agent task."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
         )
@@ -372,7 +372,7 @@ class TestCovenantMetricsAdapterLifecycle:
     @pytest.mark.asyncio
     async def test_run_lifecycle_handles_cancellation(self, mock_runtime):
         """Test run_lifecycle handles cancellation gracefully."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
         )
@@ -398,13 +398,13 @@ class TestCovenantMetricsAdapterLifecycle:
         assert adapter._running is False
 
 
-class TestCovenantMetricsAdapterIntegration:
+class TestAccordMetricsAdapterIntegration:
     """Integration tests for adapter + service."""
 
     @pytest.mark.asyncio
     async def test_full_wbd_flow_with_consent(self, mock_runtime):
         """Test full WBD event flow with consent."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
             adapter_config={"consent_given": True},
@@ -415,7 +415,7 @@ class TestCovenantMetricsAdapterIntegration:
         assert len(registrations) == 1
 
         service = registrations[0].provider
-        assert isinstance(service, CovenantMetricsService)
+        assert isinstance(service, AccordMetricsService)
 
         # Service should receive WBD events
         request = make_deferral_request()
@@ -428,7 +428,7 @@ class TestCovenantMetricsAdapterIntegration:
     @pytest.mark.asyncio
     async def test_full_flow_without_consent(self, mock_runtime):
         """Test flow without consent doesn't leak data."""
-        adapter = CovenantMetricsAdapter(
+        adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
             adapter_config={"consent_given": False},

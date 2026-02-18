@@ -92,7 +92,7 @@ def update_template_stewardship(template_path: Path, signing_key: SigningKey) ->
         {
             "creator_id": creator_ledger.get("creator_id"),
             "creation_timestamp": creator_ledger.get("creation_timestamp"),
-            "covenant_version": creator_ledger.get("covenant_version"),
+            "accord_version": creator_ledger.get("accord_version"),
             "book_vi_compliance_check": creator_ledger.get("book_vi_compliance_check"),
             "stewardship_tier_calculation": creator_ledger.get("stewardship_tier_calculation"),
             "purpose_and_functionalities": intent.get("purpose_and_functionalities"),

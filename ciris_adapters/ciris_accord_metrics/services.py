@@ -1,7 +1,7 @@
 """
-Covenant Metrics Services - Trace capture for CIRISLens scoring.
+Accord Metrics Services - Trace capture for CIRISLens scoring.
 
-This module implements the CovenantMetricsService which:
+This module implements the AccordMetricsService which:
 1. Subscribes to reasoning_event_stream for trace capture (8 event types)
 2. Receives WBD (Wisdom-Based Deferral) events via WiseBus broadcast
 3. Batches events and sends them to CIRISLens API
@@ -177,7 +177,7 @@ class Ed25519TraceSigner:
     """Sign traces using the unified Ed25519 signing key.
 
     This class wraps the unified signing key from ciris_engine.logic.audit.signing_protocol,
-    ensuring the same key is used for both audit trail signing and covenant metrics traces.
+    ensuring the same key is used for both audit trail signing and accord metrics traces.
 
     The unified key is stored at data/agent_signing.key and is shared with the audit service.
     """
@@ -331,9 +331,9 @@ class Ed25519TraceSigner:
         return self._ensure_unified_key()
 
 
-class CovenantMetricsService:
+class AccordMetricsService:
     """
-    Covenant compliance metrics service for CIRISLens.
+    Accord compliance metrics service for CIRISLens.
 
     This service:
     1. Subscribes to reasoning_event_stream for FULL 6-component trace capture
@@ -380,7 +380,7 @@ class CovenantMetricsService:
         agent_id: Optional[str] = None,
         **kwargs: Any,  # Accept extra params from service_initializer (bus_manager, etc.)
     ) -> None:
-        """Initialize CovenantMetricsService.
+        """Initialize AccordMetricsService.
 
         Args:
             config: Configuration dict with consent settings
@@ -396,8 +396,8 @@ class CovenantMetricsService:
         self._initial_agent_id = agent_id
 
         # Consent state - check env var first for QA testing
-        env_consent = os.environ.get("CIRIS_COVENANT_METRICS_CONSENT", "").lower() == "true"
-        env_timestamp = os.environ.get("CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP")
+        env_consent = os.environ.get("CIRIS_ACCORD_METRICS_CONSENT", "").lower() == "true"
+        env_timestamp = os.environ.get("CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP")
 
         config_consent = bool(self._config.get("consent_given", False))
         self._consent_given = config_consent or env_consent
@@ -413,14 +413,14 @@ class CovenantMetricsService:
             self._consent_timestamp = datetime.now(timezone.utc).isoformat()
             logger.warning(
                 f"⚠️ Consent given but no timestamp provided. Using current time: {self._consent_timestamp}. "
-                "Set CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP for consistent timestamps across restarts."
+                "Set CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP for consistent timestamps across restarts."
             )
 
         if env_consent and not config_consent:
-            logger.info("✅ CONSENT enabled via environment variable CIRIS_COVENANT_METRICS_CONSENT")
+            logger.info("✅ CONSENT enabled via environment variable CIRIS_ACCORD_METRICS_CONSENT")
 
         # Endpoint configuration - check env var first for QA testing
-        env_endpoint = os.environ.get("CIRIS_COVENANT_METRICS_ENDPOINT")
+        env_endpoint = os.environ.get("CIRIS_ACCORD_METRICS_ENDPOINT")
         raw_url = self._config.get("endpoint_url")
         if env_endpoint:
             self._endpoint_url: str = env_endpoint
@@ -436,7 +436,7 @@ class CovenantMetricsService:
             self._batch_size = 10
 
         # Flush interval - check env var first for QA testing
-        env_interval = os.environ.get("CIRIS_COVENANT_METRICS_FLUSH_INTERVAL")
+        env_interval = os.environ.get("CIRIS_ACCORD_METRICS_FLUSH_INTERVAL")
         raw_interval = self._config.get("flush_interval_seconds")
         if env_interval is not None:
             self._flush_interval: float = float(env_interval)
@@ -448,7 +448,7 @@ class CovenantMetricsService:
         # Trace detail level - per-adapter config takes precedence over env var
         # This allows loading multiple adapters with different trace levels
         # Default is GENERIC (numeric scores only) for ciris.ai/ciris-scoring
-        env_level = os.environ.get("CIRIS_COVENANT_METRICS_TRACE_LEVEL", "").lower()
+        env_level = os.environ.get("CIRIS_ACCORD_METRICS_TRACE_LEVEL", "").lower()
         config_level = str(self._config.get("trace_level", "")).lower()
         # Config takes precedence (allows per-adapter override), then env, then default
         level_str = config_level or env_level or "generic"
@@ -507,7 +507,7 @@ class CovenantMetricsService:
         self._signer = Ed25519TraceSigner()
 
         logger.info(
-            f"CovenantMetricsService initialized (consent_given={self._consent_given}, "
+            f"AccordMetricsService initialized (consent_given={self._consent_given}, "
             f"endpoint={self._endpoint_url}, signer_key={self._signer.key_id})"
         )
 
@@ -529,14 +529,14 @@ class CovenantMetricsService:
             SimpleCapabilities with send_deferral to receive WBD events
         """
         return SimpleCapabilities(
-            actions=["send_deferral", "covenant_metrics"],
-            scopes=["covenant_compliance"],
+            actions=["send_deferral", "accord_metrics"],
+            scopes=["accord_compliance"],
         )
 
     async def start(self) -> None:
         """Start the service and initialize HTTP client."""
         logger.info("=" * 70)
-        logger.info("🚀 COVENANT METRICS SERVICE STARTING")
+        logger.info("🚀 ACCORD METRICS SERVICE STARTING")
         logger.info(f"   Consent given: {self._consent_given}")
         logger.info(f"   Consent timestamp: {self._consent_timestamp or 'NOT SET (traces will be rejected!)'}")
         logger.info(f"   Endpoint: {self._endpoint_url}")
@@ -580,7 +580,7 @@ class CovenantMetricsService:
             timeout=aiohttp.ClientTimeout(total=30),
             headers={
                 "Content-Type": "application/json",
-                "User-Agent": "CIRIS-CovenantMetrics/1.0",
+                "User-Agent": "CIRIS-AccordMetrics/1.0",
             },
         )
 
@@ -588,7 +588,7 @@ class CovenantMetricsService:
         self._flush_task = asyncio.create_task(self._periodic_flush())
 
         logger.info("=" * 70)
-        logger.info(f"✅ COVENANT METRICS SERVICE READY")
+        logger.info(f"✅ ACCORD METRICS SERVICE READY")
         logger.info(f"   Sending to: {self._endpoint_url}")
         logger.info(f"   Consent timestamp: {self._consent_timestamp}")
         logger.info(f"   Batch size: {self._batch_size}")
@@ -604,7 +604,7 @@ class CovenantMetricsService:
     async def stop(self) -> None:
         """Stop the service and flush remaining events."""
         logger.info("=" * 70)
-        logger.info("🛑 COVENANT METRICS SERVICE STOPPING")
+        logger.info("🛑 ACCORD METRICS SERVICE STOPPING")
         logger.info(f"   Traces completed: {self._traces_completed}")
         logger.info(f"   Events in queue: {len(self._event_queue)}")
         logger.info("=" * 70)
@@ -649,7 +649,7 @@ class CovenantMetricsService:
             self._session = None
 
         logger.info("=" * 70)
-        logger.info("📊 COVENANT METRICS FINAL STATS")
+        logger.info("📊 ACCORD METRICS FINAL STATS")
         logger.info(f"   Traces completed: {self._traces_completed}")
         logger.info(f"   Events sent: {self._events_sent}")
         logger.info(f"   Events failed: {self._events_failed}")
@@ -733,7 +733,7 @@ class CovenantMetricsService:
         if correlation_metadata:
             payload["correlation_metadata"] = correlation_metadata
 
-        url = f"{self._endpoint_url}/covenant/events"
+        url = f"{self._endpoint_url}/accord/events"
         logger.info(
             f"📡 [{self._adapter_instance_id}] POST {url} ({len(events)} events, trace_level={self._trace_level.value})"
         )
@@ -764,7 +764,7 @@ class CovenantMetricsService:
             from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
 
             unified_key = get_unified_signing_key()
-            description = f"Agent key for covenant metrics traces"
+            description = f"Agent key for accord metrics traces"
             if self._agent_template:
                 description = f"Agent key ({self._agent_template})"
 
@@ -773,7 +773,7 @@ class CovenantMetricsService:
             # Store registered key ID for comparison during signing
             self._registered_key_id = payload["key_id"]
 
-            url = f"{self._endpoint_url}/covenant/public-keys"
+            url = f"{self._endpoint_url}/accord/public-keys"
 
             logger.info("=" * 70)
             logger.info(f"🔑 REGISTERING PUBLIC KEY with CIRISLens")
@@ -867,7 +867,7 @@ class CovenantMetricsService:
         }
 
         # Use the standard events endpoint
-        url = f"{self._endpoint_url}/covenant/events"
+        url = f"{self._endpoint_url}/accord/events"
 
         try:
             logger.info("=" * 70)
@@ -1496,7 +1496,7 @@ class CovenantMetricsService:
 
         await self._queue_event(wbd_event)
 
-        return f"WBD event recorded for covenant metrics: {request.thought_id}"
+        return f"WBD event recorded for accord metrics: {request.thought_id}"
 
     async def fetch_guidance(self, context: Any) -> Optional[str]:
         """Not implemented - this service only receives deferrals.
@@ -1522,8 +1522,8 @@ class CovenantMetricsService:
         return {
             "guidance": None,
             "confidence": 0.0,
-            "source": "covenant_metrics",
-            "message": "CovenantMetricsService does not provide guidance",
+            "source": "accord_metrics",
+            "message": "AccordMetricsService does not provide guidance",
         }
 
     # =========================================================================
@@ -1576,9 +1576,9 @@ class CovenantMetricsService:
         self._consent_timestamp = timestamp or datetime.now(timezone.utc).isoformat()
 
         if consent_given:
-            logger.info(f"Consent granted for covenant metrics at {self._consent_timestamp}")
+            logger.info(f"Consent granted for accord metrics at {self._consent_timestamp}")
         else:
-            logger.info(f"Consent revoked for covenant metrics at {self._consent_timestamp}")
+            logger.info(f"Consent revoked for accord metrics at {self._consent_timestamp}")
 
     def set_agent_id(self, agent_id: str) -> None:
         """Set and anonymize the agent ID.

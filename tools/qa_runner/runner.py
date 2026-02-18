@@ -249,7 +249,7 @@ class QARunner:
             QAModule.CONTEXT_ENRICHMENT,
             QAModule.VISION,
             QAModule.AIR,
-            QAModule.COVENANT_METRICS,
+            QAModule.ACCORD_METRICS,
             QAModule.SYSTEM_MESSAGES,
             QAModule.HOSTED_TOOLS,
             QAModule.UTILITY_ADAPTERS,
@@ -303,22 +303,22 @@ class QARunner:
             else:
                 self.console.print("[green]✅ Multi-occurrence integration test passed![/green]")
 
-        # Run COVENANT tests if requested (standalone - no server needed)
-        if QAModule.COVENANT in modules:
-            from .modules.covenant_tests import CovenantTestModule
+        # Run ACCORD tests if requested (standalone - no server needed)
+        if QAModule.ACCORD in modules:
+            from .modules.accord_tests import AccordTestModule
 
             self.console.print("\n" + "=" * 80)
-            self.console.print("[bold cyan]🔐 RUNNING COVENANT INVOCATION SYSTEM TESTS[/bold cyan]")
+            self.console.print("[bold cyan]🔐 RUNNING ACCORD INVOCATION SYSTEM TESTS[/bold cyan]")
             self.console.print("=" * 80)
 
-            covenant_module = CovenantTestModule()
-            covenant_results = covenant_module.run_all_tests()
+            accord_module = AccordTestModule()
+            accord_results = accord_module.run_all_tests()
 
             # Store results
-            covenant_passed = 0
-            covenant_failed = 0
-            for result in covenant_results:
-                test_key = f"covenant::{result.name}"
+            accord_passed = 0
+            accord_failed = 0
+            for result in accord_results:
+                test_key = f"accord::{result.name}"
                 self.results[test_key] = {
                     "success": result.passed,
                     "status": "✅ PASS" if result.passed else "❌ FAIL",
@@ -326,12 +326,12 @@ class QARunner:
                     "duration": result.duration,
                 }
                 if result.passed:
-                    covenant_passed += 1
+                    accord_passed += 1
                 else:
-                    covenant_failed += 1
+                    accord_failed += 1
                     success = False
 
-            self.console.print(f"\n[cyan]Covenant tests: {covenant_passed} passed, {covenant_failed} failed[/cyan]")
+            self.console.print(f"\n[cyan]Accord tests: {accord_passed} passed, {accord_failed} failed[/cyan]")
 
         # Run SDK-based tests
         if sdk_test_modules:
@@ -870,7 +870,7 @@ class QARunner:
         from .modules.cirisnode_tests import CIRISNodeTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
-        from .modules.covenant_metrics_tests import CovenantMetricsTests
+        from .modules.accord_metrics_tests import AccordMetricsTests
         from .modules.dream_live_tests import DreamLiveTests
         from .modules.dsar_multi_source_tests import DSARMultiSourceTests
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
@@ -913,7 +913,7 @@ class QARunner:
             QAModule.CONTEXT_ENRICHMENT: ContextEnrichmentTests,
             QAModule.VISION: VisionTests,
             QAModule.AIR: AIRTests,
-            QAModule.COVENANT_METRICS: CovenantMetricsTests,
+            QAModule.ACCORD_METRICS: AccordMetricsTests,
             QAModule.SYSTEM_MESSAGES: SystemMessagesTests,
             QAModule.HOSTED_TOOLS: HostedToolsTests,
             QAModule.UTILITY_ADAPTERS: UtilityAdaptersTests,
@@ -942,8 +942,8 @@ class QARunner:
                 client._transport.set_api_key(token_to_use, persist=False)
 
                 # Instantiate and run test module
-                # Special handling for CovenantMetricsTests - pass live_lens config
-                if module == QAModule.COVENANT_METRICS:
+                # Special handling for AccordMetricsTests - pass live_lens config
+                if module == QAModule.ACCORD_METRICS:
                     test_instance = test_class(client, self.console, live_lens=self.config.live_lens)
                 # Special handling for CIRISNodeTests - pass live_node config
                 elif module == QAModule.CIRISNODE:

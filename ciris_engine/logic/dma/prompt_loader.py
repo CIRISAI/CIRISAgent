@@ -36,8 +36,8 @@ class DMAPromptLoader:
         if not self.prompts_dir.exists():
             logger.warning(f"Prompts directory does not exist: {self.prompts_dir}")
 
-    def _normalize_covenant_mode(self, value: Any) -> str:
-        """Normalize covenant_header value to covenant_mode string.
+    def _normalize_accord_mode(self, value: Any) -> str:
+        """Normalize accord_header value to accord_mode string.
 
         Handles legacy boolean values and string modes:
         - True (bool) -> 'full'
@@ -111,7 +111,7 @@ class DMAPromptLoader:
                 final_ponder_advisory=template_data.get("final_ponder_advisory"),
                 closing_reminder=template_data.get("closing_reminder"),
                 context_integration=template_data.get("context_integration"),
-                covenant_mode=self._normalize_covenant_mode(template_data.get("covenant_header", "full")),
+                accord_mode=self._normalize_accord_mode(template_data.get("accord_header", "full")),
                 supports_agent_modes=bool(template_data.get("supports_agent_modes", True)),
             )
 
@@ -187,29 +187,29 @@ class DMAPromptLoader:
             # Fallback for basic context integration
             return f"Thought to evaluate: {kwargs.get('original_thought_content', '')}"
 
-    def get_covenant_mode(self, template_data: PromptCollection) -> str:
+    def get_accord_mode(self, template_data: PromptCollection) -> str:
         """
-        Get the covenant mode for this template.
+        Get the accord mode for this template.
 
         Args:
             template_data: The loaded template data
 
         Returns:
-            Covenant mode: 'full', 'compressed', or 'none'
+            Accord mode: 'full', 'compressed', or 'none'
         """
-        return template_data.covenant_mode
+        return template_data.accord_mode
 
-    def uses_covenant_header(self, template_data: PromptCollection) -> bool:
+    def uses_accord_header(self, template_data: PromptCollection) -> bool:
         """
-        Check if template requires covenant text as system header.
+        Check if template requires accord text as system header.
 
         Args:
             template_data: The loaded template data
 
         Returns:
-            True if covenant header should be used (mode is 'full' or 'compressed')
+            True if accord header should be used (mode is 'full' or 'compressed')
         """
-        return template_data.covenant_mode in ("full", "compressed")
+        return template_data.accord_mode in ("full", "compressed")
 
 
 # Global instance for convenience

@@ -70,9 +70,9 @@ Available modules:
   streaming       - H3ERE pipeline streaming verification
   sdk             - SDK tests
   pause_step      - Enhanced single-step/pause debugging
-  single_step_comprehensive - Complete 17-phase COVENANT single-step validation
-  covenant        - Covenant invocation system (kill switch) tests
-  covenant_metrics - Covenant metrics trace capture and signing
+  single_step_comprehensive - Complete 17-phase ACCORD single-step validation
+  accord        - Accord invocation system (kill switch) tests
+  accord_metrics - Accord metrics trace capture and signing
   cirisnode       - CIRISNode integration (deferral routing, trace forwarding)
   api_full        - All API modules
   handlers_full   - All handler modules
@@ -116,11 +116,11 @@ Available modules:
         help="Base URL for LLM API (default: https://api.groq.com/openai/v1)",
     )
 
-    # Live Lens configuration (for covenant_metrics tests)
+    # Live Lens configuration (for accord_metrics tests)
     parser.add_argument(
         "--live-lens",
         action="store_true",
-        help="Use real Lens server (https://lens.ciris-services-1.ai/lens-api/api/v1) instead of mock logshipper for covenant_metrics tests",
+        help="Use real Lens server (https://lens.ciris-services-1.ai/lens-api/api/v1) instead of mock logshipper for accord_metrics tests",
     )
 
     # Live CIRISNode configuration (for cirisnode tests)
@@ -335,7 +335,7 @@ def main():
         live_api_key=live_api_key,
         live_model=live_model,
         live_base_url=live_base_url,
-        # Live Lens configuration (for covenant_metrics tests)
+        # Live Lens configuration (for accord_metrics tests)
         live_lens=args.live_lens,
         # Live CIRISNode configuration (for cirisnode tests)
         live_node=args.live_node,

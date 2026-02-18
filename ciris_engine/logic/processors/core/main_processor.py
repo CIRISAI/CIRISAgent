@@ -1178,7 +1178,7 @@ class AgentProcessor:
         if self._should_stop_after_target_rounds(round_count, num_rounds):
             return round_count, consecutive_errors, True
 
-        # COVENANT COMPLIANCE: Check pause state before processing
+        # ACCORD COMPLIANCE: Check pause state before processing
         if not await self._check_pause_state():
             return round_count, consecutive_errors, False
 

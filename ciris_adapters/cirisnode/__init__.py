@@ -3,7 +3,7 @@ CIRISNode oversight adapter — deferral routing and trace forwarding.
 
 Registers as WISE_AUTHORITY for:
 - WBD deferral submission and resolution polling
-- Covenant trace forwarding in Lens format
+- Accord trace forwarding in Lens format
 """
 
 from ciris_adapters.cirisnode.adapter import CIRISNodeAdapter

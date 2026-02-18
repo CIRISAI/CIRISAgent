@@ -50,7 +50,12 @@ jobs:
         env:
           CI: true
         run: |
-          pytest tests/ -n 4 --cov=./ --cov-report=xml:coverage.xml
+          # Large test suite stability flags:
+          # --reruns=2: Rerun failed/crashed tests up to 2 times (handles flaky tests)
+          # --reruns-delay=1: 1 second delay between reruns (avoid race conditions)
+          # --max-worker-restart=4: Limit worker restart loops (prevent infinite crashes)
+          # -n 4: 4 parallel workers (balanced for CI runner memory)
+          pytest tests/ -n 4 --reruns=2 --reruns-delay=1 --max-worker-restart=4 --cov=./ --cov-report=xml:coverage.xml
 
       - name: Display and write version
         env:

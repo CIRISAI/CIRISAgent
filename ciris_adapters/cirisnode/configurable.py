@@ -362,23 +362,16 @@ class CIRISNodeConfigurableAdapter:
 
         device_auth_result = config.get("device_auth_result", {})
 
-        # Save signing key
+        # Import signing key into ciris_verify (preferred) or save to disk (fallback)
         signing_key_b64 = device_auth_result.get("signing_key_b64")
         if signing_key_b64:
             try:
                 from ciris_engine.logic.audit.signing_protocol import UnifiedSigningKey
-                from ciris_engine.logic.utils.path_resolution import get_data_dir
 
-                save_path = get_data_dir() / "agent_signing.key"
-                save_path.parent.mkdir(parents=True, exist_ok=True)
-
-                # Decode and save
-                import base64
-
-                key_bytes = base64.b64decode(signing_key_b64)
-                unified_key = UnifiedSigningKey.from_private_bytes(key_bytes)
-                unified_key.save(save_path)
-                logger.info(f"Saved signing key to {save_path}")
+                # Use load_provisioned_key which imports into ciris_verify if available
+                unified_key = UnifiedSigningKey()
+                unified_key.load_provisioned_key(signing_key_b64)
+                logger.info(f"Imported signing key into secure storage (key_id={unified_key.key_id})")
             except Exception as e:
                 logger.error(f"Failed to save signing key: {e}")
                 return False

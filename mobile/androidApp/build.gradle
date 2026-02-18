@@ -27,7 +27,7 @@ android {
             version "3.10"
             buildPython "/usr/bin/python3.10"
             // Extract packages to real filesystem so they can be scanned
-            extractPackages "pydantic_core", "ciris_adapters"
+            extractPackages "pydantic_core", "ciris_adapters", "ciris_verify"
 
             pip {
                 options "--find-links", "../../android/app/wheels"  // Reuse existing wheels

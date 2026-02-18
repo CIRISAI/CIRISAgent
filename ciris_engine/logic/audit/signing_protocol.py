@@ -314,20 +314,33 @@ class CIRISVerifySigner(BaseSigner):
         ciris_verify_init → LicenseEngine::with_config → Tokio runtime needs
         far more stack than the 544K iOS CIRISRuntime thread provides.
         After init, the client handle is safe for lightweight sign_sync() calls.
+
+        Also handles auto-migration: if a file-based key exists but ciris_verify
+        doesn't have one, imports it and deletes the file.
         """
         import threading
 
-        result: list[Any] = [None, None, None, None]  # [client, key_bytes, algo, error]
+        # [client, key_bytes, algo, error, has_key]
+        result: list[Any] = [None, None, None, None, False]
 
         def _init_on_large_stack() -> None:
             try:
                 from ciris_verify import CIRISVerify
 
                 client = CIRISVerify(skip_integrity_check=True)
-                key_bytes, algo = client.get_public_key_sync()  # type: ignore[attr-defined, unused-ignore]
-                result[0] = client
-                result[1] = key_bytes
-                result[2] = algo
+                # Check if key already exists in secure storage
+                has_key = client.has_key_sync()  # type: ignore[attr-defined, unused-ignore]
+                result[4] = has_key
+
+                if has_key:
+                    # Key exists, get the public key
+                    key_bytes, algo = client.get_public_key_sync()  # type: ignore[attr-defined, unused-ignore]
+                    result[0] = client
+                    result[1] = key_bytes
+                    result[2] = algo
+                else:
+                    # No key yet - client is ready for import
+                    result[0] = client
             except Exception as e:
                 result[3] = e
 
@@ -349,15 +362,83 @@ class CIRISVerifySigner(BaseSigner):
             return False
 
         self._client = result[0]
-        self._public_key_cache = result[1]
-        self._algo_name = result[2]
-        self._key_id = self._compute_key_id(result[1])
 
-        if self._algo_name and "Ed25519" in self._algo_name:
-            self._algorithm = SigningAlgorithm.ED25519
+        # If key exists in secure storage, use it
+        if result[4] and result[1] is not None:
+            self._public_key_cache = result[1]
+            self._algo_name = result[2]
+            self._key_id = self._compute_key_id(result[1])
+            if self._algo_name and "Ed25519" in self._algo_name:
+                self._algorithm = SigningAlgorithm.ED25519
+            logger.info(f"CIRISVerify vault signer loaded (algo={self._algo_name}, key_id={self._key_id})")
+            return True
 
-        logger.info(f"CIRISVerify vault signer loaded (algo={self._algo_name}, key_id={self._key_id})")
-        return True
+        # No key in secure storage - try auto-migration from file
+        return self._try_auto_migrate()
+
+    def _try_auto_migrate(self) -> bool:
+        """Try to auto-migrate an existing file-based key into ciris_verify.
+
+        Checks standard key locations for existing Ed25519 keys,
+        imports them into ciris_verify, validates, and deletes the original.
+        """
+        if not self._client:
+            return False
+
+        # Standard key locations to check
+        key_locations = [
+            Path("data/agent_signing.key"),
+            Path("/app/data/agent_signing.key"),
+        ]
+
+        # Also check path resolution
+        try:
+            from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+            key_locations.insert(0, get_data_dir() / "agent_signing.key")
+        except Exception:
+            pass
+
+        for key_path in key_locations:
+            if not key_path.exists():
+                continue
+
+            try:
+                key_bytes = key_path.read_bytes()
+                if len(key_bytes) != 32:
+                    logger.warning(f"Invalid key size at {key_path}: {len(key_bytes)} bytes")
+                    continue
+
+                # Import into ciris_verify
+                logger.info(f"Auto-migrating key from {key_path} to ciris_verify secure storage")
+                self._client.import_key_sync(key_bytes)  # type: ignore[attr-defined]
+
+                # Fetch public key to validate
+                pub_key, algo = self._client.get_public_key_sync()  # type: ignore[attr-defined, unused-ignore]
+                self._public_key_cache = pub_key
+                self._algo_name = algo
+                self._key_id = self._compute_key_id(pub_key)
+
+                if self._algo_name and "Ed25519" in self._algo_name:
+                    self._algorithm = SigningAlgorithm.ED25519
+
+                # Delete the original file after successful import
+                try:
+                    key_path.unlink()
+                    logger.info(f"Deleted original key file after migration: {key_path}")
+                except OSError as e:
+                    logger.warning(f"Could not delete original key file {key_path}: {e}")
+
+                logger.info(f"Key auto-migrated to ciris_verify (key_id={self._key_id})")
+                return True
+
+            except Exception as e:
+                logger.warning(f"Failed to auto-migrate key from {key_path}: {e}")
+                continue
+
+        # No key to migrate - ciris_verify is ready but has no key
+        logger.debug("CIRISVerify initialized but no key available (waiting for import)")
+        return False
 
     def _save_keypair(self, key_path: Path) -> None:
         """Not applicable — key lives in hardware."""
@@ -505,18 +586,57 @@ class UnifiedSigningKey:
         except OSError as e:
             logger.warning(f"Could not save provisioned key to {save_path}: {e}")
 
-        # Path 1: Try CIRISVerify vault (preferred — uses sync FFI, safe for iOS threads)
+        # Path 1: Import directly into CIRISVerify vault (preferred)
+        # This is the 2.0 requirement - portal keys go into secure storage
         try:
             verify_signer = CIRISVerifySigner()
-            if verify_signer._load_keypair(Path("__ciris_verify__")):
+            # Initialize client on large stack (required for Android JNI)
+            import threading
+
+            import_result: list[Any] = [None, None, None]  # [success, pub_key, error]
+
+            def _import_on_large_stack() -> None:
+                try:
+                    from ciris_verify import CIRISVerify
+
+                    client = CIRISVerify(skip_integrity_check=True)
+                    # Import the portal-issued key (algorithm=2 for Ed25519)
+                    client.import_key_sync(private_bytes)
+                    # Validate by fetching public key
+                    pub_key, algo = client.get_public_key_sync()
+                    import_result[0] = client
+                    import_result[1] = pub_key
+                except Exception as e:
+                    import_result[2] = e
+
+            thread = threading.Thread(target=_import_on_large_stack)
+            thread.start()
+            thread.join(timeout=10.0)
+
+            if import_result[2] is not None:
+                raise import_result[2]
+
+            if import_result[0] is not None and import_result[1] is not None:
+                # Successfully imported into ciris_verify
+                verify_signer._client = import_result[0]
+                verify_signer._public_key_bytes = import_result[1]
+                verify_signer._key_id = verify_signer._compute_key_id(import_result[1])
                 self._signer = verify_signer
                 self._initialized = True
-                logger.info(f"Using CIRISVerify vault for provisioned agent " f"(key_id={verify_signer.key_id})")
+                logger.info(f"Imported portal key into CIRISVerify vault (key_id={verify_signer.key_id})")
+
+                # Delete the disk fallback - we don't need it anymore
+                try:
+                    if save_path.exists():
+                        save_path.unlink()
+                        logger.debug(f"Deleted disk fallback after successful ciris_verify import")
+                except Exception as e:
+                    logger.debug(f"Could not delete disk fallback {save_path}: {e}")
                 return
         except Exception as e:
-            logger.debug(f"CIRISVerify vault not available for provisioned key: {e}")
+            logger.debug(f"CIRISVerify import not available for provisioned key: {e}")
 
-        # Path 2: Ed25519 fallback with the provisioned key
+        # Path 2: Ed25519 fallback with the provisioned key (disk-based)
         self._signer = Ed25519Signer()
         self._signer._private_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_bytes)
         self._signer._public_key = self._signer._private_key.public_key()

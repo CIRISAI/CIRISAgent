@@ -571,6 +571,27 @@ def portal_command(args) -> int:
     )
 
 
+def licensed_agent_command(args) -> int:
+    """Handle the licensed-agent subcommand."""
+    from .first_time_licensed_agent import run_first_time_licensed_agent
+
+    return run_first_time_licensed_agent(
+        base_url=args.api_url,
+        portal_url=args.portal_url,
+        llm_provider=args.llm_provider,
+        llm_api_key=args.llm_key or "",
+        llm_key_file=args.llm_key_file,
+        llm_model=args.llm_model,
+        admin_username=args.username,
+        admin_password=args.password,
+        wait=args.wait,
+        poll_timeout=args.timeout,
+        poll_interval=args.interval,
+        output_dir=args.output_dir,
+        verbose=args.verbose,
+    )
+
+
 def test_ios_command(args) -> int:
     """Handle iOS simulator test execution."""
     from .ios.ios_ui_automator import iOSUIAutomator
@@ -1010,6 +1031,63 @@ Examples:
     )
     portal_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
+    # ========== licensed-agent subcommand ==========
+    la_parser = subparsers.add_parser(
+        "licensed-agent",
+        help="First-time licensed agent E2E: device auth + setup complete + verify",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+End-to-end test for a first-run agent that acquires a license via Portal
+device auth, then completes setup with the provisioned credentials.
+
+Steps:
+  1. Health check / first-run verification
+  2. Enumerate providers, templates, adapters
+  3. POST /v1/setup/connect-node -> device code
+  4. Poll until Portal authorization completes
+  5. POST /v1/setup/complete with provisioned key + LLM config
+  6. Verify login, health, and services online
+
+Examples:
+  # Full E2E with --wait (prompts to authorize in browser)
+  python -m tools.qa_runner.modules.mobile licensed-agent --wait
+
+  # With explicit LLM key
+  python -m tools.qa_runner.modules.mobile licensed-agent --wait --llm-key sk-...
+
+  # Use groq key from file
+  python -m tools.qa_runner.modules.mobile licensed-agent --wait --llm-provider groq --llm-key-file ~/.groq_key
+""",
+    )
+    la_parser.add_argument(
+        "--portal-url", default="https://portal.ciris.ai",
+        help="Portal URL for device auth (default: https://portal.ciris.ai)",
+    )
+    la_parser.add_argument(
+        "--api-url", default="http://localhost:8080",
+        help="CIRIS API base URL (default: http://localhost:8080)",
+    )
+    la_parser.add_argument("--username", default="admin", help="Admin username to create")
+    la_parser.add_argument("--password", default="ciris_admin_password", help="Admin password to create")
+    la_parser.add_argument("--llm-provider", default="groq", help="LLM provider (default: groq)")
+    la_parser.add_argument("--llm-key", default=None, help="LLM API key (overrides key file)")
+    la_parser.add_argument(
+        "--llm-key-file", default="~/.groq_key",
+        help="Path to file containing LLM API key (default: ~/.groq_key)",
+    )
+    la_parser.add_argument("--llm-model", default=None, help="LLM model name (provider default if omitted)")
+    la_parser.add_argument(
+        "--wait", "-w", action="store_true",
+        help="Wait for Portal authorization (polls until done)",
+    )
+    la_parser.add_argument("--timeout", type=int, default=300, help="Poll timeout in seconds (default: 300)")
+    la_parser.add_argument("--interval", type=int, default=5, help="Poll interval in seconds (default: 5)")
+    la_parser.add_argument(
+        "--output-dir", "-o", default="mobile_qa_reports",
+        help="Directory for test reports (default: mobile_qa_reports)",
+    )
+    la_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+
     # ========== test subcommand ==========
     test_parser = subparsers.add_parser(
         "test",
@@ -1149,6 +1227,8 @@ Examples:
         return test_command(args)
     elif args.command == "portal":
         return portal_command(args)
+    elif args.command == "licensed-agent":
+        return licensed_agent_command(args)
     else:
         parser.print_help()
         return 0

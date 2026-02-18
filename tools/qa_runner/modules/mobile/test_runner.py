@@ -21,6 +21,10 @@ from .test_cases import (  # Screen navigation tests (new in 1.9.2)
     test_all_screens,
     test_app_launch,
     test_chat_interaction,
+    test_connect_node,
+    test_connect_node_auth,
+    test_connect_node_error,
+    test_connect_node_welcome,
     test_full_flow,
     test_google_signin,
     test_local_login,
@@ -64,6 +68,11 @@ class MobileTestConfig:
     test_message: str = "Hello CIRIS! This is an automated test. Please respond briefly."
     timeout: int = 300  # Total test timeout in seconds
     keep_app_open: bool = False  # Don't force-stop app after tests
+
+    # Portal / Node settings (for connect_node tests)
+    portal_url: str = "https://portal.ciris.ai"
+    wait_for_portal_auth: bool = False
+    portal_auth_timeout: int = 300
 
     # Output settings
     output_dir: str = "mobile_qa_reports"
@@ -319,6 +328,11 @@ class MobileTestRunner:
             "screen_system": test_screen_system,
             "screen_services": test_screen_services,
             "screen_runtime": test_screen_runtime,
+            # Connect Node / Register Agent tests (new in 2.0)
+            "connect_node": test_connect_node,
+            "connect_node_welcome": test_connect_node_welcome,
+            "connect_node_auth": test_connect_node_auth,
+            "connect_node_error": test_connect_node_error,
         }
 
         # Determine which tests to run
@@ -369,6 +383,11 @@ class MobileTestRunner:
             "llm_provider": self.config.llm_provider,
             "llm_api_key": self.config.llm_api_key,
             "test_message": self.config.test_message,
+            # Portal / Node settings
+            "portal_url": self.config.portal_url,
+            "node_url": self.config.portal_url,  # Alias for compat
+            "wait_for_portal_auth": self.config.wait_for_portal_auth,
+            "portal_auth_timeout": self.config.portal_auth_timeout,
         }
 
         for test_name, test_func in tests_to_run:

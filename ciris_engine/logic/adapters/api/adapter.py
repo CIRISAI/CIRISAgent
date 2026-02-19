@@ -472,12 +472,28 @@ class ApiPlatform(Service):
             self._discover_adapters_via_importlib()
             return
 
+        import time
+
+        logger.info(f"[CONFIGURABLE_DISCOVERY] Scanning {adapters_dir} for configurable adapters...")
+        start_time = time.monotonic()
         registered_count = 0
-        for adapter_path in adapters_dir.iterdir():
+        adapter_paths = list(adapters_dir.iterdir())
+        total_adapters = len(adapter_paths)
+
+        for idx, adapter_path in enumerate(adapter_paths, 1):
+            adapter_start = time.monotonic()
             if self._process_adapter_path(adapter_path):
+                elapsed = time.monotonic() - adapter_start
+                if elapsed > 1.0:
+                    logger.warning(
+                        f"[CONFIGURABLE_DISCOVERY] SLOW: {adapter_path.name} took {elapsed:.1f}s to register"
+                    )
                 registered_count += 1
 
-        logger.info(f"Discovered and registered {registered_count} configurable adapter(s)")
+        total_elapsed = time.monotonic() - start_time
+        logger.info(f"Discovered and registered {registered_count} configurable adapter(s) in {total_elapsed:.1f}s")
+        if total_elapsed > 5.0:
+            logger.warning(f"[CONFIGURABLE_DISCOVERY] Total discovery time {total_elapsed:.1f}s exceeds 5s threshold")
 
     def _process_adapter_path(self, adapter_path: Any) -> bool:
         """Process a single adapter directory and register if configurable.
@@ -541,20 +557,48 @@ class ApiPlatform(Service):
         Returns True if successful.
         """
         import importlib
+        import time
 
         try:
             module_path, class_name = configurable_class_path.rsplit(".", 1)
             if not module_path.startswith("ciris_adapters"):
                 module_path = f"ciris_adapters.{module_path}"
-            module = importlib.import_module(module_path)
-            configurable_class = getattr(module, class_name)
-            adapter_instance = configurable_class()
 
+            # Time the import
+            t0 = time.monotonic()
+            module = importlib.import_module(module_path)
+            import_time = time.monotonic() - t0
+            if import_time > 1.0:
+                logger.warning(f"[CONFIGURABLE] SLOW IMPORT: {module_path} took {import_time:.1f}s")
+
+            # Time the class lookup
+            t1 = time.monotonic()
+            configurable_class = getattr(module, class_name)
+            getattr_time = time.monotonic() - t1
+
+            # Time the instantiation
+            t2 = time.monotonic()
+            adapter_instance = configurable_class()
+            init_time = time.monotonic() - t2
+            if init_time > 1.0:
+                logger.warning(f"[CONFIGURABLE] SLOW INIT: {adapter_type}() took {init_time:.1f}s")
+
+            # Time the registration
+            t3 = time.monotonic()
             self.adapter_configuration_service.register_adapter_config(
                 adapter_type=adapter_type,
                 interactive_config=interactive_config,
                 adapter_instance=adapter_instance,
             )
+            register_time = time.monotonic() - t3
+
+            total_time = time.monotonic() - t0
+            if total_time > 2.0:
+                logger.warning(
+                    f"[CONFIGURABLE] {adapter_type} total={total_time:.1f}s "
+                    f"(import={import_time:.1f}s, init={init_time:.1f}s, register={register_time:.1f}s)"
+                )
+
             logger.info(f"Registered configurable adapter: {adapter_type}")
             return True
         except Exception as e:

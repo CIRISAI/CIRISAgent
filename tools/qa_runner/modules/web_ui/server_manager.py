@@ -42,6 +42,7 @@ class ServerConfig:
     # Build settings
     install_wheel: bool = False  # Install fresh wheel before starting
     wipe_data: bool = True  # Wipe data for clean slate
+    first_run_mode: bool = False  # Enable first-run/setup wizard mode (no CIRIS_CONFIGURED)
 
 
 @dataclass
@@ -250,15 +251,19 @@ class ServerManager:
             cmd.append("--mock-llm")
 
         # Ensure minimal .env file exists (needed for QA testing)
-        env_path = os.path.join(self.config.project_root, ".env")
-        if not os.path.exists(env_path):
-            with open(env_path, "w") as f:
-                f.write("# Auto-generated minimal .env for QA testing\n")
-                f.write("CIRIS_CONFIGURED=true\n")
-                if self.config.mock_llm:
-                    f.write("CIRIS_LLM_PROVIDER=mock\n")
-                    f.write("CIRIS_MOCK_LLM=true\n")
-            print("   Created minimal .env file")
+        # In first_run_mode, do NOT create .env so server enters setup wizard
+        if not self.config.first_run_mode:
+            env_path = os.path.join(self.config.project_root, ".env")
+            if not os.path.exists(env_path):
+                with open(env_path, "w") as f:
+                    f.write("# Auto-generated minimal .env for QA testing\n")
+                    f.write("CIRIS_CONFIGURED=true\n")
+                    if self.config.mock_llm:
+                        f.write("CIRIS_LLM_PROVIDER=mock\n")
+                        f.write("CIRIS_MOCK_LLM=true\n")
+                print("   Created minimal .env file (configured mode)")
+        else:
+            print("   Skipping .env creation (first-run mode)")
 
         # Open log file
         log_path = os.path.join(self.config.project_root, self.config.log_dir, "web_ui_qa_server.log")
@@ -269,16 +274,23 @@ class ServerManager:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
 
+        # For first-run mode, set the environment variable to force first-run detection
+        if self.config.first_run_mode:
+            env["CIRIS_FORCE_FIRST_RUN"] = "1"
+            print("   Setting CIRIS_FORCE_FIRST_RUN=1")
+
         # Start server process
-        # Note: Do NOT use preexec_fn=os.setsid - it causes the process to stop
-        # in some environments (e.g., Claude Code shell sessions)
+        # Use start_new_session=True to isolate from terminal signals
+        # Use stdin=DEVNULL to prevent any terminal read attempts
         try:
             self._process = subprocess.Popen(
                 cmd,
                 cwd=self.config.project_root,
+                stdin=subprocess.DEVNULL,
                 stdout=self._log_file,
                 stderr=subprocess.STDOUT,
                 env=env,
+                start_new_session=True,
             )
             status.pid = self._process.pid
             print(f"   Server PID: {self._process.pid}")
@@ -294,11 +306,20 @@ class ServerManager:
         while time.time() - start_time < self.config.startup_timeout:
             time.sleep(self.config.health_check_interval)
 
-            # Check if process died
+            # Check if process actually died (not just signaled)
+            # Note: In some shell environments, poll() can return -17 (SIGCHLD) spuriously
+            # when the process is still running. We verify by checking if we can still send signals.
             poll_result = self._process.poll()
             if poll_result is not None:
-                status.error = f"Server process exited unexpectedly (exit code: {poll_result})"
-                return status
+                # Double-check by trying to send a null signal
+                try:
+                    os.kill(self._process.pid, 0)
+                    # Process still exists, poll() was wrong - continue waiting
+                    print(f"   (poll returned {poll_result} but process {self._process.pid} still exists)")
+                except OSError:
+                    # Process really is dead
+                    status.error = f"Server process exited unexpectedly (exit code: {poll_result})"
+                    return status
 
             # Check health endpoint
             try:

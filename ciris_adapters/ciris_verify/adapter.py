@@ -23,18 +23,13 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
+from ciris_verify import CapabilityCheckResult, DisclosureSeverity, LicenseStatusResponse, MandatoryDisclosure
+
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.registries.base import Priority
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, RuntimeAdapterStatus
 from ciris_engine.schemas.runtime.enums import ServiceType
-
-from ciris_verify import (
-    CapabilityCheckResult,
-    DisclosureSeverity,
-    LicenseStatusResponse,
-    MandatoryDisclosure,
-)
 
 from .service import CIRISVerifyService, VerificationConfig
 
@@ -46,6 +41,7 @@ class AdapterMetadata:
     name: str
     version: str
     capabilities: List[str] = field(default_factory=list)
+
 
 logger = logging.getLogger(__name__)
 
@@ -152,14 +148,20 @@ class CIRISVerifyAdapter(Service):
             self._started = True
             logger.info("CIRISVerify adapter started successfully")
 
-            # Log initial license status
-            status = await self._service.get_license_status()
-            if status:
-                logger.info("License status: %s", status.status)
-                if status.allows_licensed_operation():
-                    logger.info("Running in LICENSED mode")
-                else:
-                    logger.info("Running in COMMUNITY mode")
+            # Check if we're in first-run mode - skip license check (no license exists yet)
+            from ciris_engine.logic.setup.first_run import is_first_run
+
+            if is_first_run():
+                logger.info("First-run mode: Skipping initial license check (license will be obtained via Portal)")
+            else:
+                # Log initial license status
+                status = await self._service.get_license_status()
+                if status:
+                    logger.info("License status: %s", status.status)
+                    if status.allows_licensed_operation():
+                        logger.info("Running in LICENSED mode")
+                    else:
+                        logger.info("Running in COMMUNITY mode")
         else:
             logger.warning("CIRISVerify initialization failed - operating in community mode")
             self._started = True  # Still mark as started, just in degraded mode

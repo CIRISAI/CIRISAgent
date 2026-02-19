@@ -24,37 +24,51 @@ class CIRISNodeClient:
     def __init__(
         self,
         base_url: Optional[str] = None,
+        portal_url: Optional[str] = None,
         auth_token: Optional[str] = None,
         agent_token: Optional[str] = None,
         timeout: int = 30,
         max_retries: int = 3,
     ) -> None:
+        # Node URL for WBD/deferral operations
         self.base_url: str = (
             base_url
             or os.getenv("CIRISNODE_BASE_URL", "https://node.ciris-services-1.ai")
             or "https://node.ciris-services-1.ai"
+        )
+        # Portal URL for registry operations (public keys, accord events)
+        self.portal_url: str = (
+            portal_url or os.getenv("CIRISNODE_PORTAL_URL", "https://portal.ciris.ai") or "https://portal.ciris.ai"
         )
         self.auth_token = auth_token or os.getenv("CIRISNODE_AUTH_TOKEN")
         self.agent_token = agent_token or os.getenv("CIRISNODE_AGENT_TOKEN")
         self.timeout = timeout
         self.max_retries = max_retries
         self._client: Optional[httpx.AsyncClient] = None
+        self._portal_client: Optional[httpx.AsyncClient] = None
         self._closed = False
 
     async def start(self) -> None:
-        """Start the HTTP client."""
+        """Start the HTTP clients."""
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=self.timeout,
         )
+        self._portal_client = httpx.AsyncClient(
+            base_url=self.portal_url,
+            timeout=self.timeout,
+        )
         self._closed = False
-        logger.info(f"CIRISNodeClient started, base_url={self.base_url}")
+        logger.info(f"CIRISNodeClient started, base_url={self.base_url}, portal_url={self.portal_url}")
 
     async def stop(self) -> None:
-        """Stop the HTTP client."""
+        """Stop the HTTP clients."""
         if self._client:
             await self._client.aclose()
             self._client = None
+        if self._portal_client:
+            await self._portal_client.aclose()
+            self._portal_client = None
         self._closed = True
         logger.info("CIRISNodeClient stopped")
 
@@ -117,6 +131,55 @@ class CIRISNodeClient:
         if last_error:
             raise last_error
         raise RuntimeError("Request failed with no error")
+
+    async def _portal_request(
+        self,
+        method: str,
+        endpoint: str,
+        json_data: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None,
+        use_agent_token: bool = False,
+    ) -> Dict[str, Any]:
+        """Make HTTP request to the portal with retry logic."""
+        if not self._portal_client:
+            raise RuntimeError("Portal client not started. Call start() first.")
+
+        headers = self._get_headers(use_agent_token)
+        last_error: Optional[Exception] = None
+
+        for attempt in range(self.max_retries):
+            try:
+                response = await self._portal_client.request(
+                    method=method,
+                    url=endpoint,
+                    json=json_data,
+                    params=params,
+                    headers=headers,
+                )
+                if 400 <= response.status_code < 500:
+                    response.raise_for_status()
+                response.raise_for_status()
+                return cast(Dict[str, Any], response.json())
+
+            except (httpx.ConnectError, httpx.TimeoutException) as e:
+                last_error = e
+                if attempt < self.max_retries - 1:
+                    logger.warning(f"Portal request failed (attempt {attempt + 1}/{self.max_retries}): {e}")
+                    continue
+                raise
+
+            except httpx.HTTPStatusError as e:
+                if 400 <= e.response.status_code < 500:
+                    raise
+                last_error = e
+                if attempt < self.max_retries - 1:
+                    logger.warning(f"Portal request failed (attempt {attempt + 1}/{self.max_retries}): {e}")
+                    continue
+                raise
+
+        if last_error:
+            raise last_error
+        raise RuntimeError("Portal request failed with no error")
 
     # =========================================================================
     # Health
@@ -187,12 +250,12 @@ class CIRISNodeClient:
         )
 
     async def register_public_key(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Register agent's Ed25519 public key with CIRISNode.
+        """Register agent's Ed25519 public key with CIRISPortal.
 
         The key is cross-validated against CIRISRegistry if org_id is provided.
         Agent token used if available (optional).
         """
-        return await self._request(
+        return await self._portal_request(
             "POST",
             "/api/v1/accord/public-keys",
             json_data=payload,

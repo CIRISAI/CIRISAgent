@@ -411,10 +411,10 @@ class CIRISVerifySigner(BaseSigner):
 
                 # Import into ciris_verify
                 logger.info(f"Auto-migrating key from {key_path} to ciris_verify secure storage")
-                self._client.import_key_sync(key_bytes)  # type: ignore[attr-defined]
+                self._client.import_key_sync(key_bytes)
 
                 # Fetch public key to validate
-                pub_key, algo = self._client.get_public_key_sync()  # type: ignore[attr-defined, unused-ignore]
+                pub_key, algo = self._client.get_ed25519_public_key_sync()
                 self._public_key_cache = pub_key
                 self._algo_name = algo
                 self._key_id = self._compute_key_id(pub_key)
@@ -603,7 +603,7 @@ class UnifiedSigningKey:
                     # Import the portal-issued key (algorithm=2 for Ed25519)
                     client.import_key_sync(private_bytes)
                     # Validate by fetching public key
-                    pub_key, algo = client.get_public_key_sync()
+                    pub_key, algo = client.get_ed25519_public_key_sync()
                     import_result[0] = client
                     import_result[1] = pub_key
                 except Exception as e:
@@ -619,7 +619,7 @@ class UnifiedSigningKey:
             if import_result[0] is not None and import_result[1] is not None:
                 # Successfully imported into ciris_verify
                 verify_signer._client = import_result[0]
-                verify_signer._public_key_bytes = import_result[1]
+                verify_signer._public_key_cache = import_result[1]
                 verify_signer._key_id = verify_signer._compute_key_id(import_result[1])
                 self._signer = verify_signer
                 self._initialized = True

@@ -127,6 +127,7 @@ class CIRISNodeService:
         """Start client, polling, and trace capture."""
         self._client = CIRISNodeClient(
             base_url=self.config.get("base_url"),
+            portal_url=self.config.get("portal_url"),
             auth_token=self.config.get("auth_token"),
             agent_token=self.config.get("agent_token"),
             timeout=self.config.get("timeout", 30),

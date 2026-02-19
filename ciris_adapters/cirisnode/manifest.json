@@ -33,6 +33,12 @@
       "default": "https://node.ciris-services-1.ai",
       "description": "CIRISNode API base URL"
     },
+    "portal_url": {
+      "type": "string",
+      "env": "CIRISNODE_PORTAL_URL",
+      "default": "https://portal.ciris.ai",
+      "description": "CIRISPortal API URL for registry operations"
+    },
     "agent_token": {
       "type": "string",
       "env": "CIRISNODE_AGENT_TOKEN",

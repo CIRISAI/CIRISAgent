@@ -143,7 +143,7 @@ class TestCIRISNodeDiscovery:
         assert us_region["label"] == "CIRIS US (Primary)"
         assert "portal_url" in us_region["metadata"]
         assert "node_url" in us_region["metadata"]
-        assert us_region["metadata"]["portal_url"] == "https://portal.ciris-services-1.ai"
+        assert us_region["metadata"]["portal_url"] == "https://portal.ciris.ai"
 
 
 class TestCIRISNodeConfigOptions:
@@ -286,7 +286,7 @@ class TestCIRISNodeRegions:
 
         assert us_region["id"] == "us-primary"
         assert "US" in us_region["label"]
-        assert us_region["metadata"]["portal_url"] == "https://portal.ciris-services-1.ai"
+        assert us_region["metadata"]["portal_url"] == "https://portal.ciris.ai"
         assert us_region["metadata"]["node_url"] == "https://node.ciris-services-1.ai"
 
     def test_eu_region(self) -> None:
@@ -295,7 +295,7 @@ class TestCIRISNodeRegions:
 
         assert eu_region["id"] == "eu"
         assert "EU" in eu_region["label"]
-        assert eu_region["metadata"]["portal_url"] == "https://portal.ciris-services-2.ai"
+        assert eu_region["metadata"]["portal_url"] == "https://portal.ciris.ai"
         assert eu_region["metadata"]["node_url"] == "https://node.ciris-services-2.ai"
 
 

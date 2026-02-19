@@ -154,6 +154,15 @@ class SystemSnapshot(BaseModel):
         description="Results from tools marked with context_enrichment=True, keyed by adapter_type:tool_name",
     )
 
+    # License disclosure from CIRISVerify - MUST be included in all LLM contexts
+    # Per FSD-001: This disclosure MUST be visible in agent processing context
+    license_disclosure_text: Optional[str] = Field(
+        None, description="Mandatory disclosure text from CIRISVerify (MUST be in LLM context)"
+    )
+    license_disclosure_severity: Optional[str] = Field(
+        None, description="Disclosure severity: INFO, WARNING, or CRITICAL"
+    )
+
     model_config = ConfigDict(extra="forbid", defer_build=True)  # Be strict about fields to catch misuse
 
 

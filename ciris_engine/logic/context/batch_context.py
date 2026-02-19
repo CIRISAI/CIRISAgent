@@ -75,6 +75,9 @@ class BatchContextData:
         from ciris_engine.schemas.runtime.extended import ShutdownContext
 
         self.shutdown_context: Optional[ShutdownContext] = None
+        # License disclosure from CIRISVerify
+        self.license_disclosure_text: Optional[str] = None
+        self.license_disclosure_severity: Optional[str] = None
 
 
 async def prefetch_batch_context(
@@ -247,6 +250,41 @@ async def prefetch_batch_context(
     # 7. Shutdown Context
     if runtime and hasattr(runtime, "current_shutdown_context"):
         batch_data.shutdown_context = runtime.current_shutdown_context
+
+    # 8. License Disclosure from CIRISVerify
+    if runtime and hasattr(runtime, "adapters"):
+        logger.debug("[DEBUG DB TIMING] Batch: fetching CIRISVerify disclosure")
+        try:
+            # Look for ciris_verify adapter in loaded adapters
+            ciris_verify_adapter = None
+            for adapter in runtime.adapters:
+                # Check by adapter type name
+                adapter_type = getattr(adapter, "adapter_type", "")
+                if "ciris_verify" in str(adapter_type).lower():
+                    ciris_verify_adapter = adapter
+                    break
+                # Also check class name as fallback
+                if "CIRISVerify" in type(adapter).__name__:
+                    ciris_verify_adapter = adapter
+                    break
+
+            if ciris_verify_adapter and hasattr(ciris_verify_adapter, "get_mandatory_disclosure"):
+                disclosure = await ciris_verify_adapter.get_mandatory_disclosure()
+                if disclosure:
+                    batch_data.license_disclosure_text = disclosure.text
+                    # Convert enum to string
+                    batch_data.license_disclosure_severity = (
+                        disclosure.severity.value if hasattr(disclosure.severity, "value") else str(disclosure.severity)
+                    )
+                    logger.info(f"[BATCH] CIRISVerify disclosure loaded: {batch_data.license_disclosure_severity}")
+        except Exception as e:
+            logger.warning(f"Failed to get CIRISVerify disclosure: {e}")
+            # Provide fallback disclosure when verification fails
+            batch_data.license_disclosure_text = (
+                "NOTICE: License verification unavailable. Operating in community mode "
+                "with limited capabilities. Professional features are NOT available."
+            )
+            batch_data.license_disclosure_severity = "WARNING"
 
     logger.debug("[DEBUG DB TIMING] Batch context prefetch complete")
     return batch_data
@@ -562,6 +600,9 @@ async def build_system_snapshot_with_batch(
         adapter_channels=adapter_channels,  # Available channels by adapter
         available_tools=available_tools,  # Available tools by adapter
         context_enrichment_results=context_enrichment_results,  # Pre-run tool results for context
+        # License disclosure from CIRISVerify - MUST be in LLM context
+        license_disclosure_text=batch_data.license_disclosure_text,
+        license_disclosure_severity=batch_data.license_disclosure_severity,
         # Get localized times - FAILS FAST AND LOUD if time_service is None
         **{
             f"current_time_{key}": value

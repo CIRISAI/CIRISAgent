@@ -30,7 +30,7 @@ CIRISNODE_REGIONS = [
         "label": "CIRIS US (Primary)",
         "description": "Primary CIRISNode in United States",
         "metadata": {
-            "portal_url": "https://portal.ciris-services-1.ai",
+            "portal_url": "https://portal.ciris.ai",
             "node_url": "https://node.ciris-services-1.ai",
             "region": "us-east",
         },
@@ -40,7 +40,7 @@ CIRISNODE_REGIONS = [
         "label": "CIRIS EU",
         "description": "CIRISNode in European Union",
         "metadata": {
-            "portal_url": "https://portal.ciris-services-2.ai",
+            "portal_url": "https://portal.ciris.ai",
             "node_url": "https://node.ciris-services-2.ai",
             "region": "eu-west",
         },

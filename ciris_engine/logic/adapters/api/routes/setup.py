@@ -2037,8 +2037,8 @@ async def _submit_attestation_inline(
             from ciris_verify import CIRISVerify as CV
 
             verifier = CV(skip_integrity_check=True)
-            proof = verifier.export_attestation_sync(challenge_bytes)  # type: ignore[attr-defined, unused-ignore]
-            attest_result[0] = proof.to_dict()
+            proof = verifier.export_attestation_sync(challenge_bytes)
+            attest_result[0] = proof  # export_attestation_sync returns dict directly
         except Exception as e:
             attest_result[1] = e
 

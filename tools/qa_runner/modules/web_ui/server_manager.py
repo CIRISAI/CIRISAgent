@@ -249,19 +249,36 @@ class ServerManager:
         if self.config.mock_llm:
             cmd.append("--mock-llm")
 
+        # Ensure minimal .env file exists (needed for QA testing)
+        env_path = os.path.join(self.config.project_root, ".env")
+        if not os.path.exists(env_path):
+            with open(env_path, "w") as f:
+                f.write("# Auto-generated minimal .env for QA testing\n")
+                f.write("CIRIS_CONFIGURED=true\n")
+                if self.config.mock_llm:
+                    f.write("CIRIS_LLM_PROVIDER=mock\n")
+                    f.write("CIRIS_MOCK_LLM=true\n")
+            print("   Created minimal .env file")
+
         # Open log file
         log_path = os.path.join(self.config.project_root, self.config.log_dir, "web_ui_qa_server.log")
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
         self._log_file = open(log_path, "w")
 
+        # Set up environment variables like the regular QA runner
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+
         # Start server process
+        # Note: Do NOT use preexec_fn=os.setsid - it causes the process to stop
+        # in some environments (e.g., Claude Code shell sessions)
         try:
             self._process = subprocess.Popen(
                 cmd,
                 cwd=self.config.project_root,
                 stdout=self._log_file,
                 stderr=subprocess.STDOUT,
-                preexec_fn=os.setsid if hasattr(os, "setsid") else None,
+                env=env,
             )
             status.pid = self._process.pid
             print(f"   Server PID: {self._process.pid}")
@@ -278,8 +295,9 @@ class ServerManager:
             time.sleep(self.config.health_check_interval)
 
             # Check if process died
-            if self._process.poll() is not None:
-                status.error = "Server process exited unexpectedly"
+            poll_result = self._process.poll()
+            if poll_result is not None:
+                status.error = f"Server process exited unexpectedly (exit code: {poll_result})"
                 return status
 
             # Check health endpoint
@@ -329,10 +347,7 @@ class ServerManager:
 
         try:
             # Try graceful shutdown first
-            if hasattr(os, "killpg"):
-                os.killpg(os.getpgid(self._process.pid), signal.SIGTERM)
-            else:
-                self._process.terminate()
+            self._process.terminate()
 
             # Wait for graceful shutdown
             try:
@@ -341,10 +356,7 @@ class ServerManager:
             except subprocess.TimeoutExpired:
                 # Force kill
                 print("   Force killing server...")
-                if hasattr(os, "killpg"):
-                    os.killpg(os.getpgid(self._process.pid), signal.SIGKILL)
-                else:
-                    self._process.kill()
+                self._process.kill()
                 self._process.wait()
 
             self._process = None

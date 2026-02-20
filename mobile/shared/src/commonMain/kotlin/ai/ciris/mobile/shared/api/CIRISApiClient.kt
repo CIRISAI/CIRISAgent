@@ -6,6 +6,7 @@ import ai.ciris.mobile.shared.viewmodels.AgentTemplateInfo
 import ai.ciris.mobile.shared.viewmodels.ConfigItemData
 import ai.ciris.mobile.shared.viewmodels.SetupCompletionResult
 import ai.ciris.mobile.shared.viewmodels.StateTransitionResult
+import ai.ciris.mobile.shared.viewmodels.VerifyStatusResponse
 import ai.ciris.api.apis.*
 import ai.ciris.api.models.InteractRequest as SdkInteractRequest
 import ai.ciris.api.models.LoginRequest as SdkLoginRequest
@@ -740,6 +741,70 @@ class CIRISApiClient(
         } catch (e: Exception) {
             logException(method, e)
             throw e
+        }
+    }
+
+    /**
+     * Get CIRISVerify status for Trust and Security display.
+     * V2.0: CIRISVerify is REQUIRED for CIRIS 2.0+ agents.
+     *
+     * Returns the status of CIRISVerify including:
+     * - Whether the library is loaded (REQUIRED for CIRIS 2.0+)
+     * - Hardware security type (TPM, Secure Enclave, Software)
+     * - Key status (none, ephemeral, portal_pending, portal_active)
+     * - Attestation status
+     */
+    suspend fun getVerifyStatus(): VerifyStatusResponse {
+        val method = "getVerifyStatus"
+        logDebug(method, "Fetching CIRISVerify status")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
+
+        return try {
+            val response = client.get("$baseUrl/v1/setup/verify-status")
+
+            if (response.status != HttpStatusCode.OK) {
+                val errorDetail = try {
+                    val errBody = response.body<JsonObject>()
+                    (errBody["detail"] as? JsonPrimitive)?.content
+                } catch (_: Exception) { null }
+                throw Exception(errorDetail ?: "Verify status failed: HTTP ${response.status}")
+            }
+
+            val body = response.body<JsonObject>()
+            val data = body["data"] as? JsonObject
+                ?: throw Exception("Invalid response format")
+
+            val loaded = (data["loaded"] as? JsonPrimitive)?.content?.toBoolean() ?: false
+            val verifyStatus = VerifyStatusResponse(
+                loaded = loaded,
+                version = (data["version"] as? JsonPrimitive)?.content,
+                hardwareType = (data["hardware_type"] as? JsonPrimitive)?.content,
+                keyStatus = (data["key_status"] as? JsonPrimitive)?.content ?: "none",
+                keyId = (data["key_id"] as? JsonPrimitive)?.content,
+                attestationStatus = (data["attestation_status"] as? JsonPrimitive)?.content ?: "not_attempted",
+                error = (data["error"] as? JsonPrimitive)?.content,
+                disclaimer = (data["disclaimer"] as? JsonPrimitive)?.content
+                    ?: "CIRISVerify provides cryptographic attestation of agent identity."
+            )
+
+            logInfo(method, "Verify status: loaded=$loaded, keyStatus=${verifyStatus.keyStatus}, hardware=${verifyStatus.hardwareType}")
+            verifyStatus
+        } catch (e: Exception) {
+            logException(method, e)
+            // Return a default "not loaded" response on error
+            VerifyStatusResponse(
+                loaded = false,
+                error = e.message ?: "Failed to fetch verify status"
+            )
+        } finally {
+            client.close()
         }
     }
 

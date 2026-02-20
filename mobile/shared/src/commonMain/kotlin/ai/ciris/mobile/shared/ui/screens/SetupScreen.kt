@@ -9,6 +9,7 @@ import ai.ciris.mobile.shared.viewmodels.DeviceAuthStatus
 import ai.ciris.mobile.shared.viewmodels.SetupStep
 import ai.ciris.mobile.shared.viewmodels.SetupFormState
 import ai.ciris.mobile.shared.viewmodels.SetupViewModel
+import ai.ciris.mobile.shared.viewmodels.VerifyStatusResponse
 import androidx.compose.animation.AnimatedVisibility
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -28,6 +29,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,7 +37,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -311,14 +317,23 @@ private fun WelcomeStep(
 ) {
     val isGoogleAuth = state.isGoogleAuth
     var detailsExpanded by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    // Track if there's more content below
+    val showScrollIndicator by remember {
+        derivedStateOf {
+            scrollState.value < scrollState.maxValue - 50
+        }
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+                .verticalScroll(scrollState),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
         // Badge: "✓ 100% Free & Open Source"
         Surface(
             shape = RoundedCornerShape(8.dp),
@@ -345,50 +360,67 @@ private fun WelcomeStep(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Register Your Agent",
+                    text = "Register Your Agent Identity",
                     color = SetupColors.SuccessDark,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Validate and register your agent HW and SW occurrence for \$1.00 bond and \$0.50 processing fee to support open source AGI alignment infrastructure",
+                    text = "Join the CIRIS community and enable cryptographic verification of your agent's behavior.",
                     color = SetupColors.SuccessText,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
                 )
 
-                OutlinedTextField(
-                    value = state.deviceAuth.nodeUrl,
-                    onValueChange = { viewModel.updateNodeUrl(it) },
-                    label = { Text("Portal URL (e.g., portal.ciris.ai)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = SetupColors.SuccessDark,
-                        focusedLabelColor = SetupColors.SuccessDark
-                    )
+                // Benefits list
+                Column(modifier = Modifier.padding(bottom = 12.dp)) {
+                    BenefitRow("Audit trail — cryptographically-signed traces begin")
+                    BenefitRow("Coherence Ratchet — coordinated deception becomes mathematically harder over time")
+                    BenefitRow("CIRIS Scoring — measures integrity across interactions")
+                    BenefitRow("Community template (Ally) included")
+                }
+
+                Text(
+                    text = "\$1.00 refundable bond + \$0.50 processing fee",
+                    color = SetupColors.SuccessDark,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(bottom = 8.dp)
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+
                 Button(
-                    onClick = { viewModel.enterNodeFlow() },
-                    enabled = state.deviceAuth.nodeUrl.isNotBlank(),
+                    onClick = {
+                        // Set default portal URL and enter node flow
+                        viewModel.updateNodeUrl("https://portal.ciris.ai")
+                        viewModel.enterNodeFlow()
+                    },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SetupColors.SuccessDark
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Connect", fontWeight = FontWeight.Bold)
+                    Text("Connect to CIRIS Portal", fontWeight = FontWeight.Bold)
                 }
 
                 Text(
-                    text = "For licensed deployment, contact sales@ciris.ai",
+                    text = "Identity keys are bound to your agent — transfers not yet supported",
                     color = SetupColors.TextSecondary,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 8.dp)
+                )
+
+                Text(
+                    text = "For licensed deployment, contact sales@ciris.ai",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
                 )
             }
         }
@@ -532,6 +564,43 @@ private fun WelcomeStep(
                 )
             }
         }
+
+        // Trust and Security card - shows CIRISVerify status (REQUIRED for 2.0)
+        Spacer(modifier = Modifier.height(16.dp))
+        TrustSecurityCard(
+            apiClient = apiClient,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+            // Bottom padding for scroll indicator
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+
+        // Scroll indicator arrow - shows when there's more content below
+        AnimatedVisibility(
+            visible = showScrollIndicator,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 8.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = SetupColors.Primary.copy(alpha = 0.9f),
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Text(
+                        text = "↓",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -545,6 +614,9 @@ private fun NodeAuthStep(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val deviceAuth = state.deviceAuth
+    val uriHandler = LocalUriHandler.current
+    val clipboardManager = LocalClipboardManager.current
+    var showCopiedToast by remember { mutableStateOf(false) }
 
     // Start connection when entering this step if not yet started
     LaunchedEffect(Unit) {
@@ -607,6 +679,9 @@ private fun NodeAuthStep(
             }
 
             DeviceAuthStatus.WAITING -> {
+                // Use verification URL as provided by server (includes device code)
+                val fullVerificationUrl = deviceAuth.verificationUri
+
                 // Verification URL card
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -618,25 +693,71 @@ private fun NodeAuthStep(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "Open this URL in your browser:",
+                            text = "Click to open in browser, or copy to open in another app:",
                             color = SetupColors.InfoDark,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
+
+                        // Clickable URL
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = Color.White,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    uriHandler.openUri(fullVerificationUrl)
+                                }
                         ) {
                             Text(
-                                text = deviceAuth.verificationUri,
+                                text = fullVerificationUrl,
                                 color = SetupColors.Primary,
                                 fontSize = 14.sp,
                                 textAlign = TextAlign.Center,
+                                textDecoration = TextDecoration.Underline,
                                 modifier = Modifier.padding(12.dp)
                             )
                         }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Action buttons row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Open in browser button
+                            Button(
+                                onClick = { uriHandler.openUri(fullVerificationUrl) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SetupColors.Primary
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Open in Browser", fontSize = 13.sp)
+                            }
+
+                            // Copy to clipboard button
+                            OutlinedButton(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(fullVerificationUrl))
+                                    showCopiedToast = true
+                                    coroutineScope.launch {
+                                        delay(2000)
+                                        showCopiedToast = false
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    if (showCopiedToast) "Copied!" else "Copy URL",
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+
                         if (deviceAuth.userCode.isNotBlank()) {
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
@@ -1410,6 +1531,396 @@ private fun DataPointRow(text: String, color: Color) {
         Text("•", color = color, fontSize = 14.sp)
         Spacer(modifier = Modifier.width(8.dp))
         Text(text, color = color, fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun BenefitRow(text: String) {
+    Row(
+        modifier = Modifier.padding(vertical = 2.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text("✓", color = SetupColors.SuccessDark, fontSize = 12.sp)
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = text,
+            color = SetupColors.SuccessText,
+            fontSize = 12.sp,
+            lineHeight = 16.sp
+        )
+    }
+}
+
+// ========== Trust and Security Card ==========
+// Additional colors for Trust and Security card
+private object TrustColors {
+    val EmeraldLight = Color(0xFFD1FAE5)
+    val EmeraldBorder = Color(0xFF6EE7B7)
+    val EmeraldDark = Color(0xFF065F46)
+    val EmeraldText = Color(0xFF047857)
+    val EmeraldMuted = Color(0xFFA7F3D0)
+
+    val WarningLight = Color(0xFFFEF3C7)
+    val WarningBorder = Color(0xFFFCD34D)
+    val WarningDark = Color(0xFF92400E)
+    val WarningText = Color(0xFFD97706)
+
+    val ErrorLight = Color(0xFFFEE2E2)
+    val ErrorBorder = Color(0xFFFCA5A5)
+    val ErrorDark = Color(0xFF991B1B)
+    val ErrorText = Color(0xFFDC2626)
+}
+
+/**
+ * Trust and Security Card
+ *
+ * Displays CIRISVerify status including:
+ * - Library loaded status (REQUIRED for CIRIS 2.0+)
+ * - Hardware security type
+ * - Key status (Portal key activation)
+ * - Attestation status
+ * - Disclaimer about cryptographic verification
+ */
+@Composable
+private fun TrustSecurityCard(
+    apiClient: CIRISApiClient,
+    modifier: Modifier = Modifier
+) {
+    var verifyStatus by remember { mutableStateOf<VerifyStatusResponse?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
+
+    // Fetch verify status on mount and refresh every 30 seconds
+    LaunchedEffect(Unit) {
+        while (true) {
+            try {
+                verifyStatus = withContext(Dispatchers.IO) {
+                    apiClient.getVerifyStatus()
+                }
+                error = null
+            } catch (e: Exception) {
+                error = e.message ?: "Failed to fetch verify status"
+            } finally {
+                loading = false
+            }
+            delay(30000) // Refresh every 30 seconds
+        }
+    }
+
+    // Loading state
+    if (loading) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SetupColors.GrayLight,
+            modifier = modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.33f)
+                        .height(16.dp)
+                        .background(Color(0xFFE5E7EB), RoundedCornerShape(4.dp))
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.66f)
+                        .height(12.dp)
+                        .background(Color(0xFFE5E7EB), RoundedCornerShape(4.dp))
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.5f)
+                        .height(12.dp)
+                        .background(Color(0xFFE5E7EB), RoundedCornerShape(4.dp))
+                )
+            }
+        }
+        return
+    }
+
+    // CIRISVerify not loaded - CRITICAL ERROR for 2.0
+    if (verifyStatus?.loaded != true) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = TrustColors.ErrorLight,
+            modifier = modifier
+                .fillMaxWidth()
+                .border(1.dp, TrustColors.ErrorBorder, RoundedCornerShape(12.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Text(
+                        text = "⚠",
+                        color = TrustColors.ErrorDark,
+                        fontSize = 18.sp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "CIRISVerify Required",
+                        color = TrustColors.ErrorDark,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Text(
+                    text = "CIRISVerify is required for CIRIS 2.0 agents. The agent cannot operate without cryptographic identity verification.",
+                    color = TrustColors.ErrorText,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+
+                (error ?: verifyStatus?.error)?.let { errMsg ->
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = TrustColors.ErrorLight.copy(alpha = 0.5f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                    ) {
+                        Text(
+                            text = errMsg,
+                            color = TrustColors.ErrorDark,
+                            fontSize = 11.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = TrustColors.ErrorBorder.copy(alpha = 0.5f))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Install CIRISVerify →",
+                    color = TrustColors.ErrorDark,
+                    fontSize = 12.sp,
+                    textDecoration = TextDecoration.Underline,
+                    modifier = Modifier.clickable {
+                        uriHandler.openUri("https://github.com/CIRISAI/CIRISVerify")
+                    }
+                )
+            }
+        }
+        return
+    }
+
+    // CIRISVerify loaded - show status
+    val status = verifyStatus!!
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = TrustColors.EmeraldLight,
+        modifier = modifier
+            .fillMaxWidth()
+            .border(1.dp, TrustColors.EmeraldBorder, RoundedCornerShape(12.dp))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "🛡",
+                        fontSize = 18.sp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Trust & Security",
+                        color = TrustColors.EmeraldDark,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                status.version?.let { version ->
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = TrustColors.EmeraldMuted
+                    ) {
+                        Text(
+                            text = "v$version",
+                            color = TrustColors.EmeraldDark,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Status grid
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Hardware column
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Hardware",
+                        color = TrustColors.EmeraldText,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = status.hardwareType?.replace("_", " ") ?: "Unknown",
+                        color = TrustColors.EmeraldDark,
+                        fontSize = 13.sp
+                    )
+                }
+
+                // Key status column
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Key Status",
+                        color = TrustColors.EmeraldText,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    val (keyLabel, keyColor) = getKeyStatusLabel(status.keyStatus)
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = keyColor.copy(alpha = 0.2f)
+                    ) {
+                        Text(
+                            text = keyLabel,
+                            color = keyColor,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Attestation column
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Attestation",
+                        color = TrustColors.EmeraldText,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    val (attestLabel, attestColor) = getAttestationLabel(status.attestationStatus)
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = attestColor.copy(alpha = 0.2f)
+                    ) {
+                        Text(
+                            text = attestLabel,
+                            color = attestColor,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                // Key ID column (if present)
+                status.keyId?.let { keyId ->
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Key ID",
+                            color = TrustColors.EmeraldText,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = if (keyId.length > 12) "${keyId.take(6)}...${keyId.takeLast(4)}" else keyId,
+                            color = TrustColors.EmeraldDark,
+                            fontSize = 11.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+
+            // Disclaimer
+            Spacer(modifier = Modifier.height(12.dp))
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = TrustColors.EmeraldMuted.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "CIRISVerify provides cryptographic attestation of agent identity. This enables participation in the Coherence Ratchet and CIRIS Scoring.",
+                    color = TrustColors.EmeraldText,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
+
+            // Links
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider(color = TrustColors.EmeraldBorder.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Coherence Ratchet",
+                    color = TrustColors.EmeraldText,
+                    fontSize = 11.sp,
+                    modifier = Modifier.clickable {
+                        uriHandler.openUri("https://ciris.ai/coherence-ratchet")
+                    }
+                )
+                Text("·", color = TrustColors.EmeraldText, fontSize = 11.sp)
+                Text(
+                    text = "CIRIS Scoring",
+                    color = TrustColors.EmeraldText,
+                    fontSize = 11.sp,
+                    modifier = Modifier.clickable {
+                        uriHandler.openUri("https://ciris.ai/ciris-scoring")
+                    }
+                )
+                Text("·", color = TrustColors.EmeraldText, fontSize = 11.sp)
+                Text(
+                    text = "CIRISVerify",
+                    color = TrustColors.EmeraldText,
+                    fontSize = 11.sp,
+                    modifier = Modifier.clickable {
+                        uriHandler.openUri("https://github.com/CIRISAI/CIRISVerify")
+                    }
+                )
+            }
+        }
+    }
+}
+
+private fun getKeyStatusLabel(keyStatus: String): Pair<String, Color> {
+    return when (keyStatus) {
+        "portal_active" -> "Portal Key Active" to Color(0xFF047857)
+        "portal_pending" -> "Portal Key Pending" to Color(0xFFD97706)
+        "ephemeral" -> "Ephemeral Key" to Color(0xFF1D4ED8)
+        else -> "No Key" to Color(0xFF6B7280)
+    }
+}
+
+private fun getAttestationLabel(attestation: String): Pair<String, Color> {
+    return when (attestation) {
+        "verified" -> "Verified" to Color(0xFF047857)
+        "pending" -> "Pending" to Color(0xFFD97706)
+        "failed" -> "Failed" to Color(0xFFDC2626)
+        else -> "Not Attempted" to Color(0xFF6B7280)
     }
 }
 

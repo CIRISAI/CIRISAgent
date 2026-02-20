@@ -39,6 +39,85 @@ logger = logging.getLogger(__name__)
 # Constants
 FIELD_DESC_DISPLAY_NAME = "Display name"
 
+
+# ============================================================================
+# Device Auth Session Persistence
+# ============================================================================
+# Device codes MUST persist across app restarts until the flow completes,
+# expires, or errors. Otherwise, if the user pays for a license in the browser
+# and the app restarts, the purchase is orphaned.
+
+
+def _get_device_auth_session_path() -> Path:
+    """Get path to the device auth session file."""
+    ciris_home = os.environ.get("CIRIS_HOME", str(Path.home() / ".ciris"))
+    return Path(ciris_home) / ".device_auth_session.json"
+
+
+def _load_device_auth_session() -> Optional[Dict[str, Any]]:
+    """Load active device auth session if it exists and hasn't expired."""
+    session_path = _get_device_auth_session_path()
+    if not session_path.exists():
+        return None
+
+    try:
+        with open(session_path, "r") as f:
+            session = json.load(f)
+
+        # Check if expired
+        expires_at = session.get("expires_at", 0)
+        if time.time() > expires_at:
+            logger.info("Device auth session expired, clearing")
+            _clear_device_auth_session()
+            return None
+
+        return session
+    except Exception as e:
+        logger.warning("Failed to load device auth session: %s", e)
+        return None
+
+
+def _save_device_auth_session(
+    device_code: str,
+    portal_url: str,
+    verification_uri_complete: str,
+    user_code: str,
+    expires_in: int,
+    interval: int,
+) -> None:
+    """Save active device auth session."""
+    session_path = _get_device_auth_session_path()
+    session = {
+        "device_code": device_code,
+        "portal_url": portal_url,
+        "verification_uri_complete": verification_uri_complete,
+        "user_code": user_code,
+        "expires_in": expires_in,
+        "interval": interval,
+        "expires_at": time.time() + expires_in,
+        "created_at": time.time(),
+    }
+
+    try:
+        session_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(session_path, "w") as f:
+            json.dump(session, f)
+        logger.info("Saved device auth session (expires in %ds)", expires_in)
+    except Exception as e:
+        logger.warning("Failed to save device auth session: %s", e)
+
+
+def _clear_device_auth_session() -> None:
+    """Clear device auth session (on completion or error)."""
+    session_path = _get_device_auth_session_path()
+    try:
+        if session_path.exists():
+            session_path.unlink()
+            logger.info("Cleared device auth session")
+    except Exception as e:
+        logger.warning("Failed to clear device auth session: %s", e)
+
+
 # ============================================================================
 # Request/Response Schemas
 # ============================================================================
@@ -112,6 +191,27 @@ class SetupStatusResponse(BaseModel):
     config_exists: bool = Field(..., description="Whether config file exists")
     config_path: Optional[str] = Field(None, description="Path to config file if exists")
     setup_required: bool = Field(..., description="Whether setup is required")
+
+
+class VerifyStatusResponse(BaseModel):
+    """CIRISVerify status for Trust and Security display.
+
+    CIRISVerify is REQUIRED for CIRIS 2.0+. Agents cannot run without it.
+    """
+
+    loaded: bool = Field(..., description="Whether CIRISVerify library is loaded")
+    version: Optional[str] = Field(None, description="CIRISVerify version if loaded")
+    hardware_type: Optional[str] = Field(None, description="Hardware security type (TPM_2_0, SOFTWARE_ONLY, etc.)")
+    key_status: str = Field(..., description="Key status: 'none', 'ephemeral', 'portal_pending', 'portal_active'")
+    key_id: Optional[str] = Field(None, description="Portal-issued key ID if activated")
+    attestation_status: str = Field(..., description="Attestation: 'not_attempted', 'pending', 'verified', 'failed'")
+    error: Optional[str] = Field(None, description="Error message if verify failed to load")
+    disclaimer: str = Field(
+        default="CIRISVerify provides cryptographic attestation of agent identity and behavior. "
+        "This enables participation in the Coherence Ratchet and CIRIS Scoring. "
+        "CIRISVerify is REQUIRED for CIRIS 2.0 agents.",
+        description="Trust and security disclaimer text",
+    )
 
 
 class LLMValidationRequest(BaseModel):
@@ -1650,6 +1750,101 @@ async def get_setup_status() -> SuccessResponse[SetupStatusResponse]:
     return SuccessResponse(data=status)
 
 
+@router.get("/verify-status")
+async def get_verify_status() -> SuccessResponse[VerifyStatusResponse]:
+    """Get CIRISVerify status for Trust and Security display.
+
+    Returns the status of CIRISVerify including:
+    - Whether the library is loaded
+    - Hardware security type (TPM, Secure Enclave, Software)
+    - Key status (none, ephemeral, portal_pending, portal_active)
+    - Attestation status
+
+    CIRISVerify is REQUIRED for CIRIS 2.0+. Agents cannot run without it.
+    This endpoint is always accessible without authentication.
+    """
+    import threading
+
+    # Try to get CIRISVerify status on a large stack thread (Rust Tokio compatibility)
+    verify_result: list[Any] = [None, None]  # [status_dict | None, error | None]
+
+    def _get_verify_status_on_large_stack() -> None:
+        try:
+            from ciris_verify import CIRISVerify as CV
+
+            verifier = CV(skip_integrity_check=True)
+
+            # Get basic info
+            version = getattr(verifier, "version", None)
+            if callable(version):
+                version = version()
+
+            # Check if Portal key is loaded
+            has_portal_key = False
+            key_id = None
+            try:
+                # Check if ed25519_signer has a key
+                has_portal_key = verifier.has_portal_key() if hasattr(verifier, "has_portal_key") else False
+            except Exception:
+                pass
+
+            # Determine key status
+            if has_portal_key:
+                key_status = "portal_active"
+            else:
+                key_status = "none"
+
+            verify_result[0] = {
+                "loaded": True,
+                "version": str(version) if version else "unknown",
+                "hardware_type": "SOFTWARE_ONLY",  # Will be updated by attestation
+                "key_status": key_status,
+                "key_id": key_id,
+                "attestation_status": "not_attempted",
+            }
+        except ImportError as e:
+            verify_result[1] = f"CIRISVerify not installed: {e}"
+        except Exception as e:
+            verify_result[1] = f"CIRISVerify error: {e}"
+
+    old_stack = threading.stack_size()
+    try:
+        threading.stack_size(8 * 1024 * 1024)  # 8 MB for Rust Tokio
+        t = threading.Thread(target=_get_verify_status_on_large_stack, daemon=True)
+        t.start()
+        t.join(timeout=5)
+    finally:
+        threading.stack_size(old_stack)
+
+    if verify_result[1] is not None or verify_result[0] is None:
+        # CIRISVerify not available - this is a CRITICAL error for 2.0
+        error_msg = verify_result[1] if verify_result[1] else "CIRISVerify status check timed out"
+        return SuccessResponse(
+            data=VerifyStatusResponse(
+                loaded=False,
+                version=None,
+                hardware_type=None,
+                key_status="none",
+                key_id=None,
+                attestation_status="not_attempted",
+                error=error_msg,
+            )
+        )
+
+    status_dict = verify_result[0]
+    return SuccessResponse(
+        data=VerifyStatusResponse(
+            loaded=status_dict["loaded"],
+            version=status_dict["version"],
+            hardware_type=status_dict["hardware_type"],
+            key_status=status_dict["key_status"],
+            key_id=status_dict["key_id"],
+            attestation_status=status_dict["attestation_status"],
+            error=None,
+        )
+    )
+
+
 @router.get("/providers")
 async def list_providers() -> SuccessResponse[List[LLMProvider]]:
     """List available LLM providers.
@@ -1872,13 +2067,15 @@ async def connect_node(req: ConnectNodeRequest) -> SuccessResponse[ConnectNodeRe
     """Initiate device auth via CIRISPortal.
 
     The user provides a Portal URL directly. This endpoint:
-    1. Normalizes the Portal URL (adds https:// if needed)
-    2. Calls Portal's POST /api/device/authorize with agent info
-    3. Returns verification URL for user to open in browser
+    1. Checks for existing non-expired device auth session (reuses if found)
+    2. Normalizes the Portal URL (adds https:// if needed)
+    3. Calls Portal's POST /api/device/authorize with agent info
+    4. Persists the session so it survives app restarts
+    5. Returns verification URL for user to open in browser
 
-    The flow contacts CIRISPortal (for device auth/OAuth) and CIRISRegistry
-    (for agent registration + key issuance). CIRISNode is NOT involved
-    in the provisioning flow.
+    CRITICAL: Device codes are persisted to survive app restarts. If user
+    pays for a license in browser and app restarts, we must continue polling
+    with the SAME device code, not request a new one.
 
     This endpoint is accessible without authentication during first-run.
     """
@@ -1888,6 +2085,22 @@ async def connect_node(req: ConnectNodeRequest) -> SuccessResponse[ConnectNodeRe
     # Normalize URL — add https:// if no scheme provided
     if not portal_url.startswith("http://") and not portal_url.startswith("https://"):
         portal_url = f"https://{portal_url}"
+
+    # Check for existing non-expired session — reuse it if found
+    existing_session = _load_device_auth_session()
+    if existing_session and existing_session.get("portal_url") == portal_url:
+        logger.info("Reusing existing device auth session (device_code=%s...)", existing_session["device_code"][:16])
+        remaining = int(existing_session["expires_at"] - time.time())
+        return SuccessResponse(
+            data=ConnectNodeResponse(
+                verification_uri_complete=existing_session["verification_uri_complete"],
+                device_code=existing_session["device_code"],
+                user_code=existing_session.get("user_code", ""),
+                portal_url=portal_url,
+                expires_in=max(remaining, 0),
+                interval=existing_session.get("interval", 5),
+            )
+        )
 
     device_auth_endpoint = "/api/device/authorize"
 
@@ -1923,14 +2136,30 @@ async def connect_node(req: ConnectNodeRequest) -> SuccessResponse[ConnectNodeRe
             portal_url=portal_url,
         )
 
+    # Persist the session so it survives app restarts
+    device_code = auth_data["device_code"]
+    expires_in = auth_data.get("expires_in", 900)
+    interval = auth_data.get("interval", 5)
+    verification_uri = auth_data["verification_uri_complete"]
+    user_code = auth_data.get("user_code", "")
+
+    _save_device_auth_session(
+        device_code=device_code,
+        portal_url=portal_url,
+        verification_uri_complete=verification_uri,
+        user_code=user_code,
+        expires_in=expires_in,
+        interval=interval,
+    )
+
     return SuccessResponse(
         data=ConnectNodeResponse(
-            verification_uri_complete=auth_data["verification_uri_complete"],
-            device_code=auth_data["device_code"],
-            user_code=auth_data.get("user_code", ""),
+            verification_uri_complete=verification_uri,
+            device_code=device_code,
+            user_code=user_code,
             portal_url=portal_url,
-            expires_in=auth_data.get("expires_in", 900),
-            interval=auth_data.get("interval", 5),
+            expires_in=expires_in,
+            interval=interval,
         )
     )
 
@@ -1963,6 +2192,8 @@ async def connect_node_status(device_code: str, portal_url: str) -> SuccessRespo
                 return SuccessResponse(data=ConnectNodeStatusResponse(status="pending"))
 
             if token_resp.status_code == 403:
+                # Authorization denied — clear session so user can retry
+                _clear_device_auth_session()
                 return SuccessResponse(data=ConnectNodeStatusResponse(status="error"))
 
             if token_resp.status_code != 200:
@@ -1993,6 +2224,16 @@ async def connect_node_status(device_code: str, portal_url: str) -> SuccessRespo
     # We don't eagerly save here to avoid filesystem issues (e.g., iOS read-only bundles).
     private_key_b64 = signing_key.get("ed25519_private_key", "")
 
+    # PHASE 2: Key Activation - import key and submit second attestation
+    # This binds the agent identity to this specific key instance.
+    # Key reuse across agents is FORBIDDEN.
+    if private_key_b64:
+        await _activate_key_inline(private_key_b64, device_code, portal_url)
+
+    # Clear device auth session — flow completed successfully
+    _clear_device_auth_session()
+    logger.info("Device auth flow completed successfully")
+
     return SuccessResponse(
         data=ConnectNodeStatusResponse(
             status="complete",
@@ -2013,9 +2254,7 @@ async def connect_node_status(device_code: str, portal_url: str) -> SuccessRespo
 # ============================================================================
 
 
-async def _submit_attestation_inline(
-    challenge_nonce: str, device_code: str, portal_url: str
-) -> None:
+async def _submit_attestation_inline(challenge_nonce: str, device_code: str, portal_url: str) -> None:
     """Submit CIRISVerify hardware attestation to Portal inline during connect-node.
 
     Runs CIRISVerify on an 8MB-stack thread (iOS Rust/Tokio compatibility),
@@ -2025,6 +2264,7 @@ async def _submit_attestation_inline(
     rejects the proof, we log and continue — the user can still authorize.
     """
     import threading
+
     import httpx
 
     challenge_bytes = bytes.fromhex(challenge_nonce)
@@ -2059,6 +2299,18 @@ async def _submit_attestation_inline(
 
     proof_dict = attest_result[0]
 
+    # Log attestation proof details for debugging
+    logger.info(
+        "[CIRISVerify] Attestation proof generated: key_type=%s, hw_algo=%s, hw_type=%s, "
+        "pubkey_len=%d, sig_len=%d, challenge_len=%d",
+        proof_dict.get("key_type", "unknown"),
+        proof_dict.get("hardware_algorithm", "unknown"),
+        proof_dict.get("hardware_type", "unknown"),
+        len(proof_dict.get("hardware_public_key", "")),
+        len(proof_dict.get("classical_signature", "")),
+        len(proof_dict.get("challenge", "")),
+    )
+
     # POST proof to Portal's /api/device/attest
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -2075,13 +2327,148 @@ async def _submit_attestation_inline(
             if attest_resp.status_code == 200:
                 result_data = attest_resp.json()
                 verified = result_data.get("verified", False)
-                logger.info("Portal attestation result: verified=%s", verified)
+                hw_type = result_data.get("hardware_type", "unknown")
+                warnings = result_data.get("warnings", [])
+                logger.info("[CIRISVerify] Portal attestation VERIFIED: hw_type=%s, warnings=%s", hw_type, warnings)
             else:
-                logger.warning(
-                    "Portal attestation rejected: HTTP %s", attest_resp.status_code
-                )
+                # Log detailed error response from Portal
+                try:
+                    error_data = attest_resp.json()
+                    errors = error_data.get("errors", [])
+                    warnings = error_data.get("warnings", [])
+                    logger.warning(
+                        "[CIRISVerify] Portal attestation REJECTED: HTTP %s, errors=%s, warnings=%s",
+                        attest_resp.status_code,
+                        errors,
+                        warnings,
+                    )
+                except Exception:
+                    logger.warning(
+                        "[CIRISVerify] Portal attestation rejected: HTTP %s, body=%s",
+                        attest_resp.status_code,
+                        attest_resp.text[:500],
+                    )
     except httpx.HTTPError as e:
-        logger.warning("Failed to submit attestation to Portal: %s", e)
+        logger.warning("[CIRISVerify] Failed to submit attestation to Portal: %s", e)
+
+
+async def _activate_key_inline(private_key_b64: str, device_code: str, portal_url: str) -> None:
+    """Phase 2: Key Activation - import Portal key and submit second attestation.
+
+    After receiving the signing key from Portal, we:
+    1. Import it into CIRISVerify
+    2. Generate a second attestation (signed with Portal key, key_type="portal")
+    3. Submit to /api/device/activate
+
+    This creates a tamper-evident binding between the agent instance and its key.
+    Key reuse across agents is FORBIDDEN - Portal tracks all activations.
+    Transferring agent identities to a new device is NOT SUPPORTED YET.
+
+    Non-fatal: if activation fails, we log and continue — agent will still work
+    but key reuse detection may not be fully enabled.
+    """
+    import base64
+    import os
+    import threading
+
+    import httpx
+
+    # Decode the private key from base64
+    try:
+        key_bytes = base64.b64decode(private_key_b64)
+        if len(key_bytes) != 32:
+            logger.warning(
+                "Key activation skipped: invalid key length (%d bytes, expected 32)",
+                len(key_bytes),
+            )
+            return
+    except Exception as e:
+        logger.warning("Key activation skipped: failed to decode key: %s", e)
+        return
+
+    # Generate a fresh challenge for the second attestation
+    challenge_bytes = os.urandom(32)
+
+    # Import key and generate attestation on 8MB stack thread
+    activate_result: list[Any] = [None, None]  # [proof_dict | None, error | None]
+
+    def _activate_on_large_stack() -> None:
+        try:
+            from ciris_verify import CIRISVerify as CV
+
+            verifier = CV(skip_integrity_check=True)
+
+            # Import the Portal-issued key
+            verifier.import_key_sync(key_bytes)
+            logger.info("Portal key imported into CIRISVerify")
+
+            # Generate second attestation (now with key_type="portal")
+            proof = verifier.export_attestation_sync(challenge_bytes)
+            activate_result[0] = proof
+        except Exception as e:
+            activate_result[1] = e
+
+    old_stack = threading.stack_size()
+    try:
+        threading.stack_size(8 * 1024 * 1024)  # 8 MB
+        t = threading.Thread(target=_activate_on_large_stack, daemon=True)
+        t.start()
+        t.join(timeout=15)
+    finally:
+        threading.stack_size(old_stack)
+
+    # Check for errors
+    if activate_result[1] is not None or activate_result[0] is None:
+        error_msg = str(activate_result[1]) if activate_result[1] else "CIRISVerify activation timed out"
+        logger.warning("Key activation skipped: %s", error_msg)
+        return
+
+    proof_dict = activate_result[0]
+
+    # Verify key_type is "portal" (not "ephemeral")
+    key_type = proof_dict.get("key_type", "unknown")
+    if key_type != "portal":
+        logger.warning(
+            "Key activation: unexpected key_type '%s' (expected 'portal'). "
+            "Key may not have been imported correctly.",
+            key_type,
+        )
+
+    # POST to Portal's /api/device/activate
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            activate_resp = await client.post(
+                f"{portal_url.rstrip('/')}/api/device/activate",
+                json={
+                    "device_code": device_code,
+                    "attestation_proof": proof_dict,
+                },
+            )
+
+            if activate_resp.status_code == 200:
+                result_data = activate_resp.json()
+                activated = result_data.get("activated", False)
+                logger.info(
+                    "Portal key activation result: activated=%s, key_id=%s",
+                    activated,
+                    result_data.get("key_id", "unknown"),
+                )
+            elif activate_resp.status_code == 403:
+                result_data = activate_resp.json()
+                error = result_data.get("error", "unknown")
+                # Check for key reuse
+                if "KEY REUSE" in error:
+                    logger.error(
+                        "KEY REUSE DETECTED: %s. This key was already activated "
+                        "for another agent. Key reuse is forbidden for CIRIS agents.",
+                        error,
+                    )
+                else:
+                    logger.warning("Portal key activation rejected: %s", error)
+            else:
+                logger.warning("Portal key activation failed: HTTP %s", activate_resp.status_code)
+    except httpx.HTTPError as e:
+        logger.warning("Failed to submit key activation to Portal: %s", e)
 
 
 # ============================================================================

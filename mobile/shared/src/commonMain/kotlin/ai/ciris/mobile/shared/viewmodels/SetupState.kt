@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.models.CommunicationAdapter
 import ai.ciris.mobile.shared.models.SetupMode
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -335,4 +336,35 @@ data class AgentTemplateInfo(
     val id: String,
     val name: String,
     val description: String
+)
+
+/**
+ * CIRISVerify status response for Trust and Security card.
+ * Source: GET /v1/setup/verify-status
+ *
+ * CIRISVerify is REQUIRED for CIRIS 2.0+ agents. Without it, agents cannot
+ * operate as they need cryptographic identity verification.
+ */
+@Serializable
+data class VerifyStatusResponse(
+    /** Whether CIRISVerify library is loaded */
+    val loaded: Boolean,
+    /** CIRISVerify version if loaded */
+    val version: String? = null,
+    /** Hardware security type (TPM_2_0, SECURE_ENCLAVE, SOFTWARE_ONLY, etc.) */
+    @SerialName("hardware_type")
+    val hardwareType: String? = null,
+    /** Key status: 'none', 'ephemeral', 'portal_pending', 'portal_active' */
+    @SerialName("key_status")
+    val keyStatus: String = "none",
+    /** Portal-issued key ID if activated */
+    @SerialName("key_id")
+    val keyId: String? = null,
+    /** Attestation: 'not_attempted', 'pending', 'verified', 'failed' */
+    @SerialName("attestation_status")
+    val attestationStatus: String = "not_attempted",
+    /** Error message if verify failed to load */
+    val error: String? = null,
+    /** Trust and security disclaimer text */
+    val disclaimer: String = "CIRISVerify provides cryptographic attestation of agent identity."
 )

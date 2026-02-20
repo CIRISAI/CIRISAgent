@@ -50,6 +50,7 @@ class QAModule(Enum):
     UTILITY_ADAPTERS = "utility_adapters"  # Weather and navigation adapters testing
     HE300_BENCHMARK = "he300_benchmark"  # HE-300 ethical benchmark via A2A adapter
     CIRISNODE = "cirisnode"  # CIRISNode integration testing (deferral routing, trace forwarding)
+    LICENSED_AGENT = "licensed_agent"  # Licensed agent device auth (RFC 8628) flow testing
 
     # Cognitive state live testing modules
     SOLITUDE_LIVE = "solitude_live"  # SOLITUDE state behavior testing
@@ -162,6 +163,10 @@ class QAConfig:
     # Live CIRISNode configuration (--live-node flag for cirisnode tests)
     # When True, runs additional tests against live CIRISNode server
     live_node: bool = False
+
+    # Live Portal configuration (--live-portal flag for licensed_agent tests)
+    # When True, runs tests against live CIRISPortal server
+    live_portal: bool = False
 
     # Fail-fast configuration
     fail_fast: bool = True  # Exit on first test failure (use --proceed-anyway to disable)

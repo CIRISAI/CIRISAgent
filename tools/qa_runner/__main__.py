@@ -74,6 +74,7 @@ Available modules:
   accord        - Accord invocation system (kill switch) tests
   accord_metrics - Accord metrics trace capture and signing
   cirisnode       - CIRISNode integration (deferral routing, trace forwarding)
+  licensed_agent  - Licensed agent device auth (RFC 8628) flow testing
   api_full        - All API modules
   handlers_full   - All handler modules
   all             - Everything
@@ -128,6 +129,13 @@ Available modules:
         "--live-node",
         action="store_true",
         help="Run additional tests against live CIRISNode server (node.ciris-services-1.ai) for cirisnode tests",
+    )
+
+    # Live Portal configuration (for licensed_agent tests)
+    parser.add_argument(
+        "--live-portal",
+        action="store_true",
+        help="Run tests against live CIRISPortal server (portal.ciris.ai) for licensed_agent tests",
     )
 
     # Database backend configuration
@@ -339,6 +347,8 @@ def main():
         live_lens=args.live_lens,
         # Live CIRISNode configuration (for cirisnode tests)
         live_node=args.live_node,
+        # Live Portal configuration (for licensed_agent tests)
+        live_portal=args.live_portal,
         # Fail-fast configuration
         fail_fast=not args.proceed_anyway,
         test_timeout=args.test_timeout,

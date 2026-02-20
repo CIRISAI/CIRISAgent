@@ -254,6 +254,7 @@ class QARunner:
             QAModule.HOSTED_TOOLS,
             QAModule.UTILITY_ADAPTERS,
             QAModule.CIRISNODE,
+            QAModule.LICENSED_AGENT,
             QAModule.SOLITUDE_LIVE,
             QAModule.PLAY_LIVE,
             QAModule.DREAM_LIVE,
@@ -862,6 +863,7 @@ class QARunner:
             MessageIDDebugTests,
             PartnershipTests,
         )
+        from .modules.accord_metrics_tests import AccordMetricsTests
         from .modules.adapter_autoload_tests import AdapterAutoloadTests
         from .modules.adapter_availability_tests import AdapterAvailabilityTests
         from .modules.adapter_config_tests import AdapterConfigTests
@@ -870,7 +872,6 @@ class QARunner:
         from .modules.cirisnode_tests import CIRISNodeTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
-        from .modules.accord_metrics_tests import AccordMetricsTests
         from .modules.dream_live_tests import DreamLiveTests
         from .modules.dsar_multi_source_tests import DSARMultiSourceTests
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
@@ -878,6 +879,7 @@ class QARunner:
         from .modules.handler_tests import HandlerTestModule
         from .modules.hosted_tools_tests import HostedToolsTests
         from .modules.identity_update_tests import IdentityUpdateTests
+        from .modules.licensed_agent_tests import LicensedAgentTests
         from .modules.mcp_tests import MCPTests
         from .modules.play_live_tests import PlayLiveTests
         from .modules.reddit_tests import RedditTests
@@ -918,6 +920,7 @@ class QARunner:
             QAModule.HOSTED_TOOLS: HostedToolsTests,
             QAModule.UTILITY_ADAPTERS: UtilityAdaptersTests,
             QAModule.CIRISNODE: CIRISNodeTests,
+            QAModule.LICENSED_AGENT: LicensedAgentTests,
             QAModule.SOLITUDE_LIVE: SolitudeLiveTests,
             QAModule.PLAY_LIVE: PlayLiveTests,
             QAModule.DREAM_LIVE: DreamLiveTests,
@@ -948,6 +951,11 @@ class QARunner:
                 # Special handling for CIRISNodeTests - pass live_node config
                 elif module == QAModule.CIRISNODE:
                     test_instance = test_class(client, self.console, live_node=getattr(self.config, "live_node", False))
+                # Special handling for LicensedAgentTests - pass live_portal config
+                elif module == QAModule.LICENSED_AGENT:
+                    test_instance = test_class(
+                        client, self.console, live_portal=getattr(self.config, "live_portal", False)
+                    )
                 elif module == QAModule.FILTERS:
                     # FilterTestModule inherits from BaseTestModule and supports fail_fast
                     test_instance = test_class(

@@ -170,7 +170,12 @@ class CIRISVerify:
 
     @staticmethod
     def _is_android() -> bool:
-        """Check if running on Android (Chaquopy)."""
+        """Check if running on Android (Chaquopy).
+
+        Android detection via:
+        1. ANDROID_ROOT environment variable (set by Android runtime)
+        2. Chaquopy's Java module availability
+        """
         # Chaquopy sets ANDROID_ROOT environment variable
         if os.environ.get("ANDROID_ROOT"):
             return True
@@ -182,67 +187,6 @@ class CIRISVerify:
         except ImportError:
             pass
         return False
-
-    @staticmethod
-    def _find_android_library() -> Optional[Path]:
-        """Find CIRISVerify library on Android.
-
-        On Android with Chaquopy, native libraries from jniLibs are loaded
-        into the app's native library directory. We use Chaquopy's Java context
-        to find the nativeLibraryDir, which is the most reliable method.
-        """
-        import logging
-
-        logger = logging.getLogger(__name__)
-
-        # First try Chaquopy's Java context (most reliable for filesystem path)
-        try:
-            from java import jclass
-
-            context = jclass("com.chaquo.python.Python").getPlatform().getApplication()
-            native_lib_dir = context.getApplicationInfo().nativeLibraryDir
-            logger.info(f"[CIRISVerify] Android nativeLibraryDir: {native_lib_dir}")
-
-            lib_path = Path(native_lib_dir) / "libciris_verify_ffi.so"
-            if lib_path.exists():
-                logger.info(f"[CIRISVerify] Found library at: {lib_path}")
-                return lib_path
-            else:
-                # List what's actually in the directory
-                try:
-                    files = list(Path(native_lib_dir).glob("*.so"))
-                    logger.warning(f"[CIRISVerify] Library not found at {lib_path}")
-                    logger.info(f"[CIRISVerify] Available .so files: {[f.name for f in files]}")
-                except Exception as e:
-                    logger.warning(f"[CIRISVerify] Could not list {native_lib_dir}: {e}")
-        except Exception as e:
-            logger.warning(f"[CIRISVerify] Chaquopy context lookup failed: {e}")
-
-        # Try ctypes.util.find_library - but only use if it returns an actual path
-        import ctypes.util
-
-        lib_name = ctypes.util.find_library("ciris_verify_ffi")
-        if lib_name:
-            lib_path = Path(lib_name)
-            # Only use if it's an absolute path that exists
-            if lib_path.is_absolute() and lib_path.exists():
-                logger.info(f"[CIRISVerify] Found via find_library: {lib_path}")
-                return lib_path
-            logger.debug(f"[CIRISVerify] find_library returned '{lib_name}' (not a valid path)")
-
-        # Fallback: search common Android library paths
-        android_paths = [
-            "/data/app/ai.ciris.mobile/lib/arm64/libciris_verify_ffi.so",
-            "/data/data/ai.ciris.mobile/lib/libciris_verify_ffi.so",
-        ]
-        for path_str in android_paths:
-            path = Path(path_str)
-            if path.exists():
-                logger.info(f"[CIRISVerify] Found at fallback path: {path}")
-                return path
-
-        logger.error("[CIRISVerify] Native library not found in any location")
-        return None
 
     @staticmethod
     def _find_ios_framework() -> Optional[Path]:
@@ -273,6 +217,45 @@ class CIRISVerify:
 
         return None
 
+    @staticmethod
+    def _find_android_library() -> Optional[Path]:
+        """Find CIRISVerify library on Android.
+
+        On Android with Chaquopy, native libraries from jniLibs are loaded
+        into the app's native library directory. ctypes.util.find_library()
+        doesn't return filesystem paths on Android, so we need to use the
+        Java context to get nativeLibraryDir.
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        # Use Chaquopy's Java context to get nativeLibraryDir
+        try:
+            from java import jclass
+
+            context = jclass("com.chaquo.python.Python").getPlatform().getApplication()
+            native_lib_dir = context.getApplicationInfo().nativeLibraryDir
+            logger.info(f"[CIRISVerify] Android nativeLibraryDir: {native_lib_dir}")
+
+            lib_path = Path(native_lib_dir) / "libciris_verify_ffi.so"
+            if lib_path.exists():
+                return lib_path
+        except Exception as e:
+            logger.warning(f"[CIRISVerify] Chaquopy context lookup failed: {e}")
+
+        # Fallback paths for common Android app locations
+        android_paths = [
+            "/data/app/ai.ciris.mobile/lib/arm64/libciris_verify_ffi.so",
+            "/data/data/ai.ciris.mobile/lib/libciris_verify_ffi.so",
+        ]
+        for path_str in android_paths:
+            path = Path(path_str)
+            if path.exists():
+                return path
+
+        return None
+
     def _find_binary(self, explicit_path: Optional[str]) -> Path:
         """Find CIRISVerify binary."""
         if explicit_path:
@@ -281,15 +264,6 @@ class CIRISVerify:
                 return path
             raise BinaryNotFoundError(explicit_path)
 
-        # Android-specific library search (Chaquopy)
-        if self._is_android():
-            android_path = self._find_android_library()
-            if android_path:
-                return android_path
-            raise BinaryNotFoundError(
-                "libciris_verify_ffi.so not found on Android. " "Ensure the native library is included in jniLibs."
-            )
-
         # iOS-specific framework search
         if self._is_ios():
             ios_path = self._find_ios_framework()
@@ -297,6 +271,15 @@ class CIRISVerify:
                 return ios_path
             raise BinaryNotFoundError(
                 "CIRISVerify.framework not found in app bundle. " "Ensure CIRISVerify.xcframework is linked in Xcode."
+            )
+
+        # Android-specific library search (Chaquopy)
+        if self._is_android():
+            android_path = self._find_android_library()
+            if android_path:
+                return android_path
+            raise BinaryNotFoundError(
+                "libciris_verify_ffi.so not found on Android. " "Ensure the native library is included in jniLibs."
             )
 
         # Search default paths
@@ -431,18 +414,18 @@ class CIRISVerify:
         self._lib.ciris_verify_destroy.restype = None
 
         # Ed25519 Portal key functions (optional - may not exist in older libraries)
-        # These are only needed for Portal key provisioning; core verification works without them
+        # These functions enable agent identity signing with Portal-issued keys.
         self._has_ed25519_support = False
         try:
-            # ciris_verify_import_key(handle, key_bytes, key_len) -> i32
+            # ciris_verify_import_key(handle, key_data, key_len) -> i32
             self._lib.ciris_verify_import_key.argtypes = [
                 ctypes.c_void_p,  # handle
-                ctypes.c_char_p,  # key_bytes (input)
+                ctypes.c_char_p,  # key_data
                 ctypes.c_size_t,  # key_len
             ]
             self._lib.ciris_verify_import_key.restype = ctypes.c_int
 
-            # ciris_verify_has_key(handle) -> i32 (1=yes, 0=no, <0=error)
+            # ciris_verify_has_key(handle) -> i32
             self._lib.ciris_verify_has_key.argtypes = [ctypes.c_void_p]
             self._lib.ciris_verify_has_key.restype = ctypes.c_int
 
@@ -470,12 +453,10 @@ class CIRISVerify:
 
             self._has_ed25519_support = True
         except AttributeError:
-            # Ed25519 functions not available in this library version
-            # Core verification still works, but Portal key import is disabled
             import logging
 
             logging.getLogger(__name__).info(
-                "[CIRISVerify] Ed25519 key functions not available - Portal key import disabled"
+                "[CIRISVerify] Ed25519 key functions not available in this library version"
             )
 
         # Initialize handle
@@ -1026,6 +1007,40 @@ class CIRISVerify:
             if proof_data.value:
                 self._lib.ciris_verify_free(ctypes.c_char_p(proof_data.value))
 
+    def get_mandatory_disclosure(self, status: LicenseStatus) -> MandatoryDisclosure:
+        """Get mandatory disclosure for a given status.
+
+        Args:
+            status: License status to get disclosure for.
+
+        Returns:
+            MandatoryDisclosure with text and severity.
+        """
+        if status.requires_lockdown():
+            severity = DisclosureSeverity.CRITICAL
+        elif status.requires_restricted():
+            severity = DisclosureSeverity.WARNING
+        else:
+            severity = DisclosureSeverity.INFO
+
+        return MandatoryDisclosure(
+            text=self._default_disclosure(status),
+            severity=severity,
+        )
+
+    # ========================================================================
+    # Ed25519 Key Management (Portal-issued keys)
+    # ========================================================================
+
+    @property
+    def has_ed25519_support(self) -> bool:
+        """Check if Ed25519 key functions are available.
+
+        Returns:
+            True if the library supports Ed25519 Portal key operations.
+        """
+        return getattr(self, "_has_ed25519_support", False)
+
     def import_key_sync(self, key_bytes: bytes) -> bool:
         """Import an Ed25519 signing key from Portal.
 
@@ -1040,10 +1055,13 @@ class CIRISVerify:
 
         Raises:
             ValueError: If key_bytes is not 32 bytes.
-            VerificationFailedError: If Ed25519 support is not available.
+            NotImplementedError: If Ed25519 support is not available.
         """
-        if not getattr(self, "_has_ed25519_support", False):
-            raise VerificationFailedError(-1, "Ed25519 support not available in this library version")
+        if not self._has_ed25519_support:
+            raise NotImplementedError(
+                "Ed25519 key functions not available in this library version. "
+                "Update to ciris-verify >= 0.4.0 for Portal key support."
+            )
         if len(key_bytes) != 32:
             raise ValueError(f"Ed25519 key must be 32 bytes, got {len(key_bytes)}")
 
@@ -1056,13 +1074,16 @@ class CIRISVerify:
         return ret == 0
 
     def has_key_sync(self) -> bool:
-        """Check if a signing key exists in secure storage.
+        """Check if an Ed25519 signing key is loaded.
 
         Returns:
-            True if a key is available for signing, False if no key or Ed25519 not supported.
+            True if a key is loaded, False otherwise.
+
+        Raises:
+            NotImplementedError: If Ed25519 support is not available.
         """
-        if not getattr(self, "_has_ed25519_support", False):
-            return False
+        if not self._has_ed25519_support:
+            raise NotImplementedError("Ed25519 key functions not available in this library version.")
         ret = self._lib.ciris_verify_has_key(self._handle)
         return ret == 1
 
@@ -1070,10 +1091,13 @@ class CIRISVerify:
         """Delete the loaded Ed25519 signing key.
 
         Returns:
-            True if deletion succeeded, False otherwise (including if Ed25519 not supported).
+            True if deletion succeeded, False otherwise.
+
+        Raises:
+            NotImplementedError: If Ed25519 support is not available.
         """
-        if not getattr(self, "_has_ed25519_support", False):
-            return False
+        if not self._has_ed25519_support:
+            raise NotImplementedError("Ed25519 key functions not available in this library version.")
         ret = self._lib.ciris_verify_delete_key(self._handle)
         return ret == 0
 
@@ -1090,10 +1114,11 @@ class CIRISVerify:
             64-byte Ed25519 signature.
 
         Raises:
-            VerificationFailedError: If no key is loaded, signing fails, or Ed25519 not supported.
+            NotImplementedError: If Ed25519 support is not available.
+            VerificationFailedError: If no key is loaded or signing fails.
         """
-        if not getattr(self, "_has_ed25519_support", False):
-            raise VerificationFailedError(-1, "Ed25519 support not available in this library version")
+        if not self._has_ed25519_support:
+            raise NotImplementedError("Ed25519 key functions not available in this library version.")
         sig_data = ctypes.c_void_p()
         sig_len = ctypes.c_size_t()
 
@@ -1121,10 +1146,11 @@ class CIRISVerify:
             32-byte Ed25519 public key.
 
         Raises:
-            VerificationFailedError: If no key is loaded or Ed25519 not supported.
+            NotImplementedError: If Ed25519 support is not available.
+            VerificationFailedError: If no key is loaded.
         """
-        if not getattr(self, "_has_ed25519_support", False):
-            raise VerificationFailedError(-1, "Ed25519 support not available in this library version")
+        if not self._has_ed25519_support:
+            raise NotImplementedError("Ed25519 key functions not available in this library version.")
         key_data = ctypes.c_void_p()
         key_len = ctypes.c_size_t()
 
@@ -1135,34 +1161,13 @@ class CIRISVerify:
         )
 
         if ret != 0:
-            raise VerificationFailedError(ret, f"Failed to get Ed25519 public key with code {ret}")
+            raise VerificationFailedError(ret, f"Get Ed25519 public key failed with code {ret}")
 
         try:
             return ctypes.string_at(key_data.value, key_len.value)
         finally:
             if key_data.value:
                 self._lib.ciris_verify_free(ctypes.c_char_p(key_data.value))
-
-    def get_mandatory_disclosure(self, status: LicenseStatus) -> MandatoryDisclosure:
-        """Get mandatory disclosure for a given status.
-
-        Args:
-            status: License status to get disclosure for.
-
-        Returns:
-            MandatoryDisclosure with text and severity.
-        """
-        if status.requires_lockdown():
-            severity = DisclosureSeverity.CRITICAL
-        elif status.requires_restricted():
-            severity = DisclosureSeverity.WARNING
-        else:
-            severity = DisclosureSeverity.INFO
-
-        return MandatoryDisclosure(
-            text=self._default_disclosure(status),
-            severity=severity,
-        )
 
 
 class MockCIRISVerify(CIRISVerify):
@@ -1353,45 +1358,6 @@ class MockCIRISVerify(CIRISVerify):
             format=serialization.PublicFormat.Raw,
         )
         return key_bytes, "Ed25519"
-
-    def import_key_sync(self, key_bytes: bytes) -> bool:
-        """Mock import_key — stores key in memory."""
-        if len(key_bytes) != 32:
-            raise ValueError(f"Ed25519 key must be 32 bytes, got {len(key_bytes)}")
-        from cryptography.hazmat.primitives.asymmetric import ed25519
-
-        self._mock_private_key = ed25519.Ed25519PrivateKey.from_private_bytes(key_bytes)
-        self._mock_public_key = self._mock_private_key.public_key()
-        self._mock_has_key = True
-        return True
-
-    def has_key_sync(self) -> bool:
-        """Mock has_key — returns True if key was imported."""
-        return getattr(self, "_mock_has_key", False)
-
-    def delete_key_sync(self) -> bool:
-        """Mock delete_key — clears stored key."""
-        self._mock_private_key = None
-        self._mock_public_key = None
-        self._mock_has_key = False
-        return True
-
-    def sign_ed25519_sync(self, data: bytes) -> bytes:
-        """Mock sign_ed25519 — signs with stored Ed25519 key."""
-        if not getattr(self, "_mock_has_key", False):
-            raise VerificationFailedError(-1, "No Ed25519 key loaded")
-        return self._mock_private_key.sign(data)
-
-    def get_ed25519_public_key_sync(self) -> bytes:
-        """Mock get_ed25519_public_key — returns stored public key."""
-        if not getattr(self, "_mock_has_key", False):
-            raise VerificationFailedError(-1, "No Ed25519 key loaded")
-        from cryptography.hazmat.primitives import serialization
-
-        return self._mock_public_key.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
-        )
 
     def _default_disclosure(self, status: LicenseStatus, reason: str = "") -> str:
         """Generate default disclosure for mock."""

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		008EBAB705831128110F1E6D /* CIRISVerify.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 960264F5759B4678704E09D5 /* CIRISVerify.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		22EA1CB33A17DCC6FC82406D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F543015C899423D4B01CEB2E /* Assets.xcassets */; };
 		40ED78CC391B58FEED543A87 /* PythonInit.m in Sources */ = {isa = PBXBuildFile; fileRef = FE5DE9AED4DF76F07B0E1091 /* PythonInit.m */; };
 		49E475AB2B339B9760DED60C /* PythonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA9BDE339934CB14814355D /* PythonBridge.swift */; };
@@ -30,6 +31,7 @@
 			dstSubfolderSpec = 10;
 			files = (
 				66A2AEEC40DC3948EEC2CEBA /* Python.xcframework in Embed Frameworks */,
+				008EBAB705831128110F1E6D /* CIRISVerify.xcframework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -407,16 +409,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
-					"$(inherited)",
-					"-force_load",
-					"$(PROJECT_DIR)/Frameworks/CIRISVerify.xcframework/ios-arm64/CIRISVerify.framework/CIRISVerify",
-				);
-				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = (
-					"$(inherited)",
-					"-force_load",
-					"$(PROJECT_DIR)/Frameworks/CIRISVerify.xcframework/ios-arm64-simulator/CIRISVerify.framework/CIRISVerify",
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = ai.ciris.mobile;
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = "iosApp/iosApp-Bridging-Header.h";
@@ -460,16 +452,6 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
-				);
-				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
-					"$(inherited)",
-					"-force_load",
-					"$(PROJECT_DIR)/Frameworks/CIRISVerify.xcframework/ios-arm64/CIRISVerify.framework/CIRISVerify",
-				);
-				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = (
-					"$(inherited)",
-					"-force_load",
-					"$(PROJECT_DIR)/Frameworks/CIRISVerify.xcframework/ios-arm64-simulator/CIRISVerify.framework/CIRISVerify",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = ai.ciris.mobile;
 				SDKROOT = iphoneos;

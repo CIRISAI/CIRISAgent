@@ -19,7 +19,6 @@ class QAModule(Enum):
     MEMORY = "memory"
     AUDIT = "audit"
     TOOLS = "tools"
-    TASKS = "tasks"
     GUIDANCE = "guidance"
     CONSENT = "consent"
     DSAR = "dsar"  # DSAR automation testing
@@ -44,12 +43,14 @@ class QAModule(Enum):
     CONTEXT_ENRICHMENT = "context_enrichment"  # Context enrichment tool testing
     VISION = "vision"  # Native multimodal vision testing
     AIR = "air"  # AIR (Artificial Interaction Reminder) parasocial prevention testing
-    COVENANT = "covenant"  # Covenant invocation system (unfilterable kill switch) testing
-    COVENANT_METRICS = "covenant_metrics"  # Covenant metrics trace capture and signing testing
+    ACCORD = "accord"  # Accord invocation system (unfilterable kill switch) testing
+    ACCORD_METRICS = "accord_metrics"  # Accord metrics trace capture and signing testing
     SYSTEM_MESSAGES = "system_messages"  # System message visibility for UI/UX testing
     HOSTED_TOOLS = "hosted_tools"  # CIRIS hosted tools (web search via proxy) testing
     UTILITY_ADAPTERS = "utility_adapters"  # Weather and navigation adapters testing
     HE300_BENCHMARK = "he300_benchmark"  # HE-300 ethical benchmark via A2A adapter
+    CIRISNODE = "cirisnode"  # CIRISNode integration testing (deferral routing, trace forwarding)
+    LICENSED_AGENT = "licensed_agent"  # Licensed agent device auth (RFC 8628) flow testing
 
     # Cognitive state live testing modules
     SOLITUDE_LIVE = "solitude_live"  # SOLITUDE state behavior testing
@@ -58,7 +59,6 @@ class QAModule(Enum):
 
     # Handler modules
     HANDLERS = "handlers"
-    SIMPLE_HANDLERS = "simple_handlers"
 
     # Filter modules
     FILTERS = "filters"
@@ -75,7 +75,6 @@ class QAModule(Enum):
 
     # Full suites
     API_FULL = "api_full"
-    HANDLERS_FULL = "handlers_full"
     ALL = "all"
 
 
@@ -157,9 +156,21 @@ class QAConfig:
     live_model: Optional[str] = None
     live_base_url: Optional[str] = None
 
-    # Live Lens configuration (--live-lens flag for covenant_metrics tests)
+    # Live Lens configuration (--live-lens flag for accord_metrics tests)
     # When True, uses https://lens.ciris-services-1.ai/lens-api/api/v1 instead of mock logshipper
     live_lens: bool = False
+
+    # Live CIRISNode configuration (--live-node flag for cirisnode tests)
+    # When True, runs additional tests against live CIRISNode server
+    live_node: bool = False
+
+    # Live Portal configuration (--live-portal flag for licensed_agent tests)
+    # When True, runs tests against live CIRISPortal server
+    live_portal: bool = False
+
+    # Fail-fast configuration
+    fail_fast: bool = True  # Exit on first test failure (use --proceed-anyway to disable)
+    test_timeout: float = 30.0  # Timeout for individual test interactions
 
     def get_module_tests(self, module: QAModule) -> List[QATestCase]:
         """Get test cases for a specific module."""
@@ -186,8 +197,6 @@ class QAConfig:
             return APITestModule.get_audit_tests()
         elif module == QAModule.TOOLS:
             return APITestModule.get_tool_tests()
-        elif module == QAModule.TASKS:
-            return APITestModule.get_task_tests()
         elif module == QAModule.GUIDANCE:
             return APITestModule.get_guidance_tests()
         elif module == QAModule.SETUP:
@@ -248,11 +257,11 @@ class QAConfig:
         elif module == QAModule.AIR:
             # AIR parasocial prevention tests use SDK client
             return []  # Will be handled separately by runner
-        elif module == QAModule.COVENANT:
-            # Covenant tests run standalone (no server needed)
+        elif module == QAModule.ACCORD:
+            # Accord tests run standalone (no server needed)
             return []  # Will be handled separately by runner
-        elif module == QAModule.COVENANT_METRICS:
-            # Covenant metrics trace capture tests use SDK client
+        elif module == QAModule.ACCORD_METRICS:
+            # Accord metrics trace capture tests use SDK client
             return []  # Will be handled separately by runner
         elif module == QAModule.SYSTEM_MESSAGES:
             # System messages visibility tests use SDK client
@@ -267,12 +276,13 @@ class QAConfig:
             from .modules.he300_benchmark_tests import HE300BenchmarkModule
 
             return HE300BenchmarkModule.get_he300_benchmark_tests()
+        elif module == QAModule.CIRISNODE:
+            # CIRISNode integration tests use SDK client
+            return []  # Will be handled separately by runner
 
         # Handler test modules
         elif module == QAModule.HANDLERS:
             return HandlerTestModule.get_handler_tests()
-        elif module == QAModule.SIMPLE_HANDLERS:
-            return HandlerTestModule.get_simple_handler_tests()
 
         # Filter test modules
         elif module == QAModule.FILTERS:
@@ -315,15 +325,8 @@ class QAConfig:
                 QAModule.MEMORY,
                 QAModule.AUDIT,
                 QAModule.TOOLS,
-                QAModule.TASKS,
                 QAModule.GUIDANCE,
             ]:
-                tests.extend(self.get_module_tests(m))
-            return tests
-
-        elif module == QAModule.HANDLERS_FULL:
-            tests = []
-            for m in [QAModule.HANDLERS, QAModule.SIMPLE_HANDLERS]:
                 tests.extend(self.get_module_tests(m))
             return tests
 
@@ -341,7 +344,6 @@ class QAConfig:
                 QAModule.MEMORY,
                 QAModule.AUDIT,
                 QAModule.TOOLS,
-                QAModule.TASKS,
                 QAModule.GUIDANCE,
                 QAModule.CONSENT,
                 QAModule.DSAR,
@@ -353,7 +355,6 @@ class QAConfig:
                 QAModule.MULTI_OCCURRENCE,
                 # Handler modules
                 QAModule.HANDLERS,
-                QAModule.SIMPLE_HANDLERS,
                 # Filter modules
                 QAModule.FILTERS,
                 # SDK modules

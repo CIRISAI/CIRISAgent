@@ -193,6 +193,8 @@ class TestSystemSnapshotLocalizedTimes:
         batch_data.shutdown_context = None
         batch_data.telemetry_summary = None
         batch_data.continuity_summary = None  # No continuity data in tests
+        batch_data.license_disclosure_text = None  # No disclosure in tests
+        batch_data.license_disclosure_severity = None
 
         # Fixed time for testing
         fixed_utc_time = datetime(2025, 6, 15, 14, 30, 0, tzinfo=timezone.utc)

@@ -648,3 +648,118 @@ class TestProcessingQueueItemEdgeCases:
             item = ProcessingQueueItem.from_thought(thought)
 
             assert len(item.ponder_notes) == 100
+
+
+class TestProcessingQueueItemHelpers:
+    """Direct tests for helper methods extracted for cognitive complexity reduction."""
+
+    def test_resolve_initial_context_with_dict(self):
+        """Test _resolve_initial_context accepts dict."""
+        ctx = {"key": "value"}
+        result = ProcessingQueueItem._resolve_initial_context(ctx, None)
+        assert result == ctx
+
+    def test_resolve_initial_context_with_thought_context(self):
+        """Test _resolve_initial_context accepts ThoughtContext."""
+        ctx = ThoughtContext(
+            task_id="task_1",
+            channel_id="channel_1",
+            round_number=1,
+            depth=0,
+            correlation_id="corr_1",
+        )
+        result = ProcessingQueueItem._resolve_initial_context(ctx, None)
+        assert result == ctx
+
+    def test_resolve_initial_context_with_pydantic_model(self):
+        """Test _resolve_initial_context accepts any Pydantic model (has model_dump)."""
+        ctx = ThoughtContext(
+            task_id="task_1",
+            channel_id="channel_1",
+            round_number=1,
+            depth=0,
+            correlation_id="corr_1",
+        )
+        result = ProcessingQueueItem._resolve_initial_context(ctx, None)
+        assert hasattr(result, "model_dump")
+
+    def test_resolve_initial_context_falls_back_to_thought_context(self):
+        """Test _resolve_initial_context uses thought_context when initial_ctx is None."""
+        thought_ctx = {"from_thought": True}
+        result = ProcessingQueueItem._resolve_initial_context(None, thought_ctx)
+        assert result == thought_ctx
+
+    def test_resolve_initial_context_returns_none_for_invalid(self):
+        """Test _resolve_initial_context returns None for invalid types."""
+        result = ProcessingQueueItem._resolve_initial_context(None, 12345)
+        assert result is None
+
+    def test_resolve_content_with_thought_content(self):
+        """Test _resolve_content with ThoughtContent input."""
+        content = ThoughtContent(text="Test")
+        result = ProcessingQueueItem._resolve_content(content, None)
+        assert result == content
+
+    def test_resolve_content_with_string(self):
+        """Test _resolve_content with string input."""
+        result = ProcessingQueueItem._resolve_content("String content", None)
+        assert isinstance(result, ThoughtContent)
+        assert result.text == "String content"
+
+    def test_resolve_content_with_dict(self):
+        """Test _resolve_content with dict input."""
+        result = ProcessingQueueItem._resolve_content({"text": "Dict content"}, None)
+        assert isinstance(result, ThoughtContent)
+        assert result.text == "Dict content"
+
+    def test_resolve_content_falls_back_to_thought_content(self):
+        """Test _resolve_content uses thought_content when override is None."""
+        result = ProcessingQueueItem._resolve_content(None, "Fallback content")
+        assert isinstance(result, ThoughtContent)
+        assert result.text == "Fallback content"
+
+    def test_load_task_images_with_explicit_images(self):
+        """Test _load_task_images returns explicit images when provided."""
+        explicit = [
+            ImageContent(
+                source_type="base64",
+                data="test",
+                media_type="image/png",
+                filename="test.png",
+                size_bytes=100,
+            )
+        ]
+        result = ProcessingQueueItem._load_task_images(explicit, "task_1", "occ_1", "thought_1")
+        assert result == explicit
+
+    def test_load_task_images_returns_empty_on_lookup_failure(self):
+        """Test _load_task_images returns empty list on lookup failure."""
+        with patch(TASK_LOOKUP_PATCH) as mock_get_task:
+            mock_get_task.side_effect = Exception("DB error")
+            result = ProcessingQueueItem._load_task_images(None, "task_1", "occ_1", "thought_1")
+            assert result == []
+
+    def test_load_task_images_returns_empty_when_task_not_found(self):
+        """Test _load_task_images returns empty list when task not found."""
+        with patch(TASK_LOOKUP_PATCH) as mock_get_task:
+            mock_get_task.return_value = None
+            result = ProcessingQueueItem._load_task_images(None, "task_1", "occ_1", "thought_1")
+            assert result == []
+
+    def test_load_task_images_returns_task_images(self):
+        """Test _load_task_images returns images from task."""
+        mock_task = Mock()
+        mock_task.images = [
+            ImageContent(
+                source_type="base64",
+                data="data",
+                media_type="image/jpeg",
+                filename="image.jpg",
+                size_bytes=500,
+            )
+        ]
+        with patch(TASK_LOOKUP_PATCH) as mock_get_task:
+            mock_get_task.return_value = mock_task
+            result = ProcessingQueueItem._load_task_images(None, "task_1", "occ_1", "thought_1")
+            assert len(result) == 1
+            assert result[0].filename == "image.jpg"

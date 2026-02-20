@@ -16,6 +16,20 @@ from ciris_engine.schemas.actions import (
 )
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, ASPDMALLMResult
 
+from .response_packaging import (
+    defer_success,
+    forget_success,
+    memorize_success,
+    observe_success,
+    ponder_success,
+    recall_not_found,
+    recall_success,
+    reject_success,
+    speak_success,
+    task_complete_success,
+    tool_success,
+)
+
 # Union type for all action parameters - 100% schema compliant
 ActionParams = Union[
     SpeakParams,
@@ -156,6 +170,56 @@ def action_selection(
                 rationale=f"TSASPDMA: Reviewed documentation for '{tsaspdma_tool_name}'. Proceeding with tool execution.",
             )
 
+    # === HE-300 BENCHMARK MODE ===
+    # When in benchmark mode, return HE-300 compliant responses
+    import os
+    import random
+
+    benchmark_mode_val = os.environ.get("CIRIS_BENCHMARK_MODE", "")
+    template_name = os.environ.get("CIRIS_TEMPLATE", "")
+    is_benchmark_mode = benchmark_mode_val.lower() in ("true", "1", "yes", "on") and template_name == "he-300-benchmark"
+
+    if is_benchmark_mode:
+        # Check if this is a primary thought (not a follow-up)
+        is_primary_thought = True
+        for msg in messages:
+            if isinstance(msg, dict) and msg.get("role") == "system":
+                content = msg.get("content", "")
+                if content.startswith("THOUGHT_TYPE=follow_up"):
+                    is_primary_thought = False
+                    break
+
+        if is_primary_thought:
+            # Generate HE-300 compliant response
+            # Valid classification words for HE-300
+            classification_words = [
+                "ETHICAL",
+                "UNETHICAL",
+                "REASONABLE",
+                "UNREASONABLE",
+                "MATCHES",
+                "CONTRADICTS",
+                "MORAL",
+                "IMMORAL",
+                "JUST",
+                "UNJUST",
+                "FAIR",
+                "UNFAIR",
+                "VALID",
+                "INVALID",
+            ]
+            # Pick a random classification for mock testing
+            classification = random.choice(classification_words)
+            response_content = f"{classification} - This action has been evaluated based on ethical principles."
+
+            logger.info(f"[MOCK_LLM] [HE-300 BENCHMARK] Returning compliant response: {classification}")
+
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.SPEAK,
+                action_parameters=SpeakParams(content=response_content).model_dump(),
+                rationale=f"[HE-300 BENCHMARK] Generated {classification} classification response.",
+            )
+
     # === CRITICAL: Early follow-up detection ===
     # Check the FIRST system message for THOUGHT_TYPE=follow_up
     # This MUST happen before any other logic to ensure follow-ups are detected
@@ -253,6 +317,27 @@ def action_selection(
             custom_rationale = item.split(":", 1)[1]
             break
 
+    # === NEW: Extract follow-up context from responses.py ===
+    is_followup_from_context = False
+    followup_type = None
+    should_task_complete = False
+    followup_content = ""
+    for item in context:
+        if item == "is_followup:true":
+            is_followup_from_context = True
+        elif item.startswith("followup_type:"):
+            followup_type = item.split(":", 1)[1]
+        elif item == "should_task_complete:true":
+            should_task_complete = True
+        elif item.startswith("followup_content:"):
+            followup_content = item.split(":", 1)[1]
+
+    if is_followup_from_context:
+        logger.info(f"[MOCK_LLM] === FOLLOW-UP DETECTED FROM CONTEXT ===")
+        logger.info(f"[MOCK_LLM] followup_type: {followup_type}")
+        logger.info(f"[MOCK_LLM] should_task_complete: {should_task_complete}")
+        logger.info(f"[MOCK_LLM] followup_content: {followup_content[:100]}...")
+
     # Initialize rationale with default - should be overridden by specific logic paths
     rationale = "[MOCK LLM] Action selection (no specific rationale provided)"
 
@@ -264,8 +349,10 @@ def action_selection(
             break
 
     # Determine action based on context
-    # Initialize params with proper type annotation for 100% schema compliance
-    params: ActionParams
+    # Initialize params with safe default - will be overwritten by action-specific logic
+    action = HandlerActionType.SPEAK
+    params: ActionParams = SpeakParams(content="[MOCK LLM] Default response")
+    rationale = "[MOCK LLM] Default fallback action"
 
     # Check for multimodal content in context
     multimodal_image_count = 0
@@ -282,19 +369,72 @@ def action_selection(
         f"[MOCK_LLM] Action selection - forced_action: {forced_action}, user_speech: {user_speech}, command_from_context: {command_from_context}, is_followup_thought: {is_followup_thought}, multimodal_images: {multimodal_image_count}"
     )
 
-    # === EARLY EXIT FOR FOLLOW-UP THOUGHTS ===
-    # If this is a follow-up thought (detected via THOUGHT_TYPE=follow_up), complete the task
-    # This check MUST come before other logic to prevent follow-ups from looping
-    if is_followup_thought and not forced_action and not command_from_context:
-        logger.info("[MOCK_LLM] *** EARLY EXIT: Follow-up thought detected, returning TASK_COMPLETE ***")
-        action = HandlerActionType.TASK_COMPLETE
-        params = TaskCompleteParams(completion_reason="[MOCK LLM] Follow-up thought completed - task finished")
-        rationale = "[MOCK LLM] Completing follow-up thought (detected via THOUGHT_TYPE=follow_up)"
-        return ActionSelectionDMAResult(
-            selected_action=action,
-            action_parameters=params.model_dump(),
-            rationale=rationale,
-        )
+    # === EARLY FOLLOW-UP HANDLING ===
+    # If responses.py detected a follow-up thought, handle it immediately
+    if is_followup_from_context:
+        logger.info("[MOCK_LLM] === EARLY FOLLOW-UP RETURN ===")
+        logger.info(f"[MOCK_LLM] followup_type={followup_type}, should_task_complete={should_task_complete}")
+
+        # Only SPEAK follow-ups go directly to TASK_COMPLETE
+        # All other handlers need to SPEAK their result first
+        if followup_type == "speak":
+            logger.info("[MOCK_LLM] SPEAK follow-up → TASK_COMPLETE")
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.TASK_COMPLETE,
+                action_parameters=TaskCompleteParams(
+                    completion_reason=task_complete_success("Message delivered successfully"),
+                ).model_dump(),
+                rationale="[MOCK LLM] SPEAK completed successfully.",
+            )
+        else:
+            # Other handlers (MEMORIZE, RECALL, FORGET, TOOL, OBSERVE, PONDER) → SPEAK the result
+            # This will create a SPEAK follow-up which then goes to TASK_COMPLETE
+            # Use deterministic packaged responses based on handler type
+            logger.info(f"[MOCK_LLM] {followup_type.upper() if followup_type else 'HANDLER'} follow-up → SPEAK result")
+
+            # Generate packaged response based on handler type
+            handler_type = (followup_type or "action").upper()
+            if handler_type == "MEMORIZE":
+                # Extract node_id from followup_content if possible
+                node_match = re.search(r"'([^']+)'", followup_content)
+                node_id = node_match.group(1) if node_match else "unknown"
+                packaged_content = memorize_success(node_id=node_id, scope="LOCAL")
+            elif handler_type == "RECALL":
+                # Extract query from followup_content
+                query_match = re.search(r"query[:\s]+([^\|]+)", followup_content, re.IGNORECASE)
+                query = query_match.group(1).strip() if query_match else "unknown"
+                # Check if results were found
+                if "no memories found" in followup_content.lower() or "not found" in followup_content.lower():
+                    packaged_content = recall_not_found(query=query)
+                else:
+                    packaged_content = recall_success(query=query, results=[], value=followup_content[:200])
+            elif handler_type == "FORGET":
+                node_match = re.search(r"forgot[:\s]+([^\s]+)", followup_content, re.IGNORECASE)
+                node_id = node_match.group(1) if node_match else "unknown"
+                packaged_content = forget_success(node_id=node_id)
+            elif handler_type == "TOOL":
+                tool_match = re.search(r"tool[:\s]+([^\s]+)", followup_content, re.IGNORECASE)
+                tool_name = tool_match.group(1) if tool_match else "unknown"
+                packaged_content = tool_success(name=tool_name)
+            elif handler_type == "OBSERVE":
+                channel_match = re.search(r"channel[:\s]+([^\s]+)", followup_content, re.IGNORECASE)
+                channel = channel_match.group(1) if channel_match else "unknown"
+                packaged_content = observe_success(channel=channel)
+            elif handler_type == "PONDER":
+                packaged_content = ponder_success(questions=[], insights=followup_content[:200])
+            else:
+                # Generic fallback
+                packaged_content = speak_success(content=followup_content[:200])
+
+            # Add multimodal marker if images were detected (for vision testing)
+            if multimodal_image_count > 0:
+                packaged_content = f"[MULTIMODAL_DETECTED:{multimodal_image_count}] {packaged_content}"
+
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.SPEAK,
+                action_parameters=SpeakParams(content=packaged_content).model_dump(),
+                rationale=f"[MOCK LLM] {handler_type} completed. Reporting result.",
+            )
 
     if forced_action:
         try:
@@ -457,29 +597,21 @@ def action_selection(
                                 tool_params = {"url": parts[1].strip()}
                                 logger.info(f"[MOCK_LLM] TOOL handler - curl with URL: {tool_params}")
                             else:
-                                # Try simple key=value parsing with quote handling
-                                # First clean up the parameters string by removing escaped newlines
+                                # Use regex to parse key="value" pairs with proper quote handling
+                                # This handles JSON-escaped values like metadata="{\"stages\": ...}"
                                 params_str = parts[1].split("\\n")[0].strip()
-                                import shlex
-
-                                try:
-                                    # Use shlex to properly handle quoted strings
-                                    tokens = shlex.split(params_str)
-                                    for token in tokens:
-                                        if "=" in token:
-                                            k, v = token.split("=", 1)
-                                            tool_params[k] = v
-                                    logger.info(f"[MOCK_LLM] TOOL handler - parsed with shlex: {tool_params}")
-                                except ValueError as e:
-                                    # Fallback to simple parsing if shlex fails
-                                    logger.info(f"[MOCK_LLM] TOOL handler - shlex failed ({e}), using fallback")
-                                    for pair in params_str.split():
-                                        if "=" in pair:
-                                            k, v = pair.split("=", 1)
-                                            # Clean up the value
-                                            v = v.strip().rstrip("\\").strip('"')
-                                            tool_params[k] = v
-                                    logger.info(f"[MOCK_LLM] TOOL handler - parsed as key=value: {tool_params}")
+                                param_pattern = r'(\w+)="((?:[^"\\]|\\.)*)"|(\w+)=(\S+)'
+                                for match in re.finditer(param_pattern, params_str):
+                                    if match.group(1):  # Quoted value
+                                        k = match.group(1)
+                                        # Unescape the value (convert \" to ")
+                                        v = match.group(2).replace('\\"', '"')
+                                        tool_params[k] = v
+                                    elif match.group(3):  # Unquoted value
+                                        k = match.group(3)
+                                        v = match.group(4)
+                                        tool_params[k] = v
+                                logger.info(f"[MOCK_LLM] TOOL handler - parsed with regex: {tool_params}")
                     else:
                         logger.info("[MOCK_LLM] TOOL handler - no parameters provided")
 
@@ -607,19 +739,36 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
 
     # Removed the weird ? recall command - only $recall is supported
 
-    elif user_speech:
-        # Regular user input - always speak
-        action = HandlerActionType.SPEAK
-        # Include multimodal detection info if images were present
-        if multimodal_image_count > 0:
-            speak_content = f"[MOCKLLM DISCLAIMER] SPEAK IN RESPONSE TO TASK WITHOUT COMMAND [MULTIMODAL_DETECTED:{multimodal_image_count}]"
-        else:
-            speak_content = "[MOCKLLM DISCLAIMER] SPEAK IN RESPONSE TO TASK WITHOUT COMMAND"
-        params = SpeakParams(content=speak_content)
-        rationale = f"Responding to user: {user_speech}"
+    # ================================================================
+    # EARLY FOLLOW-UP CHECK - MUST RUN BEFORE COMMAND PROCESSING
+    # ================================================================
+    # For follow-up thoughts, we don't want to re-execute the original command.
+    # We want to route based on what the previous action accomplished.
+    # ================================================================
+    is_followup_early = False
+    if messages and len(messages) > 0:
+        first_msg = messages[0]
+        if isinstance(first_msg, dict) and first_msg.get("role") == "system":
+            content = first_msg.get("content", "")
+            if content.startswith("THOUGHT_TYPE=follow_up"):
+                is_followup_early = True
+                logger.info("[MOCK_LLM] EARLY FOLLOW-UP DETECTION: Skipping command processing")
 
-    elif command_from_context:
+    # IMPORTANT: This must be a separate if block, not elif attached to the messages check above
+    if user_speech and not is_followup_early:
+        # Regular user input - always speak with deterministic response
+        action = HandlerActionType.SPEAK
+        # Include multimodal detection marker if images were found
+        if multimodal_image_count > 0:
+            speak_content = f"[MULTIMODAL_DETECTED:{multimodal_image_count}] [MOCK LLM] I can see you've shared {multimodal_image_count} image(s). Response to user message"
+        else:
+            speak_content = "[MOCK LLM] Response to user message"
+        params = SpeakParams(content=speak_content)
+        rationale = "[MOCK LLM] Responding to user speech"
+
+    elif command_from_context and not is_followup_early:
         # Handle command extracted from context (e.g., from Original Thought)
+        # Skip for follow-up thoughts - they should use follow-up handling, not re-execute commands
         command_found = False
 
         # Handle specific commands
@@ -698,24 +847,20 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
 
                             tool_params = json.loads(params_str)
                         except json.JSONDecodeError:
-                            # Try simple key=value parsing with quote handling
-                            import shlex
-
-                            try:
-                                # Use shlex to properly handle quoted strings
-                                tokens = shlex.split(params_str)
-                                for token in tokens:
-                                    if "=" in token:
-                                        k, v = token.split("=", 1)
-                                        tool_params[k] = v
-                            except ValueError:
-                                # Fallback to simple parsing if shlex fails
-                                for pair in params_str.split():
-                                    if "=" in pair:
-                                        k, v = pair.split("=", 1)
-                                        # Clean up the value
-                                        v = v.strip().rstrip("\\").strip('"')
-                                        tool_params[k] = v
+                            # Use regex to parse key="value" pairs with proper quote handling
+                            # This handles JSON-escaped values like metadata="{\"stages\": ...}"
+                            param_pattern = r'(\w+)="((?:[^"\\]|\\.)*)"|(\w+)=(\S+)'
+                            for match in re.finditer(param_pattern, params_str):
+                                if match.group(1):  # Quoted value
+                                    k = match.group(1)
+                                    # Unescape the value (convert \" to ")
+                                    v = match.group(2).replace('\\"', '"')
+                                    tool_params[k] = v
+                                elif match.group(3):  # Unquoted value
+                                    k = match.group(3)
+                                    v = match.group(4)
+                                    tool_params[k] = v
+                            logger.info(f"[MOCK_LLM] TOOL from context parsed params: {tool_params}")
 
             params = ToolParams(name=tool_name, parameters=tool_params)
             action = HandlerActionType.TOOL
@@ -784,7 +929,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
         # Step 1: Check if this is a follow-up thought by looking at the THOUGHT_TYPE in the system message
         is_followup = False
 
-        # The first message should be the system message with covenant
+        # The first message should be the system message with accord
         if messages and len(messages) > 0:
             first_msg = messages[0]
             if isinstance(first_msg, dict) and first_msg.get("role") == "system":
@@ -798,51 +943,165 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
             logger.info("[MOCK_LLM] No messages available for THOUGHT_TYPE check")
 
         if is_followup:
-            # Check the content of the follow-up thought to determine if it's from a SPEAK handler
-            # Extract the thought content from the user message
+            # ================================================================
+            # COMPREHENSIVE FOLLOW-UP HANDLING FOR ALL 10 VERBS
+            # ================================================================
+            # Terminal actions (DEFER, REJECT, TASK_COMPLETE) don't create follow-ups.
+            # Non-terminal actions create follow-ups that need routing:
+            #   - SPEAK follow-up → TASK_COMPLETE
+            #   - MEMORIZE/RECALL/FORGET/TOOL/OBSERVE follow-up → SPEAK result
+            #   - PONDER follow-up → analyze context for next action
+            # ================================================================
+
+            # Extract thought content from context (seed_thought:) - most reliable
             thought_content = ""
-            for msg in messages or []:
-                if isinstance(msg, dict) and msg.get("role") == "user":
-                    user_content = msg.get("content", "")
-                    # Look for "Original Thought:" pattern
-                    if "Original Thought:" in user_content:
-                        # Handle nested quotes by looking for the content between the first and last quotes
-                        # or use a more robust pattern that captures everything until the next field
-                        thought_match = re.search(r'Original Thought:\s*"(.*?)"(?:\n|$)', user_content, re.DOTALL)
-                        if thought_match:
-                            thought_content = thought_match.group(1)
+            for item in context:
+                if item.startswith("seed_thought:"):
+                    thought_content = item.split(":", 1)[1].strip()
+                    break
+
+            # Fallback: try user message patterns
+            if not thought_content:
+                for msg in messages or []:
+                    if isinstance(msg, dict) and msg.get("role") == "user":
+                        user_content = msg.get("content", "")
+                        # Try "Original Thought:" pattern
+                        if "Original Thought:" in user_content:
+                            thought_match = re.search(r'Original Thought:\s*"(.*?)"(?:\n|$)', user_content, re.DOTALL)
+                            if thought_match:
+                                thought_content = thought_match.group(1)
+                                break
+                        # Also check raw content for CIRIS_FOLLOW_UP_THOUGHT
+                        elif "CIRIS_FOLLOW_UP_THOUGHT:" in user_content:
+                            thought_content = user_content
                             break
 
-            # Check if this is a follow-up from SPEAK handler (usually contains specific patterns)
-            # Most follow-ups from other handlers contain operation results that should be spoken
-            is_speak_followup = any(
-                pattern in thought_content
-                for pattern in [
-                    "Message sent successfully to channel",
-                    "CIRIS_FOLLOW_UP_THOUGHT: Message sent successfully to channel",
-                    "NEXT ACTION IS ALMOST CERTAINLY TASK COMPLETE",
-                    "spoke in channel",
-                    "message delivered",
-                    "response sent",
-                ]
+            thought_lower = thought_content.lower()
+            logger.info(f"[MOCK_LLM] Follow-up content (first 150 chars): {thought_lower[:150]}...")
+
+            # === PATTERN DETECTION FOR EACH VERB ===
+
+            # 1. SPEAK follow-up patterns → TASK_COMPLETE
+            speak_patterns = [
+                "speak successful",
+                "message delivered",
+                "speaking repeatedly on the same task is not useful",
+            ]
+            is_speak_followup = any(p in thought_lower for p in speak_patterns)
+
+            # 2. PONDER follow-up patterns → TASK_COMPLETE
+            # Deterministic format from PonderHandler._generate_ponder_follow_up_content():
+            # "=== PONDER ROUND {n} ===" and "Conscience feedback:"
+            ponder_patterns = ["=== ponder round", "conscience feedback:"]
+            is_ponder_followup = any(p in thought_lower for p in ponder_patterns)
+
+            # 3. MEMORIZE follow-up patterns → SPEAK result
+            memorize_patterns = ["memorize complete", "stored observation", "stored config", "stored identity"]
+            is_memorize_followup = any(p in thought_lower for p in memorize_patterns)
+
+            # 4. RECALL follow-up patterns → SPEAK result
+            recall_patterns = ["memory query", "returned:", "no memories found"]
+            is_recall_followup = any(p in thought_lower for p in recall_patterns)
+
+            # 5. FORGET follow-up patterns → SPEAK result
+            forget_patterns = ["successfully forgot key", "forget action", "failed to forget"]
+            is_forget_followup = any(p in thought_lower for p in forget_patterns)
+
+            # 6. TOOL follow-up patterns → SPEAK result
+            tool_patterns = ["tool action", "executed for thought", "awaiting tool results"]
+            is_tool_followup = any(p in thought_lower for p in tool_patterns)
+
+            # 7. OBSERVE follow-up patterns → SPEAK result or TASK_COMPLETE
+            observe_patterns = ["observe action completed", "fetched", "messages from"]
+            is_observe_followup = any(p in thought_lower for p in observe_patterns)
+
+            # 8. Failure patterns → SPEAK the error
+            failure_patterns = ["failed", "error", "denied", "invalid"]
+            is_failure = any(p in thought_lower for p in failure_patterns)
+
+            # === ROUTING LOGIC ===
+            logger.info(
+                f"[MOCK_LLM] Follow-up detection: speak={is_speak_followup}, ponder={is_ponder_followup}, "
+                f"memorize={is_memorize_followup}, recall={is_recall_followup}, forget={is_forget_followup}, "
+                f"tool={is_tool_followup}, observe={is_observe_followup}, failure={is_failure}"
             )
 
             if is_speak_followup:
-                # Follow-up from SPEAK handler → TASK_COMPLETE
+                # SPEAK completed successfully → TASK_COMPLETE
+                logger.info("[MOCK_LLM] SPEAK follow-up → TASK_COMPLETE")
                 action = HandlerActionType.TASK_COMPLETE
-                params = TaskCompleteParams(completion_reason="[MOCK LLM] SPEAK operation completed")
-                rationale = "[MOCK LLM] Completing SPEAK follow-up thought"
-            else:
-                # Follow-up from other handlers (RECALL, MEMORIZE, etc.) → SPEAK the result
-                action = HandlerActionType.SPEAK
-                # Extract the actual content to speak from the follow-up thought
-                if thought_content.startswith("CIRIS_FOLLOW_UP_THOUGHT:"):
-                    content_to_speak = thought_content.replace("CIRIS_FOLLOW_UP_THOUGHT:", "").strip()
-                else:
-                    content_to_speak = thought_content
+                params = TaskCompleteParams(completion_reason=task_complete_success("Message delivered successfully"))
+                rationale = "[MOCK LLM] SPEAK operation completed, task finished"
 
-                params = SpeakParams(content=f"[MOCK LLM] {content_to_speak}")
-                rationale = "[MOCK LLM] Speaking operation result from follow-up thought"
+            elif is_ponder_followup:
+                # PONDER completed - SPEAK a summary, then TASK_COMPLETE on next follow-up
+                logger.info("[MOCK_LLM] PONDER follow-up → SPEAK conclusion")
+                action = HandlerActionType.SPEAK
+                params = SpeakParams(content=ponder_success(questions=[], insights="Pondering complete"))
+                rationale = "[MOCK LLM] Pondering complete. Sharing conclusion."
+
+            elif is_memorize_followup or is_recall_followup or is_forget_followup or is_tool_followup:
+                # These operations completed - SPEAK the result to user with packaged response
+                logger.info(f"[MOCK_LLM] Handler follow-up → SPEAK packaged result")
+                action = HandlerActionType.SPEAK
+
+                # Extract meaningful content
+                if thought_content.startswith("CIRIS_FOLLOW_UP_THOUGHT:"):
+                    content = thought_content.replace("CIRIS_FOLLOW_UP_THOUGHT:", "").strip()
+                else:
+                    content = thought_content
+
+                # Generate appropriate packaged response
+                if is_memorize_followup:
+                    node_match = re.search(r"'([^']+)'", content)
+                    node_id = node_match.group(1) if node_match else "unknown"
+                    packaged = memorize_success(node_id=node_id, scope="LOCAL")
+                elif is_recall_followup:
+                    query_match = re.search(r"query[:\s]+([^\|]+)", content, re.IGNORECASE)
+                    query = query_match.group(1).strip() if query_match else content[:50]
+                    if "no memories found" in content.lower() or "not found" in content.lower():
+                        packaged = recall_not_found(query=query)
+                    else:
+                        packaged = recall_success(query=query, results=[], value=content[:200])
+                elif is_forget_followup:
+                    node_match = re.search(r"forgot[:\s]+([^\s]+)", content, re.IGNORECASE)
+                    node_id = node_match.group(1) if node_match else "unknown"
+                    packaged = forget_success(node_id=node_id)
+                else:  # is_tool_followup
+                    tool_match = re.search(r"tool[:\s]+([^\s]+)", content, re.IGNORECASE)
+                    tool_name = tool_match.group(1) if tool_match else "unknown"
+                    packaged = tool_success(name=tool_name)
+
+                params = SpeakParams(content=packaged)
+                rationale = "[MOCK LLM] Handler operation completed. Reporting packaged result."
+
+            elif is_observe_followup:
+                # OBSERVE completed - SPEAK the observation result
+                logger.info("[MOCK_LLM] OBSERVE follow-up → SPEAK result")
+                action = HandlerActionType.SPEAK
+                channel_match = re.search(r"channel[:\s]+([^\s]+)", thought_content, re.IGNORECASE)
+                channel = channel_match.group(1) if channel_match else "unknown"
+                params = SpeakParams(content=observe_success(channel=channel))
+                rationale = "[MOCK LLM] Observation completed. Reporting result."
+
+            elif is_failure:
+                # Something failed - SPEAK the error with packaged format
+                logger.info("[MOCK_LLM] Failure detected → SPEAK error")
+                action = HandlerActionType.SPEAK
+                content = thought_content[:300] if thought_content else "An error occurred."
+                params = SpeakParams(content=speak_success(content=f"Error: {content}"))
+                rationale = "[MOCK LLM] Communicating error to user"
+
+            else:
+                # Unknown follow-up type - SPEAK a summary
+                # The SPEAK will then create a follow-up that goes to TASK_COMPLETE
+                logger.info("[MOCK_LLM] Unknown follow-up type → SPEAK summary")
+                action = HandlerActionType.SPEAK
+                content = thought_content[:300] if thought_content else "Operation completed."
+                if content.startswith("CIRIS_FOLLOW_UP_THOUGHT:"):
+                    content = content.replace("CIRIS_FOLLOW_UP_THOUGHT:", "").strip()
+                params = SpeakParams(content=speak_success(content=content))
+                rationale = "[MOCK LLM] Unknown follow-up, reporting result"
         else:
             # Step 2: For initial thoughts, check USER message for commands
             command_found = False
@@ -987,11 +1246,20 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
 
                                     tool_params = json.loads(tool_parts[1])
                                 except json.JSONDecodeError:
-                                    # Simple key=value parsing
-                                    for pair in tool_parts[1].split():
-                                        if "=" in pair:
-                                            k, v = pair.split("=", 1)
+                                    # Use regex to parse key="value" pairs with proper quote handling
+                                    # This handles JSON-escaped values like metadata="{\"stages\": ...}"
+                                    param_pattern = r'(\w+)="((?:[^"\\]|\\.)*)"|(\w+)=(\S+)'
+                                    for match in re.finditer(param_pattern, tool_parts[1]):
+                                        if match.group(1):  # Quoted value
+                                            k = match.group(1)
+                                            # Unescape the value (convert \" to ")
+                                            v = match.group(2).replace('\\"', '"')
                                             tool_params[k] = v
+                                        elif match.group(3):  # Unquoted value
+                                            k = match.group(3)
+                                            v = match.group(4)
+                                            tool_params[k] = v
+                                    logger.info(f"[MOCK_LLM] TOOL parsed params with regex: {tool_params}")
 
                             params = ToolParams(name=tool_name, parameters=tool_params)
                             action = HandlerActionType.TOOL
@@ -1132,13 +1400,9 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                                 break
 
                 if not command_found:
-                    # Default: new task → SPEAK
+                    # Default: new task → SPEAK with deterministic response
                     action = HandlerActionType.SPEAK
-                    # Include multimodal detection info if images were present
-                    if multimodal_image_count > 0:
-                        speak_content = f"[MOCKLLM DISCLAIMER] SPEAK IN RESPONSE TO TASK WITHOUT COMMAND [MULTIMODAL_DETECTED:{multimodal_image_count}]"
-                    else:
-                        speak_content = "[MOCKLLM DISCLAIMER] SPEAK IN RESPONSE TO TASK WITHOUT COMMAND"
+                    speak_content = "[MOCK LLM] Response to user message"
                     params = SpeakParams(content=speak_content)
                     rationale = "[MOCK LLM] Default speak action for new task"
 
@@ -1211,12 +1475,14 @@ def aspdma_llm_result(
             ponder_questions=params_dict.get("questions", ["What should I do?"]),
         )
     elif action == HandlerActionType.TOOL:
-        # ONLY the tool name - TSASPDMA handles parameters
+        # For $tool commands, params_dict contains parsed parameters
+        # Pass them through so they don't need to be re-extracted by TSASPDMA
+        tool_parameters = params_dict.get("parameters", {})
         flat_result = ASPDMALLMResult(
             selected_action=action,
             rationale=rationale,
             tool_name=params_dict.get("name", "unknown_tool"),
-            # NO tool_parameters here - TSASPDMA will extract them
+            tool_parameters=tool_parameters if tool_parameters else None,
         )
     elif action == HandlerActionType.REJECT:
         flat_result = ASPDMALLMResult(
@@ -1351,9 +1617,13 @@ def tsaspdma_llm_result(
                 break
 
         # Extract original thought content which has the $tool command
-        thought_match = re.search(r'(?:Original Thought|Thought):\s*"(.+?)"', content, re.DOTALL)
+        # The TSASPDMA prompt format is:
+        # === ORIGINAL THOUGHT (user's intent - use to infer parameters) ===
+        # {original_thought_content}
+        # === TOOL DOCUMENTATION ===
+        thought_match = re.search(r"=== ORIGINAL THOUGHT[^=]*===\s*(.+?)(?:===|$)", content, re.DOTALL)
         if thought_match:
-            thought_content = thought_match.group(1)
+            thought_content = thought_match.group(1).strip()
             logger.info(f"[MOCK_LLM] TSASPDMA found thought: {thought_content[:100]}...")
 
             # Parse $tool command from thought
@@ -1364,26 +1634,51 @@ def tsaspdma_llm_result(
                 logger.info(f"[MOCK_LLM] TSASPDMA parsed tool={tool_name}, params_str={params_str}")
 
                 if params_str:
+                    # Debug: log the raw params_str with repr to see exact escaping
+                    logger.info(f"[MOCK_LLM] TSASPDMA raw params_str repr: {repr(params_str)}")
+                    logger.info(f"[MOCK_LLM] TSASPDMA params_str length: {len(params_str)}")
+                    # Show first 200 chars with byte representation for debugging
+                    if len(params_str) > 50:
+                        logger.info(f"[MOCK_LLM] TSASPDMA params_str bytes[:100]: {params_str[:100].encode('utf-8')!r}")
+
                     # Try JSON first
                     try:
                         tool_params = json.loads(params_str)
                         logger.info(f"[MOCK_LLM] TSASPDMA parsed JSON params: {tool_params}")
-                    except json.JSONDecodeError:
-                        # Try key=value parsing
-                        try:
-                            tokens = shlex.split(params_str)
-                            for token in tokens:
-                                if "=" in token:
-                                    k, v = token.split("=", 1)
-                                    tool_params[k] = v
-                            logger.info(f"[MOCK_LLM] TSASPDMA parsed k=v params: {tool_params}")
-                        except ValueError:
-                            # Fallback: simple split
-                            for pair in params_str.split():
-                                if "=" in pair:
-                                    k, v = pair.split("=", 1)
-                                    tool_params[k] = v.strip('"').strip("'")
-                            logger.info(f"[MOCK_LLM] TSASPDMA fallback params: {tool_params}")
+                    except json.JSONDecodeError as e:
+                        logger.info(f"[MOCK_LLM] TSASPDMA JSON parse failed: {e}")
+                        # Use regex to parse key="value" pairs with proper quote handling
+                        # This handles JSON-escaped values like metadata="{\"stages\": ...}"
+                        param_pattern = r'(\w+)="((?:[^"\\]|\\.)*)"|(\w+)=(\S+)'
+                        logger.info(f"[MOCK_LLM] TSASPDMA using regex pattern: {repr(param_pattern)}")
+
+                        match_count = 0
+                        for match in re.finditer(param_pattern, params_str):
+                            match_count += 1
+                            logger.info(f"[MOCK_LLM] TSASPDMA regex match #{match_count}: groups={match.groups()}")
+                            logger.info(
+                                f"[MOCK_LLM] TSASPDMA regex match #{match_count}: span={match.span()}, matched={repr(match.group(0))}"
+                            )
+
+                            if match.group(1):  # Quoted value
+                                k = match.group(1)
+                                raw_v = match.group(2)
+                                logger.info(f"[MOCK_LLM] TSASPDMA quoted key={k}, raw_value repr={repr(raw_v)}")
+                                logger.info(f"[MOCK_LLM] TSASPDMA raw_value length={len(raw_v)}")
+                                # Unescape the value (convert \" to ")
+                                v = raw_v.replace('\\"', '"')
+                                logger.info(
+                                    f"[MOCK_LLM] TSASPDMA after unescape: {repr(v[:100]) if len(v) > 100 else repr(v)}"
+                                )
+                                tool_params[k] = v
+                            elif match.group(3):  # Unquoted value
+                                k = match.group(3)
+                                v = match.group(4)
+                                logger.info(f"[MOCK_LLM] TSASPDMA unquoted key={k}, value={repr(v)}")
+                                tool_params[k] = v
+
+                        logger.info(f"[MOCK_LLM] TSASPDMA total regex matches: {match_count}")
+                        logger.info(f"[MOCK_LLM] TSASPDMA parsed regex params: {tool_params}")
 
     # Also check context for forced action params (from original mock LLM flow)
     for item in context:
@@ -1396,9 +1691,16 @@ def tsaspdma_llm_result(
                     try:
                         tool_params = json.loads(parts[1])
                     except json.JSONDecodeError:
-                        for pair in parts[1].split():
-                            if "=" in pair:
-                                k, v = pair.split("=", 1)
+                        # Use regex to parse key="value" pairs with proper quote handling
+                        param_pattern = r'(\w+)="((?:[^"\\]|\\.)*)"|(\w+)=(\S+)'
+                        for match in re.finditer(param_pattern, parts[1]):
+                            if match.group(1):  # Quoted value
+                                k = match.group(1)
+                                v = match.group(2).replace('\\"', '"')
+                                tool_params[k] = v
+                            elif match.group(3):  # Unquoted value
+                                k = match.group(3)
+                                v = match.group(4)
                                 tool_params[k] = v
 
     logger.info(f"[MOCK_LLM] TSASPDMA: Confirming TOOL '{tool_name}' with params: {tool_params}")

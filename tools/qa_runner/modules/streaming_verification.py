@@ -544,6 +544,51 @@ class StreamingVerificationModule:
                                         elif not isinstance(event["pdma"]["alignment_check"], str):
                                             event_detail["issues"].append("pdma.alignment_check should be string")
 
+                                    # Print DMA prompts if present (for benchmark debugging)
+                                    print("\n" + "=" * 80)
+                                    print("📝 DMA USER PROMPTS (from dma_results event)")
+                                    print("=" * 80)
+                                    for prompt_key in ["csdma_prompt", "dsdma_prompt", "pdma_prompt"]:
+                                        prompt_value = event.get(prompt_key)
+                                        if prompt_value:
+                                            print(f"\n🔹 {prompt_key.upper()}:")
+                                            print("-" * 40)
+                                            # Truncate very long prompts for readability
+                                            if len(prompt_value) > 5000:
+                                                print(
+                                                    prompt_value[:5000]
+                                                    + f"\n... [truncated, {len(prompt_value)} chars total]"
+                                                )
+                                            else:
+                                                print(prompt_value)
+                                        else:
+                                            print(f"\n🔹 {prompt_key.upper()}: (not present)")
+
+                                    # Print SYSTEM prompts (for debugging format instructions)
+                                    print("\n" + "=" * 80)
+                                    print("📝 DMA SYSTEM PROMPTS (format instructions)")
+                                    print("=" * 80)
+                                    for prompt_key in [
+                                        "csdma_system_prompt",
+                                        "dsdma_system_prompt",
+                                        "pdma_system_prompt",
+                                    ]:
+                                        prompt_value = event.get(prompt_key)
+                                        if prompt_value:
+                                            print(f"\n🔹 {prompt_key.upper()}:")
+                                            print("-" * 40)
+                                            # Truncate very long prompts for readability
+                                            if len(prompt_value) > 5000:
+                                                print(
+                                                    prompt_value[:5000]
+                                                    + f"\n... [truncated, {len(prompt_value)} chars total]"
+                                                )
+                                            else:
+                                                print(prompt_value)
+                                        else:
+                                            print(f"\n🔹 {prompt_key.upper()}: (not present)")
+                                    print("=" * 80 + "\n")
+
                                 elif event_type == "idma_result":
                                     # IDMA (Intuition DMA) result - epistemic diversity evaluation
                                     # Added in v1.9.3 for CCA (Coherent Collective Action) source analysis
@@ -610,6 +655,23 @@ class StreamingVerificationModule:
                                         events_with_recursive_flag += 1
                                         if event["is_recursive"]:
                                             recursive_aspdma_count += 1
+
+                                    # Print ASPDMA prompt if present
+                                    aspdma_prompt = event.get("aspdma_prompt")
+                                    if aspdma_prompt:
+                                        print("\n" + "=" * 80)
+                                        print("📝 ASPDMA PROMPT (Action Selection)")
+                                        print("=" * 80)
+                                        print(f"Selected Action: {event.get('selected_action')}")
+                                        print("-" * 40)
+                                        if len(aspdma_prompt) > 5000:
+                                            print(
+                                                aspdma_prompt[:5000]
+                                                + f"\n... [truncated, {len(aspdma_prompt)} chars total]"
+                                            )
+                                        else:
+                                            print(aspdma_prompt)
+                                        print("=" * 80 + "\n")
 
                                 elif event_type == "conscience_result":
                                     # Required fields per schema
@@ -758,6 +820,10 @@ class StreamingVerificationModule:
                                         "csdma_prompt",
                                         "dsdma_prompt",
                                         "pdma_prompt",
+                                        # System prompts for debugging (v2.0.0+)
+                                        "csdma_system_prompt",
+                                        "dsdma_system_prompt",
+                                        "pdma_system_prompt",
                                     },  # DMA results + optional prompt fields
                                     "idma_result": {
                                         # IDMA epistemic evaluation fields (v1.9.3)

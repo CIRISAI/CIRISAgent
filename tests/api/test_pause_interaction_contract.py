@@ -265,10 +265,10 @@ class TestPauseInteractionContract:
 
     def test_pause_contract_documentation(self):
         """
-        Document the expected pause→interact contract for COVENANT compliance.
+        Document the expected pause→interact contract for ACCORD compliance.
         """
         contract = """
-        PAUSE→INTERACT CONTRACT FOR COVENANT TRANSPARENCY:
+        PAUSE→INTERACT CONTRACT FOR ACCORD TRANSPARENCY:
 
         1. When processor.pause_processing() is called:
            - All new interactions should be processed more slowly or queued
@@ -280,7 +280,7 @@ class TestPauseInteractionContract:
            - OR explicitly queue the interaction
            - OR reject with appropriate status code
 
-        3. COVENANT compliance validation:
+        3. ACCORD compliance validation:
            - Pause state must be detectable via API
            - Processing behavior must be transparent
            - No silent failures or hidden processing

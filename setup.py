@@ -53,7 +53,7 @@ setup(
     include_package_data=True,  # CRITICAL - includes non-Python files from MANIFEST.in
     package_data={
         "ciris_engine.data": [
-            "covenant_1.2b.txt",  # Covenant text file (v1.2-Beta)
+            "accord_1.2b.txt",  # Accord text file (v1.2-Beta)
         ],
         "ciris_engine.config": [
             "*.json",  # Pricing and configuration data

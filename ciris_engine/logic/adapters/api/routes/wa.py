@@ -212,7 +212,9 @@ async def resolve_deferral(
 async def get_permissions(
     request: Request,
     auth: Annotated[AuthContext, Depends(require_observer)],
-    wa_id: Annotated[Optional[str], Query(description="WA ID to get permissions for (defaults to current user)")] = None,
+    wa_id: Annotated[
+        Optional[str], Query(description="WA ID to get permissions for (defaults to current user)")
+    ] = None,
 ) -> SuccessResponse[PermissionsListResponse]:
     """
     Get WA permission status.

@@ -554,8 +554,210 @@ def build_command(args) -> int:
         return 1
 
 
+def portal_command(args) -> int:
+    """Handle the portal subcommand."""
+    from .portal_registration import run_portal_registration
+
+    return run_portal_registration(
+        base_url=args.api_url,
+        portal_url=args.portal_url,
+        username=args.username,
+        password=args.password,
+        wait=args.wait,
+        poll_timeout=args.timeout,
+        poll_interval=args.interval,
+        output_dir=args.output_dir,
+        verbose=args.verbose,
+    )
+
+
+def licensed_agent_command(args) -> int:
+    """Handle the licensed-agent subcommand."""
+    from .first_time_licensed_agent import run_first_time_licensed_agent
+
+    return run_first_time_licensed_agent(
+        base_url=args.api_url,
+        portal_url=args.portal_url,
+        llm_provider=args.llm_provider,
+        llm_api_key=args.llm_key or "",
+        llm_key_file=args.llm_key_file,
+        llm_model=args.llm_model,
+        admin_username=args.username,
+        admin_password=args.password,
+        wait=args.wait,
+        poll_timeout=args.timeout,
+        poll_interval=args.interval,
+        output_dir=args.output_dir,
+        verbose=args.verbose,
+    )
+
+
+def test_ios_command(args) -> int:
+    """Handle iOS simulator test execution."""
+    from .ios.ios_ui_automator import iOSUIAutomator
+    from .ios.xcrun_helper import XCRunHelper
+    from .ios_test_cases import (
+        test_ios_app_launch,
+        test_ios_connect_node,
+        test_ios_connect_node_auth,
+        test_ios_connect_node_error,
+        test_ios_connect_node_welcome,
+        test_ios_full_flow,
+        test_ios_local_login,
+        test_ios_setup_wizard,
+    )
+    from .test_cases import TestReport, TestResult
+
+    print("\n" + "=" * 60)
+    print("CIRIS Mobile QA Runner — iOS Simulator")
+    print("=" * 60)
+
+    # Initialize iOS helpers
+    try:
+        xcrun = XCRunHelper(device_id=args.device)
+    except RuntimeError as e:
+        print(f"\n[ERROR] {e}")
+        return 1
+
+    # Verify simulator is booted
+    if not xcrun.is_device_connected():
+        print("\n[INFO] No booted simulator found, attempting to boot one...")
+        devices = xcrun.get_devices()
+        available = [d for d in devices if d.state == "shutdown"]
+        if available:
+            # Prefer iPhone Pro models
+            target = next(
+                (d for d in available if "Pro" in (d.name or "") and "Max" not in (d.name or "")),
+                available[0],
+            )
+            print(f"[INFO] Booting {target.name} ({target.identifier[:8]}...)...")
+            xcrun.boot_device(target.identifier)
+            if not xcrun.wait_for_device(timeout=60):
+                print("[ERROR] Simulator failed to boot")
+                return 1
+        else:
+            print("[ERROR] No simulators available. Create one in Xcode.")
+            return 1
+
+    devices = xcrun.get_devices()
+    booted = [d for d in devices if d.state == "booted"]
+    if booted:
+        d = booted[0]
+        print(f"\n[INFO] Simulator: {d.name} (iOS {d.os_version}, {d.identifier[:8]}...)")
+
+    ios_ui = iOSUIAutomator(xcrun)
+
+    # Available iOS tests
+    ios_tests = {
+        "app_launch": test_ios_app_launch,
+        "local_login": test_ios_local_login,
+        "setup_wizard": test_ios_setup_wizard,
+        "full_flow": test_ios_full_flow,
+        "connect_node": test_ios_connect_node,
+        "connect_node_welcome": test_ios_connect_node_welcome,
+        "connect_node_auth": test_ios_connect_node_auth,
+        "connect_node_error": test_ios_connect_node_error,
+    }
+
+    # Load secrets
+    llm_api_key = args.llm_key or load_secret_file(args.llm_key_file)
+
+    # Build test config dict
+    test_config = {
+        "llm_api_key": llm_api_key,
+        "llm_provider": args.llm_provider,
+        "node_url": getattr(args, "node_url", "https://node.ciris.ai"),
+        "wait_for_portal_auth": getattr(args, "wait_portal", False),
+        "portal_auth_timeout": getattr(args, "portal_timeout", 300),
+    }
+
+    print(f"\nTests: {', '.join(args.tests)}")
+    if llm_api_key:
+        print(f"LLM key: {'*' * 8}")
+    if "connect_node" in args.tests or "connect_node_auth" in args.tests:
+        print(f"Node URL: {test_config['node_url']}")
+
+    # Create output directory
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Run tests
+    print("\n" + "=" * 60)
+    print("Running iOS Tests")
+    print("=" * 60)
+
+    reports = []
+    for test_name in args.tests:
+        if test_name not in ios_tests:
+            print(f"\n[WARN] Unknown iOS test: {test_name}")
+            print(f"  Available: {', '.join(ios_tests.keys())}")
+            continue
+
+        test_func = ios_tests[test_name]
+        print(f"\n--- Test: {test_name} ---")
+
+        try:
+            report = test_func(xcrun, ios_ui, test_config)
+            reports.append(report)
+
+            status_icon = {
+                TestResult.PASSED: "PASS",
+                TestResult.FAILED: "FAIL",
+                TestResult.SKIPPED: "SKIP",
+                TestResult.ERROR: "ERR!",
+            }
+            print(f"\n  [{status_icon.get(report.result, '????')}] {report.name} ({report.duration:.1f}s)")
+            if report.message:
+                print(f"        {report.message}")
+
+        except Exception as e:
+            error_report = TestReport(
+                name=test_name,
+                result=TestResult.ERROR,
+                duration=0.0,
+                message=f"Exception: {str(e)}",
+            )
+            reports.append(error_report)
+            print(f"\n  [ERR!] {test_name}: {e}")
+
+    # Summary
+    passed = sum(1 for r in reports if r.result == TestResult.PASSED)
+    failed = sum(1 for r in reports if r.result == TestResult.FAILED)
+    errors = sum(1 for r in reports if r.result == TestResult.ERROR)
+
+    print("\n" + "=" * 60)
+    print("iOS Test Summary")
+    print("=" * 60)
+    print(f"  Total:   {len(reports)}")
+    print(f"  Passed:  {passed}")
+    print(f"  Failed:  {failed}")
+    print(f"  Errors:  {errors}")
+    print("=" * 60 + "\n")
+
+    # Save results
+    import json
+    results_path = output_dir / f"ios_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    with open(results_path, "w") as f:
+        json.dump({
+            "platform": "ios",
+            "reports": [
+                {"name": r.name, "result": r.result.value, "duration": r.duration, "message": r.message}
+                for r in reports
+            ],
+            "summary": {"total": len(reports), "passed": passed, "failed": failed, "errors": errors},
+        }, f, indent=2)
+    print(f"Results: {results_path}")
+
+    return 0 if (failed == 0 and errors == 0) else 1
+
+
 def test_command(args) -> int:
     """Handle the test subcommand."""
+    # Route to iOS if platform is ios
+    platform = getattr(args, "platform", "android")
+    if platform == "ios":
+        return test_ios_command(args)
+
     print("\n" + "=" * 60)
     print("CIRIS Mobile QA Runner")
     print("=" * 60)
@@ -758,13 +960,141 @@ Notes:
     build_parser.add_argument("--adb-path", help="Path to adb binary (Android only)")
     build_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
+    # ========== portal subcommand ==========
+    portal_parser = subparsers.add_parser(
+        "portal",
+        help="Test portal.ciris.ai device auth registration flow",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Tests the RFC 8628 device authorization flow against portal.ciris.ai:
+  1. Health check on CIRIS API
+  2. Login to CIRIS API
+  3. POST /v1/setup/connect-node → device code + verification URL
+  4. Poll /v1/setup/connect-node/status
+
+Examples:
+  # Initiate only (print device code, don't wait)
+  python -m tools.qa_runner.modules.mobile portal
+
+  # Initiate and wait for user to complete Portal auth
+  python -m tools.qa_runner.modules.mobile portal --wait
+
+  # Custom Portal URL and timeout
+  python -m tools.qa_runner.modules.mobile portal --portal-url https://portal.ciris.ai --wait --timeout 600
+
+  # Connect to CIRIS API on a different port
+  python -m tools.qa_runner.modules.mobile portal --api-url http://localhost:9000
+""",
+    )
+    portal_parser.add_argument(
+        "--portal-url",
+        default="https://portal.ciris.ai",
+        help="Portal URL for device auth (default: https://portal.ciris.ai)",
+    )
+    portal_parser.add_argument(
+        "--api-url",
+        default="http://localhost:8080",
+        help="CIRIS API base URL (default: http://localhost:8080)",
+    )
+    portal_parser.add_argument(
+        "--username",
+        default="admin",
+        help="CIRIS API username (default: admin)",
+    )
+    portal_parser.add_argument(
+        "--password",
+        default="ciris_admin_password",
+        help="CIRIS API password (default: ciris_admin_password)",
+    )
+    portal_parser.add_argument(
+        "--wait", "-w",
+        action="store_true",
+        help="Wait for user to complete Portal authorization (polls until done)",
+    )
+    portal_parser.add_argument(
+        "--timeout",
+        type=int,
+        default=300,
+        help="Polling timeout in seconds (default: 300)",
+    )
+    portal_parser.add_argument(
+        "--interval",
+        type=int,
+        default=5,
+        help="Polling interval in seconds (default: 5)",
+    )
+    portal_parser.add_argument(
+        "--output-dir",
+        "-o",
+        default="mobile_qa_reports",
+        help="Directory for test reports (default: mobile_qa_reports)",
+    )
+    portal_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+
+    # ========== licensed-agent subcommand ==========
+    la_parser = subparsers.add_parser(
+        "licensed-agent",
+        help="First-time licensed agent E2E: device auth + setup complete + verify",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+End-to-end test for a first-run agent that acquires a license via Portal
+device auth, then completes setup with the provisioned credentials.
+
+Steps:
+  1. Health check / first-run verification
+  2. Enumerate providers, templates, adapters
+  3. POST /v1/setup/connect-node -> device code
+  4. Poll until Portal authorization completes
+  5. POST /v1/setup/complete with provisioned key + LLM config
+  6. Verify login, health, and services online
+
+Examples:
+  # Full E2E with --wait (prompts to authorize in browser)
+  python -m tools.qa_runner.modules.mobile licensed-agent --wait
+
+  # With explicit LLM key
+  python -m tools.qa_runner.modules.mobile licensed-agent --wait --llm-key sk-...
+
+  # Use groq key from file
+  python -m tools.qa_runner.modules.mobile licensed-agent --wait --llm-provider groq --llm-key-file ~/.groq_key
+""",
+    )
+    la_parser.add_argument(
+        "--portal-url", default="https://portal.ciris.ai",
+        help="Portal URL for device auth (default: https://portal.ciris.ai)",
+    )
+    la_parser.add_argument(
+        "--api-url", default="http://localhost:8080",
+        help="CIRIS API base URL (default: http://localhost:8080)",
+    )
+    la_parser.add_argument("--username", default="admin", help="Admin username to create")
+    la_parser.add_argument("--password", default="ciris_admin_password", help="Admin password to create")
+    la_parser.add_argument("--llm-provider", default="groq", help="LLM provider (default: groq)")
+    la_parser.add_argument("--llm-key", default=None, help="LLM API key (overrides key file)")
+    la_parser.add_argument(
+        "--llm-key-file", default="~/.groq_key",
+        help="Path to file containing LLM API key (default: ~/.groq_key)",
+    )
+    la_parser.add_argument("--llm-model", default=None, help="LLM model name (provider default if omitted)")
+    la_parser.add_argument(
+        "--wait", "-w", action="store_true",
+        help="Wait for Portal authorization (polls until done)",
+    )
+    la_parser.add_argument("--timeout", type=int, default=300, help="Poll timeout in seconds (default: 300)")
+    la_parser.add_argument("--interval", type=int, default=5, help="Poll interval in seconds (default: 5)")
+    la_parser.add_argument(
+        "--output-dir", "-o", default="mobile_qa_reports",
+        help="Directory for test reports (default: mobile_qa_reports)",
+    )
+    la_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+
     # ========== test subcommand ==========
     test_parser = subparsers.add_parser(
         "test",
         help="Run UI automation tests",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Available tests:
+Available tests (Android):
   app_launch        - Test that app launches and shows login screen
   google_signin     - Test Google Sign-In flow with test account
   local_login       - Test local login (BYOK mode)
@@ -772,9 +1102,26 @@ Available tests:
   chat_interaction  - Test sending a message and receiving response
   full_flow         - Run complete end-to-end flow (default)
 
+Available tests (iOS - use --platform ios):
+  app_launch              - Test that app launches and shows login screen
+  local_login             - Test local login flow
+  setup_wizard            - Test completing the setup wizard
+  full_flow               - Run complete end-to-end flow
+  connect_node            - Full Create Licensed Agent device auth flow
+  connect_node_welcome    - Verify Create Licensed Agent card on WELCOME screen
+  connect_node_auth       - Enter node URL and verify auth screen
+  connect_node_error      - Test error handling for invalid node URL
+
 Examples:
+  # Android tests (default)
   python -m tools.qa_runner.modules.mobile test full_flow
   python -m tools.qa_runner.modules.mobile test app_launch --no-reinstall
+
+  # iOS simulator tests
+  python -m tools.qa_runner.modules.mobile test app_launch --platform ios
+  python -m tools.qa_runner.modules.mobile test connect_node --platform ios
+  python -m tools.qa_runner.modules.mobile test connect_node --platform ios --node-url https://node.ciris.ai
+  python -m tools.qa_runner.modules.mobile test connect_node --platform ios --wait-portal
 """,
     )
     test_parser.add_argument(
@@ -783,8 +1130,15 @@ Examples:
         default=["full_flow"],
         help="Tests to run (default: full_flow)",
     )
-    test_parser.add_argument("--device", "-d", help="Device serial number (uses default if not specified)")
-    test_parser.add_argument("--adb-path", help="Path to adb binary")
+    test_parser.add_argument(
+        "--platform",
+        "-p",
+        choices=["android", "ios"],
+        default="android",
+        help="Target platform (default: android)",
+    )
+    test_parser.add_argument("--device", "-d", help="Device serial/UDID (uses default if not specified)")
+    test_parser.add_argument("--adb-path", help="Path to adb binary (Android only)")
     test_parser.add_argument(
         "--apk",
         default="mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk",
@@ -825,6 +1179,24 @@ Examples:
     test_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     test_parser.add_argument("--keep-open", action="store_true", help="Keep app running after tests (don't force-stop)")
 
+    # Create Licensed Agent options (iOS)
+    test_parser.add_argument(
+        "--node-url",
+        default="https://portal.ciris.ai",
+        help="Portal URL for connect_node tests (default: https://portal.ciris.ai)",
+    )
+    test_parser.add_argument(
+        "--wait-portal",
+        action="store_true",
+        help="Wait for user to complete Portal auth (connect_node tests)",
+    )
+    test_parser.add_argument(
+        "--portal-timeout",
+        type=int,
+        default=300,
+        help="Portal auth timeout in seconds (default: 300)",
+    )
+
     args = parser.parse_args()
 
     # Default to pull-logs if no command specified (backward compat: check if first arg looks like a test name)
@@ -853,6 +1225,10 @@ Examples:
         return build_command(args)
     elif args.command == "test":
         return test_command(args)
+    elif args.command == "portal":
+        return portal_command(args)
+    elif args.command == "licensed-agent":
+        return licensed_agent_command(args)
     else:
         parser.print_help()
         return 0

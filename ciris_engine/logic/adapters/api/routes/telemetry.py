@@ -476,9 +476,9 @@ async def _export_otlp_metrics(telemetry_service: Any) -> JSONDict:
         "services": aggregated.services,
     }
 
-    # Add covenant metrics if available
-    if hasattr(aggregated, "covenant_metrics"):
-        telemetry_dict["covenant_metrics"] = aggregated.covenant_metrics
+    # Add accord metrics if available
+    if hasattr(aggregated, "accord_metrics"):
+        telemetry_dict["accord_metrics"] = aggregated.accord_metrics
 
     return convert_to_otlp_json(telemetry_dict)
 

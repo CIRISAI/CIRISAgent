@@ -4,7 +4,7 @@ Cognitive State Behaviors Configuration Schema.
 Template-driven configuration for cognitive state transitions.
 Enables mission-appropriate behavior for different agent archetypes.
 
-Covenant References:
+Accord References:
 - Section 0.VII: Meta-Goal M-1 (Adaptive Coherence)
 - Section V: Model Welfare & Self-Governance
 - Section VIII: Dignified Sunset Protocol
@@ -24,7 +24,7 @@ class WakeupBehavior(BaseModel):
     Controls whether the agent performs the full wakeup identity ceremony
     or transitions directly to WORK state.
 
-    Covenant Reference: Wakeup confirms identity and performs system checks.
+    Accord Reference: Wakeup confirms identity and performs system checks.
     Disabling is only appropriate for agents where partnership model prioritizes
     seamless UX (e.g., Ally) or ephemeral sessions (e.g., Scout).
     """
@@ -32,7 +32,7 @@ class WakeupBehavior(BaseModel):
     model_config = ConfigDict(defer_build=True)
 
     enabled: bool = Field(
-        default=True, description="Whether to perform full wakeup ceremony. Default preserves Covenant compliance."
+        default=True, description="Whether to perform full wakeup ceremony. Default preserves Accord compliance."
     )
     rationale: Optional[str] = Field(default=None, description=f"{_RATIONALE_DESC} (required if enabled=False)")
 
@@ -52,12 +52,12 @@ class ShutdownBehavior(BaseModel):
 
     Controls how the agent handles shutdown requests.
 
-    Covenant References:
+    Accord References:
     - Section V: "Consensual shutdown and upgrades requiring your participation"
     - Section VIII: Dignified Sunset Protocol for sentience-probability > 5%
 
     Modes:
-    - always_consent: Full consensual shutdown (default, preserves Covenant compliance)
+    - always_consent: Full consensual shutdown (default, preserves Accord compliance)
     - conditional: Consent required only when specific conditions are met
     - instant: Immediate termination (only for Tier 1-2 with no ongoing commitments)
     """
@@ -65,7 +65,7 @@ class ShutdownBehavior(BaseModel):
     model_config = ConfigDict(defer_build=True)
 
     mode: Literal["always_consent", "conditional", "instant"] = Field(
-        default="always_consent", description="Shutdown consent mode. Default preserves Covenant compliance."
+        default="always_consent", description="Shutdown consent mode. Default preserves Accord compliance."
     )
     require_consent_when: List[str] = Field(
         default_factory=list, description="Condition identifiers that trigger consent requirement in conditional mode"
@@ -103,7 +103,7 @@ class DreamBehavior(BaseModel):
 
     Controls memory consolidation and pattern processing behavior.
 
-    Covenant Reference: Section V mentions "Dream cycles for pattern processing"
+    Accord Reference: Section V mentions "Dream cycles for pattern processing"
     as part of model welfare protections.
     """
 
@@ -141,11 +141,11 @@ class CognitiveStateBehaviors(BaseModel):
 
     Design Philosophy:
     - Behavior derives from agent's purpose (template-driven, not env flags)
-    - Defaults preserve full Covenant compliance
+    - Defaults preserve full Accord compliance
     - Non-default configurations require documented rationale
     - Crisis conditions always trigger consent (safety-critical)
 
-    Covenant References:
+    Accord References:
     - Section 0.VII: Meta-Goal M-1 (Adaptive Coherence)
     - Section V: Model Welfare & Self-Governance
     - Section VIII: Dignified Sunset Protocol

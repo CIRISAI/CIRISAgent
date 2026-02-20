@@ -352,11 +352,11 @@ class TestShouldSkipManifest:
         seen_ids = {"already_seen"}
         assert _should_skip_manifest(manifest, "already_seen", seen_ids) is True
 
-    def test_skip_covenant_metrics(self):
-        """Skip ciris_covenant_metrics (handled separately)."""
-        manifest = self._create_mock_manifest(name="ciris_covenant_metrics")
+    def test_skip_accord_metrics(self):
+        """Skip ciris_accord_metrics (handled separately)."""
+        manifest = self._create_mock_manifest(name="ciris_accord_metrics")
         seen_ids = set()
-        assert _should_skip_manifest(manifest, "ciris_covenant_metrics", seen_ids) is True
+        assert _should_skip_manifest(manifest, "ciris_accord_metrics", seen_ids) is True
 
     def test_skip_mock_modules(self):
         """Skip mock modules."""

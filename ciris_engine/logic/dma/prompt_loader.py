@@ -36,6 +36,29 @@ class DMAPromptLoader:
         if not self.prompts_dir.exists():
             logger.warning(f"Prompts directory does not exist: {self.prompts_dir}")
 
+    def _normalize_accord_mode(self, value: Any) -> str:
+        """Normalize accord_header value to accord_mode string.
+
+        Handles legacy boolean values and string modes:
+        - True (bool) -> 'full'
+        - False (bool) -> 'none'
+        - 'full', 'compressed', 'none' (str) -> as-is
+        - None -> 'full' (default)
+        """
+        if value is None:
+            return "full"
+        if isinstance(value, bool):
+            return "full" if value else "none"
+        str_value = str(value).lower()
+        if str_value in ("true", "1", "yes"):
+            return "full"
+        if str_value in ("false", "0", "no"):
+            return "none"
+        if str_value in ("full", "compressed", "none"):
+            return str_value
+        # Default to full for unknown values
+        return "full"
+
     def load_prompt_template(self, template_name: str) -> PromptCollection:
         """
         Load a prompt template from a YAML file.
@@ -88,7 +111,7 @@ class DMAPromptLoader:
                 final_ponder_advisory=template_data.get("final_ponder_advisory"),
                 closing_reminder=template_data.get("closing_reminder"),
                 context_integration=template_data.get("context_integration"),
-                uses_covenant_header=bool(template_data.get("covenant_header", False)),
+                accord_mode=self._normalize_accord_mode(template_data.get("accord_header", "full")),
                 supports_agent_modes=bool(template_data.get("supports_agent_modes", True)),
             )
 
@@ -164,17 +187,29 @@ class DMAPromptLoader:
             # Fallback for basic context integration
             return f"Thought to evaluate: {kwargs.get('original_thought_content', '')}"
 
-    def uses_covenant_header(self, template_data: PromptCollection) -> bool:
+    def get_accord_mode(self, template_data: PromptCollection) -> str:
         """
-        Check if template requires COVENANT_TEXT as system header.
+        Get the accord mode for this template.
 
         Args:
             template_data: The loaded template data
 
         Returns:
-            True if covenant header should be used
+            Accord mode: 'full', 'compressed', or 'none'
         """
-        return template_data.uses_covenant_header
+        return template_data.accord_mode
+
+    def uses_accord_header(self, template_data: PromptCollection) -> bool:
+        """
+        Check if template requires accord text as system header.
+
+        Args:
+            template_data: The loaded template data
+
+        Returns:
+            True if accord header should be used (mode is 'full' or 'compressed')
+        """
+        return template_data.accord_mode in ("full", "compressed")
 
 
 # Global instance for convenience

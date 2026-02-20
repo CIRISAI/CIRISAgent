@@ -114,6 +114,39 @@ def _is_private_network_host(host: str) -> bool:
     return False
 
 
+def _validate_redirect_scheme(scheme: str, is_private: bool, redirect_uri: str, netloc: str) -> bool:
+    """Validate URL scheme for redirect URI. Returns True if valid."""
+    if scheme == "http":
+        if not is_private:
+            logger.warning(f"Rejected HTTP redirect_uri to public host: {redirect_uri[:50]}")
+            return False
+        logger.debug(f"Allowing HTTP redirect to private network: {netloc}")
+        return True
+    if scheme == "https":
+        return True
+    logger.warning(f"Rejected redirect_uri with unsupported scheme: {scheme}")
+    return False
+
+
+def _get_allowed_redirect_domains() -> Set[str]:
+    """Build set of allowed redirect domains from config."""
+    import urllib.parse
+
+    allowed_domains: Set[str] = set(OAUTH_ALLOWED_REDIRECT_DOMAINS)
+    if OAUTH_FRONTEND_URL:
+        frontend_parsed = urllib.parse.urlparse(OAUTH_FRONTEND_URL)
+        if frontend_parsed.netloc:
+            allowed_domains.add(frontend_parsed.netloc.lower())
+    return allowed_domains
+
+
+def _is_domain_allowed(redirect_domain: str, allowed_domains: Set[str]) -> bool:
+    """Check if redirect domain is in allowed list or is a subdomain of an allowed domain."""
+    if redirect_domain in allowed_domains:
+        return True
+    return any(redirect_domain.endswith("." + allowed) for allowed in allowed_domains)
+
+
 def validate_redirect_uri(redirect_uri: Optional[str]) -> Optional[str]:
     """
     Validate redirect_uri to prevent open redirect attacks.
@@ -131,61 +164,33 @@ def validate_redirect_uri(redirect_uri: Optional[str]) -> Optional[str]:
     if not redirect_uri:
         return None
 
-    # Relative paths are always safe (same-origin)
+    # Relative paths are always safe (same-origin), but prevent //evil.com tricks
     if redirect_uri.startswith("/"):
-        # Prevent path traversal tricks like //evil.com
         if redirect_uri.startswith("//"):
             logger.warning(f"Rejected redirect_uri with protocol-relative path: {redirect_uri[:50]}")
             return None
         return redirect_uri
 
-    # Parse the URL to extract domain
     try:
         parsed = urllib.parse.urlparse(redirect_uri)
         if not parsed.scheme or not parsed.netloc:
             logger.warning(f"Rejected malformed redirect_uri: {redirect_uri[:50]}")
             return None
 
-        scheme = parsed.scheme.lower()
         is_private = _is_private_network_host(parsed.netloc)
-
-        # Allow HTTP only for private/local networks (Home Assistant, local dev)
-        # Require HTTPS for all public URLs
-        if scheme == "http":
-            if not is_private:
-                logger.warning(f"Rejected HTTP redirect_uri to public host: {redirect_uri[:50]}")
-                return None
-            # HTTP to private network is allowed
-            logger.debug(f"Allowing HTTP redirect to private network: {parsed.netloc}")
-        elif scheme != "https":
-            logger.warning(f"Rejected redirect_uri with unsupported scheme: {scheme}")
+        if not _validate_redirect_scheme(parsed.scheme.lower(), is_private, redirect_uri, parsed.netloc):
             return None
 
-        redirect_domain = parsed.netloc.lower()
-
         # Private network hosts are always allowed (Home Assistant, local dev)
-        # This enables OAuth callbacks to local Home Assistant instances
         if is_private:
-            logger.debug(f"Allowing redirect to private network host: {redirect_domain}")
+            logger.debug(f"Allowing redirect to private network host: {parsed.netloc.lower()}")
             return redirect_uri
 
-        # Build list of allowed domains for public URLs
-        allowed_domains: Set[str] = set(OAUTH_ALLOWED_REDIRECT_DOMAINS)
-
-        # Always allow OAUTH_FRONTEND_URL domain if configured
-        if OAUTH_FRONTEND_URL:
-            frontend_parsed = urllib.parse.urlparse(OAUTH_FRONTEND_URL)
-            if frontend_parsed.netloc:
-                allowed_domains.add(frontend_parsed.netloc.lower())
-
-        # Check if redirect domain is allowed
-        if redirect_domain in allowed_domains:
+        # Check against allowed domains for public URLs
+        redirect_domain = parsed.netloc.lower()
+        allowed_domains = _get_allowed_redirect_domains()
+        if _is_domain_allowed(redirect_domain, allowed_domains):
             return redirect_uri
-
-        # Check for subdomain matches (e.g., allow *.ciris.ai if ciris.ai is in allowed)
-        for allowed in allowed_domains:
-            if redirect_domain == allowed or redirect_domain.endswith("." + allowed):
-                return redirect_uri
 
         logger.warning(
             f"Rejected redirect_uri to untrusted domain: {redirect_domain}. "

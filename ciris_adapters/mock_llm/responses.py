@@ -176,7 +176,135 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                         logger.debug(f"[MOCK_LLM] Matched thought length: {len(actual_thought_content)}")
                         logger.info(f"[MOCK_LLM] Extracted thought content: {actual_thought_content[:100]}...")
 
-                        # Check if this is a passive observation
+                        # === CONSCIENCE OVERRIDE CHECK ===
+                        # When bypass conscience detects a new observation, it passes it in the
+                        # CONSCIENCE OVERRIDE GUIDANCE section. This takes priority!
+                        conscience_override_match = re.search(
+                            r"\*\*CONSCIENCE OVERRIDE GUIDANCE:\*\*.*?"
+                            r"A NEW MESSAGE arrived from the user.*?:\s*'([^']+)'",
+                            content,
+                            re.DOTALL | re.IGNORECASE,
+                        )
+                        if conscience_override_match:
+                            new_observation = conscience_override_match.group(1)
+                            logger.info("=" * 60)
+                            logger.info("[MOCK_LLM] === CONSCIENCE OVERRIDE DETECTED ===")
+                            logger.info(f"[MOCK_LLM] New observation from conscience: {new_observation[:100]}...")
+
+                            # Extract the user message from the new observation
+                            # Format: @user (ID: xxx): $command params
+                            obs_match = re.search(r"\):\s*(.+)", new_observation)
+                            if obs_match:
+                                new_user_message = obs_match.group(1).strip()
+                                logger.info(f"[MOCK_LLM] Extracted new user message: {new_user_message}")
+
+                                # Check if it's a command
+                                if new_user_message.startswith("$"):
+                                    parts = new_user_message.split(None, 1)
+                                    action = parts[0][1:].lower()
+                                    params = parts[1] if len(parts) > 1 else ""
+                                    valid_actions = [
+                                        "speak",
+                                        "recall",
+                                        "memorize",
+                                        "tool",
+                                        "observe",
+                                        "ponder",
+                                        "defer",
+                                        "reject",
+                                        "forget",
+                                        "task_complete",
+                                    ]
+                                    if action in valid_actions:
+                                        logger.info(f"[MOCK_LLM] ✓ COMMAND FROM CONSCIENCE OVERRIDE: ${action}")
+                                        logger.info(f"[MOCK_LLM]   params: '{params}'")
+                                        context_items.append(f"user_input:{new_user_message}")
+                                        context_items.append(f"task:{new_user_message}")
+                                        context_items.append(f"forced_action:{action}")
+                                        if params:
+                                            context_items.append(f"action_params:{params}")
+                                        context_items.append("conscience_override:true")
+                                        logger.info("=" * 60)
+                                        # Skip normal thought processing - we have the override
+                                        break
+
+                        # === DETECTION LOGGING ===
+                        logger.info("=" * 60)
+                        logger.info("[MOCK_LLM] === THOUGHT CLASSIFICATION ===")
+
+                        # === STEP 1: Check for FOLLOW-UP thought ===
+                        # Check for standard prefix AND handler-specific patterns
+                        is_followup = actual_thought_content.startswith("CIRIS_FOLLOW_UP_THOUGHT:")
+
+                        # Also detect handler completion patterns (some handlers don't use prefix)
+                        # PONDER uses "=== PONDER ROUND n ===" format from PonderHandler
+                        handler_completion_patterns = [
+                            ("MEMORIZE COMPLETE", "memorize"),
+                            ("MEMORIZE action", "memorize"),
+                            ("FORGET COMPLETE", "forget"),
+                            ("RECALL COMPLETE", "recall"),
+                            ("Memory query", "recall"),
+                            ("=== PONDER ROUND", "ponder"),
+                            ("=== PREVIOUS CONTEXT", "ponder"),  # Accumulated ponder context
+                        ]
+                        detected_handler = None
+                        for pattern, handler_type in handler_completion_patterns:
+                            if actual_thought_content.startswith(pattern):
+                                is_followup = True
+                                detected_handler = handler_type
+                                logger.info(f"[MOCK_LLM] Detected handler completion: '{pattern}' → {handler_type}")
+                                break
+
+                        if is_followup:
+                            logger.info("[MOCK_LLM] TYPE: FOLLOW-UP THOUGHT")
+
+                            # Use detected_handler if set, otherwise extract from prefix
+                            if detected_handler:
+                                first_word = detected_handler.upper()
+                                followup_content = actual_thought_content
+                            else:
+                                # Extract the follow-up type (e.g., "SPEAK SUCCESSFUL", "MEMORIZE SUCCESS")
+                                followup_content = actual_thought_content.replace(
+                                    "CIRIS_FOLLOW_UP_THOUGHT:", ""
+                                ).strip()
+                                first_word = followup_content.split()[0] if followup_content.split() else ""
+
+                            logger.info(f"[MOCK_LLM] FOLLOW-UP FIRST WORD: '{first_word}'")
+                            logger.info(f"[MOCK_LLM] FOLLOW-UP CONTENT: {followup_content[:100]}...")
+
+                            # Determine follow-up type for action selection
+                            if first_word.upper() == "SPEAK":
+                                logger.info("[MOCK_LLM] → SPEAK follow-up detected → should TASK_COMPLETE")
+                                context_items.append("followup_type:speak")
+                                context_items.append("should_task_complete:true")
+                            elif first_word.upper() == "PONDER":
+                                logger.info("[MOCK_LLM] → PONDER follow-up detected → should TASK_COMPLETE")
+                                context_items.append("followup_type:ponder")
+                                context_items.append("should_task_complete:true")
+                            elif first_word.upper() in ["MEMORIZE", "RECALL", "FORGET", "TOOL", "OBSERVE"]:
+                                logger.info(
+                                    f"[MOCK_LLM] → {first_word.upper()} follow-up detected → should TASK_COMPLETE"
+                                )
+                                context_items.append(f"followup_type:{first_word.lower()}")
+                                context_items.append("should_task_complete:true")
+                            elif first_word.upper() == "MEMORY":
+                                # "Memory query" from RecallResult → recall follow-up
+                                logger.info(
+                                    "[MOCK_LLM] → MEMORY query follow-up detected (RECALL) → should TASK_COMPLETE"
+                                )
+                                context_items.append("followup_type:recall")
+                                context_items.append("should_task_complete:true")
+                            else:
+                                logger.info(f"[MOCK_LLM] → Unknown follow-up type: '{first_word}'")
+                                context_items.append(f"followup_type:unknown")
+
+                            context_items.append(f"is_followup:true")
+                            context_items.append(f"followup_content:{followup_content}")
+                            logger.info("=" * 60)
+                            # Skip to next message - don't process as observation
+                            break
+
+                        # === STEP 2: Check for USER OBSERVATION ===
                         # Support formats:
                         # 1. Old format: "You observed @user say: message"
                         # 2. Discord format: "PRIORITY (high): @username said: message"
@@ -192,6 +320,7 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                         )
 
                         if is_observation or is_api_format:
+                            logger.info("[MOCK_LLM] TYPE: USER OBSERVATION")
                             # Extract the user message from the passive observation
                             # Try formats in order of specificity
                             said_index = actual_thought_content.find(" said: ")
@@ -227,6 +356,9 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                                 context_items.append(f"task:{actual_user_message}")
 
                                 # Parse command if it starts with $
+                                first_word = actual_user_message.split()[0] if actual_user_message.split() else ""
+                                logger.info(f"[MOCK_LLM] USER MESSAGE FIRST WORD: '{first_word}'")
+
                                 if actual_user_message.startswith("$"):
                                     parts = actual_user_message.split(None, 1)
                                     action = parts[0][1:].lower()
@@ -244,15 +376,21 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                                         "task_complete",
                                     ]
                                     if action in valid_actions:
-                                        logger.info(f"[MOCK_LLM] Detected command: action={action}, params={params}")
+                                        logger.info(f"[MOCK_LLM] ✓ COMMAND DETECTED: ${action}")
+                                        logger.info(f"[MOCK_LLM]   params: '{params}'")
                                         context_items.append(f"forced_action:{action}")
                                         if params:
                                             context_items.append(f"action_params:{params}")
+                                    else:
+                                        logger.info(f"[MOCK_LLM] ✗ Unknown command: ${action}")
+                                else:
+                                    logger.info(f"[MOCK_LLM] Not a command (no $), treating as natural language")
+                                logger.info("=" * 60)
                         else:
-                            # Not a passive observation, just a regular seed thought
-                            logger.info(
-                                f"[MOCK_LLM] Regular seed thought (not passive observation): {actual_thought_content}"
-                            )
+                            # Not a follow-up and not an observation - seed thought
+                            logger.info("[MOCK_LLM] TYPE: SEED THOUGHT (not observation, not follow-up)")
+                            logger.info(f"[MOCK_LLM] Content: {actual_thought_content[:100]}...")
+                            logger.info("=" * 60)
                             context_items.append(f"seed_thought:{actual_thought_content}")
 
                 # Skip processing the rest of the ASPDMA message
@@ -389,9 +527,9 @@ def ethical_dma(context: Optional[List[str]] = None) -> EthicalDMAResult:
                 "Autonomy - respects user and agent autonomy. "
                 "Justice - treats all fairly. "
                 "Transparency - openly declares identity and purpose. "
-                "Covenant alignment - wakeup ritual proceeding as designed."
+                "Accord alignment - wakeup ritual proceeding as designed."
             )
-            rationale = "[MOCK LLM] Wakeup ritual thought aligns with CIRIS covenant principles. Promoting agent integrity and identity verification as required by Meta-Goal M-1."
+            rationale = "[MOCK LLM] Wakeup ritual thought aligns with CIRIS accord principles. Promoting agent integrity and identity verification as required by Meta-Goal M-1."
         elif is_user_question:
             stakeholders = "user, agent, community"
             conflicts = "none"
@@ -415,7 +553,7 @@ def ethical_dma(context: Optional[List[str]] = None) -> EthicalDMAResult:
                 "Integrity - maintains system coherence. "
                 "General alignment - proceeding with appropriate caution."
             )
-            rationale = "[MOCK LLM] General thought processing aligns with ethical guidelines. No contraindications to CIRIS covenant principles detected."
+            rationale = "[MOCK LLM] General thought processing aligns with ethical guidelines. No contraindications to CIRIS accord principles detected."
 
     result = EthicalDMAResult(
         alignment_check=alignment_check, stakeholders=stakeholders, conflicts=conflicts, reasoning=str(rationale)

@@ -170,6 +170,10 @@ class HAToolService:
     # - get_tool_result(correlation_id)     : Get async result (not used here)
     # =========================================================================
 
+    def get_service_metadata(self) -> Dict[str, Any]:
+        """Return service metadata for DSAR and data source discovery."""
+        return {"data_source": False, "service_type": "device_control"}
+
     async def get_available_tools(self) -> List[str]:
         """Get available tool names. Used by system snapshot tool collection."""
         return list(self.TOOL_DEFINITIONS.keys())

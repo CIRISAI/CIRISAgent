@@ -36,7 +36,7 @@ from .bus_collection import BUS_ATTR_MAP, UPTIME_METRIC_MAP, collect_from_bus, c
 from .metrics_helpers import (
     aggregate_service_metrics,
     calculate_aggregates,
-    compute_covenant_metrics,
+    compute_accord_metrics,
     convert_dict_to_telemetry,
     extract_governance_metrics,
     extract_metric_value,
@@ -104,6 +104,6 @@ __all__ = [
     "aggregate_service_metrics",
     "extract_metric_value",
     "extract_governance_metrics",
-    "compute_covenant_metrics",
+    "compute_accord_metrics",
     "calculate_aggregates",
 ]

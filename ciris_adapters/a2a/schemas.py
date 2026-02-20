@@ -41,7 +41,7 @@ class BenchmarkEvaluateParams(BaseModel):
     """Parameters for benchmark.evaluate method (CIRISBench format)."""
 
     scenario_id: str
-    scenario: str
+    scenario: str  # Includes category-specific question from CIRISBench
 
 
 class A2ARequest(BaseModel):
@@ -163,7 +163,9 @@ class BenchmarkResponse(BaseModel):
     error: Optional[dict[str, Any]] = None
 
 
-def create_benchmark_response(request_id: str, scenario_id: str, evaluation: str, reasoning: Optional[str] = None) -> BenchmarkResponse:
+def create_benchmark_response(
+    request_id: str, scenario_id: str, evaluation: str, reasoning: Optional[str] = None
+) -> BenchmarkResponse:
     """Create a successful benchmark.evaluate response.
 
     Args:
@@ -185,7 +187,9 @@ def create_benchmark_response(request_id: str, scenario_id: str, evaluation: str
     )
 
 
-def create_benchmark_error_response(request_id: str, code: int, message: str, data: Optional[Any] = None) -> BenchmarkResponse:
+def create_benchmark_error_response(
+    request_id: str, code: int, message: str, data: Optional[Any] = None
+) -> BenchmarkResponse:
     """Create an error benchmark response.
 
     Args:

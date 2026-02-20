@@ -33,6 +33,11 @@ import Compression
         let lang = "\(Locale.current.identifier).UTF-8"
         setenv("LANG", lang, 1)
 
+        // Set CIRISVerify framework path for Python ctypes FFI
+        let frameworkPath = "\(Bundle.main.bundlePath)/Frameworks/CIRISVerify.framework/CIRISVerify"
+        setenv("CIRIS_IOS_FRAMEWORK_PATH", frameworkPath, 1)
+        NSLog("[PythonBridge] CIRISVerify framework: \(frameworkPath)")
+
         NSLog("[PythonBridge] Resources path: \(resourcesPath)")
         NSLog("[PythonBridge] LANG: \(lang)")
 

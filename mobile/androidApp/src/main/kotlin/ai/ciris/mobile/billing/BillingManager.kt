@@ -15,10 +15,10 @@ import kotlinx.coroutines.withContext
 /**
  * Manages Google Play Billing interactions for CIRIS credit purchases.
  *
- * Product catalog (must match server-side and Play Console):
- * - credits_100: 100 credits ($0.99)
- * - credits_250: 250 credits ($1.99)
- * - credits_600: 600 credits ($3.99)
+ * Product catalog (must match Play Console and CIRISBilling):
+ * - credits_100: 99 credits ($9.99, $0.10/credit)
+ * - credits_250: 249 credits ($24.99, $0.10/credit)
+ * - credits_600: 599 credits ($59.99, $0.10/credit)
  *
  * Flow:
  * 1. User selects product in BillingScreen

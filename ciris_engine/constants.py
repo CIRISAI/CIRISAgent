@@ -3,11 +3,11 @@
 from pathlib import Path
 
 # Version information
-CIRIS_VERSION = "1.9.9"
-COVENANT_VERSION = "1.2-Beta"
-CIRIS_VERSION_MAJOR = 1
-CIRIS_VERSION_MINOR = 9
-CIRIS_VERSION_PATCH = 8
+CIRIS_VERSION = "2.0.0-stable"
+ACCORD_VERSION = "1.2-Beta"
+CIRIS_VERSION_MAJOR = 2
+CIRIS_VERSION_MINOR = 0
+CIRIS_VERSION_PATCH = 0
 CIRIS_VERSION_BUILD = 0
 CIRIS_VERSION_STAGE = "stable"
 CIRIS_CODENAME = "Context Engineering"  # Codename for this release

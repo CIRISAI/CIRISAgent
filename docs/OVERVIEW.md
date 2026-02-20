@@ -1,6 +1,6 @@
 # CIRIS Architecture Overview
 
-CIRIS (Coherent Identity with Resilience, Integrity, and Sensemaking) is an ethical AI agent platform designed for production deployment with built-in human oversight, auditability, and graceful degradation.
+CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude) is an ethical AI agent platform designed for production deployment with built-in human oversight, auditability, and graceful degradation.
 
 ## What CIRIS Is
 
@@ -33,10 +33,10 @@ The agent operates in 6 states:
 | State | Purpose |
 |-------|---------|
 | WAKEUP | Identity confirmation, system checks |
-| WORK | Primary operational state (active) |
-| PLAY | Creative exploration (planned) |
-| SOLITUDE | Reflection and maintenance (planned) |
-| DREAM | Deep introspection (planned) |
+| WORK | Primary operational state |
+| PLAY | Creative exploration mode |
+| SOLITUDE | Reflection and maintenance |
+| DREAM | Deep introspection, memory consolidation |
 | SHUTDOWN | Graceful termination |
 
 ### Conscience Checks

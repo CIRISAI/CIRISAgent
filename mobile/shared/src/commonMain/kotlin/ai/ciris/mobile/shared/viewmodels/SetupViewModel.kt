@@ -48,11 +48,11 @@ class SetupViewModel {
             googleIdToken = idToken,
             googleEmail = email,
             googleUserId = userId,
-            // Default to CIRIS proxy if Google auth available and no mode selected yet
-            setupMode = if (isAuth && _state.value.setupMode == null) {
-                SetupMode.CIRIS_PROXY
-            } else {
-                _state.value.setupMode
+            // Default mode: CIRIS_PROXY for Google auth, BYOK for local credentials
+            setupMode = when {
+                _state.value.setupMode != null -> _state.value.setupMode
+                isAuth -> SetupMode.CIRIS_PROXY
+                else -> SetupMode.BYOK
             }
         )
     }
@@ -139,12 +139,24 @@ class SetupViewModel {
             return false
         }
 
-        val nextStep = when (currentState.currentStep) {
-            SetupStep.WELCOME -> SetupStep.LLM_CONFIGURATION
-            SetupStep.LLM_CONFIGURATION -> SetupStep.OPTIONAL_FEATURES
-            SetupStep.OPTIONAL_FEATURES -> SetupStep.ACCOUNT_AND_CONFIRMATION
-            SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.COMPLETE
-            SetupStep.COMPLETE -> SetupStep.COMPLETE // Stay at complete
+        val nextStep = if (currentState.isNodeFlow) {
+            // Node flow: WELCOME → NODE_AUTH → LLM → VERIFY_SETUP → COMPLETE
+            when (currentState.currentStep) {
+                SetupStep.WELCOME -> SetupStep.NODE_AUTH
+                SetupStep.NODE_AUTH -> SetupStep.LLM_CONFIGURATION
+                SetupStep.LLM_CONFIGURATION -> SetupStep.VERIFY_SETUP
+                SetupStep.VERIFY_SETUP -> SetupStep.COMPLETE
+                else -> SetupStep.COMPLETE
+            }
+        } else {
+            // Normal flow: WELCOME → LLM → OPTIONAL_FEATURES → ACCOUNT → COMPLETE
+            when (currentState.currentStep) {
+                SetupStep.WELCOME -> SetupStep.LLM_CONFIGURATION
+                SetupStep.LLM_CONFIGURATION -> SetupStep.OPTIONAL_FEATURES
+                SetupStep.OPTIONAL_FEATURES -> SetupStep.ACCOUNT_AND_CONFIRMATION
+                SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.COMPLETE
+                else -> SetupStep.COMPLETE
+            }
         }
 
         _state.value = currentState.copy(currentStep = nextStep)
@@ -157,12 +169,26 @@ class SetupViewModel {
     fun previousStep() {
         val currentState = _state.value
 
-        val prevStep = when (currentState.currentStep) {
-            SetupStep.WELCOME -> SetupStep.WELCOME // Stay at welcome
-            SetupStep.LLM_CONFIGURATION -> SetupStep.WELCOME
-            SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
-            SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.OPTIONAL_FEATURES
-            SetupStep.COMPLETE -> SetupStep.ACCOUNT_AND_CONFIRMATION
+        val prevStep = if (currentState.isNodeFlow) {
+            // Node flow: COMPLETE → VERIFY_SETUP → LLM → NODE_AUTH → WELCOME
+            when (currentState.currentStep) {
+                SetupStep.WELCOME -> SetupStep.WELCOME
+                SetupStep.NODE_AUTH -> SetupStep.WELCOME
+                SetupStep.LLM_CONFIGURATION -> SetupStep.NODE_AUTH
+                SetupStep.VERIFY_SETUP -> SetupStep.LLM_CONFIGURATION
+                SetupStep.COMPLETE -> SetupStep.VERIFY_SETUP
+                else -> SetupStep.WELCOME
+            }
+        } else {
+            // Normal flow
+            when (currentState.currentStep) {
+                SetupStep.WELCOME -> SetupStep.WELCOME
+                SetupStep.LLM_CONFIGURATION -> SetupStep.WELCOME
+                SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
+                SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.OPTIONAL_FEATURES
+                SetupStep.COMPLETE -> SetupStep.ACCOUNT_AND_CONFIRMATION
+                else -> SetupStep.WELCOME
+            }
         }
 
         _state.value = currentState.copy(currentStep = prevStep)
@@ -288,6 +314,181 @@ class SetupViewModel {
      */
     fun resetToWelcome() {
         _state.value = _state.value.copy(currentStep = SetupStep.WELCOME)
+    }
+
+    // ========== Connect to Node (Device Auth Flow) ==========
+
+    /**
+     * Update the node URL for the Connect to Node flow.
+     */
+    fun updateNodeUrl(url: String) {
+        _state.value = _state.value.copy(
+            deviceAuth = _state.value.deviceAuth.copy(nodeUrl = url)
+        )
+    }
+
+    /**
+     * Enter the node flow from the WELCOME step.
+     * Sets isNodeFlow=true and transitions to NODE_AUTH step.
+     */
+    fun enterNodeFlow() {
+        _state.value = _state.value.copy(
+            isNodeFlow = true,
+            currentStep = SetupStep.NODE_AUTH
+        )
+    }
+
+    /**
+     * Initiate device auth with the target CIRISNode.
+     * Calls POST /v1/setup/connect-node which:
+     * 1. Fetches node manifest
+     * 2. Initiates device auth with Portal
+     * 3. Returns verification URL for user
+     *
+     * @param connectFunc Platform-specific HTTP call to POST /v1/setup/connect-node
+     */
+    suspend fun startNodeConnection(
+        connectFunc: suspend (nodeUrl: String) -> ConnectNodeResult
+    ) {
+        val nodeUrl = _state.value.deviceAuth.nodeUrl
+        if (nodeUrl.isBlank()) return
+
+        _state.value = _state.value.copy(
+            deviceAuth = _state.value.deviceAuth.copy(
+                status = DeviceAuthStatus.CONNECTING,
+                error = null
+            )
+        )
+
+        try {
+            val result = connectFunc(nodeUrl)
+            _state.value = _state.value.copy(
+                deviceAuth = _state.value.deviceAuth.copy(
+                    status = DeviceAuthStatus.WAITING,
+                    verificationUri = result.verificationUriComplete,
+                    deviceCode = result.deviceCode,
+                    userCode = result.userCode,
+                    portalUrl = result.portalUrl,
+                    expiresIn = result.expiresIn,
+                    interval = result.interval
+                )
+            )
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(
+                deviceAuth = _state.value.deviceAuth.copy(
+                    status = DeviceAuthStatus.ERROR,
+                    error = e.message ?: "Connection failed"
+                )
+            )
+        }
+    }
+
+    /**
+     * Poll for device auth completion.
+     * Called periodically while status == WAITING.
+     *
+     * @param pollFunc Platform-specific HTTP call to GET /v1/setup/connect-node/status
+     */
+    suspend fun pollNodeAuthStatus(
+        pollFunc: suspend (deviceCode: String, portalUrl: String) -> NodeAuthPollResult
+    ) {
+        val auth = _state.value.deviceAuth
+        if (auth.status != DeviceAuthStatus.WAITING) return
+
+        try {
+            val result = pollFunc(auth.deviceCode, auth.portalUrl)
+            when (result.status) {
+                "pending" -> { /* Keep polling */ }
+                "complete" -> {
+                    _state.value = _state.value.copy(
+                        deviceAuth = auth.copy(
+                            status = DeviceAuthStatus.COMPLETE,
+                            provisionedTemplate = result.template,
+                            provisionedAdapters = result.adapters ?: emptyList(),
+                            signingKeyB64 = result.signingKeyB64,
+                            keyId = result.keyId,
+                            orgId = result.orgId,
+                            stewardshipTier = result.stewardshipTier
+                        ),
+                        // Lock template to provisioned value in node flow
+                        selectedTemplateId = result.template ?: "default",
+                        enabledAdapterIds = (result.adapters ?: emptyList()).toSet() + "api"
+                    )
+                }
+                else -> {
+                    _state.value = _state.value.copy(
+                        deviceAuth = auth.copy(
+                            status = DeviceAuthStatus.ERROR,
+                            error = result.error ?: "Authorization failed"
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(
+                deviceAuth = auth.copy(
+                    status = DeviceAuthStatus.ERROR,
+                    error = e.message ?: "Polling failed"
+                )
+            )
+        }
+    }
+
+    // ========== CIRISVerify Setup ==========
+
+    /**
+     * Toggle CIRISVerify installation.
+     */
+    fun setVerifyEnabled(enabled: Boolean) {
+        _state.value = _state.value.copy(
+            verifySetup = _state.value.verifySetup.copy(enabled = enabled)
+        )
+    }
+
+    /**
+     * Toggle hardware requirement for CIRISVerify.
+     */
+    fun setVerifyRequireHardware(require: Boolean) {
+        _state.value = _state.value.copy(
+            verifySetup = _state.value.verifySetup.copy(requireHardware = require)
+        )
+    }
+
+    /**
+     * Download and configure CIRISVerify binary.
+     * TODO: Implement actual binary download from CIRIS CDN or GitHub releases.
+     * MVP: Stub that sets downloaded=true for UI flow testing.
+     *
+     * @param downloadFunc Platform-specific download function
+     */
+    suspend fun downloadVerifyBinary(
+        downloadFunc: suspend () -> VerifyDownloadResult
+    ) {
+        _state.value = _state.value.copy(
+            verifySetup = _state.value.verifySetup.copy(
+                downloading = true,
+                error = null
+            )
+        )
+
+        try {
+            val result = downloadFunc()
+            _state.value = _state.value.copy(
+                verifySetup = _state.value.verifySetup.copy(
+                    downloading = false,
+                    downloaded = true,
+                    binaryPath = result.binaryPath,
+                    version = result.version
+                )
+            )
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(
+                verifySetup = _state.value.verifySetup.copy(
+                    downloading = false,
+                    error = e.message ?: "Download failed"
+                )
+            )
+        }
     }
 
     // ========== Validation ==========

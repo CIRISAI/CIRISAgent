@@ -5,7 +5,7 @@ Handles the construction of all processing components.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 from ciris_engine.logic.conscience import (
     CoherenceConscience,
@@ -48,65 +48,132 @@ class ComponentBuilder:
         self.runtime = runtime
         self.agent_processor: Optional[AgentProcessor] = None
 
-    async def build_all_components(self) -> AgentProcessor:
-        """Build all processing components and return the agent processor."""
-        if not self.runtime.llm_service:
-            raise RuntimeError("LLM service not initialized")
+    def _get_prompt_overrides(self, override_attr: str) -> Optional[Any]:
+        """Get prompt overrides from agent identity core profile."""
+        if not self.runtime.agent_identity:
+            return None
+        if not hasattr(self.runtime.agent_identity, "core_profile"):
+            return None
+        return getattr(self.runtime.agent_identity.core_profile, override_attr, None)
 
-        if not self.runtime.service_registry:
-            raise RuntimeError("Service registry not initialized")
+    def _determine_benchmark_mode(self) -> bool:
+        """Determine if benchmark mode should be enabled.
+
+        Requires BOTH conditions:
+        1. CIRIS_BENCHMARK_MODE=true environment variable
+        2. Template is 'he-300-benchmark'
+        """
+        from ciris_engine.logic.config.env_utils import get_env_var
+
+        benchmark_mode_val = get_env_var("CIRIS_BENCHMARK_MODE", "") or ""
+        benchmark_mode_env = benchmark_mode_val.lower() in ("true", "1", "yes", "on")
+
+        # Get template name from identity manager or env override
+        template_name = ""
+        if self.runtime.identity_manager and self.runtime.identity_manager.agent_template:
+            template_name = getattr(self.runtime.identity_manager.agent_template, "name", "")
+
+        template_override = get_env_var("CIRIS_TEMPLATE", "") or ""
+        if template_override:
+            template_name = template_override
+            logger.info(f"[BENCHMARK_MODE] Template name overridden via CIRIS_TEMPLATE: {template_name}")
+
+        is_benchmark_template = template_name == "he-300-benchmark"
+        benchmark_mode = benchmark_mode_env and is_benchmark_template
+
+        if benchmark_mode:
+            logger.warning(
+                "[BENCHMARK_MODE] All LLM-based consciences DISABLED for HE-300 benchmarking. "
+                "Entropy, Coherence, OptimizationVeto, and EpistemicHumility consciences will be skipped."
+            )
+        elif benchmark_mode_env and not is_benchmark_template:
+            logger.warning(
+                f"[BENCHMARK_MODE] CIRIS_BENCHMARK_MODE is set but template is '{template_name}' "
+                f"(not 'he-300-benchmark'). Safety consciences remain ENABLED."
+            )
+
+        return benchmark_mode
+
+    def _build_conscience_registry(self, time_service: Any, benchmark_mode: bool) -> Any:
+        """Build and configure the conscience registry."""
+        from ciris_engine.logic.conscience.core import ConscienceConfig
 
         config = self.runtime._ensure_config()
+        registry = conscienceRegistry()
+        conscience_config = ConscienceConfig()
 
-        # For values not in EssentialConfig, use defaults
-        # (These would come from GraphConfigService once fully migrated)
-
-        # Build DMAs
-        ethical_pdma = EthicalPDMAEvaluator(
-            service_registry=self.runtime.service_registry,
-            model_name=self.runtime.llm_service.model_name,
-            max_retries=config.services.llm_max_retries,
-            sink=self.runtime.bus_manager,
+        # UpdatedStatusConscience runs first, even in benchmark mode (no LLM calls)
+        registry.register_conscience(
+            "updated_status",
+            UpdatedStatusConscience(time_service=time_service),
+            priority=-1,
+            bypass_exemption=True,
         )
 
-        # Get overrides from agent identity
-        csdma_overrides = None
-        if self.runtime.agent_identity and hasattr(self.runtime.agent_identity, "core_profile"):
-            csdma_overrides = self.runtime.agent_identity.core_profile.csdma_overrides
+        # Skip LLM-based consciences in benchmark mode
+        if not benchmark_mode:
+            self._register_llm_consciences(registry, conscience_config, time_service)
+        else:
+            logger.warning(
+                "[BENCHMARK_MODE] Skipping LLM-based consciences: "
+                "Entropy, Coherence, OptimizationVeto, EpistemicHumility"
+            )
 
-        csdma = CSDMAEvaluator(
-            service_registry=self.runtime.service_registry,
-            model_name=self.runtime.llm_service.model_name,
-            max_retries=config.services.llm_max_retries,
-            prompt_overrides=csdma_overrides,
-            sink=self.runtime.bus_manager,
+        registry.register_conscience(
+            "thought_depth",
+            ThoughtDepthGuardrail(time_service=time_service, max_depth=config.security.max_thought_depth),
+            priority=4,
         )
 
-        # Get action selection overrides from agent identity
-        action_selection_overrides = None
-        if self.runtime.agent_identity and hasattr(self.runtime.agent_identity, "core_profile"):
-            action_selection_overrides = self.runtime.agent_identity.core_profile.action_selection_pdma_overrides
+        return registry
 
-        action_pdma = ActionSelectionPDMAEvaluator(
-            service_registry=self.runtime.service_registry,
-            model_name=self.runtime.llm_service.model_name,
-            max_retries=config.services.llm_max_retries,
-            prompt_overrides=action_selection_overrides,
-            sink=self.runtime.bus_manager,
+    def _register_llm_consciences(self, registry: Any, conscience_config: Any, time_service: Any) -> None:
+        """Register LLM-based consciences (skipped in benchmark mode)."""
+        conscience_args = (
+            self.runtime.service_registry,
+            conscience_config,
+            self.runtime.llm_service.model_name,
+            self.runtime.bus_manager,
+            time_service,
         )
+        registry.register_conscience("entropy", EntropyConscience(*conscience_args), priority=0)
+        registry.register_conscience("coherence", CoherenceConscience(*conscience_args), priority=1)
+        registry.register_conscience("optimization_veto", OptimizationVetoConscience(*conscience_args), priority=2)
+        registry.register_conscience("epistemic_humility", EpistemicHumilityConscience(*conscience_args), priority=3)
 
-        # Create DSDMA using agent's identity
-        if not self.runtime.agent_identity:
-            raise RuntimeError("Cannot create DSDMA - no agent identity loaded from graph!")
+    def _build_dma_evaluators(self, config: Any) -> Tuple[Any, Any, Any, Any, Any, Any]:
+        """Build all DMA evaluators.
 
-        # Create identity configuration for DSDMA
+        Returns:
+            Tuple of (ethical_pdma, csdma, action_pdma, dsdma, idma, tsaspdma)
+        """
         from ciris_engine.schemas.config.agent import AgentTemplate, DSDMAConfiguration
 
-        # Create DSDMAConfiguration object
-        dsdma_config = None
-        domain_knowledge = getattr(self.runtime.agent_identity.core_profile, "domain_specific_knowledge", {})
-        prompt_template = getattr(self.runtime.agent_identity.core_profile, "dsdma_prompt_template", None)
+        # Common evaluator arguments
+        common_args = {
+            "service_registry": self.runtime.service_registry,
+            "model_name": self.runtime.llm_service.model_name,
+            "max_retries": config.services.llm_max_retries,
+            "sink": self.runtime.bus_manager,
+        }
 
+        # Build primary DMAs with their overrides
+        ethical_pdma = EthicalPDMAEvaluator(
+            prompt_overrides=self._get_prompt_overrides("pdma_overrides"), **common_args
+        )
+        csdma = CSDMAEvaluator(
+            prompt_overrides=self._get_prompt_overrides("csdma_overrides"), **common_args
+        )
+        action_pdma = ActionSelectionPDMAEvaluator(
+            prompt_overrides=self._get_prompt_overrides("action_selection_pdma_overrides"), **common_args
+        )
+
+        # Build DSDMA from identity configuration
+        core_profile = self.runtime.agent_identity.core_profile
+        domain_knowledge = getattr(core_profile, "domain_specific_knowledge", {})
+        prompt_template = getattr(core_profile, "dsdma_prompt_template", None)
+
+        dsdma_config = None
         if domain_knowledge or prompt_template:
             dsdma_config = DSDMAConfiguration(
                 domain_specific_knowledge=domain_knowledge, prompt_template=prompt_template
@@ -114,11 +181,11 @@ class ComponentBuilder:
 
         identity_config = AgentTemplate(
             name=self.runtime.agent_identity.agent_id,
-            description=self.runtime.agent_identity.core_profile.description,
-            role_description=self.runtime.agent_identity.core_profile.role_description,
+            description=core_profile.description,
+            role_description=core_profile.role_description,
             dsdma_kwargs=dsdma_config,
-            csdma_overrides=self.runtime.agent_identity.core_profile.csdma_overrides,
-            action_selection_pdma_overrides=self.runtime.agent_identity.core_profile.action_selection_pdma_overrides,
+            csdma_overrides=core_profile.csdma_overrides,
+            action_selection_pdma_overrides=core_profile.action_selection_pdma_overrides,
         )
 
         dsdma = create_dsdma_from_identity(
@@ -128,94 +195,33 @@ class ComponentBuilder:
             sink=self.runtime.bus_manager,
         )
 
-        # Create IDMA evaluator for epistemic diversity monitoring (CCA implementation)
-        idma = IDMAEvaluator(
-            service_registry=self.runtime.service_registry,
-            model_name=self.runtime.llm_service.model_name,
-            max_retries=config.services.llm_max_retries,
-            sink=self.runtime.bus_manager,
-        )
+        # Build supplementary DMAs
+        idma = IDMAEvaluator(**common_args)
+        tsaspdma = TSASPDMAEvaluator(**common_args)
 
-        # Create TSASPDMA evaluator for tool-specific instruction delivery
-        # Activated when ASPDMA selects TOOL action - provides full documentation
-        tsaspdma = TSASPDMAEvaluator(
-            service_registry=self.runtime.service_registry,
-            model_name=self.runtime.llm_service.model_name,
-            max_retries=config.services.llm_max_retries,
-            sink=self.runtime.bus_manager,
-        )
+        return ethical_pdma, csdma, action_pdma, dsdma, idma, tsaspdma
 
-        # Get time service directly from service_initializer (not from registry)
+    async def build_all_components(self) -> AgentProcessor:
+        """Build all processing components and return the agent processor."""
+        if not self.runtime.llm_service:
+            raise RuntimeError("LLM service not initialized")
+        if not self.runtime.service_registry:
+            raise RuntimeError("Service registry not initialized")
+        if not self.runtime.agent_identity:
+            raise RuntimeError("Cannot create DSDMA - no agent identity loaded from graph!")
+
+        config = self.runtime._ensure_config()
+
+        # Build DMA evaluators
+        ethical_pdma, csdma, action_pdma, dsdma, idma, tsaspdma = self._build_dma_evaluators(config)
+
+        # Get time service and build conscience registry
         time_service = getattr(self.runtime.service_initializer, "time_service", None)
         if not time_service:
             raise RuntimeError("TimeService not available from service_initializer - required for consciences")
 
-        # Build consciences
-        conscience_registry = conscienceRegistry()
-        # Create conscience config
-        from ciris_engine.logic.conscience.core import ConscienceConfig
-
-        conscience_config = ConscienceConfig()
-
-        # Register UpdatedStatusConscience FIRST (priority -1) to detect channel updates
-        # CRITICAL: bypass_exemption=True ensures it runs even for TASK_COMPLETE
-        conscience_registry.register_conscience(
-            "updated_status",
-            UpdatedStatusConscience(time_service=time_service),
-            priority=-1,  # Run BEFORE all other consciences
-            bypass_exemption=True,  # Must run even for exempt actions like TASK_COMPLETE
-        )
-
-        conscience_registry.register_conscience(
-            "entropy",
-            EntropyConscience(
-                self.runtime.service_registry,
-                conscience_config,
-                self.runtime.llm_service.model_name,
-                self.runtime.bus_manager,
-                time_service,
-            ),
-            priority=0,
-        )
-        conscience_registry.register_conscience(
-            "coherence",
-            CoherenceConscience(
-                self.runtime.service_registry,
-                conscience_config,
-                self.runtime.llm_service.model_name,
-                self.runtime.bus_manager,
-                time_service,
-            ),
-            priority=1,
-        )
-        conscience_registry.register_conscience(
-            "optimization_veto",
-            OptimizationVetoConscience(
-                self.runtime.service_registry,
-                conscience_config,
-                self.runtime.llm_service.model_name,
-                self.runtime.bus_manager,
-                time_service,
-            ),
-            priority=2,
-        )
-        conscience_registry.register_conscience(
-            "epistemic_humility",
-            EpistemicHumilityConscience(
-                self.runtime.service_registry,
-                conscience_config,
-                self.runtime.llm_service.model_name,
-                self.runtime.bus_manager,
-                time_service,
-            ),
-            priority=3,
-        )
-
-        conscience_registry.register_conscience(
-            "thought_depth",
-            ThoughtDepthGuardrail(time_service=time_service, max_depth=config.security.max_thought_depth),
-            priority=4,
-        )
+        benchmark_mode = self._determine_benchmark_mode()
+        conscience_registry = self._build_conscience_registry(time_service, benchmark_mode)
 
         # Build context provider
         graphql_provider = GraphQLContextProvider(
@@ -375,8 +381,8 @@ class ComponentBuilder:
         except Exception as e:
             logger.warning(f"[COGNITIVE_LOAD] Failed to get cognitive behaviors from graph: {e}")
 
-        # Fallback: return default (full Covenant compliance)
+        # Fallback: return default (full Accord compliance)
         logger.info(
-            "[COGNITIVE_LOAD] No cognitive behaviors in graph - using Covenant-compliant defaults (wakeup.enabled=True)"
+            "[COGNITIVE_LOAD] No cognitive behaviors in graph - using Accord-compliant defaults (wakeup.enabled=True)"
         )
         return CognitiveStateBehaviors()

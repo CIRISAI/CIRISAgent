@@ -105,6 +105,23 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
         else:
             self.prompts = defaults
 
+    def get_accord_mode(self) -> str:
+        """Get the accord mode from prompts configuration.
+
+        Returns:
+            'full' (default), 'compressed', or 'none'
+        """
+        if isinstance(self.prompts, PromptCollection):
+            return getattr(self.prompts, "accord_mode", "full")
+        elif isinstance(self.prompts, dict):
+            # Check for accord_header key (legacy) or accord_mode
+            accord_value = self.prompts.get("accord_header", self.prompts.get("accord_mode", "full"))
+            if isinstance(accord_value, bool):
+                # Legacy boolean - True means 'full', False means 'none'
+                return "full" if accord_value else "none"
+            return str(accord_value) if accord_value else "full"
+        return "full"
+
     async def get_llm_service(self) -> Optional[LLMService]:
         """Return the LLM service for this DMA from the service registry."""
         service = await self.service_registry.get_service(

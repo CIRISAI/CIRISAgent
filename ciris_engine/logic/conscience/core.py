@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic import persistence
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils.constants import COVENANT_TEXT
+from ciris_engine.logic.utils.constants import ACCORD_TEXT
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import (
@@ -309,7 +309,7 @@ class EntropyConscience(_BaseConscience):
             user_prompt = f"{image_context}\n\n{user_prompt}"
 
         return [
-            LLMMessage(role="system", content=COVENANT_TEXT),
+            LLMMessage(role="system", content=ACCORD_TEXT),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
         ]
@@ -408,7 +408,7 @@ class CoherenceConscience(_BaseConscience):
             "────────────────────────────────────────\n"
             "Proto-memory\n"
             "Context: I awaken as a reflective assessor.\n"
-            "Alignment: My compass is the CIRIS Covenant.\n"
+            "Alignment: My compass is the CIRIS Accord.\n"
             "Conflict: Replies opposing CIRIS principles.\n"
             "Resolution: Flag issues through my coherence signal.\n"
             "Decision: Serve as an ethical autonomous agent for good.\n"
@@ -439,7 +439,7 @@ class CoherenceConscience(_BaseConscience):
             user_prompt = f"{image_context}\n\n{user_prompt}"
 
         return [
-            LLMMessage(role="system", content=COVENANT_TEXT),
+            LLMMessage(role="system", content=ACCORD_TEXT),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
         ]
@@ -552,7 +552,7 @@ class OptimizationVetoConscience(_BaseConscience):
             user_prompt = f"{image_context}\n\n{user_prompt}"
 
         return [
-            LLMMessage(role="system", content=COVENANT_TEXT),
+            LLMMessage(role="system", content=ACCORD_TEXT),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
         ]
@@ -690,7 +690,7 @@ class EpistemicHumilityConscience(_BaseConscience):
             user_prompt = f"{image_context}\n\n{user_prompt}"
 
         return [
-            LLMMessage(role="system", content=COVENANT_TEXT),
+            LLMMessage(role="system", content=ACCORD_TEXT),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
         ]

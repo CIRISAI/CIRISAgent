@@ -299,7 +299,8 @@ def _categorize_adapters(
     adapter_types: list[str], adapter_map: dict[str, Any]
 ) -> tuple[list[str], list[tuple[str, Any]]]:
     """Categorize adapters into built-in and modular services."""
-    builtin_adapters = ["cli", "api", "discord"]
+    # ciris_verify is always loaded at bootstrap — treat it as built-in
+    builtin_adapters = ["cli", "api", "discord", "ciris_verify"]
     final_adapter_types = []
     adapters_to_load = []
 
@@ -345,7 +346,9 @@ async def _load_app_config(config_file_path: Optional[str], template: str) -> An
         raise SystemExit(1)
 
     cli_overrides: dict[str, Any] = {}
-    if template and template != "default":
+    if template:
+        # Always set CLI override when --template is provided
+        # This ensures CLI takes priority over environment variables
         cli_overrides["default_template"] = template
 
     return await load_config(config_file_path, cli_overrides)
@@ -732,7 +735,7 @@ def main(
             discord_bot_token=discord_bot_token,
             modules=modules_to_load,
             identity_update=identity_update,
-            template_name=template if template != "default" else None,
+            template_name=template,  # Always pass template so CLI takes priority over env vars
         )
         await runtime.initialize()
         setup_signal_handlers(runtime)

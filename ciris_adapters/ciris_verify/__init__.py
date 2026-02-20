@@ -13,4 +13,7 @@ legal, financial) without proper licensing.
 
 from .adapter import CIRISVerifyAdapter
 
-__all__ = ["CIRISVerifyAdapter"]
+# Alias for adapter loading convention
+Adapter = CIRISVerifyAdapter
+
+__all__ = ["CIRISVerifyAdapter", "Adapter"]

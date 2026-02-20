@@ -123,12 +123,12 @@ def isolate_test_env_vars():
     """
     # Env vars that need isolation
     env_vars = [
-        # Covenant metrics
-        "CIRIS_COVENANT_METRICS_CONSENT",
-        "CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP",
-        "CIRIS_COVENANT_METRICS_TRACE_LEVEL",
-        "CIRIS_COVENANT_METRICS_FLUSH_INTERVAL",
-        "CIRIS_COVENANT_METRICS_ENDPOINT",
+        # Accord metrics
+        "CIRIS_ACCORD_METRICS_CONSENT",
+        "CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP",
+        "CIRIS_ACCORD_METRICS_TRACE_LEVEL",
+        "CIRIS_ACCORD_METRICS_FLUSH_INTERVAL",
+        "CIRIS_ACCORD_METRICS_ENDPOINT",
         # LLM provider detection (affects which provider is selected)
         "CIRIS_LLM_PROVIDER",
         "LLM_PROVIDER",

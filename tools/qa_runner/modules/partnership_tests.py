@@ -54,23 +54,15 @@ class PartnershipTests:
 
     async def test_get_partnership_options(self):
         """Test getting partnership options and requirements."""
-        try:
-            options = await self.client.consent.get_partnership_options()
+        options = await self.client.consent.get_partnership_options()
 
-            # Verify response structure
-            if not isinstance(options, dict):
-                raise ValueError(f"Expected dict response, got: {type(options)}")
+        # Verify response structure
+        if not isinstance(options, dict):
+            raise ValueError(f"Expected dict response, got: {type(options)}")
 
-            # Should have description of partnership requirements
-            # (exact structure depends on backend implementation)
-
-        except Exception as e:
-            # Partnership options endpoint may not be implemented yet
-            if "404" in str(e) or "not found" in str(e).lower():
-                self.console.print("    [yellow]Partnership options endpoint not yet implemented[/yellow]")
-                # Don't fail the test - this is expected during development
-            else:
-                raise
+        # Should have some content describing partnership options
+        if len(options) == 0:
+            raise ValueError("Partnership options response is empty")
 
     async def test_request_partnership(self):
         """Test requesting partnership upgrade."""
@@ -129,10 +121,11 @@ class PartnershipTests:
         # Check that we have a pending partnership
         status = await self.client.consent.get_partnership_status()
 
-        # Should either be pending or none (if processed immediately)
-        # In test environment without agent processor, status may be "none"
-        if status["partnership_status"] not in ["pending", "none", "accepted"]:
-            raise ValueError(f"Unexpected partnership status: {status['partnership_status']}")
+        # After requesting partnership, status should be 'pending' or 'accepted'
+        # (none is not valid after requesting - that would mean the request was lost)
+        partnership_status = status["partnership_status"]
+        if partnership_status not in ["pending", "accepted"]:
+            raise ValueError(f"After partnership request, expected 'pending' or 'accepted', got: {partnership_status}")
 
     async def test_stream_unchanged(self):
         """Test that stream doesn't change until partnership is approved."""

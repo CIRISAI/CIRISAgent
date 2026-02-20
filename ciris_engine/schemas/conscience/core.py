@@ -84,6 +84,16 @@ class EpistemicData(BaseModel):
 
     model_config = ConfigDict(defer_build=True, extra="forbid")
 
+    @classmethod
+    def create_neutral(cls) -> "EpistemicData":
+        """Create neutral/default EpistemicData for fallback cases."""
+        return cls(
+            entropy_level=0.5,
+            coherence_level=0.5,
+            uncertainty_acknowledged=True,
+            reasoning_transparency=0.5,
+        )
+
 
 class ConscienceCheckResult(BaseModel):
     """Unified result from conscience safety checks"""

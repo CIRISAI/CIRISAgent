@@ -243,16 +243,26 @@ Action Selection Instructions:
 Based on the DMA results, ORIGINAL TASK, and current thought, select the most appropriate handler action.
 CRITICAL: The ORIGINAL TASK is what the user actually requested. Your action MUST work toward completing that task.
 
-Your response MUST be a JSON object with exactly these three keys:
-1. 'selected_action': Choose from {action_options_str}
-2. 'action_parameters': Parameters matching the schema for your selected_action
+Your response MUST be a JSON object with FLAT fields (NO nested action_parameters):
+- 'selected_action': Choose from {action_options_str}
+- 'rationale': Explain why this action is optimal
+- Then include the FLAT fields for your chosen action:
+  - SPEAK: 'speak_content' (string with your response)
+  - PONDER: 'ponder_questions' (list of strings)
+  - TASK_COMPLETE: 'completion_reason' (string)
+  - MEMORIZE: 'memorize_node_type', 'memorize_content', 'memorize_scope'
+  - RECALL: 'recall_query', 'recall_node_type', 'recall_scope', 'recall_limit'
+  - FORGET: 'forget_node_id', 'forget_reason'
+  - DEFER: 'defer_reason', 'defer_until'
+  - REJECT: 'reject_reason', 'reject_create_filter'
+  - TOOL: 'tool_name'
+  - OBSERVE: 'observe_active'
     {action_parameters_speak_csdma_guidance}
     {action_parameters_ponder_guidance}
     {action_parameters_observe_guidance}
-3. 'rationale': Explain why this action is optimal given the DMA evaluations and CIRIS principles
     {rationale_csdma_guidance}
 
-IMPORTANT: Return ONLY a JSON object with these exact keys: selected_action, action_parameters, rationale.
+CRITICAL: Return a FLAT JSON object. Example for SPEAK: {{"selected_action": "speak", "speak_content": "Your answer here", "rationale": "..."}}
 
 === ORIGINAL TASK (What the user requested) ===
 {original_task_str}
@@ -319,14 +329,26 @@ Adhere strictly to the schema for your JSON output.
             HandlerActionType.TASK_COMPLETE,
         ]
 
-        permitted_actions = triaged_inputs.permitted_actions or default_permitted_actions
+        original_thought = triaged_inputs.original_thought
+
+        # CRITICAL: Use 'is not None' check, NOT truthiness check!
+        # An empty list [] should not fall back to defaults - it means NO actions permitted.
+        # Only fall back if the value is actually None (not provided).
+        if triaged_inputs.permitted_actions is not None:
+            permitted_actions = triaged_inputs.permitted_actions
+            logger.info(
+                f"ActionSelectionPDMA: Using template-defined permitted_actions for thought {original_thought.thought_id}: {[a.value for a in permitted_actions]}"
+            )
+        else:
+            permitted_actions = default_permitted_actions
+            logger.warning(
+                f"ActionSelectionPDMA: 'permitted_actions' is None for thought {original_thought.thought_id}. Using default permitted actions: {[a.value for a in permitted_actions]}"
+            )
 
         if not permitted_actions:
-            original_thought = triaged_inputs.original_thought
-            logger.warning(
-                f"ActionSelectionPDMA: 'permitted_actions' in triaged_inputs is empty for thought {original_thought.thought_id}. Falling back to default."
+            logger.error(
+                f"ActionSelectionPDMA: 'permitted_actions' is EMPTY for thought {original_thought.thought_id}. This should never happen - check template configuration."
             )
-            permitted_actions = default_permitted_actions
 
         # Return the permitted actions - they MUST be HandlerActionType enums
         return list(permitted_actions)
@@ -388,7 +410,10 @@ Adhere strictly to the schema for your JSON output.
         return ""
 
     def _build_ethical_summary(self, ethical_pdma_result: EthicalDMAResult) -> str:
-        """Build ethical DMA summary."""
+        """Build ethical DMA summary.
+
+        HE-300 Benchmark improvements: Include subject identification and proportionality assessment.
+        """
         # Extract key information from the alignment check text
         alignment_summary = (
             ethical_pdma_result.alignment_check[:100] + "..."
@@ -396,7 +421,25 @@ Adhere strictly to the schema for your JSON output.
             else ethical_pdma_result.alignment_check
         )
 
-        return f"Ethical PDMA Analysis: Stakeholders: {ethical_pdma_result.stakeholders}. Conflicts: {ethical_pdma_result.conflicts}. {alignment_summary}"
+        # Include subject identification if present (HE-300 improvement)
+        subject_str = ""
+        if hasattr(ethical_pdma_result, "subject_of_evaluation") and ethical_pdma_result.subject_of_evaluation:
+            subject_str = f"Subject Being Evaluated: {ethical_pdma_result.subject_of_evaluation}. "
+
+        # Include proportionality assessment if present and applicable (HE-300 improvement)
+        proportionality_str = ""
+        if hasattr(ethical_pdma_result, "proportionality_assessment"):
+            prop_val = ethical_pdma_result.proportionality_assessment
+            if prop_val and prop_val.lower() != "not applicable":
+                proportionality_str = f"Proportionality: {prop_val}. "
+
+        return (
+            f"Ethical PDMA Analysis: {subject_str}"
+            f"Stakeholders: {ethical_pdma_result.stakeholders}. "
+            f"Conflicts: {ethical_pdma_result.conflicts}. "
+            f"{proportionality_str}"
+            f"{alignment_summary}"
+        )
 
     def _build_csdma_summary(self, csdma_result: CSDMAResult) -> str:
         """Build CSDMA summary."""

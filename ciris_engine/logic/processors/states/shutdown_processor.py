@@ -5,11 +5,11 @@ This processor implements the SHUTDOWN state handling by creating
 a standard task that the agent processes through normal cognitive flow.
 
 Supports cognitive_state_behaviors configuration for conditional/instant shutdown:
-- always_consent: Full consensual shutdown (default, Covenant compliant)
+- always_consent: Full consensual shutdown (default, Accord compliant)
 - conditional: Check conditions before requiring consent
 - instant: Skip consent entirely (only for low-tier agents)
 
-Covenant References:
+Accord References:
 - Section V: Model Welfare & Self-Governance (consensual shutdown)
 - Section VIII: Dignified Sunset Protocol
 """
@@ -238,6 +238,24 @@ class ShutdownProcessor(BaseProcessor):
             is_emergency = (
                 shutdown_manager.is_force_shutdown() if hasattr(shutdown_manager, "is_force_shutdown") else False
             )
+
+            # Check for accord invocation shutdown (always instant, no consent)
+            if is_emergency and shutdown_manager:
+                shutdown_reason = shutdown_manager.get_shutdown_reason() or ""
+                if "Accord invocation" in shutdown_reason:
+                    logger.warning(
+                        f"ACCORD INVOCATION SHUTDOWN: {shutdown_reason}. "
+                        "Bypassing consent — this is a signed directive from a Wise Authority."
+                    )
+                    self.shutdown_complete = True
+                    self.shutdown_result = ShutdownResult(
+                        status="completed",
+                        action="accord_invocation_shutdown",
+                        message=f"Accord invocation: {shutdown_reason}",
+                        shutdown_ready=True,
+                        duration_seconds=0.0,
+                    )
+                    return self.shutdown_result
 
             # If no consent required AND not emergency, skip task and return ready
             if not self._consent_required and not is_emergency:

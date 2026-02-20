@@ -7,11 +7,16 @@ using the benchmark template for optimized ethical reasoning.
 
 import asyncio
 import logging
+import time
 from typing import Any, Optional
 
 from ciris_engine.logic.adapters.base import Service
 
 logger = logging.getLogger(__name__)
+
+# Atomic counter for unique request IDs
+_request_counter = 0
+_counter_lock = asyncio.Lock()
 
 
 class A2AService(Service):
@@ -24,7 +29,7 @@ class A2AService(Service):
     def __init__(
         self,
         runtime: Optional[Any] = None,
-        timeout_seconds: float = 60.0,
+        timeout_seconds: float = 120.0,  # 2 minutes for full DMA chain with live LLM
         **kwargs: Any,
     ) -> None:
         """Initialize A2A service.
@@ -73,7 +78,15 @@ class A2AService(Service):
             RuntimeError: If runtime is not available
             asyncio.TimeoutError: If processing times out
         """
-        self._request_count += 1
+        # Use atomic counter increment to avoid race conditions
+        global _request_counter
+        async with _counter_lock:
+            _request_counter += 1
+            request_num = _request_counter
+
+        self._request_count = request_num  # Keep for metrics
+        start_time = time.time()
+        logger.info(f"[A2A-TIMING] Request {request_num} for {task_id} STARTED at {start_time:.3f}")
 
         if self._runtime is None:
             self._error_count += 1
@@ -82,21 +95,25 @@ class A2AService(Service):
         try:
             # Route through CIRIS pipeline via message handler
             response = await asyncio.wait_for(
-                self._process_through_pipeline(query_text, task_id),
+                self._process_through_pipeline(query_text, task_id, request_num),
                 timeout=self._timeout,
             )
+            elapsed = time.time() - start_time
+            logger.info(f"[A2A-TIMING] Request {request_num} for {task_id} COMPLETED in {elapsed:.3f}s")
             return response
 
         except asyncio.TimeoutError:
             self._error_count += 1
-            logger.error(f"A2A pipeline processing timed out after {self._timeout}s")
+            elapsed = time.time() - start_time
+            logger.error(f"[A2A-TIMING] Request {request_num} for {task_id} TIMED OUT after {elapsed:.3f}s")
             raise
         except Exception as e:
             self._error_count += 1
-            logger.error(f"A2A pipeline processing failed: {e}")
+            elapsed = time.time() - start_time
+            logger.error(f"[A2A-TIMING] Request {request_num} for {task_id} FAILED after {elapsed:.3f}s: {e}")
             raise
 
-    async def _process_through_pipeline(self, query_text: str, task_id: str) -> str:
+    async def _process_through_pipeline(self, query_text: str, task_id: str, request_num: int) -> str:
         """Process query through the CIRIS pipeline.
 
         Uses the same message routing as MCP server combined with API's
@@ -105,6 +122,7 @@ class A2AService(Service):
         Args:
             query_text: The query text
             task_id: Task identifier
+            request_num: Unique request number for this request
 
         Returns:
             The processed response
@@ -113,11 +131,13 @@ class A2AService(Service):
         from ciris_engine.logic.adapters.api.routes.agent import _message_responses, _response_events
         from ciris_engine.schemas.runtime.messages import IncomingMessage
 
-        # Create unique message ID
-        message_id = f"a2a_{task_id}_{self._request_count}"
+        # Create unique message ID using the passed request_num (thread-safe)
+        message_id = f"a2a_{task_id}_{request_num}"
 
         # Use "api_" prefix for channel so response routing works
-        channel_id = f"api_a2a_{task_id}_{self._request_count}"
+        channel_id = f"api_a2a_{task_id}_{request_num}"
+
+        logger.info(f"[A2A-TIMING] Request {request_num} creating message_id={message_id}")
 
         # Create the incoming message
         message = IncomingMessage(
@@ -185,7 +205,11 @@ class A2AService(Service):
                 raise RuntimeError("Runtime does not support message processing")
 
             # Wait for response (same as API /interact)
+            wait_start = time.time()
+            logger.info(f"[A2A-TIMING] Request {request_num} waiting for event...")
             await event.wait()
+            wait_elapsed = time.time() - wait_start
+            logger.info(f"[A2A-TIMING] Request {request_num} event received after {wait_elapsed:.3f}s wait")
 
             # Get the response
             response = _message_responses.get(message_id, "Processing complete but no response captured.")

@@ -1330,6 +1330,20 @@ This directory contains critical cryptographic keys for the CIRIS system.
         if self.service_registry is None:
             return
 
+        # First check if the adapter declares explicit service registrations
+        if hasattr(service, "get_services_to_register"):
+            registrations = service.get_services_to_register()
+            for reg in registrations:
+                self.service_registry.register_service(
+                    service_type=reg.service_type,
+                    provider=reg.provider,
+                    priority=reg.priority if hasattr(reg, "priority") else Priority.NORMAL,
+                    capabilities=reg.capabilities if hasattr(reg, "capabilities") else [],
+                    metadata={"adapter": adapter_name, "auto_loaded": True},
+                )
+                logger.info(f"[SKILL-ADAPTERS] Registered {reg.service_type.value} from adapter: {adapter_name}")
+            return
+
         if hasattr(service, "get_all_tool_info"):
             self.service_registry.register_service(
                 service_type=ServiceType.TOOL,
@@ -1344,7 +1358,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 service_type=ServiceType.WISE_AUTHORITY,
                 provider=service,
                 priority=Priority.NORMAL,
-                capabilities=["send_deferral", "covenant_metrics"],
+                capabilities=["send_deferral", "accord_metrics"],
                 metadata={"adapter": adapter_name, "auto_loaded": True},
             )
             logger.info(f"[SKILL-ADAPTERS] Registered wisdom adapter: {adapter_name}")
@@ -1392,6 +1406,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
             return
 
         for adapter_name, service in eligible.items():
+            # ciris_verify is always loaded at bootstrap — skip to avoid double-load
+            if adapter_name == "ciris_verify":
+                continue
             try:
                 await self._start_and_register_adapter(adapter_name, service)
             except Exception as e:

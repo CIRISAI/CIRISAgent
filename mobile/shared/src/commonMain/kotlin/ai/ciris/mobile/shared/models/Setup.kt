@@ -214,6 +214,50 @@ data class CompleteSetupResponseData(
         get() = status == "completed"
 }
 
+// ========== Connect to Node (Device Auth Flow) ==========
+// Source: POST /v1/setup/connect-node, GET /v1/setup/connect-node/status
+
+/**
+ * Result from POST /v1/setup/connect-node.
+ * Contains the RFC 8628 device auth parameters.
+ */
+@Serializable
+data class ConnectNodeResult(
+    val verificationUriComplete: String,  // URL for user to open in browser
+    val deviceCode: String,               // Opaque code for polling
+    val userCode: String,                 // Human-readable code
+    val portalUrl: String,                // Portal URL (from node manifest)
+    val expiresIn: Int = 900,             // Seconds until expiry
+    val interval: Int = 5                 // Polling interval in seconds
+)
+
+/**
+ * Result from GET /v1/setup/connect-node/status.
+ * Returned each time the agent polls for device auth completion.
+ */
+@Serializable
+data class NodeAuthPollResult(
+    val status: String,                   // "pending", "complete", "error"
+    val template: String? = null,         // Provisioned identity template ID
+    val adapters: List<String>? = null,   // Approved adapter list
+    val orgId: String? = null,            // Organization ID
+    val signingKeyB64: String? = null,    // Base64 Ed25519 private key (one-time)
+    val keyId: String? = null,            // Key ID from Registry
+    val stewardshipTier: Int? = null,     // Stewardship tier from template
+    val error: String? = null             // Error message if status == "error"
+)
+
+/**
+ * Result from CIRISVerify binary download.
+ * TODO: Wire to actual POST /v1/setup/verify/download endpoint.
+ * MVP: Stub for UI flow testing.
+ */
+@Serializable
+data class VerifyDownloadResult(
+    val binaryPath: String,
+    val version: String
+)
+
 // ========== KMP Adapter Filtering ==========
 
 /**

@@ -182,6 +182,18 @@ rsync -a --exclude='__pycache__' "$CIRIS_ROOT/ciris_adapters/" "$RESOURCES_DIR/a
 echo "Overlaying ciris_ios from source (includes kmp_main.py)..."
 rsync -a --exclude='__pycache__' "$CIRIS_ROOT/ios/CirisiOS/src/ciris_ios/" "$RESOURCES_DIR/app/ciris_ios/"
 
+# Overlay ciris_verify Python package (FFI bindings for CIRISVerify)
+# The native library is statically linked into the app binary;
+# this package provides the Python ctypes wrapper that uses CDLL(None) on iOS
+CIRIS_VERIFY_BINDINGS="/Users/macmini/CIRISVerify/bindings/python/ciris_verify"
+if [ -d "$CIRIS_VERIFY_BINDINGS" ]; then
+    echo "Overlaying ciris_verify Python package..."
+    rsync -a --exclude='__pycache__' --exclude='*.pyc' "$CIRIS_VERIFY_BINDINGS/" "$RESOURCES_DIR/app_packages/ciris_verify/"
+    echo "  ciris_verify package added to app_packages"
+else
+    echo "WARNING: ciris_verify bindings not found at $CIRIS_VERIFY_BINDINGS"
+fi
+
 # Remove any __pycache__ directories
 echo "Cleaning up __pycache__ directories..."
 find "$RESOURCES_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true

@@ -1014,7 +1014,12 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             logger.error(f"Failed to save adapter config for {adapter_id}: {e}")
 
     async def _remove_adapter_config_from_graph(self, adapter_id: str) -> None:
-        """Remove adapter configuration from graph config service."""
+        """Remove adapter configuration from graph config service.
+
+        IMPORTANT: Multi-occurrence safety - only removes configs belonging to the current occurrence.
+        This prevents cross-contamination in shared database deployments where multiple occurrences
+        share the same PostgreSQL database.
+        """
         try:
             # Get config service from runtime
             config_service = None
@@ -1023,6 +1028,30 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
             if not config_service:
                 logger.warning(f"Cannot remove adapter config for {adapter_id} - GraphConfigService not available")
+                return
+
+            # MULTI-OCCURRENCE SAFETY: Check occurrence ownership before removal
+            # This prevents one occurrence from corrupting another's adapter configs
+            from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
+
+            current_occurrence_id = get_current_occurrence_id()
+
+            # Get the adapter's occurrence_id from the graph
+            occurrence_key = f"adapter.{adapter_id}.occurrence_id"
+            occurrence_entry = await config_service.get_config(occurrence_key)
+            saved_occurrence_id = None
+            if occurrence_entry and hasattr(occurrence_entry, "value"):
+                value = occurrence_entry.value
+                if hasattr(value, "str_value") and value.str_value:
+                    saved_occurrence_id = value.str_value
+
+            # If there's a saved occurrence_id and it doesn't match current, refuse to remove
+            if saved_occurrence_id is not None and saved_occurrence_id != current_occurrence_id:
+                logger.warning(
+                    f"MULTI-OCCURRENCE SAFETY: Refusing to remove adapter config for {adapter_id} - "
+                    f"adapter belongs to occurrence '{saved_occurrence_id}', current is '{current_occurrence_id}'. "
+                    f"This prevents cross-contamination in shared database deployments."
+                )
                 return
 
             # List all configs with adapter prefix
@@ -1035,7 +1064,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 await config_service.set_config(config_key, None, updated_by="adapter_manager")
                 logger.debug(f"Removed config key: {config_key}")
 
-            logger.info(f"Removed adapter config for {adapter_id} from graph")
+            logger.info(f"Removed adapter config for {adapter_id} from graph (occurrence={current_occurrence_id})")
 
         except Exception as e:
             logger.error(f"Failed to remove adapter config for {adapter_id}: {e}")

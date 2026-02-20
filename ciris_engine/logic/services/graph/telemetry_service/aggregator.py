@@ -33,7 +33,7 @@ from .bus_collection import collect_from_component as _collect_from_component
 from .metrics_helpers import (
     aggregate_service_metrics,
     calculate_aggregates,
-    compute_covenant_metrics,
+    compute_accord_metrics,
     convert_dict_to_telemetry,
     extract_governance_metrics,
     extract_metric_value,
@@ -113,8 +113,8 @@ class TelemetryAggregator:
             "service_registry",
             "agent_processor",  # Has get_metrics() now
         ],
-        # New v1.4.3: Covenant/Ethics metrics (computed, not from services)
-        "covenant": [],  # Will be computed from governance services
+        # New v1.4.3: Accord/Ethics metrics (computed, not from services)
+        "accord": [],  # Will be computed from governance services
     }
 
     def __init__(self, service_registry: Any, time_service: Any, runtime: Any = None):
@@ -233,17 +233,17 @@ class TelemetryAggregator:
         # Process completed tasks
         self._process_completed_tasks(tasks, service_info, done, telemetry)
 
-        # Compute covenant metrics from governance services
-        covenant_metrics_data = self.compute_covenant_metrics(telemetry)
-        # Wrap covenant metrics in ServiceTelemetryData using custom_metrics
-        telemetry["covenant"]["covenant_metrics"] = ServiceTelemetryData(
+        # Compute accord metrics from governance services
+        accord_metrics_data = self.compute_accord_metrics(telemetry)
+        # Wrap accord metrics in ServiceTelemetryData using custom_metrics
+        telemetry["accord"]["accord_metrics"] = ServiceTelemetryData(
             healthy=True,
             uptime_seconds=0.0,
             error_count=0,
             requests_handled=0,
             error_rate=0.0,
             memory_mb=0.0,
-            custom_metrics=covenant_metrics_data,
+            custom_metrics=accord_metrics_data,
         )
 
         return telemetry
@@ -430,11 +430,11 @@ class TelemetryAggregator:
         """Extract metrics from a governance service."""
         return extract_governance_metrics(telemetry, service_name, metric_mappings)
 
-    def compute_covenant_metrics(
+    def compute_accord_metrics(
         self, telemetry: Dict[str, Dict[str, ServiceTelemetryData]]
     ) -> Dict[str, Union[float, int, str]]:
-        """Compute covenant/ethics metrics from governance services."""
-        return compute_covenant_metrics(telemetry)
+        """Compute accord/ethics metrics from governance services."""
+        return compute_accord_metrics(telemetry)
 
     def calculate_aggregates(
         self, telemetry: Dict[str, Dict[str, ServiceTelemetryData]]

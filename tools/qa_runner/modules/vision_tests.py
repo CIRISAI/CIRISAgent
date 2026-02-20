@@ -8,13 +8,15 @@ Tests the native multimodal vision pipeline:
 - Mock LLM multimodal message detection
 """
 
-import base64
+import asyncio
 import logging
 import traceback
 from typing import Any, Dict, List, Optional
 
 import httpx
 from rich.console import Console
+
+from .filter_test_helper import FilterTestHelper
 
 logger = logging.getLogger(__name__)
 
@@ -51,30 +53,48 @@ class VisionTests:
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIA" "X8jx0gAAAABJRU5ErkJggg=="
         )
 
+        # SSE helper for waiting on task completion
+        self.sse_helper: Optional[FilterTestHelper] = None
+
     async def run(self) -> List[Dict[str, Any]]:
         """Run all vision tests."""
         self.console.print("\n[cyan]🖼️ Testing Native Vision/Multimodal Support[/cyan]")
+
+        # Start SSE monitoring for interact tests
+        if self.token:
+            self.sse_helper = FilterTestHelper(self.base_url, self.token, verbose=False)
+            try:
+                self.sse_helper.start_monitoring()
+            except Exception as e:
+                logger.warning(f"Could not start SSE monitoring: {e}")
+                self.sse_helper = None
 
         tests = [
             ("API Vision Helper - Base64", self.test_api_vision_base64),
             ("API Vision Helper - Data URL", self.test_api_vision_data_url),
             ("API Vision Helper - URL", self.test_api_vision_url),
-            ("Interact with Image", self.test_interact_with_image),
+            # Run multi-image test FIRST to avoid task overlap with single image test
             ("Interact with Multiple Images", self.test_interact_multiple_images),
+            ("Interact with Image", self.test_interact_with_image),
             ("Image Content Schema", self.test_image_content_schema),
             ("Multimodal Message Building", self.test_multimodal_message_building),
         ]
 
-        for name, test_func in tests:
-            try:
-                await test_func()
-                self.results.append({"test": name, "status": "✅ PASS", "error": None})
-                self.console.print(f"  ✅ {name}")
-            except Exception as e:
-                self.results.append({"test": name, "status": "❌ FAIL", "error": str(e)})
-                self.console.print(f"  ❌ {name}: {str(e)[:100]}")
-                if self.console.is_terminal:
-                    self.console.print(f"     [dim]{traceback.format_exc()}[/dim]")
+        try:
+            for name, test_func in tests:
+                try:
+                    await test_func()
+                    self.results.append({"test": name, "status": "✅ PASS", "error": None})
+                    self.console.print(f"  ✅ {name}")
+                except Exception as e:
+                    self.results.append({"test": name, "status": "❌ FAIL", "error": str(e)})
+                    self.console.print(f"  ❌ {name}: {str(e)[:100]}")
+                    if self.console.is_terminal:
+                        self.console.print(f"     [dim]{traceback.format_exc()}[/dim]")
+        finally:
+            # Stop SSE monitoring
+            if self.sse_helper:
+                self.sse_helper.stop_monitoring()
 
         self._print_summary()
         return self.results
@@ -123,6 +143,22 @@ class VisionTests:
 
     async def test_interact_with_image(self) -> None:
         """Test sending a message with an image through the API."""
+        from datetime import datetime, timezone
+
+        # Wait for any existing tasks to complete before starting
+        if self.sse_helper:
+            # Give time for any previous tasks to complete
+            logger.info("Waiting for any active tasks to complete before vision test...")
+            self.sse_helper.wait_for_task_complete(timeout=10.0)
+            # Small delay to ensure clean state
+            await asyncio.sleep(1.0)
+            # Reset flags for this test
+            self.sse_helper.task_complete_seen = False
+            self.sse_helper.completed_tasks.clear()
+
+        # Record submission time BEFORE sending - used to filter history
+        submission_time = datetime.now(timezone.utc)
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{self.base_url}/v1/agent/interact",
@@ -147,20 +183,66 @@ class VisionTests:
             assert "response" in data["data"], "Missing 'response' in data"
             assert "message_id" in data["data"], "Missing 'message_id' in data"
 
+            response_text = data["data"]["response"]
+
+            # If we got "Still processing", wait for TASK_COMPLETE via SSE then get history
+            if "Still processing" in response_text and self.sse_helper:
+                logger.info("Response is 'Still processing', waiting for TASK_COMPLETE via SSE...")
+                completed = self.sse_helper.wait_for_task_complete(timeout=45.0)
+                if completed:
+                    # Get the actual response from history - FILTER BY TIMESTAMP
+                    history = await self.client.agent.get_history(limit=10)
+                    for msg in history.messages:
+                        # Must be agent message AFTER our submission time
+                        msg_time = getattr(msg, "timestamp", None) or getattr(msg, "created_at", None)
+                        if msg_time:
+                            if isinstance(msg_time, str):
+                                msg_time = datetime.fromisoformat(msg_time.replace("Z", "+00:00"))
+                            if msg.is_agent and msg_time > submission_time and "Still processing" not in msg.content:
+                                response_text = msg.content
+                                logger.info(
+                                    f"Found response from history after {submission_time}: {response_text[:100]}..."
+                                )
+                                break
+
             # The mock LLM should have processed this - check we got a response
-            assert len(data["data"]["response"]) > 0, "Empty response"
-            logger.info(f"Vision interact response: {data['data']['response'][:200]}...")
+            assert len(response_text) > 0, "Empty response"
+            logger.info(f"Vision interact response: {response_text[:200]}...")
 
             # CRITICAL: Verify that images reached the mock LLM
             # The mock LLM includes [MULTIMODAL_DETECTED:N] in its response when images are detected
-            response_text = data["data"]["response"]
             assert "[MULTIMODAL_DETECTED:1]" in response_text, (
                 f"Mock LLM did not detect multimodal content! Images did not reach the LLM pipeline. "
                 f"Response: {response_text[:300]}"
             )
 
+            # CRITICAL: Always wait for task completion before test ends
+            # This ensures the task is marked COMPLETE in the database before the next test starts
+            if self.sse_helper and not self.sse_helper.task_complete_seen:
+                logger.info("Waiting for task completion before test ends...")
+                self.sse_helper.wait_for_task_complete(timeout=30.0)
+                # Extra delay to ensure database is updated
+                await asyncio.sleep(1.0)
+
     async def test_interact_multiple_images(self) -> None:
         """Test sending multiple images in a single message."""
+        from datetime import datetime, timezone
+
+        # Wait for any existing tasks to complete before starting
+        if self.sse_helper:
+            # Give time for any previous tasks to complete (including follow-up thoughts)
+            logger.info("Waiting for any active tasks to complete before multi-image vision test...")
+            self.sse_helper.wait_for_task_complete(timeout=30.0)
+            # Longer delay to ensure all follow-up thoughts complete
+            await asyncio.sleep(3.0)
+            # Reset flags for this test
+            self.sse_helper.task_complete_seen = False
+            self.sse_helper.completed_tasks.clear()
+
+        # Record submission time BEFORE sending - used to filter history
+        submission_time = datetime.now(timezone.utc)
+        waited_for_completion = False
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{self.base_url}/v1/agent/interact",
@@ -187,14 +269,51 @@ class VisionTests:
             assert "data" in data, "Missing 'data' in response"
             assert "response" in data["data"], "Missing 'response' in data"
 
+            response_text = data["data"]["response"]
+
+            # If we got "Still processing", wait for TASK_COMPLETE via SSE then get history
+            if "Still processing" in response_text and self.sse_helper:
+                logger.info("Response is 'Still processing', waiting for TASK_COMPLETE via SSE...")
+                completed = self.sse_helper.wait_for_task_complete(timeout=45.0)
+                waited_for_completion = True
+                if completed:
+                    # Get the actual response from history - FILTER BY TIMESTAMP
+                    history = await self.client.agent.get_history(limit=10)
+                    for msg in history.messages:
+                        # Must be agent message AFTER our submission time
+                        msg_time = getattr(msg, "timestamp", None) or getattr(msg, "created_at", None)
+                        if msg_time:
+                            if isinstance(msg_time, str):
+                                msg_time = datetime.fromisoformat(msg_time.replace("Z", "+00:00"))
+                            if msg.is_agent and msg_time > submission_time and "Still processing" not in msg.content:
+                                response_text = msg.content
+                                logger.info(
+                                    f"Found response from history after {submission_time}: {response_text[:100]}..."
+                                )
+                                break
+
+            logger.info(f"Multi-image response: {response_text[:200]}...")
+
             # CRITICAL: Verify that both images reached the mock LLM
             # The mock LLM includes [MULTIMODAL_DETECTED:N] in its response when images are detected
-            response_text = data["data"]["response"]
-            logger.info(f"Multi-image response: {response_text[:200]}...")
             assert "[MULTIMODAL_DETECTED:2]" in response_text, (
                 f"Mock LLM did not detect both images! Expected 2 images in multimodal detection. "
                 f"Response: {response_text[:300]}"
             )
+
+        # CRITICAL: Always wait for task completion before test ends (outside httpx context)
+        # This ensures the task is marked COMPLETE in the database before the next test starts
+        # Only wait if we didn't already wait in the "Still processing" branch
+        if self.sse_helper and not waited_for_completion:
+            logger.info("Waiting for task completion before multi-image test ends...")
+            # Wait for the TASK_COMPLETE that follows SPEAK
+            completed = self.sse_helper.wait_for_task_complete(timeout=45.0)
+            if completed:
+                logger.info("Multi-image task completed successfully")
+            else:
+                logger.warning("Multi-image task completion timeout - proceeding anyway")
+        # Extra delay to ensure database is fully updated
+        await asyncio.sleep(2.0)
 
     async def test_image_content_schema(self) -> None:
         """Test ImageContent schema functionality."""
@@ -236,12 +355,13 @@ class VisionTests:
             size_bytes=100,
         )
 
-        # Test with images (should return list of content blocks)
+        # Test with images (should return list of content block dicts)
         content = BaseDMA.build_multimodal_content("Describe this", [img])
         assert isinstance(content, list), "Multimodal content should be a list"
         assert len(content) == 2, "Should have text and image blocks"
-        assert content[0].type == "text", "First block should be text"
-        assert content[1].type == "image_url", "Second block should be image_url"
+        # Content blocks are serialized dicts (via model_dump), not objects
+        assert content[0]["type"] == "text", "First block should be text"
+        assert content[1]["type"] == "image_url", "Second block should be image_url"
 
         # Test without images (should return string)
         text_content = BaseDMA.build_multimodal_content("Just text", [])

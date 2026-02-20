@@ -9,11 +9,12 @@ from .adapter_manifest_tests import AdapterManifestTests
 from .air_tests import AIRTests
 from .api_tests import APITestModule
 from .billing_tests import BillingTests
+from .cirisnode_tests import CIRISNodeTests
 from .cognitive_state_api_tests import CognitiveStateAPITests
 from .consent_tests import ConsentTests
 from .context_enrichment_tests import ContextEnrichmentTests
-from .covenant_metrics_tests import CovenantMetricsTests
-from .covenant_tests import CovenantTestModule
+from .accord_metrics_tests import AccordMetricsTests
+from .accord_tests import AccordTestModule
 from .dream_live_tests import DreamLiveTests
 from .dsar_multi_source_tests import DSARMultiSourceTests
 from .dsar_tests import DSARTests
@@ -41,10 +42,11 @@ __all__ = [
     "AdapterManifestTests",
     "AIRTests",
     "APITestModule",
+    "CIRISNodeTests",
     "CognitiveStateAPITests",
     "ContextEnrichmentTests",
-    "CovenantMetricsTests",
-    "CovenantTestModule",
+    "AccordMetricsTests",
+    "AccordTestModule",
     "DreamLiveTests",
     "HandlerTestModule",
     "IdentityUpdateTests",

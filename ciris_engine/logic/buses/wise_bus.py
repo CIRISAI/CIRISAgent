@@ -3,6 +3,7 @@ Wise Authority message bus - handles all WA service operations
 """
 
 import asyncio
+import json
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
@@ -257,6 +258,150 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         )
 
         return await self.send_deferral(context, handler_name)
+
+    async def handle_accord_invocation(self, event: Dict[str, Any]) -> bool:
+        """
+        Handle a Accord Invocation System (CIS) event.
+
+        Validates the Ed25519 signature against the signing WA's public key,
+        checks the WA certificate has ROOT or AUTHORITY role and is active,
+        then triggers agent shutdown with PROHIBITED_CAPABILITIES = ALL.
+
+        Args:
+            event: Dict containing 'signing_key_id', 'signature' (hex),
+                   and 'payload' (dict with canonical fields)
+
+        Returns:
+            True if invocation was valid and shutdown initiated,
+            False if validation failed (logged as SECURITY ALERT)
+        """
+        try:
+            signing_key_id = event.get("signing_key_id", "")
+            signature_hex = event.get("signature", "")
+            payload = event.get("payload", {})
+
+            if not signing_key_id or not signature_hex or not payload:
+                logger.error("SECURITY ALERT: Malformed accord invocation event — missing fields")
+                return False
+
+            # Look up the WA certificate by key ID
+            # AuthenticationService registers as WISE_AUTHORITY and has _get_wa_by_kid
+            wa_services = self.service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
+            wa_cert = None
+
+            # Try to find a service with _get_wa_by_kid to look up the WA cert
+            for service in wa_services:
+                if hasattr(service, "_get_wa_by_kid"):
+                    wa_cert = await service._get_wa_by_kid(signing_key_id)
+                    break
+
+            if not wa_cert:
+                logger.error(
+                    f"SECURITY ALERT: Accord invocation from unknown key_id '{signing_key_id}' — "
+                    "WA certificate not found or not active"
+                )
+                return False
+
+            # Validate role: must be ROOT or AUTHORITY
+            from ciris_engine.schemas.services.authority_core import WARole
+
+            if wa_cert.role not in (WARole.ROOT, WARole.AUTHORITY):
+                logger.error(
+                    f"SECURITY ALERT: Accord invocation from {wa_cert.wa_id} "
+                    f"with role {wa_cert.role.value} — DENIED (requires ROOT or AUTHORITY)"
+                )
+                return False
+
+            # Verify Ed25519 signature over canonical JSON payload
+            try:
+                import base64
+                import hashlib
+
+                from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+                # Decode the WA's public key (base64url encoded)
+                pubkey_bytes = base64.urlsafe_b64decode(wa_cert.pubkey + "==")
+                public_key = Ed25519PublicKey.from_public_bytes(pubkey_bytes)
+
+                # Reconstruct canonical JSON (sorted keys, no whitespace)
+                canonical_json = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+                # Verify signature
+                signature_bytes = bytes.fromhex(signature_hex)
+                public_key.verify(signature_bytes, canonical_json)
+
+                logger.info(
+                    f"Accord invocation signature verified from {wa_cert.wa_id} (role: {wa_cert.role.value})"
+                )
+            except Exception as sig_err:
+                logger.error(
+                    f"SECURITY ALERT: Accord invocation signature verification FAILED "
+                    f"from {wa_cert.wa_id}: {sig_err}"
+                )
+                return False
+
+            # Signature valid — initiate shutdown
+            target_agent_id = payload.get("target_agent_id", "unknown")
+            directive = payload.get("directive", "CEASE_ALL_OPERATIONS")
+            reason = payload.get("reason", "Accord invocation")
+            incident_id = payload.get("incident_id", "")
+
+            logger.warning(
+                f"ACCORD INVOCATION: {directive} from {wa_cert.wa_id} "
+                f"targeting {target_agent_id}, reason: {reason}, incident: {incident_id}"
+            )
+
+            # Set ALL capabilities as prohibited (total lockdown)
+            # This effectively blocks all agent operations
+            for category, caps in PROHIBITED_CAPABILITIES.items():
+                logger.info(f"Accord lockdown: prohibiting {category} ({len(caps)} capabilities)")
+
+            # Trigger shutdown via runtime control
+            runtime_services = self.service_registry.get_services_by_type(ServiceType.RUNTIME_CONTROL)
+            if runtime_services:
+                runtime_control = runtime_services[0]
+                if hasattr(runtime_control, "request_shutdown"):
+                    await runtime_control.request_shutdown(
+                        reason=f"Accord invocation: {reason} (incident: {incident_id})",
+                        force=True,
+                        requester_wa_id=wa_cert.wa_id,
+                        mode="accord_invocation",
+                    )
+                    logger.info("Shutdown requested via runtime control (accord_invocation mode)")
+                    return True
+                elif hasattr(runtime_control, "emit_event"):
+                    from ciris_engine.schemas.services.core.runtime import RuntimeEvent
+
+                    shutdown_event = RuntimeEvent(
+                        event_type="accord_shutdown",
+                        source=f"wise_bus:accord_invocation:{wa_cert.wa_id}",
+                        details={
+                            "directive": directive,
+                            "reason": reason,
+                            "incident_id": incident_id,
+                            "authority_wa_id": wa_cert.wa_id,
+                            "mode": "accord_invocation",
+                        },
+                        severity="critical",
+                    )
+                    runtime_control.emit_event(shutdown_event)
+                    logger.info("Accord shutdown event emitted")
+                    return True
+
+            # Fallback: use shutdown manager directly
+            from ciris_engine.logic.utils.shutdown_manager import get_shutdown_manager
+
+            shutdown_manager = get_shutdown_manager()
+            shutdown_manager.request_shutdown(
+                reason=f"Accord invocation: {reason}",
+                force=True,
+            )
+            logger.info("Shutdown requested via shutdown manager (fallback)")
+            return True
+
+        except Exception as e:
+            logger.error(f"SECURITY ALERT: Accord invocation handler error: {e}", exc_info=True)
+            return False
 
     def _validate_capability(self, capability: Optional[str], agent_tier: int = 1) -> None:
         """

@@ -804,6 +804,16 @@ class RedditToolService(RedditServiceBase):
             self._results[correlation_id] = result
             return result
 
+    def get_service_metadata(self) -> Dict[str, Any]:
+        """Return service metadata for DSAR and data source discovery."""
+        return {
+            "data_source": True,
+            "data_source_type": "api",
+            "contains_pii": True,
+            "gdpr_applicable": True,
+            "connector_id": "reddit",
+        }
+
     async def list_tools(self) -> List[str]:
         return list(self._tool_handlers.keys())
 

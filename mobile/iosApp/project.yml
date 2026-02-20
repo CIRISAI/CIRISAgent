@@ -55,9 +55,11 @@ targets:
           HEADER_SEARCH_PATHS[sdk=iphoneos*]:
             - $(inherited)
             - $(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64/Python.framework/Headers
+            - $(PROJECT_DIR)/Frameworks/CIRISVerify.xcframework/ios-arm64/CIRISVerify.framework/Headers
           HEADER_SEARCH_PATHS[sdk=iphonesimulator*]:
             - $(inherited)
             - $(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64_x86_64-simulator/Python.framework/Headers
+            - $(PROJECT_DIR)/Frameworks/CIRISVerify.xcframework/ios-arm64-simulator/CIRISVerify.framework/Headers
         Release:
           FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]:
             - $(inherited)
@@ -70,13 +72,18 @@ targets:
           HEADER_SEARCH_PATHS[sdk=iphoneos*]:
             - $(inherited)
             - $(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64/Python.framework/Headers
+            - $(PROJECT_DIR)/Frameworks/CIRISVerify.xcframework/ios-arm64/CIRISVerify.framework/Headers
           HEADER_SEARCH_PATHS[sdk=iphonesimulator*]:
             - $(inherited)
             - $(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64_x86_64-simulator/Python.framework/Headers
+            - $(PROJECT_DIR)/Frameworks/CIRISVerify.xcframework/ios-arm64-simulator/CIRISVerify.framework/Headers
     dependencies:
       - framework: Frameworks/Python.xcframework
         embed: true
+      - framework: Frameworks/CIRISVerify.xcframework
+        embed: true
       - sdk: AuthenticationServices.framework
+      - sdk: Security.framework
     preBuildScripts:
       - name: Link KMP Shared Framework
         script: |

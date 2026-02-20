@@ -140,7 +140,7 @@ class AdaptersConfig(BaseModel):
     disabled_adapters: list[str] = Field(
         default_factory=lambda: [
             "sample_adapter",  # Example adapter, not for production use
-            "ciris_covenant_metrics",  # Requires explicit opt-in
+            "ciris_accord_metrics",  # Requires explicit opt-in
             "external_data_sql",  # Database adapter requires explicit configuration
         ],
         description="List of adapter names to exclude from auto-loading",

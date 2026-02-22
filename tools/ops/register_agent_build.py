@@ -96,9 +96,11 @@ def get_version() -> tuple[int, int, int]:
         constants_path = Path(__file__).parent.parent.parent / "ciris_engine" / "constants.py"
         with open(constants_path) as f:
             for line in f:
-                if line.startswith("CIRIS_VERSION"):
-                    # Parse: CIRIS_VERSION = "1.8.0"
+                if line.startswith("CIRIS_VERSION ="):
+                    # Parse: CIRIS_VERSION = "2.0.0-stable" or "1.8.0"
                     version_str = line.split('"')[1]
+                    # Strip suffix like -stable, -beta, -rc1
+                    version_str = version_str.split("-")[0]
                     parts = version_str.split(".")
                     return int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 0
     except Exception:

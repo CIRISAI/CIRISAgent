@@ -2195,40 +2195,76 @@ async def get_verify_status(
 
             # Audit trail check (Level 5)
             # Triple audit system: SQLite (ciris_audit.db), JSONL (audit_logs.jsonl), Graph (memory)
-            # We validate the audit trail exists and has entries signed by our key
+            # v0.6.16+: Use CIRISVerify verify_audit_trail for cryptographic verification
             audit_ok = False
-            audit_details = {"sources_checked": [], "sources_valid": []}
+            audit_details: dict = {"sources_checked": [], "sources_valid": []}
             try:
                 data_dir = os.environ.get("CIRIS_DATA_DIR", ".")
-
-                # Check SQLite audit database (primary)
                 audit_db_path = os.path.join(data_dir, "ciris_audit.db")
-                if os.path.exists(audit_db_path) and os.path.getsize(audit_db_path) > 0:
-                    audit_details["sources_checked"].append("sqlite")
-                    audit_details["sources_valid"].append("sqlite")
-                    audit_details["sqlite_path"] = audit_db_path
-                    audit_details["sqlite_size"] = os.path.getsize(audit_db_path)
-
-                # Check JSONL audit log (secondary)
                 jsonl_path = os.environ.get("AUDIT_LOG_PATH", os.path.join(data_dir, "audit_logs.jsonl"))
-                # Handle ~ expansion
                 jsonl_path = os.path.expanduser(jsonl_path)
-                if os.path.exists(jsonl_path) and os.path.getsize(jsonl_path) > 0:
-                    audit_details["sources_checked"].append("jsonl")
-                    audit_details["sources_valid"].append("jsonl")
-                    audit_details["jsonl_path"] = jsonl_path
-                    audit_details["jsonl_size"] = os.path.getsize(jsonl_path)
-
-                # Audit trail is valid if ANY source has entries
-                audit_ok = len(audit_details["sources_valid"]) > 0
-
-                # If we have a Registry-provisioned key, note it for enhanced verification
                 key_id = os.environ.get("CIRIS_SIGNING_KEY_ID", "")
-                if key_id:
-                    audit_details["registry_key_id"] = key_id
-                    audit_details["registry_verified"] = True  # Key from Portal = registered
 
-                logger.info(f"[verify-status] Audit trail check: {audit_ok} (sources={audit_details['sources_valid']})")
+                # v0.6.16+: Use CIRISVerify for cryptographic audit verification
+                if hasattr(verifier, "verify_audit_trail_sync"):
+                    logger.info("[verify-status] Using CIRISVerify audit trail verification (v0.6.16+)")
+                    try:
+                        audit_result = verifier.verify_audit_trail_sync(
+                            db_path=audit_db_path if os.path.exists(audit_db_path) else None,
+                            jsonl_path=jsonl_path if os.path.exists(jsonl_path) else None,
+                            portal_key_id=key_id if key_id else None,
+                        )
+                        audit_ok = getattr(audit_result, "valid", False)
+                        audit_details = {
+                            "verified_by": "ciris_verify",
+                            "valid": audit_ok,
+                            "total_entries": getattr(audit_result, "total_entries", 0),
+                            "entries_verified": getattr(audit_result, "entries_verified", 0),
+                            "hash_chain_valid": getattr(audit_result, "hash_chain_valid", False),
+                            "signatures_valid": getattr(audit_result, "signatures_valid", False),
+                            "genesis_valid": getattr(audit_result, "genesis_valid", False),
+                            "errors": getattr(audit_result, "errors", []),
+                            "verification_time_ms": getattr(audit_result, "verification_time_ms", 0),
+                        }
+                        chain_summary = getattr(audit_result, "chain_summary", None)
+                        if chain_summary:
+                            audit_details["chain_summary"] = {
+                                "sequence_range": getattr(chain_summary, "sequence_range", None),
+                                "current_hash": getattr(chain_summary, "current_hash", None),
+                                "oldest_entry": getattr(chain_summary, "oldest_entry", None),
+                                "newest_entry": getattr(chain_summary, "newest_entry", None),
+                            }
+                        logger.info(
+                            f"[verify-status] Audit trail verified: valid={audit_ok}, "
+                            f"entries={audit_details.get('entries_verified', 0)}/{audit_details.get('total_entries', 0)}, "
+                            f"hash_chain={audit_details.get('hash_chain_valid')}, sigs={audit_details.get('signatures_valid')}"
+                        )
+                    except Exception as verify_err:
+                        logger.warning(f"[verify-status] CIRISVerify audit verification failed: {verify_err}")
+                        # Fall through to legacy check
+                        audit_details["verify_error"] = str(verify_err)
+
+                # Legacy fallback: Check file existence (pre-v0.6.16)
+                if not audit_ok and not audit_details.get("verified_by"):
+                    if os.path.exists(audit_db_path) and os.path.getsize(audit_db_path) > 0:
+                        audit_details["sources_checked"].append("sqlite")
+                        audit_details["sources_valid"].append("sqlite")
+                        audit_details["sqlite_path"] = audit_db_path
+                        audit_details["sqlite_size"] = os.path.getsize(audit_db_path)
+
+                    if os.path.exists(jsonl_path) and os.path.getsize(jsonl_path) > 0:
+                        audit_details["sources_checked"].append("jsonl")
+                        audit_details["sources_valid"].append("jsonl")
+                        audit_details["jsonl_path"] = jsonl_path
+                        audit_details["jsonl_size"] = os.path.getsize(jsonl_path)
+
+                    audit_ok = len(audit_details.get("sources_valid", [])) > 0
+                    audit_details["verified_by"] = "file_check"
+
+                    if key_id:
+                        audit_details["registry_key_id"] = key_id
+
+                    logger.info(f"[verify-status] Audit trail check (legacy): {audit_ok} (sources={audit_details.get('sources_valid', [])})")
             except Exception as audit_err:
                 logger.warning(f"[verify-status] Audit trail check failed: {audit_err}")
 

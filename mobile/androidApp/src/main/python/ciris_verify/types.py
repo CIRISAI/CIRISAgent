@@ -266,3 +266,34 @@ class FileIntegrityResult(BaseModel):
     files_missing: int = Field(default=0, description="Files missing from disk")
     files_unexpected: int = Field(default=0, description="Unexpected files not in manifest")
     failure_reason: str = Field(default="", description="Opaque failure category")
+
+
+class BinaryIntegrityStatus(BaseModel):
+    """Binary self-verification status (v0.6.17).
+
+    Reports whether the running CIRISVerify binary matches its registry manifest.
+    This is the "who watches the watchmen" check.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    status: str = Field(..., description="verified/tampered/unavailable/not_found/pending")
+    version: str = Field(..., description="CIRISVerify binary version")
+    target: str = Field(..., description="Target platform (e.g., x86_64-unknown-linux-gnu)")
+    actual_hash: Optional[str] = Field(default=None, description="Computed hash of running binary")
+    expected_hash: Optional[str] = Field(default=None, description="Expected hash from registry")
+    matches: bool = Field(default=False, description="Whether hashes match")
+    error: Optional[str] = Field(default=None, description="Error message if verification failed")
+    verified_at: int = Field(default=0, description="Unix timestamp of verification")
+
+    def is_verified(self) -> bool:
+        """Check if binary is verified against registry."""
+        return self.status == "verified" and self.matches
+
+    def is_tampered(self) -> bool:
+        """Check if binary is detected as tampered."""
+        return self.status == "tampered"
+
+    def is_available(self) -> bool:
+        """Check if verification was possible (registry reachable)."""
+        return self.status not in ("unavailable", "not_found", "pending")

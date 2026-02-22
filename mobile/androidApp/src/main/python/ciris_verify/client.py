@@ -485,6 +485,22 @@ class CIRISVerify:
         except AttributeError:
             self._has_audit_trail_support = False
 
+        # ciris_verify_run_attestation (optional - added in 0.6.17)
+        # Unified attestation that fetches manifest from registry
+        self._has_run_attestation = False
+        try:
+            self._lib.ciris_verify_run_attestation.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # request_json (input)
+                ctypes.c_size_t,  # request_len
+                ctypes.POINTER(ctypes.c_void_p),  # result_json (out)
+                ctypes.POINTER(ctypes.c_size_t),  # result_len (out)
+            ]
+            self._lib.ciris_verify_run_attestation.restype = ctypes.c_int
+            self._has_run_attestation = True
+        except AttributeError:
+            pass  # Older library version
+
         # Initialize handle
         self._handle = self._lib.ciris_verify_init()
         if not self._handle:
@@ -1039,6 +1055,84 @@ class CIRISVerify:
         finally:
             if proof_data.value:
                 self._lib.ciris_verify_free(ctypes.c_char_p(proof_data.value))
+
+    # ========================================================================
+    # Unified Attestation (v0.6.17+)
+    # ========================================================================
+
+    def has_run_attestation_support(self) -> bool:
+        """Check if unified attestation is available (v0.6.17+).
+
+        Returns:
+            True if the library supports run_attestation.
+        """
+        return getattr(self, "_has_run_attestation", False)
+
+    def run_attestation_sync(
+        self,
+        challenge: bytes,
+        agent_version: str,
+        agent_root: str,
+        spot_check_count: int = 0,
+    ) -> dict:
+        """Run unified attestation with registry-based file integrity (v0.6.17+).
+
+        This is the preferred method for full attestation. It:
+        1. Queries the registry for the file manifest for the given version
+        2. Runs file integrity checks against the manifest
+        3. Returns complete attestation proof including file integrity
+
+        Args:
+            challenge: Random challenge bytes (32 bytes recommended).
+            agent_version: Agent version string (e.g., "2.0.0").
+            agent_root: Root directory of the agent installation.
+            spot_check_count: Number of files to spot-check. 0 = full check.
+
+        Returns:
+            dict with attestation result including:
+            - binary_version: CIRISVerify version
+            - file_integrity: File integrity result with total_files, files_checked, etc.
+            - attestation_proof: Cryptographic proof
+            - errors: List of any errors encountered
+        """
+        if not self._has_run_attestation:
+            return {
+                "error": "run_attestation not available (requires v0.6.17+)",
+                "file_integrity": {"valid": False, "reason": "not_supported"},
+            }
+
+        # Build request JSON
+        request = {
+            "challenge": list(challenge),
+            "agent_version": agent_version,
+            "agent_root": agent_root,
+            "spot_check_count": spot_check_count,
+        }
+        request_bytes = json.dumps(request).encode("utf-8")
+
+        result_data = ctypes.c_void_p()
+        result_len = ctypes.c_size_t()
+
+        ret = self._lib.ciris_verify_run_attestation(
+            self._handle,
+            request_bytes,
+            len(request_bytes),
+            ctypes.byref(result_data),
+            ctypes.byref(result_len),
+        )
+
+        if ret != 0:
+            return {
+                "error": f"run_attestation failed with code {ret}",
+                "file_integrity": {"valid": False, "reason": f"ffi_error_{ret}"},
+            }
+
+        try:
+            result_bytes = ctypes.string_at(result_data.value, result_len.value)
+            return json.loads(result_bytes)
+        finally:
+            if result_data.value:
+                self._lib.ciris_verify_free(ctypes.c_char_p(result_data.value))
 
     # ========================================================================
     # Audit Trail Verification

@@ -2138,7 +2138,7 @@ async def get_verify_status(
                 validation_status = "timeout"
 
             # File integrity check (Level 4)
-            # The binary handles everything - we just call it with the right params
+            # v0.6.17+: Use run_attestation_sync which fetches manifest from Registry
             file_integrity_ok = False
             total_files = 0
             files_checked = 0
@@ -2146,14 +2146,54 @@ async def get_verify_status(
             files_failed = 0
             integrity_failure_reason = None
             try:
-                if hasattr(verifier, "check_agent_integrity"):
-                    # Find manifest file and agent root
-                    agent_root = os.environ.get("CIRIS_AGENT_ROOT", os.getcwd())
-                    manifest_path = os.path.join(agent_root, "file_manifest.json")
+                # Get agent version and root
+                from ciris_engine.constants import CIRIS_VERSION
 
+                agent_version = CIRIS_VERSION
+                agent_root = os.environ.get("CIRIS_AGENT_ROOT", os.getcwd())
+                # On Android, use the Chaquopy extracted path
+                if platform_os == "android":
+                    try:
+                        import ciris_engine
+
+                        agent_root = os.path.dirname(os.path.dirname(ciris_engine.__file__))
+                    except Exception:
+                        pass
+
+                # v0.6.17+: Use unified attestation with registry-based manifest
+                if hasattr(verifier, "run_attestation_sync") or hasattr(verifier, "has_run_attestation_support"):
+                    if getattr(verifier, "has_run_attestation_support", lambda: False)():
+                        logger.info(
+                            f"[verify-status] Using run_attestation_sync (v0.6.17+) version={agent_version}, root={agent_root}"
+                        )
+                        challenge = os.urandom(32)
+                        attestation_result = verifier.run_attestation_sync(
+                            challenge=challenge,
+                            agent_version=agent_version,
+                            agent_root=agent_root,
+                            spot_check_count=spot_check_count,
+                        )
+                        # Extract file integrity from attestation result
+                        fi_result = attestation_result.get("file_integrity", {})
+                        file_integrity_ok = fi_result.get("valid", False)
+                        total_files = fi_result.get("total_files", 0)
+                        files_checked = fi_result.get("files_checked", 0)
+                        files_passed = fi_result.get("files_passed", 0)
+                        files_failed = fi_result.get("files_failed", 0)
+                        integrity_failure_reason = fi_result.get("reason") or attestation_result.get("error")
+                        logger.info(
+                            f"[verify-status] File integrity (registry): ok={file_integrity_ok}, "
+                            f"checked={files_checked}/{total_files}, passed={files_passed}, failed={files_failed}"
+                        )
+                    else:
+                        # run_attestation not available, use legacy method
+                        file_integrity_ok = False
+                        integrity_failure_reason = "run_attestation not available - update to v0.6.17+"
+                        logger.info("[verify-status] run_attestation_sync not available")
+                elif hasattr(verifier, "check_agent_integrity"):
+                    # Legacy: local manifest file check
+                    manifest_path = os.path.join(agent_root, "file_manifest.json")
                     if os.path.exists(manifest_path):
-                        # check_agent_integrity(manifest_path, agent_root, spot_check_count)
-                        # spot_check_count=0 for full check, >0 for spot check N files
                         import asyncio
 
                         loop = asyncio.new_event_loop()
@@ -2162,32 +2202,28 @@ async def get_verify_status(
                                 verifier.check_agent_integrity(
                                     manifest_path,
                                     agent_root,
-                                    spot_check_count,  # From outer scope: 0=full, 10=partial
+                                    spot_check_count,
                                 )
                             )
                         finally:
                             loop.close()
-
-                        # Extract detailed results
                         file_integrity_ok = getattr(integrity_result, "integrity_valid", False)
                         total_files = getattr(integrity_result, "total_files", 0)
                         files_checked = getattr(integrity_result, "files_checked", 0)
                         files_passed = getattr(integrity_result, "files_passed", 0)
                         files_failed = getattr(integrity_result, "files_failed", 0)
                         integrity_failure_reason = getattr(integrity_result, "failure_reason", None)
-
                         logger.info(
-                            f"[verify-status] File integrity: ok={file_integrity_ok}, checked={files_checked}/{total_files}, passed={files_passed}, failed={files_failed}"
+                            f"[verify-status] File integrity (legacy): ok={file_integrity_ok}, "
+                            f"checked={files_checked}/{total_files}"
                         )
                     else:
-                        # No manifest - assume OK for now (pre-distribution state)
-                        file_integrity_ok = True
-                        integrity_failure_reason = "No manifest file (pre-distribution)"
-                        logger.info("[verify-status] No manifest file, assuming OK (pre-distribution)")
+                        file_integrity_ok = False
+                        integrity_failure_reason = "No manifest - register build with Registry"
+                        logger.info("[verify-status] No manifest file, file integrity cannot be verified")
                 else:
-                    # Fallback: assume OK if binary loaded successfully
                     file_integrity_ok = binary_ok
-                    logger.info("[verify-status] No check_agent_integrity method, using binary_ok as proxy")
+                    logger.info("[verify-status] No file integrity method, using binary_ok as proxy")
             except Exception as fi_err:
                 logger.warning(f"[verify-status] File integrity check failed: {fi_err}")
                 file_integrity_ok = False

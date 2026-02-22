@@ -500,9 +500,11 @@ class InteractViewModel(
                                 // Add to timeline (persists for bubble net)
                                 addTimelineEvent(event.emoji, event.eventType)
 
-                                // Update processing state
+                                // Update processing state and status text
                                 if (event.isComplete) {
                                     _agentProcessingState.value = AgentProcessingState.IDLE
+                                    // Clear processing status text when task completes
+                                    _processingStatus.value = ""
                                 } else {
                                     _agentProcessingState.value = AgentProcessingState.PROCESSING
                                 }

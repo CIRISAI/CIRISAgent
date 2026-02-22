@@ -3,6 +3,7 @@ package ai.ciris.mobile.shared.api
 import ai.ciris.mobile.shared.models.*
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.viewmodels.AgentTemplateInfo
+import ai.ciris.mobile.shared.viewmodels.CheckDetail
 import ai.ciris.mobile.shared.viewmodels.ConfigItemData
 import ai.ciris.mobile.shared.viewmodels.SetupCompletionResult
 import ai.ciris.mobile.shared.viewmodels.StateTransitionResult
@@ -113,6 +114,25 @@ class CIRISApiClient(
 
     private fun logError(method: String, message: String) {
         PlatformLogger.e(TAG, "[$method] $message")
+    }
+
+    /**
+     * Parse the checks map from the verify-status response.
+     */
+    private fun parseChecks(checksObj: JsonObject?): Map<String, CheckDetail>? {
+        if (checksObj == null) return null
+        return checksObj.mapValues { (_, value) ->
+            val obj = value as? JsonObject
+            CheckDetail(
+                ok = (obj?.get("ok") as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                label = (obj?.get("label") as? JsonPrimitive)?.content ?: "",
+                level = (obj?.get("level") as? JsonPrimitive)?.content?.toIntOrNull() ?: 0,
+                filesChecked = (obj?.get("files_checked") as? JsonPrimitive)?.content?.toIntOrNull(),
+                filesPassed = (obj?.get("files_passed") as? JsonPrimitive)?.content?.toIntOrNull(),
+                filesFailed = (obj?.get("files_failed") as? JsonPrimitive)?.content?.toIntOrNull(),
+                failureReason = (obj?.get("failure_reason") as? JsonPrimitive)?.content
+            )
+        }
     }
 
     private fun logException(method: String, e: Exception, context: String = "") {
@@ -754,20 +774,33 @@ class CIRISApiClient(
      * - Key status (none, ephemeral, portal_pending, portal_active)
      * - Attestation status
      */
-    suspend fun getVerifyStatus(): VerifyStatusResponse {
+    suspend fun getVerifyStatus(
+        mode: String = "partial",
+        playIntegrityToken: String? = null,
+        playIntegrityNonce: String? = null
+    ): VerifyStatusResponse {
         val method = "getVerifyStatus"
-        logDebug(method, "Fetching CIRISVerify status")
+        logDebug(method, "Fetching CIRISVerify status (mode=$mode, hasPlayIntegrity=${playIntegrityToken != null})")
 
+        // Longer timeout for verify-status since attestation does network checks (DNS, HTTPS)
+        // Full mode takes longer due to complete file integrity check
+        val timeoutMs = if (mode == "full") 60000L else 30000L
         val client = HttpClient {
             install(ContentNegotiation) { json(jsonConfig) }
             install(HttpTimeout) {
-                requestTimeoutMillis = 10000
-                connectTimeoutMillis = 5000
+                requestTimeoutMillis = timeoutMs
+                connectTimeoutMillis = 10000
+                socketTimeoutMillis = timeoutMs
             }
         }
 
         return try {
-            val response = client.get("$baseUrl/v1/setup/verify-status")
+            // Build URL with optional play integrity parameters
+            var url = "$baseUrl/v1/setup/verify-status?mode=$mode"
+            if (playIntegrityToken != null && playIntegrityNonce != null) {
+                url += "&play_integrity_token=$playIntegrityToken&play_integrity_nonce=$playIntegrityNonce"
+            }
+            val response = client.get(url)
 
             if (response.status != HttpStatusCode.OK) {
                 val errorDetail = try {
@@ -790,8 +823,35 @@ class CIRISApiClient(
                 keyId = (data["key_id"] as? JsonPrimitive)?.content,
                 attestationStatus = (data["attestation_status"] as? JsonPrimitive)?.content ?: "not_attempted",
                 error = (data["error"] as? JsonPrimitive)?.content,
+                diagnosticInfo = (data["diagnostic_info"] as? JsonPrimitive)?.content,
                 disclaimer = (data["disclaimer"] as? JsonPrimitive)?.content
-                    ?: "CIRISVerify provides cryptographic attestation of agent identity."
+                    ?: "CIRISVerify provides cryptographic attestation of agent identity.",
+                // Attestation level checks
+                dnsUsOk = (data["dns_us_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                dnsEuOk = (data["dns_eu_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                httpsUsOk = (data["https_us_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                httpsEuOk = (data["https_eu_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                binaryOk = (data["binary_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                fileIntegrityOk = (data["file_integrity_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                registryOk = (data["registry_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                auditOk = (data["audit_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                envOk = (data["env_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                playIntegrityOk = (data["play_integrity_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                playIntegrityVerdict = (data["play_integrity_verdict"] as? JsonPrimitive)?.content,
+                maxLevel = (data["max_level"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0,
+                // New detailed fields
+                attestationMode = (data["attestation_mode"] as? JsonPrimitive)?.content ?: "partial",
+                platformOs = (data["platform_os"] as? JsonPrimitive)?.content,
+                platformArch = (data["platform_arch"] as? JsonPrimitive)?.content,
+                totalFiles = (data["total_files"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                filesChecked = (data["files_checked"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                filesPassed = (data["files_passed"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                filesFailed = (data["files_failed"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                integrityFailureReason = (data["integrity_failure_reason"] as? JsonPrimitive)?.content,
+                // Parse checks map (for detailed view)
+                checks = parseChecks(data["checks"] as? JsonObject),
+                // Keep details as raw JsonElement map for flexibility
+                details = (data["details"] as? JsonObject)?.mapValues { it.value }
             )
 
             logInfo(method, "Verify status: loaded=$loaded, keyStatus=${verifyStatus.keyStatus}, hardware=${verifyStatus.hardwareType}")
@@ -939,9 +999,13 @@ class CIRISApiClient(
                 adminPassword = request.admin_password,
                 oauthProvider = request.oauth_provider,
                 oauthExternalId = request.oauth_external_id,
-                oauthEmail = request.oauth_email
+                oauthEmail = request.oauth_email,
+                nodeUrl = request.node_url,
+                signingKeyId = request.signing_key_id,
+                signingKeyProvisioned = request.signing_key_provisioned,
+                provisionedSigningKeyB64 = request.provisioned_signing_key_b64
             )
-            logDebug(method, "Created SdkSetupCompleteRequest")
+            logDebug(method, "Created SdkSetupCompleteRequest with signingKeyId=${request.signing_key_id}")
 
             val response = setupApi.completeSetupV1SetupCompletePost(sdkRequest)
             logDebug(method, "Response: status=${response.status}")

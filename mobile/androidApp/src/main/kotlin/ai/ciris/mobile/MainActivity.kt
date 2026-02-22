@@ -13,6 +13,7 @@ import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.config.CIRISConfig
 import ai.ciris.mobile.shared.platform.AppRestarter
 import ai.ciris.mobile.shared.platform.PythonRuntime
+import ai.ciris.mobile.shared.diagnostics.NetworkDiagnosticsAndroid
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
@@ -96,6 +97,17 @@ class MainActivity : ComponentActivity() {
                 // Start logcat reader for service status updates
                 launch {
                     startLogcatReader()
+                }
+
+                // Run network diagnostics to debug CIRISVerify connectivity
+                launch(Dispatchers.IO) {
+                    try {
+                        Log.i(TAG, "Running CIRIS network diagnostics...")
+                        NetworkDiagnosticsAndroid.runAllDiagnostics()
+                        Log.i(TAG, "Network diagnostics completed")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Network diagnostics failed", e)
+                    }
                 }
 
                 // Start Python server

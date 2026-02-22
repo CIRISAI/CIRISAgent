@@ -4,12 +4,13 @@ import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.models.Platform
 import ai.ciris.mobile.shared.models.SetupMode
 import ai.ciris.mobile.shared.models.filterAdaptersForPlatform
+import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
+
 import ai.ciris.mobile.shared.viewmodels.DeviceAuthStatus
 import ai.ciris.mobile.shared.viewmodels.SetupStep
 import ai.ciris.mobile.shared.viewmodels.SetupFormState
 import ai.ciris.mobile.shared.viewmodels.SetupViewModel
-import ai.ciris.mobile.shared.viewmodels.VerifyStatusResponse
 import androidx.compose.animation.AnimatedVisibility
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -44,6 +45,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+private const val TAG = "SetupScreen"
 
 /**
  * Setup Wizard Screen - EXACTLY matches android/app/.../setup/ fragments
@@ -146,7 +149,7 @@ fun SetupScreen(
                     SetupStep.LLM_CONFIGURATION -> LlmConfigurationStep(viewModel, state)
                     SetupStep.OPTIONAL_FEATURES -> OptionalFeaturesStep(viewModel, state)
                     SetupStep.ACCOUNT_AND_CONFIRMATION -> AccountConfirmationStep(viewModel, state)
-                    SetupStep.VERIFY_SETUP -> VerifySetupStep(viewModel, state)
+                    SetupStep.VERIFY_SETUP -> OptionalFeaturesStep(viewModel, state) // Legacy - redirects to OPTIONAL_FEATURES
                     SetupStep.COMPLETE -> CompleteStep(onSetupComplete)
                 }
             }
@@ -178,7 +181,7 @@ fun SetupScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         Button(
                             onClick = {
-                                println("[SetupScreen] User chose to skip setup (already configured)")
+                                PlatformLogger.i(TAG, " User chose to skip setup (already configured)")
                                 onSetupComplete()
                             },
                             colors = ButtonDefaults.buttonColors(
@@ -197,38 +200,45 @@ fun SetupScreen(
                 canProceed = state.canProceedFromCurrentStep(),
                 validationError = state.getStepValidationError(),
                 isSubmitting = state.isSubmitting,
+                isNodeFlow = state.isNodeFlow,
                 onNext = {
-                    println("[SetupScreen] onNext clicked, currentStep=${state.currentStep}, canProceed=${state.canProceedFromCurrentStep()}")
-                    if (state.currentStep == SetupStep.ACCOUNT_AND_CONFIRMATION) {
+                    PlatformLogger.i(TAG, " onNext clicked, currentStep=${state.currentStep}, canProceed=${state.canProceedFromCurrentStep()}, isNodeFlow=${state.isNodeFlow}")
+                    // Determine if this is the final step before COMPLETE
+                    // - Normal flow: ACCOUNT_AND_CONFIRMATION is the final step
+                    // - Node flow: OPTIONAL_FEATURES is the final step (skips ACCOUNT_AND_CONFIRMATION)
+                    val isFinalStep = state.currentStep == SetupStep.ACCOUNT_AND_CONFIRMATION ||
+                        (state.isNodeFlow && state.currentStep == SetupStep.OPTIONAL_FEATURES)
+
+                    if (isFinalStep) {
                         // On final step, submit setup to API then advance
-                        println("[SetupScreen] Final step - launching coroutine to submit setup")
+                        PlatformLogger.i(TAG, " Final step - launching coroutine to submit setup")
                         coroutineScope.launch {
-                            println("[SetupScreen] Coroutine started - calling viewModel.completeSetup")
+                            PlatformLogger.i(TAG, " Coroutine started - calling viewModel.completeSetup")
                             try {
                                 // Run API call on IO dispatcher to avoid blocking main thread
                                 // Setup can take 20+ seconds as Python initializes services
                                 val result = withContext(Dispatchers.IO) {
                                     viewModel.completeSetup { request ->
                                         // Make API call to /v1/setup/complete
-                                        println("[SetupScreen] Calling apiClient.completeSetup with provider=${request.llm_provider}")
+                                        PlatformLogger.i(TAG, " Calling apiClient.completeSetup with provider=${request.llm_provider}")
                                         apiClient.completeSetup(request)
                                     }
                                 }
-                                println("[SetupScreen] completeSetup returned: success=${result.success}, error=${result.error}")
+                                PlatformLogger.i(TAG, " completeSetup returned: success=${result.success}, error=${result.error}")
                                 if (result.success) {
-                                    println("[SetupScreen] Setup successful - advancing to next step")
+                                    PlatformLogger.i(TAG, " Setup successful - advancing to next step")
                                     viewModel.nextStep()
                                 } else {
-                                    println("[SetupScreen] ERROR: Setup failed: ${result.error}")
+                                    PlatformLogger.i(TAG, " ERROR: Setup failed: ${result.error}")
                                     // Error is now shown in UI via state.submissionError
                                 }
                             } catch (e: Exception) {
-                                println("[SetupScreen] EXCEPTION in completeSetup: ${e.message}")
+                                PlatformLogger.i(TAG, " EXCEPTION in completeSetup: ${e.message}")
                                 e.printStackTrace()
                             }
                         }
                     } else {
-                        println("[SetupScreen] Not final step - calling viewModel.nextStep()")
+                        PlatformLogger.i(TAG, " Not final step - calling viewModel.nextStep()")
                         viewModel.nextStep()
                     }
                 },
@@ -254,7 +264,7 @@ private fun StepIndicators(
             SetupStep.WELCOME to "1",
             SetupStep.NODE_AUTH to "2",
             SetupStep.LLM_CONFIGURATION to "3",
-            SetupStep.VERIFY_SETUP to "4"
+            SetupStep.OPTIONAL_FEATURES to "4"
         )
     } else {
         listOf(
@@ -565,13 +575,6 @@ private fun WelcomeStep(
             }
         }
 
-        // Trust and Security card - shows CIRISVerify status (REQUIRED for 2.0)
-        Spacer(modifier = Modifier.height(16.dp))
-        TrustSecurityCard(
-            apiClient = apiClient,
-            modifier = Modifier.fillMaxWidth()
-        )
-
             // Bottom padding for scroll indicator
             Spacer(modifier = Modifier.height(32.dp))
         }
@@ -629,19 +632,10 @@ private fun NodeAuthStep(
         }
     }
 
-    // Poll for completion while waiting
-    LaunchedEffect(deviceAuth.status) {
-        if (deviceAuth.status == DeviceAuthStatus.WAITING) {
-            while (true) {
-                kotlinx.coroutines.delay(deviceAuth.interval.toLong() * 1000)
-                viewModel.pollNodeAuthStatus { deviceCode, portalUrl ->
-                    apiClient.pollNodeAuthStatus(deviceCode, portalUrl)
-                }
-                // Break if no longer waiting
-                if (viewModel.state.value.deviceAuth.status != DeviceAuthStatus.WAITING) break
-            }
-        }
-    }
+    // Manual polling triggered by "All Done!" button instead of automatic polling
+    // This prevents "unable to resolve localhost" when app returns from browser
+    var isChecking by remember { mutableStateOf(false) }
+    var checkError by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = modifier
@@ -772,18 +766,68 @@ private fun NodeAuthStep(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Polling spinner
-                CircularProgressIndicator(
-                    color = SetupColors.Primary,
-                    modifier = Modifier.size(24.dp),
-                    strokeWidth = 2.dp
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Waiting for authorization...",
-                    color = SetupColors.TextSecondary,
-                    fontSize = 14.sp
-                )
+                // "All Done!" button for manual check after returning from browser
+                if (isChecking) {
+                    CircularProgressIndicator(
+                        color = SetupColors.Primary,
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Checking authorization...",
+                        color = SetupColors.TextSecondary,
+                        fontSize = 14.sp
+                    )
+                } else {
+                    Text(
+                        text = "After completing authorization in your browser, tap the button below:",
+                        color = SetupColors.TextSecondary,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    Button(
+                        onClick = {
+                            isChecking = true
+                            checkError = null
+                            coroutineScope.launch {
+                                try {
+                                    viewModel.pollNodeAuthStatus { deviceCode, portalUrl ->
+                                        apiClient.pollNodeAuthStatus(deviceCode, portalUrl)
+                                    }
+                                } catch (e: Exception) {
+                                    checkError = e.message ?: "Check failed"
+                                } finally {
+                                    isChecking = false
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SetupColors.SuccessDark
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                    ) {
+                        Text(
+                            "All Done!",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    checkError?.let { error ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = error,
+                            color = Color.Red,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
             }
 
             DeviceAuthStatus.COMPLETE -> {
@@ -870,174 +914,6 @@ private fun NodeAuthStep(
                 }
             }
         }
-    }
-}
-
-// ========== CIRISVerify Setup Step ==========
-@Composable
-private fun VerifySetupStep(
-    viewModel: SetupViewModel,
-    state: SetupFormState,
-    modifier: Modifier = Modifier
-) {
-    val verifyState = state.verifySetup
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "CIRISVerify",
-            color = SetupColors.TextPrimary,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        Text(
-            text = "CIRISVerify provides hardware-rooted license verification for your agent.",
-            color = SetupColors.TextSecondary,
-            fontSize = 14.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(bottom = 24.dp)
-        )
-
-        // Enable toggle
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = if (verifyState.enabled) SetupColors.SuccessLight else SetupColors.GrayLight,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { viewModel.setVerifyEnabled(!verifyState.enabled) }
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Install CIRISVerify",
-                        color = SetupColors.TextPrimary,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Enables hardware attestation and license verification",
-                        color = SetupColors.TextSecondary,
-                        fontSize = 13.sp
-                    )
-                }
-                Switch(
-                    checked = verifyState.enabled,
-                    onCheckedChange = { viewModel.setVerifyEnabled(it) },
-                    colors = SwitchDefaults.colors(
-                        checkedTrackColor = SetupColors.SuccessDark
-                    )
-                )
-            }
-        }
-
-        if (verifyState.enabled) {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Download status
-            if (verifyState.downloaded) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SetupColors.SuccessLight,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "✓ CIRISVerify Installed",
-                            color = SetupColors.SuccessDark,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        verifyState.version?.let {
-                            Text(
-                                text = "Version: $it",
-                                color = SetupColors.SuccessText,
-                                fontSize = 13.sp
-                            )
-                        }
-                    }
-                }
-            } else if (verifyState.downloading) {
-                CircularProgressIndicator(
-                    color = SetupColors.Primary,
-                    modifier = Modifier.padding(16.dp)
-                )
-                Text(
-                    text = "Downloading CIRISVerify...",
-                    color = SetupColors.TextSecondary,
-                    fontSize = 14.sp
-                )
-            } else {
-                // TODO: Wire download button to actual POST /v1/setup/verify/download.
-                // MVP: Placeholder button (download func not yet implemented).
-                Button(
-                    onClick = { /* TODO: Implement download */ },
-                    colors = ButtonDefaults.buttonColors(containerColor = SetupColors.Primary),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Download CIRISVerify", fontWeight = FontWeight.Bold)
-                }
-            }
-
-            // Hardware requirement toggle
-            Spacer(modifier = Modifier.height(16.dp))
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = SetupColors.GrayLight,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { viewModel.setVerifyRequireHardware(!verifyState.requireHardware) }
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Require Hardware Attestation",
-                            color = SetupColors.TextPrimary,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Requires TPM or Secure Enclave for verification",
-                            color = SetupColors.TextSecondary,
-                            fontSize = 12.sp
-                        )
-                    }
-                    Switch(
-                        checked = verifyState.requireHardware,
-                        onCheckedChange = { viewModel.setVerifyRequireHardware(it) }
-                    )
-                }
-            }
-
-            verifyState.error?.let { error ->
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = error,
-                    color = Color(0xFFDC2626),
-                    fontSize = 13.sp
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            text = "You can skip this step and configure CIRISVerify later.",
-            color = SetupColors.TextSecondary,
-            fontSize = 13.sp,
-            textAlign = TextAlign.Center
-        )
     }
 }
 
@@ -1551,379 +1427,6 @@ private fun BenefitRow(text: String) {
     }
 }
 
-// ========== Trust and Security Card ==========
-// Additional colors for Trust and Security card
-private object TrustColors {
-    val EmeraldLight = Color(0xFFD1FAE5)
-    val EmeraldBorder = Color(0xFF6EE7B7)
-    val EmeraldDark = Color(0xFF065F46)
-    val EmeraldText = Color(0xFF047857)
-    val EmeraldMuted = Color(0xFFA7F3D0)
-
-    val WarningLight = Color(0xFFFEF3C7)
-    val WarningBorder = Color(0xFFFCD34D)
-    val WarningDark = Color(0xFF92400E)
-    val WarningText = Color(0xFFD97706)
-
-    val ErrorLight = Color(0xFFFEE2E2)
-    val ErrorBorder = Color(0xFFFCA5A5)
-    val ErrorDark = Color(0xFF991B1B)
-    val ErrorText = Color(0xFFDC2626)
-}
-
-/**
- * Trust and Security Card
- *
- * Displays CIRISVerify status including:
- * - Library loaded status (REQUIRED for CIRIS 2.0+)
- * - Hardware security type
- * - Key status (Portal key activation)
- * - Attestation status
- * - Disclaimer about cryptographic verification
- */
-@Composable
-private fun TrustSecurityCard(
-    apiClient: CIRISApiClient,
-    modifier: Modifier = Modifier
-) {
-    var verifyStatus by remember { mutableStateOf<VerifyStatusResponse?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
-    val coroutineScope = rememberCoroutineScope()
-    val uriHandler = LocalUriHandler.current
-
-    // Fetch verify status on mount and refresh every 30 seconds
-    LaunchedEffect(Unit) {
-        while (true) {
-            try {
-                verifyStatus = withContext(Dispatchers.IO) {
-                    apiClient.getVerifyStatus()
-                }
-                error = null
-            } catch (e: Exception) {
-                error = e.message ?: "Failed to fetch verify status"
-            } finally {
-                loading = false
-            }
-            delay(30000) // Refresh every 30 seconds
-        }
-    }
-
-    // Loading state
-    if (loading) {
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = SetupColors.GrayLight,
-            modifier = modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.33f)
-                        .height(16.dp)
-                        .background(Color(0xFFE5E7EB), RoundedCornerShape(4.dp))
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.66f)
-                        .height(12.dp)
-                        .background(Color(0xFFE5E7EB), RoundedCornerShape(4.dp))
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.5f)
-                        .height(12.dp)
-                        .background(Color(0xFFE5E7EB), RoundedCornerShape(4.dp))
-                )
-            }
-        }
-        return
-    }
-
-    // CIRISVerify not loaded - CRITICAL ERROR for 2.0
-    if (verifyStatus?.loaded != true) {
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = TrustColors.ErrorLight,
-            modifier = modifier
-                .fillMaxWidth()
-                .border(1.dp, TrustColors.ErrorBorder, RoundedCornerShape(12.dp))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                ) {
-                    Text(
-                        text = "⚠",
-                        color = TrustColors.ErrorDark,
-                        fontSize = 18.sp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "CIRISVerify Required",
-                        color = TrustColors.ErrorDark,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Text(
-                    text = "CIRISVerify is required for CIRIS 2.0 agents. The agent cannot operate without cryptographic identity verification.",
-                    color = TrustColors.ErrorText,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp
-                )
-
-                (error ?: verifyStatus?.error)?.let { errMsg ->
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = TrustColors.ErrorLight.copy(alpha = 0.5f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp)
-                    ) {
-                        Text(
-                            text = errMsg,
-                            color = TrustColors.ErrorDark,
-                            fontSize = 11.sp,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                            modifier = Modifier.padding(8.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(color = TrustColors.ErrorBorder.copy(alpha = 0.5f))
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Install CIRISVerify →",
-                    color = TrustColors.ErrorDark,
-                    fontSize = 12.sp,
-                    textDecoration = TextDecoration.Underline,
-                    modifier = Modifier.clickable {
-                        uriHandler.openUri("https://github.com/CIRISAI/CIRISVerify")
-                    }
-                )
-            }
-        }
-        return
-    }
-
-    // CIRISVerify loaded - show status
-    val status = verifyStatus!!
-
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = TrustColors.EmeraldLight,
-        modifier = modifier
-            .fillMaxWidth()
-            .border(1.dp, TrustColors.EmeraldBorder, RoundedCornerShape(12.dp))
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Header row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "🛡",
-                        fontSize = 18.sp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Trust & Security",
-                        color = TrustColors.EmeraldDark,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                status.version?.let { version ->
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = TrustColors.EmeraldMuted
-                    ) {
-                        Text(
-                            text = "v$version",
-                            color = TrustColors.EmeraldDark,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Status grid
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Hardware column
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Hardware",
-                        color = TrustColors.EmeraldText,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = status.hardwareType?.replace("_", " ") ?: "Unknown",
-                        color = TrustColors.EmeraldDark,
-                        fontSize = 13.sp
-                    )
-                }
-
-                // Key status column
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Key Status",
-                        color = TrustColors.EmeraldText,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    val (keyLabel, keyColor) = getKeyStatusLabel(status.keyStatus)
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = keyColor.copy(alpha = 0.2f)
-                    ) {
-                        Text(
-                            text = keyLabel,
-                            color = keyColor,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Attestation column
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Attestation",
-                        color = TrustColors.EmeraldText,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    val (attestLabel, attestColor) = getAttestationLabel(status.attestationStatus)
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = attestColor.copy(alpha = 0.2f)
-                    ) {
-                        Text(
-                            text = attestLabel,
-                            color = attestColor,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-
-                // Key ID column (if present)
-                status.keyId?.let { keyId ->
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Key ID",
-                            color = TrustColors.EmeraldText,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = if (keyId.length > 12) "${keyId.take(6)}...${keyId.takeLast(4)}" else keyId,
-                            color = TrustColors.EmeraldDark,
-                            fontSize = 11.sp,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                        )
-                    }
-                }
-            }
-
-            // Disclaimer
-            Spacer(modifier = Modifier.height(12.dp))
-            Surface(
-                shape = RoundedCornerShape(4.dp),
-                color = TrustColors.EmeraldMuted.copy(alpha = 0.5f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = "CIRISVerify provides cryptographic attestation of agent identity. This enables participation in the Coherence Ratchet and CIRIS Scoring.",
-                    color = TrustColors.EmeraldText,
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp,
-                    modifier = Modifier.padding(8.dp)
-                )
-            }
-
-            // Links
-            Spacer(modifier = Modifier.height(12.dp))
-            HorizontalDivider(color = TrustColors.EmeraldBorder.copy(alpha = 0.5f))
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "Coherence Ratchet",
-                    color = TrustColors.EmeraldText,
-                    fontSize = 11.sp,
-                    modifier = Modifier.clickable {
-                        uriHandler.openUri("https://ciris.ai/coherence-ratchet")
-                    }
-                )
-                Text("·", color = TrustColors.EmeraldText, fontSize = 11.sp)
-                Text(
-                    text = "CIRIS Scoring",
-                    color = TrustColors.EmeraldText,
-                    fontSize = 11.sp,
-                    modifier = Modifier.clickable {
-                        uriHandler.openUri("https://ciris.ai/ciris-scoring")
-                    }
-                )
-                Text("·", color = TrustColors.EmeraldText, fontSize = 11.sp)
-                Text(
-                    text = "CIRISVerify",
-                    color = TrustColors.EmeraldText,
-                    fontSize = 11.sp,
-                    modifier = Modifier.clickable {
-                        uriHandler.openUri("https://github.com/CIRISAI/CIRISVerify")
-                    }
-                )
-            }
-        }
-    }
-}
-
-private fun getKeyStatusLabel(keyStatus: String): Pair<String, Color> {
-    return when (keyStatus) {
-        "portal_active" -> "Portal Key Active" to Color(0xFF047857)
-        "portal_pending" -> "Portal Key Pending" to Color(0xFFD97706)
-        "ephemeral" -> "Ephemeral Key" to Color(0xFF1D4ED8)
-        else -> "No Key" to Color(0xFF6B7280)
-    }
-}
-
-private fun getAttestationLabel(attestation: String): Pair<String, Color> {
-    return when (attestation) {
-        "verified" -> "Verified" to Color(0xFF047857)
-        "pending" -> "Pending" to Color(0xFFD97706)
-        "failed" -> "Failed" to Color(0xFFDC2626)
-        else -> "Not Attempted" to Color(0xFF6B7280)
-    }
-}
-
 @Composable
 private fun AdapterToggleItem(
     name: String,
@@ -2243,6 +1746,7 @@ private fun NavigationButtons(
     canProceed: Boolean,
     validationError: String?,
     isSubmitting: Boolean,
+    isNodeFlow: Boolean,
     onNext: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
@@ -2302,10 +1806,13 @@ private fun NavigationButtons(
                             strokeWidth = 2.dp
                         )
                     } else {
+                        // Determine button text based on step and flow type
+                        val isFinalStep = currentStep == SetupStep.ACCOUNT_AND_CONFIRMATION ||
+                            (isNodeFlow && currentStep == SetupStep.OPTIONAL_FEATURES)
                         Text(
-                            when (currentStep) {
-                                SetupStep.WELCOME -> "Continue →"
-                                SetupStep.ACCOUNT_AND_CONFIRMATION -> "Finish Setup"
+                            when {
+                                currentStep == SetupStep.WELCOME -> "Continue →"
+                                isFinalStep -> "Finish Setup"
                                 else -> "Next"
                             }
                         )

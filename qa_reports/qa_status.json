@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-02-19T21:37:55.163033+00:00",
+  "last_updated": "2026-02-20T01:56:01.383439+00:00",
   "version": "2.0.0-beta",
   "modules": {
     "_comment_core": "=== CORE API MODULES ===",
@@ -443,11 +443,20 @@
       "status": "passing",
       "duration_seconds": 74.09,
       "context": "Comprehensive API coverage test suite including all REST endpoints for system, telemetry, memory, agent, audit, tools, auth, guidance, and emergency operations with real HTTP calls."
+    },
+    "licensed_agent": {
+      "last_run": "2026-02-20T01:56:01.383417+00:00",
+      "passed": 5,
+      "failed": 0,
+      "total": 5,
+      "status": "passing",
+      "duration_seconds": 0.88,
+      "context": null
     }
   },
   "summary": {
-    "total_modules": 49,
-    "passing": 45,
+    "total_modules": 50,
+    "passing": 46,
     "failing": 2,
     "not_run": 2
   }

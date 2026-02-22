@@ -4,6 +4,7 @@ import ai.ciris.mobile.shared.models.CommunicationAdapter
 import ai.ciris.mobile.shared.models.SetupMode
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /**
  * Setup wizard state management.
@@ -124,7 +125,7 @@ data class SetupFormState(
     val currentStep: SetupStep = SetupStep.WELCOME,
 
     // Node flow flag: when true, step sequence is modified
-    // WELCOME → NODE_AUTH → LLM_CONFIGURATION → VERIFY_SETUP → COMPLETE
+    // WELCOME → NODE_AUTH → LLM_CONFIGURATION → OPTIONAL_FEATURES → COMPLETE
     val isNodeFlow: Boolean = false,
 
     // Device auth state (Connect to Node flow)
@@ -365,6 +366,114 @@ data class VerifyStatusResponse(
     val attestationStatus: String = "not_attempted",
     /** Error message if verify failed to load */
     val error: String? = null,
+    /** Detailed diagnostic info for troubleshooting */
+    @SerialName("diagnostic_info")
+    val diagnosticInfo: String? = null,
     /** Trust and security disclaimer text */
-    val disclaimer: String = "CIRISVerify provides cryptographic attestation of agent identity."
+    val disclaimer: String = "CIRISVerify provides cryptographic attestation of agent identity.",
+
+    // === Attestation Level Checks ===
+    /** CIRIS DNS connectivity (US) */
+    @SerialName("dns_us_ok")
+    val dnsUsOk: Boolean = false,
+    /** CIRIS DNS connectivity (EU) */
+    @SerialName("dns_eu_ok")
+    val dnsEuOk: Boolean = false,
+    /** CIRIS HTTPS connectivity (US) */
+    @SerialName("https_us_ok")
+    val httpsUsOk: Boolean = false,
+    /** CIRIS HTTPS connectivity (EU) */
+    @SerialName("https_eu_ok")
+    val httpsEuOk: Boolean = false,
+    /** CIRISVerify binary loaded and functional */
+    @SerialName("binary_ok")
+    val binaryOk: Boolean = false,
+    /** File integrity verified */
+    @SerialName("file_integrity_ok")
+    val fileIntegrityOk: Boolean = false,
+    /** Signing key registered with Portal/Registry */
+    @SerialName("registry_ok")
+    val registryOk: Boolean = false,
+    /** Audit trail intact */
+    @SerialName("audit_ok")
+    val auditOk: Boolean = false,
+    /** Environment (.env) properly configured */
+    @SerialName("env_ok")
+    val envOk: Boolean = false,
+    /** Google Play Integrity verification passed */
+    @SerialName("play_integrity_ok")
+    val playIntegrityOk: Boolean = false,
+    /** Play Integrity verdict (MEETS_STRONG_INTEGRITY, etc.) */
+    @SerialName("play_integrity_verdict")
+    val playIntegrityVerdict: String? = null,
+    /** Maximum attestation level achieved (0-5) */
+    @SerialName("max_level")
+    val maxLevel: Int = 0,
+    /** Attestation mode: 'full' or 'partial' */
+    @SerialName("attestation_mode")
+    val attestationMode: String = "partial",
+    /** Per-check details with ok/label/level */
+    val checks: Map<String, CheckDetail>? = null,
+    /** Full attestation details from CIRISVerify */
+    val details: Map<String, kotlinx.serialization.json.JsonElement>? = null,
+    /** Platform OS from attestation */
+    @SerialName("platform_os")
+    val platformOs: String? = null,
+    /** Platform architecture */
+    @SerialName("platform_arch")
+    val platformArch: String? = null,
+    /** Total files in registry manifest */
+    @SerialName("total_files")
+    val totalFiles: Int? = null,
+    /** Number of files checked for integrity */
+    @SerialName("files_checked")
+    val filesChecked: Int? = null,
+    /** Number of files that passed integrity */
+    @SerialName("files_passed")
+    val filesPassed: Int? = null,
+    /** Number of files that failed integrity */
+    @SerialName("files_failed")
+    val filesFailed: Int? = null,
+    /** Reason for integrity failure if any */
+    @SerialName("integrity_failure_reason")
+    val integrityFailureReason: String? = null,
+
+    // === v0.6.0 Fields ===
+    /** Function integrity: verified, tampered, unavailable:{reason}, signature_invalid, not_found, pending */
+    @SerialName("function_integrity")
+    val functionIntegrity: String? = null,
+    /** Per-source error details: {source: {category: str, details: str}} */
+    @SerialName("source_errors")
+    val sourceErrors: Map<String, SourceErrorDetail>? = null
+)
+
+/**
+ * Detail for a single attestation check.
+ */
+@Serializable
+data class CheckDetail(
+    val ok: Boolean = false,
+    val label: String = "",
+    val level: Int = 0,
+    // File integrity specific
+    @SerialName("total_files")
+    val totalFiles: Int? = null,
+    @SerialName("files_checked")
+    val filesChecked: Int? = null,
+    @SerialName("files_passed")
+    val filesPassed: Int? = null,
+    @SerialName("files_failed")
+    val filesFailed: Int? = null,
+    @SerialName("failure_reason")
+    val failureReason: String? = null
+)
+
+/**
+ * v0.6.0: Per-source error details for network validation.
+ * Categories: timeout, dns_resolution, tls_error, connection_refused, network_unreachable, server_error
+ */
+@Serializable
+data class SourceErrorDetail(
+    val category: String = "unknown",
+    val details: String = ""
 )

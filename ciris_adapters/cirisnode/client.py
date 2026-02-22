@@ -250,14 +250,15 @@ class CIRISNodeClient:
         )
 
     async def register_public_key(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Register agent's Ed25519 public key with CIRISPortal.
+        """Register agent's Ed25519 public key with CIRISNode.
 
-        The key is cross-validated against CIRISRegistry if org_id is provided.
-        Agent token used if available (optional).
+        CIRISNode verifies the key fingerprint against CIRISRegistry via gRPC.
+        This enables signature verification for WBD deferrals and covenant traces.
+        Agent token used if available (optional bootstrap auth).
         """
-        return await self._portal_request(
+        return await self._request(
             "POST",
-            "/api/v1/accord/public-keys",
+            "/api/v1/covenant/public-keys",
             json_data=payload,
             use_agent_token=True,
         )

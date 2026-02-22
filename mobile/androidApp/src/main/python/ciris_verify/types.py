@@ -177,6 +177,15 @@ class SourceDetails(BaseModel):
     validation_status: ValidationStatus = ValidationStatus.NO_SOURCES_REACHABLE
     sources_agreeing: int = 0
 
+    # Error details for each source (added in v0.6.6)
+    # These expose the actual network error when a source fails
+    dns_us_error: Optional[str] = None
+    dns_us_error_category: Optional[str] = None
+    dns_eu_error: Optional[str] = None
+    dns_eu_error_category: Optional[str] = None
+    https_error: Optional[str] = None
+    https_error_category: Optional[str] = None
+
 
 class AttestationData(BaseModel):
     """Hardware attestation data."""

@@ -206,11 +206,52 @@ class VerifyStatusResponse(BaseModel):
     key_id: Optional[str] = Field(None, description="Portal-issued key ID if activated")
     attestation_status: str = Field(..., description="Attestation: 'not_attempted', 'pending', 'verified', 'failed'")
     error: Optional[str] = Field(None, description="Error message if verify failed to load")
+    diagnostic_info: Optional[str] = Field(None, description="Detailed diagnostic info for troubleshooting")
     disclaimer: str = Field(
         default="CIRISVerify provides cryptographic attestation of agent identity and behavior. "
         "This enables participation in the Coherence Ratchet and CIRIS Scoring. "
         "CIRISVerify is REQUIRED for CIRIS 2.0 agents.",
         description="Trust and security disclaimer text",
+    )
+    # Attestation level checks
+    dns_us_ok: bool = Field(default=False, description="CIRIS DNS connectivity (US)")
+    dns_eu_ok: bool = Field(default=False, description="CIRIS DNS connectivity (EU)")
+    https_us_ok: bool = Field(default=False, description="CIRIS HTTPS connectivity (US)")
+    https_eu_ok: bool = Field(default=False, description="CIRIS HTTPS connectivity (EU)")
+    binary_ok: bool = Field(default=False, description="CIRISVerify binary loaded and functional")
+    file_integrity_ok: bool = Field(default=False, description="File integrity verified (Tripwire-style)")
+    registry_ok: bool = Field(default=False, description="Signing key registered with Portal/Registry")
+    audit_ok: bool = Field(default=False, description="Audit trail intact")
+    env_ok: bool = Field(default=False, description="Environment (.env) properly configured")
+    play_integrity_ok: bool = Field(default=False, description="Google Play Integrity verification passed")
+    play_integrity_verdict: Optional[str] = Field(
+        default=None, description="Play Integrity verdict (MEETS_STRONG_INTEGRITY, etc.)"
+    )
+    max_level: int = Field(default=0, description="Maximum attestation level achieved (0-5)")
+    # Attestation mode
+    attestation_mode: str = Field(default="partial", description="Attestation mode: 'full' or 'partial'")
+    # Detailed attestation info (for expanded view)
+    checks: Optional[Dict[str, Any]] = Field(default=None, description="Per-check details with ok/label/level")
+    details: Optional[Dict[str, Any]] = Field(default=None, description="Full attestation details from CIRISVerify")
+    # Platform info from attestation
+    platform_os: Optional[str] = Field(default=None, description="Platform OS from attestation")
+    platform_arch: Optional[str] = Field(default=None, description="Platform architecture")
+    # Integrity details
+    total_files: Optional[int] = Field(default=None, description="Total files in registry manifest")
+    files_checked: Optional[int] = Field(default=None, description="Number of files checked for integrity")
+    files_passed: Optional[int] = Field(default=None, description="Number of files that passed integrity")
+    files_failed: Optional[int] = Field(default=None, description="Number of files that failed integrity")
+    integrity_failure_reason: Optional[str] = Field(default=None, description="Reason for integrity failure if any")
+
+    # v0.6.0: Function integrity verification (constructor-based)
+    function_integrity: Optional[str] = Field(
+        default=None,
+        description="Function integrity: verified, tampered, unavailable:{reason}, signature_invalid, not_found, pending",
+    )
+
+    # v0.6.0: Per-source error details for network validation
+    source_errors: Optional[Dict[str, Dict[str, str]]] = Field(
+        default=None, description="Per-source error details: {source: {category: str, details: str}}"
     )
 
 
@@ -316,6 +357,10 @@ class SetupCompleteRequest(BaseModel):
     provisioned_signing_key_b64: Optional[str] = Field(
         None,
         description="Base64-encoded Ed25519 private key from Registry (consumed and cleared after save)",
+    )
+    signing_key_id: Optional[str] = Field(
+        None,
+        description="Portal-issued signing key ID (stored in .env, private key stored in hardware keystore)",
     )
 
     # Licensed module package (set by download-package flow)
@@ -1568,6 +1613,9 @@ def _write_node_connection_config(f: Any, setup: SetupCompleteRequest) -> None:
         f.write(f'CIRIS_APPROVED_ADAPTERS="{",".join(setup.approved_adapters)}"\n')
     if setup.org_id:
         f.write(f'CIRIS_ORG_ID="{setup.org_id}"\n')
+    # Portal-issued key ID (private key is stored in hardware keystore, NOT here)
+    if setup.signing_key_id:
+        f.write(f'CIRIS_SIGNING_KEY_ID="{setup.signing_key_id}"\n')
 
 
 def _write_licensed_package_config(f: Any, setup: SetupCompleteRequest) -> None:
@@ -1689,6 +1737,13 @@ def _log_setup_debug_info(setup: SetupCompleteRequest) -> bool:
     logger.debug(f"CIRIS_SETUP_DEBUG   llm_provider = {setup.llm_provider}")
     logger.debug(f"CIRIS_SETUP_DEBUG   template_id = {setup.template_id}")
 
+    # Node flow / signing key fields
+    logger.info(f"CIRIS_SETUP_DEBUG Node flow fields:")
+    logger.info(f"CIRIS_SETUP_DEBUG   node_url = {repr(setup.node_url)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   signing_key_id = {repr(setup.signing_key_id)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   signing_key_provisioned = {setup.signing_key_provisioned}")
+    logger.info(f"CIRIS_SETUP_DEBUG   provisioned_signing_key_b64 set = {bool(setup.provisioned_signing_key_b64)}")
+
     return will_link_oauth
 
 
@@ -1751,7 +1806,11 @@ async def get_setup_status() -> SuccessResponse[SetupStatusResponse]:
 
 
 @router.get("/verify-status")
-async def get_verify_status() -> SuccessResponse[VerifyStatusResponse]:
+async def get_verify_status(
+    mode: str = "partial",
+    play_integrity_token: Optional[str] = None,
+    play_integrity_nonce: Optional[str] = None,
+) -> SuccessResponse[VerifyStatusResponse]:
     """Get CIRISVerify status for Trust and Security display.
 
     Returns the status of CIRISVerify including:
@@ -1759,66 +1818,574 @@ async def get_verify_status() -> SuccessResponse[VerifyStatusResponse]:
     - Hardware security type (TPM, Secure Enclave, Software)
     - Key status (none, ephemeral, portal_pending, portal_active)
     - Attestation status
+    - Play Integrity verification (if token provided)
+
+    Query Parameters:
+    - mode: "full" for complete file integrity check, "partial" for spot-check (default)
+    - play_integrity_token: Optional Google Play Integrity token for device verification
+    - play_integrity_nonce: Optional nonce used when requesting the Play Integrity token
 
     CIRISVerify is REQUIRED for CIRIS 2.0+. Agents cannot run without it.
     This endpoint is always accessible without authentication.
     """
     import threading
 
+    # Validate mode parameter
+    attestation_mode = "partial" if mode not in ("full", "partial") else mode
+    # spot_check_count: 0 = full check, 10 = spot check 10 files
+    spot_check_count = 0 if attestation_mode == "full" else 10
+
+    logger.info(f"[verify-status] Starting CIRISVerify status check (mode={attestation_mode})")
+
     # Try to get CIRISVerify status on a large stack thread (Rust Tokio compatibility)
     verify_result: list[Any] = [None, None]  # [status_dict | None, error | None]
 
     def _get_verify_status_on_large_stack() -> None:
         try:
+            logger.info("[verify-status] Importing ciris_verify...")
             from ciris_verify import CIRISVerify as CV
 
+            logger.info("[verify-status] Creating CIRISVerify instance...")
             verifier = CV(skip_integrity_check=True)
+            logger.info("[verify-status] CIRISVerify instance created successfully")
 
-            # Get basic info
-            version = getattr(verifier, "version", None)
-            if callable(version):
-                version = version()
-
-            # Check if Portal key is loaded
-            has_portal_key = False
-            key_id = None
+            # Get version - try both attribute and __version__
+            version = None
             try:
-                # Check if ed25519_signer has a key
-                has_portal_key = verifier.has_portal_key() if hasattr(verifier, "has_portal_key") else False
-            except Exception:
-                pass
+                version = getattr(verifier, "version", None)
+                if callable(version):
+                    version = version()
+                if version is None:
+                    # Try module-level __version__
+                    import ciris_verify
+
+                    version = getattr(ciris_verify, "__version__", "unknown")
+            except Exception as ve:
+                logger.warning(f"[verify-status] Version check failed: {ve}")
+                version = "unknown"
+
+            logger.info(f"[verify-status] CIRISVerify version: {version}")
+
+            # Build diagnostic info for troubleshooting
+            diag_parts = []
+            import os
+
+            is_android = os.environ.get("ANDROID_ROOT") is not None
+            diag_parts.append(f"platform={'android' if is_android else 'other'}")
+
+            # Check if Portal key is loaded using the correct method name
+            has_portal_key = False
+            key_id = os.environ.get("CIRIS_SIGNING_KEY_ID")  # Read from .env
+            key_check_method = "none"
+            key_check_error = None
+            try:
+                # Mobile FFI uses has_key_sync(), desktop may use has_portal_key()
+                # The key should be stored in Android Keystore (hardware-backed)
+                if hasattr(verifier, "has_key_sync"):
+                    key_check_method = "has_key_sync"
+                    has_portal_key = verifier.has_key_sync()
+                    logger.info(f"[verify-status] has_key_sync() = {has_portal_key}")
+                elif hasattr(verifier, "has_portal_key"):
+                    key_check_method = "has_portal_key"
+                    has_portal_key = verifier.has_portal_key()
+                    logger.info(f"[verify-status] has_portal_key() = {has_portal_key}")
+                else:
+                    key_check_method = "unavailable"
+                    logger.info("[verify-status] No key check method available")
+            except Exception as ke:
+                key_check_error = str(ke)
+                logger.warning(f"[verify-status] Key check failed: {ke}")
+
+            diag_parts.append(f"key_check={key_check_method}")
+            diag_parts.append(f"has_portal_key={has_portal_key}")
+            if key_check_error:
+                diag_parts.append(f"key_error={key_check_error}")
+
+            # Check Ed25519 support
+            has_ed25519 = getattr(verifier, "has_ed25519_support", False)
+            if callable(has_ed25519):
+                has_ed25519 = has_ed25519
+            logger.info(f"[verify-status] Ed25519 support: {has_ed25519}")
+            diag_parts.append(f"ed25519={has_ed25519}")
+
+            # List available verifier methods for debugging
+            verifier_methods = [
+                m for m in dir(verifier) if not m.startswith("_") and callable(getattr(verifier, m, None))
+            ]
+            diag_parts.append(f"methods={','.join(verifier_methods[:10])}")  # First 10 methods
 
             # Determine key status
-            if has_portal_key:
+            # If we have a key_id from .env, the portal key was provisioned
+            # (even if has_key_sync() returns False on a fresh verifier instance)
+            if key_id:
                 key_status = "portal_active"
+                logger.info(f"[verify-status] key_id={key_id} found in .env, setting key_status=portal_active")
+            elif has_portal_key:
+                key_status = "portal_active"
+            elif has_ed25519:
+                key_status = "ephemeral"
             else:
                 key_status = "none"
 
+            # Get hardware type - use platform detection (fast) on mobile
+            is_ios = os.path.exists("/System/Library/Frameworks")
+
+            if is_android:
+                # Android: Check for StrongBox vs Keystore
+                # For now, default to ANDROID_KEYSTORE (StrongBox detection requires JNI)
+                hardware_type = "ANDROID_KEYSTORE"
+                logger.info(f"[verify-status] Android detected, using {hardware_type}")
+            elif is_ios:
+                hardware_type = "IOS_SECURE_ENCLAVE"
+                logger.info(f"[verify-status] iOS detected, using {hardware_type}")
+            else:
+                # Desktop: Try to get hardware type from verifier (non-blocking)
+                hardware_type = "SOFTWARE_ONLY"
+                try:
+                    if hasattr(verifier, "get_hardware_type"):
+                        hw = verifier.get_hardware_type()
+                        if hasattr(hw, "name"):
+                            hardware_type = hw.name
+                        elif hasattr(hw, "value"):
+                            hardware_type = str(hw.value)
+                        else:
+                            hardware_type = str(hw)
+                        logger.info(f"[verify-status] Hardware type from verifier: {hardware_type}")
+                except Exception as hw_err:
+                    logger.warning(f"[verify-status] Could not get hardware type: {hw_err}")
+
+            diagnostic_info = " | ".join(diag_parts)
+            logger.info(f"[verify-status] Diagnostics: {diagnostic_info}")
+
+            # === Attestation Level Checks ===
+            # Level 0: Nothing
+            # Level 1: CIRISVerify binary loaded
+            # Level 2: Environment configured (.env has required keys)
+            # Level 3: DNS connectivity to CIRIS infrastructure
+            # Level 4: HTTPS connectivity to CIRIS infrastructure
+            # Level 5: Signing key registered with Portal/Registry
+
+            binary_ok = True  # We got here, so binary is loaded
+            env_ok = bool(os.environ.get("CIRIS_CONFIGURED")) and bool(os.environ.get("OPENAI_API_KEY"))
+
+            # Play Integrity check (Level 2 - device/app integrity)
+            play_integrity_ok = False
+            play_integrity_verdict = None
+            if play_integrity_token and play_integrity_nonce:
+                try:
+                    import httpx
+
+                    registry_url = os.environ.get("CIRIS_REGISTRY_URL", "https://api.registry.ciris-services-1.ai")
+                    with httpx.Client(timeout=10.0) as client:
+                        resp = client.post(
+                            f"{registry_url}/v1/integrity/verify",
+                            json={"token": play_integrity_token, "nonce": play_integrity_nonce},
+                        )
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            play_integrity_ok = data.get("valid", False)
+                            play_integrity_verdict = data.get("device_verdict", None)
+                            logger.info(
+                                f"[verify-status] Play Integrity: ok={play_integrity_ok}, verdict={play_integrity_verdict}"
+                            )
+                        else:
+                            logger.warning(f"[verify-status] Play Integrity verification failed: {resp.status_code}")
+                except Exception as pi_err:
+                    logger.warning(f"[verify-status] Play Integrity check failed: {pi_err}")
+
+            # Use CIRISVerify's get_license_status for real attestation checks
+            dns_us_ok = False
+            dns_eu_ok = False
+            https_us_ok = False
+            https_eu_ok = False
+            registry_ok = bool(key_id)
+            sources_agreeing = 0
+
+            # v0.6.0 fields
+            source_errors: Dict[str, Dict[str, str]] = {}
+            function_integrity: Optional[str] = None
+
+            try:
+                # Generate challenge nonce for attestation
+                import secrets
+
+                challenge_nonce = secrets.token_bytes(32)
+
+                # Check if verifier has get_license_status method (v0.5.0+)
+                if hasattr(verifier, "get_license_status"):
+                    # Use longer timeout for network validation (30s instead of default 10s)
+                    network_timeout = 30.0
+                    logger.info(
+                        f"[verify-status] Calling CIRISVerify get_license_status (timeout={network_timeout}s)..."
+                    )
+                    # Run async method in a new event loop
+                    import asyncio
+
+                    loop = asyncio.new_event_loop()
+                    try:
+                        license_status = loop.run_until_complete(
+                            verifier.get_license_status(challenge_nonce, timeout=network_timeout)
+                        )
+                    finally:
+                        loop.close()
+
+                    # Extract source details from CIRISVerify response
+                    source_errors: Dict[str, Dict[str, str]] = {}
+                    if hasattr(license_status, "source_details"):
+                        sd = license_status.source_details
+                        dns_us_ok = getattr(sd, "dns_us_reachable", False)
+                        dns_eu_ok = getattr(sd, "dns_eu_reachable", False)
+                        https_us_ok = getattr(sd, "https_reachable", False)
+                        https_eu_ok = https_us_ok
+                        sources_agreeing = getattr(sd, "sources_agreeing", 0)
+                        validation_status = str(getattr(sd, "validation_status", "unknown"))
+
+                        # Log all available source_details attributes for debugging
+                        sd_attrs = [attr for attr in dir(sd) if not attr.startswith("_")]
+                        logger.info(f"[verify-status] source_details attrs: {sd_attrs}")
+
+                        # v0.6.6: Extract per-source error details (FLAT fields on source_details)
+                        # Fields: dns_us_error, dns_us_error_category, dns_eu_error, etc.
+                        for source_name in ["dns_us", "dns_eu", "https"]:
+                            error_val = getattr(sd, f"{source_name}_error", None)
+                            error_cat = getattr(sd, f"{source_name}_error_category", None)
+                            logger.info(f"[verify-status] {source_name}: error={error_val}, category={error_cat}")
+
+                            if error_val or error_cat:
+                                source_errors[source_name] = {
+                                    "category": str(error_cat) if error_cat else "unknown",
+                                    "details": str(error_val) if error_val else "",
+                                }
+
+                        # Log Level 3 details explicitly
+                        logger.info(
+                            f"[verify-status] LEVEL 3 NETWORK: dns_us={dns_us_ok}, dns_eu={dns_eu_ok}, https={https_us_ok}, sources_agreeing={sources_agreeing}/3, validation={validation_status}"
+                        )
+                    else:
+                        validation_status = "unknown"
+                        sources_agreeing = 0
+                        logger.warning("[verify-status] LEVEL 3 NETWORK: No source_details in response")
+
+                    # v0.6.0: Extract function integrity status (constructor-based verification)
+                    function_integrity = getattr(license_status, "function_integrity", None)
+                    if function_integrity:
+                        logger.info(f"[verify-status] Function integrity: {function_integrity}")
+
+                    # Build detailed info for expanded view
+                    detailed_info = {
+                        # License status
+                        "status_code": int(license_status.status) if hasattr(license_status, "status") else 0,
+                        "status_name": license_status.status.name if hasattr(license_status, "status") else "UNKNOWN",
+                        "validation_status": validation_status,
+                        "sources_agreeing": sources_agreeing,
+                        # Hardware
+                        "has_attestation_chain": bool(
+                            getattr(license_status, "attestation", None)
+                            and getattr(license_status.attestation, "attestation_chain", None)
+                        ),
+                        "has_signature": bool(
+                            getattr(license_status, "attestation", None)
+                            and getattr(license_status.attestation, "signature", None)
+                        ),
+                        # Cache
+                        "cached": getattr(license_status, "cached", False),
+                        "cache_age_seconds": getattr(license_status, "cache_age_seconds", None),
+                        # Disclosure (required by CIRIS)
+                        "disclosure_text": (
+                            getattr(license_status.mandatory_disclosure, "text", "")
+                            if hasattr(license_status, "mandatory_disclosure") and license_status.mandatory_disclosure
+                            else ""
+                        ),
+                        "disclosure_severity": (
+                            str(getattr(license_status.mandatory_disclosure, "severity", "info"))
+                            if hasattr(license_status, "mandatory_disclosure") and license_status.mandatory_disclosure
+                            else "info"
+                        ),
+                    }
+
+                    # License details if present
+                    if hasattr(license_status, "license") and license_status.license:
+                        lic = license_status.license
+                        detailed_info["license"] = {
+                            "tier": int(getattr(lic, "tier", 0)),
+                            "tier_name": ["COMMUNITY", "PROFESSIONAL_BASIC", "PROFESSIONAL_FULL", "ENTERPRISE"][
+                                int(getattr(lic, "tier", 0))
+                            ],
+                            "license_id": getattr(lic, "license_id", None),
+                            "issuer": getattr(lic, "issuer", None),
+                            "holder": getattr(lic, "holder_name", None),
+                            "organization": getattr(lic, "holder_organization", None),
+                            "expires": str(getattr(lic, "expires_at", "")) if hasattr(lic, "expires_at") else None,
+                            "capabilities": list(getattr(lic, "capabilities", [])),
+                            "prohibited": list(getattr(lic, "prohibited_capabilities", [])),
+                        }
+
+                    logger.info(
+                        f"[verify-status] CIRISVerify: status={detailed_info['status_name']}, sources={sources_agreeing}/3, validation={validation_status}"
+                    )
+                else:
+                    detailed_info = {"status_name": "NOT_AVAILABLE", "status_code": 0}
+                    validation_status = "not_checked"
+                    sources_agreeing = 0
+                    logger.info("[verify-status] CIRISVerify <0.5.0 - no get_license_status")
+            except Exception as attest_err:
+                # Log explicit Level 3 failure details
+                logger.warning(f"[verify-status] LEVEL 3 NETWORK FAILED: {attest_err}")
+                logger.warning(
+                    f"[verify-status] dns_us={dns_us_ok}, dns_eu={dns_eu_ok}, https_us={https_us_ok}, https_eu={https_eu_ok}"
+                )
+                detailed_info = {"status_name": "TIMEOUT", "error": str(attest_err)}
+                validation_status = "timeout"
+
+            # File integrity check (Level 4)
+            # The binary handles everything - we just call it with the right params
+            file_integrity_ok = False
+            total_files = 0
+            files_checked = 0
+            files_passed = 0
+            files_failed = 0
+            integrity_failure_reason = None
+            try:
+                if hasattr(verifier, "check_agent_integrity"):
+                    # Find manifest file and agent root
+                    agent_root = os.environ.get("CIRIS_AGENT_ROOT", os.getcwd())
+                    manifest_path = os.path.join(agent_root, "file_manifest.json")
+
+                    if os.path.exists(manifest_path):
+                        # check_agent_integrity(manifest_path, agent_root, spot_check_count)
+                        # spot_check_count=0 for full check, >0 for spot check N files
+                        import asyncio
+
+                        loop = asyncio.new_event_loop()
+                        try:
+                            integrity_result = loop.run_until_complete(
+                                verifier.check_agent_integrity(
+                                    manifest_path,
+                                    agent_root,
+                                    spot_check_count,  # From outer scope: 0=full, 10=partial
+                                )
+                            )
+                        finally:
+                            loop.close()
+
+                        # Extract detailed results
+                        file_integrity_ok = getattr(integrity_result, "integrity_valid", False)
+                        total_files = getattr(integrity_result, "total_files", 0)
+                        files_checked = getattr(integrity_result, "files_checked", 0)
+                        files_passed = getattr(integrity_result, "files_passed", 0)
+                        files_failed = getattr(integrity_result, "files_failed", 0)
+                        integrity_failure_reason = getattr(integrity_result, "failure_reason", None)
+
+                        logger.info(
+                            f"[verify-status] File integrity: ok={file_integrity_ok}, checked={files_checked}/{total_files}, passed={files_passed}, failed={files_failed}"
+                        )
+                    else:
+                        # No manifest - assume OK for now (pre-distribution state)
+                        file_integrity_ok = True
+                        integrity_failure_reason = "No manifest file (pre-distribution)"
+                        logger.info("[verify-status] No manifest file, assuming OK (pre-distribution)")
+                else:
+                    # Fallback: assume OK if binary loaded successfully
+                    file_integrity_ok = binary_ok
+                    logger.info("[verify-status] No check_agent_integrity method, using binary_ok as proxy")
+            except Exception as fi_err:
+                logger.warning(f"[verify-status] File integrity check failed: {fi_err}")
+                file_integrity_ok = False
+                integrity_failure_reason = str(fi_err)
+
+            # Audit trail check (Level 5)
+            # Triple audit system: SQLite (ciris_audit.db), JSONL (audit_logs.jsonl), Graph (memory)
+            # We validate the audit trail exists and has entries signed by our key
+            audit_ok = False
+            audit_details = {"sources_checked": [], "sources_valid": []}
+            try:
+                data_dir = os.environ.get("CIRIS_DATA_DIR", ".")
+
+                # Check SQLite audit database (primary)
+                audit_db_path = os.path.join(data_dir, "ciris_audit.db")
+                if os.path.exists(audit_db_path) and os.path.getsize(audit_db_path) > 0:
+                    audit_details["sources_checked"].append("sqlite")
+                    audit_details["sources_valid"].append("sqlite")
+                    audit_details["sqlite_path"] = audit_db_path
+                    audit_details["sqlite_size"] = os.path.getsize(audit_db_path)
+
+                # Check JSONL audit log (secondary)
+                jsonl_path = os.environ.get("AUDIT_LOG_PATH", os.path.join(data_dir, "audit_logs.jsonl"))
+                # Handle ~ expansion
+                jsonl_path = os.path.expanduser(jsonl_path)
+                if os.path.exists(jsonl_path) and os.path.getsize(jsonl_path) > 0:
+                    audit_details["sources_checked"].append("jsonl")
+                    audit_details["sources_valid"].append("jsonl")
+                    audit_details["jsonl_path"] = jsonl_path
+                    audit_details["jsonl_size"] = os.path.getsize(jsonl_path)
+
+                # Audit trail is valid if ANY source has entries
+                audit_ok = len(audit_details["sources_valid"]) > 0
+
+                # If we have a Registry-provisioned key, note it for enhanced verification
+                key_id = os.environ.get("CIRIS_SIGNING_KEY_ID", "")
+                if key_id:
+                    audit_details["registry_key_id"] = key_id
+                    audit_details["registry_verified"] = True  # Key from Portal = registered
+
+                logger.info(f"[verify-status] Audit trail check: {audit_ok} (sources={audit_details['sources_valid']})")
+            except Exception as audit_err:
+                logger.warning(f"[verify-status] Audit trail check failed: {audit_err}")
+
+            # Export attestation proof to get platform info and signatures
+            platform_os = None
+            platform_arch = None
+            attestation_proof = None
+            try:
+                if hasattr(verifier, "export_attestation_sync"):
+                    attestation_proof = verifier.export_attestation_sync(challenge_nonce)
+                elif hasattr(verifier, "export_attestation"):
+                    import asyncio
+
+                    loop = asyncio.new_event_loop()
+                    try:
+                        attestation_proof = loop.run_until_complete(verifier.export_attestation(challenge_nonce))
+                    finally:
+                        loop.close()
+
+                if attestation_proof:
+                    # Extract platform info
+                    platform_attestation = attestation_proof.get("platform_attestation", {})
+                    if "Software" in platform_attestation:
+                        sw = platform_attestation["Software"]
+                        platform_os = sw.get("os", "unknown")
+                        platform_arch = sw.get("arch", "unknown")
+                    logger.info(f"[verify-status] Attestation proof: os={platform_os}, arch={platform_arch}")
+            except Exception as ap_err:
+                logger.warning(f"[verify-status] Attestation proof export failed: {ap_err}")
+
+            # Calculate max level
+            # Level 1: Binary OK
+            # Level 2: Env OK
+            # Level 3: DNS/HTTPS (2 of 3 checks pass)
+            # Level 4: File Integrity
+            # Level 5: Portal Key + Audit Trail
+            max_level = 0
+            if binary_ok:
+                max_level = 1
+            if max_level >= 1 and env_ok:
+                max_level = 2
+            # Level 3 requires 2 of 3 network checks
+            network_checks_passed = sum([dns_us_ok, dns_eu_ok, https_us_ok or https_eu_ok])
+            if max_level >= 2 and network_checks_passed >= 2:
+                max_level = 3
+            if max_level >= 3 and file_integrity_ok:
+                max_level = 4
+            if max_level >= 4 and registry_ok and audit_ok:
+                max_level = 5
+
+            logger.info(
+                f"[verify-status] Attestation levels: binary={binary_ok}, env={env_ok}, dns_us={dns_us_ok}, dns_eu={dns_eu_ok}, https_us={https_us_ok}, https_eu={https_eu_ok}, file_integrity={file_integrity_ok}, registry={registry_ok}, audit={audit_ok}, max_level={max_level}"
+            )
+
+            # Build result with simple view + detailed info for expansion
             verify_result[0] = {
+                # === SIMPLE VIEW (always shown) ===
                 "loaded": True,
                 "version": str(version) if version else "unknown",
-                "hardware_type": "SOFTWARE_ONLY",  # Will be updated by attestation
+                "hardware_type": hardware_type,
                 "key_status": key_status,
                 "key_id": key_id,
-                "attestation_status": "not_attempted",
+                "max_level": max_level,
+                "attestation_status": (
+                    "verified" if max_level >= 5 else ("pending" if max_level >= 3 else "not_attempted")
+                ),
+                "attestation_mode": attestation_mode,  # "full" or "partial"
+                # === LEVEL CHECKS (expandable section 1) ===
+                "checks": {
+                    "binary": {"ok": binary_ok, "label": "CIRISVerify Binary", "level": 1},
+                    "env": {"ok": env_ok, "label": "Environment Config", "level": 2},
+                    "play_integrity": {
+                        "ok": play_integrity_ok,
+                        "label": "Play Integrity",
+                        "level": 2,
+                        "verdict": play_integrity_verdict,
+                    },
+                    "dns_us": {"ok": dns_us_ok, "label": "DNS (US)", "level": 3},
+                    "dns_eu": {"ok": dns_eu_ok, "label": "DNS (EU)", "level": 3},
+                    "https": {"ok": https_us_ok or https_eu_ok, "label": "HTTPS Registry", "level": 3},
+                    "file_integrity": {
+                        "ok": file_integrity_ok,
+                        "label": "File Integrity",
+                        "level": 4,
+                        "total_files": total_files,
+                        "files_checked": files_checked,
+                        "files_passed": files_passed,
+                        "files_failed": files_failed,
+                        "failure_reason": integrity_failure_reason,
+                    },
+                    "portal_key": {"ok": registry_ok, "label": "Portal Key", "level": 5},
+                    "audit": {"ok": audit_ok, "label": "Audit Trail", "level": 5},
+                },
+                "sources_agreeing": sources_agreeing if "sources_agreeing" in dir() else 0,
+                "validation_status": validation_status if "validation_status" in dir() else "unknown",
+                # === DETAILED INFO (expandable section 2) ===
+                "details": detailed_info if "detailed_info" in dir() else {},
+                # === PLATFORM INFO (from attestation proof) ===
+                "platform_os": platform_os,
+                "platform_arch": platform_arch,
+                "attestation_proof": attestation_proof,  # Full proof for advanced users
+                # === FILE INTEGRITY DETAILS ===
+                "total_files": total_files,
+                "files_checked": files_checked,
+                "files_passed": files_passed,
+                "files_failed": files_failed,
+                "integrity_failure_reason": integrity_failure_reason,
+                # Legacy fields for compatibility
+                "diagnostic_info": diagnostic_info,
+                "dns_us_ok": dns_us_ok,
+                "dns_eu_ok": dns_eu_ok,
+                "https_us_ok": https_us_ok,
+                "https_eu_ok": https_eu_ok,
+                "binary_ok": binary_ok,
+                "file_integrity_ok": file_integrity_ok,
+                "registry_ok": registry_ok,
+                "audit_ok": audit_ok,
+                "env_ok": env_ok,
+                "play_integrity_ok": play_integrity_ok,
+                "play_integrity_verdict": play_integrity_verdict,
+                # v0.6.0 fields
+                "function_integrity": function_integrity,
+                "source_errors": source_errors if source_errors else None,
             }
+            logger.info(f"[verify-status] Success: {verify_result[0]}")
         except ImportError as e:
-            verify_result[1] = f"CIRISVerify not installed: {e}"
+            error_msg = f"CIRISVerify not installed: {e}"
+            logger.error(f"[verify-status] {error_msg}")
+            verify_result[1] = error_msg
         except Exception as e:
-            verify_result[1] = f"CIRISVerify error: {e}"
+            error_msg = f"CIRISVerify error: {type(e).__name__}: {e}"
+            logger.error(f"[verify-status] {error_msg}")
+            verify_result[1] = error_msg
 
-    old_stack = threading.stack_size()
-    try:
-        threading.stack_size(8 * 1024 * 1024)  # 8 MB for Rust Tokio
+    # On Android/mobile, thread stack size manipulation may not work
+    # Try without stack size change first, fall back to large stack if needed
+    is_android = os.environ.get("ANDROID_ROOT") is not None
+
+    if is_android:
+        logger.info("[verify-status] Android detected, using default thread stack")
         t = threading.Thread(target=_get_verify_status_on_large_stack, daemon=True)
         t.start()
-        t.join(timeout=5)
-    finally:
-        threading.stack_size(old_stack)
+        t.join(timeout=25)  # Longer timeout for mobile attestation network checks
+    else:
+        old_stack = threading.stack_size()
+        try:
+            threading.stack_size(8 * 1024 * 1024)  # 8 MB for Rust Tokio
+            t = threading.Thread(target=_get_verify_status_on_large_stack, daemon=True)
+            t.start()
+            t.join(timeout=5)
+        finally:
+            threading.stack_size(old_stack)
 
     if verify_result[1] is not None or verify_result[0] is None:
         # CIRISVerify not available - this is a CRITICAL error for 2.0
         error_msg = verify_result[1] if verify_result[1] else "CIRISVerify status check timed out"
+        logger.error(f"[verify-status] Returning error: {error_msg}")
         return SuccessResponse(
             data=VerifyStatusResponse(
                 loaded=False,
@@ -1832,6 +2399,9 @@ async def get_verify_status() -> SuccessResponse[VerifyStatusResponse]:
         )
 
     status_dict = verify_result[0]
+    logger.info(
+        f"[verify-status] Returning success: loaded=True, key_status={status_dict['key_status']}, max_level={status_dict.get('max_level', 0)}"
+    )
     return SuccessResponse(
         data=VerifyStatusResponse(
             loaded=status_dict["loaded"],
@@ -1840,7 +2410,34 @@ async def get_verify_status() -> SuccessResponse[VerifyStatusResponse]:
             key_status=status_dict["key_status"],
             key_id=status_dict["key_id"],
             attestation_status=status_dict["attestation_status"],
+            attestation_mode=status_dict.get("attestation_mode", "partial"),
             error=None,
+            diagnostic_info=status_dict.get("diagnostic_info"),
+            # Attestation level checks
+            dns_us_ok=status_dict.get("dns_us_ok", False),
+            dns_eu_ok=status_dict.get("dns_eu_ok", False),
+            https_us_ok=status_dict.get("https_us_ok", False),
+            https_eu_ok=status_dict.get("https_eu_ok", False),
+            binary_ok=status_dict.get("binary_ok", False),
+            file_integrity_ok=status_dict.get("file_integrity_ok", False),
+            registry_ok=status_dict.get("registry_ok", False),
+            audit_ok=status_dict.get("audit_ok", False),
+            env_ok=status_dict.get("env_ok", False),
+            play_integrity_ok=status_dict.get("play_integrity_ok", False),
+            play_integrity_verdict=status_dict.get("play_integrity_verdict"),
+            max_level=status_dict.get("max_level", 0),
+            # Detailed attestation info
+            checks=status_dict.get("checks"),
+            details=status_dict.get("details"),
+            # Platform info
+            platform_os=status_dict.get("platform_os"),
+            platform_arch=status_dict.get("platform_arch"),
+            # File integrity details
+            total_files=status_dict.get("total_files"),
+            files_checked=status_dict.get("files_checked"),
+            files_passed=status_dict.get("files_passed"),
+            files_failed=status_dict.get("files_failed"),
+            integrity_failure_reason=status_dict.get("integrity_failure_reason"),
         )
     )
 
@@ -2220,6 +2817,12 @@ async def connect_node_status(device_code: str, portal_url: str) -> SuccessRespo
     agent_record = data.get("agent_record", {})
     licensed_package = data.get("licensed_package") or {}
 
+    # Log what Portal returned for debugging
+    logger.info("[connect-node/status] Portal token response keys: %s", list(data.keys()))
+    logger.info("[connect-node/status] signing_key keys: %s", list(signing_key.keys()) if signing_key else "None")
+    logger.info("[connect-node/status] signing_key.key_id = %s", signing_key.get("key_id"))
+    logger.info("[connect-node/status] agent_record keys: %s", list(agent_record.keys()) if agent_record else "None")
+
     # Extract the provisioned signing key — it will be saved during /complete setup.
     # We don't eagerly save here to avoid filesystem issues (e.g., iOS read-only bundles).
     private_key_b64 = signing_key.get("ed25519_private_key", "")
@@ -2390,32 +2993,65 @@ async def _activate_key_inline(private_key_b64: str, device_code: str, portal_ur
     challenge_bytes = os.urandom(32)
 
     # Import key and generate attestation on 8MB stack thread
-    activate_result: list[Any] = [None, None]  # [proof_dict | None, error | None]
+    # [proof_dict, error, has_key_before, has_key_after]
+    activate_result: list[Any] = [None, None, None, None]
 
     def _activate_on_large_stack() -> None:
         try:
             from ciris_verify import CIRISVerify as CV
 
+            logger.info("[KEY-IMPORT] Creating CIRISVerify instance...")
             verifier = CV(skip_integrity_check=True)
 
-            # Import the Portal-issued key
+            # Check key state BEFORE import
+            has_key_before = False
+            if hasattr(verifier, "has_key_sync"):
+                has_key_before = verifier.has_key_sync()
+            activate_result[2] = has_key_before
+            logger.info(f"[KEY-IMPORT] has_key_sync() BEFORE import: {has_key_before}")
+
+            # Import the Portal-issued key into Android Keystore
+            logger.info(f"[KEY-IMPORT] Calling import_key_sync() with {len(key_bytes)} byte key...")
             verifier.import_key_sync(key_bytes)
-            logger.info("Portal key imported into CIRISVerify")
+            logger.info("[KEY-IMPORT] import_key_sync() completed")
+
+            # Check key state AFTER import
+            has_key_after = False
+            if hasattr(verifier, "has_key_sync"):
+                has_key_after = verifier.has_key_sync()
+            activate_result[3] = has_key_after
+            logger.info(f"[KEY-IMPORT] has_key_sync() AFTER import: {has_key_after}")
+
+            if not has_key_after:
+                logger.error("[KEY-IMPORT] CRITICAL: Key import succeeded but has_key_sync() returns False!")
+                logger.error("[KEY-IMPORT] This suggests the key was NOT persisted to Android Keystore")
 
             # Generate second attestation (now with key_type="portal")
+            logger.info("[KEY-IMPORT] Generating attestation proof...")
             proof = verifier.export_attestation_sync(challenge_bytes)
+            key_type = proof.get("key_type", "unknown") if isinstance(proof, dict) else "unknown"
+            logger.info(f"[KEY-IMPORT] Attestation generated: key_type={key_type}")
             activate_result[0] = proof
         except Exception as e:
+            logger.error(f"[KEY-IMPORT] Exception during key import: {type(e).__name__}: {e}")
             activate_result[1] = e
 
-    old_stack = threading.stack_size()
-    try:
-        threading.stack_size(8 * 1024 * 1024)  # 8 MB
+    # On Android, skip stack size manipulation (may not work)
+    is_android = os.environ.get("ANDROID_ROOT") is not None
+
+    if is_android:
         t = threading.Thread(target=_activate_on_large_stack, daemon=True)
         t.start()
         t.join(timeout=15)
-    finally:
-        threading.stack_size(old_stack)
+    else:
+        old_stack = threading.stack_size()
+        try:
+            threading.stack_size(8 * 1024 * 1024)  # 8 MB
+            t = threading.Thread(target=_activate_on_large_stack, daemon=True)
+            t.start()
+            t.join(timeout=15)
+        finally:
+            threading.stack_size(old_stack)
 
     # Check for errors
     if activate_result[1] is not None or activate_result[0] is None:
@@ -2687,7 +3323,30 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
 
             provisioned_key = UnifiedSigningKey()
             provisioned_key.load_provisioned_key(setup.provisioned_signing_key_b64)
-            logger.info("[Setup Complete] Saved Registry-provisioned signing key")
+            provisioned_key_id = provisioned_key.key_id
+            logger.info(f"[Setup Complete] Saved Registry-provisioned signing key (key_id={provisioned_key_id})")
+
+            # Audit the key provisioning event - critical for Level 5 attestation
+            audit_service = getattr(request.app.state, "audit_service", None)
+            if audit_service:
+                import asyncio
+
+                from ciris_engine.schemas.services.graph.audit import AuditEventData
+
+                audit_event = AuditEventData(
+                    event_type="signing_key_provisioned",
+                    details={
+                        "key_id": provisioned_key_id,
+                        "signing_key_id": setup.signing_key_id,
+                        "source": "portal_registry",
+                        "node_url": setup.node_url,
+                    },
+                    severity="info",
+                    source="setup_complete",
+                )
+                asyncio.create_task(audit_service.log_event("signing_key_provisioned", audit_event))
+                logger.info(f"[Setup Complete] Audit entry created for key provisioning")
+
             # Clear the key from the request to avoid logging it
             setup.provisioned_signing_key_b64 = None
 

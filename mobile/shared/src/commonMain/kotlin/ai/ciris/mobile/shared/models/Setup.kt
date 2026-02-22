@@ -184,7 +184,17 @@ data class CompleteSetupRequest(
     // OAuth configuration (for Google users)
     val oauth_provider: String? = null,    // "google"
     val oauth_external_id: String? = null, // Google user ID
-    val oauth_email: String? = null        // Google email
+    val oauth_email: String? = null,       // Google email
+
+    // Node flow fields (Connect to Node / Portal provisioning)
+    val node_url: String? = null,                      // Portal URL from node flow
+    val identity_template: String? = null,             // Portal-assigned template
+    val stewardship_tier: Int? = null,                 // Portal-assigned tier (1-5)
+    val approved_adapters: List<String>? = null,       // Portal-approved adapters
+    val org_id: String? = null,                        // Organization ID from Portal
+    val signing_key_provisioned: Boolean? = null,      // Whether Portal key was provisioned
+    val provisioned_signing_key_b64: String? = null,   // Base64 Portal signing key (one-time)
+    val signing_key_id: String? = null                  // Portal-issued key ID (saved to .env)
 )
 
 /**

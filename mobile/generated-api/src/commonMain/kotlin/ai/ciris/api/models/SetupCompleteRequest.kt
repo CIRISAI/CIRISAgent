@@ -84,7 +84,16 @@ data class SetupCompleteRequest (
     @SerialName(value = "oauth_email") val oauthEmail: kotlin.String? = null,
 
     /* Agent API port */
-    @SerialName(value = "agent_port") val agentPort: kotlin.Int? = 8080
+    @SerialName(value = "agent_port") val agentPort: kotlin.Int? = 8080,
+
+    /* Node flow fields */
+    @SerialName(value = "node_url") val nodeUrl: kotlin.String? = null,
+
+    @SerialName(value = "signing_key_id") val signingKeyId: kotlin.String? = null,
+
+    @SerialName(value = "signing_key_provisioned") val signingKeyProvisioned: kotlin.Boolean? = false,
+
+    @SerialName(value = "provisioned_signing_key_b64") val provisionedSigningKeyB64: kotlin.String? = null
 
 ) {
 

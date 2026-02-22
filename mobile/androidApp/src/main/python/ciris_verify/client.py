@@ -459,6 +459,17 @@ class CIRISVerify:
                 "[CIRISVerify] Ed25519 key functions not available in this library version"
             )
 
+        # ciris_verify_get_diagnostics (optional - added in 0.4.3)
+        try:
+            self._lib.ciris_verify_get_diagnostics.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.POINTER(ctypes.c_void_p),  # diag_data (out)
+                ctypes.POINTER(ctypes.c_size_t),  # diag_len (out)
+            ]
+            self._lib.ciris_verify_get_diagnostics.restype = ctypes.c_int
+        except AttributeError:
+            pass  # Older library version, diagnostics not available
+
         # Initialize handle
         self._handle = self._lib.ciris_verify_init()
         if not self._handle:
@@ -562,6 +573,13 @@ class CIRISVerify:
                     https_src.get("valid", False),
                 ]
             ),
+            # Error details (added in v0.6.6)
+            dns_us_error=dns_us.get("error_details") or dns_us.get("error"),
+            dns_us_error_category=dns_us.get("error_category"),
+            dns_eu_error=dns_eu.get("error_details") or dns_eu.get("error"),
+            dns_eu_error_category=dns_eu.get("error_category"),
+            https_error=https_src.get("error_details") or https_src.get("error"),
+            https_error_category=https_src.get("error_category"),
         )
 
         # Parse license details if present
@@ -1168,6 +1186,43 @@ class CIRISVerify:
         finally:
             if key_data.value:
                 self._lib.ciris_verify_free(ctypes.c_char_p(key_data.value))
+
+    def get_diagnostics_sync(self) -> str:
+        """Get diagnostic information about the Ed25519 signer state.
+
+        Returns detailed diagnostic info including:
+        - Key alias
+        - Whether key is loaded in memory
+        - Storage path for persistence
+        - Environment variables affecting storage
+
+        Returns:
+            Diagnostic string with key state information.
+
+        Raises:
+            CommunicationError: If diagnostics retrieval fails.
+        """
+        diag_data = ctypes.c_void_p()
+        diag_len = ctypes.c_size_t()
+
+        # Check if function exists (added in 0.4.3)
+        if not hasattr(self._lib, "ciris_verify_get_diagnostics"):
+            return "Diagnostics not available (library version < 0.4.3)"
+
+        ret = self._lib.ciris_verify_get_diagnostics(
+            self._handle,
+            ctypes.byref(diag_data),
+            ctypes.byref(diag_len),
+        )
+
+        if ret != 0:
+            return f"Diagnostics retrieval failed with code {ret}"
+
+        try:
+            return ctypes.string_at(diag_data.value, diag_len.value).decode("utf-8")
+        finally:
+            if diag_data.value:
+                self._lib.ciris_verify_free(ctypes.c_char_p(diag_data.value))
 
 
 class MockCIRISVerify(CIRISVerify):

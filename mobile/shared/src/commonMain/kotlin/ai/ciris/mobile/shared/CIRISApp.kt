@@ -338,8 +338,8 @@ fun CIRISApp(
     val startupViewModel: StartupViewModel = viewModel {
         StartupViewModel(pythonRuntimeProtocol, apiClient)
     }
-    // SetupViewModel is a plain class, not an androidx ViewModel
-    val setupViewModel = remember { SetupViewModel() }
+    // SetupViewModel needs to survive configuration changes and app backgrounding
+    val setupViewModel: SetupViewModel = viewModel { SetupViewModel() }
     val interactViewModel: InteractViewModel = viewModel {
         InteractViewModel(apiClient)
     }
@@ -483,6 +483,19 @@ fun CIRISApp(
                                 billingViewModel.loadBalance()
                                 adaptersViewModel.fetchAdapters()
                                 interactViewModel.startPolling() // Start polling now that token is set
+
+                                // Run CIRISVerify attestation at boot (not first run)
+                                launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    try {
+                                        println("[$TAG][INFO] Running boot-time attestation check...")
+                                        val verifyResult = apiClient.getVerifyStatus(mode = "partial")
+                                        println("[$TAG][INFO] Boot attestation: loaded=${verifyResult.loaded}, maxLevel=${verifyResult.maxLevel}, " +
+                                            "dns_us=${verifyResult.dnsUsOk}, dns_eu=${verifyResult.dnsEuOk}, https=${verifyResult.httpsUsOk}")
+                                    } catch (e: Exception) {
+                                        println("[$TAG][WARN] Boot attestation failed: ${e.message}")
+                                    }
+                                }
+
                                 currentScreen = Screen.Interact
                             } else {
                                 // Token invalid and couldn't refresh - need interactive login
@@ -755,6 +768,7 @@ fun CIRISApp(
             Screen.Settings -> {
                 SettingsScreen(
                     viewModel = settingsViewModel,
+                    apiClient = apiClient,
                     onNavigateBack = { currentScreen = Screen.Interact },
                     onLogout = {
                         println("[CIRISApp][INFO][onLogout] User initiated logout")

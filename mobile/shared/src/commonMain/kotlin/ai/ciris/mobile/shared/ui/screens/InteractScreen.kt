@@ -4,8 +4,11 @@ import ai.ciris.mobile.shared.models.ChatMessage
 import ai.ciris.mobile.shared.models.MessageType
 import ai.ciris.mobile.shared.viewmodels.AgentProcessingState
 import ai.ciris.mobile.shared.viewmodels.BubbleEmoji
+import ai.ciris.mobile.shared.viewmodels.CreditStatus
 import ai.ciris.mobile.shared.viewmodels.InteractViewModel
+import ai.ciris.mobile.shared.viewmodels.LlmHealthStatus
 import ai.ciris.mobile.shared.viewmodels.TimelineEvent
+import ai.ciris.mobile.shared.viewmodels.TrustStatus
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -63,6 +66,7 @@ fun InteractScreen(
     viewModel: InteractViewModel,
     onNavigateBack: () -> Unit,
     onSessionExpired: () -> Unit = {},
+    onOpenTrustPage: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsState()
@@ -87,6 +91,9 @@ fun InteractScreen(
     val timelineEvents by viewModel.timelineEvents.collectAsState()
     val showTimeline by viewModel.showTimeline.collectAsState()
     val showLegend by viewModel.showLegend.collectAsState()
+    val llmHealth by viewModel.llmHealth.collectAsState()
+    val creditStatus by viewModel.creditStatus.collectAsState()
+    val trustStatus by viewModel.trustStatus.collectAsState()
 
     // Focus requester for the text input
     val focusRequester = remember { FocusRequester() }
@@ -105,13 +112,17 @@ fun InteractScreen(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Status bar (from fragment_interact.xml:10-63)
-            ConnectionStatusBar(
-            isConnected = isConnected,
-            status = agentStatus,
-            onShutdown = { viewModel.shutdown(emergency = false) },
-            onEmergencyStop = { viewModel.shutdown(emergency = true) }
-        )
+            // Enhanced status bar with LLM health, credits, and trust shield
+            EnhancedStatusBar(
+                isConnected = isConnected,
+                status = agentStatus,
+                llmHealth = llmHealth,
+                creditStatus = creditStatus,
+                trustStatus = trustStatus,
+                onShutdown = { viewModel.shutdown(emergency = false) },
+                onEmergencyStop = { viewModel.shutdown(emergency = true) },
+                onTrustShieldClick = onOpenTrustPage
+            )
 
         // Auth error is now handled by LaunchedEffect above - navigates to login silently
 
@@ -213,7 +224,244 @@ fun InteractScreen(
 }
 
 /**
- * Connection status bar with shutdown controls
+ * Enhanced status bar with:
+ * - Connection status (local server)
+ * - LLM provider health
+ * - CIRIS credits (if CIRIS proxy)
+ * - Trust shield (X/5 level)
+ * - Shutdown controls
+ */
+@Composable
+private fun EnhancedStatusBar(
+    isConnected: Boolean,
+    status: String,
+    llmHealth: LlmHealthStatus,
+    creditStatus: CreditStatus,
+    trustStatus: TrustStatus,
+    onShutdown: () -> Unit,
+    onEmergencyStop: () -> Unit,
+    onTrustShieldClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = Color.White,
+        shadowElevation = 2.dp,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column {
+            // Main status row
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Connection status dot
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(
+                            color = if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444),
+                            shape = CircleShape
+                        )
+                )
+
+                // Connection text
+                Text(
+                    text = if (isConnected) "Server" else "Offline",
+                    fontSize = 11.sp,
+                    color = if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444)
+                )
+
+                // Divider
+                Text(text = "•", fontSize = 10.sp, color = Color(0xFFD1D5DB))
+
+                // LLM health indicator
+                LlmHealthIndicator(health = llmHealth)
+
+                // Credits indicator (only if CIRIS proxy)
+                if (llmHealth.isCirisProxy && creditStatus.isLoaded) {
+                    Text(text = "•", fontSize = 10.sp, color = Color(0xFFD1D5DB))
+                    CreditsIndicator(credits = creditStatus)
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                // Trust shield
+                TrustShield(
+                    trustStatus = trustStatus,
+                    onClick = onTrustShieldClick
+                )
+            }
+
+            // Shutdown controls row (collapsed by default, could be expandable)
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 8.dp)
+                    .padding(bottom = 6.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End
+            ) {
+                // Cognitive state
+                Text(
+                    text = status,
+                    fontSize = 10.sp,
+                    color = Color(0xFF6B7280),
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Shutdown button
+                OutlinedButton(
+                    onClick = onShutdown,
+                    modifier = Modifier.height(26.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color(0xFFEF4444)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Text("Shutdown", fontSize = 9.sp)
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // Emergency stop button
+                Button(
+                    onClick = onEmergencyStop,
+                    modifier = Modifier.height(26.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFEF4444)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Text("STOP", fontSize = 9.sp, color = Color.White)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * LLM health indicator - shows provider and status
+ */
+@Composable
+private fun LlmHealthIndicator(
+    health: LlmHealthStatus,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        // Health dot
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .background(
+                    color = if (health.isHealthy) Color(0xFF10B981) else Color(0xFFD97706),
+                    shape = CircleShape
+                )
+        )
+
+        // Provider name
+        val displayName = when {
+            health.isCirisProxy -> "CIRIS"
+            health.provider == "openai" -> "OpenAI"
+            health.provider == "anthropic" -> "Anthropic"
+            health.provider == "local" -> "Local"
+            else -> health.provider.take(8)
+        }
+        Text(
+            text = displayName,
+            fontSize = 10.sp,
+            color = if (health.isHealthy) Color(0xFF059669) else Color(0xFFD97706)
+        )
+    }
+}
+
+/**
+ * Credits indicator - shows remaining credits
+ */
+@Composable
+private fun CreditsIndicator(
+    credits: CreditStatus,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        // Coin emoji for credits
+        Text(text = "💰", fontSize = 10.sp)
+
+        // Credits count
+        val creditsText = when {
+            credits.creditsRemaining > 0 -> "${credits.creditsRemaining}"
+            credits.freeUsesRemaining > 0 -> "Free: ${credits.freeUsesRemaining}"
+            else -> "0"
+        }
+        val creditsColor = when {
+            credits.creditsRemaining > 10 -> Color(0xFF059669)
+            credits.creditsRemaining > 0 -> Color(0xFFD97706)
+            credits.freeUsesRemaining > 0 -> Color(0xFF2563EB)
+            else -> Color(0xFFDC2626)
+        }
+        Text(
+            text = creditsText,
+            fontSize = 10.sp,
+            color = creditsColor,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+/**
+ * Trust shield - shows attestation level X/5
+ */
+@Composable
+private fun TrustShield(
+    trustStatus: TrustStatus,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val level = trustStatus.maxLevel
+    val shieldColor = when {
+        level >= 5 -> Color(0xFF059669)  // Full trust - green
+        level >= 3 -> Color(0xFF2563EB)  // Good trust - blue
+        level >= 1 -> Color(0xFFD97706)  // Some trust - amber
+        else -> Color(0xFF6B7280)        // No trust - gray
+    }
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(4.dp),
+        color = shieldColor.copy(alpha = 0.1f),
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            // Shield emoji
+            Text(text = "🛡", fontSize = 12.sp)
+
+            // Level text
+            Text(
+                text = "$level/5",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = shieldColor
+            )
+        }
+    }
+}
+
+/**
+ * Legacy connection status bar with shutdown controls
  * From fragment_interact.xml:10-63
  */
 @Composable

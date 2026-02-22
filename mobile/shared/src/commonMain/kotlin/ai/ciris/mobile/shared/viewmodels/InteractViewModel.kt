@@ -53,6 +53,37 @@ enum class AgentProcessingState {
  * - Message submission
  * - Shutdown controls
  */
+/**
+ * LLM health status for status bar display
+ */
+data class LlmHealthStatus(
+    val provider: String = "unknown",
+    val isHealthy: Boolean = false,
+    val model: String = "unknown",
+    val isCirisProxy: Boolean = false
+)
+
+/**
+ * Credit status for status bar display
+ */
+data class CreditStatus(
+    val hasCredit: Boolean = false,
+    val creditsRemaining: Int = 0,
+    val freeUsesRemaining: Int = 0,
+    val planName: String? = null,
+    val isLoaded: Boolean = false
+)
+
+/**
+ * Trust status for trust shield display
+ */
+data class TrustStatus(
+    val maxLevel: Int = 0,
+    val isLoaded: Boolean = false,
+    val keyStatus: String = "none",
+    val attestationStatus: String = "not_attempted"
+)
+
 class InteractViewModel(
     private val apiClient: CIRISApiClient
 ) : ViewModel() {
@@ -61,6 +92,7 @@ class InteractViewModel(
         private const val TAG = "InteractViewModel"
         private const val POLL_INTERVAL_MS = 3000L
         private const val STATUS_POLL_INTERVAL_MS = 5000L
+        private const val HEALTH_POLL_INTERVAL_MS = 30000L  // Less frequent health checks
         private const val MAX_BUBBLES = 8
         private const val BUBBLE_LIFETIME_MS = 2000L
         private const val MAX_TIMELINE_EVENTS = 100
@@ -125,8 +157,21 @@ class InteractViewModel(
     private val _showLegend = MutableStateFlow(false)
     val showLegend: StateFlow<Boolean> = _showLegend.asStateFlow()
 
+    // LLM health status for status bar
+    private val _llmHealth = MutableStateFlow(LlmHealthStatus())
+    val llmHealth: StateFlow<LlmHealthStatus> = _llmHealth.asStateFlow()
+
+    // Credit status for status bar (only shown when isCirisProxy)
+    private val _creditStatus = MutableStateFlow(CreditStatus())
+    val creditStatus: StateFlow<CreditStatus> = _creditStatus.asStateFlow()
+
+    // Trust status for shield display
+    private val _trustStatus = MutableStateFlow(TrustStatus())
+    val trustStatus: StateFlow<TrustStatus> = _trustStatus.asStateFlow()
+
     private var pollingJob: Job? = null
     private var statusJob: Job? = null
+    private var healthJob: Job? = null
     private var sseJob: Job? = null
     private var isFirstLoad = true
     private var authErrorCount = 0
@@ -161,6 +206,7 @@ class InteractViewModel(
         pollingStarted = true
         startStatusPolling()
         startMessagePolling()
+        startHealthPolling()
         startSseStream()
     }
 
@@ -317,6 +363,98 @@ class InteractViewModel(
                     _agentStatus.value = "Disconnected"
                 }
                 delay(STATUS_POLL_INTERVAL_MS)
+            }
+        }
+    }
+
+    /**
+     * Poll for LLM health, credits, and trust status (less frequent)
+     */
+    private fun startHealthPolling() {
+        val method = "startHealthPolling"
+        logInfo(method, "Starting health polling (interval=${HEALTH_POLL_INTERVAL_MS}ms)")
+
+        healthJob = viewModelScope.launch {
+            // Initial fetch on startup
+            fetchHealthData()
+
+            while (isActive) {
+                delay(HEALTH_POLL_INTERVAL_MS)
+                fetchHealthData()
+            }
+        }
+    }
+
+    /**
+     * Fetch LLM health, credits, and trust status
+     */
+    private suspend fun fetchHealthData() {
+        val method = "fetchHealthData"
+        try {
+            // Fetch LLM config for health status
+            try {
+                val config = apiClient.getLlmConfig()
+                _llmHealth.value = LlmHealthStatus(
+                    provider = config.provider,
+                    isHealthy = config.apiKeySet || config.isCirisProxy,
+                    model = config.model,
+                    isCirisProxy = config.isCirisProxy
+                )
+                logDebug(method, "LLM health: provider=${config.provider}, isCirisProxy=${config.isCirisProxy}")
+
+                // Only fetch credits if using CIRIS proxy
+                if (config.isCirisProxy) {
+                    try {
+                        val credits = apiClient.getCredits()
+                        _creditStatus.value = CreditStatus(
+                            hasCredit = credits.hasCredit,
+                            creditsRemaining = credits.creditsRemaining,
+                            freeUsesRemaining = credits.freeUsesRemaining,
+                            planName = credits.planName,
+                            isLoaded = true
+                        )
+                        logDebug(method, "Credits: remaining=${credits.creditsRemaining}")
+                    } catch (e: Exception) {
+                        logWarn(method, "Failed to fetch credits: ${e.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                logWarn(method, "Failed to fetch LLM config: ${e.message}")
+            }
+
+            // Fetch trust status (partial mode for quick check)
+            try {
+                val verifyStatus = apiClient.getVerifyStatus("partial")
+                _trustStatus.value = TrustStatus(
+                    maxLevel = verifyStatus.maxLevel,
+                    isLoaded = verifyStatus.loaded,
+                    keyStatus = verifyStatus.keyStatus,
+                    attestationStatus = verifyStatus.attestationStatus
+                )
+                logDebug(method, "Trust: level=${verifyStatus.maxLevel}/5, keyStatus=${verifyStatus.keyStatus}")
+            } catch (e: Exception) {
+                logWarn(method, "Failed to fetch trust status: ${e.message}")
+            }
+        } catch (e: Exception) {
+            logWarn(method, "Health polling error: ${e.message}")
+        }
+    }
+
+    /**
+     * Refresh trust status (called when opening trust page)
+     */
+    fun refreshTrustStatus() {
+        viewModelScope.launch {
+            try {
+                val verifyStatus = apiClient.getVerifyStatus("partial")
+                _trustStatus.value = TrustStatus(
+                    maxLevel = verifyStatus.maxLevel,
+                    isLoaded = verifyStatus.loaded,
+                    keyStatus = verifyStatus.keyStatus,
+                    attestationStatus = verifyStatus.attestationStatus
+                )
+            } catch (e: Exception) {
+                logWarn("refreshTrustStatus", "Failed: ${e.message}")
             }
         }
     }
@@ -577,6 +715,7 @@ class InteractViewModel(
         super.onCleared()
         pollingJob?.cancel()
         statusJob?.cancel()
+        healthJob?.cancel()
         sseJob?.cancel()
     }
 }

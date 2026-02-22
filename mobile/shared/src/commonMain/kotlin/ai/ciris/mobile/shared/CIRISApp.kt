@@ -760,6 +760,10 @@ fun CIRISApp(
                             }
                             currentScreen = Screen.Login
                         },
+                        onOpenTrustPage = {
+                            platformLog(TAG, "[INFO] Opening Trust page")
+                            currentScreen = Screen.Trust
+                        },
                         modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
                     )
                 }
@@ -1567,6 +1571,16 @@ fun CIRISApp(
                     onNavigateBack = { currentScreen = Screen.Interact }
                 )
             }
+
+            Screen.Trust -> {
+                TrustPage(
+                    apiClient = apiClient,
+                    onNavigateBack = {
+                        println("[CIRISApp][INFO][Screen.Trust] Navigating back to Interact")
+                        currentScreen = Screen.Interact
+                    }
+                )
+            }
         }
     }
 }
@@ -1851,4 +1865,5 @@ private sealed class Screen {
     object System : Screen()
     object Runtime : Screen()
     object Users : Screen()
+    object Trust : Screen()
 }

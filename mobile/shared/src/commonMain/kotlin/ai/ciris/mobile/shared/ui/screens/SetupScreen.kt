@@ -369,14 +369,31 @@ private fun WelcomeStep(
                 .border(1.dp, Color(0xFF86EFAC), RoundedCornerShape(12.dp))
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Register Your Agent Identity",
+                        color = SetupColors.SuccessDark,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFFD1FAE5)
+                    ) {
+                        Text(
+                            text = "OPTIONAL",
+                            color = SetupColors.SuccessDark,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
                 Text(
-                    text = "Register Your Agent Identity",
-                    color = SetupColors.SuccessDark,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Join the CIRIS community and enable cryptographic verification of your agent's behavior.",
+                    text = "Join the CIRIS community and enable cryptographic attestation against the public infrastructure and your audit log.",
                     color = SetupColors.SuccessText,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
@@ -431,6 +448,17 @@ private fun WelcomeStep(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 4.dp)
+                )
+
+                // Skip option
+                Text(
+                    text = "Skip for now - you can register later in Settings",
+                    color = Color(0xFF9CA3AF),  // Lighter gray for tertiary
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
                 )
             }
         }

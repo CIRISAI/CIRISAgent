@@ -2199,11 +2199,12 @@ async def get_verify_status(
             audit_ok = False
             audit_details: dict = {"sources_checked": [], "sources_valid": []}
             try:
-                data_dir = os.environ.get("CIRIS_DATA_DIR", ".")
+                data_dir = os.path.expanduser(os.environ.get("CIRIS_DATA_DIR", "."))
                 audit_db_path = os.path.join(data_dir, "ciris_audit.db")
                 jsonl_path = os.environ.get("AUDIT_LOG_PATH", os.path.join(data_dir, "audit_logs.jsonl"))
                 jsonl_path = os.path.expanduser(jsonl_path)
                 key_id = os.environ.get("CIRIS_SIGNING_KEY_ID", "")
+                logger.info(f"[verify-status] Audit paths: db={audit_db_path}, jsonl={jsonl_path}")
 
                 # v0.6.16+: Use CIRISVerify for cryptographic audit verification
                 if hasattr(verifier, "verify_audit_trail_sync"):
@@ -2215,17 +2216,19 @@ async def get_verify_status(
                             portal_key_id=key_id if key_id else None,
                         )
                         audit_ok = getattr(audit_result, "valid", False)
-                        audit_details = {
-                            "verified_by": "ciris_verify",
-                            "valid": audit_ok,
-                            "total_entries": getattr(audit_result, "total_entries", 0),
-                            "entries_verified": getattr(audit_result, "entries_verified", 0),
-                            "hash_chain_valid": getattr(audit_result, "hash_chain_valid", False),
-                            "signatures_valid": getattr(audit_result, "signatures_valid", False),
-                            "genesis_valid": getattr(audit_result, "genesis_valid", False),
-                            "errors": getattr(audit_result, "errors", []),
-                            "verification_time_ms": getattr(audit_result, "verification_time_ms", 0),
-                        }
+                        audit_details.update(
+                            {
+                                "verified_by": "ciris_verify",
+                                "valid": audit_ok,
+                                "total_entries": getattr(audit_result, "total_entries", 0),
+                                "entries_verified": getattr(audit_result, "entries_verified", 0),
+                                "hash_chain_valid": getattr(audit_result, "hash_chain_valid", False),
+                                "signatures_valid": getattr(audit_result, "signatures_valid", False),
+                                "genesis_valid": getattr(audit_result, "genesis_valid", False),
+                                "errors": getattr(audit_result, "errors", []),
+                                "verification_time_ms": getattr(audit_result, "verification_time_ms", 0),
+                            }
+                        )
                         chain_summary = getattr(audit_result, "chain_summary", None)
                         if chain_summary:
                             audit_details["chain_summary"] = {
@@ -2239,6 +2242,16 @@ async def get_verify_status(
                             f"entries={audit_details.get('entries_verified', 0)}/{audit_details.get('total_entries', 0)}, "
                             f"hash_chain={audit_details.get('hash_chain_valid')}, sigs={audit_details.get('signatures_valid')}"
                         )
+                        # If CIRISVerify found 0 entries but files exist, schema mismatch - use legacy
+                        if not audit_ok and audit_details.get("total_entries", 0) == 0:
+                            db_exists = os.path.exists(audit_db_path) and os.path.getsize(audit_db_path) > 0
+                            jsonl_exists = os.path.exists(jsonl_path) and os.path.getsize(jsonl_path) > 0
+                            if db_exists or jsonl_exists:
+                                logger.info(
+                                    "[verify-status] CIRISVerify found 0 entries but files exist - schema mismatch, using legacy check"
+                                )
+                                audit_details["schema_mismatch"] = True
+                                audit_details["verified_by"] = None  # Force legacy fallback
                     except Exception as verify_err:
                         logger.warning(f"[verify-status] CIRISVerify audit verification failed: {verify_err}")
                         # Fall through to legacy check
@@ -2264,7 +2277,9 @@ async def get_verify_status(
                     if key_id:
                         audit_details["registry_key_id"] = key_id
 
-                    logger.info(f"[verify-status] Audit trail check (legacy): {audit_ok} (sources={audit_details.get('sources_valid', [])})")
+                    logger.info(
+                        f"[verify-status] Audit trail check (legacy): {audit_ok} (sources={audit_details.get('sources_valid', [])})"
+                    )
             except Exception as audit_err:
                 logger.warning(f"[verify-status] Audit trail check failed: {audit_err}")
 

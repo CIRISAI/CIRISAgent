@@ -470,6 +470,21 @@ class CIRISVerify:
         except AttributeError:
             pass  # Older library version, diagnostics not available
 
+        # ciris_verify_audit_trail (optional - added in 0.6.16)
+        try:
+            self._lib.ciris_verify_audit_trail.argtypes = [
+                ctypes.c_void_p,  # handle (can be null)
+                ctypes.c_char_p,  # db_path
+                ctypes.c_char_p,  # jsonl_path (optional)
+                ctypes.c_char_p,  # portal_key_id (optional)
+                ctypes.POINTER(ctypes.c_void_p),  # result_json (out)
+                ctypes.POINTER(ctypes.c_size_t),  # result_len (out)
+            ]
+            self._lib.ciris_verify_audit_trail.restype = ctypes.c_int
+            self._has_audit_trail_support = True
+        except AttributeError:
+            self._has_audit_trail_support = False
+
         # Initialize handle
         self._handle = self._lib.ciris_verify_init()
         if not self._handle:
@@ -1024,6 +1039,152 @@ class CIRISVerify:
         finally:
             if proof_data.value:
                 self._lib.ciris_verify_free(ctypes.c_char_p(proof_data.value))
+
+    # ========================================================================
+    # Audit Trail Verification
+    # ========================================================================
+
+    @property
+    def has_audit_trail_support(self) -> bool:
+        """Check if audit trail verification is available.
+
+        Returns:
+            True if the library supports audit trail verification.
+        """
+        return getattr(self, "_has_audit_trail_support", False)
+
+    async def verify_audit_trail(
+        self,
+        db_path: str,
+        jsonl_path: Optional[str] = None,
+        portal_key_id: Optional[str] = None,
+        timeout: Optional[float] = None,
+    ) -> dict:
+        """Verify the agent's audit trail for integrity.
+
+        This reads the audit trail from the specified SQLite database
+        and/or JSONL file and verifies:
+        - Hash chain integrity (each entry links to previous)
+        - Hash validity (each entry's hash matches computed hash)
+        - Genesis validity (first entry has "genesis" as previous_hash)
+        - Optional signature verification
+
+        Args:
+            db_path: Path to ciris_audit.db SQLite database.
+            jsonl_path: Optional path to audit_logs.jsonl for cross-checking.
+            portal_key_id: Optional Portal key ID for signature verification.
+            timeout: Operation timeout in seconds.
+
+        Returns:
+            Dictionary containing AuditVerificationResult with:
+            - valid: Whether audit trail is valid
+            - total_entries: Total entries in audit log
+            - entries_verified: Number of entries verified
+            - hash_chain_valid: Whether hash chain is intact
+            - signatures_valid: Whether signatures are valid
+            - genesis_valid: Whether genesis entry is proper
+            - portal_key_used: Whether Portal key was used
+            - first_tampered_sequence: First tampered sequence (if any)
+            - errors: List of error messages
+            - verification_time_ms: Verification time in milliseconds
+            - chain_summary: Summary of the chain state
+
+        Raises:
+            RuntimeError: If audit trail support is not available.
+            VerificationFailedError: If verification fails to run.
+            TimeoutError: If operation times out.
+        """
+        if not self.has_audit_trail_support:
+            raise RuntimeError("Audit trail verification not available in this library version")
+
+        timeout = timeout or self._timeout
+
+        def _verify() -> dict:
+            result_data = ctypes.c_void_p()
+            result_len = ctypes.c_size_t()
+
+            # Encode paths as C strings
+            db_path_bytes = db_path.encode("utf-8")
+            jsonl_path_bytes = jsonl_path.encode("utf-8") if jsonl_path else None
+            portal_key_bytes = portal_key_id.encode("utf-8") if portal_key_id else None
+
+            ret = self._lib.ciris_verify_audit_trail(
+                self._handle,
+                db_path_bytes,
+                jsonl_path_bytes,
+                portal_key_bytes,
+                ctypes.byref(result_data),
+                ctypes.byref(result_len),
+            )
+
+            if ret != 0:
+                raise VerificationFailedError(ret, f"Audit trail verification failed with code {ret}")
+
+            try:
+                result_bytes = ctypes.string_at(result_data.value, result_len.value)
+                return json.loads(result_bytes)
+            finally:
+                if result_data.value:
+                    self._lib.ciris_verify_free(ctypes.c_char_p(result_data.value))
+
+        loop = asyncio.get_event_loop()
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(self._executor, _verify),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            raise CIRISTimeoutError("verify_audit_trail", timeout)
+
+    def verify_audit_trail_sync(
+        self,
+        db_path: str,
+        jsonl_path: Optional[str] = None,
+        portal_key_id: Optional[str] = None,
+    ) -> dict:
+        """Synchronous version of verify_audit_trail.
+
+        Args:
+            db_path: Path to ciris_audit.db SQLite database.
+            jsonl_path: Optional path to audit_logs.jsonl for cross-checking.
+            portal_key_id: Optional Portal key ID for signature verification.
+
+        Returns:
+            Dictionary containing AuditVerificationResult.
+
+        Raises:
+            RuntimeError: If audit trail support is not available.
+            VerificationFailedError: If verification fails to run.
+        """
+        if not self.has_audit_trail_support:
+            raise RuntimeError("Audit trail verification not available in this library version")
+
+        result_data = ctypes.c_void_p()
+        result_len = ctypes.c_size_t()
+
+        # Encode paths as C strings
+        db_path_bytes = db_path.encode("utf-8")
+        jsonl_path_bytes = jsonl_path.encode("utf-8") if jsonl_path else None
+        portal_key_bytes = portal_key_id.encode("utf-8") if portal_key_id else None
+
+        ret = self._lib.ciris_verify_audit_trail(
+            self._handle,
+            db_path_bytes,
+            jsonl_path_bytes,
+            portal_key_bytes,
+            ctypes.byref(result_data),
+            ctypes.byref(result_len),
+        )
+
+        if ret != 0:
+            raise VerificationFailedError(ret, f"Audit trail verification failed with code {ret}")
+
+        try:
+            result_bytes = ctypes.string_at(result_data.value, result_len.value)
+            return json.loads(result_bytes)
+        finally:
+            if result_data.value:
+                self._lib.ciris_verify_free(ctypes.c_char_p(result_data.value))
 
     def get_mandatory_disclosure(self, status: LicenseStatus) -> MandatoryDisclosure:
         """Get mandatory disclosure for a given status.

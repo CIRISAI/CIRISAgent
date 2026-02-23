@@ -50,3 +50,9 @@ fun getOAuthProviderId(): String = when (getPlatform()) {
  * Includes platform, OS version, CPU architecture, and app version.
  */
 expect fun getDeviceDebugInfo(): String
+
+/**
+ * Open a URL in the platform's default browser.
+ * On iOS calls UIApplication.shared.open, on Android uses Intent.ACTION_VIEW.
+ */
+expect fun openUrlInBrowser(url: String)

@@ -143,10 +143,11 @@ import Compression
                 NSLog("[PythonBridge] Will re-extract to get .fwork files for code signing")
                 needsReextract = true
             }
-            // On device, check if we have simulator .fwork files (wrong platform)
+            // On device, check if we have simulator .fwork files WITHOUT device .fwork files
+            // If both exist (Resources.zip ships both), that's fine — no re-extract needed
             #if !targetEnvironment(simulator)
-            if !needsReextract && fm.fileExists(atPath: pydanticSimulatorFworkPath) {
-                NSLog("[PythonBridge] Simulator extraction detected on device (iphonesimulator.fwork)")
+            if !needsReextract && fm.fileExists(atPath: pydanticSimulatorFworkPath) && !fm.fileExists(atPath: pydanticFworkPath) {
+                NSLog("[PythonBridge] Simulator-only extraction detected on device (iphonesimulator.fwork but no iphoneos.fwork)")
                 NSLog("[PythonBridge] Will re-extract with device-specific resources")
                 needsReextract = true
             }

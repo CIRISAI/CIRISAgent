@@ -39,7 +39,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalUriHandler
+import ai.ciris.mobile.shared.platform.openUrlInBrowser
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -645,7 +645,6 @@ private fun NodeAuthStep(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val deviceAuth = state.deviceAuth
-    val uriHandler = LocalUriHandler.current
     val clipboardManager = LocalClipboardManager.current
     var showCopiedToast by remember { mutableStateOf(false) }
 
@@ -730,7 +729,7 @@ private fun NodeAuthStep(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    uriHandler.openUri(fullVerificationUrl)
+                                    openUrlInBrowser(fullVerificationUrl)
                                 }
                         ) {
                             Text(
@@ -752,7 +751,7 @@ private fun NodeAuthStep(
                         ) {
                             // Open in browser button
                             Button(
-                                onClick = { uriHandler.openUri(fullVerificationUrl) },
+                                onClick = { openUrlInBrowser(fullVerificationUrl) },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = SetupColors.Primary
                                 ),

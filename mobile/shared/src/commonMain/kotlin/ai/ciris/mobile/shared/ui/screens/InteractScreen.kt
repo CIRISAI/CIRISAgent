@@ -67,6 +67,7 @@ fun InteractScreen(
     onNavigateBack: () -> Unit,
     onSessionExpired: () -> Unit = {},
     onOpenTrustPage: () -> Unit = {},
+    onOpenBilling: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsState()
@@ -121,7 +122,8 @@ fun InteractScreen(
                 trustStatus = trustStatus,
                 onShutdown = { viewModel.shutdown(emergency = false) },
                 onEmergencyStop = { viewModel.shutdown(emergency = true) },
-                onTrustShieldClick = onOpenTrustPage
+                onTrustShieldClick = onOpenTrustPage,
+                onCreditsClick = onOpenBilling
             )
 
         // Auth error is now handled by LaunchedEffect above - navigates to login silently
@@ -241,6 +243,7 @@ private fun EnhancedStatusBar(
     onShutdown: () -> Unit,
     onEmergencyStop: () -> Unit,
     onTrustShieldClick: () -> Unit,
+    onCreditsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -267,9 +270,9 @@ private fun EnhancedStatusBar(
                         )
                 )
 
-                // Connection text
+                // Connection text - "Local Runtime" instead of "Server"
                 Text(
-                    text = if (isConnected) "Server" else "Offline",
+                    text = if (isConnected) "Local" else "Offline",
                     fontSize = 11.sp,
                     color = if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444)
                 )
@@ -280,10 +283,10 @@ private fun EnhancedStatusBar(
                 // LLM health indicator
                 LlmHealthIndicator(health = llmHealth)
 
-                // Credits indicator (only if CIRIS proxy)
+                // Credits indicator (only if CIRIS proxy) - clickable to billing
                 if (llmHealth.isCirisProxy && creditStatus.isLoaded) {
                     Text(text = "•", fontSize = 10.sp, color = Color(0xFFD1D5DB))
-                    CreditsIndicator(credits = creditStatus)
+                    CreditsIndicator(credits = creditStatus, onClick = onCreditsClick)
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -382,39 +385,46 @@ private fun LlmHealthIndicator(
 }
 
 /**
- * Credits indicator - shows remaining credits
+ * Credits indicator - shows remaining credits (clickable to billing)
  */
 @Composable
 private fun CreditsIndicator(
     credits: CreditStatus,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    Surface(
+        onClick = onClick,
+        color = Color.Transparent,
+        modifier = modifier
     ) {
-        // Coin emoji for credits
-        Text(text = "💰", fontSize = 10.sp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+        ) {
+            // Coin emoji for credits
+            Text(text = "💰", fontSize = 10.sp)
 
-        // Credits count
-        val creditsText = when {
-            credits.creditsRemaining > 0 -> "${credits.creditsRemaining}"
-            credits.freeUsesRemaining > 0 -> "Free: ${credits.freeUsesRemaining}"
-            else -> "0"
+            // Credits count
+            val creditsText = when {
+                credits.creditsRemaining > 0 -> "${credits.creditsRemaining}"
+                credits.freeUsesRemaining > 0 -> "Free: ${credits.freeUsesRemaining}"
+                else -> "0"
+            }
+            val creditsColor = when {
+                credits.creditsRemaining > 10 -> Color(0xFF059669)
+                credits.creditsRemaining > 0 -> Color(0xFFD97706)
+                credits.freeUsesRemaining > 0 -> Color(0xFF2563EB)
+                else -> Color(0xFFDC2626)
+            }
+            Text(
+                text = creditsText,
+                fontSize = 10.sp,
+                color = creditsColor,
+                fontWeight = FontWeight.Medium
+            )
         }
-        val creditsColor = when {
-            credits.creditsRemaining > 10 -> Color(0xFF059669)
-            credits.creditsRemaining > 0 -> Color(0xFFD97706)
-            credits.freeUsesRemaining > 0 -> Color(0xFF2563EB)
-            else -> Color(0xFFDC2626)
-        }
-        Text(
-            text = creditsText,
-            fontSize = 10.sp,
-            color = creditsColor,
-            fontWeight = FontWeight.Medium
-        )
     }
 }
 

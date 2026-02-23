@@ -764,6 +764,10 @@ fun CIRISApp(
                             platformLog(TAG, "[INFO] Opening Trust page")
                             currentScreen = Screen.Trust
                         },
+                        onOpenBilling = {
+                            platformLog(TAG, "[INFO] Opening Billing page from credits")
+                            currentScreen = Screen.Billing
+                        },
                         modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
                     )
                 }

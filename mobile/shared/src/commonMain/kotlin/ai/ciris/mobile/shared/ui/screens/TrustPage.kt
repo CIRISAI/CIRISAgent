@@ -103,105 +103,104 @@ fun TrustPage(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Loading state
-            if (loading) {
-                LoadingCard()
-                return@Column
-            }
-
-            // Error state
-            if (error != null || verifyStatus?.loaded != true) {
-                ErrorCard(
-                    error = error ?: verifyStatus?.error ?: "Unknown error",
-                    onRetry = {
-                        loading = true
-                        coroutineScope.launch {
-                            fetchVerifyStatus(
-                                apiClient = apiClient,
-                                mode = attestationMode,
-                                onSuccess = { verifyStatus = it; loading = false; error = null },
-                                onError = { error = it; loading = false }
-                            )
+            // Conditional rendering based on state (no early returns!)
+            when {
+                loading -> {
+                    LoadingCard()
+                }
+                error != null || verifyStatus?.loaded != true -> {
+                    ErrorCard(
+                        error = error ?: verifyStatus?.error ?: "Unknown error",
+                        onRetry = {
+                            loading = true
+                            coroutineScope.launch {
+                                fetchVerifyStatus(
+                                    apiClient = apiClient,
+                                    mode = attestationMode,
+                                    onSuccess = { verifyStatus = it; loading = false; error = null },
+                                    onError = { error = it; loading = false }
+                                )
+                            }
                         }
-                    }
-                )
-                return@Column
-            }
-
-            val status = verifyStatus!!
-
-            // Header card with summary
-            TrustSummaryCard(status = status)
-
-            // Mode toggle
-            ModeToggleCard(
-                currentMode = attestationMode,
-                isLoading = loading,
-                onModeChange = { newMode ->
-                    attestationMode = newMode
-                    loading = true
-                    coroutineScope.launch {
-                        fetchVerifyStatus(
-                            apiClient = apiClient,
-                            mode = newMode,
-                            onSuccess = { verifyStatus = it; loading = false; error = null },
-                            onError = { error = it; loading = false }
-                        )
-                    }
-                },
-                onRun = {
-                    loading = true
-                    coroutineScope.launch {
-                        fetchVerifyStatus(
-                            apiClient = apiClient,
-                            mode = attestationMode,
-                            onSuccess = { verifyStatus = it; loading = false; error = null },
-                            onError = { error = it; loading = false }
-                        )
-                    }
+                    )
                 }
-            )
+                else -> {
+                    val status = verifyStatus!!
 
-            // Attestation levels
-            AttestationLevelsCard(status = status)
+                    // Header card with summary
+                    TrustSummaryCard(status = status)
 
-            // Platform info
-            if (status.platformOs != null || status.platformArch != null) {
-                PlatformInfoCard(status = status)
-            }
+                    // Mode toggle
+                    ModeToggleCard(
+                        currentMode = attestationMode,
+                        isLoading = loading,
+                        onModeChange = { newMode ->
+                            attestationMode = newMode
+                            loading = true
+                            coroutineScope.launch {
+                                fetchVerifyStatus(
+                                    apiClient = apiClient,
+                                    mode = newMode,
+                                    onSuccess = { verifyStatus = it; loading = false; error = null },
+                                    onError = { error = it; loading = false }
+                                )
+                            }
+                        },
+                        onRun = {
+                            loading = true
+                            coroutineScope.launch {
+                                fetchVerifyStatus(
+                                    apiClient = apiClient,
+                                    mode = attestationMode,
+                                    onSuccess = { verifyStatus = it; loading = false; error = null },
+                                    onError = { error = it; loading = false }
+                                )
+                            }
+                        }
+                    )
 
-            // File integrity details
-            if (status.filesChecked != null && status.filesChecked > 0) {
-                FileIntegrityCard(status = status)
-            }
+                    // Attestation levels
+                    AttestationLevelsCard(status = status)
 
-            // Key status warning
-            if (status.keyStatus != "portal_active") {
-                KeyStatusWarningCard(status = status)
-            }
+                    // Platform info
+                    if (status.platformOs != null || status.platformArch != null) {
+                        PlatformInfoCard(status = status)
+                    }
 
-            // Disclaimer
-            DisclaimerCard()
+                    // File integrity details
+                    if (status.filesChecked != null && status.filesChecked > 0) {
+                        FileIntegrityCard(status = status)
+                    }
 
-            // Learn more link
-            Text(
-                text = "Learn more about CIRISVerify",
-                fontSize = 14.sp,
-                color = Color(0xFF2563EB),
-                textDecoration = TextDecoration.Underline,
-                modifier = Modifier
-                    .clickable { uriHandler.openUri("https://ciris.ai/trust") }
-                    .padding(8.dp)
-            )
+                    // Key status warning
+                    if (status.keyStatus != "portal_active") {
+                        KeyStatusWarningCard(status = status)
+                    }
 
-            // Raw details (expandable)
-            RawDetailsCard(
-                status = status,
-                onCopy = {
-                    val text = buildRawDetailsText(status)
-                    clipboardManager.setText(AnnotatedString(text))
+                    // Disclaimer
+                    DisclaimerCard()
+
+                    // Learn more link
+                    Text(
+                        text = "Learn more about CIRISVerify",
+                        fontSize = 14.sp,
+                        color = Color(0xFF2563EB),
+                        textDecoration = TextDecoration.Underline,
+                        modifier = Modifier
+                            .clickable { uriHandler.openUri("https://ciris.ai/trust") }
+                            .padding(8.dp)
+                    )
+
+                    // Raw details (expandable)
+                    RawDetailsCard(
+                        status = status,
+                        onCopy = {
+                            val text = buildRawDetailsText(status)
+                            clipboardManager.setText(AnnotatedString(text))
+                        }
+                    )
                 }
-            )
+            }
         }
     }
 }
@@ -357,22 +356,38 @@ private fun ModeToggleCard(
             Text("Attestation Mode", fontWeight = FontWeight.Medium)
 
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                FilterChip(
-                    selected = currentMode == "partial",
+                // Partial mode button
+                OutlinedButton(
                     onClick = { onModeChange("partial") },
-                    label = { Text("Partial", fontSize = 12.sp) }
-                )
-                FilterChip(
-                    selected = currentMode == "full",
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (currentMode == "partial") Color(0xFF2563EB).copy(alpha = 0.1f) else Color.Transparent,
+                        contentColor = if (currentMode == "partial") Color(0xFF2563EB) else Color(0xFF6B7280)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text("Partial", fontSize = 12.sp)
+                }
+                // Full mode button
+                OutlinedButton(
                     onClick = { onModeChange("full") },
-                    label = { Text("Full", fontSize = 12.sp) }
-                )
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (currentMode == "full") Color(0xFF2563EB).copy(alpha = 0.1f) else Color.Transparent,
+                        contentColor = if (currentMode == "full") Color(0xFF2563EB) else Color(0xFF6B7280)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text("Full", fontSize = 12.sp)
+                }
+                // Run button
                 Button(
                     onClick = onRun,
                     enabled = !isLoading,
-                    contentPadding = PaddingValues(horizontal = 12.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier.height(32.dp)
                 ) {
-                    Text(if (isLoading) "..." else "Run")
+                    Text(if (isLoading) "..." else "Run", fontSize = 12.sp)
                 }
             }
         }

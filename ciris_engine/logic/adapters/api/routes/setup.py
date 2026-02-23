@@ -2147,9 +2147,10 @@ async def get_verify_status(
             integrity_failure_reason = None
             try:
                 # Get agent version and root
-                from ciris_engine.constants import CIRIS_VERSION
+                # Use major.minor.patch only (strip stage suffix like "-stable")
+                from ciris_engine.constants import CIRIS_VERSION_MAJOR, CIRIS_VERSION_MINOR, CIRIS_VERSION_PATCH
 
-                agent_version = CIRIS_VERSION
+                agent_version = f"{CIRIS_VERSION_MAJOR}.{CIRIS_VERSION_MINOR}.{CIRIS_VERSION_PATCH}"
                 agent_root = os.environ.get("CIRIS_AGENT_ROOT", os.getcwd())
                 # On Android, use the Chaquopy extracted path
                 if platform_os == "android":

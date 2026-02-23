@@ -162,6 +162,9 @@ fun TrustPage(
                     // Attestation levels
                     AttestationLevelsCard(status = status)
 
+                    // Device attestation (Play Integrity / App Attest)
+                    DeviceAttestationCard(status = status)
+
                     // Platform info
                     if (status.platformOs != null || status.platformArch != null) {
                         PlatformInfoCard(status = status)
@@ -482,6 +485,179 @@ private fun AttestationLevelsCard(status: VerifyStatusResponse) {
 }
 
 @Composable
+private fun DeviceAttestationCard(status: VerifyStatusResponse) {
+    val isAndroid = status.platformOs?.lowercase() == "android"
+    val isIos = status.platformOs?.lowercase() in listOf("ios", "ipados", "macos")
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Device Attestation",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
+
+            Text(
+                text = "Single-party device integrity verification from platform vendor",
+                fontSize = 12.sp,
+                color = Color(0xFF6B7280)
+            )
+
+            when {
+                isAndroid -> {
+                    // Google Play Integrity
+                    val passed = status.playIntegrityOk
+                    val verdict = status.playIntegrityVerdict ?: "Not checked"
+                    val color = if (passed) Color(0xFF059669) else Color(0xFFD97706)
+                    val icon = if (passed) "✓" else "○"
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(color.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = icon,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = color
+                            )
+                            Text(
+                                text = "Google Play Integrity",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = color
+                            )
+                        }
+
+                        // Verdict badges
+                        Column(
+                            modifier = Modifier.padding(start = 22.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            val verdictItems = parsePlayIntegrityVerdict(verdict)
+                            verdictItems.forEach { (label, ok) ->
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (ok) "●" else "○",
+                                        fontSize = 8.sp,
+                                        color = if (ok) Color(0xFF059669) else Color(0xFFD97706)
+                                    )
+                                    Text(
+                                        text = label,
+                                        fontSize = 12.sp,
+                                        color = if (ok) Color(0xFF059669) else Color(0xFF6B7280)
+                                    )
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = "Validates: genuine app, unmodified device, Google Play Services",
+                            fontSize = 11.sp,
+                            color = Color(0xFF9CA3AF),
+                            modifier = Modifier.padding(start = 22.dp)
+                        )
+                    }
+                }
+                isIos -> {
+                    // Apple App Attest (placeholder for future)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF6B7280).copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "○",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF6B7280)
+                            )
+                            Text(
+                                text = "Apple App Attest",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF6B7280)
+                            )
+                        }
+                        Text(
+                            text = "Not yet implemented - coming soon",
+                            fontSize = 12.sp,
+                            color = Color(0xFF9CA3AF),
+                            modifier = Modifier.padding(start = 22.dp)
+                        )
+                    }
+                }
+                else -> {
+                    // Desktop/other - no device attestation available
+                    Text(
+                        text = "Device attestation not available on ${status.platformOs ?: "this platform"}",
+                        fontSize = 12.sp,
+                        color = Color(0xFF9CA3AF)
+                    )
+                }
+            }
+
+            // Disclaimer
+            Text(
+                text = "Device attestation is independent of software attestation levels above",
+                fontSize = 11.sp,
+                color = Color(0xFF9CA3AF)
+            )
+        }
+    }
+}
+
+/**
+ * Parse Play Integrity verdict string into display items
+ */
+private fun parsePlayIntegrityVerdict(verdict: String): List<Pair<String, Boolean>> {
+    return when {
+        verdict.contains("MEETS_STRONG_INTEGRITY", ignoreCase = true) -> listOf(
+            "App Integrity" to true,
+            "Device Integrity" to true,
+            "Strong Integrity" to true
+        )
+        verdict.contains("MEETS_DEVICE_INTEGRITY", ignoreCase = true) -> listOf(
+            "App Integrity" to true,
+            "Device Integrity" to true,
+            "Strong Integrity" to false
+        )
+        verdict.contains("MEETS_BASIC_INTEGRITY", ignoreCase = true) -> listOf(
+            "App Integrity" to true,
+            "Device Integrity" to false,
+            "Strong Integrity" to false
+        )
+        verdict == "Not checked" || verdict.isBlank() -> listOf(
+            "App Integrity" to false,
+            "Device Integrity" to false,
+            "Strong Integrity" to false
+        )
+        else -> listOf(
+            "Status" to false
+        )
+    }
+}
+
+@Composable
 private fun AttestationLevel(
     level: Int,
     title: String,
@@ -724,7 +900,11 @@ private fun RawDetailsCard(
                         RawLine("File Integrity", status.fileIntegrityOk)
                         RawLine("Registry", status.registryOk)
                         RawLine("Audit", status.auditOk)
+                        RawLine("Play Integrity", status.playIntegrityOk)
                         Spacer(modifier = Modifier.height(4.dp))
+                        status.playIntegrityVerdict?.let {
+                            Text("Play Verdict: $it", fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                        }
                         Text("Platform: ${status.platformOs ?: "?"} / ${status.platformArch ?: "?"}", fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                         Text("Hardware: ${status.hardwareType ?: "?"}", fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                         Text("Key Status: ${status.keyStatus}", fontSize = 10.sp, fontFamily = FontFamily.Monospace)
@@ -765,6 +945,8 @@ private fun buildRawDetailsText(status: VerifyStatusResponse): String {
         appendLine("  File Integrity: ${status.fileIntegrityOk}")
         appendLine("  Registry: ${status.registryOk}")
         appendLine("  Audit: ${status.auditOk}")
+        appendLine("  Play Integrity: ${status.playIntegrityOk}")
+        status.playIntegrityVerdict?.let { appendLine("  Play Verdict: $it") }
         appendLine()
         appendLine("Platform: ${status.platformOs ?: "?"} / ${status.platformArch ?: "?"}")
         appendLine("Hardware: ${status.hardwareType ?: "?"}")

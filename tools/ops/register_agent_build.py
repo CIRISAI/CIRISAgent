@@ -7,6 +7,10 @@ This script:
 2. Creates a RegisterAgentRequest payload
 3. Calls the RegistryAdminService/RegisterAgent gRPC endpoint
 
+For build registration with file manifests:
+  # Register a build with full file manifest
+  python tools/ops/register_agent_build.py --build /path/to/CIRISAgent
+
 Usage:
   # Register a test agent
   python tools/ops/register_agent_build.py --test
@@ -30,8 +34,200 @@ import os
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+
+# File extensions exempt from integrity checking (must match CIRISVerify)
+EXEMPT_EXTENSIONS = {".env", ".log", ".audit", ".db", ".sqlite", ".sqlite3", ".pyc", ".pyo"}
+
+# Directory names exempt from integrity checking (must match CIRISVerify)
+EXEMPT_DIRS = {
+    "__pycache__",
+    ".git",
+    ".venv",
+    "venv",
+    "node_modules",
+    "data",
+    "logs",
+    ".pytest_cache",
+    ".mypy_cache",
+    "dist",
+    "build",
+    ".ruff_cache",
+    ".coverage",
+    ".tox",
+    ".nox",
+}
+
+
+def is_exempt(relative_path: str) -> bool:
+    """
+    Check if a file path is exempt from integrity checking.
+    Must match CIRISVerify's is_exempt logic exactly.
+    """
+    path = Path(relative_path)
+
+    # Check exempt extensions
+    if path.suffix in EXEMPT_EXTENSIONS:
+        return True
+
+    # Check if filename itself is exempt (e.g., ".env")
+    if path.name in EXEMPT_EXTENSIONS:
+        return True
+
+    # Check exempt directories
+    for part in path.parts:
+        if part in EXEMPT_DIRS:
+            return True
+        # Wildcard suffix match for *.egg-info
+        if part.endswith(".egg-info"):
+            return True
+
+    return False
+
+
+def generate_file_manifest(agent_root: Path, subdirs: list[str] | None = None) -> dict[str, str]:
+    """
+    Generate a file manifest by walking the agent directory and hashing all non-exempt files.
+    Returns a dict of {relative_path: sha256_hex_hash} sorted alphabetically by path.
+    Must match CIRISVerify's generate_manifest logic exactly.
+
+    Args:
+        agent_root: The root directory of the agent (e.g., /path/to/CIRISAgent)
+        subdirs: Optional list of subdirectories to include (e.g., ["ciris_engine"]).
+                 If None, includes all non-exempt files from agent_root.
+    """
+    files: dict[str, str] = {}
+
+    # Determine which directories to scan
+    if subdirs:
+        scan_dirs = [agent_root / subdir for subdir in subdirs if (agent_root / subdir).exists()]
+    else:
+        scan_dirs = [agent_root]
+
+    for scan_dir in scan_dirs:
+        for root, dirs, filenames in os.walk(scan_dir):
+            # Prune exempt directories from walk
+            dirs[:] = [d for d in dirs if d not in EXEMPT_DIRS and not d.endswith(".egg-info")]
+
+            for filename in filenames:
+                file_path = Path(root) / filename
+                # Always use path relative to agent_root (not scan_dir)
+                relative = str(file_path.relative_to(agent_root)).replace("\\", "/")
+
+                if is_exempt(relative):
+                    continue
+
+                # Hash the file
+                sha256 = hashlib.sha256()
+                try:
+                    with open(file_path, "rb") as f:
+                        for chunk in iter(lambda: f.read(8192), b""):
+                            sha256.update(chunk)
+                    files[relative] = sha256.hexdigest()
+                except (PermissionError, IOError) as e:
+                    print(f"Warning: Skipping {relative}: {e}")
+
+    # Return sorted dict (BTreeMap equivalent - alphabetical order by path)
+    return dict(sorted(files.items()))
+
+
+def compute_manifest_hash(manifest: dict[str, str]) -> str:
+    """
+    Compute the manifest hash by concatenating all file hashes in sorted path order.
+    Must match CIRISVerify's hash computation exactly:
+      SHA256(hash1 || hash2 || ...) where hashes are hex strings in alphabetical path order.
+    """
+    hasher = hashlib.sha256()
+    # Manifest is already sorted, just concatenate hex hashes
+    for file_hash in manifest.values():
+        hasher.update(file_hash.encode("ascii"))  # Hash the hex string bytes
+    return hasher.hexdigest()
+
+
+def register_build(
+    agent_root: Path,
+    version: str,
+    source_repo: str = "",
+    source_commit: str = "",
+    modules: list[str] | None = None,
+    notes: str = "",
+    include_dirs: list[str] | None = None,
+) -> bool:
+    """Register a build with file manifest via Registry gRPC."""
+    jwt_secret = os.environ.get("REGISTRY_JWT_SECRET")
+    if not jwt_secret:
+        print("Error: REGISTRY_JWT_SECRET environment variable required")
+        return False
+
+    addr = os.environ.get("REGISTRY_GRPC_ADDR", "207.148.13.157:50051")
+
+    # Generate file manifest
+    if include_dirs:
+        print(f"Generating file manifest from: {agent_root} (subdirs: {include_dirs})")
+    else:
+        print(f"Generating file manifest from: {agent_root}")
+    manifest = generate_file_manifest(agent_root, subdirs=include_dirs)
+    manifest_hash = compute_manifest_hash(manifest)
+    manifest_json = json.dumps({"files": manifest}, separators=(",", ":"))
+
+    # Compute build_hash (same as manifest_hash for now, identifies the build)
+    build_hash = manifest_hash
+
+    print(f"  Files in manifest: {len(manifest)}")
+    print(f"  Manifest hash: {manifest_hash[:16]}...")
+
+    # Generate admin JWT
+    token = generate_admin_jwt(jwt_secret)
+
+    # Build the request payload
+    payload = {
+        "build": {
+            "build_id": str(uuid.uuid4()),
+            "version": version,
+            "build_hash": build_hash,
+            "file_manifest_hash": manifest_hash,
+            "file_manifest_count": len(manifest),
+            "file_manifest_json": base64.b64encode(manifest_json.encode()).decode("ascii"),
+            "includes_modules": modules or ["core"],
+            "source_repo": source_repo,
+            "source_commit": source_commit,
+            "registered_at": int(datetime.now(timezone.utc).timestamp()),
+            "registered_by": "register_agent_build.py",
+            "status": "active",
+            "notes": notes,
+        }
+    }
+
+    print(f"\nRegistering build with Registry at {addr}")
+    print(f"  Version: {version}")
+    print(f"  Build hash: {build_hash[:16]}...")
+    print(f"  Modules: {modules or ['core']}")
+
+    # Serialize payload
+    payload_json = json.dumps(payload)
+
+    try:
+        # Call grpcurl with stdin input (payload too large for command line)
+        cmd = [
+            "grpcurl",
+            "-plaintext",
+            "-H",
+            f"Authorization: Bearer {token}",
+            "-d",
+            "@",  # Read from stdin
+            addr,
+            "ciris.registry.v1.RegistryAdminService/RegisterBuild",
+        ]
+
+        result = subprocess.run(cmd, input=payload_json, capture_output=True, text=True)
+        print("\nResponse:")
+        print(result.stdout or result.stderr)
+        return result.returncode == 0
+    except FileNotFoundError:
+        print("Error: grpcurl not found. Install with: go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest")
+        return False
 
 
 def get_docker_digest(image: str) -> str:
@@ -119,18 +315,18 @@ def generate_admin_jwt(jwt_secret: str, jwt_issuer: str = "ciris-registry") -> s
         "iat": int(time.time()),
         "exp": int(time.time()) + 3600,
         "role": 1,  # SYSTEM_ADMIN
-        "org_id": ""
+        "org_id": "",
     }
 
     def b64url_encode(data: bytes) -> str:
-        return base64.urlsafe_b64encode(data).rstrip(b'=').decode('ascii')
+        return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
-    header_b64 = b64url_encode(json.dumps(header, separators=(',', ':'), sort_keys=True).encode())
-    payload_b64 = b64url_encode(json.dumps(payload, separators=(',', ':'), sort_keys=True).encode())
+    header_b64 = b64url_encode(json.dumps(header, separators=(",", ":"), sort_keys=True).encode())
+    payload_b64 = b64url_encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode())
 
     # Sign using secret string as UTF-8 bytes (NOT base64 decoded)
     message = f"{header_b64}.{payload_b64}".encode()
-    signature = hmac.new(jwt_secret.encode('utf-8'), message, hashlib.sha256).digest()
+    signature = hmac.new(jwt_secret.encode("utf-8"), message, hashlib.sha256).digest()
     signature_b64 = b64url_encode(signature)
 
     return f"{header_b64}.{payload_b64}.{signature_b64}"
@@ -197,8 +393,10 @@ def register_agent(
     cmd = [
         "grpcurl",
         "-plaintext",
-        "-H", f"Authorization: Bearer {token}",
-        "-d", json.dumps(payload),
+        "-H",
+        f"Authorization: Bearer {token}",
+        "-d",
+        json.dumps(payload),
         addr,
         "ciris.registry.v1.RegistryAdminService/RegisterAgent",
     ]
@@ -220,12 +418,23 @@ def main():
     group.add_argument("--wheel", help="Python wheel file to register")
     group.add_argument("--hash", help="Direct SHA256 hash (hex) to register")
     group.add_argument("--test", action="store_true", help="Register a test agent with random hash")
+    group.add_argument(
+        "--build", help="Register a build with file manifest from agent directory (e.g., ./ciris_engine)"
+    )
 
     parser.add_argument("--type", type=int, default=99, help="Agent type (1=CIRISCare, 2=CIRISMedical, 99=Custom)")
     parser.add_argument("--autonomy", type=int, default=1, help="Autonomy tier (1=A0_Advisory, 2=A1_Limited, etc)")
     parser.add_argument("--template", default="default", help="Identity template name")
     parser.add_argument("--capabilities", nargs="+", default=["domain:general"], help="Base capabilities")
     parser.add_argument("--test-tag", default="", help="Test tag for cleanup (auto-set for --test)")
+    parser.add_argument("--modules", nargs="+", default=["core"], help="Modules included in build (for --build)")
+    parser.add_argument("--notes", default="", help="Build notes (for --build)")
+    parser.add_argument(
+        "--include-dirs",
+        nargs="+",
+        default=["ciris_engine"],
+        help="Directories to include in manifest (for --build), default: ciris_engine",
+    )
 
     args = parser.parse_args()
 
@@ -233,7 +442,26 @@ def main():
     repo, commit = get_git_info()
     version = get_version()
 
-    # Determine hash
+    # Handle --build mode separately (uses RegisterBuild endpoint)
+    if args.build:
+        agent_root = Path(args.build)
+        if not agent_root.exists():
+            print(f"Error: Agent directory not found: {agent_root}")
+            sys.exit(1)
+
+        version_str = f"{version[0]}.{version[1]}.{version[2]}"
+        success = register_build(
+            agent_root=agent_root,
+            version=version_str,
+            source_repo=repo,
+            source_commit=commit,
+            modules=args.modules,
+            notes=args.notes,
+            include_dirs=args.include_dirs,
+        )
+        sys.exit(0 if success else 1)
+
+    # Determine hash for RegisterAgent mode
     if args.test:
         # Generate deterministic test hash
         test_data = f"test-agent-{datetime.now(timezone.utc).isoformat()}"

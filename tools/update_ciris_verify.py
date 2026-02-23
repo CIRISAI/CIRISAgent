@@ -469,26 +469,41 @@ def _patch_ios_service_py() -> None:
     ios_service.write_text(content)
 
 
+def ensure_device_fwork_stubs() -> None:
+    """Create iphoneos .fwork stubs alongside iphonesimulator ones.
+
+    Python on iOS uses .fwork redirect files to find native modules in
+    Frameworks/.  The Resources directory ships with simulator stubs
+    (``*.cpython-310-iphonesimulator.fwork``).  On a physical device
+    Python looks for ``*.cpython-310-iphoneos.fwork`` instead, so we
+    duplicate every simulator stub with a device-named copy.
+    """
+    print("\nEnsuring device .fwork stubs exist...")
+    count = 0
+    for fwork in IOS_RESOURCES_DIR.rglob("*.cpython-310-iphonesimulator.fwork"):
+        device_fwork = fwork.with_name(
+            fwork.name.replace("iphonesimulator", "iphoneos")
+        )
+        if not device_fwork.exists():
+            shutil.copy2(fwork, device_fwork)
+            count += 1
+    print(f"  -> Created {count} device .fwork stubs")
+
+
 def rebuild_resources_zip() -> None:
     """Rebuild the iOS Resources.zip."""
+    # Ensure device .fwork stubs before zipping
+    ensure_device_fwork_stubs()
+
     print("\nRebuilding Resources.zip...")
 
     if IOS_RESOURCES_ZIP.exists():
         IOS_RESOURCES_ZIP.unlink()
 
-    # zip from inside the Resources directory
-    result = run_cmd(
-        ["zip", "-q", "-r", str(IOS_RESOURCES_ZIP), "."],
-        check=False,
-    )
-    if result.returncode != 0:
-        # Try with subprocess directly from the right cwd
-        import subprocess as sp
-        sp.run(
-            ["zip", "-q", "-r", str(IOS_RESOURCES_ZIP), "."],
-            cwd=str(IOS_RESOURCES_DIR),
-            check=True,
-        )
+    # zip from inside the Resources directory (MUST set cwd)
+    cmd = ["zip", "-q", "-r", str(IOS_RESOURCES_ZIP), "."]
+    print(f"  $ zip -q -r {IOS_RESOURCES_ZIP.name} .")
+    subprocess.run(cmd, cwd=str(IOS_RESOURCES_DIR), check=True)
 
     size_mb = IOS_RESOURCES_ZIP.stat().st_size / 1024 / 1024
     print(f"  -> Resources.zip ({size_mb:.1f}MB)")

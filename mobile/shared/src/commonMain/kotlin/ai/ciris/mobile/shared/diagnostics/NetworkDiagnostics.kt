@@ -4,6 +4,7 @@ import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import kotlin.system.getTimeMillis
 import kotlinx.coroutines.*
 
 // Platform-specific logging
@@ -84,7 +85,7 @@ object NetworkDiagnostics {
 
     private suspend fun testDoH(name: String, dohUrl: String, query: String): DiagResult {
         log("Testing $name: $query via $dohUrl")
-        val start = System.currentTimeMillis()
+        val start = getTimeMillis()
 
         return try {
             val client = HttpClient()
@@ -95,7 +96,7 @@ object NetworkDiagnostics {
                     header("Accept", "application/dns-json")
                 }
             }
-            val duration = System.currentTimeMillis() - start
+            val duration = getTimeMillis() - start
             val body = response.bodyAsText()
             client.close()
 
@@ -107,7 +108,7 @@ object NetworkDiagnostics {
                 DiagResult(name, false, duration, error = "HTTP ${response.status}")
             }
         } catch (e: Exception) {
-            val duration = System.currentTimeMillis() - start
+            val duration = getTimeMillis() - start
             log("  ERROR ($duration ms): ${e::class.simpleName}: ${e.message}")
             DiagResult(name, false, duration, error = "${e::class.simpleName}: ${e.message}")
         }
@@ -115,7 +116,7 @@ object NetworkDiagnostics {
 
     private suspend fun testDoHGoogle(name: String, dohUrl: String, query: String): DiagResult {
         log("Testing $name: $query via Google DoH")
-        val start = System.currentTimeMillis()
+        val start = getTimeMillis()
 
         return try {
             val client = HttpClient()
@@ -125,7 +126,7 @@ object NetworkDiagnostics {
                     parameter("type", "TXT")
                 }
             }
-            val duration = System.currentTimeMillis() - start
+            val duration = getTimeMillis() - start
             val body = response.bodyAsText()
             client.close()
 
@@ -137,7 +138,7 @@ object NetworkDiagnostics {
                 DiagResult(name, false, duration, error = "HTTP ${response.status}")
             }
         } catch (e: Exception) {
-            val duration = System.currentTimeMillis() - start
+            val duration = getTimeMillis() - start
             log("  ERROR ($duration ms): ${e::class.simpleName}: ${e.message}")
             DiagResult(name, false, duration, error = "${e::class.simpleName}: ${e.message}")
         }
@@ -145,14 +146,14 @@ object NetworkDiagnostics {
 
     private suspend fun testHttps(name: String, url: String): DiagResult {
         log("Testing $name: $url")
-        val start = System.currentTimeMillis()
+        val start = getTimeMillis()
 
         return try {
             val client = HttpClient()
             val response = withTimeout(10_000) {
                 client.get(url)
             }
-            val duration = System.currentTimeMillis() - start
+            val duration = getTimeMillis() - start
             val body = response.bodyAsText()
             client.close()
 
@@ -166,7 +167,7 @@ object NetworkDiagnostics {
                 DiagResult(name, false, duration, error = "HTTP ${response.status}")
             }
         } catch (e: Exception) {
-            val duration = System.currentTimeMillis() - start
+            val duration = getTimeMillis() - start
             log("  ERROR ($duration ms): ${e::class.simpleName}: ${e.message}")
             DiagResult(name, false, duration, error = "${e::class.simpleName}: ${e.message}")
         }

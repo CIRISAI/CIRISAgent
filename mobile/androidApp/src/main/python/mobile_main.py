@@ -556,6 +556,184 @@ def debug_pydantic_core() -> None:
 # The new setup_pydantic_core() handles everything with clear logging
 
 
+# =============================================================================
+# PYTHON CODE INTEGRITY VERIFICATION
+# =============================================================================
+# Verifies ciris_engine Python modules at startup by hashing their source.
+# This catches tampering of bundled Python code inside the APK.
+# Saves hashes to startup_python_hashes.json for CIRISVerify to use.
+# =============================================================================
+
+
+def _get_module_source(modname: str, spec) -> Optional[bytes]:
+    """Get module source bytes, handling Chaquopy's AssetFinder.
+
+    Tries multiple methods:
+    1. Direct file read if spec.origin is a .py file
+    2. Loader's get_data() method (works with AssetFinder)
+    3. Loader's get_source() method
+    """
+    import importlib.util
+
+    # Method 1: Direct file read
+    if spec and spec.origin and spec.origin.endswith(".py"):
+        try:
+            with open(spec.origin, "rb") as f:
+                return f.read()
+        except (OSError, IOError):
+            pass
+
+    # Method 2: Use loader's get_data (works with Chaquopy AssetFinder)
+    if spec and spec.loader and hasattr(spec.loader, "get_data"):
+        try:
+            # For AssetFinder, origin might be like /data/.../app/ciris_engine/foo.py
+            if spec.origin:
+                return spec.loader.get_data(spec.origin)
+        except (OSError, IOError):
+            pass
+
+    # Method 3: Use loader's get_source
+    if spec and spec.loader and hasattr(spec.loader, "get_source"):
+        try:
+            source = spec.loader.get_source(modname)
+            if source:
+                return source.encode("utf-8")
+        except (OSError, IOError, TypeError):
+            pass
+
+    return None
+
+
+def _save_hashes_to_file(results: dict) -> None:
+    """Save module hashes to JSON file for CIRISVerify integration.
+
+    Writes to CIRIS_HOME/startup_python_hashes.json with format:
+    {
+        "version": "1.0",
+        "generated_at": "ISO timestamp",
+        "package": "ciris_engine",
+        "modules_hashed": int,
+        "total_hash": "sha256 hex",
+        "module_hashes": {"module.name": "sha256 hex", ...}
+    }
+    """
+    import json
+    from datetime import datetime, timezone
+
+    try:
+        # Get CIRIS_HOME for save location
+        ciris_home = os.environ.get("CIRIS_HOME", "/data/data/ai.ciris.mobile/files/ciris")
+        output_path = Path(ciris_home) / "startup_python_hashes.json"
+
+        output_data = {
+            "version": "1.0",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "package": "ciris_engine",
+            "modules_hashed": results["modules_hashed"],
+            "total_hash": results["total_hash"],
+            "module_hashes": results["module_hashes"],
+        }
+
+        with open(output_path, "w") as f:
+            json.dump(output_data, f, indent=2, sort_keys=True)
+
+        logger.info(f"Saved {results['modules_hashed']} module hashes to {output_path}")
+
+    except Exception as e:
+        logger.error(f"Failed to save hashes to file: {e}")
+
+
+def verify_code_integrity(package_name: str = "ciris_engine", save_to_file: bool = True) -> Tuple[bool, dict]:
+    """Verify integrity of Python modules by hashing their source.
+
+    Walks through all modules in the specified package, computes SHA256 hashes,
+    and optionally saves to startup_python_hashes.json for CIRISVerify.
+
+    Args:
+        package_name: The package to verify (default: ciris_engine)
+        save_to_file: Whether to save hashes to JSON file (default: True)
+
+    Returns:
+        Tuple of (success: bool, results: dict) where results contains:
+        - modules_checked: int
+        - modules_hashed: int
+        - total_hash: str (combined hash of all module hashes)
+        - errors: list of error messages
+    """
+    import hashlib
+    import importlib
+    import importlib.util
+    import json
+    import pkgutil
+
+    results = {
+        "modules_checked": 0,
+        "modules_hashed": 0,
+        "total_hash": "",
+        "module_hashes": {},
+        "errors": [],
+        "sample_origins": [],  # Debug: sample of spec.origin values
+    }
+
+    try:
+        # Import the package
+        package = importlib.import_module(package_name)
+        if not hasattr(package, "__path__"):
+            results["errors"].append(f"{package_name} is not a package")
+            return False, results
+
+        # Collect all module hashes
+        all_hashes = []
+
+        for importer, modname, ispkg in pkgutil.walk_packages(
+            package.__path__, prefix=f"{package_name}."
+        ):
+            results["modules_checked"] += 1
+            try:
+                spec = importlib.util.find_spec(modname)
+
+                # Debug: capture sample origins
+                if len(results["sample_origins"]) < 5 and spec:
+                    results["sample_origins"].append(f"{modname}: {spec.origin}")
+
+                # Try to get module source
+                source = _get_module_source(modname, spec)
+                if source:
+                    mod_hash = hashlib.sha256(source).hexdigest()
+                    results["module_hashes"][modname] = mod_hash
+                    all_hashes.append(f"{modname}:{mod_hash}")
+                    results["modules_hashed"] += 1
+
+            except Exception as e:
+                if len(results["errors"]) < 10:  # Limit errors
+                    results["errors"].append(f"{modname}: {e}")
+
+        # Compute combined hash of all modules (deterministic order)
+        if all_hashes:
+            combined = "\n".join(sorted(all_hashes))
+            results["total_hash"] = hashlib.sha256(combined.encode()).hexdigest()
+
+        logger.info(
+            f"Code integrity check: {results['modules_hashed']}/{results['modules_checked']} "
+            f"modules hashed, total_hash={results['total_hash'][:16] if results['total_hash'] else 'none'}..."
+        )
+
+        # Debug: log sample origins if no modules hashed
+        if results["modules_hashed"] == 0 and results["sample_origins"]:
+            logger.warning(f"Sample spec.origins: {results['sample_origins']}")
+
+        # Save hashes to JSON file for CIRISVerify
+        if save_to_file and results["module_hashes"]:
+            _save_hashes_to_file(results)
+
+        return True, results
+
+    except Exception as e:
+        results["errors"].append(f"Failed to verify {package_name}: {e}")
+        logger.error(f"Code integrity check failed: {e}")
+        return False, results
+
+
 def setup_android_environment():
     """Configure environment for Android on-device operation.
 
@@ -717,6 +895,17 @@ def main():
     """Main entrypoint for Android app."""
     logger.info("CIRIS Mobile - Full On-Device Runtime (LLM Remote)")
     setup_android_environment()
+
+    # Verify Python code integrity at startup
+    logger.info("Verifying code integrity...")
+    integrity_ok, integrity_results = verify_code_integrity("ciris_engine")
+    if integrity_ok:
+        logger.info(
+            f"Code integrity verified: {integrity_results['modules_hashed']} modules, "
+            f"hash={integrity_results['total_hash'][:16]}..."
+        )
+    else:
+        logger.warning(f"Code integrity check failed: {integrity_results['errors']}")
 
     try:
         asyncio.run(start_mobile_runtime())

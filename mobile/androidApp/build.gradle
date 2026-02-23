@@ -304,4 +304,7 @@ dependencies {
 
     // Google Play Billing for in-app purchases
     implementation "com.android.billingclient:billing-ktx:7.0.0"
+
+    // Google Play Integrity for device attestation
+    implementation "com.google.android.play:integrity:1.4.0"
 }

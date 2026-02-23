@@ -36,6 +36,85 @@ from ._common import (
 router = APIRouter(prefix="/setup", tags=["setup"])
 logger = logging.getLogger(__name__)
 
+
+def _fetch_manifest_files_from_registry(version: str) -> Optional[set]:
+    """Fetch manifest file list from registry.
+
+    Args:
+        version: Agent version (e.g., "2.0.0")
+
+    Returns:
+        Set of file paths from manifest, or None if fetch failed
+    """
+    import urllib.request
+    import json
+
+    try:
+        url = f"https://api.registry.ciris-services-1.ai/v1/builds/{version}"
+        logger.info(f"[verify-status] Fetching manifest from registry for version {version}")
+        with urllib.request.urlopen(url, timeout=5) as response:
+            data = json.loads(response.read().decode())
+            manifest_json = data.get("file_manifest_json", {})
+            if isinstance(manifest_json, dict):
+                files = manifest_json.get("files", {})
+                logger.info(f"[verify-status] Registry manifest has {len(files)} files")
+                return set(files.keys())
+    except Exception as e:
+        logger.warning(f"[verify-status] Failed to fetch manifest from registry: {e}")
+    return None
+
+
+def _find_unexpected_python_files(agent_root: str, manifest_files: set) -> tuple[List[str], List[str]]:
+    """Find Python files that exist on disk but aren't in the manifest.
+
+    Args:
+        agent_root: Root directory of the agent
+        manifest_files: Set of relative file paths from manifest
+
+    Returns:
+        Tuple of (unexpected files, expected_excluded files) - both max 10 items
+        expected_excluded are known files like ciris_verify/ wrapper that aren't in manifest
+    """
+    unexpected = []
+    expected_excluded = []
+    # Files to completely ignore (not count at all)
+    ignore_patterns = {".env", "__pycache__", ".pyc", "test_", "_test.py", "conftest.py", "logs/", ".db"}
+    # Files that are expected to be missing from manifest (report but don't fail)
+    expected_missing_patterns = {"ciris_verify/"}
+
+    try:
+        import os
+        for root, dirs, files in os.walk(agent_root):
+            # Skip __pycache__ and hidden directories
+            dirs[:] = [d for d in dirs if d != "__pycache__" and not d.startswith(".") and d != "logs"]
+
+            for f in files:
+                if not f.endswith(".py"):
+                    continue
+
+                # Get relative path
+                full_path = os.path.join(root, f)
+                rel_path = os.path.relpath(full_path, agent_root)
+
+                # Skip completely ignored files
+                if any(p in rel_path for p in ignore_patterns):
+                    continue
+
+                # Check if in manifest
+                if rel_path not in manifest_files:
+                    # Check if it's an expected exclusion
+                    if any(p in rel_path for p in expected_missing_patterns):
+                        if len(expected_excluded) < 10:
+                            expected_excluded.append(rel_path)
+                    else:
+                        unexpected.append(rel_path)
+                        if len(unexpected) >= 10:
+                            return unexpected, expected_excluded
+    except Exception as e:
+        logger.warning(f"Error scanning for unexpected files: {e}")
+
+    return unexpected, expected_excluded
+
 # Constants
 FIELD_DESC_DISPLAY_NAME = "Display name"
 
@@ -253,6 +332,29 @@ class VerifyStatusResponse(BaseModel):
     source_errors: Optional[Dict[str, Dict[str, str]]] = Field(
         default=None, description="Per-source error details: {source: {category: str, details: str}}"
     )
+
+    # v0.7.0: Enhanced verification details
+    ed25519_fingerprint: Optional[str] = Field(
+        default=None, description="Ed25519 public key fingerprint (SHA-256 hex)"
+    )
+    key_storage_mode: Optional[str] = Field(
+        default=None, description="Key storage mode: SOFTWARE, HARDWARE_BACKED, or specific provider"
+    )
+    hardware_backed: bool = Field(default=False, description="Whether the key is hardware-backed")
+    target_triple: Optional[str] = Field(
+        default=None, description="Target triple being checked against registry (e.g., aarch64-linux-android)"
+    )
+    binary_self_check: Optional[str] = Field(
+        default=None, description="Binary self-check status: verified, mismatch, not_found, unavailable:{reason}"
+    )
+    binary_hash: Optional[str] = Field(default=None, description="Binary hash computed locally")
+    expected_binary_hash: Optional[str] = Field(default=None, description="Expected binary hash from registry")
+    function_self_check: Optional[str] = Field(
+        default=None, description="Function self-check status: verified, mismatch, not_found, unavailable:{reason}"
+    )
+    functions_checked: Optional[int] = Field(default=None, description="Number of functions verified")
+    functions_passed: Optional[int] = Field(default=None, description="Number of functions that passed verification")
+    registry_key_status: Optional[str] = Field(default=None, description="Registry key verification status")
 
 
 class LLMValidationRequest(BaseModel):
@@ -2145,6 +2247,18 @@ async def get_verify_status(
             files_passed = 0
             files_failed = 0
             integrity_failure_reason = None
+            # v0.7.0+: Self-verification details
+            target_triple = None
+            binary_self_check = None
+            binary_hash = None
+            expected_binary_hash = None
+            function_self_check = None
+            functions_checked_count = None
+            functions_passed_count = None
+            ed25519_fingerprint = None
+            key_storage_mode = None
+            is_hardware_backed = False
+            registry_key_status = None
             try:
                 # Get agent version and root
                 # Use major.minor.patch only (strip stage suffix like "-stable")
@@ -2152,40 +2266,302 @@ async def get_verify_status(
 
                 agent_version = f"{CIRIS_VERSION_MAJOR}.{CIRIS_VERSION_MINOR}.{CIRIS_VERSION_PATCH}"
                 agent_root = os.environ.get("CIRIS_AGENT_ROOT", os.getcwd())
+                # Detect Android via Chaquopy environment
+                is_android = "ANDROID_ROOT" in os.environ or os.path.exists("/data/data")
                 # On Android, use the Chaquopy extracted path
-                if platform_os == "android":
+                if is_android:
                     try:
                         import ciris_engine
 
                         agent_root = os.path.dirname(os.path.dirname(ciris_engine.__file__))
-                    except Exception:
-                        pass
+                        print(f"[FILE_INTEGRITY_DEBUG] Android agent_root={agent_root}, is_android={is_android}")
+                    except Exception as e:
+                        print(f"[FILE_INTEGRITY_DEBUG] Android agent_root detection failed: {e}")
 
                 # v0.6.17+: Use unified attestation with registry-based manifest
-                if hasattr(verifier, "run_attestation_sync") or hasattr(verifier, "has_run_attestation_support"):
-                    if getattr(verifier, "has_run_attestation_support", lambda: False)():
+                has_run_attest = hasattr(verifier, "run_attestation_sync")
+                has_support_attr = hasattr(verifier, "has_run_attestation_support")
+                print(f"[FILE_INTEGRITY_DEBUG] has_run_attest={has_run_attest}, has_support_attr={has_support_attr}")
+                if has_run_attest or has_support_attr:
+                    # has_run_attestation_support can be a method or property depending on version
+                    has_support = getattr(verifier, "has_run_attestation_support", False)
+                    if callable(has_support):
+                        has_support = has_support()
+                    print(f"[FILE_INTEGRITY_DEBUG] has_support={has_support}, calling run_attestation_sync with agent_root={agent_root}")
+                    if has_support:
                         logger.info(
                             f"[verify-status] Using run_attestation_sync (v0.6.17+) version={agent_version}, root={agent_root}"
                         )
                         challenge = os.urandom(32)
+                        # v0.8.0+: Full file integrity check is now the default
+                        # Unexpected Python files not in manifest will be flagged.
                         attestation_result = verifier.run_attestation_sync(
                             challenge=challenge,
                             agent_version=agent_version,
                             agent_root=agent_root,
                             spot_check_count=spot_check_count,
                         )
+                        # Debug: print to logcat
+                        print(f"[FILE_INTEGRITY_DEBUG] run_attestation_sync returned: type={type(attestation_result)}")
+                        if isinstance(attestation_result, dict):
+                            print(f"[FILE_INTEGRITY_DEBUG] keys={list(attestation_result.keys())}")
+                            # Print self_verification details (v0.7.12+)
+                            sv = attestation_result.get("self_verification")
+                            print(f"[FILE_INTEGRITY_DEBUG] self_verification={sv}")
+                            fi = attestation_result.get("file_integrity")
+                            print(f"[FILE_INTEGRITY_DEBUG] file_integrity={fi}")
+                            errs = attestation_result.get("errors")
+                            print(f"[FILE_INTEGRITY_DEBUG] errors={errs}")
+                            diag = attestation_result.get("diagnostics")
+                            print(f"[FILE_INTEGRITY_DEBUG] diagnostics={diag}")
+                        # Debug: log the raw attestation result
+                        logger.info(f"[verify-status] run_attestation_sync raw result type: {type(attestation_result)}")
+                        if isinstance(attestation_result, dict):
+                            logger.info(f"[verify-status] run_attestation_sync keys: {list(attestation_result.keys())}")
+                            if "file_integrity" in attestation_result:
+                                logger.info(f"[verify-status] file_integrity value: {attestation_result.get('file_integrity')}")
+                            if "errors" in attestation_result:
+                                logger.info(f"[verify-status] errors: {attestation_result.get('errors')}")
+                            if "diagnostics" in attestation_result:
+                                logger.info(f"[verify-status] diagnostics: {attestation_result.get('diagnostics')}")
+                        else:
+                            logger.info(f"[verify-status] run_attestation_sync attrs: {[a for a in dir(attestation_result) if not a.startswith('_')]}")
+                            if hasattr(attestation_result, "file_integrity"):
+                                logger.info(f"[verify-status] file_integrity attr: {getattr(attestation_result, 'file_integrity', None)}")
+                            if hasattr(attestation_result, "errors"):
+                                logger.info(f"[verify-status] errors attr: {getattr(attestation_result, 'errors', None)}")
                         # Extract file integrity from attestation result
-                        fi_result = attestation_result.get("file_integrity", {})
-                        file_integrity_ok = fi_result.get("valid", False)
-                        total_files = fi_result.get("total_files", 0)
-                        files_checked = fi_result.get("files_checked", 0)
-                        files_passed = fi_result.get("files_passed", 0)
-                        files_failed = fi_result.get("files_failed", 0)
-                        integrity_failure_reason = fi_result.get("reason") or attestation_result.get("error")
+                        if attestation_result is None:
+                            logger.warning("[verify-status] run_attestation_sync returned None")
+                            attestation_result = {}
+                        # Handle dict or object return types
+                        if isinstance(attestation_result, dict):
+                            fi_result = attestation_result.get("file_integrity") or {}
+                            attest_error = attestation_result.get("error")
+                        else:
+                            fi_result = getattr(attestation_result, "file_integrity", None) or {}
+                            attest_error = getattr(attestation_result, "error", None)
+                        # Handle fi_result being dict or object
+                        # Note: fi_result may have nested 'full' or 'spot' dicts from CIRISVerify v0.7+
+                        files_missing = 0
+                        if isinstance(fi_result, dict):
+                            # Check for nested 'full' structure from v0.7+ attestation
+                            full_result = fi_result.get("full") or fi_result
+                            if isinstance(full_result, dict):
+                                total_files = full_result.get("total_files", 0)
+                                files_checked = full_result.get("files_checked", 0)
+                                files_passed = full_result.get("files_passed", 0)
+                                files_failed = full_result.get("files_failed", 0)
+                                files_missing = full_result.get("files_missing", 0)
+                                files_unexpected = full_result.get("files_unexpected", 0)
+                                raw_failure_reason = full_result.get("failure_reason") or full_result.get("reason") or ""
+                                # file_integrity_ok: On mobile, only check for hash mismatches (files_failed)
+                                # since mobile bundles a subset of files (missing files are expected).
+                                # On server, require no failed AND no missing.
+                                if is_android:
+                                    file_integrity_ok = (files_failed == 0)  # Mobile: only hash mismatches matter
+                                else:
+                                    file_integrity_ok = (files_failed == 0 and files_missing == 0)
+                                # Make failure reason more informative with file names
+                                if files_unexpected > 0:
+                                    # Fetch manifest from registry and find unexpected files
+                                    manifest_files = _fetch_manifest_files_from_registry(agent_version) or set()
+                                    unexpected_files, expected_excluded = _find_unexpected_python_files(agent_root, manifest_files)
+                                    reasons = []
+                                    if unexpected_files:
+                                        file_list = ", ".join(unexpected_files[:5])
+                                        if len(unexpected_files) > 5:
+                                            file_list += f" (+{len(unexpected_files) - 5} more)"
+                                        reasons.append(f"unexpected_files:{len(unexpected_files)}|{file_list}")
+                                        logger.info(f"[verify-status] Unexpected files found: {unexpected_files}")
+                                    if expected_excluded:
+                                        file_list = ", ".join(expected_excluded[:5])
+                                        if len(expected_excluded) > 5:
+                                            file_list += f" (+{len(expected_excluded) - 5} more)"
+                                        reasons.append(f"expected_excluded:{len(expected_excluded)}|{file_list}")
+                                        logger.info(f"[verify-status] Expected excluded files: {expected_excluded}")
+                                    integrity_failure_reason = ";".join(reasons) if reasons else f"unexpected_files:{files_unexpected}"
+                                elif raw_failure_reason and raw_failure_reason != "unexpected":
+                                    integrity_failure_reason = raw_failure_reason
+                                else:
+                                    integrity_failure_reason = attest_error if not file_integrity_ok else None
+                            else:
+                                total_files = fi_result.get("total_files", 0)
+                                files_checked = fi_result.get("files_checked", 0)
+                                files_passed = fi_result.get("files_passed", 0)
+                                files_failed = fi_result.get("files_failed", 0)
+                                files_missing = fi_result.get("files_missing", 0)
+                                files_unexpected = fi_result.get("files_unexpected", 0)
+                                raw_failure_reason = fi_result.get("reason") or ""
+                                if is_android:
+                                    file_integrity_ok = (files_failed == 0)  # Mobile: only hash mismatches matter
+                                else:
+                                    file_integrity_ok = (files_failed == 0 and files_missing == 0)
+                                if files_unexpected > 0:
+                                    # Fetch manifest from registry and find unexpected files
+                                    manifest_files = _fetch_manifest_files_from_registry(agent_version) or set()
+                                    unexpected_files, expected_excluded = _find_unexpected_python_files(agent_root, manifest_files)
+                                    reasons = []
+                                    if unexpected_files:
+                                        file_list = ", ".join(unexpected_files[:5])
+                                        if len(unexpected_files) > 5:
+                                            file_list += f" (+{len(unexpected_files) - 5} more)"
+                                        reasons.append(f"unexpected_files:{len(unexpected_files)}|{file_list}")
+                                    if expected_excluded:
+                                        file_list = ", ".join(expected_excluded[:5])
+                                        if len(expected_excluded) > 5:
+                                            file_list += f" (+{len(expected_excluded) - 5} more)"
+                                        reasons.append(f"expected_excluded:{len(expected_excluded)}|{file_list}")
+                                    integrity_failure_reason = ";".join(reasons) if reasons else f"unexpected_files:{files_unexpected}"
+                                elif raw_failure_reason and raw_failure_reason != "unexpected":
+                                    integrity_failure_reason = raw_failure_reason
+                                else:
+                                    integrity_failure_reason = attest_error if not file_integrity_ok else None
+                        else:
+                            total_files = getattr(fi_result, "total_files", 0)
+                            files_checked = getattr(fi_result, "files_checked", 0)
+                            files_passed = getattr(fi_result, "files_passed", 0)
+                            files_failed = getattr(fi_result, "files_failed", 0)
+                            files_missing = getattr(fi_result, "files_missing", 0)
+                            files_unexpected = getattr(fi_result, "files_unexpected", 0)
+                            raw_failure_reason = getattr(fi_result, "reason", None) or getattr(fi_result, "failure_reason", None) or ""
+                            # file_integrity_ok = true if all MANIFEST files pass (no failed/missing)
+                            file_integrity_ok = (files_failed == 0 and files_missing == 0)
+                            if files_unexpected > 0:
+                                # Fetch manifest from registry and find unexpected files
+                                manifest_files = _fetch_manifest_files_from_registry(agent_version) or set()
+                                unexpected_files, expected_excluded = _find_unexpected_python_files(agent_root, manifest_files)
+                                reasons = []
+                                if unexpected_files:
+                                    file_list = ", ".join(unexpected_files[:5])
+                                    if len(unexpected_files) > 5:
+                                        file_list += f" (+{len(unexpected_files) - 5} more)"
+                                    reasons.append(f"unexpected_files:{len(unexpected_files)}|{file_list}")
+                                if expected_excluded:
+                                    file_list = ", ".join(expected_excluded[:5])
+                                    if len(expected_excluded) > 5:
+                                        file_list += f" (+{len(expected_excluded) - 5} more)"
+                                    reasons.append(f"expected_excluded:{len(expected_excluded)}|{file_list}")
+                                integrity_failure_reason = ";".join(reasons) if reasons else f"unexpected_files:{files_unexpected}"
+                            elif raw_failure_reason and raw_failure_reason != "unexpected":
+                                integrity_failure_reason = raw_failure_reason
+                            else:
+                                integrity_failure_reason = attest_error if not file_integrity_ok else None
                         logger.info(
                             f"[verify-status] File integrity (registry): ok={file_integrity_ok}, "
-                            f"checked={files_checked}/{total_files}, passed={files_passed}, failed={files_failed}"
+                            f"checked={files_checked}/{total_files}, passed={files_passed}, failed={files_failed}, unexpected={files_unexpected}"
                         )
+
+                        # v0.7.0+: Extract self-verification details (binary & function self-checks)
+                        sv_result = None
+                        if isinstance(attestation_result, dict):
+                            sv_result = attestation_result.get("self_verification")
+                        else:
+                            sv_result = getattr(attestation_result, "self_verification", None)
+
+                        if sv_result:
+                            if isinstance(sv_result, dict):
+                                target_triple = sv_result.get("target")
+                                # CIRISVerify v0.7+ uses binary_valid/functions_valid booleans
+                                binary_valid = sv_result.get("binary_valid", False)
+                                functions_valid = sv_result.get("functions_valid", False)
+                                sv_error = sv_result.get("error", "")
+                                # Derive status strings from booleans and error
+                                if binary_valid:
+                                    binary_self_check = "verified"
+                                elif "mismatch" in sv_error.lower():
+                                    binary_self_check = "mismatch"
+                                elif "not found" in sv_error.lower() or "no binary" in sv_error.lower():
+                                    binary_self_check = "not_found"
+                                else:
+                                    binary_self_check = f"unavailable:{sv_error[:50]}" if sv_error else "unavailable"
+                                if functions_valid:
+                                    function_self_check = "verified"
+                                elif "no function manifest" in sv_error.lower():
+                                    function_self_check = "no_manifest"
+                                elif sv_result.get("functions_checked", 0) == 0:
+                                    function_self_check = "not_checked"
+                                else:
+                                    function_self_check = "failed"
+                                binary_hash = sv_result.get("binary_hash")
+                                expected_binary_hash = sv_result.get("expected_hash")  # Note: expected_hash not expected_binary_hash
+                                functions_checked_count = sv_result.get("functions_checked")
+                                functions_passed_count = sv_result.get("functions_passed")
+                            else:
+                                target_triple = getattr(sv_result, "target", None)
+                                binary_valid = getattr(sv_result, "binary_valid", False)
+                                functions_valid = getattr(sv_result, "functions_valid", False)
+                                sv_error = getattr(sv_result, "error", "") or ""
+                                binary_self_check = "verified" if binary_valid else ("mismatch" if "mismatch" in sv_error.lower() else "unavailable")
+                                function_self_check = "verified" if functions_valid else "failed"
+                                binary_hash = getattr(sv_result, "binary_hash", None)
+                                expected_binary_hash = getattr(sv_result, "expected_hash", None)
+                                functions_checked_count = getattr(sv_result, "functions_checked", None)
+                                functions_passed_count = getattr(sv_result, "functions_passed", None)
+                            logger.info(
+                                f"[verify-status] Self-verification: target={target_triple}, "
+                                f"binary={binary_self_check}, functions={function_self_check} "
+                                f"({functions_passed_count}/{functions_checked_count} passed)"
+                            )
+
+                        # v0.7.0+: Extract key attestation info
+                        key_attest = None
+                        if isinstance(attestation_result, dict):
+                            key_attest = attestation_result.get("key_attestation")
+                        else:
+                            key_attest = getattr(attestation_result, "key_attestation", None)
+
+                        if key_attest:
+                            if isinstance(key_attest, dict):
+                                ed25519_fingerprint = key_attest.get("ed25519_fingerprint")
+                                key_storage_mode = key_attest.get("storage_mode")
+                                is_hardware_backed = key_attest.get("hardware_backed", False)
+                            else:
+                                ed25519_fingerprint = getattr(key_attest, "ed25519_fingerprint", None)
+                                key_storage_mode = getattr(key_attest, "storage_mode", None)
+                                is_hardware_backed = getattr(key_attest, "hardware_backed", False)
+                            logger.info(
+                                f"[verify-status] Key attestation: fingerprint={ed25519_fingerprint[:16] if ed25519_fingerprint else 'N/A'}..., "
+                                f"storage={key_storage_mode}, hw_backed={is_hardware_backed}"
+                            )
+                            # Verify key against registry if we have a fingerprint
+                            if ed25519_fingerprint and hasattr(verifier, "verify_key_by_fingerprint"):
+                                try:
+                                    key_verify_result = verifier.verify_key_by_fingerprint(ed25519_fingerprint)
+                                    if key_verify_result:
+                                        if isinstance(key_verify_result, dict):
+                                            registry_key_status = key_verify_result.get("status", "unknown")
+                                        else:
+                                            registry_key_status = getattr(key_verify_result, "status", "unknown")
+                                        logger.info(f"[verify-status] Registry key verification: {registry_key_status}")
+                                except Exception as key_err:
+                                    logger.warning(f"[verify-status] Registry key verification failed: {key_err}")
+                                    registry_key_status = f"error:{str(key_err)[:30]}"
+                            else:
+                                # No verifier method available, mark as not_checked
+                                registry_key_status = "not_checked"
+
+                        # v0.7.0+: Extract device/play integrity from attestation result
+                        # This overrides the URL parameter-based check since CIRISVerify handles it internally
+                        device_int = None
+                        if isinstance(attestation_result, dict):
+                            device_int = attestation_result.get("device_integrity")
+                        else:
+                            device_int = getattr(attestation_result, "device_integrity", None)
+
+                        if device_int:
+                            if isinstance(device_int, dict):
+                                play_integrity_ok = device_int.get("verified", False)
+                                play_integrity_verdict = device_int.get("summary") or device_int.get("verdict")
+                            else:
+                                play_integrity_ok = getattr(device_int, "verified", False)
+                                play_integrity_verdict = getattr(device_int, "summary", None) or getattr(
+                                    device_int, "verdict", None
+                                )
+                            logger.info(
+                                f"[verify-status] Device integrity (from attestation): ok={play_integrity_ok}, "
+                                f"verdict={play_integrity_verdict}"
+                            )
                     else:
                         # run_attestation not available, use legacy method
                         file_integrity_ok = False
@@ -2440,6 +2816,18 @@ async def get_verify_status(
                 # v0.6.0 fields
                 "function_integrity": function_integrity,
                 "source_errors": source_errors if source_errors else None,
+                # v0.7.0 fields - Enhanced verification details
+                "ed25519_fingerprint": ed25519_fingerprint,
+                "key_storage_mode": key_storage_mode,
+                "hardware_backed": is_hardware_backed,
+                "target_triple": target_triple,
+                "binary_self_check": binary_self_check,
+                "binary_hash": binary_hash,
+                "expected_binary_hash": expected_binary_hash,
+                "function_self_check": function_self_check,
+                "functions_checked": functions_checked_count,
+                "functions_passed": functions_passed_count,
+                "registry_key_status": registry_key_status,
             }
             logger.info(f"[verify-status] Success: {verify_result[0]}")
         except ImportError as e:
@@ -2526,6 +2914,21 @@ async def get_verify_status(
             files_passed=status_dict.get("files_passed"),
             files_failed=status_dict.get("files_failed"),
             integrity_failure_reason=status_dict.get("integrity_failure_reason"),
+            # v0.6.0 fields
+            function_integrity=status_dict.get("function_integrity"),
+            source_errors=status_dict.get("source_errors"),
+            # v0.7.0 fields - Enhanced verification details
+            ed25519_fingerprint=status_dict.get("ed25519_fingerprint"),
+            key_storage_mode=status_dict.get("key_storage_mode"),
+            hardware_backed=status_dict.get("hardware_backed", False),
+            target_triple=status_dict.get("target_triple"),
+            binary_self_check=status_dict.get("binary_self_check"),
+            binary_hash=status_dict.get("binary_hash"),
+            expected_binary_hash=status_dict.get("expected_binary_hash"),
+            function_self_check=status_dict.get("function_self_check"),
+            functions_checked=status_dict.get("functions_checked"),
+            functions_passed=status_dict.get("functions_passed"),
+            registry_key_status=status_dict.get("registry_key_status"),
         )
     )
 

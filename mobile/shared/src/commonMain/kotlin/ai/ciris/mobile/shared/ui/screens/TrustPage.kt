@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.DeviceAttestationCallback
+import ai.ciris.mobile.shared.DeviceAttestationResult
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.viewmodels.VerifyStatusResponse
 import androidx.compose.foundation.background
@@ -45,6 +47,7 @@ import kotlinx.coroutines.withContext
 fun TrustPage(
     apiClient: CIRISApiClient,
     onNavigateBack: () -> Unit,
+    deviceAttestationCallback: DeviceAttestationCallback? = null,
     modifier: Modifier = Modifier
 ) {
     var verifyStatus by remember { mutableStateOf<VerifyStatusResponse?>(null) }
@@ -52,6 +55,10 @@ fun TrustPage(
     var error by remember { mutableStateOf<String?>(null) }
     var attestationMode by remember { mutableStateOf("partial") }
     val coroutineScope = rememberCoroutineScope()
+
+    // Play Integrity / Device Attestation state
+    var deviceAttestationResult by remember { mutableStateOf<DeviceAttestationResult?>(null) }
+    var deviceAttestationLoading by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
     val clipboardManager = LocalClipboardManager.current
 
@@ -63,6 +70,15 @@ fun TrustPage(
             onSuccess = { verifyStatus = it; loading = false; error = null },
             onError = { error = it; loading = false }
         )
+
+        // Request device attestation (Play Integrity on Android)
+        deviceAttestationCallback?.let { callback ->
+            deviceAttestationLoading = true
+            callback.onDeviceAttestationRequested { result ->
+                deviceAttestationResult = result
+                deviceAttestationLoading = false
+            }
+        }
     }
 
     Scaffold(
@@ -163,12 +179,19 @@ fun TrustPage(
                     AttestationLevelsCard(status = status)
 
                     // Device attestation (Play Integrity / App Attest)
-                    DeviceAttestationCard(status = status)
+                    DeviceAttestationCard(
+                        status = status,
+                        deviceAttestationResult = deviceAttestationResult,
+                        deviceAttestationLoading = deviceAttestationLoading
+                    )
 
                     // Platform info
                     if (status.platformOs != null || status.platformArch != null) {
                         PlatformInfoCard(status = status)
                     }
+
+                    // Verification Details (new detailed view)
+                    VerificationDetailsCard(status = status)
 
                     // File integrity details
                     if (status.filesChecked != null && status.filesChecked > 0) {
@@ -192,6 +215,14 @@ fun TrustPage(
                         modifier = Modifier
                             .clickable { uriHandler.openUri("https://ciris.ai/trust") }
                             .padding(8.dp)
+                    )
+
+                    // Diagnostics Log (expandable - shows full verify output)
+                    DiagnosticsLogCard(
+                        diagnostics = status.diagnosticInfo,
+                        onCopy = {
+                            clipboardManager.setText(AnnotatedString(status.diagnosticInfo ?: "No diagnostics"))
+                        }
                     )
 
                     // Raw details (expandable)
@@ -457,7 +488,7 @@ private fun AttestationLevelsCard(status: VerifyStatusResponse) {
                 level = 4,
                 title = "File Integrity",
                 description = if (status.filesChecked != null && status.filesChecked > 0) {
-                    "Verified ${status.filesChecked}/${status.totalFiles ?: "?"} files (${status.attestationMode})"
+                    "Verified ${status.filesPassed ?: 0}/${status.filesChecked} files (${status.attestationMode})"
                 } else {
                     "Software matches registry-hosted manifest"
                 },
@@ -485,7 +516,11 @@ private fun AttestationLevelsCard(status: VerifyStatusResponse) {
 }
 
 @Composable
-private fun DeviceAttestationCard(status: VerifyStatusResponse) {
+private fun DeviceAttestationCard(
+    status: VerifyStatusResponse,
+    deviceAttestationResult: DeviceAttestationResult? = null,
+    deviceAttestationLoading: Boolean = false
+) {
     val isAndroid = status.platformOs?.lowercase() == "android"
     val isIos = status.platformOs?.lowercase() in listOf("ios", "ipados", "macos")
 
@@ -508,11 +543,44 @@ private fun DeviceAttestationCard(status: VerifyStatusResponse) {
 
             when {
                 isAndroid -> {
-                    // Google Play Integrity
-                    val passed = status.playIntegrityOk
-                    val verdict = status.playIntegrityVerdict ?: "Not checked"
-                    val color = if (passed) Color(0xFF059669) else Color(0xFFD97706)
-                    val icon = if (passed) "✓" else "○"
+                    // Google Play Integrity - use native result if available
+                    val (passed, verdict, verdictItems) = when (deviceAttestationResult) {
+                        is DeviceAttestationResult.Success -> Triple(
+                            deviceAttestationResult.verified,
+                            deviceAttestationResult.verdict,
+                            listOf(
+                                "Strong Integrity" to deviceAttestationResult.meetsStrongIntegrity,
+                                "Device Integrity" to deviceAttestationResult.meetsDeviceIntegrity,
+                                "Basic Integrity" to deviceAttestationResult.meetsBasicIntegrity
+                            )
+                        )
+                        is DeviceAttestationResult.Error -> Triple(
+                            false,
+                            "Error: ${deviceAttestationResult.message}",
+                            emptyList()
+                        )
+                        is DeviceAttestationResult.NotSupported -> Triple(
+                            false,
+                            "Not supported",
+                            emptyList()
+                        )
+                        null -> Triple(
+                            status.playIntegrityOk,
+                            status.playIntegrityVerdict ?: if (deviceAttestationLoading) "Checking..." else "Not checked",
+                            parsePlayIntegrityVerdict(status.playIntegrityVerdict ?: "")
+                        )
+                    }
+
+                    val color = when {
+                        deviceAttestationLoading -> Color(0xFF6B7280)
+                        passed -> Color(0xFF059669)
+                        else -> Color(0xFFD97706)
+                    }
+                    val icon = when {
+                        deviceAttestationLoading -> "⋯"
+                        passed -> "✓"
+                        else -> "○"
+                    }
 
                     Column(
                         modifier = Modifier
@@ -544,7 +612,6 @@ private fun DeviceAttestationCard(status: VerifyStatusResponse) {
                             modifier = Modifier.padding(start = 22.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            val verdictItems = parsePlayIntegrityVerdict(verdict)
                             verdictItems.forEach { (label, ok) ->
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -793,8 +860,346 @@ private fun FileIntegrityCard(status: VerifyStatusResponse) {
                     Text("Failed: ${status.filesFailed}", fontSize = 12.sp, color = Color(0xFFDC2626))
                 }
             }
-            status.integrityFailureReason?.let {
-                Text("Reason: $it", fontSize = 12.sp, color = Color(0xFFDC2626))
+            status.integrityFailureReason?.let { reason ->
+                // Parse multiple reason segments (separated by ;)
+                // Format: "unexpected_files:N|file1,file2;expected_excluded:N|file1,file2"
+                val segments = reason.split(";")
+
+                for (segment in segments) {
+                    val (displayReason, fileList, isExpected) = when {
+                        segment.startsWith("expected_excluded:") -> {
+                            val parts = segment.substringAfter("expected_excluded:").split("|", limit = 2)
+                            val count = parts[0].toIntOrNull() ?: 0
+                            val files = if (parts.size > 1) parts[1] else null
+                            Triple("$count expected excluded file(s) (verification wrapper)", files, true)
+                        }
+                        segment.startsWith("unexpected_files:") -> {
+                            val parts = segment.substringAfter("unexpected_files:").split("|", limit = 2)
+                            val count = parts[0].toIntOrNull() ?: 0
+                            val files = if (parts.size > 1) parts[1] else null
+                            Triple("$count unexpected Python file(s) found not in manifest", files, false)
+                        }
+                        segment == "unexpected" -> Triple("Unexpected files found not in manifest", null, false)
+                        segment == "modified" -> Triple("Files have been modified (hash mismatch)", null, false)
+                        segment == "missing" -> Triple("Required files are missing", null, false)
+                        segment == "manifest" -> Triple("Invalid or tampered manifest", null, false)
+                        else -> Triple(segment, null, false)
+                    }
+                    // Use green for expected excluded, amber for unexpected, red for errors
+                    val reasonColor = when {
+                        isExpected -> Color(0xFF059669)  // Green - expected/OK
+                        segment.startsWith("unexpected") -> Color(0xFFD97706)  // Amber - warning
+                        else -> Color(0xFFDC2626)  // Red - error
+                    }
+                    val label = if (isExpected) "Info" else "Reason"
+                    Text("$label: $displayReason", fontSize = 12.sp, color = reasonColor)
+                    // Show file list if available
+                    fileList?.let { files ->
+                        Text("Files: $files", fontSize = 10.sp, color = Color(0xFF6B7280), fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VerificationDetailsCard(status: VerifyStatusResponse) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Verification Details",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
+
+            // Key Identity Section
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Identity Key",
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    color = Color(0xFF374151)
+                )
+
+                val keyIcon = if (status.hardwareBacked) "🔐" else "🔑"
+                val storageMode = status.keyStorageMode ?: (if (status.hardwareBacked) "Hardware-backed" else "Software")
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF3F4F6), RoundedCornerShape(4.dp))
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(text = keyIcon, fontSize = 14.sp)
+                    Column {
+                        Text(
+                            text = "Storage: $storageMode",
+                            fontSize = 12.sp,
+                            color = if (status.hardwareBacked) Color(0xFF059669) else Color(0xFF6B7280)
+                        )
+                        status.ed25519Fingerprint?.let { fp ->
+                            Text(
+                                text = "Fingerprint: ${fp.take(16)}...",
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = Color(0xFF6B7280)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Target Platform Section
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Registry Target",
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    color = Color(0xFF374151)
+                )
+
+                val targetTriple = status.targetTriple ?: "${status.platformArch ?: "unknown"}-${status.platformOs?.lowercase() ?: "unknown"}"
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF3F4F6), RoundedCornerShape(4.dp))
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(text = "📦", fontSize = 14.sp)
+                    Text(
+                        text = targetTriple,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFF374151)
+                    )
+                }
+            }
+
+            // Binary Self-Check Section
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Binary Self-Check",
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    color = Color(0xFF374151)
+                )
+
+                val binaryStatus = status.binarySelfCheck ?: "not_checked"
+                val binaryOk = binaryStatus == "verified"
+                val binaryColor = when {
+                    binaryOk -> Color(0xFF059669)
+                    binaryStatus.contains("unavailable") -> Color(0xFFD97706)
+                    else -> Color(0xFFDC2626)
+                }
+                val binaryIcon = when {
+                    binaryOk -> "✓"
+                    binaryStatus.contains("unavailable") -> "○"
+                    else -> "✗"
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(binaryColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = binaryIcon, fontSize = 12.sp, color = binaryColor)
+                        Text(
+                            text = binaryStatus.replaceFirstChar { it.uppercase() },
+                            fontSize = 12.sp,
+                            color = binaryColor
+                        )
+                    }
+                    status.binaryHash?.let { hash ->
+                        Text(
+                            text = "Local: ${hash.take(16)}...",
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color(0xFF6B7280)
+                        )
+                    }
+                    status.expectedBinaryHash?.let { hash ->
+                        Text(
+                            text = "Expected: ${hash.take(16)}...",
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color(0xFF6B7280)
+                        )
+                    }
+                }
+            }
+
+            // Function Self-Check Section
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Function Self-Check",
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    color = Color(0xFF374151)
+                )
+
+                val funcStatus = status.functionSelfCheck ?: status.functionIntegrity ?: "not_checked"
+                val funcOk = funcStatus == "verified"
+                val funcColor = when {
+                    funcOk -> Color(0xFF059669)
+                    funcStatus.contains("unavailable") || funcStatus.contains("not_found") -> Color(0xFFD97706)
+                    else -> Color(0xFFDC2626)
+                }
+                val funcIcon = when {
+                    funcOk -> "✓"
+                    funcStatus.contains("unavailable") || funcStatus.contains("not_found") -> "○"
+                    else -> "✗"
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(funcColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = funcIcon, fontSize = 12.sp, color = funcColor)
+                        Text(
+                            text = funcStatus.replaceFirstChar { it.uppercase() },
+                            fontSize = 12.sp,
+                            color = funcColor
+                        )
+                    }
+                    if (status.functionsChecked != null && status.functionsChecked > 0) {
+                        Text(
+                            text = "Functions: ${status.functionsPassed ?: 0}/${status.functionsChecked} passed",
+                            fontSize = 10.sp,
+                            color = Color(0xFF6B7280)
+                        )
+                    }
+                }
+            }
+
+            // Registry Key Status
+            status.registryKeyStatus?.let { regStatus ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Registry Key Status",
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 14.sp,
+                        color = Color(0xFF374151)
+                    )
+
+                    val regOk = regStatus.contains("active", ignoreCase = true)
+                    val regColor = if (regOk) Color(0xFF059669) else Color(0xFFD97706)
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(regColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(text = if (regOk) "✓" else "○", fontSize = 12.sp, color = regColor)
+                        Text(
+                            text = regStatus,
+                            fontSize = 12.sp,
+                            color = regColor
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiagnosticsLogCard(
+    diagnostics: String?,
+    onCopy: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "📋", fontSize = 16.sp)
+                    Text(
+                        text = if (expanded) "▼ Verify Log" else "▶ Verify Log",
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                TextButton(onClick = onCopy, enabled = !diagnostics.isNullOrEmpty()) {
+                    Text("Copy")
+                }
+            }
+
+            if (expanded) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    color = Color(0xFF1F2937),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp)
+                    ) {
+                        if (diagnostics.isNullOrEmpty()) {
+                            Text(
+                                text = "No diagnostics available",
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = Color(0xFF9CA3AF)
+                            )
+                        } else {
+                            // Split into lines and display with proper formatting
+                            diagnostics.lines().forEach { line ->
+                                val color = when {
+                                    line.startsWith("===") -> Color(0xFF60A5FA) // Section headers
+                                    line.contains("PASS") || line.contains("✓") -> Color(0xFF34D399)
+                                    line.contains("FAIL") || line.contains("✗") -> Color(0xFFF87171)
+                                    line.contains("WARN") || line.contains("○") -> Color(0xFFFBBF24)
+                                    line.contains(":") -> Color(0xFFE5E7EB) // Key-value lines
+                                    else -> Color(0xFF9CA3AF)
+                                }
+                                Text(
+                                    text = line,
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = color
+                                )
+                            }
+                        }
+                    }
+                }
+                Text(
+                    text = "This log shows the full CIRISVerify attestation output",
+                    fontSize = 10.sp,
+                    color = Color(0xFF9CA3AF),
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
         }
     }
@@ -900,11 +1305,7 @@ private fun RawDetailsCard(
                         RawLine("File Integrity", status.fileIntegrityOk)
                         RawLine("Registry", status.registryOk)
                         RawLine("Audit", status.auditOk)
-                        RawLine("Play Integrity", status.playIntegrityOk)
                         Spacer(modifier = Modifier.height(4.dp))
-                        status.playIntegrityVerdict?.let {
-                            Text("Play Verdict: $it", fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                        }
                         Text("Platform: ${status.platformOs ?: "?"} / ${status.platformArch ?: "?"}", fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                         Text("Hardware: ${status.hardwareType ?: "?"}", fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                         Text("Key Status: ${status.keyStatus}", fontSize = 10.sp, fontFamily = FontFamily.Monospace)
@@ -945,8 +1346,6 @@ private fun buildRawDetailsText(status: VerifyStatusResponse): String {
         appendLine("  File Integrity: ${status.fileIntegrityOk}")
         appendLine("  Registry: ${status.registryOk}")
         appendLine("  Audit: ${status.auditOk}")
-        appendLine("  Play Integrity: ${status.playIntegrityOk}")
-        status.playIntegrityVerdict?.let { appendLine("  Play Verdict: $it") }
         appendLine()
         appendLine("Platform: ${status.platformOs ?: "?"} / ${status.platformArch ?: "?"}")
         appendLine("Hardware: ${status.hardwareType ?: "?"}")

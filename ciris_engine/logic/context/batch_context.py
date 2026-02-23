@@ -17,6 +17,77 @@ from ciris_engine.schemas.services.operations import MemoryQuery
 logger = logging.getLogger(__name__)
 
 
+async def _get_attestation_summary() -> Optional[str]:
+    """Get a concise attestation summary from CIRISVerify.
+
+    Returns a string like:
+    "Level 5/5 | ✓Binary ✓Environment ✓Registry ✓FileIntegrity ✓Audit"
+    """
+    try:
+        from ciris_verify import CIRISVerify
+
+        cv = CIRISVerify(skip_integrity_check=True)
+
+        # Get attestation result (uses cached data if available)
+        result = cv.run_attestation_sync()
+        if not result:
+            return None
+
+        # Extract level and checks
+        max_level = result.get("level", 0)
+        checks_passed = result.get("checks_passed", 0)
+        checks_total = result.get("checks_total", 5)
+
+        # Build check status list
+        checks = []
+        self_verify = result.get("self_verification", {})
+        if self_verify.get("binary_valid", False):
+            checks.append("✓Binary")
+        else:
+            checks.append("✗Binary")
+
+        # Key attestation (environment)
+        key_attest = result.get("key_attestation", {})
+        if key_attest.get("valid", False):
+            checks.append("✓Environment")
+        else:
+            checks.append("✗Environment")
+
+        # Sources (registry cross-validation)
+        sources = result.get("sources", {})
+        sources_valid = sum(1 for s in sources.values() if isinstance(s, dict) and s.get("reachable"))
+        if sources_valid >= 2:
+            checks.append(f"✓Registry({sources_valid}/3)")
+        else:
+            checks.append(f"✗Registry({sources_valid}/3)")
+
+        # File integrity
+        file_integrity = result.get("file_integrity", {})
+        fi_full = file_integrity.get("full", {}) if isinstance(file_integrity, dict) else {}
+        if fi_full.get("valid", False) or fi_full.get("files_failed", 1) == 0:
+            checks.append("✓FileIntegrity")
+        else:
+            checks.append("✗FileIntegrity")
+
+        # Audit trail
+        audit = result.get("audit_trail", {})
+        if audit.get("valid", False):
+            checks.append("✓Audit")
+        else:
+            checks.append("○Audit")
+
+        summary = f"Level {max_level}/5 | {' '.join(checks)}"
+        logger.debug(f"[BATCH] Attestation summary: {summary}")
+        return summary
+
+    except ImportError:
+        logger.debug("[BATCH] CIRISVerify not available for attestation summary")
+        return None
+    except Exception as e:
+        logger.warning(f"[BATCH] Failed to get attestation summary: {e}")
+        return None
+
+
 async def create_minimal_batch_context(
     memory_service: Optional[Any] = None,
     secrets_service: Optional[Any] = None,
@@ -78,6 +149,8 @@ class BatchContextData:
         # License disclosure from CIRISVerify
         self.license_disclosure_text: Optional[str] = None
         self.license_disclosure_severity: Optional[str] = None
+        # Attestation summary (e.g., "Level 5/5 | ✓Binary ✓Environment ✓Registry")
+        self.attestation_summary: Optional[str] = None
 
 
 async def prefetch_batch_context(
@@ -277,6 +350,9 @@ async def prefetch_batch_context(
                         disclosure.severity.value if hasattr(disclosure.severity, "value") else str(disclosure.severity)
                     )
                     logger.info(f"[BATCH] CIRISVerify disclosure loaded: {batch_data.license_disclosure_severity}")
+
+            # Also fetch attestation summary for context
+            batch_data.attestation_summary = await _get_attestation_summary()
         except Exception as e:
             logger.warning(f"Failed to get CIRISVerify disclosure: {e}")
             # Provide fallback disclosure when verification fails
@@ -603,6 +679,7 @@ async def build_system_snapshot_with_batch(
         # License disclosure from CIRISVerify - MUST be in LLM context
         license_disclosure_text=batch_data.license_disclosure_text,
         license_disclosure_severity=batch_data.license_disclosure_severity,
+        attestation_summary=batch_data.attestation_summary,
         # Get localized times - FAILS FAST AND LOUD if time_service is None
         **{
             f"current_time_{key}": value

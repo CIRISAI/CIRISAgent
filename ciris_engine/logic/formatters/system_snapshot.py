@@ -85,6 +85,9 @@ def format_system_snapshot(system_snapshot: SystemSnapshot) -> str:
         else:
             lines.append("📋 LICENSE DISCLOSURE")
         lines.append(system_snapshot.license_disclosure_text)
+        # Add attestation summary if available
+        if hasattr(system_snapshot, "attestation_summary") and system_snapshot.attestation_summary:
+            lines.append(f"Verification: {system_snapshot.attestation_summary}")
         lines.append("")  # Empty line for separation
 
     # Time of System Snapshot

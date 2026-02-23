@@ -1240,9 +1240,9 @@ private fun TrustSecurityCard(
                                 !level4Passed -> status.integrityFailureReason ?: "File integrity check failed"
                                 level4Unverified -> "Cannot verify against registry (network unavailable)"
                                 status.filesChecked != null && status.filesChecked > 0 && status.totalFiles != null && status.totalFiles > 0 ->
-                                    "Verified ${status.filesChecked}/${status.totalFiles} files (${status.attestationMode})"
+                                    "Verified ${status.filesPassed ?: 0}/${status.filesChecked} files (${status.attestationMode})"
                                 status.filesChecked != null && status.filesChecked > 0 ->
-                                    "Verified ${status.filesChecked} files (${status.attestationMode})"
+                                    "Verified ${status.filesPassed ?: 0} files (${status.attestationMode})"
                                 else -> "Software matches registry-hosted manifest"
                             }
                             Text(
@@ -1456,7 +1456,17 @@ private fun TrustSecurityCard(
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text("Files: ${status.filesChecked ?: 0}/${status.totalFiles ?: 0} checked", fontSize = 9.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
                                 Text("Passed: ${status.filesPassed ?: 0}, Failed: ${status.filesFailed ?: 0}", fontSize = 9.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-                                status.integrityFailureReason?.let { Text("Reason: $it", fontSize = 9.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, color = Color(0xFFDC2626)) }
+                                status.integrityFailureReason?.let { reason ->
+                                    val displayReason = when {
+                                        reason.startsWith("unexpected_files:") -> {
+                                            val count = reason.substringAfter(":").toIntOrNull() ?: 0
+                                            "$count unexpected file(s)"
+                                        }
+                                        else -> reason
+                                    }
+                                    val reasonColor = if (reason.startsWith("unexpected")) Color(0xFFD97706) else Color(0xFFDC2626)
+                                    Text("Reason: $displayReason", fontSize = 9.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, color = reasonColor)
+                                }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 status.diagnosticInfo?.let { Text("Diag: $it", fontSize = 8.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, color = Color.Gray) }
                             }

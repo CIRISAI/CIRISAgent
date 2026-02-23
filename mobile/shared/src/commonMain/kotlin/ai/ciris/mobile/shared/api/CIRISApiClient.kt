@@ -851,10 +851,22 @@ class CIRISApiClient(
                 // Parse checks map (for detailed view)
                 checks = parseChecks(data["checks"] as? JsonObject),
                 // Keep details as raw JsonElement map for flexibility
-                details = (data["details"] as? JsonObject)?.mapValues { it.value }
+                details = (data["details"] as? JsonObject)?.mapValues { it.value },
+                // === v0.7.0 Fields - Enhanced verification details ===
+                ed25519Fingerprint = (data["ed25519_fingerprint"] as? JsonPrimitive)?.content,
+                keyStorageMode = (data["key_storage_mode"] as? JsonPrimitive)?.content,
+                hardwareBacked = (data["hardware_backed"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                targetTriple = (data["target_triple"] as? JsonPrimitive)?.content,
+                binarySelfCheck = (data["binary_self_check"] as? JsonPrimitive)?.content,
+                binaryHash = (data["binary_hash"] as? JsonPrimitive)?.content,
+                expectedBinaryHash = (data["expected_binary_hash"] as? JsonPrimitive)?.content,
+                functionSelfCheck = (data["function_self_check"] as? JsonPrimitive)?.content,
+                functionsChecked = (data["functions_checked"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                functionsPassed = (data["functions_passed"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                registryKeyStatus = (data["registry_key_status"] as? JsonPrimitive)?.content
             )
 
-            logInfo(method, "Verify status: loaded=$loaded, keyStatus=${verifyStatus.keyStatus}, hardware=${verifyStatus.hardwareType}")
+            logInfo(method, "Verify status: loaded=$loaded, keyStatus=${verifyStatus.keyStatus}, hardware=${verifyStatus.hardwareType}, hwBacked=${verifyStatus.hardwareBacked}, fingerprint=${verifyStatus.ed25519Fingerprint?.take(16)}..., target=${verifyStatus.targetTriple}, playOk=${verifyStatus.playIntegrityOk}")
             verifyStatus
         } catch (e: Exception) {
             logException(method, e)

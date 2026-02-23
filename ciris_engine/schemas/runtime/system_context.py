@@ -162,6 +162,9 @@ class SystemSnapshot(BaseModel):
     license_disclosure_severity: Optional[str] = Field(
         None, description="Disclosure severity: INFO, WARNING, or CRITICAL"
     )
+    attestation_summary: Optional[str] = Field(
+        None, description="Concise attestation status (e.g., 'Level 5/5 | ✓Binary ✓Environment ✓Registry')"
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)  # Be strict about fields to catch misuse
 

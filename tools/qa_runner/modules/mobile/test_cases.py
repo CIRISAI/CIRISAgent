@@ -1635,3 +1635,62 @@ def test_connect_node_error(adb: ADBHelper, ui: UIAutomator, config: dict) -> Te
             message=f"Error: {str(e)}",
             screenshots=screenshots,
         )
+
+
+def test_verify_trust(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """
+    Test: Trust and Security page displays correct CIRISVerify information.
+
+    Validates:
+    1. Key storage mode (hardware vs software)
+    2. Ed25519 fingerprint display
+    3. Binary/function self-check status
+    4. File integrity counts
+    5. Play Integrity status
+
+    Requires: App logged in and running
+    """
+    from .verify_trust_tests import VerifyTrustTests, VerifyTrustExpectations
+
+    start_time = time.time()
+    screenshots = []
+
+    try:
+        # Run verify trust tests
+        tests = VerifyTrustTests(adb, ui, expectations=VerifyTrustExpectations())
+        reports = tests.run_all()
+
+        # Aggregate results
+        passed = sum(1 for r in reports if r.result == TestResult.PASSED)
+        failed = sum(1 for r in reports if r.result == TestResult.FAILED)
+        errors = sum(1 for r in reports if r.result == TestResult.ERROR)
+
+        # Collect screenshots from sub-reports
+        for r in reports:
+            screenshots.extend(r.screenshots)
+
+        # Build summary message
+        failed_tests = [r.name for r in reports if r.result != TestResult.PASSED]
+        if failed_tests:
+            message = f"{passed}/{len(reports)} passed. Failed: {', '.join(failed_tests)}"
+            result = TestResult.FAILED if failed > 0 else TestResult.ERROR
+        else:
+            message = f"All {passed} verify trust checks passed"
+            result = TestResult.PASSED
+
+        return TestReport(
+            name="test_verify_trust",
+            result=result,
+            duration=time.time() - start_time,
+            message=message,
+            screenshots=screenshots,
+        )
+
+    except Exception as e:
+        return TestReport(
+            name="test_verify_trust",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Error: {str(e)}",
+            screenshots=screenshots,
+        )

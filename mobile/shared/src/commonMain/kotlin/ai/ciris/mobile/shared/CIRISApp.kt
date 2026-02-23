@@ -88,6 +88,35 @@ interface NativeSignInCallback {
 }
 
 /**
+ * Callback interface for Play Integrity / App Attest device attestation.
+ * Android implements with Google Play Integrity API.
+ * iOS implements with App Attest (placeholder).
+ */
+interface DeviceAttestationCallback {
+    /**
+     * Request device attestation.
+     * @param onResult Callback with attestation result
+     */
+    fun onDeviceAttestationRequested(onResult: (DeviceAttestationResult) -> Unit)
+}
+
+/**
+ * Result of device attestation (Play Integrity on Android, App Attest on iOS)
+ */
+sealed class DeviceAttestationResult {
+    data class Success(
+        val verified: Boolean,
+        val verdict: String,  // e.g., "MEETS_STRONG_INTEGRITY", "MEETS_DEVICE_INTEGRITY"
+        val meetsStrongIntegrity: Boolean = false,
+        val meetsDeviceIntegrity: Boolean = false,
+        val meetsBasicIntegrity: Boolean = false
+    ) : DeviceAttestationResult()
+
+    data class Error(val message: String) : DeviceAttestationResult()
+    object NotSupported : DeviceAttestationResult()
+}
+
+/**
  * Result of native OAuth Sign-In attempt (Google on Android, Apple on iOS)
  */
 sealed class NativeSignInResult {
@@ -214,6 +243,7 @@ fun CIRISApp(
     envFileUpdater: EnvFileUpdater = createEnvFileUpdater(),
     googleSignInCallback: GoogleSignInCallback? = null,
     purchaseLauncher: PurchaseLauncher? = null,
+    deviceAttestationCallback: DeviceAttestationCallback? = null,
     onTokenUpdated: ((String) -> Unit)? = null
 ) {
     val TAG = "CIRISApp"
@@ -1582,7 +1612,8 @@ fun CIRISApp(
                     onNavigateBack = {
                         println("[CIRISApp][INFO][Screen.Trust] Navigating back to Interact")
                         currentScreen = Screen.Interact
-                    }
+                    },
+                    deviceAttestationCallback = deviceAttestationCallback
                 )
             }
         }

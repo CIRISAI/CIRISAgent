@@ -444,7 +444,42 @@ data class VerifyStatusResponse(
     val functionIntegrity: String? = null,
     /** Per-source error details: {source: {category: str, details: str}} */
     @SerialName("source_errors")
-    val sourceErrors: Map<String, SourceErrorDetail>? = null
+    val sourceErrors: Map<String, SourceErrorDetail>? = null,
+
+    // === v0.7.0 Fields - Enhanced verification details ===
+    /** Ed25519 public key fingerprint (SHA-256 hex) */
+    @SerialName("ed25519_fingerprint")
+    val ed25519Fingerprint: String? = null,
+    /** Key storage mode: SOFTWARE, HARDWARE_BACKED, or specific provider */
+    @SerialName("key_storage_mode")
+    val keyStorageMode: String? = null,
+    /** Whether the key is hardware-backed (Secure Enclave/Keystore) */
+    @SerialName("hardware_backed")
+    val hardwareBacked: Boolean = false,
+    /** Target triple being checked against registry (e.g., aarch64-linux-android) */
+    @SerialName("target_triple")
+    val targetTriple: String? = null,
+    /** Binary self-check status: verified, mismatch, not_found, unavailable:{reason} */
+    @SerialName("binary_self_check")
+    val binarySelfCheck: String? = null,
+    /** Binary hash computed locally */
+    @SerialName("binary_hash")
+    val binaryHash: String? = null,
+    /** Expected binary hash from registry */
+    @SerialName("expected_binary_hash")
+    val expectedBinaryHash: String? = null,
+    /** Function self-check status: verified, mismatch, not_found, unavailable:{reason} */
+    @SerialName("function_self_check")
+    val functionSelfCheck: String? = null,
+    /** Number of functions verified */
+    @SerialName("functions_checked")
+    val functionsChecked: Int? = null,
+    /** Number of functions that passed verification */
+    @SerialName("functions_passed")
+    val functionsPassed: Int? = null,
+    /** Registry key verification status */
+    @SerialName("registry_key_status")
+    val registryKeyStatus: String? = null
 )
 
 /**

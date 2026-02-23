@@ -19,29 +19,29 @@ Usage:
 """
 
 from .client import CIRISVerify, MockCIRISVerify
-from .exceptions import (
-    BinaryNotFoundError,
-    BinaryTamperedError,
-    CIRISVerifyError,
-    CommunicationError,
-    TimeoutError,
-    VerificationFailedError,
-)
 from .types import (
-    BinaryIntegrityStatus,
-    CapabilityCheckResult,
-    DisclosureSeverity,
-    FileIntegrityResult,
-    HardwareType,
-    LicenseDetails,
     LicenseStatus,
-    LicenseStatusResponse,
     LicenseTier,
+    LicenseDetails,
     MandatoryDisclosure,
+    DisclosureSeverity,
+    LicenseStatusResponse,
+    CapabilityCheckResult,
+    FileIntegrityResult,
+    BinaryIntegrityStatus,
+    HardwareType,
     ValidationStatus,
 )
+from .exceptions import (
+    CIRISVerifyError,
+    BinaryNotFoundError,
+    BinaryTamperedError,
+    VerificationFailedError,
+    TimeoutError,
+    CommunicationError,
+)
 
-__version__ = "0.6.17"
+__version__ = "0.8.1"
 __all__ = [
     "CIRISVerify",
     "MockCIRISVerify",

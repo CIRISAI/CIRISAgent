@@ -37,6 +37,7 @@ from .test_cases import (  # Screen navigation tests (new in 1.9.2)
     test_screen_services,
     test_screen_system,
     test_setup_wizard,
+    test_verify_trust,
 )
 from .ui_automator import UIAutomator
 
@@ -333,6 +334,8 @@ class MobileTestRunner:
             "connect_node_welcome": test_connect_node_welcome,
             "connect_node_auth": test_connect_node_auth,
             "connect_node_error": test_connect_node_error,
+            # Trust and Security verification (new in 2.0)
+            "verify_trust": test_verify_trust,
         }
 
         # Determine which tests to run

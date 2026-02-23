@@ -72,6 +72,7 @@ SCREEN_REGISTRY: Dict[str, Tuple[str, Optional[str], str]] = {
     "system": ("System", "System", "System management/control screen"),
     "services": ("Services", "Services", "Service status management screen"),
     "runtime": ("Runtime", "Runtime", "Runtime control panel screen"),
+    "trust": ("Trust and Security", "Trust and Security", "CIRISVerify trust & security attestation screen"),
 }
 
 

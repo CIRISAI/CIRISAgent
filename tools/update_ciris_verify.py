@@ -500,7 +500,7 @@ def rebuild_resources_zip() -> None:
     if IOS_RESOURCES_ZIP.exists():
         IOS_RESOURCES_ZIP.unlink()
 
-    # zip from inside the Resources directory (MUST set cwd)
+    # zip from inside the Resources directory (MUST set cwd to avoid zipping entire repo!)
     cmd = ["zip", "-q", "-r", str(IOS_RESOURCES_ZIP), "."]
     print(f"  $ zip -q -r {IOS_RESOURCES_ZIP.name} .")
     subprocess.run(cmd, cwd=str(IOS_RESOURCES_DIR), check=True)

@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.CreditStatusData
+import ai.ciris.mobile.shared.auth.TokenManager
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.ui.screens.CreditProduct
 import androidx.lifecycle.ViewModel
@@ -163,6 +164,18 @@ class BillingViewModel(
 
             } catch (e: Exception) {
                 logException(method, e)
+
+                // Check for auth errors (401/503) and trigger token refresh
+                val errorMessage = e.message ?: ""
+                val isAuthError = errorMessage.contains("401") ||
+                    errorMessage.contains("503") ||
+                    errorMessage.contains("Unauthorized", ignoreCase = true)
+
+                if (isAuthError) {
+                    logWarn(method, "Auth error detected, triggering token refresh")
+                    TokenManager.shared?.on401Error()
+                }
+
                 handleBalanceError("Failed to load balance: ${e.message}")
             } finally {
                 _isLoading.value = false
@@ -246,6 +259,17 @@ class BillingViewModel(
             logDebug(method, "Silent balance update: ${_currentBalance.value}")
         } catch (e: Exception) {
             logWarn(method, "Silent balance load failed: ${e.message}")
+
+            // Check for auth errors (401/503) and trigger token refresh
+            val errorMessage = e.message ?: ""
+            val isAuthError = errorMessage.contains("401") ||
+                errorMessage.contains("503") ||
+                errorMessage.contains("Unauthorized", ignoreCase = true)
+
+            if (isAuthError) {
+                logWarn(method, "Auth error in silent poll, triggering token refresh")
+                TokenManager.shared?.on401Error()
+            }
             // Don't update error state for silent polls
         }
     }

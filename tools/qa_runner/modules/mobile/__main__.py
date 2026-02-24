@@ -107,18 +107,32 @@ def pull_logs_command(args) -> int:
     # Determine platform
     platform = getattr(args, "platform", "auto")
     if platform == "auto":
-        # Try iOS first if on macOS
+        # Try physical iOS devices first (preferred over simulators)
         try:
-            from .ios.xcrun_helper import XCRunHelper
+            from .ios.idevice_helper import IDeviceHelper
 
-            ios_helper = XCRunHelper()
-            ios_devices = ios_helper.get_devices()
-            booted_ios = [d for d in ios_devices if d.state == "booted"]
-            if booted_ios:
+            phys_helper = IDeviceHelper()
+            phys_devices = phys_helper.get_devices()
+            connected_phys = [d for d in phys_devices if d.state == "device"]
+            if connected_phys:
                 platform = "ios"
-                print("[INFO] Auto-detected iOS simulator")
-        except Exception:
+                print(f"[INFO] Auto-detected physical iOS device: {connected_phys[0].name or connected_phys[0].identifier[:8]}")
+        except (RuntimeError, Exception):
             pass
+
+        # Fall back to iOS simulator
+        if platform == "auto":
+            try:
+                from .ios.xcrun_helper import XCRunHelper
+
+                ios_helper = XCRunHelper()
+                ios_devices = ios_helper.get_devices()
+                booted_ios = [d for d in ios_devices if d.state == "booted"]
+                if booted_ios:
+                    platform = "ios"
+                    print("[INFO] Auto-detected iOS simulator")
+            except Exception:
+                pass
 
         if platform == "auto":
             platform = "android"
@@ -212,8 +226,13 @@ def pull_logs_command(args) -> int:
 
         # Print quick analysis hints
         print("\nQuick analysis:")
-        if collection.app_logs:
-            print(f"  cat {collection.app_logs[0]}")
+        for log in collection.app_logs:
+            if "incidents" in log.name:
+                print(f"  grep -i error {log}  # CHECK THIS FIRST")
+            elif "runtime_status" in log.name or "service_status" in log.name or "startup_status" in log.name:
+                print(f"  cat {log}")
+            elif log.name.endswith(".log"):
+                print(f"  tail -100 {log}")
         if collection.system_logs:
             print(f"  grep -i error {collection.system_logs[0]}")
 

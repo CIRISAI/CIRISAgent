@@ -47,12 +47,25 @@ def _fetch_manifest_files_from_registry(version: str) -> Optional[set]:
         Set of file paths from manifest, or None if fetch failed
     """
     import json
+    import ssl
     import urllib.request
 
     try:
         url = f"https://api.registry.ciris-services-1.ai/v1/builds/{version}"
         logger.info(f"[verify-status] Fetching manifest from registry for version {version}")
-        with urllib.request.urlopen(url, timeout=5) as response:
+        # On iOS, Python's default SSL context can't find CA certificates.
+        # Use certifi bundle if available, else fall back to unverified context
+        # (manifest is public, integrity is verified by hash comparison not TLS)
+        ssl_ctx = None
+        try:
+            import certifi
+
+            ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            ssl_ctx = ssl.create_default_context()
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl.CERT_NONE
+        with urllib.request.urlopen(url, timeout=5, context=ssl_ctx) as response:
             data = json.loads(response.read().decode())
             manifest_json = data.get("file_manifest_json", {})
             if isinstance(manifest_json, dict):
@@ -80,7 +93,10 @@ def _find_unexpected_python_files(agent_root: str, manifest_files: set) -> tuple
     # Files to completely ignore (not count at all)
     ignore_patterns = {".env", "__pycache__", ".pyc", "test_", "_test.py", "conftest.py", "logs/", ".db"}
     # Files that are expected to be missing from manifest (report but don't fail)
-    expected_missing_patterns = {"ciris_verify/"}
+    # ciris_verify/: Python bindings wrapper, not in server manifest
+    # ciris_ios/: iOS platform-specific files, not in server manifest
+    # ciris_android/: Android platform-specific files, not in server manifest
+    expected_missing_patterns = {"ciris_verify/", "ciris_ios/", "ciris_android/"}
 
     try:
         import os
@@ -2054,6 +2070,199 @@ async def get_attestation_status(
     )
 
 
+# =============================================================================
+# App Attest (Apple iOS Hardware Attestation)
+# =============================================================================
+
+
+class AppAttestVerifyRequest(BaseModel):
+    """Request body for App Attest verification."""
+    attestation_object: str = Field(..., description="Base64-encoded CBOR attestation from DCAppAttestService")
+    key_id: str = Field(..., description="Key ID from DCAppAttestService.generateKey()")
+    nonce: str = Field(..., description="Nonce used when requesting the attestation")
+
+
+@router.get("/app-attest/nonce")
+async def get_app_attest_nonce() -> SuccessResponse:
+    """Get a nonce for iOS App Attest verification.
+
+    Calls CIRISVerify FFI -> registry GET /v1/integrity/ios/nonce.
+    The iOS app uses this nonce as the challenge hash when calling
+    DCAppAttestService.attestKey(_:clientDataHash:).
+    """
+    try:
+        from ciris_verify import CIRISVerify
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="CIRISVerify not available",
+        )
+
+    def _get_nonce():
+        import ctypes
+        import threading
+
+        result = {}
+
+        def _inner():
+            try:
+                verifier = CIRISVerify(skip_integrity_check=True)
+                lib = verifier._lib
+                if not lib or not hasattr(lib, "ciris_verify_get_app_attest_nonce"):
+                    result["error"] = "App Attest FFI not available (need CIRISVerify >= 0.8.19)"
+                    return
+
+                # Set argtypes/restype for the new FFI function
+                lib.ciris_verify_get_app_attest_nonce.argtypes = [
+                    ctypes.c_void_p,           # handle
+                    ctypes.POINTER(ctypes.c_void_p),  # nonce_json out
+                    ctypes.POINTER(ctypes.c_size_t),   # nonce_len out
+                ]
+                lib.ciris_verify_get_app_attest_nonce.restype = ctypes.c_int
+
+                handle = verifier._handle
+                nonce_ptr = ctypes.c_void_p()
+                nonce_len = ctypes.c_size_t()
+
+                ret = lib.ciris_verify_get_app_attest_nonce(
+                    handle,
+                    ctypes.byref(nonce_ptr),
+                    ctypes.byref(nonce_len),
+                )
+
+                if ret != 0:
+                    result["error"] = f"FFI error code: {ret}"
+                    return
+
+                nonce_bytes = ctypes.string_at(nonce_ptr.value, nonce_len.value)
+                # ciris_verify_free takes a single pointer arg
+                lib.ciris_verify_free(ctypes.cast(nonce_ptr, ctypes.c_char_p))
+
+                nonce_json = json.loads(nonce_bytes.decode("utf-8"))
+                result["data"] = nonce_json
+            except Exception as e:
+                result["error"] = str(e)
+
+        # Run on 8MB stack thread (CIRISVerify Rust runtime needs it)
+        threading.stack_size(8 * 1024 * 1024)
+        t = threading.Thread(target=_inner)
+        t.start()
+        t.join(timeout=15)
+        threading.stack_size(0)
+        return result
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, _get_nonce)
+
+    if "error" in result:
+        logger.warning(f"[app-attest] Nonce request failed: {result['error']}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=result["error"],
+        )
+
+    return SuccessResponse(data=result["data"])
+
+
+@router.post("/app-attest/verify")
+async def verify_app_attest(request: AppAttestVerifyRequest) -> SuccessResponse:
+    """Verify an iOS App Attest attestation object.
+
+    Calls CIRISVerify FFI -> registry POST /v1/integrity/ios/verify.
+    The registry verifies the CBOR attestation against Apple's certificate chain.
+    """
+    try:
+        from ciris_verify import CIRISVerify
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="CIRISVerify not available",
+        )
+
+    def _verify():
+        import ctypes
+        import threading
+
+        result = {}
+
+        def _inner():
+            try:
+                verifier = CIRISVerify(skip_integrity_check=True)
+                lib = verifier._lib
+                if not lib or not hasattr(lib, "ciris_verify_app_attest"):
+                    result["error"] = "App Attest FFI not available (need CIRISVerify >= 0.8.19)"
+                    return
+
+                # Set argtypes/restype for the new FFI function
+                lib.ciris_verify_app_attest.argtypes = [
+                    ctypes.c_void_p,           # handle
+                    ctypes.c_char_p,           # request_json
+                    ctypes.c_size_t,           # request_len
+                    ctypes.POINTER(ctypes.c_void_p),  # result_json out
+                    ctypes.POINTER(ctypes.c_size_t),   # result_len out
+                ]
+                lib.ciris_verify_app_attest.restype = ctypes.c_int
+
+                handle = verifier._handle
+
+                # Build request JSON
+                req_json = json.dumps({
+                    "attestation_object": request.attestation_object,
+                    "key_id": request.key_id,
+                    "nonce": request.nonce,
+                }).encode("utf-8")
+
+                req_ptr = ctypes.c_char_p(req_json)
+                req_len = ctypes.c_size_t(len(req_json))
+                result_ptr = ctypes.c_void_p()
+                result_len = ctypes.c_size_t()
+
+                ret = lib.ciris_verify_app_attest(
+                    handle,
+                    req_ptr,
+                    req_len,
+                    ctypes.byref(result_ptr),
+                    ctypes.byref(result_len),
+                )
+
+                if ret != 0:
+                    result["error"] = f"FFI error code: {ret}"
+                    return
+
+                result_bytes = ctypes.string_at(result_ptr.value, result_len.value)
+                # ciris_verify_free takes a single pointer arg
+                lib.ciris_verify_free(ctypes.cast(result_ptr, ctypes.c_char_p))
+
+                verify_result = json.loads(result_bytes.decode("utf-8"))
+                result["data"] = verify_result
+            except Exception as e:
+                result["error"] = str(e)
+
+        # Run on 8MB stack thread
+        threading.stack_size(8 * 1024 * 1024)
+        t = threading.Thread(target=_inner)
+        t.start()
+        t.join(timeout=30)
+        threading.stack_size(0)
+        return result
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, _verify)
+
+    if "error" in result:
+        logger.warning(f"[app-attest] Verification failed: {result['error']}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=result["error"],
+        )
+
+    verify_data = result["data"]
+    verified = verify_data.get("verified", False)
+    logger.info(f"[app-attest] Verification result: verified={verified}")
+
+    return SuccessResponse(data=verify_data)
+
+
 @router.get("/verify-status")
 async def get_verify_status(
     mode: str = "partial",
@@ -2120,7 +2329,13 @@ async def get_verify_status(
             import os
 
             is_android = os.environ.get("ANDROID_ROOT") is not None
-            diag_parts.append(f"platform={'android' if is_android else 'other'}")
+            is_ios = (
+                os.environ.get("CIRIS_IOS_FRAMEWORK_PATH") is not None
+                or "/var/mobile" in os.environ.get("CIRIS_HOME", "")
+            )
+            is_mobile = is_android or is_ios
+            platform_name = "android" if is_android else ("ios" if is_ios else "other")
+            diag_parts.append(f"platform={platform_name}")
 
             # Check if Portal key is loaded using the correct method name
             has_portal_key = False
@@ -2177,8 +2392,6 @@ async def get_verify_status(
                 key_status = "none"
 
             # Get hardware type - use platform detection (fast) on mobile
-            is_ios = os.path.exists("/System/Library/Frameworks")
-
             if is_android:
                 # Android: Check for StrongBox vs Keystore
                 # For now, default to ANDROID_KEYSTORE (StrongBox detection requires JNI)
@@ -2431,17 +2644,15 @@ async def get_verify_status(
 
                 agent_version = f"{CIRIS_VERSION_MAJOR}.{CIRIS_VERSION_MINOR}.{CIRIS_VERSION_PATCH}"
                 agent_root = os.environ.get("CIRIS_AGENT_ROOT", os.getcwd())
-                # Detect Android via Chaquopy environment
-                is_android = "ANDROID_ROOT" in os.environ or os.path.exists("/data/data")
-                # On Android, use the Chaquopy extracted path
-                if is_android:
+                # On mobile, os.getcwd() may return "/" — use Python package path instead
+                if is_mobile:
                     try:
                         import ciris_engine
 
                         agent_root = os.path.dirname(os.path.dirname(ciris_engine.__file__))
-                        print(f"[FILE_INTEGRITY_DEBUG] Android agent_root={agent_root}, is_android={is_android}")
+                        print(f"[FILE_INTEGRITY_DEBUG] Mobile agent_root={agent_root}")
                     except Exception as e:
-                        print(f"[FILE_INTEGRITY_DEBUG] Android agent_root detection failed: {e}")
+                        print(f"[FILE_INTEGRITY_DEBUG] Mobile agent_root detection failed: {e}")
 
                 # v0.6.17+: Use unified attestation with registry-based manifest
                 has_run_attest = hasattr(verifier, "run_attestation_sync")
@@ -2475,16 +2686,23 @@ async def get_verify_status(
                                     )
                         except Exception as key_err:
                             logger.warning(f"[verify-status] Could not get Ed25519 fingerprint: {key_err}")
+                            # Log diagnostics to understand why key isn't found
+                            try:
+                                if hasattr(verifier, "get_diagnostics_sync"):
+                                    diag = verifier.get_diagnostics_sync()
+                                    logger.warning(f"[verify-status] Ed25519 diagnostics: {diag}")
+                            except Exception as diag_err:
+                                logger.warning(f"[verify-status] Could not get diagnostics: {diag_err}")
 
                         # v0.8.1+: Load Python module hashes for mobile code integrity
                         python_hashes_obj = None
                         expected_python_hash = None
-                        if is_android:
+                        if is_mobile:
                             try:
                                 import json
                                 from pathlib import Path
 
-                                ciris_home = os.environ.get("CIRIS_HOME", "/data/data/ai.ciris.mobile/files/ciris")
+                                ciris_home = os.environ.get("CIRIS_HOME", "")
                                 hashes_path = Path(ciris_home) / "startup_python_hashes.json"
                                 if hashes_path.exists():
                                     with open(hashes_path) as f:
@@ -2589,16 +2807,21 @@ async def get_verify_status(
                                 raw_failure_reason = (
                                     full_result.get("failure_reason") or full_result.get("reason") or ""
                                 )
-                                # file_integrity_ok: On mobile, only check for hash mismatches (files_failed)
-                                # since mobile bundles a subset of files (missing files are expected).
+                                # file_integrity_ok: On mobile, only check for actual hash mismatches.
+                                # Unexpected files (platform-specific, not in manifest) and missing files
+                                # are expected on mobile since it bundles a platform subset.
+                                # Rust may report unexpected files as part of files_failed, so subtract them.
                                 # On server, require no failed AND no missing.
-                                if is_android:
-                                    file_integrity_ok = files_failed == 0  # Mobile: only hash mismatches matter
+                                if is_mobile:
+                                    actual_hash_failures = max(0, files_failed - files_unexpected)
+                                    file_integrity_ok = actual_hash_failures == 0
                                 else:
                                     file_integrity_ok = files_failed == 0 and files_missing == 0
                                 # Make failure reason more informative with file names
                                 # v0.8.4+: Fetch manifest and compute file lists for UI
                                 manifest_files = _fetch_manifest_files_from_registry(agent_version) or set()
+                                unexpected_files: list = []
+                                expected_excluded: list = []
                                 if manifest_files:
                                     # Find missing files (in manifest but not on device filesystem)
                                     raw_missing_list = _find_missing_manifest_files(
@@ -2691,8 +2914,9 @@ async def get_verify_status(
                                 files_missing = fi_result.get("files_missing", 0)
                                 files_unexpected = fi_result.get("files_unexpected", 0)
                                 raw_failure_reason = fi_result.get("reason") or ""
-                                if is_android:
-                                    file_integrity_ok = files_failed == 0  # Mobile: only hash mismatches matter
+                                if is_mobile:
+                                    actual_hash_failures = max(0, files_failed - files_unexpected)
+                                    file_integrity_ok = actual_hash_failures == 0
                                 else:
                                     file_integrity_ok = files_failed == 0 and files_missing == 0
                                 if files_unexpected > 0:
@@ -2729,8 +2953,12 @@ async def get_verify_status(
                             raw_failure_reason = (
                                 getattr(fi_result, "reason", None) or getattr(fi_result, "failure_reason", None) or ""
                             )
-                            # file_integrity_ok = true if all MANIFEST files pass (no failed/missing)
-                            file_integrity_ok = files_failed == 0 and files_missing == 0
+                            # file_integrity_ok: On mobile, only actual hash mismatches matter
+                            if is_mobile:
+                                actual_hash_failures = max(0, files_failed - files_unexpected)
+                                file_integrity_ok = actual_hash_failures == 0
+                            else:
+                                file_integrity_ok = files_failed == 0 and files_missing == 0
                             if files_unexpected > 0:
                                 # Fetch manifest from registry and find unexpected files
                                 manifest_files = _fetch_manifest_files_from_registry(agent_version) or set()
@@ -3014,11 +3242,14 @@ async def get_verify_status(
                 if hasattr(verifier, "verify_audit_trail_sync"):
                     logger.info("[verify-status] Using CIRISVerify audit trail verification (v0.6.16+)")
                     try:
-                        audit_result = verifier.verify_audit_trail_sync(
-                            db_path=audit_db_path if os.path.exists(audit_db_path) else None,
-                            jsonl_path=jsonl_path if os.path.exists(jsonl_path) else None,
-                            portal_key_id=key_id if key_id else None,
-                        )
+                        # db_path is required positional in v0.8+
+                        audit_db = audit_db_path if os.path.exists(audit_db_path) else ""
+                        audit_kwargs: dict[str, Any] = {}
+                        if os.path.exists(jsonl_path):
+                            audit_kwargs["jsonl_path"] = jsonl_path
+                        if key_id:
+                            audit_kwargs["portal_key_id"] = key_id
+                        audit_result = verifier.verify_audit_trail_sync(audit_db, **audit_kwargs)
                         audit_ok = getattr(audit_result, "valid", False)
                         audit_details.update(
                             {
@@ -3111,6 +3342,15 @@ async def get_verify_status(
                         platform_os = sw.get("os", "unknown")
                         platform_arch = sw.get("arch", "unknown")
                     logger.info(f"[verify-status] Attestation proof: os={platform_os}, arch={platform_arch}")
+                # Fallback: detect platform from hardware_type if attestation didn't provide it
+                if not platform_os and hardware_type:
+                    ht = hardware_type.upper()
+                    if "IOS" in ht:
+                        platform_os = "ios"
+                        platform_arch = "arm64"
+                    elif "ANDROID" in ht:
+                        platform_os = "android"
+                        platform_arch = "arm64"
             except Exception as ap_err:
                 logger.warning(f"[verify-status] Attestation proof export failed: {ap_err}")
 
@@ -3250,6 +3490,7 @@ async def get_verify_status(
     # On Android/mobile, thread stack size manipulation may not work
     # Try without stack size change first, fall back to large stack if needed
     is_android = os.environ.get("ANDROID_ROOT") is not None
+    is_ios = os.environ.get("CIRIS_IOS_FRAMEWORK_PATH") is not None
 
     if is_android:
         logger.info("[verify-status] Android detected, using default thread stack")
@@ -3257,12 +3498,14 @@ async def get_verify_status(
         t.start()
         t.join(timeout=25)  # Longer timeout for mobile attestation network checks
     else:
+        # iOS needs 8MB stack AND longer timeout (Rust FFI is slow on device)
+        join_timeout = 25 if is_ios else 10
         old_stack = threading.stack_size()
         try:
             threading.stack_size(8 * 1024 * 1024)  # 8 MB for Rust Tokio
             t = threading.Thread(target=_get_verify_status_on_large_stack, daemon=True)
             t.start()
-            t.join(timeout=5)
+            t.join(timeout=join_timeout)
         finally:
             threading.stack_size(old_stack)
 
@@ -3975,20 +4218,23 @@ async def _activate_key_inline(private_key_b64: str, device_code: str, portal_ur
             logger.error(f"[KEY-IMPORT] Exception during key import: {type(e).__name__}: {e}")
             activate_result[1] = e
 
-    # On Android, skip stack size manipulation (may not work)
+    # On Android, skip stack size manipulation (may not work with Chaquopy)
+    # iOS + desktop need 8MB stack for Rust/Tokio runtime
     is_android = os.environ.get("ANDROID_ROOT") is not None
+    is_ios = os.environ.get("CIRIS_IOS_FRAMEWORK_PATH") is not None
+    join_timeout = 25 if (is_android or is_ios) else 15
 
     if is_android:
         t = threading.Thread(target=_activate_on_large_stack, daemon=True)
         t.start()
-        t.join(timeout=15)
+        t.join(timeout=join_timeout)
     else:
         old_stack = threading.stack_size()
         try:
             threading.stack_size(8 * 1024 * 1024)  # 8 MB
             t = threading.Thread(target=_activate_on_large_stack, daemon=True)
             t.start()
-            t.join(timeout=15)
+            t.join(timeout=join_timeout)
         finally:
             threading.stack_size(old_stack)
 

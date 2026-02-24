@@ -84,7 +84,8 @@ fun MainViewControllerWithAuthAndStore(
     onLoadProducts: (callback: (List<StoreKitProductBridge>) -> Unit) -> Unit,
     onPurchase: (productId: String, appleIDToken: String, callback: (StoreKitPurchaseResultBridge) -> Unit) -> Unit,
     isStoreLoading: () -> Boolean,
-    getStoreError: () -> String?
+    getStoreError: () -> String?,
+    onDeviceAttestationRequested: ((callback: (DeviceAttestationResultBridge) -> Unit) -> Unit)? = null
 ): UIViewController {
     NSLog("[Main.ios][INFO] MainViewControllerWithAuthAndStore called")
 
@@ -161,15 +162,29 @@ fun MainViewControllerWithAuthAndStore(
         }
     }
 
-    NSLog("[Main.ios][INFO] Callbacks created successfully")
+    // Create DeviceAttestationCallback if Swift provided one
+    val attestationCallback = if (onDeviceAttestationRequested != null) {
+        object : DeviceAttestationCallback {
+            override fun onDeviceAttestationRequested(onResult: (DeviceAttestationResult) -> Unit) {
+                NSLog("[Main.ios][INFO] Device attestation requested - invoking Swift App Attest")
+                onDeviceAttestationRequested { bridgeResult ->
+                    NSLog("[Main.ios][INFO] Got App Attest result: type=${bridgeResult.type}")
+                    onResult(bridgeResult.toResult())
+                }
+            }
+        }
+    } else null
+
+    NSLog("[Main.ios][INFO] Callbacks created successfully (attestation=${if (attestationCallback != null) "PRESENT" else "NULL"})")
 
     return ComposeUIViewController {
-        NSLog("[Main.ios][INFO] ComposeUIViewController content lambda executing with auth and store callbacks")
+        NSLog("[Main.ios][INFO] ComposeUIViewController content lambda executing with auth, store, and attestation callbacks")
         CIRISApp(
             accessToken = "",
             baseUrl = "http://localhost:8080",
             googleSignInCallback = signInCallback,
-            purchaseLauncher = purchaseLauncher
+            purchaseLauncher = purchaseLauncher,
+            deviceAttestationCallback = attestationCallback
         )
     }
 }
@@ -213,6 +228,61 @@ class AppleSignInResultBridge private constructor(
             )
             "cancelled" -> NativeSignInResult.Cancelled
             else -> NativeSignInResult.Error(errorMessage ?: "Unknown error")
+        }
+    }
+}
+
+/**
+ * Bridge class for App Attest device attestation results from Swift.
+ * Maps to KMP DeviceAttestationResult sealed class.
+ */
+class DeviceAttestationResultBridge private constructor(
+    val type: String,  // "success", "error", "not_supported"
+    val verified: Boolean = false,
+    val verdict: String? = null,
+    val meetsStrongIntegrity: Boolean = false,
+    val meetsDeviceIntegrity: Boolean = false,
+    val meetsBasicIntegrity: Boolean = false,
+    val errorMessage: String? = null
+) {
+    companion object {
+        fun success(
+            verified: Boolean,
+            verdict: String,
+            meetsStrongIntegrity: Boolean = false,
+            meetsDeviceIntegrity: Boolean = false,
+            meetsBasicIntegrity: Boolean = false
+        ): DeviceAttestationResultBridge {
+            return DeviceAttestationResultBridge(
+                type = "success",
+                verified = verified,
+                verdict = verdict,
+                meetsStrongIntegrity = meetsStrongIntegrity,
+                meetsDeviceIntegrity = meetsDeviceIntegrity,
+                meetsBasicIntegrity = meetsBasicIntegrity
+            )
+        }
+
+        fun error(message: String): DeviceAttestationResultBridge {
+            return DeviceAttestationResultBridge(type = "error", errorMessage = message)
+        }
+
+        fun notSupported(): DeviceAttestationResultBridge {
+            return DeviceAttestationResultBridge(type = "not_supported")
+        }
+    }
+
+    fun toResult(): DeviceAttestationResult {
+        return when (type) {
+            "success" -> DeviceAttestationResult.Success(
+                verified = verified,
+                verdict = verdict ?: "UNKNOWN",
+                meetsStrongIntegrity = meetsStrongIntegrity,
+                meetsDeviceIntegrity = meetsDeviceIntegrity,
+                meetsBasicIntegrity = meetsBasicIntegrity
+            )
+            "not_supported" -> DeviceAttestationResult.NotSupported
+            else -> DeviceAttestationResult.Error(errorMessage ?: "Unknown error")
         }
     }
 }

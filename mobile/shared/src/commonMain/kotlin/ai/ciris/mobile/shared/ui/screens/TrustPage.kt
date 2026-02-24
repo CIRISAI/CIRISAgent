@@ -56,9 +56,23 @@ fun TrustPage(
     var attestationMode by remember { mutableStateOf("partial") }
     val coroutineScope = rememberCoroutineScope()
 
-    // Note: Play Integrity is part of CIRISVerify attestation, no separate UI check needed
+    // Device attestation state (App Attest on iOS, Play Integrity on Android)
+    var deviceAttestationResult by remember { mutableStateOf<DeviceAttestationResult?>(null) }
+    var deviceAttestationLoading by remember { mutableStateOf(false) }
+
     val uriHandler = LocalUriHandler.current
     val clipboardManager = LocalClipboardManager.current
+
+    // Trigger device attestation on mount if callback available
+    LaunchedEffect(deviceAttestationCallback) {
+        if (deviceAttestationCallback != null && deviceAttestationResult == null) {
+            deviceAttestationLoading = true
+            deviceAttestationCallback.onDeviceAttestationRequested { result ->
+                deviceAttestationResult = result
+                deviceAttestationLoading = false
+            }
+        }
+    }
 
     // Fetch verify status on mount
     LaunchedEffect(Unit) {
@@ -167,8 +181,8 @@ fun TrustPage(
                     // 5 Expandable Tier Cards - consolidated view
                     TierCardsSection(
                         status = status,
-                        deviceAttestationResult = null,  // Play Integrity via CIRISVerify, not separate UI check
-                        deviceAttestationLoading = false,
+                        deviceAttestationResult = deviceAttestationResult,
+                        deviceAttestationLoading = deviceAttestationLoading,
                         onCopyDiagnostics = {
                             clipboardManager.setText(AnnotatedString(status.diagnosticInfo ?: "No diagnostics"))
                         }
@@ -1199,28 +1213,33 @@ private fun L2Content(
 
     // Hardware Keystore - check if signing key is encrypted by hardware key
     // HW-AES-256-GCM means Ed25519 key is encrypted by hardware-backed AES key
+    val isIosPlatform = status.platformOs?.lowercase() in listOf("ios", "ipados") ||
+        status.hardwareType?.contains("IOS", ignoreCase = true) == true
     val hasHwEncryption = status.hardwareBacked &&
         status.keyStorageMode?.contains("HW", ignoreCase = true) == true
+    val keystoreLabel = if (isIosPlatform) "Secure Enclave" else "Hardware Keystore"
     val keystoreValue = when {
         hasHwEncryption -> status.keyStorageMode ?: "Hardware-backed"
+        isIosPlatform && status.hardwareBacked -> "iOS Secure Enclave (Software Key)"
         status.hardwareBacked -> "Android Keystore (Software)"
         else -> "Software fallback"
     }
     DetailRow(
-        label = "Hardware Keystore",
+        label = keystoreLabel,
         value = keystoreValue,
         ok = hasHwEncryption,
         pending = status.hardwareBacked && !hasHwEncryption  // Yellow if Keystore but no HW encryption
     )
 
-    // Google Play Integrity / Device Attestation
+    // Device Attestation: App Attest (iOS) / Play Integrity (Android)
+    val attestLabel = if (isIosPlatform) "App Attest" else "Play Integrity"
     if (loading) {
-        DetailRow(label = "Device Attestation", value = "Checking...", ok = false, pending = true)
+        DetailRow(label = attestLabel, value = "Checking...", ok = false, pending = true)
     } else {
         when (deviceResult) {
             is DeviceAttestationResult.Success -> {
                 DetailRow(
-                    label = "Play Integrity",
+                    label = attestLabel,
                     value = if (deviceResult.verified) deviceResult.verdict else "Failed",
                     ok = deviceResult.verified
                 )
@@ -1229,15 +1248,15 @@ private fun L2Content(
                 if (deviceResult.meetsBasicIntegrity) DetailSubtext("• Basic integrity")
             }
             is DeviceAttestationResult.Error -> {
-                DetailRow(label = "Play Integrity", value = "Error", ok = false)
-                DetailSubtext(deviceResult.message.take(50))
+                DetailRow(label = attestLabel, value = "Error", ok = false)
+                DetailSubtext(deviceResult.message.take(80))
             }
             is DeviceAttestationResult.NotSupported -> {
-                DetailRow(label = "Play Integrity", value = "Not supported", ok = false, pending = true)
+                DetailRow(label = attestLabel, value = "Not supported", ok = false, pending = true)
             }
             null -> {
                 DetailRow(
-                    label = "Play Integrity",
+                    label = attestLabel,
                     value = if (status.playIntegrityOk) "Valid" else "Not available",
                     ok = status.playIntegrityOk,
                     pending = !status.playIntegrityOk

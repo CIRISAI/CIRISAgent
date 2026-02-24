@@ -1,19 +1,71 @@
-"""CIRISVerify adapter for hardware-rooted license verification.
+"""CIRISVerify Python bindings.
 
-This adapter integrates CIRISVerify with the CIRIS agent to provide:
-- License status verification
-- Capability enforcement based on license tier
-- Mandatory disclosure management
-- Hardware attestation for professional licenses
+Hardware-rooted license verification for the CIRIS ecosystem.
+Provides cryptographic proof of license status to prevent capability spoofing.
 
-The adapter hooks into WiseBus to enforce license-based capability restrictions,
-ensuring community agents cannot access professional capabilities (medical,
-legal, financial) without proper licensing.
+Usage:
+    from ciris_verify import CIRISVerify, LicenseStatus
+
+    verifier = CIRISVerify()
+    status = verifier.get_license_status(challenge_nonce=os.urandom(32))
+
+    if status.allows_licensed_operation():
+        # Professional capabilities available
+        pass
+    else:
+        # Community mode only
+        disclosure = status.mandatory_disclosure
+        print(disclosure.text)
 """
 
-from .adapter import CIRISVerifyAdapter
+from .client import CIRISVerify, MockCIRISVerify
+from .types import (
+    LicenseStatus,
+    LicenseTier,
+    LicenseDetails,
+    MandatoryDisclosure,
+    DisclosureSeverity,
+    LicenseStatusResponse,
+    CapabilityCheckResult,
+    FileIntegrityResult,
+    FileCheckStatus,
+    BinaryIntegrityStatus,
+    HardwareType,
+    ValidationStatus,
+    PythonModuleHashes,
+    PythonIntegrityResult,
+)
+from .exceptions import (
+    CIRISVerifyError,
+    BinaryNotFoundError,
+    BinaryTamperedError,
+    VerificationFailedError,
+    TimeoutError,
+    CommunicationError,
+)
 
-# Alias for adapter loading convention
-Adapter = CIRISVerifyAdapter
-
-__all__ = ["CIRISVerifyAdapter", "Adapter"]
+__version__ = "0.8.13"
+__all__ = [
+    "CIRISVerify",
+    "MockCIRISVerify",
+    "LicenseStatus",
+    "LicenseTier",
+    "LicenseDetails",
+    "MandatoryDisclosure",
+    "DisclosureSeverity",
+    "LicenseStatusResponse",
+    "CapabilityCheckResult",
+    "FileIntegrityResult",
+    "FileCheckStatus",
+    "BinaryIntegrityStatus",
+    "HardwareType",
+    "ValidationStatus",
+    "PythonModuleHashes",
+    "PythonIntegrityResult",
+    "CIRISVerifyError",
+    "BinaryNotFoundError",
+    "BinaryTamperedError",
+    "VerificationFailedError",
+    "TimeoutError",
+    "CommunicationError",
+]

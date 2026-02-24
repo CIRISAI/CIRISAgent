@@ -84,6 +84,7 @@ targets:
         embed: true
       - sdk: AuthenticationServices.framework
       - sdk: Security.framework
+      - sdk: DeviceCheck.framework
     preBuildScripts:
       - name: Link KMP Shared Framework
         script: |

@@ -34,7 +34,7 @@ Resources/app/ciris_adapters/ciris_verify/  # CIRIS adapter (loads CIRISVerify a
 
 2. **8MB stack thread required on iOS.** The Rust/Tokio runtime inside CIRISVerify needs ~8MB of stack. iOS default thread stack is 512KB. The iOS `service.py` wraps `CIRISVerify()` construction in an 8MB stack thread. **Do NOT overwrite this file with the repo version** (`ciris_adapters/ciris_verify/service.py`) without re-applying the fix.
 
-3. **Resources.zip extraction is cached.** The app only extracts `Resources.zip` on first install. Reinstalling over an existing install does NOT re-extract. To get updated Python code onto the device, **delete the app first** (Settings or long-press), then reinstall.
+3. **Resources.zip extraction is version-gated.** `PythonBridge.swift:extractResourcesIfNeeded()` compares `"{CFBundleShortVersionString}-{CFBundleVersion}"` against a `.extraction_version` marker file. If the version matches, extraction is skipped. **To force re-extraction after updating Python code, bump `CFBundleVersion` in `Info.plist`** (e.g., 49→50). Deleting the app also works but is slower.
 
 4. **Framework path discovery.** `PythonBridge.swift` sets `CIRIS_IOS_FRAMEWORK_PATH` env var pointing to the embedded framework in the app bundle. The Python `ciris_verify` client reads this to find the `.dylib`.
 
@@ -107,6 +107,33 @@ idevice_id -l
 # Get device info
 ideviceinfo -u <DEVICE_ID> | head -20
 ```
+
+### Taking Screenshots of Device
+
+Uses `pymobiledevice3` with a background `tunneld` daemon (requires one-time `sudo` setup for the TUN device). Once tunneld is running, screenshots work without sudo.
+
+```bash
+# One-time setup: start tunneld as background daemon (requires sudo)
+sudo python3 -m pymobiledevice3 remote tunneld &
+# Or make permanent via launchd (see below)
+
+# Take screenshot (no sudo needed, connects to running tunneld)
+python3 -m pymobiledevice3 developer dvt screenshot /tmp/ios_screenshot.png
+```
+
+**Permanent tunneld setup (survives reboots):**
+
+Create `/Library/LaunchDaemons/com.pymobiledevice3.tunneld.plist` and load with:
+```bash
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.pymobiledevice3.tunneld.plist
+```
+
+**Why this approach:** Other methods don't work on iOS 26:
+- `idevicescreenshot` — broken (requires DeveloperDiskImage, removed in iOS 17+)
+- `xcrun devicectl` — has no screenshot subcommand
+- iPhone Mirroring — DRM-protected (`kCGWindowSharingState: 0`), invisible to all macOS screen capture APIs
+- AVFoundation/CoreMediaIO — only sees Continuity Camera, not the device screen
+- `screencapture` CLI — fails with "could not create image from display"
 
 ### Pulling Logs from Device
 
@@ -254,39 +281,57 @@ xcrun simctl install booted "$APP_PATH"
 xcrun simctl launch booted ai.ciris.mobile
 ```
 
-### For Physical Device
+### For Physical Device — CLI Build & Deploy (Preferred)
 
-Build via Xcode (requires signing):
-
-1. Open `iosApp.xcodeproj` in Xcode
-2. Select your device as target
-3. Cmd+R to build and run
-
-Or via command line (if provisioning is set up):
+CLI builds work with the developer account configured in Xcode (Team `MHX9MGJ62V`):
 
 ```bash
+DEVICE_ID="00008110-0016395C1ED9401E"  # Replace with actual device ID
+cd mobile/iosApp
+
+# 1. Build for device
 xcodebuild -project iosApp.xcodeproj -scheme iosApp \
   -sdk iphoneos -configuration Debug \
   -destination 'generic/platform=iOS' \
-  DEVELOPMENT_TEAM=T7HP5J7U87 \
   -allowProvisioningUpdates \
   -quiet build
+
+# 2. Find the built app
+APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/iosApp-* \
+  -name "iosApp.app" -path "*Debug-iphoneos*" -not -path "*/Index.noindex/*" | head -1)
+
+# 3. Install to device
+xcrun devicectl device install app --device $DEVICE_ID "$APP_PATH"
+
+# 4. Launch
+xcrun devicectl device process launch --device $DEVICE_ID ai.ciris.mobile
+
+# 5. Port forward to hit API
+iproxy 18080 8080 -u $DEVICE_ID &
+curl -s http://127.0.0.1:18080/v1/system/health | python3 -m json.tool
 ```
 
-### Updating Python Bundle
+Or build via Xcode UI: Open `iosApp.xcodeproj`, select device, Cmd+R.
 
-After changes to Python code:
+### Updating Python Bundle & Deploying
+
+After changes to Python code (engine, adapters, ciris_verify bindings):
 
 ```bash
-# 1. Copy updated files to Resources
-cp /path/to/updated/*.py Resources/app/ciris_ios/
+cd mobile/iosApp
 
-# 2. Recreate zip
+# 1. Sync updated files to Resources/
+#    - Engine:   cp ../../ciris_engine/path/to/file.py Resources/app/ciris_engine/path/to/file.py
+#    - Verify:   cp ~/CIRISVerify/bindings/python/ciris_verify/*.py Resources/app_packages/ciris_verify/
+#    - Adapter:  cp file Resources/app/ciris_adapters/ciris_verify/ (BUT preserve service.py 8MB fix!)
+
+# 2. Rebuild Resources.zip
 rm -f Resources.zip && cd Resources && zip -q -r ../Resources.zip . && cd ..
 
-# 3. Rebuild in Xcode
+# 3. Bump build number in Info.plist (triggers re-extraction on device)
+#    Increment CFBundleVersion (e.g., 50 → 51)
 
-# 4. IMPORTANT: Delete app from device before installing (Resources.zip cache!)
+# 4. Build, install, launch (see CLI commands above)
 ```
 
 ## Sleep/Wake Recovery
@@ -368,7 +413,7 @@ The iOS `service.py` is missing the 8MB stack thread fix. Check that `threading.
 
 ### CIRISVerify adapter not found in /v1/system/adapters
 
-The `ciris_verify` Python package is missing from `Resources/app_packages/`. This means Resources.zip wasn't re-extracted. Delete the app and reinstall.
+The `ciris_verify` Python package is missing from `Resources/app_packages/`. This means Resources.zip wasn't re-extracted. Bump `CFBundleVersion` in `Info.plist` and redeploy (or delete the app and reinstall).
 
 ### pydantic_core framework not found (device only)
 
@@ -401,10 +446,11 @@ xcrun devicectl device copy from --device $DEVICE_ID \
 - [x] API server running (port 8080)
 - [x] Sign in with Apple integration
 - [x] Restart signal mechanism (watchdog thread)
-- [x] CIRISVerify XCFramework (dynamic, v0.6.16)
-- [x] CIRISVerify Python bindings (attestation, Ed25519, audit trail)
+- [x] CIRISVerify XCFramework (dynamic)
+- [x] CIRISVerify Python bindings v0.8.13 (attestation, Ed25519, audit trail)
 - [x] CIRISVerify adapter with 8MB stack thread fix
-- [ ] CIRISVerify loading verified on device (needs app reinstall)
-- [ ] Secure Enclave key generation
+- [x] CLI build & deploy pipeline (xcodebuild → devicectl install → devicectl launch)
+- [x] 15/15 services healthy on device (build 50, 2026-02-24)
+- [ ] Secure Enclave ECIES hardware-wrapped Ed25519 (CIRISVerify 0.8.11+ Rust side done, iOS build feature gate issue)
 - [ ] Event loop binding fix for restart
 - [ ] Full agent interaction after resume

@@ -1204,6 +1204,41 @@ struct ComposeViewWithAuthAndStore: UIViewControllerRepresentable {
             },
             getStoreError: {
                 return self.storeKitManager.errorMessage
+            },
+
+            // App Attest device attestation callback
+            onDeviceAttestationRequested: { callback in
+                NSLog("[ComposeViewWithAuthAndStore] onDeviceAttestationRequested LAMBDA INVOKED")
+
+                Task {
+                    let manager = AppAttestManager.shared
+
+                    guard manager.isSupported else {
+                        NSLog("[ComposeViewWithAuthAndStore] App Attest not supported")
+                        callback(DeviceAttestationResultBridge.companion.notSupported())
+                        return
+                    }
+
+                    let result = await manager.attestDevice()
+
+                    if result.verified {
+                        NSLog("[ComposeViewWithAuthAndStore] App Attest success: \(result.verdict)")
+                        // Map App Attest results to Play Integrity-style fields
+                        let isStrong = result.isGenuineDevice && result.isUnmodifiedApp
+                        callback(DeviceAttestationResultBridge.companion.success(
+                            verified: true,
+                            verdict: result.verdict,
+                            meetsStrongIntegrity: isStrong,
+                            meetsDeviceIntegrity: result.isGenuineDevice,
+                            meetsBasicIntegrity: true
+                        ))
+                    } else {
+                        NSLog("[ComposeViewWithAuthAndStore] App Attest failed: \(result.error ?? "unknown")")
+                        callback(DeviceAttestationResultBridge.companion.error(
+                            message: result.error ?? "App Attest verification failed"
+                        ))
+                    }
+                }
             }
         )
 

@@ -145,7 +145,8 @@ def create_env_file(
     # On desktop, this will be ~/ciris (which gets expanded by the OS)
     if is_android() or is_ios():
         # Use absolute path for mobile - tilde doesn't expand
-        data_dir = str(get_ciris_home() / "data")
+        # Must match ios_main.py / android_main.py CIRIS_DATA_DIR setting
+        data_dir = str(get_ciris_home())
     else:
         # Use ~/ciris for desktop - more portable
         data_dir = "~/ciris/data"

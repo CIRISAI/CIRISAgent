@@ -272,7 +272,7 @@ class CIRISVerifySigner(BaseSigner):
         if not self._client:
             raise RuntimeError(SIGNER_NOT_INITIALIZED)
         try:
-            return cast(bytes, self._client.sign_sync(data))
+            return cast(bytes, self._client.sign_ed25519_sync(data))
         except Exception as e:
             raise RuntimeError(f"CIRISVerify signing failed: {e}") from e
 
@@ -391,11 +391,12 @@ class CIRISVerifySigner(BaseSigner):
             Path("/app/data/agent_signing.key"),
         ]
 
-        # Also check path resolution
+        # Also check path resolution (CIRIS_HOME and CIRIS_HOME/data/)
         try:
-            from ciris_engine.logic.utils.path_resolution import get_data_dir
+            from ciris_engine.logic.utils.path_resolution import get_ciris_home, get_data_dir
 
             key_locations.insert(0, get_data_dir() / "agent_signing.key")
+            key_locations.insert(0, get_ciris_home() / "agent_signing.key")
         except Exception:
             pass
 
@@ -414,20 +415,18 @@ class CIRISVerifySigner(BaseSigner):
                 self._client.import_key_sync(key_bytes)
 
                 # Fetch public key to validate
-                pub_key, algo = self._client.get_ed25519_public_key_sync()
+                pub_key = self._client.get_ed25519_public_key_sync()
                 self._public_key_cache = pub_key
-                self._algo_name = algo
+                self._algo_name = "Ed25519"
                 self._key_id = self._compute_key_id(pub_key)
 
                 if self._algo_name and "Ed25519" in self._algo_name:
                     self._algorithm = SigningAlgorithm.ED25519
 
-                # Delete the original file after successful import
-                try:
-                    key_path.unlink()
-                    logger.info(f"Deleted original key file after migration: {key_path}")
-                except OSError as e:
-                    logger.warning(f"Could not delete original key file {key_path}: {e}")
+                # Note: Do NOT delete the key file. CIRISVerify's persist_key()
+                # stores to the same CIRIS_DATA_DIR path, so deleting the "original"
+                # would also delete the Rust-persisted copy.
+                logger.info(f"Key imported from {key_path} (file retained for Rust persistence)")
 
                 logger.info(f"Key auto-migrated to ciris_verify (key_id={self._key_id})")
                 return True
@@ -522,6 +521,16 @@ class UnifiedSigningKey:
         key_locations = []
         if self._key_path:
             key_locations.append(self._key_path)
+
+        # Check CIRIS_HOME (iOS: Documents/ciris/, Android: files/ciris/)
+        try:
+            from ciris_engine.logic.utils.path_resolution import get_ciris_home, get_data_dir
+
+            key_locations.append(get_ciris_home() / "agent_signing.key")
+            key_locations.append(get_data_dir() / "agent_signing.key")
+        except Exception:
+            pass
+
         key_locations.extend(
             [
                 self.DEFAULT_KEY_PATH,
@@ -547,6 +556,37 @@ class UnifiedSigningKey:
                 break
             except Exception as e:
                 logger.debug(f"Could not save key to {key_path}: {e}")
+
+        # Also import into CIRISVerify vault so other instances can find it
+        if self._key_path and isinstance(self._signer, Ed25519Signer) and self._signer._private_key:
+            try:
+                import threading
+
+                from cryptography.hazmat.primitives import serialization
+
+                private_bytes = self._signer._private_key.private_bytes(
+                    encoding=serialization.Encoding.Raw,
+                    format=serialization.PrivateFormat.Raw,
+                    encryption_algorithm=serialization.NoEncryption(),
+                )
+
+                def _import_to_verify() -> None:
+                    try:
+                        from ciris_verify import CIRISVerify
+
+                        client = CIRISVerify(skip_integrity_check=True)
+                        client.import_key_sync(private_bytes)
+                        logger.info("Imported generated key into CIRISVerify vault")
+                    except Exception as ie:
+                        logger.debug(f"Could not import key into CIRISVerify: {ie}")
+
+                t = threading.Thread(target=_import_to_verify)
+                t.daemon = True
+                threading.stack_size(8 * 1024 * 1024)
+                t.start()
+                t.join(timeout=10.0)
+            except Exception as e:
+                logger.debug(f"CIRISVerify import skipped: {e}")
 
         self._initialized = True
 
@@ -603,7 +643,7 @@ class UnifiedSigningKey:
                     # Import the portal-issued key (algorithm=2 for Ed25519)
                     client.import_key_sync(private_bytes)
                     # Validate by fetching public key
-                    pub_key, algo = client.get_ed25519_public_key_sync()
+                    pub_key = client.get_ed25519_public_key_sync()
                     import_result[0] = client
                     import_result[1] = pub_key
                 except Exception as e:

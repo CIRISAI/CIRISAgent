@@ -382,16 +382,22 @@ class CIRISApiClient(
             val body = response.body()
             val data = body.`data` ?: throw RuntimeException("API returned null data")
 
-            val healthyCount = data.services["healthy"]?.get("count") ?: 0
-            val unhealthyCount = data.services["unhealthy"]?.get("count") ?: 0
+            var healthyCount = 0
+            var totalCount = 0
+            for ((_, info) in data.services) {
+                val svcHealthy = info["healthy"] ?: 0
+                val svcAvailable = info["available"] ?: 0
+                healthyCount += svcHealthy
+                totalCount += svcAvailable
+            }
 
-            logInfo(method, "System status: ${data.status}, services: $healthyCount healthy, $unhealthyCount unhealthy")
+            logInfo(method, "System status: ${data.status}, services: $healthyCount healthy / $totalCount total")
 
             SystemStatus(
                 status = data.status,
                 cognitive_state = data.cognitiveState,
                 services_online = healthyCount,
-                services_total = healthyCount + unhealthyCount,
+                services_total = totalCount,
                 services = emptyMap()
             )
         } catch (e: Exception) {

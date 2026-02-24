@@ -1,42 +1,42 @@
 {
-  "last_updated": "2026-02-20T01:56:01.383439+00:00",
+  "last_updated": "2026-02-24T15:14:41.736064+00:00",
   "version": "2.0.0-beta",
   "modules": {
     "_comment_core": "=== CORE API MODULES ===",
     "auth": {
-      "last_run": "2026-02-19T21:37:55.163008+00:00",
+      "last_run": "2026-02-24T15:11:29.534322+00:00",
       "passed": 3,
       "failed": 0,
       "total": 3,
       "status": "passing",
-      "duration_seconds": 15.02,
+      "duration_seconds": 17.54,
       "context": "Tests authentication system including login with username/password, JWT token generation/validation, token refresh, and logout. Validates OAuth integration readiness and API key authentication."
     },
     "telemetry": {
-      "last_run": "2026-02-18T17:32:07.920206+00:00",
-      "passed": 9,
+      "last_run": "2026-02-24T15:14:41.735972+00:00",
+      "passed": 4,
       "failed": 0,
-      "total": 9,
+      "total": 4,
       "status": "passing",
-      "duration_seconds": 13.47,
+      "duration_seconds": 19.55,
       "context": "Tests telemetry collection and aggregation including unified metrics endpoint, service health status for all 22 core services, TSDB storage, and metrics export formats (OTLP, Prometheus)."
     },
     "agent": {
-      "last_run": "2026-02-18T17:32:07.920701+00:00",
-      "passed": 12,
+      "last_run": "2026-02-24T15:14:15.578600+00:00",
+      "passed": 8,
       "failed": 0,
-      "total": 12,
+      "total": 8,
       "status": "passing",
-      "duration_seconds": 13.47,
+      "duration_seconds": 77.66,
       "context": "Tests agent interaction endpoints including message submission, response retrieval, conversation history, queue status, thought processing, and the H3ERE reasoning pipeline integration."
     },
     "system": {
-      "last_run": "2026-02-18T17:32:07.921153+00:00",
-      "passed": 23,
+      "last_run": "2026-02-24T15:11:05.768424+00:00",
+      "passed": 5,
       "failed": 0,
-      "total": 23,
+      "total": 5,
       "status": "passing",
-      "duration_seconds": 13.47,
+      "duration_seconds": 20.06,
       "context": "Tests system management endpoints including health checks, runtime control (pause/resume), configuration management, emergency shutdown, and service status monitoring."
     },
     "memory": {

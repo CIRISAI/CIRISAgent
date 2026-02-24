@@ -31,6 +31,7 @@ from .types import (
     BinaryIntegrityStatus,
     CapabilityCheckResult,
     DisclosureSeverity,
+    FileCheckStatus,
     FileIntegrityResult,
     HardwareType,
     LicenseDetails,
@@ -43,7 +44,7 @@ from .types import (
     ValidationStatus,
 )
 
-__version__ = "0.8.7"
+__version__ = "0.8.8"
 __all__ = [
     "CIRISVerify",
     "MockCIRISVerify",
@@ -55,6 +56,7 @@ __all__ = [
     "LicenseStatusResponse",
     "CapabilityCheckResult",
     "FileIntegrityResult",
+    "FileCheckStatus",
     "BinaryIntegrityStatus",
     "HardwareType",
     "ValidationStatus",

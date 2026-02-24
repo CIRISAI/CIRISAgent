@@ -1382,8 +1382,16 @@ private fun L4Content(status: VerifyStatusResponse) {
     }
 
     // 1. Missing from System (files in manifest but not on device)
-    val missingFromSystem = if (perFile != null) missingFiles else (status.filesMissingList ?: emptyList())
-    val missingFromSystemCount = if (perFile != null) missingFiles.size else (status.filesMissingCount ?: missingFromSystem.size)
+    // Filter out mobile-excluded paths (discord, reddit, cli, gui_static, etc.)
+    val mobileExclusionPatterns = listOf(
+        "adapters/discord/", "adapters/reddit/", "adapters/cli/",
+        "gui_static/", "gui/", "/tests/", "test_"
+    )
+    val rawMissingFromSystem = if (perFile != null) missingFiles else (status.filesMissingList ?: emptyList())
+    val missingFromSystem = rawMissingFromSystem.filter { path ->
+        mobileExclusionPatterns.none { pattern -> path.contains(pattern) }
+    }
+    val missingFromSystemCount = missingFromSystem.size
     if (missingFromSystemCount > 0) {
         CollapsibleFileSection(
             title = "Missing from System",
@@ -1391,8 +1399,8 @@ private fun L4Content(status: VerifyStatusResponse) {
             files = missingFromSystem.take(50),
             expanded = missingFromSystemExpanded,
             onToggle = { missingFromSystemExpanded = !missingFromSystemExpanded },
-            titleColor = Color(0xFFF59E0B),  // Amber for missing (expected on mobile)
-            fileColor = Color(0xFFFBBF24)
+            titleColor = Color(0xFFB45309),  // Darker amber, readable on gray
+            fileColor = Color(0xFF92400E)   // Dark amber for file names
         )
     }
 
@@ -1405,8 +1413,8 @@ private fun L4Content(status: VerifyStatusResponse) {
             files = missingFromManifest.take(50),
             expanded = missingFromManifestExpanded,
             onToggle = { missingFromManifestExpanded = !missingFromManifestExpanded },
-            titleColor = Color(0xFFF59E0B),
-            fileColor = Color(0xFFFBBF24)
+            titleColor = Color(0xFFB45309),  // Darker amber, readable
+            fileColor = Color(0xFF92400E)   // Dark amber for file names
         )
     }
 

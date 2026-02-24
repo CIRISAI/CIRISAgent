@@ -249,6 +249,15 @@ class CapabilityCheckResult(BaseModel):
     requires_separate_module: bool = Field(default=False, description="Needs separate licensed repo")
 
 
+class FileCheckStatus(str, Enum):
+    """Status of a single file integrity check."""
+
+    PASSED = "passed"
+    FAILED = "failed"
+    MISSING = "missing"
+    UNREADABLE = "unreadable"
+
+
 class FileIntegrityResult(BaseModel):
     """Result of Tripwire-style agent file integrity check.
 
@@ -266,6 +275,21 @@ class FileIntegrityResult(BaseModel):
     files_missing: int = Field(default=0, description="Files missing from disk")
     files_unexpected: int = Field(default=0, description="Unexpected files not in manifest")
     failure_reason: str = Field(default="", description="Opaque failure category")
+    # Per-file results (v0.8.5+)
+    per_file_results: dict = Field(default_factory=dict, description="file_path -> FileCheckStatus")
+    unexpected_files: List[str] = Field(default_factory=list, description="List of unexpected file paths")
+
+    def get_failed_files(self) -> List[str]:
+        """Get list of files that failed hash check."""
+        return [path for path, status in self.per_file_results.items() if status == "failed"]
+
+    def get_missing_files(self) -> List[str]:
+        """Get list of files that are missing from disk."""
+        return [path for path, status in self.per_file_results.items() if status == "missing"]
+
+    def get_passed_files(self) -> List[str]:
+        """Get list of files that passed hash check."""
+        return [path for path, status in self.per_file_results.items() if status == "passed"]
 
 
 class BinaryIntegrityStatus(BaseModel):

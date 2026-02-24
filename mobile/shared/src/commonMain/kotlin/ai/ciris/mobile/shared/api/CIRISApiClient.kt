@@ -880,6 +880,10 @@ class CIRISApiClient(
                 // v0.8.6: Mobile exclusion tracking (discord, reddit, cli, etc.)
                 mobileExcludedCount = (data["mobile_excluded_count"] as? JsonPrimitive)?.content?.toIntOrNull(),
                 mobileExcludedList = (data["mobile_excluded_list"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                // v0.8.6+: Per-file results for deconflicted integrity display
+                perFileResults = (data["per_file_results"] as? JsonObject)?.let { obj ->
+                    obj.entries.associate { (k, v) -> k to ((v as? JsonPrimitive)?.content ?: "unknown") }
+                },
                 // v0.8.5: Registry sources agreement
                 sourcesAgreeing = (data["sources_agreeing"] as? JsonPrimitive)?.content?.toIntOrNull(),
                 // Attestation proof hardware type (nested in attestation_proof object)

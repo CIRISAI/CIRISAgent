@@ -522,6 +522,11 @@ data class VerifyStatusResponse(
     @SerialName("mobile_excluded_list")
     val mobileExcludedList: List<String>? = null,
 
+    // v0.8.6+: Per-file results for deconflicted integrity display
+    /** Per-file status map (path → passed/failed/missing/unreadable) */
+    @SerialName("per_file_results")
+    val perFileResults: Map<String, String>? = null,
+
     // v0.8.5: Registry sources agreement
     /** Number of registry sources that agree (0-3) */
     @SerialName("sources_agreeing")

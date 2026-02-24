@@ -43,7 +43,7 @@ from .types import (
     ValidationStatus,
 )
 
-__version__ = "0.8.4"
+__version__ = "0.8.7"
 __all__ = [
     "CIRISVerify",
     "MockCIRISVerify",

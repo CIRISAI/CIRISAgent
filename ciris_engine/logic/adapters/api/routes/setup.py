@@ -411,6 +411,11 @@ class VerifyStatusResponse(BaseModel):
         default=None, description="Full attestation proof from CIRISVerify"
     )
 
+    # v0.8.6: Per-file results for deconflicted integrity display
+    per_file_results: Optional[Dict[str, str]] = Field(
+        default=None, description="Per-file status map (path → passed/failed/missing/unreadable)"
+    )
+
 
 class LLMValidationRequest(BaseModel):
     """Request to validate LLM configuration."""
@@ -2318,6 +2323,8 @@ async def get_verify_status(
             # v0.8.6: Mobile exclusion tracking
             mobile_excluded_count = 0
             mobile_excluded_list: List[str] = []
+            # v0.8.6+: Per-file results from CIRISVerify
+            per_file_results_raw: Dict[str, str] = {}
             # v0.7.0+: Self-verification details
             target_triple = None
             binary_self_check = None
@@ -2490,6 +2497,8 @@ async def get_verify_status(
                                 files_failed = full_result.get("files_failed", 0)
                                 files_missing = full_result.get("files_missing", 0)
                                 files_unexpected = full_result.get("files_unexpected", 0)
+                                # v0.8.6+: Extract per-file results for deconflicted display
+                                per_file_results_raw = full_result.get("per_file_results", {})
                                 raw_failure_reason = (
                                     full_result.get("failure_reason") or full_result.get("reason") or ""
                                 )
@@ -2815,6 +2824,47 @@ async def get_verify_status(
                                 f"[verify-status] Python integrity: ok={python_integrity_ok}, "
                                 f"modules={python_modules_passed}/{python_modules_checked}, hash_valid={python_hash_valid}"
                             )
+
+                        # v0.8.6+: Extract sources from attestation result (overrides get_license_status)
+                        # This is more accurate than get_license_status().source_details.sources_agreeing
+                        # The attestation result has dns_us_ok, dns_eu_ok, https_us_ok at top level
+                        sources_data = None
+                        if isinstance(attestation_result, dict):
+                            sources_data = attestation_result.get("sources")
+                            # Also check top-level dns_us_ok etc (attestation result format)
+                            top_level_dns_us = attestation_result.get("dns_us_ok", False)
+                            top_level_dns_eu = attestation_result.get("dns_eu_ok", False)
+                            top_level_https = attestation_result.get("https_us_ok", False)
+                        else:
+                            sources_data = getattr(attestation_result, "sources", None)
+                            top_level_dns_us = getattr(attestation_result, "dns_us_ok", False)
+                            top_level_dns_eu = getattr(attestation_result, "dns_eu_ok", False)
+                            top_level_https = getattr(attestation_result, "https_us_ok", False)
+
+                        # Check sources.validation_status for "AllSourcesAgree"
+                        sources_status = ""
+                        if sources_data:
+                            if isinstance(sources_data, dict):
+                                sources_status = sources_data.get("validation_status", sources_data.get("status", ""))
+                            else:
+                                sources_status = getattr(sources_data, "validation_status", "") or getattr(
+                                    sources_data, "status", ""
+                                )
+
+                        # Use top-level dns_us_ok etc as authoritative (from run_attestation)
+                        attestation_sources_agreeing = sum([top_level_dns_us, top_level_dns_eu, top_level_https])
+
+                        # Override the get_license_status value with attestation result
+                        if "AllSourcesAgree" in str(sources_status) or attestation_sources_agreeing == 3:
+                            sources_agreeing = 3
+                        elif attestation_sources_agreeing > sources_agreeing:
+                            sources_agreeing = attestation_sources_agreeing
+
+                        logger.info(
+                            f"[verify-status] Sources (from attestation): status={sources_status}, "
+                            f"dns_us={top_level_dns_us}, dns_eu={top_level_dns_eu}, https={top_level_https}, "
+                            f"agreeing={sources_agreeing}/3"
+                        )
                     else:
                         # run_attestation not available, use legacy method
                         file_integrity_ok = False
@@ -3096,6 +3146,8 @@ async def get_verify_status(
                 # v0.8.6: Mobile exclusion tracking
                 "mobile_excluded_count": mobile_excluded_count,
                 "mobile_excluded_list": mobile_excluded_list[:50] if mobile_excluded_list else [],
+                # v0.8.6+: Per-file results for deconflicted display
+                "per_file_results": per_file_results_raw if per_file_results_raw else None,
             }
             logger.info(f"[verify-status] Success: {verify_result[0]}")
         except ImportError as e:
@@ -3215,6 +3267,8 @@ async def get_verify_status(
             # v0.8.5: Registry sources agreement and attestation proof
             sources_agreeing=status_dict.get("sources_agreeing", 0),
             attestation_proof=status_dict.get("attestation_proof"),
+            # v0.8.6+: Per-file results for deconflicted display
+            per_file_results=status_dict.get("per_file_results"),
         )
     )
 

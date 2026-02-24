@@ -929,11 +929,12 @@ private fun TierCardsSection(
             L2Content(status, deviceAttestationResult, deviceAttestationLoading)
         }
 
-        // L3: Registry Cross-Validation
+        // L3: Registry Cross-Validation - requires at least 2/3 sources to agree
+        val l3SourcesAgreeing = status.sourcesAgreeing ?: 0
         ExpandableTierCard(
             level = 3,
             title = "Registry Network",
-            passed = status.registryOk,
+            passed = l3SourcesAgreeing >= 2,
             checksInfo = buildL3ChecksInfo(status),
             expanded = expandedTier == 3,
             onToggle = { expandedTier = if (expandedTier == 3) null else 3 }
@@ -1072,24 +1073,40 @@ private fun buildL2ChecksInfo(status: VerifyStatusResponse, deviceResult: Device
 private fun buildL3ChecksInfo(status: VerifyStatusResponse): String {
     // Registry cross-validation uses 3 sources (DNS US, DNS EU, HTTPS)
     val sources = 3
-    val agreement = status.sourcesAgreeing ?: (if (status.registryOk) 3 else 0)
+    val agreement = status.sourcesAgreeing ?: 0
     val icon = when {
         agreement >= 3 -> "✓"
-        agreement >= 1 -> "◐"  // Partial
-        else -> "○"
+        agreement >= 2 -> "◐"  // Partial (2/3 is still passing)
+        else -> "✗"  // Failing (0-1/3)
     }
     return "$agreement/$sources sources • $icon"
 }
 
 private fun buildL4ChecksInfo(status: VerifyStatusResponse): String {
-    val filesPassed = status.filesPassed ?: 0
-    val filesChecked = status.filesChecked ?: 0
+    val perFile = status.perFileResults
     val mobileExcluded = status.mobileExcludedCount ?: 0
     val pyModulesPassed = status.pythonModulesPassed ?: 0
     val pyModulesChecked = status.pythonModulesChecked ?: pyModulesPassed
-    val totalVerified = filesPassed + pyModulesPassed
-    val totalExpected = (filesChecked - mobileExcluded) + pyModulesChecked
-    return "$totalVerified/$totalExpected files"
+
+    return if (perFile != null) {
+        // v0.8.6+: Use per_file_results for accurate counts
+        val passed = perFile.values.count { it == "passed" }
+        val failed = perFile.values.count { it == "failed" }
+        val total = perFile.size - mobileExcluded + pyModulesChecked
+        val totalPassed = passed + pyModulesPassed
+        if (failed > 0) {
+            "$totalPassed/$total files • $failed failed"
+        } else {
+            "$totalPassed/$total files"
+        }
+    } else {
+        // Fallback to legacy counts
+        val filesPassed = status.filesPassed ?: 0
+        val filesChecked = status.filesChecked ?: 0
+        val totalVerified = filesPassed + pyModulesPassed
+        val totalExpected = (filesChecked - mobileExcluded) + pyModulesChecked
+        "$totalVerified/$totalExpected files"
+    }
 }
 
 private fun buildL5ChecksInfo(status: VerifyStatusResponse): String {
@@ -1257,13 +1274,13 @@ private fun L2Content(
 private fun L3Content(status: VerifyStatusResponse) {
     // Registry uses 3 sources: DNS US, DNS EU, HTTPS
     val sources = 3
-    val agreement = status.sourcesAgreeing ?: (if (status.registryOk) 3 else 0)
-    val isPartial = agreement in 1..2
+    val agreement = status.sourcesAgreeing ?: 0
+    val isPartial = agreement == 2  // 2/3 is partial but passing
 
     DetailRow(
         label = "Cross-Validation",
         value = "$agreement/$sources sources agree",
-        ok = agreement >= 3,
+        ok = agreement >= 2,  // 2/3 is passing threshold
         pending = isPartial
     )
 
@@ -1288,10 +1305,11 @@ private fun L3Content(status: VerifyStatusResponse) {
         label = "Registry Status",
         value = when {
             agreement >= 3 -> "All sources agree"
-            agreement >= 1 -> "Partial validation ($agreement/3)"
+            agreement >= 2 -> "Majority agree ($agreement/3)"
+            agreement >= 1 -> "Insufficient ($agreement/3)"
             else -> "Validation pending"
         },
-        ok = agreement >= 3,
+        ok = agreement >= 2,  // 2/3 is passing threshold
         pending = isPartial
     )
 }
@@ -1299,46 +1317,82 @@ private fun L3Content(status: VerifyStatusResponse) {
 // L4 Content: Code Integrity
 @Composable
 private fun L4Content(status: VerifyStatusResponse) {
-    // Manifest file counts
-    val filesPassed = status.filesPassed ?: 0
-    val filesChecked = status.filesChecked ?: 0
-    val mobileExcluded = status.mobileExcludedCount ?: 0
-    val effectiveManifestExpected = filesChecked - mobileExcluded
+    // v0.8.6+: Use per_file_results for deconflicted counts if available
+    val perFile = status.perFileResults
 
-    // Python module counts
+    // Extract counts from per_file_results (authoritative source from CIRISVerify)
+    val passedFiles = perFile?.filterValues { it == "passed" }?.keys?.toList() ?: emptyList()
+    val failedFiles = perFile?.filterValues { it == "failed" }?.keys?.toList() ?: emptyList()
+    val missingFiles = perFile?.filterValues { it == "missing" }?.keys?.toList() ?: emptyList()
+    val unreadableFiles = perFile?.filterValues { it == "unreadable" }?.keys?.toList() ?: emptyList()
+
+    // Mobile exclusions (server-only adapters not bundled in APK)
+    val mobileExcluded = status.mobileExcludedList ?: emptyList()
+    val mobileExcludedCount = status.mobileExcludedCount ?: mobileExcluded.size
+
+    // Python module counts (separate integrity check)
     val pyModulesPassed = status.pythonModulesPassed ?: 0
     val pyModulesChecked = status.pythonModulesChecked ?: pyModulesPassed
 
-    // Combined totals
-    val totalVerified = filesPassed + pyModulesPassed
-    val totalExpected = effectiveManifestExpected + pyModulesChecked
+    // Calculate totals
+    val manifestTotal = if (perFile != null) perFile.size else (status.filesChecked ?: 0)
+    val manifestPassed = if (perFile != null) passedFiles.size else (status.filesPassed ?: 0)
+    val manifestFailed = if (perFile != null) failedFiles.size else (status.filesFailed ?: 0)
+    val manifestMissing = if (perFile != null) missingFiles.size else (status.filesMissingCount ?: 0)
+
+    // Total integrity = manifest files (excluding mobile-only) + python modules
+    val effectiveManifestTotal = manifestTotal - mobileExcludedCount
+    val totalExpected = effectiveManifestTotal + pyModulesChecked
+    val totalPassed = manifestPassed + pyModulesPassed
 
     // Summary row
+    val integrityOk = manifestFailed == 0 && unreadableFiles.isEmpty()
     DetailRow(
         label = "Code Integrity",
-        value = if (status.fileIntegrityOk) "Verified" else "Partial",
-        ok = status.fileIntegrityOk
+        value = if (integrityOk) "Verified" else "Issues Found",
+        ok = integrityOk
     )
-    DetailSubtext("$totalVerified/$totalExpected total ($filesPassed/$effectiveManifestExpected manifest + $pyModulesPassed/$pyModulesChecked python)")
+
+    // Deconflicted summary line
+    if (perFile != null) {
+        DetailSubtext("$totalPassed/$totalExpected verified (${passedFiles.size} manifest + $pyModulesPassed python)")
+    } else {
+        // Fallback to legacy display
+        DetailSubtext("$totalPassed/$totalExpected total ($manifestPassed/$effectiveManifestTotal manifest + $pyModulesPassed/$pyModulesChecked python)")
+    }
 
     // Collapsible state for each section
+    var passedExpanded by remember { mutableStateOf(false) }
     var missingFromSystemExpanded by remember { mutableStateOf(false) }
     var missingFromManifestExpanded by remember { mutableStateOf(false) }
     var excludedExpanded by remember { mutableStateOf(false) }
     var checksumMismatchExpanded by remember { mutableStateOf(false) }
 
+    // 0. Passed files (green, collapsed by default) - only show if per_file_results available
+    if (passedFiles.isNotEmpty()) {
+        CollapsibleFileSection(
+            title = "Passed",
+            count = passedFiles.size,
+            files = passedFiles.take(50),
+            expanded = passedExpanded,
+            onToggle = { passedExpanded = !passedExpanded },
+            titleColor = Color(0xFF059669),
+            fileColor = Color(0xFF10B981)
+        )
+    }
+
     // 1. Missing from System (files in manifest but not on device)
-    val missingFromSystem = status.filesMissingList ?: emptyList()
-    val missingFromSystemCount = status.filesMissingCount ?: missingFromSystem.size
+    val missingFromSystem = if (perFile != null) missingFiles else (status.filesMissingList ?: emptyList())
+    val missingFromSystemCount = if (perFile != null) missingFiles.size else (status.filesMissingCount ?: missingFromSystem.size)
     if (missingFromSystemCount > 0) {
         CollapsibleFileSection(
             title = "Missing from System",
             count = missingFromSystemCount,
-            files = missingFromSystem,
+            files = missingFromSystem.take(50),
             expanded = missingFromSystemExpanded,
             onToggle = { missingFromSystemExpanded = !missingFromSystemExpanded },
-            titleColor = Color(0xFFDC2626),
-            fileColor = Color(0xFFEF4444)
+            titleColor = Color(0xFFF59E0B),  // Amber for missing (expected on mobile)
+            fileColor = Color(0xFFFBBF24)
         )
     }
 
@@ -1346,9 +1400,9 @@ private fun L4Content(status: VerifyStatusResponse) {
     val missingFromManifest = status.filesUnexpectedList ?: emptyList()
     if (missingFromManifest.isNotEmpty()) {
         CollapsibleFileSection(
-            title = "Missing from Manifest",
+            title = "Unexpected Files",
             count = missingFromManifest.size,
-            files = missingFromManifest,
+            files = missingFromManifest.take(50),
             expanded = missingFromManifestExpanded,
             onToggle = { missingFromManifestExpanded = !missingFromManifestExpanded },
             titleColor = Color(0xFFF59E0B),
@@ -1357,30 +1411,42 @@ private fun L4Content(status: VerifyStatusResponse) {
     }
 
     // 3. Excluded (mobile-excluded: discord, reddit, cli, gui_static, etc.)
-    val excluded = status.mobileExcludedList ?: emptyList()
-    val excludedCount = status.mobileExcludedCount ?: excluded.size
-    if (excludedCount > 0) {
+    if (mobileExcludedCount > 0) {
         CollapsibleFileSection(
             title = "Excluded (Mobile)",
-            count = excludedCount,
-            files = excluded,
+            count = mobileExcludedCount,
+            files = mobileExcluded.take(50),
             expanded = excludedExpanded,
             onToggle = { excludedExpanded = !excludedExpanded },
-            titleColor = Color(0xFF059669),
-            fileColor = Color(0xFF10B981)
+            titleColor = Color(0xFF6B7280),  // Gray for excluded
+            fileColor = Color(0xFF9CA3AF)
         )
     }
 
-    // 4. Checksum Mismatch (files present but hash doesn't match)
-    val checksumMismatch = status.filesFailedList ?: emptyList()
-    val checksumMismatchCount = status.filesFailed ?: checksumMismatch.size
+    // 4. Checksum Mismatch (files present but hash doesn't match) - CRITICAL
+    val checksumMismatch = if (perFile != null) failedFiles else (status.filesFailedList ?: emptyList())
+    val checksumMismatchCount = if (perFile != null) failedFiles.size else (status.filesFailed ?: checksumMismatch.size)
     if (checksumMismatchCount > 0) {
         CollapsibleFileSection(
             title = "Checksum Mismatch",
             count = checksumMismatchCount,
-            files = checksumMismatch,
+            files = checksumMismatch.take(50),
             expanded = checksumMismatchExpanded,
             onToggle = { checksumMismatchExpanded = !checksumMismatchExpanded },
+            titleColor = Color(0xFFDC2626),  // Red for failed
+            fileColor = Color(0xFFEF4444)
+        )
+    }
+
+    // 5. Unreadable files (if any)
+    var unreadableExpanded by remember { mutableStateOf(false) }
+    if (unreadableFiles.isNotEmpty()) {
+        CollapsibleFileSection(
+            title = "Unreadable",
+            count = unreadableFiles.size,
+            files = unreadableFiles.take(50),
+            expanded = unreadableExpanded,
+            onToggle = { unreadableExpanded = !unreadableExpanded },
             titleColor = Color(0xFFDC2626),
             fileColor = Color(0xFFEF4444)
         )

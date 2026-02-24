@@ -1083,28 +1083,19 @@ private fun buildL3ChecksInfo(status: VerifyStatusResponse): String {
 }
 
 private fun buildL4ChecksInfo(status: VerifyStatusResponse): String {
-    val perFile = status.perFileResults
+    val perFile = status.perFileResults ?: emptyMap()
+    val manifestTotal = perFile.size.takeIf { it > 0 } ?: (status.filesChecked ?: 0)
     val mobileExcluded = status.mobileExcludedCount ?: 0
-    val pyModulesPassed = status.pythonModulesPassed ?: 0
-    val pyModulesChecked = status.pythonModulesChecked ?: pyModulesPassed
+    val totalExpected = manifestTotal - mobileExcluded
 
-    return if (perFile != null) {
-        // v0.8.6+: Use per_file_results for accurate counts
-        val passed = perFile.values.count { it == "passed" }
-        val failed = perFile.values.count { it == "failed" }
-        val total = perFile.size - mobileExcluded + pyModulesChecked
-        val totalPassed = passed + pyModulesPassed
-        if (failed > 0) {
-            "$totalPassed/$total files • $failed failed"
-        } else {
-            "$totalPassed/$total files"
-        }
+    // Use backend's deconflicted count (mobile_excluded_list is truncated so can't calculate here)
+    val trulyMissing = status.filesMissingCount ?: 0
+    val totalVerified = totalExpected - trulyMissing
+    val failed = status.filesFailed ?: 0
+
+    return if (failed > 0) {
+        "$totalVerified/$totalExpected • $failed failed"
     } else {
-        // Fallback to legacy counts
-        val filesPassed = status.filesPassed ?: 0
-        val filesChecked = status.filesChecked ?: 0
-        val totalVerified = filesPassed + pyModulesPassed
-        val totalExpected = (filesChecked - mobileExcluded) + pyModulesChecked
         "$totalVerified/$totalExpected files"
     }
 }
@@ -1315,138 +1306,163 @@ private fun L3Content(status: VerifyStatusResponse) {
 }
 
 // L4 Content: Code Integrity
+//
+// Deconfliction logic:
+// 1. EXPECTED (denominator) = Registry Manifest - Mobile Exclusions
+// 2. VERIFIED (numerator) = Filesystem verified + Chaquopy verified (by full path)
+// 3. MISSING = Files in expected but not verified by either source
+// 4. FAILED = Checksum mismatches reported by CIRISVerify
+//
 @Composable
 private fun L4Content(status: VerifyStatusResponse) {
-    // v0.8.6+: Use per_file_results for deconflicted counts if available
-    val perFile = status.perFileResults
+    val perFile = status.perFileResults ?: emptyMap()
 
-    // Extract counts from per_file_results (authoritative source from CIRISVerify)
-    val passedFiles = perFile?.filterValues { it == "passed" }?.keys?.toList() ?: emptyList()
-    val failedFiles = perFile?.filterValues { it == "failed" }?.keys?.toList() ?: emptyList()
-    val missingFiles = perFile?.filterValues { it == "missing" }?.keys?.toList() ?: emptyList()
-    val unreadableFiles = perFile?.filterValues { it == "unreadable" }?.keys?.toList() ?: emptyList()
+    // === SOURCE 1: Registry Manifest ===
+    val manifestTotal = perFile.size.takeIf { it > 0 } ?: (status.filesChecked ?: 0)
+    val mobileExcludedCount = status.mobileExcludedCount ?: 0
 
-    // Mobile exclusions (server-only adapters not bundled in APK)
-    val mobileExcluded = status.mobileExcludedList ?: emptyList()
-    val mobileExcludedCount = status.mobileExcludedCount ?: mobileExcluded.size
+    // EXPECTED = Manifest - Mobile Exclusions (denominator)
+    val totalExpected = manifestTotal - mobileExcludedCount
 
-    // Python module counts (separate integrity check)
-    val pyModulesPassed = status.pythonModulesPassed ?: 0
-    val pyModulesChecked = status.pythonModulesChecked ?: pyModulesPassed
+    // === SOURCE 2: Chaquopy Hash Verified (Python files) ===
+    // These are Python files validated via startup hash, not on filesystem
+    val chaquopyVerifiedCount = status.pythonModulesPassed ?: 0
 
-    // Calculate totals
-    val manifestTotal = if (perFile != null) perFile.size else (status.filesChecked ?: 0)
-    val manifestPassed = if (perFile != null) passedFiles.size else (status.filesPassed ?: 0)
-    val manifestFailed = if (perFile != null) failedFiles.size else (status.filesFailed ?: 0)
-    val manifestMissing = if (perFile != null) missingFiles.size else (status.filesMissingCount ?: 0)
+    // === SOURCE 3: Filesystem Verified ===
+    // Files physically on disk that passed CIRISVerify check
+    val filesystemVerified = perFile.filterValues { it == "passed" }.keys.toList()
+    val filesystemVerifiedCount = filesystemVerified.size
 
-    // Total integrity = manifest files (excluding mobile-only) + python modules
-    val effectiveManifestTotal = manifestTotal - mobileExcludedCount
-    val totalExpected = effectiveManifestTotal + pyModulesChecked
-    val totalPassed = manifestPassed + pyModulesPassed
+    // === MOBILE EXCLUSIONS (from backend) ===
+    val mobileExcludedList = status.mobileExcludedList ?: emptyList()
+    val mobileExcludedSet = mobileExcludedList.toSet()
+    fun isExcluded(path: String) = path in mobileExcludedSet
 
-    // Summary row
-    val integrityOk = manifestFailed == 0 && unreadableFiles.isEmpty()
+    // === DECONFLICTED VERIFIED (numerator) ===
+    // Python files in manifest that are "missing" from filesystem = covered by chaquopy
+    // But exclude mobile-excluded paths from the count
+    val missingInManifest = perFile.filterValues { it == "missing" }.keys
+    val pythonFilesInManifest = missingInManifest.filter { path ->
+        (path.endsWith(".py") || path.endsWith(".pyi")) && !isExcluded(path)
+    }
+    val chaquopyCoveredFromManifest = pythonFilesInManifest.size
+
+    // Filesystem verified (also exclude mobile-excluded)
+    val filesystemVerifiedFiltered = filesystemVerified.filter { !isExcluded(it) }
+    val filesystemVerifiedFilteredCount = filesystemVerifiedFiltered.size
+
+    // Total verified = Expected - truly missing (use backend's deconflicted count)
+    // Note: calculating from per_file_results doesn't work because mobile_excluded_list is truncated
+    val trulyMissingCount = status.filesMissingCount ?: 0
+    val totalVerified = totalExpected - trulyMissingCount
+
+    // === TRULY MISSING ===
+    // Files in manifest (not excluded) that are NOT verified by either source
+    // Backend provides deconflicted list, or we calculate from non-Python missing files
+    val trulyMissingList = status.filesMissingList ?: missingInManifest.filter { path ->
+        !path.endsWith(".py") && !path.endsWith(".pyi")
+    }.toList()
+
+    // === FAILED CHECKSUMS ===
+    val failedFiles = perFile.filterValues { it == "failed" }.keys.toList()
+    val failedCount = failedFiles.size
+
+    // === UNREADABLE ===
+    val unreadableFiles = perFile.filterValues { it == "unreadable" }.keys.toList()
+
+    // === DISPLAY ===
+    val integrityOk = failedCount == 0 && unreadableFiles.isEmpty() && trulyMissingCount == 0
+
+    // Summary header
     DetailRow(
         label = "Code Integrity",
         value = if (integrityOk) "Verified" else "Issues Found",
         ok = integrityOk
     )
 
-    // Deconflicted summary line
-    if (perFile != null) {
-        DetailSubtext("$totalPassed/$totalExpected verified (${passedFiles.size} manifest + $pyModulesPassed python)")
-    } else {
-        // Fallback to legacy display
-        DetailSubtext("$totalPassed/$totalExpected total ($manifestPassed/$effectiveManifestTotal manifest + $pyModulesPassed/$pyModulesChecked python)")
-    }
+    // Main count: Verified / Expected
+    DetailSubtext("$totalVerified / $totalExpected verified")
 
-    // Collapsible state for each section
-    var passedExpanded by remember { mutableStateOf(false) }
-    var missingFromSystemExpanded by remember { mutableStateOf(false) }
-    var missingFromManifestExpanded by remember { mutableStateOf(false) }
+    // Diagnostic breakdown
+    Spacer(modifier = Modifier.height(4.dp))
+    DetailSubtext("  Manifest: $manifestTotal | Excluded: $mobileExcludedCount | Expected: $totalExpected")
+    DetailSubtext("  Filesystem: $filesystemVerifiedCount | Chaquopy (manifest): $chaquopyCoveredFromManifest")
+    DetailSubtext("  Missing Python in manifest: ${pythonFilesInManifest.size}")
+    val nonPythonMissing = missingInManifest.filter { !it.endsWith(".py") && !it.endsWith(".pyi") }
+    DetailSubtext("  Missing non-Python: ${nonPythonMissing.size}")
+
+    // Breakdown
+    Spacer(modifier = Modifier.height(8.dp))
+
+    // Collapsible state
+    var filesystemExpanded by remember { mutableStateOf(false) }
+    var chaquopyExpanded by remember { mutableStateOf(false) }
+    var missingExpanded by remember { mutableStateOf(false) }
     var excludedExpanded by remember { mutableStateOf(false) }
-    var checksumMismatchExpanded by remember { mutableStateOf(false) }
+    var failedExpanded by remember { mutableStateOf(false) }
+    var unexpectedExpanded by remember { mutableStateOf(false) }
 
-    // 0. Passed files (green, collapsed by default) - only show if per_file_results available
-    if (passedFiles.isNotEmpty()) {
+    // 1. Filesystem Verified (non-Python files on disk)
+    if (filesystemVerifiedCount > 0) {
         CollapsibleFileSection(
-            title = "Passed",
-            count = passedFiles.size,
-            files = passedFiles.take(50),
-            expanded = passedExpanded,
-            onToggle = { passedExpanded = !passedExpanded },
+            title = "Filesystem Verified",
+            count = filesystemVerifiedCount,
+            files = filesystemVerified.take(50),
+            expanded = filesystemExpanded,
+            onToggle = { filesystemExpanded = !filesystemExpanded },
             titleColor = Color(0xFF059669),
             fileColor = Color(0xFF10B981)
         )
     }
 
-    // 1. Missing from System (files in manifest but not on device)
-    // Filter out mobile-excluded paths (discord, reddit, cli, gui_static, etc.)
-    val mobileExclusionPatterns = listOf(
-        "adapters/discord/", "adapters/reddit/", "adapters/cli/",
-        "gui_static/", "gui/", "/tests/", "test_"
-    )
-    val rawMissingFromSystem = if (perFile != null) missingFiles else (status.filesMissingList ?: emptyList())
-    val missingFromSystem = rawMissingFromSystem.filter { path ->
-        mobileExclusionPatterns.none { pattern -> path.contains(pattern) }
-    }
-    val missingFromSystemCount = missingFromSystem.size
-    if (missingFromSystemCount > 0) {
+    // 2. Chaquopy Hash Verified (Python files from manifest)
+    if (chaquopyCoveredFromManifest > 0) {
         CollapsibleFileSection(
-            title = "Missing from System",
-            count = missingFromSystemCount,
-            files = missingFromSystem.take(50),
-            expanded = missingFromSystemExpanded,
-            onToggle = { missingFromSystemExpanded = !missingFromSystemExpanded },
-            titleColor = Color(0xFFB45309),  // Darker amber, readable on gray
-            fileColor = Color(0xFF92400E)   // Dark amber for file names
+            title = "Chaquopy Hash Verified",
+            count = chaquopyCoveredFromManifest,
+            files = pythonFilesInManifest.take(50),
+            expanded = chaquopyExpanded,
+            onToggle = { chaquopyExpanded = !chaquopyExpanded },
+            titleColor = Color(0xFF059669),
+            fileColor = Color(0xFF10B981)
         )
     }
 
-    // 2. Missing from Manifest (files on device but not in registry manifest)
-    val missingFromManifest = status.filesUnexpectedList ?: emptyList()
-    if (missingFromManifest.isNotEmpty()) {
-        CollapsibleFileSection(
-            title = "Unexpected Files",
-            count = missingFromManifest.size,
-            files = missingFromManifest.take(50),
-            expanded = missingFromManifestExpanded,
-            onToggle = { missingFromManifestExpanded = !missingFromManifestExpanded },
-            titleColor = Color(0xFFB45309),  // Darker amber, readable
-            fileColor = Color(0xFF92400E)   // Dark amber for file names
-        )
+    // Show extra Python modules not in manifest (info only)
+    // These are Python modules in chaquopy bundle but not in registry manifest
+    // (stdlib, dependencies, etc.)
+    val extraChaquopyModules = chaquopyVerifiedCount - chaquopyCoveredFromManifest
+    if (extraChaquopyModules > 0) {
+        DetailSubtext("  + $extraChaquopyModules extra modules (stdlib/deps, not in manifest)")
     }
 
-    // 3. Excluded (mobile-excluded: discord, reddit, cli, gui_static, etc.)
-    if (mobileExcludedCount > 0) {
+    // 3. Truly Missing (not verified by either source)
+    if (trulyMissingCount > 0) {
         CollapsibleFileSection(
-            title = "Excluded (Mobile)",
-            count = mobileExcludedCount,
-            files = mobileExcluded.take(50),
-            expanded = excludedExpanded,
-            onToggle = { excludedExpanded = !excludedExpanded },
-            titleColor = Color(0xFF6B7280),  // Gray for excluded
-            fileColor = Color(0xFF9CA3AF)
-        )
-    }
-
-    // 4. Checksum Mismatch (files present but hash doesn't match) - CRITICAL
-    val checksumMismatch = if (perFile != null) failedFiles else (status.filesFailedList ?: emptyList())
-    val checksumMismatchCount = if (perFile != null) failedFiles.size else (status.filesFailed ?: checksumMismatch.size)
-    if (checksumMismatchCount > 0) {
-        CollapsibleFileSection(
-            title = "Checksum Mismatch",
-            count = checksumMismatchCount,
-            files = checksumMismatch.take(50),
-            expanded = checksumMismatchExpanded,
-            onToggle = { checksumMismatchExpanded = !checksumMismatchExpanded },
-            titleColor = Color(0xFFDC2626),  // Red for failed
+            title = "Truly Missing",
+            count = trulyMissingCount,
+            files = trulyMissingList.take(50),
+            expanded = missingExpanded,
+            onToggle = { missingExpanded = !missingExpanded },
+            titleColor = Color(0xFFDC2626),
             fileColor = Color(0xFFEF4444)
         )
     }
 
-    // 5. Unreadable files (if any)
+    // 4. Failed Checksums (file exists but hash mismatch)
+    if (failedCount > 0) {
+        CollapsibleFileSection(
+            title = "Checksum Mismatch",
+            count = failedCount,
+            files = failedFiles.take(50),
+            expanded = failedExpanded,
+            onToggle = { failedExpanded = !failedExpanded },
+            titleColor = Color(0xFFDC2626),
+            fileColor = Color(0xFFEF4444)
+        )
+    }
+
+    // 5. Unreadable files
     var unreadableExpanded by remember { mutableStateOf(false) }
     if (unreadableFiles.isNotEmpty()) {
         CollapsibleFileSection(
@@ -1457,6 +1473,34 @@ private fun L4Content(status: VerifyStatusResponse) {
             onToggle = { unreadableExpanded = !unreadableExpanded },
             titleColor = Color(0xFFDC2626),
             fileColor = Color(0xFFEF4444)
+        )
+    }
+
+    // 6. Mobile Excluded (info - not counted in expected)
+    val mobileExcluded = status.mobileExcludedList ?: emptyList()
+    if (mobileExcludedCount > 0) {
+        CollapsibleFileSection(
+            title = "Mobile Excluded",
+            count = mobileExcludedCount,
+            files = mobileExcluded.take(50),
+            expanded = excludedExpanded,
+            onToggle = { excludedExpanded = !excludedExpanded },
+            titleColor = Color(0xFF6B7280),
+            fileColor = Color(0xFF9CA3AF)
+        )
+    }
+
+    // 7. Unexpected Files (on device but not in manifest)
+    val unexpectedFiles = status.filesUnexpectedList ?: emptyList()
+    if (unexpectedFiles.isNotEmpty()) {
+        CollapsibleFileSection(
+            title = "Unexpected Files",
+            count = unexpectedFiles.size,
+            files = unexpectedFiles.take(50),
+            expanded = unexpectedExpanded,
+            onToggle = { unexpectedExpanded = !unexpectedExpanded },
+            titleColor = Color(0xFFB45309),
+            fileColor = Color(0xFF92400E)
         )
     }
 }

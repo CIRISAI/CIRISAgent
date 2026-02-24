@@ -2559,8 +2559,9 @@ async def get_verify_status(
                                     files_missing_list = true_missing[:50]  # Limit for UI
 
                                     # Track mobile-excluded files separately for correct UI display
+                                    # Send full list so UI can properly deconflict
                                     mobile_excluded_count = len(mobile_excluded_files)
-                                    mobile_excluded_list = mobile_excluded_files[:50]
+                                    mobile_excluded_list = mobile_excluded_files
                                     logger.info(f"[verify-status] Mobile-excluded files: {mobile_excluded_count}")
 
                                     logger.info(
@@ -3143,9 +3144,9 @@ async def get_verify_status(
                 "files_failed_list": files_failed_list[:50] if files_failed_list else [],
                 "files_unexpected_list": files_unexpected_list[:50] if files_unexpected_list else [],
                 "functions_failed_list": functions_failed_list[:50] if functions_failed_list else [],
-                # v0.8.6: Mobile exclusion tracking
+                # v0.8.6: Mobile exclusion tracking (full list for UI deconfliction)
                 "mobile_excluded_count": mobile_excluded_count,
-                "mobile_excluded_list": mobile_excluded_list[:50] if mobile_excluded_list else [],
+                "mobile_excluded_list": mobile_excluded_list if mobile_excluded_list else [],
                 # v0.8.6+: Per-file results for deconflicted display
                 "per_file_results": per_file_results_raw if per_file_results_raw else None,
             }

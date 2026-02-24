@@ -18,6 +18,7 @@ import ai.ciris.api.models.StateTransitionRequest as SdkStateTransitionRequest
 import ai.ciris.api.models.ConfigUpdate as SdkConfigUpdate
 import ai.ciris.api.models.ConsentRequest as SdkConsentRequest
 import ai.ciris.api.models.ConfigValue
+import ai.ciris.api.models.SuccessResponseDictStrStr
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*
@@ -863,10 +864,31 @@ class CIRISApiClient(
                 functionSelfCheck = (data["function_self_check"] as? JsonPrimitive)?.content,
                 functionsChecked = (data["functions_checked"] as? JsonPrimitive)?.content?.toIntOrNull(),
                 functionsPassed = (data["functions_passed"] as? JsonPrimitive)?.content?.toIntOrNull(),
-                registryKeyStatus = (data["registry_key_status"] as? JsonPrimitive)?.content
+                registryKeyStatus = (data["registry_key_status"] as? JsonPrimitive)?.content,
+                // v0.8.1: Python integrity fields
+                pythonIntegrityOk = (data["python_integrity_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                pythonModulesChecked = (data["python_modules_checked"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                pythonModulesPassed = (data["python_modules_passed"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                pythonTotalHash = (data["python_total_hash"] as? JsonPrimitive)?.content,
+                pythonHashValid = (data["python_hash_valid"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                // v0.8.4: Detail lists for UI
+                filesMissingCount = (data["files_missing_count"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                filesMissingList = (data["files_missing_list"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                filesFailedList = (data["files_failed_list"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                filesUnexpectedList = (data["files_unexpected_list"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                functionsFailedList = (data["functions_failed_list"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                // v0.8.6: Mobile exclusion tracking (discord, reddit, cli, etc.)
+                mobileExcludedCount = (data["mobile_excluded_count"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                mobileExcludedList = (data["mobile_excluded_list"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                // v0.8.5: Registry sources agreement
+                sourcesAgreeing = (data["sources_agreeing"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                // Attestation proof hardware type (nested in attestation_proof object)
+                attestationProofHardwareType = (data["attestation_proof"] as? JsonObject)?.let {
+                    (it["hardware_type"] as? JsonPrimitive)?.content
+                }
             )
 
-            logInfo(method, "Verify status: loaded=$loaded, keyStatus=${verifyStatus.keyStatus}, hardware=${verifyStatus.hardwareType}, hwBacked=${verifyStatus.hardwareBacked}, fingerprint=${verifyStatus.ed25519Fingerprint?.take(16)}..., target=${verifyStatus.targetTriple}, playOk=${verifyStatus.playIntegrityOk}")
+            logInfo(method, "Verify status: loaded=$loaded, keyStatus=${verifyStatus.keyStatus}, hwType=${verifyStatus.attestationProofHardwareType ?: verifyStatus.hardwareType}, sourcesAgreeing=${verifyStatus.sourcesAgreeing}/3, playOk=${verifyStatus.playIntegrityOk}")
             verifyStatus
         } catch (e: Exception) {
             logException(method, e)
@@ -1019,23 +1041,88 @@ class CIRISApiClient(
             )
             logDebug(method, "Created SdkSetupCompleteRequest with signingKeyId=${request.signing_key_id}")
 
-            val response = setupApi.completeSetupV1SetupCompletePost(sdkRequest)
-            logDebug(method, "Response: status=${response.status}")
+            // Use manual HTTP request to handle error responses properly
+            // The generated SDK tries to parse error responses as success, which fails
+            val httpClient = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                // Don't throw on non-2xx responses - we handle them manually
+                expectSuccess = false
+            }
 
-            val body = response.body()
-            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            try {
+                val httpResponse = httpClient.post("$baseUrl/v1/setup/complete") {
+                    contentType(io.ktor.http.ContentType.Application.Json)
+                    setBody(sdkRequest)
+                }
 
-            val success = data["status"] == "completed"
-            val message = data["message"] ?: "Setup completed"
-            logInfo(method, "Setup complete: success=$success, message=$message")
+                val statusCode = httpResponse.status.value
+                val responseBody = httpResponse.bodyAsText()
+                logDebug(method, "Response: status=$statusCode, body=${responseBody.take(500)}")
 
-            SetupCompletionResult(
-                success = success,
-                message = message,
-                agentId = null,
-                adminUserId = data["username"],
-                error = null
-            )
+                when {
+                    statusCode == 422 -> {
+                        // FastAPI validation error
+                        logError(method, "FastAPI validation failure (422): $responseBody")
+                        val detail = try {
+                            val detailMatch = Regex(""""detail"\s*:\s*"([^"]+)"""").find(responseBody)
+                            detailMatch?.groupValues?.get(1) ?: responseBody
+                        } catch (_: Exception) {
+                            responseBody
+                        }
+                        SetupCompletionResult(
+                            success = false,
+                            message = "Setup failed",
+                            error = "Validation error: $detail"
+                        )
+                    }
+                    statusCode in 400..499 -> {
+                        logError(method, "Client error (HTTP $statusCode): $responseBody")
+                        SetupCompletionResult(
+                            success = false,
+                            message = "Setup failed",
+                            error = "HTTP $statusCode: $responseBody"
+                        )
+                    }
+                    statusCode in 500..599 -> {
+                        logError(method, "Server error (HTTP $statusCode): $responseBody")
+                        SetupCompletionResult(
+                            success = false,
+                            message = "Setup failed",
+                            error = "Server error ($statusCode)"
+                        )
+                    }
+                    statusCode in 200..299 -> {
+                        // Success - parse the response
+                        val successResponse = Json.decodeFromString<SuccessResponseDictStrStr>(responseBody)
+                        val data = successResponse.`data`
+                        val success = data["status"] == "completed"
+                        val message = data["message"] ?: "Setup completed"
+                        logInfo(method, "Setup complete: success=$success, message=$message")
+                        SetupCompletionResult(
+                            success = success,
+                            message = message,
+                            agentId = null,
+                            adminUserId = data["username"],
+                            error = null
+                        )
+                    }
+                    else -> {
+                        logError(method, "Unexpected status code $statusCode: $responseBody")
+                        SetupCompletionResult(
+                            success = false,
+                            message = "Setup failed",
+                            error = "Unexpected response: HTTP $statusCode"
+                        )
+                    }
+                }
+            } finally {
+                httpClient.close()
+            }
         } catch (e: Exception) {
             logException(method, e, "provider=${request.llm_provider}, template=${request.template_id}")
             SetupCompletionResult(

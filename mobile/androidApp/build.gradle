@@ -155,6 +155,10 @@ task syncPythonSources(type: Sync) {
     // Exclude web GUI static files (React/Next.js) - not used in mobile KMP app
     exclude "**/gui_static/**"
     exclude "**/android_gui_static/**"
+
+    // Exclude adapters that depend on libraries not available on Android
+    // Discord adapter requires discord.py which has no Android wheels
+    exclude "**/adapters/discord/**"
 }
 
 // Make Python tasks depend on sync

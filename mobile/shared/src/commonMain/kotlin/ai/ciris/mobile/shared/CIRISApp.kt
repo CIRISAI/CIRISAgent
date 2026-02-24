@@ -749,6 +749,11 @@ fun CIRISApp(
                             justCompletedSetup = true  // Skip token re-validation since we just authenticated
                             currentScreen = Screen.Startup
                         }
+                    },
+                    onBackToLogin = {
+                        platformLog(TAG, "[INFO] Back to login from setup wizard")
+                        setupViewModel.resetState()  // Clear any partial setup state
+                        currentScreen = Screen.Login
                     }
                 )
             }

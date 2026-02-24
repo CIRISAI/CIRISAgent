@@ -479,8 +479,92 @@ data class VerifyStatusResponse(
     val functionsPassed: Int? = null,
     /** Registry key verification status */
     @SerialName("registry_key_status")
-    val registryKeyStatus: String? = null
-)
+    val registryKeyStatus: String? = null,
+    // v0.8.1: Python integrity for mobile
+    /** Python module integrity verified */
+    @SerialName("python_integrity_ok")
+    val pythonIntegrityOk: Boolean = false,
+    /** Number of Python modules checked */
+    @SerialName("python_modules_checked")
+    val pythonModulesChecked: Int? = null,
+    /** Number of Python modules that passed */
+    @SerialName("python_modules_passed")
+    val pythonModulesPassed: Int? = null,
+    /** Total hash of all Python modules */
+    @SerialName("python_total_hash")
+    val pythonTotalHash: String? = null,
+    /** Whether Python total hash matches expected */
+    @SerialName("python_hash_valid")
+    val pythonHashValid: Boolean = false,
+
+    // v0.8.4: Detail lists for UI
+    /** Number of manifest files not on device */
+    @SerialName("files_missing_count")
+    val filesMissingCount: Int? = null,
+    /** List of missing files (max 50) */
+    @SerialName("files_missing_list")
+    val filesMissingList: List<String>? = null,
+    /** List of files that failed hash check (max 50) */
+    @SerialName("files_failed_list")
+    val filesFailedList: List<String>? = null,
+    /** List of unexpected files (max 50) */
+    @SerialName("files_unexpected_list")
+    val filesUnexpectedList: List<String>? = null,
+    /** List of functions that failed verification (max 50) */
+    @SerialName("functions_failed_list")
+    val functionsFailedList: List<String>? = null,
+
+    // v0.8.6: Mobile exclusion tracking (discord, reddit, cli, etc. not bundled in APK)
+    /** Number of files excluded from mobile (server-only adapters) */
+    @SerialName("mobile_excluded_count")
+    val mobileExcludedCount: Int? = null,
+    /** List of mobile-excluded files (max 50) */
+    @SerialName("mobile_excluded_list")
+    val mobileExcludedList: List<String>? = null,
+
+    // v0.8.5: Registry sources agreement
+    /** Number of registry sources that agree (0-3) */
+    @SerialName("sources_agreeing")
+    val sourcesAgreeing: Int? = null,
+
+    // v0.8.5: Attestation proof hardware type (SoftwareOnly, TEE, StrongBox, etc.)
+    // This is the actual hardware security level from attestation_proof.hardware_type
+    @SerialName("attestation_proof_hardware_type")
+    val attestationProofHardwareType: String? = null
+) {
+    /**
+     * Calculate actual achieved attestation level (0-5).
+     * This is the highest level where ALL required checks pass.
+     * Use this instead of maxLevel which is the maximum *achievable* level.
+     *
+     * @param deviceAttestationPassed Optional override for Play Integrity from UI check
+     */
+    fun calculateActualLevel(deviceAttestationPassed: Boolean? = null): Int {
+        // L1: Binary loaded and verified
+        val l1Passed = binaryOk && binarySelfCheck == "verified"
+        // L2: Environment AND device attestation (HW + Play Integrity)
+        // Use UI's device attestation result if provided, otherwise fall back to API field
+        val playOk = deviceAttestationPassed ?: playIntegrityOk
+        val l2Passed = l1Passed && envOk && playOk
+        // L3: Registry cross-validation (need majority agreement - 2+ sources)
+        val sourcesOk = (sourcesAgreeing ?: 0) >= 2
+        val l3Passed = l2Passed && sourcesOk
+        // L4: File integrity check
+        val l4Passed = l3Passed && fileIntegrityOk
+        // L5: Portal key active AND audit trail intact
+        val portalKeyOk = registryKeyStatus?.contains("active", ignoreCase = true) == true
+        val l5Passed = l4Passed && portalKeyOk && auditOk
+
+        return when {
+            l5Passed -> 5
+            l4Passed -> 4
+            l3Passed -> 3
+            l2Passed -> 2
+            l1Passed -> 1
+            else -> 0
+        }
+    }
+}
 
 /**
  * Detail for a single attestation check.

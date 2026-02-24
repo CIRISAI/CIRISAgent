@@ -46,8 +46,8 @@ def _fetch_manifest_files_from_registry(version: str) -> Optional[set]:
     Returns:
         Set of file paths from manifest, or None if fetch failed
     """
-    import urllib.request
     import json
+    import urllib.request
 
     try:
         url = f"https://api.registry.ciris-services-1.ai/v1/builds/{version}"
@@ -84,6 +84,7 @@ def _find_unexpected_python_files(agent_root: str, manifest_files: set) -> tuple
 
     try:
         import os
+
         for root, dirs, files in os.walk(agent_root):
             # Skip __pycache__ and hidden directories
             dirs[:] = [d for d in dirs if d != "__pycache__" and not d.startswith(".") and d != "logs"]
@@ -114,6 +115,31 @@ def _find_unexpected_python_files(agent_root: str, manifest_files: set) -> tuple
         logger.warning(f"Error scanning for unexpected files: {e}")
 
     return unexpected, expected_excluded
+
+
+def _find_missing_manifest_files(agent_root: str, manifest_files: set, max_files: int = 50) -> List[str]:
+    """Find files that are in the manifest but not on disk.
+
+    Args:
+        agent_root: Root directory of the agent
+        manifest_files: Set of relative file paths from manifest
+        max_files: Maximum number of files to return
+
+    Returns:
+        List of missing file paths (max max_files items)
+    """
+    missing = []
+    try:
+        for rel_path in manifest_files:
+            full_path = os.path.join(agent_root, rel_path)
+            if not os.path.exists(full_path):
+                missing.append(rel_path)
+                if len(missing) >= max_files:
+                    break
+    except Exception as e:
+        logger.warning(f"Error checking for missing files: {e}")
+    return missing
+
 
 # Constants
 FIELD_DESC_DISPLAY_NAME = "Display name"
@@ -334,9 +360,7 @@ class VerifyStatusResponse(BaseModel):
     )
 
     # v0.7.0: Enhanced verification details
-    ed25519_fingerprint: Optional[str] = Field(
-        default=None, description="Ed25519 public key fingerprint (SHA-256 hex)"
-    )
+    ed25519_fingerprint: Optional[str] = Field(default=None, description="Ed25519 public key fingerprint (SHA-256 hex)")
     key_storage_mode: Optional[str] = Field(
         default=None, description="Key storage mode: SOFTWARE, HARDWARE_BACKED, or specific provider"
     )
@@ -355,6 +379,37 @@ class VerifyStatusResponse(BaseModel):
     functions_checked: Optional[int] = Field(default=None, description="Number of functions verified")
     functions_passed: Optional[int] = Field(default=None, description="Number of functions that passed verification")
     registry_key_status: Optional[str] = Field(default=None, description="Registry key verification status")
+
+    # v0.8.1: Python integrity for mobile
+    python_integrity_ok: bool = Field(default=False, description="Python module integrity verified")
+    python_modules_checked: Optional[int] = Field(default=None, description="Number of Python modules checked")
+    python_modules_passed: Optional[int] = Field(default=None, description="Number of Python modules that passed")
+    python_total_hash: Optional[str] = Field(default=None, description="Total hash of all Python modules")
+    python_hash_valid: bool = Field(default=False, description="Whether Python total hash matches expected")
+
+    # v0.8.4: Enhanced detail lists for UI
+    files_missing_count: Optional[int] = Field(default=None, description="Number of manifest files not on device")
+    files_missing_list: Optional[List[str]] = Field(default=None, description="List of missing files (max 50)")
+    files_failed_list: Optional[List[str]] = Field(
+        default=None, description="List of files that failed hash check (max 50)"
+    )
+    files_unexpected_list: Optional[List[str]] = Field(default=None, description="List of unexpected files (max 50)")
+    functions_failed_list: Optional[List[str]] = Field(
+        default=None, description="List of functions that failed verification (max 50)"
+    )
+    # v0.8.6: Mobile exclusion tracking for correct denominator
+    mobile_excluded_count: Optional[int] = Field(
+        default=None, description="Files excluded from mobile (discord, reddit, cli, etc.)"
+    )
+    mobile_excluded_list: Optional[List[str]] = Field(
+        default=None, description="List of mobile-excluded files (max 50)"
+    )
+
+    # v0.8.5: Registry sources agreement and attestation proof
+    sources_agreeing: int = Field(default=0, description="Number of registry sources that agree (0-3)")
+    attestation_proof: Optional[Dict[str, Any]] = Field(
+        default=None, description="Full attestation proof from CIRISVerify"
+    )
 
 
 class LLMValidationRequest(BaseModel):
@@ -2073,6 +2128,13 @@ async def get_verify_status(
             # Play Integrity check (Level 2 - device/app integrity)
             play_integrity_ok = False
             play_integrity_verdict = None
+
+            # Python integrity (v0.8.1+)
+            python_integrity_ok = False
+            python_modules_checked = None
+            python_modules_passed = None
+            python_total_hash = None
+            python_hash_valid = False
             if play_integrity_token and play_integrity_nonce:
                 try:
                     import httpx
@@ -2247,6 +2309,15 @@ async def get_verify_status(
             files_passed = 0
             files_failed = 0
             integrity_failure_reason = None
+            # v0.8.4+: Detail lists for UI
+            files_missing_count = 0
+            files_missing_list: List[str] = []
+            files_failed_list: List[str] = []
+            files_unexpected_list: List[str] = []
+            functions_failed_list: List[str] = []
+            # v0.8.6: Mobile exclusion tracking
+            mobile_excluded_count = 0
+            mobile_excluded_list: List[str] = []
             # v0.7.0+: Self-verification details
             target_triple = None
             binary_self_check = None
@@ -2287,12 +2358,66 @@ async def get_verify_status(
                     has_support = getattr(verifier, "has_run_attestation_support", False)
                     if callable(has_support):
                         has_support = has_support()
-                    print(f"[FILE_INTEGRITY_DEBUG] has_support={has_support}, calling run_attestation_sync with agent_root={agent_root}")
+                    print(
+                        f"[FILE_INTEGRITY_DEBUG] has_support={has_support}, calling run_attestation_sync with agent_root={agent_root}"
+                    )
                     if has_support:
                         logger.info(
                             f"[verify-status] Using run_attestation_sync (v0.6.17+) version={agent_version}, root={agent_root}"
                         )
                         challenge = os.urandom(32)
+
+                        # v0.8.1+: Get Ed25519 key fingerprint for registry verification
+                        key_fingerprint_hex = None
+                        try:
+                            if hasattr(verifier, "get_ed25519_public_key_sync"):
+                                import hashlib
+
+                                ed25519_pubkey = verifier.get_ed25519_public_key_sync()
+                                if ed25519_pubkey:
+                                    key_fingerprint_hex = hashlib.sha256(ed25519_pubkey).hexdigest()
+                                    logger.info(
+                                        f"[verify-status] Ed25519 key fingerprint: {key_fingerprint_hex[:16]}..."
+                                    )
+                        except Exception as key_err:
+                            logger.warning(f"[verify-status] Could not get Ed25519 fingerprint: {key_err}")
+
+                        # v0.8.1+: Load Python module hashes for mobile code integrity
+                        python_hashes_obj = None
+                        expected_python_hash = None
+                        if is_android:
+                            try:
+                                import json
+                                from pathlib import Path
+
+                                ciris_home = os.environ.get("CIRIS_HOME", "/data/data/ai.ciris.mobile/files/ciris")
+                                hashes_path = Path(ciris_home) / "startup_python_hashes.json"
+                                if hashes_path.exists():
+                                    with open(hashes_path) as f:
+                                        hashes_data = json.load(f)
+                                    # Import PythonModuleHashes type
+                                    try:
+                                        from ciris_verify.types import PythonModuleHashes
+
+                                        python_hashes_obj = PythonModuleHashes(
+                                            total_hash=hashes_data.get("total_hash", ""),
+                                            module_hashes=hashes_data.get("module_hashes", {}),
+                                            module_count=hashes_data.get("modules_hashed", 0),
+                                            agent_version=agent_version or "",
+                                            computed_at=0,
+                                        )
+                                        expected_python_hash = hashes_data.get("total_hash")
+                                        logger.info(
+                                            f"[verify-status] Loaded Python hashes: {python_hashes_obj.module_count} modules, "
+                                            f"total_hash={expected_python_hash[:16] if expected_python_hash else 'N/A'}..."
+                                        )
+                                    except ImportError:
+                                        logger.warning("[verify-status] PythonModuleHashes type not available")
+                                else:
+                                    logger.info(f"[verify-status] No Python hashes file at {hashes_path}")
+                            except Exception as hash_err:
+                                logger.warning(f"[verify-status] Could not load Python hashes: {hash_err}")
+
                         # v0.8.0+: Full file integrity check is now the default
                         # Unexpected Python files not in manifest will be flagged.
                         attestation_result = verifier.run_attestation_sync(
@@ -2300,6 +2425,9 @@ async def get_verify_status(
                             agent_version=agent_version,
                             agent_root=agent_root,
                             spot_check_count=spot_check_count,
+                            key_fingerprint=key_fingerprint_hex,
+                            python_hashes=python_hashes_obj,
+                            expected_python_hash=expected_python_hash,
                         )
                         # Debug: print to logcat
                         print(f"[FILE_INTEGRITY_DEBUG] run_attestation_sync returned: type={type(attestation_result)}")
@@ -2319,17 +2447,25 @@ async def get_verify_status(
                         if isinstance(attestation_result, dict):
                             logger.info(f"[verify-status] run_attestation_sync keys: {list(attestation_result.keys())}")
                             if "file_integrity" in attestation_result:
-                                logger.info(f"[verify-status] file_integrity value: {attestation_result.get('file_integrity')}")
+                                logger.info(
+                                    f"[verify-status] file_integrity value: {attestation_result.get('file_integrity')}"
+                                )
                             if "errors" in attestation_result:
                                 logger.info(f"[verify-status] errors: {attestation_result.get('errors')}")
                             if "diagnostics" in attestation_result:
                                 logger.info(f"[verify-status] diagnostics: {attestation_result.get('diagnostics')}")
                         else:
-                            logger.info(f"[verify-status] run_attestation_sync attrs: {[a for a in dir(attestation_result) if not a.startswith('_')]}")
+                            logger.info(
+                                f"[verify-status] run_attestation_sync attrs: {[a for a in dir(attestation_result) if not a.startswith('_')]}"
+                            )
                             if hasattr(attestation_result, "file_integrity"):
-                                logger.info(f"[verify-status] file_integrity attr: {getattr(attestation_result, 'file_integrity', None)}")
+                                logger.info(
+                                    f"[verify-status] file_integrity attr: {getattr(attestation_result, 'file_integrity', None)}"
+                                )
                             if hasattr(attestation_result, "errors"):
-                                logger.info(f"[verify-status] errors attr: {getattr(attestation_result, 'errors', None)}")
+                                logger.info(
+                                    f"[verify-status] errors attr: {getattr(attestation_result, 'errors', None)}"
+                                )
                         # Extract file integrity from attestation result
                         if attestation_result is None:
                             logger.warning("[verify-status] run_attestation_sync returned None")
@@ -2354,19 +2490,82 @@ async def get_verify_status(
                                 files_failed = full_result.get("files_failed", 0)
                                 files_missing = full_result.get("files_missing", 0)
                                 files_unexpected = full_result.get("files_unexpected", 0)
-                                raw_failure_reason = full_result.get("failure_reason") or full_result.get("reason") or ""
+                                raw_failure_reason = (
+                                    full_result.get("failure_reason") or full_result.get("reason") or ""
+                                )
                                 # file_integrity_ok: On mobile, only check for hash mismatches (files_failed)
                                 # since mobile bundles a subset of files (missing files are expected).
                                 # On server, require no failed AND no missing.
                                 if is_android:
-                                    file_integrity_ok = (files_failed == 0)  # Mobile: only hash mismatches matter
+                                    file_integrity_ok = files_failed == 0  # Mobile: only hash mismatches matter
                                 else:
-                                    file_integrity_ok = (files_failed == 0 and files_missing == 0)
+                                    file_integrity_ok = files_failed == 0 and files_missing == 0
                                 # Make failure reason more informative with file names
+                                # v0.8.4+: Fetch manifest and compute file lists for UI
+                                manifest_files = _fetch_manifest_files_from_registry(agent_version) or set()
+                                if manifest_files:
+                                    # Find missing files (in manifest but not on device filesystem)
+                                    raw_missing_list = _find_missing_manifest_files(
+                                        agent_root, manifest_files, max_files=1000
+                                    )
+
+                                    # Filter out files covered by Python module hashes (Chaquopy bundle)
+                                    # Convert module names to file paths for comparison
+                                    python_covered_paths = set()
+                                    if python_hashes_obj and hasattr(python_hashes_obj, "module_hashes"):
+                                        module_hashes = python_hashes_obj.module_hashes or {}
+                                        for mod_name in module_hashes.keys():
+                                            # module.name -> module/name/__init__.py and module/name.py
+                                            path_base = mod_name.replace(".", "/")
+                                            python_covered_paths.add(f"{path_base}.py")
+                                            python_covered_paths.add(f"{path_base}/__init__.py")
+
+                                    # True missing = missing from filesystem AND not covered by Python modules
+                                    # Exclude server-only components not bundled in mobile APK:
+                                    # - gui_static: web UI assets
+                                    # - adapters/discord: Discord bot adapter
+                                    # - adapters/reddit: Reddit adapter
+                                    # - adapters/cli: CLI adapter
+                                    # - adapters/slack: Slack adapter
+                                    mobile_excluded_prefixes = (
+                                        "ciris_engine/gui_static/",
+                                        "ciris_engine/logic/adapters/discord/",
+                                        "ciris_engine/logic/adapters/reddit/",
+                                        "ciris_engine/logic/adapters/cli/",
+                                        "ciris_engine/logic/adapters/slack/",
+                                    )
+
+                                    # Separate into true missing vs mobile-excluded
+                                    true_missing = []
+                                    mobile_excluded_files = []
+                                    for f in raw_missing_list:
+                                        if f in python_covered_paths:
+                                            continue  # Covered by Python module hashes
+                                        if any(f.startswith(prefix) for prefix in mobile_excluded_prefixes):
+                                            mobile_excluded_files.append(f)
+                                        else:
+                                            true_missing.append(f)
+
+                                    files_missing_count = len(true_missing)
+                                    files_missing_list = true_missing[:50]  # Limit for UI
+
+                                    # Track mobile-excluded files separately for correct UI display
+                                    mobile_excluded_count = len(mobile_excluded_files)
+                                    mobile_excluded_list = mobile_excluded_files[:50]
+                                    logger.info(f"[verify-status] Mobile-excluded files: {mobile_excluded_count}")
+
+                                    logger.info(
+                                        f"[verify-status] Raw missing: {len(raw_missing_list)}, Python covered: {len(python_covered_paths)}, True missing: {files_missing_count}"
+                                    )
+
+                                    # Find unexpected files (on device but not in manifest)
+                                    unexpected_files, expected_excluded = _find_unexpected_python_files(
+                                        agent_root, manifest_files
+                                    )
+                                    files_unexpected_list = unexpected_files + expected_excluded
+                                    logger.info(f"[verify-status] Unexpected: {len(files_unexpected_list)}")
+
                                 if files_unexpected > 0:
-                                    # Fetch manifest from registry and find unexpected files
-                                    manifest_files = _fetch_manifest_files_from_registry(agent_version) or set()
-                                    unexpected_files, expected_excluded = _find_unexpected_python_files(agent_root, manifest_files)
                                     reasons = []
                                     if unexpected_files:
                                         file_list = ", ".join(unexpected_files[:5])
@@ -2380,7 +2579,9 @@ async def get_verify_status(
                                             file_list += f" (+{len(expected_excluded) - 5} more)"
                                         reasons.append(f"expected_excluded:{len(expected_excluded)}|{file_list}")
                                         logger.info(f"[verify-status] Expected excluded files: {expected_excluded}")
-                                    integrity_failure_reason = ";".join(reasons) if reasons else f"unexpected_files:{files_unexpected}"
+                                    integrity_failure_reason = (
+                                        ";".join(reasons) if reasons else f"unexpected_files:{files_unexpected}"
+                                    )
                                 elif raw_failure_reason and raw_failure_reason != "unexpected":
                                     integrity_failure_reason = raw_failure_reason
                                 else:
@@ -2394,13 +2595,15 @@ async def get_verify_status(
                                 files_unexpected = fi_result.get("files_unexpected", 0)
                                 raw_failure_reason = fi_result.get("reason") or ""
                                 if is_android:
-                                    file_integrity_ok = (files_failed == 0)  # Mobile: only hash mismatches matter
+                                    file_integrity_ok = files_failed == 0  # Mobile: only hash mismatches matter
                                 else:
-                                    file_integrity_ok = (files_failed == 0 and files_missing == 0)
+                                    file_integrity_ok = files_failed == 0 and files_missing == 0
                                 if files_unexpected > 0:
                                     # Fetch manifest from registry and find unexpected files
                                     manifest_files = _fetch_manifest_files_from_registry(agent_version) or set()
-                                    unexpected_files, expected_excluded = _find_unexpected_python_files(agent_root, manifest_files)
+                                    unexpected_files, expected_excluded = _find_unexpected_python_files(
+                                        agent_root, manifest_files
+                                    )
                                     reasons = []
                                     if unexpected_files:
                                         file_list = ", ".join(unexpected_files[:5])
@@ -2412,7 +2615,9 @@ async def get_verify_status(
                                         if len(expected_excluded) > 5:
                                             file_list += f" (+{len(expected_excluded) - 5} more)"
                                         reasons.append(f"expected_excluded:{len(expected_excluded)}|{file_list}")
-                                    integrity_failure_reason = ";".join(reasons) if reasons else f"unexpected_files:{files_unexpected}"
+                                    integrity_failure_reason = (
+                                        ";".join(reasons) if reasons else f"unexpected_files:{files_unexpected}"
+                                    )
                                 elif raw_failure_reason and raw_failure_reason != "unexpected":
                                     integrity_failure_reason = raw_failure_reason
                                 else:
@@ -2424,13 +2629,17 @@ async def get_verify_status(
                             files_failed = getattr(fi_result, "files_failed", 0)
                             files_missing = getattr(fi_result, "files_missing", 0)
                             files_unexpected = getattr(fi_result, "files_unexpected", 0)
-                            raw_failure_reason = getattr(fi_result, "reason", None) or getattr(fi_result, "failure_reason", None) or ""
+                            raw_failure_reason = (
+                                getattr(fi_result, "reason", None) or getattr(fi_result, "failure_reason", None) or ""
+                            )
                             # file_integrity_ok = true if all MANIFEST files pass (no failed/missing)
-                            file_integrity_ok = (files_failed == 0 and files_missing == 0)
+                            file_integrity_ok = files_failed == 0 and files_missing == 0
                             if files_unexpected > 0:
                                 # Fetch manifest from registry and find unexpected files
                                 manifest_files = _fetch_manifest_files_from_registry(agent_version) or set()
-                                unexpected_files, expected_excluded = _find_unexpected_python_files(agent_root, manifest_files)
+                                unexpected_files, expected_excluded = _find_unexpected_python_files(
+                                    agent_root, manifest_files
+                                )
                                 reasons = []
                                 if unexpected_files:
                                     file_list = ", ".join(unexpected_files[:5])
@@ -2442,7 +2651,9 @@ async def get_verify_status(
                                     if len(expected_excluded) > 5:
                                         file_list += f" (+{len(expected_excluded) - 5} more)"
                                     reasons.append(f"expected_excluded:{len(expected_excluded)}|{file_list}")
-                                integrity_failure_reason = ";".join(reasons) if reasons else f"unexpected_files:{files_unexpected}"
+                                integrity_failure_reason = (
+                                    ";".join(reasons) if reasons else f"unexpected_files:{files_unexpected}"
+                                )
                             elif raw_failure_reason and raw_failure_reason != "unexpected":
                                 integrity_failure_reason = raw_failure_reason
                             else:
@@ -2484,7 +2695,9 @@ async def get_verify_status(
                                 else:
                                     function_self_check = "failed"
                                 binary_hash = sv_result.get("binary_hash")
-                                expected_binary_hash = sv_result.get("expected_hash")  # Note: expected_hash not expected_binary_hash
+                                expected_binary_hash = sv_result.get(
+                                    "expected_hash"
+                                )  # Note: expected_hash not expected_binary_hash
                                 functions_checked_count = sv_result.get("functions_checked")
                                 functions_passed_count = sv_result.get("functions_passed")
                             else:
@@ -2492,7 +2705,11 @@ async def get_verify_status(
                                 binary_valid = getattr(sv_result, "binary_valid", False)
                                 functions_valid = getattr(sv_result, "functions_valid", False)
                                 sv_error = getattr(sv_result, "error", "") or ""
-                                binary_self_check = "verified" if binary_valid else ("mismatch" if "mismatch" in sv_error.lower() else "unavailable")
+                                binary_self_check = (
+                                    "verified"
+                                    if binary_valid
+                                    else ("mismatch" if "mismatch" in sv_error.lower() else "unavailable")
+                                )
                                 function_self_check = "verified" if functions_valid else "failed"
                                 binary_hash = getattr(sv_result, "binary_hash", None)
                                 expected_binary_hash = getattr(sv_result, "expected_hash", None)
@@ -2524,7 +2741,18 @@ async def get_verify_status(
                                 f"[verify-status] Key attestation: fingerprint={ed25519_fingerprint[:16] if ed25519_fingerprint else 'N/A'}..., "
                                 f"storage={key_storage_mode}, hw_backed={is_hardware_backed}"
                             )
-                            # Verify key against registry if we have a fingerprint
+
+                        # v0.8.1+: Extract registry_key_status directly from attestation result (top-level field)
+                        if isinstance(attestation_result, dict):
+                            registry_key_status = attestation_result.get("registry_key_status")
+                        else:
+                            registry_key_status = getattr(attestation_result, "registry_key_status", None)
+                        if registry_key_status:
+                            logger.info(
+                                f"[verify-status] Registry key status (from attestation): {registry_key_status}"
+                            )
+                        elif key_attest:
+                            # Fallback: Verify key against registry if we have a fingerprint
                             if ed25519_fingerprint and hasattr(verifier, "verify_key_by_fingerprint"):
                                 try:
                                     key_verify_result = verifier.verify_key_by_fingerprint(ed25519_fingerprint)
@@ -2561,6 +2789,31 @@ async def get_verify_status(
                             logger.info(
                                 f"[verify-status] Device integrity (from attestation): ok={play_integrity_ok}, "
                                 f"verdict={play_integrity_verdict}"
+                            )
+
+                        # v0.8.1+: Extract Python integrity from attestation result
+                        python_int = None
+                        if isinstance(attestation_result, dict):
+                            python_int = attestation_result.get("python_integrity")
+                        else:
+                            python_int = getattr(attestation_result, "python_integrity", None)
+
+                        if python_int:
+                            if isinstance(python_int, dict):
+                                python_integrity_ok = python_int.get("valid", False)
+                                python_modules_checked = python_int.get("modules_checked", 0)
+                                python_modules_passed = python_int.get("modules_passed", 0)
+                                python_total_hash = python_int.get("total_hash")
+                                python_hash_valid = python_int.get("total_hash_valid", False)
+                            else:
+                                python_integrity_ok = getattr(python_int, "valid", False)
+                                python_modules_checked = getattr(python_int, "modules_checked", 0)
+                                python_modules_passed = getattr(python_int, "modules_passed", 0)
+                                python_total_hash = getattr(python_int, "total_hash", None)
+                                python_hash_valid = getattr(python_int, "total_hash_valid", False)
+                            logger.info(
+                                f"[verify-status] Python integrity: ok={python_integrity_ok}, "
+                                f"modules={python_modules_passed}/{python_modules_checked}, hash_valid={python_hash_valid}"
                             )
                     else:
                         # run_attestation not available, use legacy method
@@ -2828,6 +3081,21 @@ async def get_verify_status(
                 "functions_checked": functions_checked_count,
                 "functions_passed": functions_passed_count,
                 "registry_key_status": registry_key_status,
+                # v0.8.1: Python integrity
+                "python_integrity_ok": python_integrity_ok,
+                "python_modules_checked": python_modules_checked,
+                "python_modules_passed": python_modules_passed,
+                "python_total_hash": python_total_hash,
+                "python_hash_valid": python_hash_valid,
+                # v0.8.4: Detail lists for UI
+                "files_missing_count": files_missing_count,
+                "files_missing_list": files_missing_list[:50] if files_missing_list else [],
+                "files_failed_list": files_failed_list[:50] if files_failed_list else [],
+                "files_unexpected_list": files_unexpected_list[:50] if files_unexpected_list else [],
+                "functions_failed_list": functions_failed_list[:50] if functions_failed_list else [],
+                # v0.8.6: Mobile exclusion tracking
+                "mobile_excluded_count": mobile_excluded_count,
+                "mobile_excluded_list": mobile_excluded_list[:50] if mobile_excluded_list else [],
             }
             logger.info(f"[verify-status] Success: {verify_result[0]}")
         except ImportError as e:
@@ -2929,6 +3197,24 @@ async def get_verify_status(
             functions_checked=status_dict.get("functions_checked"),
             functions_passed=status_dict.get("functions_passed"),
             registry_key_status=status_dict.get("registry_key_status"),
+            # v0.8.1: Python integrity
+            python_integrity_ok=status_dict.get("python_integrity_ok", False),
+            python_modules_checked=status_dict.get("python_modules_checked"),
+            python_modules_passed=status_dict.get("python_modules_passed"),
+            python_total_hash=status_dict.get("python_total_hash"),
+            python_hash_valid=status_dict.get("python_hash_valid", False),
+            # v0.8.4: Detail lists for UI
+            files_missing_count=status_dict.get("files_missing_count"),
+            files_missing_list=status_dict.get("files_missing_list"),
+            files_failed_list=status_dict.get("files_failed_list"),
+            files_unexpected_list=status_dict.get("files_unexpected_list"),
+            functions_failed_list=status_dict.get("functions_failed_list"),
+            # v0.8.6: Mobile exclusion tracking
+            mobile_excluded_count=status_dict.get("mobile_excluded_count"),
+            mobile_excluded_list=status_dict.get("mobile_excluded_list"),
+            # v0.8.5: Registry sources agreement and attestation proof
+            sources_agreeing=status_dict.get("sources_agreeing", 0),
+            attestation_proof=status_dict.get("attestation_proof"),
         )
     )
 

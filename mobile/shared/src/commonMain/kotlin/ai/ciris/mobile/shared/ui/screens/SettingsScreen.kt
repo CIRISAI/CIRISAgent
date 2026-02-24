@@ -255,20 +255,6 @@ fun SettingsScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-                // Trust & Security Section
-                Text(
-                    text = "Trust & Security",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                TrustSecurityCard(
-                    apiClient = apiClient,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
                 // App Info
                 Text(
                     text = "App Info",

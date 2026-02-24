@@ -171,6 +171,9 @@ class SetupViewModel : ViewModel() {
 
     /**
      * Move to the previous setup step.
+     *
+     * IMPORTANT: When going back from NODE_AUTH to WELCOME, we must reset isNodeFlow
+     * so that the user can choose to NOT register this time.
      */
     fun previousStep() {
         val currentState = _state.value
@@ -197,7 +200,16 @@ class SetupViewModel : ViewModel() {
             }
         }
 
-        _state.value = currentState.copy(currentStep = prevStep)
+        // When going back from NODE_AUTH to WELCOME, reset isNodeFlow so user can
+        // choose NOT to register this time (fixes bug where back->continue still went to NODE_AUTH)
+        val shouldResetNodeFlow = currentState.isNodeFlow &&
+            currentState.currentStep == SetupStep.NODE_AUTH &&
+            prevStep == SetupStep.WELCOME
+
+        _state.value = currentState.copy(
+            currentStep = prevStep,
+            isNodeFlow = if (shouldResetNodeFlow) false else currentState.isNodeFlow
+        )
     }
 
     // ========== Covenant Metrics Opt-In ==========
@@ -644,7 +656,7 @@ class SetupViewModel : ViewModel() {
                 stewardship_tier = nodeFlowData?.stewardshipTier,
                 approved_adapters = nodeFlowData?.approvedAdapters,
                 org_id = nodeFlowData?.orgId,
-                signing_key_provisioned = nodeFlowData?.signingKeyProvisioned,
+                signing_key_provisioned = nodeFlowData?.signingKeyProvisioned ?: false,  // Must be boolean, not null
                 provisioned_signing_key_b64 = nodeFlowData?.provisionedSigningKeyB64,
                 signing_key_id = nodeFlowData?.keyId
             )
@@ -688,7 +700,7 @@ class SetupViewModel : ViewModel() {
                 stewardship_tier = nodeFlowData?.stewardshipTier,
                 approved_adapters = nodeFlowData?.approvedAdapters,
                 org_id = nodeFlowData?.orgId,
-                signing_key_provisioned = nodeFlowData?.signingKeyProvisioned,
+                signing_key_provisioned = nodeFlowData?.signingKeyProvisioned ?: false,  // Must be boolean, not null
                 provisioned_signing_key_b64 = nodeFlowData?.provisionedSigningKeyB64,
                 signing_key_id = nodeFlowData?.keyId
             )

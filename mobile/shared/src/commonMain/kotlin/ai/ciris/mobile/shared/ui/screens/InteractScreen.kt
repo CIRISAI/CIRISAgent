@@ -437,6 +437,7 @@ private fun TrustShield(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // TrustStatus.maxLevel now contains actual achieved level (calculated in ViewModel)
     val level = trustStatus.maxLevel
     val shieldColor = when {
         level >= 5 -> Color(0xFF059669)  // Full trust - green

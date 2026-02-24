@@ -89,6 +89,7 @@ fun SetupScreen(
     viewModel: SetupViewModel,
     apiClient: CIRISApiClient,
     onSetupComplete: () -> Unit,
+    onBackToLogin: (() -> Unit)? = null,  // Optional callback to return to login screen
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.state.collectAsState()
@@ -243,6 +244,7 @@ fun SetupScreen(
                     }
                 },
                 onBack = { viewModel.previousStep() },
+                onBackToLogin = onBackToLogin,
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
@@ -1776,6 +1778,7 @@ private fun NavigationButtons(
     isNodeFlow: Boolean,
     onNext: () -> Unit,
     onBack: () -> Unit,
+    onBackToLogin: (() -> Unit)? = null,  // Optional callback to return to login screen
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -1801,8 +1804,19 @@ private fun NavigationButtons(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Back button
-            if (currentStep != SetupStep.WELCOME && currentStep != SetupStep.COMPLETE) {
+            // Back button - on WELCOME step, go back to Login if callback provided
+            if (currentStep == SetupStep.WELCOME && onBackToLogin != null) {
+                OutlinedButton(
+                    onClick = onBackToLogin,
+                    enabled = !isSubmitting,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = SetupColors.TextSecondary
+                    )
+                ) {
+                    Text("Back to Login")
+                }
+            } else if (currentStep != SetupStep.WELCOME && currentStep != SetupStep.COMPLETE) {
                 OutlinedButton(
                     onClick = onBack,
                     enabled = !isSubmitting,
@@ -1820,7 +1834,10 @@ private fun NavigationButtons(
                 Button(
                     onClick = onNext,
                     enabled = canProceed && !isSubmitting,
-                    modifier = Modifier.weight(if (currentStep == SetupStep.WELCOME) 2f else 1f),
+                    // Use equal weights if back button is visible, otherwise double width on WELCOME
+                    modifier = Modifier.weight(
+                        if (currentStep == SetupStep.WELCOME && onBackToLogin == null) 2f else 1f
+                    ),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SetupColors.Primary,
                         contentColor = Color.White

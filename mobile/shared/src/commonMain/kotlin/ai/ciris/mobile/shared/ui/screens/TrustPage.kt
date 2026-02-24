@@ -144,7 +144,7 @@ fun TrustPage(
                     val status = verifyStatus!!
 
                     // Header card with summary
-                    TrustSummaryCard(status = status)
+                    TrustSummaryCard(status = status, deviceAttestationResult = deviceAttestationResult)
 
                     // Mode toggle
                     ModeToggleCard(
@@ -175,36 +175,15 @@ fun TrustPage(
                         }
                     )
 
-                    // Attestation levels
-                    AttestationLevelsCard(status = status)
-
-                    // Device attestation (Play Integrity / App Attest)
-                    DeviceAttestationCard(
+                    // 5 Expandable Tier Cards - consolidated view
+                    TierCardsSection(
                         status = status,
                         deviceAttestationResult = deviceAttestationResult,
-                        deviceAttestationLoading = deviceAttestationLoading
+                        deviceAttestationLoading = deviceAttestationLoading,
+                        onCopyDiagnostics = {
+                            clipboardManager.setText(AnnotatedString(status.diagnosticInfo ?: "No diagnostics"))
+                        }
                     )
-
-                    // Platform info
-                    if (status.platformOs != null || status.platformArch != null) {
-                        PlatformInfoCard(status = status)
-                    }
-
-                    // Verification Details (new detailed view)
-                    VerificationDetailsCard(status = status)
-
-                    // File integrity details
-                    if (status.filesChecked != null && status.filesChecked > 0) {
-                        FileIntegrityCard(status = status)
-                    }
-
-                    // Key status warning
-                    if (status.keyStatus != "portal_active") {
-                        KeyStatusWarningCard(status = status)
-                    }
-
-                    // Disclaimer
-                    DisclaimerCard()
 
                     // Learn more link
                     Text(
@@ -215,23 +194,6 @@ fun TrustPage(
                         modifier = Modifier
                             .clickable { uriHandler.openUri("https://ciris.ai/trust") }
                             .padding(8.dp)
-                    )
-
-                    // Diagnostics Log (expandable - shows full verify output)
-                    DiagnosticsLogCard(
-                        diagnostics = status.diagnosticInfo,
-                        onCopy = {
-                            clipboardManager.setText(AnnotatedString(status.diagnosticInfo ?: "No diagnostics"))
-                        }
-                    )
-
-                    // Raw details (expandable)
-                    RawDetailsCard(
-                        status = status,
-                        onCopy = {
-                            val text = buildRawDetailsText(status)
-                            clipboardManager.setText(AnnotatedString(text))
-                        }
                     )
                 }
             }
@@ -305,13 +267,32 @@ private fun ErrorCard(error: String, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun TrustSummaryCard(status: VerifyStatusResponse) {
-    val level = status.maxLevel
+private fun TrustSummaryCard(
+    status: VerifyStatusResponse,
+    deviceAttestationResult: DeviceAttestationResult? = null
+) {
+    // Use shared calculation for actual achieved level
+    // Pass device attestation result from UI's separate Play Integrity check
+    val deviceAttestationPassed = (deviceAttestationResult as? DeviceAttestationResult.Success)?.verified
+    val level = status.calculateActualLevel(deviceAttestationPassed = deviceAttestationPassed)
+
+    // Check if current level has partial passes (for yellow state)
+    val sourcesOk = (status.sourcesAgreeing ?: 0) >= 2
+    val portalKeyOk = status.registryKeyStatus?.contains("active", ignoreCase = true) == true
+    val isPartial = when (level) {
+        1 -> status.envOk || status.playIntegrityOk  // Some L2 checks pass
+        2 -> sourcesOk || status.fileIntegrityOk  // Some L3/L4 checks pass
+        3 -> status.fileIntegrityOk  // L4 passes
+        4 -> status.auditOk || portalKeyOk  // Some L5 checks pass
+        else -> false
+    }
+
     val bgColor = when {
-        level >= 5 -> Color(0xFFD1FAE5)
-        level >= 3 -> Color(0xFFDBEAFE)
-        level >= 1 -> Color(0xFFFEF3C7)
-        else -> Color(0xFFF5F5F5)
+        level >= 5 -> Color(0xFFD1FAE5)  // Green
+        level >= 3 -> Color(0xFFDBEAFE)  // Blue
+        isPartial -> Color(0xFFFEF3C7)   // Yellow (partial)
+        level >= 1 -> Color(0xFFFEF3C7)  // Yellow
+        else -> Color(0xFFF5F5F5)        // Gray
     }
     val textColor = when {
         level >= 5 -> Color(0xFF065F46)
@@ -903,12 +884,656 @@ private fun FileIntegrityCard(status: VerifyStatusResponse) {
     }
 }
 
+/**
+ * 5 Expandable Tier Cards - consolidates all attestation details into collapsible sections
+ */
+@Composable
+private fun TierCardsSection(
+    status: VerifyStatusResponse,
+    deviceAttestationResult: DeviceAttestationResult?,
+    deviceAttestationLoading: Boolean,
+    onCopyDiagnostics: () -> Unit
+) {
+    var expandedTier by remember { mutableStateOf<Int?>(null) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // L1: Binary & Self-Verification
+        // Check if keystore is software-only (no hardware encryption)
+        // Key is hardware-backed if: hardware_backed=true AND key_storage_mode contains "HW"
+        // attestation_proof.hardware_type refers to Ed25519 signing, not storage encryption
+        val hasHardwareStorage = status.hardwareBacked &&
+            status.keyStorageMode?.contains("HW", ignoreCase = true) == true
+        val isSoftwareKeystore = !hasHardwareStorage
+        ExpandableTierCard(
+            level = 1,
+            title = "Binary Loaded",
+            passed = status.binarySelfCheck == "verified",
+            checksInfo = buildL1ChecksInfo(status),
+            expanded = expandedTier == 1,
+            onToggle = { expandedTier = if (expandedTier == 1) null else 1 },
+            partial = isSoftwareKeystore  // Yellow if software-backed keystore
+        ) {
+            L1Content(status)
+        }
+
+        // L2: Environment & Device Attestation
+        val deviceOk = (deviceAttestationResult as? DeviceAttestationResult.Success)?.verified == true
+        ExpandableTierCard(
+            level = 2,
+            title = "Environment",
+            passed = status.hardwareBacked && (deviceOk || status.playIntegrityOk),
+            checksInfo = buildL2ChecksInfo(status, deviceAttestationResult),
+            expanded = expandedTier == 2,
+            onToggle = { expandedTier = if (expandedTier == 2) null else 2 }
+        ) {
+            L2Content(status, deviceAttestationResult, deviceAttestationLoading)
+        }
+
+        // L3: Registry Cross-Validation
+        ExpandableTierCard(
+            level = 3,
+            title = "Registry Network",
+            passed = status.registryOk,
+            checksInfo = buildL3ChecksInfo(status),
+            expanded = expandedTier == 3,
+            onToggle = { expandedTier = if (expandedTier == 3) null else 3 }
+        ) {
+            L3Content(status)
+        }
+
+        // L4: Agent Code Integrity
+        ExpandableTierCard(
+            level = 4,
+            title = "Agent Code Integrity",
+            passed = status.fileIntegrityOk,
+            checksInfo = buildL4ChecksInfo(status),
+            expanded = expandedTier == 4,
+            onToggle = { expandedTier = if (expandedTier == 4) null else 4 }
+        ) {
+            L4Content(status)
+        }
+
+        // L5: Full Attestation & Audit
+        ExpandableTierCard(
+            level = 5,
+            title = "Registry & Audit",
+            passed = status.auditOk && status.registryKeyStatus?.contains("active", ignoreCase = true) == true,
+            checksInfo = buildL5ChecksInfo(status),
+            expanded = expandedTier == 5,
+            onToggle = { expandedTier = if (expandedTier == 5) null else 5 }
+        ) {
+            L5Content(status, onCopyDiagnostics)
+        }
+
+        // Verify Log (expandable)
+        DiagnosticsLogCard(
+            diagnostics = status.diagnosticInfo,
+            onCopy = onCopyDiagnostics
+        )
+    }
+}
+
+@Composable
+private fun ExpandableTierCard(
+    level: Int,
+    title: String,
+    passed: Boolean,
+    checksInfo: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    partial: Boolean = false,  // Yellow/warning state (e.g., software-backed keystore)
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val levelColor = when {
+        passed && !partial -> Color(0xFF059669)  // Green - fully passed
+        partial -> Color(0xFFF59E0B)              // Yellow/amber - partial/warning
+        else -> Color(0xFFDC2626)                 // Red - failed
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column {
+            // Header (always visible)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggle() }
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Level badge
+                    Text(
+                        text = "L$level",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier
+                            .background(levelColor, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                    Column {
+                        Text(
+                            text = title,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = checksInfo,
+                            fontSize = 11.sp,
+                            color = Color(0xFF6B7280)
+                        )
+                    }
+                }
+                // Expand icon
+                Text(
+                    text = if (expanded) "▼" else "▶",
+                    fontSize = 12.sp,
+                    color = Color(0xFF9CA3AF)
+                )
+            }
+
+            // Expanded content
+            if (expanded) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF9FAFB))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    content = content
+                )
+            }
+        }
+    }
+}
+
+// Helper functions to build check info strings
+private fun buildL1ChecksInfo(status: VerifyStatusResponse): String {
+    val binaryOk = status.binarySelfCheck == "verified"
+    val funcOk = status.functionSelfCheck == "verified" || status.functionIntegrity == "verified"
+    val passed = listOf(binaryOk, funcOk).count { it }
+    return "$passed/2 checks • ${if (binaryOk) "Binary ✓" else "Binary ✗"}"
+}
+
+private fun buildL2ChecksInfo(status: VerifyStatusResponse, deviceResult: DeviceAttestationResult?): String {
+    val hwOk = status.hardwareBacked
+    val playOk = (deviceResult as? DeviceAttestationResult.Success)?.verified == true || status.playIntegrityOk
+    val passed = listOf(hwOk, playOk).count { it }
+    return "$passed/2 checks • HW: ${if (hwOk) "✓" else "○"} Play: ${if (playOk) "✓" else "○"}"
+}
+
+private fun buildL3ChecksInfo(status: VerifyStatusResponse): String {
+    // Registry cross-validation uses 3 sources (DNS US, DNS EU, HTTPS)
+    val sources = 3
+    val agreement = status.sourcesAgreeing ?: (if (status.registryOk) 3 else 0)
+    val icon = when {
+        agreement >= 3 -> "✓"
+        agreement >= 1 -> "◐"  // Partial
+        else -> "○"
+    }
+    return "$agreement/$sources sources • $icon"
+}
+
+private fun buildL4ChecksInfo(status: VerifyStatusResponse): String {
+    val filesPassed = status.filesPassed ?: 0
+    val filesChecked = status.filesChecked ?: 0
+    val mobileExcluded = status.mobileExcludedCount ?: 0
+    val pyModulesPassed = status.pythonModulesPassed ?: 0
+    val pyModulesChecked = status.pythonModulesChecked ?: pyModulesPassed
+    val totalVerified = filesPassed + pyModulesPassed
+    val totalExpected = (filesChecked - mobileExcluded) + pyModulesChecked
+    return "$totalVerified/$totalExpected files"
+}
+
+private fun buildL5ChecksInfo(status: VerifyStatusResponse): String {
+    val keyOk = status.registryKeyStatus?.contains("active", ignoreCase = true) == true
+    val auditOk = status.auditOk
+    val passed = listOf(keyOk, auditOk).count { it }
+    return "$passed/2 checks • Key: ${if (keyOk) "✓" else "○"} Audit: ${if (auditOk) "✓" else "○"}"
+}
+
+// L1 Content: Binary & Self-Verification
+@Composable
+private fun L1Content(status: VerifyStatusResponse) {
+    // Identity Key - check for hardware-backed storage
+    // Ed25519 signing key is wrapped (encrypted) by HW key if: hardware_backed=true AND key_storage_mode contains "HW"
+    val hasHardwareStorage = status.hardwareBacked &&
+        status.keyStorageMode?.contains("HW", ignoreCase = true) == true
+    val isSoftwareOnly = !hasHardwareStorage
+    val keyIcon = when {
+        isSoftwareOnly -> "⚠️"  // Warning for software-only
+        status.hardwareBacked -> "🔐"  // Hardware-backed
+        else -> "🔑"  // Unknown/software
+    }
+    val storageMode = status.keyStorageMode ?: (if (status.hardwareBacked) "Hardware-backed" else "Software")
+    val displayValue = if (isSoftwareOnly) {
+        "$storageMode (Software-Only)"
+    } else {
+        storageMode
+    }
+    DetailRow(
+        icon = keyIcon,
+        label = "Identity Key (Ed25519)",
+        value = displayValue,
+        ok = !isSoftwareOnly,
+        pending = isSoftwareOnly  // Yellow/warning for software-only
+    )
+    if (hasHardwareStorage) {
+        DetailSubtext("✓ Ed25519 key wrapped by hardware-stored AES key")
+    } else if (isSoftwareOnly) {
+        DetailSubtext("⚠️ No hardware security module - keys protected by OS only")
+    }
+    status.ed25519Fingerprint?.let {
+        DetailSubtext("Fingerprint: ${it.take(20)}...")
+    }
+
+    // Target
+    val target = status.targetTriple ?: "${status.platformArch ?: "?"}-${status.platformOs?.lowercase() ?: "?"}"
+    DetailRow(icon = "📦", label = "Registry Target", value = target, ok = true)
+
+    // Binary Hash
+    val binaryOk = status.binarySelfCheck == "verified"
+    DetailRow(
+        label = "Binary Hash",
+        value = if (binaryOk) "Verified" else (status.binarySelfCheck ?: "Unknown"),
+        ok = binaryOk
+    )
+    status.binaryHash?.let { DetailSubtext("Local: ${it.take(20)}...") }
+
+    // Function Integrity
+    val funcStatus = status.functionSelfCheck ?: status.functionIntegrity ?: "not_checked"
+    val funcOk = funcStatus == "verified"
+    DetailRow(
+        label = "Function Integrity",
+        value = if (funcOk) "Verified" else funcStatus.replaceFirstChar { it.uppercase() },
+        ok = funcOk
+    )
+    if (status.functionsChecked != null && status.functionsChecked > 0) {
+        DetailSubtext("${status.functionsPassed ?: 0}/${status.functionsChecked} functions passed")
+    }
+    // Show failed functions if available
+    val failedFuncs = status.functionsFailedList ?: emptyList()
+    if (failedFuncs.isNotEmpty()) {
+        Text(
+            text = "Failed functions:",
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color(0xFFDC2626),
+            modifier = Modifier.padding(start = 8.dp, top = 4.dp)
+        )
+        failedFuncs.take(5).forEach { func ->
+            Text(
+                text = "  • $func",
+                fontSize = 9.sp,
+                color = Color(0xFFEF4444),
+                modifier = Modifier.padding(start = 12.dp)
+            )
+        }
+        if (failedFuncs.size > 5) {
+            Text(
+                text = "  ... and ${failedFuncs.size - 5} more",
+                fontSize = 9.sp,
+                color = Color(0xFFEF4444),
+                modifier = Modifier.padding(start = 12.dp)
+            )
+        }
+    }
+}
+
+// L2 Content: Environment & Device Attestation
+@Composable
+private fun L2Content(
+    status: VerifyStatusResponse,
+    deviceResult: DeviceAttestationResult?,
+    loading: Boolean
+) {
+    // Platform
+    DetailRow(
+        icon = "📱",
+        label = "Platform",
+        value = "${status.platformOs ?: "?"} • ${status.platformArch ?: "?"}",
+        ok = true
+    )
+
+    // Hardware Keystore - check if signing key is encrypted by hardware key
+    // HW-AES-256-GCM means Ed25519 key is encrypted by hardware-backed AES key
+    val hasHwEncryption = status.hardwareBacked &&
+        status.keyStorageMode?.contains("HW", ignoreCase = true) == true
+    val keystoreValue = when {
+        hasHwEncryption -> status.keyStorageMode ?: "Hardware-backed"
+        status.hardwareBacked -> "Android Keystore (Software)"
+        else -> "Software fallback"
+    }
+    DetailRow(
+        label = "Hardware Keystore",
+        value = keystoreValue,
+        ok = hasHwEncryption,
+        pending = status.hardwareBacked && !hasHwEncryption  // Yellow if Keystore but no HW encryption
+    )
+
+    // Google Play Integrity / Device Attestation
+    if (loading) {
+        DetailRow(label = "Device Attestation", value = "Checking...", ok = false, pending = true)
+    } else {
+        when (deviceResult) {
+            is DeviceAttestationResult.Success -> {
+                DetailRow(
+                    label = "Play Integrity",
+                    value = if (deviceResult.verified) deviceResult.verdict else "Failed",
+                    ok = deviceResult.verified
+                )
+                if (deviceResult.meetsStrongIntegrity) DetailSubtext("• Strong integrity")
+                if (deviceResult.meetsDeviceIntegrity) DetailSubtext("• Device integrity")
+                if (deviceResult.meetsBasicIntegrity) DetailSubtext("• Basic integrity")
+            }
+            is DeviceAttestationResult.Error -> {
+                DetailRow(label = "Play Integrity", value = "Error", ok = false)
+                DetailSubtext(deviceResult.message.take(50))
+            }
+            is DeviceAttestationResult.NotSupported -> {
+                DetailRow(label = "Play Integrity", value = "Not supported", ok = false, pending = true)
+            }
+            null -> {
+                DetailRow(
+                    label = "Play Integrity",
+                    value = if (status.playIntegrityOk) "Valid" else "Not available",
+                    ok = status.playIntegrityOk,
+                    pending = !status.playIntegrityOk
+                )
+            }
+        }
+    }
+}
+
+// L3 Content: Registry Cross-Validation
+@Composable
+private fun L3Content(status: VerifyStatusResponse) {
+    // Registry uses 3 sources: DNS US, DNS EU, HTTPS
+    val sources = 3
+    val agreement = status.sourcesAgreeing ?: (if (status.registryOk) 3 else 0)
+    val isPartial = agreement in 1..2
+
+    DetailRow(
+        label = "Cross-Validation",
+        value = "$agreement/$sources sources agree",
+        ok = agreement >= 3,
+        pending = isPartial
+    )
+
+    // Show individual source status
+    DetailRow(
+        label = "DNS (US)",
+        value = if (status.dnsUsOk) "✓ Reachable" else "✗ Timeout",
+        ok = status.dnsUsOk
+    )
+    DetailRow(
+        label = "DNS (EU)",
+        value = if (status.dnsEuOk) "✓ Reachable" else "✗ Timeout",
+        ok = status.dnsEuOk
+    )
+    DetailRow(
+        label = "HTTPS",
+        value = if (status.httpsUsOk) "✓ Reachable" else "✗ Failed",
+        ok = status.httpsUsOk
+    )
+
+    DetailRow(
+        label = "Registry Status",
+        value = when {
+            agreement >= 3 -> "All sources agree"
+            agreement >= 1 -> "Partial validation ($agreement/3)"
+            else -> "Validation pending"
+        },
+        ok = agreement >= 3,
+        pending = isPartial
+    )
+}
+
+// L4 Content: Code Integrity
+@Composable
+private fun L4Content(status: VerifyStatusResponse) {
+    // Manifest file counts
+    val filesPassed = status.filesPassed ?: 0
+    val filesChecked = status.filesChecked ?: 0
+    val mobileExcluded = status.mobileExcludedCount ?: 0
+    val effectiveManifestExpected = filesChecked - mobileExcluded
+
+    // Python module counts
+    val pyModulesPassed = status.pythonModulesPassed ?: 0
+    val pyModulesChecked = status.pythonModulesChecked ?: pyModulesPassed
+
+    // Combined totals
+    val totalVerified = filesPassed + pyModulesPassed
+    val totalExpected = effectiveManifestExpected + pyModulesChecked
+
+    // Summary row
+    DetailRow(
+        label = "Code Integrity",
+        value = if (status.fileIntegrityOk) "Verified" else "Partial",
+        ok = status.fileIntegrityOk
+    )
+    DetailSubtext("$totalVerified/$totalExpected total ($filesPassed/$effectiveManifestExpected manifest + $pyModulesPassed/$pyModulesChecked python)")
+
+    // Collapsible state for each section
+    var missingFromSystemExpanded by remember { mutableStateOf(false) }
+    var missingFromManifestExpanded by remember { mutableStateOf(false) }
+    var excludedExpanded by remember { mutableStateOf(false) }
+    var checksumMismatchExpanded by remember { mutableStateOf(false) }
+
+    // 1. Missing from System (files in manifest but not on device)
+    val missingFromSystem = status.filesMissingList ?: emptyList()
+    val missingFromSystemCount = status.filesMissingCount ?: missingFromSystem.size
+    if (missingFromSystemCount > 0) {
+        CollapsibleFileSection(
+            title = "Missing from System",
+            count = missingFromSystemCount,
+            files = missingFromSystem,
+            expanded = missingFromSystemExpanded,
+            onToggle = { missingFromSystemExpanded = !missingFromSystemExpanded },
+            titleColor = Color(0xFFDC2626),
+            fileColor = Color(0xFFEF4444)
+        )
+    }
+
+    // 2. Missing from Manifest (files on device but not in registry manifest)
+    val missingFromManifest = status.filesUnexpectedList ?: emptyList()
+    if (missingFromManifest.isNotEmpty()) {
+        CollapsibleFileSection(
+            title = "Missing from Manifest",
+            count = missingFromManifest.size,
+            files = missingFromManifest,
+            expanded = missingFromManifestExpanded,
+            onToggle = { missingFromManifestExpanded = !missingFromManifestExpanded },
+            titleColor = Color(0xFFF59E0B),
+            fileColor = Color(0xFFFBBF24)
+        )
+    }
+
+    // 3. Excluded (mobile-excluded: discord, reddit, cli, gui_static, etc.)
+    val excluded = status.mobileExcludedList ?: emptyList()
+    val excludedCount = status.mobileExcludedCount ?: excluded.size
+    if (excludedCount > 0) {
+        CollapsibleFileSection(
+            title = "Excluded (Mobile)",
+            count = excludedCount,
+            files = excluded,
+            expanded = excludedExpanded,
+            onToggle = { excludedExpanded = !excludedExpanded },
+            titleColor = Color(0xFF059669),
+            fileColor = Color(0xFF10B981)
+        )
+    }
+
+    // 4. Checksum Mismatch (files present but hash doesn't match)
+    val checksumMismatch = status.filesFailedList ?: emptyList()
+    val checksumMismatchCount = status.filesFailed ?: checksumMismatch.size
+    if (checksumMismatchCount > 0) {
+        CollapsibleFileSection(
+            title = "Checksum Mismatch",
+            count = checksumMismatchCount,
+            files = checksumMismatch,
+            expanded = checksumMismatchExpanded,
+            onToggle = { checksumMismatchExpanded = !checksumMismatchExpanded },
+            titleColor = Color(0xFFDC2626),
+            fileColor = Color(0xFFEF4444)
+        )
+    }
+}
+
+@Composable
+private fun CollapsibleFileSection(
+    title: String,
+    count: Int,
+    files: List<String>,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    titleColor: Color,
+    fileColor: Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggle() }
+            .padding(start = 8.dp, top = 6.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = if (expanded) "▼" else "▶",
+            fontSize = 10.sp,
+            color = titleColor
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = "$title ($count):",
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            color = titleColor
+        )
+    }
+
+    if (expanded && files.isNotEmpty()) {
+        files.forEach { file ->
+            Text(
+                text = "  • $file",
+                fontSize = 9.sp,
+                color = fileColor,
+                modifier = Modifier.padding(start = 20.dp)
+            )
+        }
+        if (count > files.size) {
+            Text(
+                text = "  ... and ${count - files.size} more (not fetched)",
+                fontSize = 9.sp,
+                color = fileColor.copy(alpha = 0.7f),
+                modifier = Modifier.padding(start = 20.dp)
+            )
+        }
+    }
+}
+
+// L5 Content: Registry & Audit
+@Composable
+private fun L5Content(status: VerifyStatusResponse, onCopyDiagnostics: () -> Unit) {
+    // Registry Key
+    val keyStatus = status.registryKeyStatus ?: "not_checked"
+    val keyOk = keyStatus.contains("active", ignoreCase = true)
+    DetailRow(
+        label = "Registry Key",
+        value = keyStatus.replaceFirstChar { it.uppercase() },
+        ok = keyOk,
+        pending = keyStatus == "not_checked"
+    )
+
+    // Audit Trail
+    DetailRow(
+        label = "Audit Trail",
+        value = if (status.auditOk) "Verified" else "Pending",
+        ok = status.auditOk,
+        pending = !status.auditOk
+    )
+
+    // Copy diagnostics button
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        horizontalArrangement = Arrangement.End
+    ) {
+        Text(
+            text = "Copy Diagnostics",
+            fontSize = 11.sp,
+            color = Color(0xFF2563EB),
+            modifier = Modifier
+                .clickable { onCopyDiagnostics() }
+                .padding(4.dp)
+        )
+    }
+}
+
+@Composable
+private fun DetailRow(
+    label: String,
+    value: String,
+    ok: Boolean,
+    pending: Boolean = false,
+    icon: String? = null
+) {
+    val color = when {
+        ok -> Color(0xFF059669)
+        pending -> Color(0xFFD97706)
+        else -> Color(0xFFDC2626)
+    }
+    val statusIcon = when {
+        ok -> "✓"
+        pending -> "○"
+        else -> "✗"
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (icon != null) Text(text = icon, fontSize = 12.sp)
+            Text(text = label, fontSize = 12.sp, color = Color(0xFF4B5563))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(text = statusIcon, fontSize = 11.sp, color = color)
+            Text(
+                text = value,
+                fontSize = 11.sp,
+                color = color,
+                fontFamily = if (value.length > 20) FontFamily.Monospace else FontFamily.Default
+            )
+        }
+    }
+}
+
+@Composable
+private fun DetailSubtext(text: String) {
+    Text(
+        text = text,
+        fontSize = 10.sp,
+        fontFamily = FontFamily.Monospace,
+        color = Color(0xFF9CA3AF),
+        modifier = Modifier.padding(start = 18.dp)
+    )
+}
+
 @Composable
 private fun VerificationDetailsCard(status: VerifyStatusResponse) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
                 text = "Verification Details",
@@ -916,210 +1541,223 @@ private fun VerificationDetailsCard(status: VerifyStatusResponse) {
                 fontSize = 16.sp
             )
 
-            // Key Identity Section
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "Identity Key",
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp,
-                    color = Color(0xFF374151)
-                )
-
+            // === LEVEL 1: Self-Verification (Local Only) ===
+            TierSection(
+                level = 1,
+                title = "Self-Verification",
+                badge = "Local"
+            ) {
+                // Identity Key
                 val keyIcon = if (status.hardwareBacked) "🔐" else "🔑"
                 val storageMode = status.keyStorageMode ?: (if (status.hardwareBacked) "Hardware-backed" else "Software")
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFFF3F4F6), RoundedCornerShape(4.dp))
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(text = keyIcon, fontSize = 14.sp)
-                    Column {
-                        Text(
-                            text = "Storage: $storageMode",
-                            fontSize = 12.sp,
-                            color = if (status.hardwareBacked) Color(0xFF059669) else Color(0xFF6B7280)
-                        )
-                        status.ed25519Fingerprint?.let { fp ->
-                            Text(
-                                text = "Fingerprint: ${fp.take(16)}...",
-                                fontSize = 10.sp,
-                                fontFamily = FontFamily.Monospace,
-                                color = Color(0xFF6B7280)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Target Platform Section
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "Registry Target",
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp,
-                    color = Color(0xFF374151)
+                CheckRow(
+                    label = "Identity Key",
+                    value = storageMode,
+                    ok = true,
+                    icon = keyIcon,
+                    detail = status.ed25519Fingerprint?.let { "Fingerprint: ${it.take(16)}..." }
                 )
 
+                // Target
                 val targetTriple = status.targetTriple ?: "${status.platformArch ?: "unknown"}-${status.platformOs?.lowercase() ?: "unknown"}"
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFFF3F4F6), RoundedCornerShape(4.dp))
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(text = "📦", fontSize = 14.sp)
-                    Text(
-                        text = targetTriple,
-                        fontSize = 12.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = Color(0xFF374151)
-                    )
-                }
-            }
-
-            // Binary Self-Check Section
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "Binary Self-Check",
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp,
-                    color = Color(0xFF374151)
+                CheckRow(
+                    label = "Registry Target",
+                    value = targetTriple,
+                    ok = true,
+                    icon = "📦"
                 )
 
+                // Binary Self-Check
                 val binaryStatus = status.binarySelfCheck ?: "not_checked"
                 val binaryOk = binaryStatus == "verified"
-                val binaryColor = when {
-                    binaryOk -> Color(0xFF059669)
-                    binaryStatus.contains("unavailable") -> Color(0xFFD97706)
-                    else -> Color(0xFFDC2626)
-                }
-                val binaryIcon = when {
-                    binaryOk -> "✓"
-                    binaryStatus.contains("unavailable") -> "○"
-                    else -> "✗"
-                }
+                CheckRow(
+                    label = "Binary Hash",
+                    value = binaryStatus.replaceFirstChar { it.uppercase() },
+                    ok = binaryOk,
+                    pending = binaryStatus.contains("unavailable"),
+                    detail = status.binaryHash?.let { "Local: ${it.take(16)}..." }
+                )
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(binaryColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = binaryIcon, fontSize = 12.sp, color = binaryColor)
-                        Text(
-                            text = binaryStatus.replaceFirstChar { it.uppercase() },
-                            fontSize = 12.sp,
-                            color = binaryColor
-                        )
-                    }
-                    status.binaryHash?.let { hash ->
-                        Text(
-                            text = "Local: ${hash.take(16)}...",
-                            fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = Color(0xFF6B7280)
-                        )
-                    }
-                    status.expectedBinaryHash?.let { hash ->
-                        Text(
-                            text = "Expected: ${hash.take(16)}...",
-                            fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = Color(0xFF6B7280)
-                        )
-                    }
+                // Function Self-Check
+                val funcStatus = status.functionSelfCheck ?: status.functionIntegrity ?: "not_checked"
+                val funcOk = funcStatus == "verified"
+                val funcDetail = if (status.functionsChecked != null && status.functionsChecked > 0) {
+                    "${status.functionsPassed ?: 0}/${status.functionsChecked} functions"
+                } else null
+                CheckRow(
+                    label = "Function Integrity",
+                    value = funcStatus.replaceFirstChar { it.uppercase() },
+                    ok = funcOk,
+                    pending = funcStatus.contains("unavailable") || funcStatus.contains("not_found"),
+                    detail = funcDetail
+                )
+            }
+
+            // === LEVEL 4: Agent Code Integrity (Recursive - needs registry manifest) ===
+            TierSection(
+                level = 4,
+                title = "Agent Code Integrity",
+                badge = ""
+            ) {
+                // File Integrity
+                val fileOk = status.fileIntegrityOk
+                val fileDetail = if (status.filesChecked != null && status.filesChecked > 0) {
+                    "${status.filesPassed ?: 0}/${status.filesChecked} files"
+                } else null
+                CheckRow(
+                    label = "File Manifest",
+                    value = if (fileOk) "Verified" else (status.integrityFailureReason?.take(30) ?: "Failed"),
+                    ok = fileOk,
+                    detail = fileDetail
+                )
+
+                // Python Integrity (mobile only)
+                if (status.pythonModulesChecked != null && status.pythonModulesChecked > 0) {
+                    val pyOk = status.pythonIntegrityOk && status.pythonHashValid
+                    CheckRow(
+                        label = "Python Modules",
+                        value = if (pyOk) "Verified" else "Hash mismatch",
+                        ok = pyOk,
+                        detail = "${status.pythonModulesPassed ?: 0}/${status.pythonModulesChecked} modules, hash: ${status.pythonTotalHash?.take(12) ?: "N/A"}..."
+                    )
                 }
             }
 
-            // Function Self-Check Section
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // === LEVEL 5: Registry & Audit (Recursive - network verification) ===
+            TierSection(
+                level = 5,
+                title = "Registry & Audit",
+                badge = "Recursive"
+            ) {
+                // Registry Key Status
+                val regStatus = status.registryKeyStatus ?: "not_checked"
+                val regOk = regStatus.contains("active", ignoreCase = true)
+                CheckRow(
+                    label = "Registry Key",
+                    value = regStatus.replaceFirstChar { it.uppercase() },
+                    ok = regOk,
+                    pending = regStatus == "not_checked"
+                )
+
+                // Audit Trail
+                CheckRow(
+                    label = "Audit Trail",
+                    value = if (status.auditOk) "Verified" else "Pending",
+                    ok = status.auditOk,
+                    pending = !status.auditOk
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TierSection(
+    level: Int,
+    title: String,
+    badge: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Function Self-Check",
-                    fontWeight = FontWeight.Medium,
+                    text = "L$level",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = Modifier
+                        .background(Color(0xFF6366F1), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp,
                     color = Color(0xFF374151)
                 )
-
-                val funcStatus = status.functionSelfCheck ?: status.functionIntegrity ?: "not_checked"
-                val funcOk = funcStatus == "verified"
-                val funcColor = when {
-                    funcOk -> Color(0xFF059669)
-                    funcStatus.contains("unavailable") || funcStatus.contains("not_found") -> Color(0xFFD97706)
-                    else -> Color(0xFFDC2626)
-                }
-                val funcIcon = when {
-                    funcOk -> "✓"
-                    funcStatus.contains("unavailable") || funcStatus.contains("not_found") -> "○"
-                    else -> "✗"
-                }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(funcColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = funcIcon, fontSize = 12.sp, color = funcColor)
-                        Text(
-                            text = funcStatus.replaceFirstChar { it.uppercase() },
-                            fontSize = 12.sp,
-                            color = funcColor
-                        )
-                    }
-                    if (status.functionsChecked != null && status.functionsChecked > 0) {
-                        Text(
-                            text = "Functions: ${status.functionsPassed ?: 0}/${status.functionsChecked} passed",
-                            fontSize = 10.sp,
-                            color = Color(0xFF6B7280)
-                        )
-                    }
-                }
             }
+            Text(
+                text = badge,
+                fontSize = 10.sp,
+                color = Color(0xFF6B7280),
+                modifier = Modifier
+                    .background(Color(0xFFE5E7EB), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFF9FAFB), RoundedCornerShape(8.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            content = content
+        )
+    }
+}
 
-            // Registry Key Status
-            status.registryKeyStatus?.let { regStatus ->
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "Registry Key Status",
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 14.sp,
-                        color = Color(0xFF374151)
-                    )
+@Composable
+private fun CheckRow(
+    label: String,
+    value: String,
+    ok: Boolean,
+    pending: Boolean = false,
+    icon: String? = null,
+    detail: String? = null
+) {
+    val color = when {
+        ok -> Color(0xFF059669)
+        pending -> Color(0xFFD97706)
+        else -> Color(0xFFDC2626)
+    }
+    val statusIcon = when {
+        ok -> "✓"
+        pending -> "○"
+        else -> "✗"
+    }
 
-                    val regOk = regStatus.contains("active", ignoreCase = true)
-                    val regColor = if (regOk) Color(0xFF059669) else Color(0xFFD97706)
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(regColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
-                            .padding(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(text = if (regOk) "✓" else "○", fontSize = 12.sp, color = regColor)
-                        Text(
-                            text = regStatus,
-                            fontSize = 12.sp,
-                            color = regColor
-                        )
-                    }
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (icon != null) {
+                    Text(text = icon, fontSize = 12.sp)
                 }
+                Text(
+                    text = label,
+                    fontSize = 12.sp,
+                    color = Color(0xFF4B5563)
+                )
             }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = statusIcon, fontSize = 11.sp, color = color)
+                Text(
+                    text = value,
+                    fontSize = 11.sp,
+                    color = color,
+                    fontFamily = if (value.contains("-") || value.length > 20) FontFamily.Monospace else FontFamily.Default
+                )
+            }
+        }
+        detail?.let {
+            Text(
+                text = it,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                color = Color(0xFF9CA3AF),
+                modifier = Modifier.padding(start = if (icon != null) 18.dp else 0.dp)
+            )
         }
     }
 }

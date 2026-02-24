@@ -604,17 +604,69 @@ def _get_module_source(modname: str, spec) -> Optional[bytes]:
     return None
 
 
+def _fetch_manifest_modules(package_prefix: str = "ciris_engine") -> Optional[set]:
+    """Fetch module names from registry manifest.
+
+    Args:
+        package_prefix: Package prefix to filter (e.g., "ciris_engine")
+
+    Returns:
+        Set of module names (e.g., "ciris_engine.logic.adapters.discord.adapter")
+    """
+    import json
+    import re
+    import urllib.request
+
+    try:
+        # Get version from ciris_engine
+        from ciris_engine import __version__
+
+        # Strip any suffix like -stable, -beta, etc. (registry uses base version)
+        version = re.split(r"[-+]", __version__)[0]
+
+        url = f"https://api.registry.ciris-services-1.ai/v1/builds/{version}"
+        logger.info(f"[code-integrity] Fetching manifest from registry for version {version}")
+
+        with urllib.request.urlopen(url, timeout=10) as response:
+            data = json.loads(response.read().decode())
+            manifest_json = data.get("file_manifest_json", {})
+            if isinstance(manifest_json, dict):
+                files = manifest_json.get("files", {})
+                # Convert file paths to module names
+                # e.g., "ciris_engine/logic/adapters/discord/adapter.py" -> "ciris_engine.logic.adapters.discord.adapter"
+                modules = set()
+                for file_path in files.keys():
+                    if file_path.startswith(package_prefix) and file_path.endswith(".py"):
+                        # Skip __init__.py for now (handled separately as packages)
+                        if file_path.endswith("__init__.py"):
+                            # Convert to package name
+                            pkg_path = file_path[:-12]  # Remove "/__init__.py"
+                            modname = pkg_path.replace("/", ".")
+                        else:
+                            # Convert to module name
+                            modname = file_path[:-3].replace("/", ".")  # Remove ".py"
+                        modules.add(modname)
+                logger.info(f"[code-integrity] Manifest has {len(modules)} {package_prefix} modules")
+                return modules
+    except Exception as e:
+        logger.warning(f"[code-integrity] Failed to fetch manifest: {e}")
+    return None
+
+
 def _save_hashes_to_file(results: dict) -> None:
     """Save module hashes to JSON file for CIRISVerify integration.
 
     Writes to CIRIS_HOME/startup_python_hashes.json with format:
     {
-        "version": "1.0",
+        "version": "1.1",
         "generated_at": "ISO timestamp",
-        "package": "ciris_engine",
+        "packages": ["ciris_engine", "ciris_adapters"],
         "modules_hashed": int,
+        "modules_checked": int,
+        "unavailable_count": int,
         "total_hash": "sha256 hex",
-        "module_hashes": {"module.name": "sha256 hex", ...}
+        "module_hashes": {"module.name": "sha256 hex", ...},
+        "unavailable_modules": ["module.name: reason", ...]
     }
     """
     import json
@@ -626,12 +678,15 @@ def _save_hashes_to_file(results: dict) -> None:
         output_path = Path(ciris_home) / "startup_python_hashes.json"
 
         output_data = {
-            "version": "1.0",
+            "version": "1.1",
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "package": "ciris_engine",
+            "packages": ["ciris_engine", "ciris_adapters"],
+            "modules_checked": results.get("modules_checked", 0),
             "modules_hashed": results["modules_hashed"],
+            "unavailable_count": len(results.get("unavailable_modules", [])),
             "total_hash": results["total_hash"],
             "module_hashes": results["module_hashes"],
+            "unavailable_modules": results.get("unavailable_modules", []),
         }
 
         with open(output_path, "w") as f:
@@ -643,14 +698,14 @@ def _save_hashes_to_file(results: dict) -> None:
         logger.error(f"Failed to save hashes to file: {e}")
 
 
-def verify_code_integrity(package_name: str = "ciris_engine", save_to_file: bool = True) -> Tuple[bool, dict]:
+def verify_code_integrity(package_names: list = None, save_to_file: bool = True) -> Tuple[bool, dict]:
     """Verify integrity of Python modules by hashing their source.
 
-    Walks through all modules in the specified package, computes SHA256 hashes,
-    and optionally saves to startup_python_hashes.json for CIRISVerify.
+    Walks through all modules in the specified packages, computes SHA256 hashes,
+    and tracks which modules fail to import (unavailable on Android).
 
     Args:
-        package_name: The package to verify (default: ciris_engine)
+        package_names: List of packages to verify (default: ["ciris_engine", "ciris_adapters"])
         save_to_file: Whether to save hashes to JSON file (default: True)
 
     Returns:
@@ -659,12 +714,15 @@ def verify_code_integrity(package_name: str = "ciris_engine", save_to_file: bool
         - modules_hashed: int
         - total_hash: str (combined hash of all module hashes)
         - errors: list of error messages
+        - unavailable_modules: list of modules that can't be imported on Android
     """
     import hashlib
     import importlib
     import importlib.util
-    import json
     import pkgutil
+
+    if package_names is None:
+        package_names = ["ciris_engine", "ciris_adapters"]
 
     results = {
         "modules_checked": 0,
@@ -672,66 +730,75 @@ def verify_code_integrity(package_name: str = "ciris_engine", save_to_file: bool
         "total_hash": "",
         "module_hashes": {},
         "errors": [],
-        "sample_origins": [],  # Debug: sample of spec.origin values
+        "unavailable_modules": [],  # Modules that fail to import on Android
+        "sample_origins": [],
     }
 
-    try:
-        # Import the package
-        package = importlib.import_module(package_name)
-        if not hasattr(package, "__path__"):
-            results["errors"].append(f"{package_name} is not a package")
-            return False, results
+    all_hashes = []
 
-        # Collect all module hashes
-        all_hashes = []
+    for package_name in package_names:
+        try:
+            # Import the package
+            package = importlib.import_module(package_name)
+            if not hasattr(package, "__path__"):
+                results["errors"].append(f"{package_name} is not a package")
+                continue
 
-        for importer, modname, ispkg in pkgutil.walk_packages(
-            package.__path__, prefix=f"{package_name}."
-        ):
-            results["modules_checked"] += 1
-            try:
-                spec = importlib.util.find_spec(modname)
+            # Walk all modules in the package
+            for importer, modname, ispkg in pkgutil.walk_packages(package.__path__, prefix=f"{package_name}."):
+                results["modules_checked"] += 1
+                try:
+                    spec = importlib.util.find_spec(modname)
 
-                # Debug: capture sample origins
-                if len(results["sample_origins"]) < 5 and spec:
-                    results["sample_origins"].append(f"{modname}: {spec.origin}")
+                    # Debug: capture sample origins
+                    if len(results["sample_origins"]) < 5 and spec:
+                        results["sample_origins"].append(f"{modname}: {spec.origin}")
 
-                # Try to get module source
-                source = _get_module_source(modname, spec)
-                if source:
-                    mod_hash = hashlib.sha256(source).hexdigest()
-                    results["module_hashes"][modname] = mod_hash
-                    all_hashes.append(f"{modname}:{mod_hash}")
-                    results["modules_hashed"] += 1
+                    # Try to get module source
+                    source = _get_module_source(modname, spec)
+                    if source:
+                        mod_hash = hashlib.sha256(source).hexdigest()
+                        results["module_hashes"][modname] = mod_hash
+                        all_hashes.append(f"{modname}:{mod_hash}")
+                        results["modules_hashed"] += 1
 
-            except Exception as e:
-                if len(results["errors"]) < 10:  # Limit errors
-                    results["errors"].append(f"{modname}: {e}")
+                except ImportError as e:
+                    # Track modules that can't be imported (missing dependencies)
+                    results["unavailable_modules"].append(f"{modname}: {e}")
+                except Exception as e:
+                    if len(results["errors"]) < 20:
+                        results["errors"].append(f"{modname}: {e}")
 
-        # Compute combined hash of all modules (deterministic order)
-        if all_hashes:
-            combined = "\n".join(sorted(all_hashes))
-            results["total_hash"] = hashlib.sha256(combined.encode()).hexdigest()
+        except ImportError as e:
+            results["errors"].append(f"Cannot import {package_name}: {e}")
+        except Exception as e:
+            results["errors"].append(f"Failed to verify {package_name}: {e}")
 
-        logger.info(
-            f"Code integrity check: {results['modules_hashed']}/{results['modules_checked']} "
-            f"modules hashed, total_hash={results['total_hash'][:16] if results['total_hash'] else 'none'}..."
-        )
+    # Compute combined hash of all modules (deterministic order) - OUTSIDE the loop
+    if all_hashes:
+        combined = "\n".join(sorted(all_hashes))
+        results["total_hash"] = hashlib.sha256(combined.encode()).hexdigest()
 
-        # Debug: log sample origins if no modules hashed
-        if results["modules_hashed"] == 0 and results["sample_origins"]:
-            logger.warning(f"Sample spec.origins: {results['sample_origins']}")
+    unavailable_count = len(results["unavailable_modules"])
+    logger.info(
+        f"Code integrity check: {results['modules_hashed']}/{results['modules_checked']} "
+        f"modules hashed, {unavailable_count} unavailable on Android, "
+        f"total_hash={results['total_hash'][:16] if results['total_hash'] else 'none'}..."
+    )
 
-        # Save hashes to JSON file for CIRISVerify
-        if save_to_file and results["module_hashes"]:
-            _save_hashes_to_file(results)
+    # Log unavailable modules (likely missing native dependencies)
+    if results["unavailable_modules"]:
+        logger.info(f"Unavailable modules on Android: {results['unavailable_modules'][:5]}...")
 
-        return True, results
+    # Debug: log sample origins if no modules hashed
+    if results["modules_hashed"] == 0 and results["sample_origins"]:
+        logger.warning(f"Sample spec.origins: {results['sample_origins']}")
 
-    except Exception as e:
-        results["errors"].append(f"Failed to verify {package_name}: {e}")
-        logger.error(f"Code integrity check failed: {e}")
-        return False, results
+    # Save hashes to JSON file for CIRISVerify
+    if save_to_file and results["module_hashes"]:
+        _save_hashes_to_file(results)
+
+    return True, results
 
 
 def setup_android_environment():
@@ -896,9 +963,9 @@ def main():
     logger.info("CIRIS Mobile - Full On-Device Runtime (LLM Remote)")
     setup_android_environment()
 
-    # Verify Python code integrity at startup
+    # Verify Python code integrity at startup (both ciris_engine and ciris_adapters)
     logger.info("Verifying code integrity...")
-    integrity_ok, integrity_results = verify_code_integrity("ciris_engine")
+    integrity_ok, integrity_results = verify_code_integrity()
     if integrity_ok:
         logger.info(
             f"Code integrity verified: {integrity_results['modules_hashed']} modules, "

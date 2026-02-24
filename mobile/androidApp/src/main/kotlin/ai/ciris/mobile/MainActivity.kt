@@ -17,6 +17,7 @@ import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.config.CIRISConfig
 import ai.ciris.mobile.shared.platform.AppRestarter
 import ai.ciris.mobile.shared.platform.PythonRuntime
+import ai.ciris.mobile.shared.platform.initUrlOpener
 import ai.ciris.mobile.shared.diagnostics.NetworkDiagnosticsAndroid
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -84,6 +85,9 @@ class MainActivity : ComponentActivity() {
 
         // Initialize AppRestarter for app restart functionality (used by Settings reset)
         AppRestarter.init(this, MainActivity::class.java)
+
+        // Initialize URL opener for browser links
+        initUrlOpener(this)
 
         // Initialize Python runtime (Chaquopy)
         if (!Python.isStarted()) {

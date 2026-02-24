@@ -56,9 +56,7 @@ fun TrustPage(
     var attestationMode by remember { mutableStateOf("partial") }
     val coroutineScope = rememberCoroutineScope()
 
-    // Play Integrity / Device Attestation state
-    var deviceAttestationResult by remember { mutableStateOf<DeviceAttestationResult?>(null) }
-    var deviceAttestationLoading by remember { mutableStateOf(false) }
+    // Note: Play Integrity is part of CIRISVerify attestation, no separate UI check needed
     val uriHandler = LocalUriHandler.current
     val clipboardManager = LocalClipboardManager.current
 
@@ -70,15 +68,6 @@ fun TrustPage(
             onSuccess = { verifyStatus = it; loading = false; error = null },
             onError = { error = it; loading = false }
         )
-
-        // Request device attestation (Play Integrity on Android)
-        deviceAttestationCallback?.let { callback ->
-            deviceAttestationLoading = true
-            callback.onDeviceAttestationRequested { result ->
-                deviceAttestationResult = result
-                deviceAttestationLoading = false
-            }
-        }
     }
 
     Scaffold(
@@ -144,7 +133,7 @@ fun TrustPage(
                     val status = verifyStatus!!
 
                     // Header card with summary
-                    TrustSummaryCard(status = status, deviceAttestationResult = deviceAttestationResult)
+                    TrustSummaryCard(status = status)
 
                     // Mode toggle
                     ModeToggleCard(
@@ -178,8 +167,8 @@ fun TrustPage(
                     // 5 Expandable Tier Cards - consolidated view
                     TierCardsSection(
                         status = status,
-                        deviceAttestationResult = deviceAttestationResult,
-                        deviceAttestationLoading = deviceAttestationLoading,
+                        deviceAttestationResult = null,  // Play Integrity via CIRISVerify, not separate UI check
+                        deviceAttestationLoading = false,
                         onCopyDiagnostics = {
                             clipboardManager.setText(AnnotatedString(status.diagnosticInfo ?: "No diagnostics"))
                         }
@@ -268,13 +257,11 @@ private fun ErrorCard(error: String, onRetry: () -> Unit) {
 
 @Composable
 private fun TrustSummaryCard(
-    status: VerifyStatusResponse,
-    deviceAttestationResult: DeviceAttestationResult? = null
+    status: VerifyStatusResponse
 ) {
     // Use shared calculation for actual achieved level
-    // Pass device attestation result from UI's separate Play Integrity check
-    val deviceAttestationPassed = (deviceAttestationResult as? DeviceAttestationResult.Success)?.verified
-    val level = status.calculateActualLevel(deviceAttestationPassed = deviceAttestationPassed)
+    // Play Integrity is part of CIRISVerify attestation, uses API's playIntegrityOk
+    val level = status.calculateActualLevel()
 
     // Check if current level has partial passes (for yellow state)
     val sourcesOk = (status.sourcesAgreeing ?: 0) >= 2

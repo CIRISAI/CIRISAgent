@@ -243,7 +243,20 @@ fun SetupScreen(
                         viewModel.nextStep()
                     }
                 },
-                onBack = { viewModel.previousStep() },
+                onBack = {
+                    // If backing out of NODE_AUTH, also reset server-side device auth state
+                    if (state.isNodeFlow && state.currentStep == SetupStep.NODE_AUTH) {
+                        PlatformLogger.i(TAG, "Backing out of NODE_AUTH - resetting server device auth state")
+                        coroutineScope.launch(Dispatchers.IO) {
+                            try {
+                                apiClient.resetDeviceAuthOnServer()
+                            } catch (e: Exception) {
+                                PlatformLogger.w(TAG, "Failed to reset device auth on server: ${e.message}")
+                            }
+                        }
+                    }
+                    viewModel.previousStep()
+                },
                 onBackToLogin = onBackToLogin,
                 modifier = Modifier
                     .fillMaxWidth()

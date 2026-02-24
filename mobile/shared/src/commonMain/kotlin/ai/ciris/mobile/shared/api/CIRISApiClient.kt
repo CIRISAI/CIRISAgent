@@ -1015,6 +1015,45 @@ class CIRISApiClient(
         }
     }
 
+    /**
+     * Reset device auth session on server.
+     * Calls POST /v1/setup/reset-device-auth on the local agent API.
+     * Used when user backs out of NODE_AUTH flow to clear stale server state.
+     */
+    suspend fun resetDeviceAuthOnServer(): Boolean {
+        val method = "resetDeviceAuthOnServer"
+        logDebug(method, "Resetting device auth session on server")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 5000
+                connectTimeoutMillis = 3000
+            }
+        }
+
+        return try {
+            val response = client.post("$baseUrl/v1/setup/reset-device-auth") {
+                contentType(ContentType.Application.Json)
+                setBody("{}")
+            }
+
+            val success = response.status == HttpStatusCode.OK
+            if (success) {
+                logInfo(method, "Device auth session reset successfully")
+            } else {
+                logWarn(method, "Device auth reset returned HTTP ${response.status}")
+            }
+            success
+        } catch (e: Exception) {
+            // Non-fatal - log but don't throw since this is cleanup
+            logWarn(method, "Failed to reset device auth on server: ${e.message}")
+            false
+        } finally {
+            client.close()
+        }
+    }
+
     override suspend fun completeSetup(request: CompleteSetupRequest): SetupCompletionResult {
         val method = "completeSetup"
         logInfo(method, "Completing setup: provider=${request.llm_provider}, template=${request.template_id}, username=${request.admin_username}")

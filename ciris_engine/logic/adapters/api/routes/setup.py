@@ -1967,6 +1967,93 @@ async def get_setup_status() -> SuccessResponse[SetupStatusResponse]:
     return SuccessResponse(data=status)
 
 
+@router.get("/attestation-status")
+async def get_attestation_status(
+    request: Request,
+    force_refresh: bool = False,
+) -> SuccessResponse[Dict[str, Any]]:
+    """Get cached attestation status from AuthenticationService.
+
+    This is a lightweight endpoint that returns the cached attestation result
+    populated at startup. Use this for the startup badge and quick status checks.
+
+    For full attestation with Play Integrity, use /verify-status instead.
+
+    Query Parameters:
+    - force_refresh: Force re-run attestation even if cache is valid (default: false)
+
+    Returns:
+        Cached AttestationResult or triggers a new attestation if cache is empty/expired
+    """
+    from ciris_engine.logic.runtime.service_registry import ServiceRegistry
+    from ciris_engine.schemas.runtime.enums import ServiceType
+
+    # Get AuthenticationService from registry
+    registry = ServiceRegistry.get_instance()
+    auth_service = registry.get_service(ServiceType.WISE_AUTHORITY)
+
+    if not auth_service or not hasattr(auth_service, "get_attestation_cache_status"):
+        return SuccessResponse(
+            data={
+                "error": "AuthenticationService not available",
+                "has_cached_result": False,
+                "attestation_in_progress": False,
+            }
+        )
+
+    # Get cache status
+    cache_status = auth_service.get_attestation_cache_status()
+
+    # If force_refresh or no cached result, trigger attestation
+    if force_refresh or not cache_status.has_cached_result:
+        if not cache_status.attestation_in_progress:
+            # Trigger attestation in background
+            import asyncio
+
+            asyncio.create_task(auth_service.run_attestation(mode="partial", force_refresh=force_refresh))
+
+        return SuccessResponse(
+            data={
+                "has_cached_result": False,
+                "attestation_in_progress": True,
+                "message": "Attestation started, poll again for results",
+            }
+        )
+
+    # Return cached result
+    cached = auth_service.get_cached_attestation()
+    if cached:
+        return SuccessResponse(
+            data={
+                "has_cached_result": True,
+                "attestation_in_progress": False,
+                "cached_at": cached.cached_at.isoformat() if cached.cached_at else None,
+                "cache_age_seconds": cache_status.cache_age_seconds,
+                "max_level": cached.max_level,
+                "loaded": cached.loaded,
+                "version": cached.version,
+                "key_status": cached.key_status,
+                "attestation_status": cached.attestation_status,
+                "binary_ok": cached.binary_ok,
+                "function_integrity": cached.function_integrity,
+                "functions_checked": cached.functions_checked,
+                "functions_passed": cached.functions_passed,
+                "registry_ok": cached.registry_ok,
+                "audit_ok": cached.audit_ok,
+                "play_integrity_ok": cached.play_integrity_ok,
+                "hardware_backed": cached.hardware_backed,
+                "error": cached.error,
+            }
+        )
+
+    return SuccessResponse(
+        data={
+            "has_cached_result": False,
+            "attestation_in_progress": cache_status.attestation_in_progress,
+        }
+    )
+
+
 @router.get("/verify-status")
 async def get_verify_status(
     mode: str = "partial",
@@ -3681,6 +3768,26 @@ async def connect_node_status(device_code: str, portal_url: str) -> SuccessRespo
             package_download_url=licensed_package.get("download_url"),
             package_template_id=licensed_package.get("template_id"),
         )
+    )
+
+
+@router.post("/reset-device-auth", responses=RESPONSES_500)
+async def reset_device_auth() -> SuccessResponse[Dict[str, Any]]:
+    """Reset device auth session state.
+
+    Called when user backs out of the node auth flow (e.g., after timeout or cancel).
+    This clears any stale device auth session to allow a fresh retry.
+
+    No authentication required since this only affects local session state.
+    """
+    logger.info("Resetting device auth session (user backed out of node auth flow)")
+    _clear_device_auth_session()
+
+    return SuccessResponse(
+        data={
+            "status": "reset",
+            "message": "Device auth session cleared",
+        }
     )
 
 

@@ -210,6 +210,13 @@ class SetupViewModel : ViewModel() {
             currentStep = prevStep,
             isNodeFlow = if (shouldResetNodeFlow) false else currentState.isNodeFlow
         )
+
+        // Also reset device auth state when backing out of NODE_AUTH to clear any
+        // stale/error/timeout state. This ensures a clean slate for retry.
+        if (shouldResetNodeFlow) {
+            PlatformLogger.i(TAG, "previousStep: Backing out of NODE_AUTH, resetting device auth state")
+            resetDeviceAuth()
+        }
     }
 
     // ========== Covenant Metrics Opt-In ==========
@@ -765,5 +772,17 @@ class SetupViewModel : ViewModel() {
      */
     fun resetState() {
         _state.value = SetupFormState()
+    }
+
+    /**
+     * Reset device auth state only.
+     * Called when user backs out of NODE_AUTH step to clear any stale/error state.
+     * This allows the user to retry the node flow with a clean slate.
+     */
+    fun resetDeviceAuth() {
+        PlatformLogger.i(TAG, "resetDeviceAuth: Clearing device auth state")
+        _state.value = _state.value.copy(
+            deviceAuth = DeviceAuthState()  // Reset to default empty state
+        )
     }
 }

@@ -103,6 +103,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         self._attestation_lock = asyncio.Lock()
         self._attestation_cache_ttl = 300  # 5 minutes default
 
+        # CIRISVerify singleton - all code should use get_verifier() instead of creating instances
+        self._verifier: Any = None
+        self._verifier_lock = asyncio.Lock()
+        self._verifier_sync_lock: Any = None  # threading.Lock for sync contexts
+
     def get_service_type(self) -> ServiceType:
         """Get service type - authentication is part of wise authority infrastructure."""
         from ciris_engine.schemas.runtime.enums import ServiceType
@@ -1685,6 +1690,109 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         return authentication_store.check_database_health(self.db_path)
 
     # =========================================================================
+    # CIRISVerify Singleton Management
+    # =========================================================================
+
+    def get_verifier(self) -> Any:
+        """Get the shared CIRISVerify singleton instance (thread-safe).
+
+        All code that needs CIRISVerify should use this method instead of
+        creating instances directly. This ensures:
+        - Single instance across the application
+        - Portal key is imported once and shared
+        - Hardware keystore access is consistent
+
+        Returns:
+            CIRISVerify instance, or None if not available.
+        """
+        import threading
+
+        if self._verifier_sync_lock is None:
+            self._verifier_sync_lock = threading.Lock()
+
+        with self._verifier_sync_lock:
+            if self._verifier is None:
+                try:
+                    from ciris_verify import CIRISVerify
+
+                    # CIRISVerify() triggers Rust/Tokio init which needs 8MB stack
+                    holder: list[Any] = [None, None]  # [verifier, error]
+
+                    def _create() -> None:
+                        try:
+                            holder[0] = CIRISVerify(skip_integrity_check=True)
+                        except Exception as exc:
+                            holder[1] = exc
+
+                    threading.stack_size(8 * 1024 * 1024)
+                    t = threading.Thread(target=_create, daemon=True)
+                    t.start()
+                    t.join(timeout=30)
+                    threading.stack_size(0)
+
+                    if holder[1] is not None:
+                        logger.warning(f"[CIRISVerify] Failed to create singleton: {holder[1]}")
+                        return None
+                    if holder[0] is None:
+                        logger.warning("[CIRISVerify] Creation timed out")
+                        return None
+
+                    self._verifier = holder[0]
+                    logger.info("[CIRISVerify] Singleton created successfully")
+
+                except ImportError:
+                    logger.debug("[CIRISVerify] Not available (import failed)")
+                    return None
+
+            return self._verifier
+
+    def import_portal_key(self, private_key_bytes: bytes) -> bool:
+        """Import a Portal-issued Ed25519 signing key into the CIRISVerify vault.
+
+        This uses the singleton verifier to import the key. CIRISVerify handles
+        storage in Android Keystore, Secure Enclave, TPM, or SW fallback.
+
+        Args:
+            private_key_bytes: 32-byte Ed25519 private key from Portal
+
+        Returns:
+            True if import succeeded, False otherwise.
+        """
+        verifier = self.get_verifier()
+        if verifier is None:
+            logger.warning("[CIRISVerify] Cannot import key - verifier not available")
+            return False
+
+        try:
+            if not hasattr(verifier, "import_key_sync"):
+                logger.warning("[CIRISVerify] import_key_sync not available")
+                return False
+
+            verifier.import_key_sync(private_key_bytes)
+            logger.info("[CIRISVerify] Portal key imported successfully")
+            return True
+        except Exception as e:
+            logger.warning(f"[CIRISVerify] Failed to import portal key: {e}")
+            return False
+
+    def has_signing_key(self) -> bool:
+        """Check if a signing key exists in the CIRISVerify vault.
+
+        Returns:
+            True if a key exists, False otherwise.
+        """
+        verifier = self.get_verifier()
+        if verifier is None:
+            return False
+
+        try:
+            if not hasattr(verifier, "has_key_sync"):
+                return False
+            return bool(verifier.has_key_sync())
+        except Exception:
+            return False
+
+    # =========================================================================
     # Attestation Methods (CIRISVerify Integration)
     # =========================================================================
 
@@ -1764,9 +1872,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         def _run_verify_on_large_stack() -> None:
             """Run CIRISVerify on a thread with larger stack (Rust Tokio compatibility)."""
             try:
-                from ciris_verify import CIRISVerify as CV
-
-                verifier = CV(skip_integrity_check=True)
+                # Use singleton instead of creating new instance
+                verifier = self.get_verifier()
+                if verifier is None:
+                    verify_result[1] = "CIRISVerify singleton not available"
+                    return
 
                 # Get version
                 version = None

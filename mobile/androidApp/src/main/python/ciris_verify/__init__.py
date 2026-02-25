@@ -77,11 +77,11 @@ def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str =
 
     # Map Rust levels to Python logging levels
     level_map = {
-        1: _logging.ERROR,    # ERROR
+        1: _logging.ERROR,  # ERROR
         2: _logging.WARNING,  # WARN
-        3: _logging.INFO,     # INFO
-        4: _logging.DEBUG,    # DEBUG
-        5: _logging.DEBUG,    # TRACE (Python has no TRACE, use DEBUG)
+        3: _logging.INFO,  # INFO
+        4: _logging.DEBUG,  # DEBUG
+        5: _logging.DEBUG,  # TRACE (Python has no TRACE, use DEBUG)
     }
 
     # Map level string to Rust level int
@@ -102,7 +102,7 @@ def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str =
     verifier.set_log_callback(log_callback, level=rust_level)
 
 
-__version__ = "0.9.4"
+__version__ = "0.9.5"
 __all__ = [
     "CIRISVerify",
     "MockCIRISVerify",

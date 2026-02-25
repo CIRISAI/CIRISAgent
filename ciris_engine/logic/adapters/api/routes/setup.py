@@ -263,7 +263,7 @@ def _load_device_auth_session() -> Optional[Dict[str, Any]]:
 
     try:
         with open(session_path, "r") as f:
-            session = json.load(f)
+            session: Dict[str, Any] = json.load(f)
 
         # Check if expired
         expires_at = session.get("expires_at", 0)
@@ -2081,12 +2081,8 @@ async def get_attestation_status(
     Returns:
         Cached AttestationResult or triggers a new attestation if cache is empty/expired
     """
-    from ciris_engine.logic.runtime.service_registry import ServiceRegistry
-    from ciris_engine.schemas.runtime.enums import ServiceType
-
-    # Get AuthenticationService from registry
-    registry = ServiceRegistry.get_instance()
-    auth_service = registry.get_service(ServiceType.WISE_AUTHORITY)
+    # Get AuthenticationService from app state
+    auth_service = getattr(request.app.state, "auth_service", None)
 
     if not auth_service or not hasattr(auth_service, "get_attestation_cache_status"):
         return SuccessResponse(
@@ -2164,7 +2160,7 @@ class AppAttestVerifyRequest(BaseModel):
 
 
 @router.get("/app-attest/nonce")
-async def get_app_attest_nonce() -> SuccessResponse:
+async def get_app_attest_nonce() -> SuccessResponse[Dict[str, Any]]:
     """Get a nonce for iOS App Attest verification.
 
     Calls CIRISVerify FFI -> registry GET /v1/integrity/ios/nonce.
@@ -2213,7 +2209,7 @@ async def get_app_attest_nonce() -> SuccessResponse:
                     result["error"] = f"FFI error code: {ret}"
                     return
 
-                nonce_bytes = ctypes.string_at(nonce_ptr.value, nonce_len.value)
+                nonce_bytes = ctypes.string_at(nonce_ptr.value, nonce_len.value)  # type: ignore[arg-type]
                 # ciris_verify_free takes a single pointer arg
                 lib.ciris_verify_free(ctypes.cast(nonce_ptr, ctypes.c_char_p))
 
@@ -2244,7 +2240,7 @@ async def get_app_attest_nonce() -> SuccessResponse:
 
 
 @router.post("/app-attest/verify")
-async def verify_app_attest(request: AppAttestVerifyRequest) -> SuccessResponse:
+async def verify_app_attest(request: AppAttestVerifyRequest) -> SuccessResponse[Dict[str, Any]]:
     """Verify an iOS App Attest attestation object.
 
     Calls CIRISVerify FFI -> registry POST /v1/integrity/ios/verify.
@@ -2308,7 +2304,7 @@ async def verify_app_attest(request: AppAttestVerifyRequest) -> SuccessResponse:
                     result["error"] = f"FFI error code: {ret}"
                     return
 
-                result_bytes = ctypes.string_at(result_ptr.value, result_len.value)
+                result_bytes = ctypes.string_at(result_ptr.value, result_len.value)  # type: ignore[arg-type]
                 # ciris_verify_free takes a single pointer arg
                 lib.ciris_verify_free(ctypes.cast(result_ptr, ctypes.c_char_p))
 

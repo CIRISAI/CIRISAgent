@@ -39,7 +39,7 @@ from .service import CIRISVerifyService, VerificationConfig  # noqa: F401
 # Alias for adapter loading code (looks for 'Adapter' class)
 Adapter = CIRISVerifyAdapter
 
-__version__ = "0.9.5"
+__version__ = "0.9.6"
 __all__ = [
     # Adapter exports
     "Adapter",

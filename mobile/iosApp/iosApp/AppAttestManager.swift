@@ -143,7 +143,7 @@ class AppAttestManager {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let body: [String: Any] = [
-            "attestation_object": attestationObject.base64EncodedString(),
+            "attestation": attestationObject.base64EncodedString(),
             "key_id": keyId,
             "nonce": nonce
         ]

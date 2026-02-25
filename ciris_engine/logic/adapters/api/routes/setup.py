@@ -2077,7 +2077,7 @@ async def get_attestation_status(
 
 class AppAttestVerifyRequest(BaseModel):
     """Request body for App Attest verification."""
-    attestation_object: str = Field(..., description="Base64-encoded CBOR attestation from DCAppAttestService")
+    attestation: str = Field(..., description="Base64-encoded CBOR attestation from DCAppAttestService")
     key_id: str = Field(..., description="Key ID from DCAppAttestService.generateKey()")
     nonce: str = Field(..., description="Nonce used when requesting the attestation")
 
@@ -2207,7 +2207,7 @@ async def verify_app_attest(request: AppAttestVerifyRequest) -> SuccessResponse:
 
                 # Build request JSON
                 req_json = json.dumps({
-                    "attestation_object": request.attestation_object,
+                    "attestation": request.attestation,
                     "key_id": request.key_id,
                     "nonce": request.nonce,
                 }).encode("utf-8")
@@ -3335,12 +3335,23 @@ async def get_verify_status(
                         loop.close()
 
                 if attestation_proof:
-                    # Extract platform info
+                    # Extract platform info from serde-tagged platform_attestation
+                    # v0.9.0+: keys are "Ios", "Android", "Tpm", "Software"
                     platform_attestation = attestation_proof.get("platform_attestation", {})
-                    if "Software" in platform_attestation:
-                        sw = platform_attestation["Software"]
-                        platform_os = sw.get("os", "unknown")
-                        platform_arch = sw.get("arch", "unknown")
+                    if isinstance(platform_attestation, dict):
+                        if "Ios" in platform_attestation:
+                            platform_os = "ios"
+                            platform_arch = "arm64"
+                        elif "Android" in platform_attestation:
+                            platform_os = "android"
+                            platform_arch = "arm64"
+                        elif "Software" in platform_attestation:
+                            sw = platform_attestation["Software"]
+                            platform_os = sw.get("os", "unknown")
+                            platform_arch = sw.get("arch", "unknown")
+                        elif "Tpm" in platform_attestation:
+                            platform_os = "linux"
+                            platform_arch = "x86_64"
                     logger.info(f"[verify-status] Attestation proof: os={platform_os}, arch={platform_arch}")
                 # Fallback: detect platform from hardware_type if attestation didn't provide it
                 if not platform_os and hardware_type:

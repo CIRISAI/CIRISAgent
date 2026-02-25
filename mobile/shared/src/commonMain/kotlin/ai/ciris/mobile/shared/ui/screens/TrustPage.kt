@@ -1065,10 +1065,13 @@ private fun buildL1ChecksInfo(status: VerifyStatusResponse): String {
 }
 
 private fun buildL2ChecksInfo(status: VerifyStatusResponse, deviceResult: DeviceAttestationResult?): String {
+    val isIos = status.platformOs?.lowercase() in listOf("ios", "ipados") ||
+        status.hardwareType?.contains("IOS", ignoreCase = true) == true
     val hwOk = status.hardwareBacked
     val playOk = (deviceResult as? DeviceAttestationResult.Success)?.verified == true || status.playIntegrityOk
     val passed = listOf(hwOk, playOk).count { it }
-    return "$passed/2 checks • HW: ${if (hwOk) "✓" else "○"} Play: ${if (playOk) "✓" else "○"}"
+    val attestLabel = if (isIos) "Attest" else "Play"
+    return "$passed/2 checks • HW: ${if (hwOk) "✓" else "○"} $attestLabel: ${if (playOk) "✓" else "○"}"
 }
 
 private fun buildL3ChecksInfo(status: VerifyStatusResponse): String {

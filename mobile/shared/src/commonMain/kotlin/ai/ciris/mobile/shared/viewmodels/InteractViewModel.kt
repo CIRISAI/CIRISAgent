@@ -425,14 +425,13 @@ class InteractViewModel(
             // Fetch trust status (partial mode for quick check)
             try {
                 val verifyStatus = apiClient.getVerifyStatus("partial")
-                val actualLevel = verifyStatus.calculateActualLevel()
                 _trustStatus.value = TrustStatus(
-                    maxLevel = actualLevel,  // Use actual achieved level, not max achievable
+                    maxLevel = verifyStatus.maxLevel,  // Use backend's authoritative level
                     isLoaded = verifyStatus.loaded,
                     keyStatus = verifyStatus.keyStatus,
                     attestationStatus = verifyStatus.attestationStatus
                 )
-                logDebug(method, "Trust: level=$actualLevel/5, keyStatus=${verifyStatus.keyStatus}")
+                logDebug(method, "Trust: level=${verifyStatus.maxLevel}/5, keyStatus=${verifyStatus.keyStatus}")
             } catch (e: Exception) {
                 logWarn(method, "Failed to fetch trust status: ${e.message}")
             }
@@ -449,7 +448,7 @@ class InteractViewModel(
             try {
                 val verifyStatus = apiClient.getVerifyStatus("partial")
                 _trustStatus.value = TrustStatus(
-                    maxLevel = verifyStatus.calculateActualLevel(),  // Use actual achieved level
+                    maxLevel = verifyStatus.maxLevel,  // Use backend's authoritative level
                     isLoaded = verifyStatus.loaded,
                     keyStatus = verifyStatus.keyStatus,
                     attestationStatus = verifyStatus.attestationStatus

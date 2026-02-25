@@ -273,9 +273,8 @@ private fun ErrorCard(error: String, onRetry: () -> Unit) {
 private fun TrustSummaryCard(
     status: VerifyStatusResponse
 ) {
-    // Use shared calculation for actual achieved level
-    // Play Integrity is part of CIRISVerify attestation, uses API's playIntegrityOk
-    val level = status.calculateActualLevel()
+    // Use backend's authoritative level calculation
+    val level = status.maxLevel
 
     // Check if current level has partial passes (for yellow state)
     val sourcesOk = (status.sourcesAgreeing ?: 0) >= 2

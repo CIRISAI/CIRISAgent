@@ -348,7 +348,7 @@ class VerifyStatusResponse(BaseModel):
     play_integrity_verdict: Optional[str] = Field(
         default=None, description="Play Integrity verdict (MEETS_STRONG_INTEGRITY, etc.)"
     )
-    max_level: int = Field(default=0, description="Maximum attestation level achieved (0-5)")
+    max_level: int = Field(default=0, description="Current attestation level achieved (0-5)")
     # Attestation mode
     attestation_mode: str = Field(default="partial", description="Attestation mode: 'full' or 'partial'")
     # Detailed attestation info (for expanded view)
@@ -2077,6 +2077,7 @@ async def get_attestation_status(
 
 class AppAttestVerifyRequest(BaseModel):
     """Request body for App Attest verification."""
+
     attestation: str = Field(..., description="Base64-encoded CBOR attestation from DCAppAttestService")
     key_id: str = Field(..., description="Key ID from DCAppAttestService.generateKey()")
     nonce: str = Field(..., description="Nonce used when requesting the attestation")
@@ -2114,9 +2115,9 @@ async def get_app_attest_nonce() -> SuccessResponse:
 
                 # Set argtypes/restype for the new FFI function
                 lib.ciris_verify_get_app_attest_nonce.argtypes = [
-                    ctypes.c_void_p,           # handle
+                    ctypes.c_void_p,  # handle
                     ctypes.POINTER(ctypes.c_void_p),  # nonce_json out
-                    ctypes.POINTER(ctypes.c_size_t),   # nonce_len out
+                    ctypes.POINTER(ctypes.c_size_t),  # nonce_len out
                 ]
                 lib.ciris_verify_get_app_attest_nonce.restype = ctypes.c_int
 
@@ -2195,22 +2196,24 @@ async def verify_app_attest(request: AppAttestVerifyRequest) -> SuccessResponse:
 
                 # Set argtypes/restype for the new FFI function
                 lib.ciris_verify_app_attest.argtypes = [
-                    ctypes.c_void_p,           # handle
-                    ctypes.c_char_p,           # request_json
-                    ctypes.c_size_t,           # request_len
+                    ctypes.c_void_p,  # handle
+                    ctypes.c_char_p,  # request_json
+                    ctypes.c_size_t,  # request_len
                     ctypes.POINTER(ctypes.c_void_p),  # result_json out
-                    ctypes.POINTER(ctypes.c_size_t),   # result_len out
+                    ctypes.POINTER(ctypes.c_size_t),  # result_len out
                 ]
                 lib.ciris_verify_app_attest.restype = ctypes.c_int
 
                 handle = verifier._handle
 
                 # Build request JSON
-                req_json = json.dumps({
-                    "attestation": request.attestation,
-                    "key_id": request.key_id,
-                    "nonce": request.nonce,
-                }).encode("utf-8")
+                req_json = json.dumps(
+                    {
+                        "attestation": request.attestation,
+                        "key_id": request.key_id,
+                        "nonce": request.nonce,
+                    }
+                ).encode("utf-8")
 
                 req_ptr = ctypes.c_char_p(req_json)
                 req_len = ctypes.c_size_t(len(req_json))
@@ -2329,9 +2332,8 @@ async def get_verify_status(
             import os
 
             is_android = os.environ.get("ANDROID_ROOT") is not None
-            is_ios = (
-                os.environ.get("CIRIS_IOS_FRAMEWORK_PATH") is not None
-                or "/var/mobile" in os.environ.get("CIRIS_HOME", "")
+            is_ios = os.environ.get("CIRIS_IOS_FRAMEWORK_PATH") is not None or "/var/mobile" in os.environ.get(
+                "CIRIS_HOME", ""
             )
             is_mobile = is_android or is_ios
             platform_name = "android" if is_android else ("ios" if is_ios else "other")

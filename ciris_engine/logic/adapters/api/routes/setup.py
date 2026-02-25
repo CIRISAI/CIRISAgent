@@ -39,11 +39,12 @@ logger = logging.getLogger(__name__)
 # Module-level CIRISVerify singleton so App Attest endpoints and verify-status
 # share the same FFI handle. The device attestation cache lives in the handle,
 # so all calls must go through the same instance.
-_shared_verifier = None
-_shared_verifier_lock = None
+_shared_verifier: Any = None
+_shared_verifier_lock: Any = None
+_rust_log_cb: Any = None  # Prevent GC of ctypes callback
 
 
-def _get_shared_verifier():
+def _get_shared_verifier() -> Any:
     """Get or create the shared CIRISVerify instance (thread-safe).
 
     On iOS the CIRISVerify constructor calls into Rust FFI which needs an 8MB
@@ -63,9 +64,9 @@ def _get_shared_verifier():
 
                 # CIRISVerify() triggers Rust/Tokio init which needs 8MB stack on iOS.
                 # Spawn a dedicated thread so callers from async handlers don't crash.
-                holder: list = [None, None]  # [verifier, error]
+                holder: list[Any] = [None, None]  # [verifier, error]
 
-                def _create():
+                def _create() -> None:
                     try:
                         holder[0] = CIRISVerify(skip_integrity_check=True)
                     except Exception as exc:
@@ -88,12 +89,13 @@ def _get_shared_verifier():
                 # Register log callback so Rust tracing flows to Python logging
                 try:
                     import ctypes
+
                     lib = _shared_verifier._lib
                     if lib and hasattr(lib, "ciris_verify_set_log_callback"):
                         LOGCB = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p)
                         _level_map = {1: 40, 2: 30, 3: 20, 4: 10, 5: 5}  # ERROR,WARN,INFO,DEBUG,TRACE
 
-                        def _rust_log(level, target, message):
+                        def _rust_log(level: int, target: Any, message: Any) -> None:
                             try:
                                 t = target.decode("utf-8", errors="replace") if target else "ciris_verify"
                                 m = message.decode("utf-8", errors="replace") if message else ""
@@ -102,7 +104,7 @@ def _get_shared_verifier():
                             except Exception:
                                 pass
 
-                        # prevent GC by stashing on the module
+                        # prevent GC by stashing on the module (declared at module level)
                         global _rust_log_cb
                         _rust_log_cb = LOGCB(_rust_log)
                         lib.ciris_verify_set_log_callback(_rust_log_cb)
@@ -115,7 +117,7 @@ def _get_shared_verifier():
         return _shared_verifier
 
 
-def _fetch_manifest_files_from_registry(version: str) -> Optional[set]:
+def _fetch_manifest_files_from_registry(version: str) -> Optional[set[str]]:
     """Fetch manifest file list from registry.
 
     Args:
@@ -155,7 +157,7 @@ def _fetch_manifest_files_from_registry(version: str) -> Optional[set]:
     return None
 
 
-def _find_unexpected_python_files(agent_root: str, manifest_files: set) -> tuple[List[str], List[str]]:
+def _find_unexpected_python_files(agent_root: str, manifest_files: set[str]) -> tuple[List[str], List[str]]:
     """Find Python files that exist on disk but aren't in the manifest.
 
     Args:
@@ -166,8 +168,8 @@ def _find_unexpected_python_files(agent_root: str, manifest_files: set) -> tuple
         Tuple of (unexpected files, expected_excluded files) - both max 10 items
         expected_excluded are known files like ciris_verify/ wrapper that aren't in manifest
     """
-    unexpected = []
-    expected_excluded = []
+    unexpected: list[str] = []
+    expected_excluded: list[str] = []
     # Files to completely ignore (not count at all)
     ignore_patterns = {".env", "__pycache__", ".pyc", "test_", "_test.py", "conftest.py", "logs/", ".db"}
     # Files that are expected to be missing from manifest (report but don't fail)
@@ -211,7 +213,7 @@ def _find_unexpected_python_files(agent_root: str, manifest_files: set) -> tuple
     return unexpected, expected_excluded
 
 
-def _find_missing_manifest_files(agent_root: str, manifest_files: set, max_files: int = 50) -> List[str]:
+def _find_missing_manifest_files(agent_root: str, manifest_files: set[str], max_files: int = 50) -> List[str]:
     """Find files that are in the manifest but not on disk.
 
     Args:
@@ -2176,13 +2178,13 @@ async def get_app_attest_nonce() -> SuccessResponse:
             detail="CIRISVerify not available",
         )
 
-    def _get_nonce():
+    def _get_nonce() -> dict[str, Any]:
         import ctypes
         import threading
 
-        result = {}
+        result: dict[str, Any] = {}
 
-        def _inner():
+        def _inner() -> None:
             try:
                 lib = verifier._lib
                 if not lib or not hasattr(lib, "ciris_verify_get_app_attest_nonce"):
@@ -2255,13 +2257,13 @@ async def verify_app_attest(request: AppAttestVerifyRequest) -> SuccessResponse:
             detail="CIRISVerify not available",
         )
 
-    def _verify():
+    def _verify() -> dict[str, Any]:
         import ctypes
         import threading
 
-        result = {}
+        result: dict[str, Any] = {}
 
-        def _inner():
+        def _inner() -> None:
             try:
                 lib = verifier._lib
                 if not lib or not hasattr(lib, "ciris_verify_app_attest"):
@@ -2575,7 +2577,7 @@ async def get_verify_status(
                         loop.close()
 
                     # Extract source details from CIRISVerify response
-                    source_errors: Dict[str, Dict[str, str]] = {}
+                    source_errors = {}
                     if hasattr(license_status, "source_details"):
                         sd = license_status.source_details
                         dns_us_ok = getattr(sd, "dns_us_reachable", False)
@@ -2899,8 +2901,8 @@ async def get_verify_status(
                                 # Make failure reason more informative with file names
                                 # v0.8.4+: Fetch manifest and compute file lists for UI
                                 manifest_files = _fetch_manifest_files_from_registry(agent_version) or set()
-                                unexpected_files: list = []
-                                expected_excluded: list = []
+                                unexpected_files: list[str] = []
+                                expected_excluded: list[str] = []
                                 if manifest_files:
                                     # Find missing files (in manifest but not on device filesystem)
                                     raw_missing_list = _find_missing_manifest_files(
@@ -2934,15 +2936,15 @@ async def get_verify_status(
                                     )
 
                                     # Separate into true missing vs mobile-excluded
-                                    true_missing = []
-                                    mobile_excluded_files = []
-                                    for f in raw_missing_list:
-                                        if f in python_covered_paths:
+                                    true_missing: list[str] = []
+                                    mobile_excluded_files: list[str] = []
+                                    for filepath in raw_missing_list:
+                                        if filepath in python_covered_paths:
                                             continue  # Covered by Python module hashes
-                                        if any(f.startswith(prefix) for prefix in mobile_excluded_prefixes):
-                                            mobile_excluded_files.append(f)
+                                        if any(filepath.startswith(prefix) for prefix in mobile_excluded_prefixes):
+                                            mobile_excluded_files.append(filepath)
                                         else:
-                                            true_missing.append(f)
+                                            true_missing.append(filepath)
 
                                     files_missing_count = len(true_missing)
                                     files_missing_list = true_missing[:50]  # Limit for UI
@@ -3181,9 +3183,13 @@ async def get_verify_status(
                         # Field was renamed: device_integrity → device_attestation
                         device_int = None
                         if isinstance(attestation_result, dict):
-                            device_int = attestation_result.get("device_attestation") or attestation_result.get("device_integrity")
+                            device_int = attestation_result.get("device_attestation") or attestation_result.get(
+                                "device_integrity"
+                            )
                         else:
-                            device_int = getattr(attestation_result, "device_attestation", None) or getattr(attestation_result, "device_integrity", None)
+                            device_int = getattr(attestation_result, "device_attestation", None) or getattr(
+                                attestation_result, "device_integrity", None
+                            )
                         logger.info(f"[verify-status] device_attestation raw: {device_int}")
 
                         if device_int:
@@ -3245,7 +3251,9 @@ async def get_verify_status(
                         sources_status = ""
                         if sources_data:
                             if isinstance(sources_data, dict):
-                                sources_status = sources_data.get("validation_status", sources_data.get("status", ""))
+                                sources_status = (
+                                    sources_data.get("validation_status", sources_data.get("status", "")) or ""
+                                )
                             else:
                                 sources_status = getattr(sources_data, "validation_status", "") or getattr(
                                     sources_data, "status", ""
@@ -3313,7 +3321,7 @@ async def get_verify_status(
             # Triple audit system: SQLite (ciris_audit.db), JSONL (audit_logs.jsonl), Graph (memory)
             # v0.6.16+: Use CIRISVerify verify_audit_trail for cryptographic verification
             audit_ok = False
-            audit_details: dict = {"sources_checked": [], "sources_valid": []}
+            audit_details: dict[str, Any] = {"sources_checked": [], "sources_valid": []}
             try:
                 data_dir = os.path.expanduser(os.environ.get("CIRIS_DATA_DIR", "."))
                 audit_db_path = os.path.join(data_dir, "ciris_audit.db")

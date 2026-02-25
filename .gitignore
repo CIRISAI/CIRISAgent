@@ -125,3 +125,4 @@ benchmark_results/
 .gradle/
 */.gradle/
 **/.gradle/
+agent_signing.key

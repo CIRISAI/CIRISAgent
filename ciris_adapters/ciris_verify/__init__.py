@@ -12,7 +12,6 @@ Usage:
 
 # Re-export from the ciris-verify PyPI package for convenience
 from ciris_verify import (  # noqa: F401
-    BinaryIntegrityStatus,
     BinaryNotFoundError,
     BinaryTamperedError,
     CapabilityCheckResult,
@@ -20,7 +19,6 @@ from ciris_verify import (  # noqa: F401
     CIRISVerifyError,
     CommunicationError,
     DisclosureSeverity,
-    FileCheckStatus,
     FileIntegrityResult,
     HardwareType,
     LicenseDetails,
@@ -29,8 +27,6 @@ from ciris_verify import (  # noqa: F401
     LicenseTier,
     MandatoryDisclosure,
     MockCIRISVerify,
-    PythonIntegrityResult,
-    PythonModuleHashes,
     TimeoutError,
     ValidationStatus,
     VerificationFailedError,
@@ -61,12 +57,8 @@ __all__ = [
     "LicenseStatusResponse",
     "CapabilityCheckResult",
     "FileIntegrityResult",
-    "FileCheckStatus",
-    "BinaryIntegrityStatus",
     "HardwareType",
     "ValidationStatus",
-    "PythonModuleHashes",
-    "PythonIntegrityResult",
     "CIRISVerifyError",
     "BinaryNotFoundError",
     "BinaryTamperedError",

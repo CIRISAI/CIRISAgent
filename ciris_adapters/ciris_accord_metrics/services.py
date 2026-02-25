@@ -1160,7 +1160,7 @@ class AccordMetricsService:
             # attestation_context is REQUIRED at all 3 levels per FSD-001
             # cognitive_state might be at top level or in snapshot
             cognitive_state = event.get("cognitive_state") or snapshot.get("cognitive_state")
-            data: Dict[str, Any] = {
+            data = {
                 "agent_name": self._agent_name,
                 "cognitive_state": cognitive_state,
                 # CIRISVerify attestation - REQUIRED at all levels

@@ -1800,19 +1800,17 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                             if hashes_path.exists():
                                 with open(hashes_path) as f:
                                     hashes_data = json.load(f)
-                                # Import PythonModuleHashes type
-                                from ciris_verify.types import PythonModuleHashes
-
-                                python_hashes = PythonModuleHashes(
-                                    total_hash=hashes_data.get("total_hash", ""),
-                                    module_hashes=hashes_data.get("module_hashes", {}),
-                                    module_count=hashes_data.get("modules_hashed", 0),
-                                    agent_version=hashes_data.get("agent_version", ""),
-                                    computed_at=hashes_data.get("computed_at", 0),
-                                )
+                                # Use dict-like object for python hashes
+                                python_hashes = {
+                                    "total_hash": hashes_data.get("total_hash", ""),
+                                    "module_hashes": hashes_data.get("module_hashes", {}),
+                                    "module_count": hashes_data.get("modules_hashed", 0),
+                                    "agent_version": hashes_data.get("agent_version", ""),
+                                    "computed_at": hashes_data.get("computed_at", 0),
+                                }
                                 agent_version = hashes_data.get("agent_version")
                                 logger.info(
-                                    f"[attestation] Loaded {python_hashes.module_count} "
+                                    f"[attestation] Loaded {python_hashes['module_count']} "
                                     f"module hashes from {hashes_path}"
                                 )
                             else:
@@ -1939,7 +1937,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             AttestationCacheStatus with cache metadata
         """
         has_cached = self._attestation_cache is not None
-        cached_at = self._attestation_cache.cached_at if has_cached else None
+        cached_at = self._attestation_cache.cached_at if self._attestation_cache else None
         cache_age = None
         cache_expired = False
         max_level = None

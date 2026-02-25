@@ -263,7 +263,7 @@ async def load_post_setup_adapters_for_resume(
             adapter_config = AdapterConfig(adapter_type=adapter_type)
 
             # Create and register adapter
-            adapter_instance = adapter_class(runtime, context=context, adapter_config=adapter_config.settings)
+            adapter_instance = adapter_class(runtime, context=context, adapter_config=adapter_config.settings)  # type: ignore[call-arg]
             runtime.adapters.append(adapter_instance)
 
             # Register adapter services with buses

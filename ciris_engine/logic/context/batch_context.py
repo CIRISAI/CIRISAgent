@@ -24,12 +24,15 @@ async def _get_attestation_summary() -> Optional[str]:
     "Level 5/5 | ✓Binary ✓Environment ✓Registry ✓FileIntegrity ✓Audit"
     """
     try:
+        import secrets
+
         from ciris_verify import CIRISVerify
 
         cv = CIRISVerify(skip_integrity_check=True)
 
         # Get attestation result (uses cached data if available)
-        result = cv.run_attestation_sync()
+        challenge_nonce = secrets.token_bytes(32)
+        result = cv.export_attestation_sync(challenge_nonce)
         if not result:
             return None
 

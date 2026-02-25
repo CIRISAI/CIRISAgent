@@ -99,7 +99,7 @@ class CIRISVerifyService:
                 logger.debug(log_msg)
 
         try:
-            self._client.set_log_callback(log_callback, level=callback_level)
+            self._client.set_log_callback(log_callback, level=callback_level)  # type: ignore[attr-defined]
             self._log_callback_enabled = True
             logger.debug("CIRISVerify log callback enabled at level %d", callback_level)
         except Exception as e:
@@ -144,7 +144,7 @@ class CIRISVerifyService:
         # Clear log callback before destroying client
         if self._client and self._log_callback_enabled:
             try:
-                self._client.set_log_callback(None)
+                self._client.set_log_callback(None)  # type: ignore[attr-defined]
             except Exception:
                 pass
             self._log_callback_enabled = False

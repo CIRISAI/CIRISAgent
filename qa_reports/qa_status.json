@@ -1,78 +1,78 @@
 {
-  "last_updated": "2026-02-25T14:38:10.298057+00:00",
+  "last_updated": "2026-02-25T15:42:59.926564+00:00",
   "version": "2.0.0-beta",
   "modules": {
     "_comment_core": "=== CORE API MODULES ===",
     "auth": {
-      "last_run": "2026-02-25T14:38:10.298032+00:00",
-      "passed": 3,
-      "failed": 0,
-      "total": 3,
-      "status": "passing",
-      "duration_seconds": 0.64,
-      "context": "Tests authentication system including login with username/password, JWT token generation/validation, token refresh, and logout. Validates OAuth integration readiness and API key authentication."
-    },
-    "telemetry": {
-      "last_run": "2026-02-24T15:14:41.735972+00:00",
-      "passed": 4,
-      "failed": 0,
-      "total": 4,
-      "status": "passing",
-      "duration_seconds": 19.55,
-      "context": "Tests telemetry collection and aggregation including unified metrics endpoint, service health status for all 22 core services, TSDB storage, and metrics export formats (OTLP, Prometheus)."
-    },
-    "agent": {
-      "last_run": "2026-02-24T15:14:15.578600+00:00",
-      "passed": 8,
-      "failed": 0,
-      "total": 8,
-      "status": "passing",
-      "duration_seconds": 77.66,
-      "context": "Tests agent interaction endpoints including message submission, response retrieval, conversation history, queue status, thought processing, and the H3ERE reasoning pipeline integration."
-    },
-    "system": {
-      "last_run": "2026-02-25T14:38:02.124596+00:00",
-      "passed": 3,
-      "failed": 2,
-      "total": 5,
-      "status": "failing",
-      "duration_seconds": 9.87,
-      "context": "Tests system management endpoints including health checks, runtime control (pause/resume), configuration management, emergency shutdown, and service status monitoring."
-    },
-    "memory": {
-      "last_run": "2026-02-18T17:32:07.921553+00:00",
-      "passed": 6,
-      "failed": 0,
-      "total": 6,
-      "status": "passing",
-      "duration_seconds": 13.47,
-      "context": "Tests graph memory system including memorize/recall/forget operations, node and relationship management, user-scoped memory isolation, and query API with filtering."
-    },
-    "audit": {
-      "last_run": "2026-02-18T17:32:07.921967+00:00",
+      "last_run": "2026-02-25T15:42:59.915285+00:00",
       "passed": 5,
       "failed": 0,
       "total": 5,
       "status": "passing",
-      "duration_seconds": 13.47,
+      "duration_seconds": 14.97,
+      "context": "Tests authentication system including login with username/password, JWT token generation/validation, token refresh, and logout. Validates OAuth integration readiness and API key authentication."
+    },
+    "telemetry": {
+      "last_run": "2026-02-25T15:42:59.923841+00:00",
+      "passed": 9,
+      "failed": 0,
+      "total": 9,
+      "status": "passing",
+      "duration_seconds": 14.97,
+      "context": "Tests telemetry collection and aggregation including unified metrics endpoint, service health status for all 22 core services, TSDB storage, and metrics export formats (OTLP, Prometheus)."
+    },
+    "agent": {
+      "last_run": "2026-02-25T15:42:59.924273+00:00",
+      "passed": 12,
+      "failed": 0,
+      "total": 12,
+      "status": "passing",
+      "duration_seconds": 14.97,
+      "context": "Tests agent interaction endpoints including message submission, response retrieval, conversation history, queue status, thought processing, and the H3ERE reasoning pipeline integration."
+    },
+    "system": {
+      "last_run": "2026-02-25T15:42:59.924602+00:00",
+      "passed": 23,
+      "failed": 0,
+      "total": 23,
+      "status": "passing",
+      "duration_seconds": 14.97,
+      "context": "Tests system management endpoints including health checks, runtime control (pause/resume), configuration management, emergency shutdown, and service status monitoring."
+    },
+    "memory": {
+      "last_run": "2026-02-25T15:42:59.924898+00:00",
+      "passed": 6,
+      "failed": 0,
+      "total": 6,
+      "status": "passing",
+      "duration_seconds": 14.97,
+      "context": "Tests graph memory system including memorize/recall/forget operations, node and relationship management, user-scoped memory isolation, and query API with filtering."
+    },
+    "audit": {
+      "last_run": "2026-02-25T15:42:59.925367+00:00",
+      "passed": 5,
+      "failed": 0,
+      "total": 5,
+      "status": "passing",
+      "duration_seconds": 14.97,
       "context": "Tests cryptographic audit trail including Ed25519 signed entries, hash chain integrity, event querying with filters, and immutable decision ledger compliance."
     },
     "tools": {
-      "last_run": "2026-02-18T17:32:07.922441+00:00",
+      "last_run": "2026-02-25T15:42:59.925679+00:00",
       "passed": 2,
       "failed": 0,
       "total": 2,
       "status": "passing",
-      "duration_seconds": 13.47,
+      "duration_seconds": 14.97,
       "context": "Tests tool registration and discovery via ToolBus including listing available tools, tool metadata retrieval, and tool service integration from adapters."
     },
     "guidance": {
-      "last_run": "2026-02-18T17:32:07.923187+00:00",
+      "last_run": "2026-02-25T15:42:59.925972+00:00",
       "passed": 2,
       "failed": 0,
       "total": 2,
       "status": "passing",
-      "duration_seconds": 13.47,
+      "duration_seconds": 14.97,
       "context": "Tests WiseAuthority guidance system including deferral request handling, guidance history retrieval, human oversight escalation, and WA certificate validation."
     },
     "consent": {
@@ -139,12 +139,12 @@
       "context": "Tests complete billing workflow with OAuth user including initial 3-credit check, credit deduction after messages (with cache expiry waits), credit exhaustion flow, purchase_required flag validation, and Stripe payment initiation with status checks."
     },
     "multi_occurrence": {
-      "last_run": "2026-02-18T17:32:07.923869+00:00",
+      "last_run": "2026-02-25T15:42:59.926249+00:00",
       "passed": 4,
       "failed": 0,
       "total": 4,
       "status": "passing",
-      "duration_seconds": 13.47,
+      "duration_seconds": 14.97,
       "context": "Tests horizontal scaling with multiple agent occurrences including shared task coordination, atomic claiming with deterministic IDs, wakeup/shutdown synchronization, and PostgreSQL backend compatibility."
     },
     "message_id_debug": {
@@ -382,12 +382,12 @@
       "context": "Tests adaptive filtering system including WiseBus capability restrictions, prohibited domain blocking (medical, financial, legal, weapons), severity level enforcement, and ethical conscience validation gates."
     },
     "sdk": {
-      "last_run": "2026-02-18T17:32:07.924200+00:00",
+      "last_run": "2026-02-25T15:42:59.926557+00:00",
       "passed": 8,
       "failed": 0,
       "total": 8,
       "status": "passing",
-      "duration_seconds": 13.47,
+      "duration_seconds": 14.97,
       "context": "Tests CIRIS Python SDK client library including API client initialization, authentication, agent interaction, memory operations, telemetry queries, and all SDK-wrapped endpoints."
     },
     "extended_api": {
@@ -427,12 +427,12 @@
       "context": "Tests the H3ERE ethical reasoning pipeline's single-step debugging functionality by pausing, stepping through processing, creating tasks, and verifying queue states with cleanup guarantees."
     },
     "streaming": {
-      "last_run": "2026-02-18T17:32:07.911410+00:00",
-      "passed": 2,
-      "failed": 0,
+      "last_run": "2026-02-25T15:42:59.914586+00:00",
+      "passed": 1,
+      "failed": 1,
       "total": 2,
-      "status": "passing",
-      "duration_seconds": 13.47,
+      "status": "failing",
+      "duration_seconds": 14.97,
       "context": "Validates SSE streaming of the 7 core H3ERE reasoning events (thought_start through action_result) with comprehensive schema validation, duplicate detection, audit trail verification, and resource tracking."
     },
     "api_full": {

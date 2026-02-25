@@ -2787,7 +2787,7 @@ async def get_verify_status(
                                         hashes_data = json.load(f)
                                     # Import PythonModuleHashes type
                                     try:
-                                        from ciris_verify.types import PythonModuleHashes
+                                        from ciris_verify.types import PythonModuleHashes  # type: ignore[attr-defined]
 
                                         python_hashes_obj = PythonModuleHashes(
                                             total_hash=hashes_data.get("total_hash", ""),

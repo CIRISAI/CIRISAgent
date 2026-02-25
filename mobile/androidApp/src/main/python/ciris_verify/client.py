@@ -536,18 +536,25 @@ class CIRISVerify:
     def __del__(self):
         """Clean up resources."""
         # Clear log callback first to prevent calls during destruction
-        if self._active_log_callback and self._lib and self._has_log_callback_support:
+        # Use getattr to handle partial initialization
+        if getattr(self, "_has_log_callback_support", False) and getattr(self, "_lib", None):
             try:
-                self._lib.ciris_verify_set_log_callback(None)
+                # Pass null function pointer to disable callback
+                log_cb_type = getattr(self, "_log_callback_type", None)
+                if log_cb_type:
+                    null_callback = ctypes.cast(None, log_cb_type)
+                    self._lib.ciris_verify_set_log_callback(null_callback)
             except Exception:
                 pass
+        # Clear the reference after FFI call
+        if hasattr(self, "_active_log_callback"):
             self._active_log_callback = None
-        if self._handle and self._lib:
+        if getattr(self, "_handle", None) and getattr(self, "_lib", None):
             try:
                 self._lib.ciris_verify_destroy(self._handle)
             except Exception:
                 pass
-        if self._executor:
+        if getattr(self, "_executor", None):
             self._executor.shutdown(wait=False)
 
     def set_log_callback(self, callback=None, level: int = 3):
@@ -576,7 +583,9 @@ class CIRISVerify:
             return
 
         if callback is None:
-            self._lib.ciris_verify_set_log_callback(None)
+            # Pass null function pointer to disable callback
+            null_callback = ctypes.cast(None, self._log_callback_type)
+            self._lib.ciris_verify_set_log_callback(null_callback)
             self._active_log_callback = None
             return
 

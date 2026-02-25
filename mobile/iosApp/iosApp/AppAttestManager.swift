@@ -5,11 +5,17 @@ import Foundation
 /// Manages Apple App Attest for hardware-backed device attestation.
 /// iOS equivalent of PlayIntegrityManager on Android.
 ///
-/// Flow:
-/// 1. Get nonce from backend (which calls CIRISVerify FFI → registry)
+/// Results are cached in UserDefaults with a 24h TTL to:
+/// - Avoid slamming the registry on crash loops
+/// - Skip redundant attestation on normal restarts
+/// - Persist across app launches
+///
+/// Flow (only if cache is stale/missing):
+/// 1. Get nonce from backend (CIRISVerify FFI → registry)
 /// 2. Generate key via DCAppAttestService
 /// 3. Attest key with nonce hash → Apple returns CBOR attestation object
 /// 4. Send attestation to backend for verification (CIRISVerify FFI → registry)
+/// 5. Cache result in UserDefaults
 class AppAttestManager {
 
     static let shared = AppAttestManager()
@@ -17,9 +23,28 @@ class AppAttestManager {
     private let service = DCAppAttestService.shared
     private var keyId: String?
 
+    // Cache keys
+    private static let cacheResultKey = "ciris_app_attest_result"
+    private static let cacheTimestampKey = "ciris_app_attest_timestamp"
+    private static let keyIdKey = "ciris_app_attest_key_id"
+    private static let cacheTTL: TimeInterval = 24 * 60 * 60  // 24 hours
+
+    /// In-memory cached result for the current session
+    private var cachedResult: AppAttestResult?
+
+    private static let cachedBuildKey = "ciris_app_attest_build"
+
     private init() {
-        // Restore saved key ID if available
-        keyId = UserDefaults.standard.string(forKey: "ciris_app_attest_key_id")
+        keyId = UserDefaults.standard.string(forKey: Self.keyIdKey)
+
+        // Clear cache when app build changes so new code gets a fresh attestation
+        let currentBuild = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
+        let cachedBuild = UserDefaults.standard.string(forKey: Self.cachedBuildKey) ?? ""
+        if currentBuild != cachedBuild {
+            NSLog("[AppAttest] Build changed (\(cachedBuild) → \(currentBuild)), clearing cache")
+            clearCache()
+            UserDefaults.standard.set(currentBuild, forKey: Self.cachedBuildKey)
+        }
     }
 
     /// Check if App Attest is supported on this device.
@@ -27,12 +52,54 @@ class AppAttestManager {
         return service.isSupported
     }
 
-    /// Perform full App Attest attestation.
-    /// Returns a result struct matching the KMP DeviceAttestationResult pattern.
+    /// Get cached result if available and fresh (< 24h old).
+    /// Returns nil if cache is stale or missing.
+    func getCachedResult() -> AppAttestResult? {
+        // Check in-memory cache first
+        if let cached = cachedResult {
+            return cached
+        }
+
+        // Check persistent cache
+        let defaults = UserDefaults.standard
+        let timestamp = defaults.double(forKey: Self.cacheTimestampKey)
+        guard timestamp > 0 else { return nil }
+
+        let age = Date().timeIntervalSince1970 - timestamp
+        guard age < Self.cacheTTL else {
+            NSLog("[AppAttest] Cache expired (age=%.0fs, ttl=%.0fs)", age, Self.cacheTTL)
+            return nil
+        }
+
+        guard let data = defaults.data(forKey: Self.cacheResultKey),
+              let result = try? JSONDecoder().decode(AppAttestResult.self, from: data) else {
+            return nil
+        }
+
+        NSLog("[AppAttest] Using cached result (age=%.0fs): verified=%d", age, result.verified)
+        cachedResult = result
+        return result
+    }
+
+    /// Perform App Attest, using cache if available.
+    /// Safe to call on every startup — will no-op if cache is fresh.
+    func attestDeviceIfNeeded() async -> AppAttestResult {
+        // Return cached result if fresh
+        if let cached = getCachedResult() {
+            return cached
+        }
+
+        // No cache or stale — do full attestation
+        return await attestDevice()
+    }
+
+    /// Perform full App Attest attestation (bypasses cache).
     func attestDevice() async -> AppAttestResult {
         guard isSupported else {
             NSLog("[AppAttest] Not supported on this device")
-            return AppAttestResult(verified: false, error: "App Attest not supported")
+            let result = AppAttestResult(verified: false, error: "App Attest not supported")
+            cacheResult(result)
+            return result
         }
 
         NSLog("[AppAttest] Starting attestation flow...")
@@ -44,7 +111,9 @@ class AppAttestManager {
             NSLog("[AppAttest] Got nonce: \(nonce.prefix(20))...")
         } catch {
             NSLog("[AppAttest] Failed to get nonce: \(error)")
-            return AppAttestResult(verified: false, error: "Failed to get nonce: \(error.localizedDescription)")
+            let result = AppAttestResult(verified: false, error: "Failed to get nonce: \(error.localizedDescription)")
+            cacheResult(result)
+            return result
         }
 
         // Step 2: Generate key (or reuse existing)
@@ -54,13 +123,14 @@ class AppAttestManager {
             NSLog("[AppAttest] Using key: \(attestKeyId.prefix(16))...")
         } catch {
             NSLog("[AppAttest] Failed to generate key: \(error)")
-            return AppAttestResult(verified: false, error: "Failed to generate key: \(error.localizedDescription)")
+            let result = AppAttestResult(verified: false, error: "Failed to generate key: \(error.localizedDescription)")
+            cacheResult(result)
+            return result
         }
 
         // Step 3: Attest key with nonce hash
         let attestationObject: Data
         do {
-            // DCAppAttestService expects SHA256 hash of the challenge
             let nonceData = Data(nonce.utf8)
             let hash = SHA256.hash(data: nonceData)
             let clientDataHash = Data(hash)
@@ -71,8 +141,10 @@ class AppAttestManager {
             NSLog("[AppAttest] attestKey failed: \(error)")
             // Key may be compromised, clear it
             keyId = nil
-            UserDefaults.standard.removeObject(forKey: "ciris_app_attest_key_id")
-            return AppAttestResult(verified: false, error: "attestKey failed: \(error.localizedDescription)")
+            UserDefaults.standard.removeObject(forKey: Self.keyIdKey)
+            let result = AppAttestResult(verified: false, error: "attestKey failed: \(error.localizedDescription)")
+            cacheResult(result)
+            return result
         }
 
         // Step 4: Send to backend for verification
@@ -83,11 +155,42 @@ class AppAttestManager {
                 nonce: nonce
             )
             NSLog("[AppAttest] Verification result: verified=\(result.verified)")
+            cacheResult(result)
             return result
         } catch {
             NSLog("[AppAttest] Backend verification failed: \(error)")
-            return AppAttestResult(verified: false, error: "Verification failed: \(error.localizedDescription)")
+            let result = AppAttestResult(verified: false, error: "Verification failed: \(error.localizedDescription)")
+            cacheResult(result)
+            return result
         }
+    }
+
+    // MARK: - Cache
+
+    private func cacheResult(_ result: AppAttestResult) {
+        cachedResult = result
+        // Only persist successful results for 24h.
+        // Failed results stay in memory for this session only — next
+        // launch will retry (prevents 24h lockout on transient errors).
+        guard result.verified else {
+            NSLog("[AppAttest] Not persisting failed result (memory-only): \(result.error ?? "unknown")")
+            return
+        }
+        let defaults = UserDefaults.standard
+        if let data = try? JSONEncoder().encode(result) {
+            defaults.set(data, forKey: Self.cacheResultKey)
+            defaults.set(Date().timeIntervalSince1970, forKey: Self.cacheTimestampKey)
+            NSLog("[AppAttest] Cached successful result to UserDefaults")
+        }
+    }
+
+    /// Clear cached result (e.g., on logout or manual refresh).
+    func clearCache() {
+        cachedResult = nil
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: Self.cacheResultKey)
+        defaults.removeObject(forKey: Self.cacheTimestampKey)
+        NSLog("[AppAttest] Cache cleared")
     }
 
     // MARK: - Private helpers
@@ -98,13 +201,12 @@ class AppAttestManager {
         }
         let newKeyId = try await service.generateKey()
         keyId = newKeyId
-        UserDefaults.standard.set(newKeyId, forKey: "ciris_app_attest_key_id")
+        UserDefaults.standard.set(newKeyId, forKey: Self.keyIdKey)
         NSLog("[AppAttest] Generated new key: \(newKeyId.prefix(16))...")
         return newKeyId
     }
 
     /// Get App Attest nonce from the local Python backend.
-    /// Backend calls CIRISVerify FFI → registry GET /v1/integrity/ios/nonce
     private func getNonceFromBackend() async throws -> String {
         let url = URL(string: "http://localhost:8080/v1/setup/app-attest/nonce")!
         var request = URLRequest(url: url, timeoutInterval: 15)
@@ -119,9 +221,6 @@ class AppAttestManager {
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-
-        // Response format: {"nonce": "...", "expires_at": "..."}
-        // Or wrapped: {"data": {"nonce": "...", "expires_at": "..."}}
         let nonceData = (json?["data"] as? [String: Any]) ?? json
         guard let nonce = nonceData?["nonce"] as? String else {
             throw AppAttestError.backendError("No nonce in response")
@@ -131,7 +230,6 @@ class AppAttestManager {
     }
 
     /// Verify attestation object with the local Python backend.
-    /// Backend calls CIRISVerify FFI → registry POST /v1/integrity/ios/verify
     private func verifyAttestationWithBackend(
         attestationObject: Data,
         keyId: String,
@@ -163,7 +261,6 @@ class AppAttestManager {
         let verified = resultData?["verified"] as? Bool ?? false
         let error = resultData?["error"] as? String
 
-        // Map to Play Integrity-style verdicts for UI compatibility
         let deviceEnv = resultData?["device_environment"] as? [String: Any]
         let isGenuine = deviceEnv?["is_genuine_device"] as? Bool ?? false
         let isUnmodified = deviceEnv?["is_unmodified_app"] as? Bool ?? false
@@ -189,8 +286,8 @@ class AppAttestManager {
     }
 }
 
-/// Result of App Attest attestation.
-struct AppAttestResult {
+/// Result of App Attest attestation. Codable for UserDefaults persistence.
+struct AppAttestResult: Codable {
     let verified: Bool
     var verdict: String = ""
     var isGenuineDevice: Bool = false

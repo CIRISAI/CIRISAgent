@@ -192,6 +192,11 @@ struct ContentView: View {
             // Check health endpoint
             if PythonBridge.checkHealth() {
                 NSLog("[ContentView] Server is healthy after \(attempts) seconds")
+
+                // Trigger App Attest at startup (before login) so the result
+                // gets cached in CIRISVerify's FFI handle for run_attestation L2
+                await triggerAppAttestAtStartup()
+
                 await MainActor.run {
                     pythonReady = true
                 }
@@ -202,6 +207,16 @@ struct ContentView: View {
         }
 
         initError = "Server did not become healthy within 30 seconds"
+    }
+
+    /// Trigger App Attest at startup so the CIRISVerify FFI handle caches the
+    /// device attestation result. Uses persistent cache (UserDefaults, 24h TTL)
+    /// to avoid slamming the registry on crash loops or normal restarts.
+    private func triggerAppAttestAtStartup() async {
+        NSLog("[ContentView] Checking App Attest cache...")
+        let manager = AppAttestManager.shared
+        let result = await manager.attestDeviceIfNeeded()
+        NSLog("[ContentView] App Attest: verified=\(result.verified), verdict=\(result.verdict), error=\(result.error ?? "none")")
     }
 
     private func loadStartupStatus() -> StartupStatus? {

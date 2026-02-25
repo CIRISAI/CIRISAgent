@@ -36,6 +36,84 @@ from ._common import (
 router = APIRouter(prefix="/setup", tags=["setup"])
 logger = logging.getLogger(__name__)
 
+# Module-level CIRISVerify singleton so App Attest endpoints and verify-status
+# share the same FFI handle. The device attestation cache lives in the handle,
+# so all calls must go through the same instance.
+_shared_verifier = None
+_shared_verifier_lock = None
+
+
+def _get_shared_verifier():
+    """Get or create the shared CIRISVerify instance (thread-safe).
+
+    On iOS the CIRISVerify constructor calls into Rust FFI which needs an 8MB
+    stack.  If the caller is already on a large-stack thread the construction
+    happens inline; otherwise we spawn a dedicated 8MB thread for it.
+    """
+    global _shared_verifier, _shared_verifier_lock
+    import threading
+
+    if _shared_verifier_lock is None:
+        _shared_verifier_lock = threading.Lock()
+
+    with _shared_verifier_lock:
+        if _shared_verifier is None:
+            try:
+                from ciris_verify import CIRISVerify
+
+                # CIRISVerify() triggers Rust/Tokio init which needs 8MB stack on iOS.
+                # Spawn a dedicated thread so callers from async handlers don't crash.
+                holder: list = [None, None]  # [verifier, error]
+
+                def _create():
+                    try:
+                        holder[0] = CIRISVerify(skip_integrity_check=True)
+                    except Exception as exc:
+                        holder[1] = exc
+
+                threading.stack_size(8 * 1024 * 1024)
+                t = threading.Thread(target=_create, daemon=True)
+                t.start()
+                t.join(timeout=30)
+                threading.stack_size(0)
+
+                if holder[1] is not None:
+                    raise holder[1]
+                if holder[0] is None:
+                    raise RuntimeError("CIRISVerify creation timed out")
+
+                _shared_verifier = holder[0]
+                logger.info("[setup] Created shared CIRISVerify instance (8MB stack thread)")
+
+                # Register log callback so Rust tracing flows to Python logging
+                try:
+                    import ctypes
+                    lib = _shared_verifier._lib
+                    if lib and hasattr(lib, "ciris_verify_set_log_callback"):
+                        LOGCB = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p)
+                        _level_map = {1: 40, 2: 30, 3: 20, 4: 10, 5: 5}  # ERROR,WARN,INFO,DEBUG,TRACE
+
+                        def _rust_log(level, target, message):
+                            try:
+                                t = target.decode("utf-8", errors="replace") if target else "ciris_verify"
+                                m = message.decode("utf-8", errors="replace") if message else ""
+                                py_level = _level_map.get(level, 20)
+                                logging.getLogger(f"ciris_verify.{t}").log(py_level, m)
+                            except Exception:
+                                pass
+
+                        # prevent GC by stashing on the module
+                        global _rust_log_cb
+                        _rust_log_cb = LOGCB(_rust_log)
+                        lib.ciris_verify_set_log_callback(_rust_log_cb)
+                        logger.info("[setup] Registered CIRISVerify Rust log callback")
+                except Exception as cb_err:
+                    logger.warning(f"[setup] Could not register log callback: {cb_err}")
+            except Exception as e:
+                logger.warning(f"[setup] Failed to create shared CIRISVerify: {e}")
+                return None
+        return _shared_verifier
+
 
 def _fetch_manifest_files_from_registry(version: str) -> Optional[set]:
     """Fetch manifest file list from registry.
@@ -2091,9 +2169,8 @@ async def get_app_attest_nonce() -> SuccessResponse:
     The iOS app uses this nonce as the challenge hash when calling
     DCAppAttestService.attestKey(_:clientDataHash:).
     """
-    try:
-        from ciris_verify import CIRISVerify
-    except ImportError:
+    verifier = _get_shared_verifier()
+    if not verifier:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="CIRISVerify not available",
@@ -2107,7 +2184,6 @@ async def get_app_attest_nonce() -> SuccessResponse:
 
         def _inner():
             try:
-                verifier = CIRISVerify(skip_integrity_check=True)
                 lib = verifier._lib
                 if not lib or not hasattr(lib, "ciris_verify_get_app_attest_nonce"):
                     result["error"] = "App Attest FFI not available (need CIRISVerify >= 0.8.19)"
@@ -2172,9 +2248,8 @@ async def verify_app_attest(request: AppAttestVerifyRequest) -> SuccessResponse:
     Calls CIRISVerify FFI -> registry POST /v1/integrity/ios/verify.
     The registry verifies the CBOR attestation against Apple's certificate chain.
     """
-    try:
-        from ciris_verify import CIRISVerify
-    except ImportError:
+    verifier = _get_shared_verifier()
+    if not verifier:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="CIRISVerify not available",
@@ -2188,7 +2263,6 @@ async def verify_app_attest(request: AppAttestVerifyRequest) -> SuccessResponse:
 
         def _inner():
             try:
-                verifier = CIRISVerify(skip_integrity_check=True)
                 lib = verifier._lib
                 if not lib or not hasattr(lib, "ciris_verify_app_attest"):
                     result["error"] = "App Attest FFI not available (need CIRISVerify >= 0.8.19)"
@@ -2303,12 +2377,12 @@ async def get_verify_status(
 
     def _get_verify_status_on_large_stack() -> None:
         try:
-            logger.info("[verify-status] Importing ciris_verify...")
-            from ciris_verify import CIRISVerify as CV
-
-            logger.info("[verify-status] Creating CIRISVerify instance...")
-            verifier = CV(skip_integrity_check=True)
-            logger.info("[verify-status] CIRISVerify instance created successfully")
+            logger.info("[verify-status] Getting shared CIRISVerify instance...")
+            verifier = _get_shared_verifier()
+            if verifier is None:
+                verify_result[1] = "CIRISVerify not available"
+                return
+            logger.info("[verify-status] Using shared CIRISVerify instance (device attestation cache shared)")
 
             # Get version - try both attribute and __version__
             version = None
@@ -2652,21 +2726,21 @@ async def get_verify_status(
                         import ciris_engine
 
                         agent_root = os.path.dirname(os.path.dirname(ciris_engine.__file__))
-                        print(f"[FILE_INTEGRITY_DEBUG] Mobile agent_root={agent_root}")
+                        logger.info(f"[verify-status] Mobile agent_root={agent_root}")
                     except Exception as e:
-                        print(f"[FILE_INTEGRITY_DEBUG] Mobile agent_root detection failed: {e}")
+                        logger.info(f"[verify-status] Mobile agent_root detection failed: {e}")
 
                 # v0.6.17+: Use unified attestation with registry-based manifest
                 has_run_attest = hasattr(verifier, "run_attestation_sync")
                 has_support_attr = hasattr(verifier, "has_run_attestation_support")
-                print(f"[FILE_INTEGRITY_DEBUG] has_run_attest={has_run_attest}, has_support_attr={has_support_attr}")
+                logger.info(f"[verify-status] has_run_attest={has_run_attest}, has_support_attr={has_support_attr}")
                 if has_run_attest or has_support_attr:
                     # has_run_attestation_support can be a method or property depending on version
                     has_support = getattr(verifier, "has_run_attestation_support", False)
                     if callable(has_support):
                         has_support = has_support()
-                    print(
-                        f"[FILE_INTEGRITY_DEBUG] has_support={has_support}, calling run_attestation_sync with agent_root={agent_root}"
+                    logger.info(
+                        f"[verify-status] has_support={has_support}, calling run_attestation_sync with agent_root={agent_root}"
                     )
                     if has_support:
                         logger.info(
@@ -2744,18 +2818,21 @@ async def get_verify_status(
                             expected_python_hash=expected_python_hash,
                         )
                         # Debug: print to logcat
-                        print(f"[FILE_INTEGRITY_DEBUG] run_attestation_sync returned: type={type(attestation_result)}")
+                        logger.info(f"[verify-status] run_attestation_sync returned: type={type(attestation_result)}")
                         if isinstance(attestation_result, dict):
-                            print(f"[FILE_INTEGRITY_DEBUG] keys={list(attestation_result.keys())}")
+                            logger.info(f"[verify-status] keys={list(attestation_result.keys())}")
+                            # Print device_attestation (L2) - critical for App Attest
+                            di = attestation_result.get("device_attestation")
+                            logger.info(f"[verify-status] device_attestation={di}")
                             # Print self_verification details (v0.7.12+)
                             sv = attestation_result.get("self_verification")
-                            print(f"[FILE_INTEGRITY_DEBUG] self_verification={sv}")
+                            logger.info(f"[verify-status] self_verification={sv}")
                             fi = attestation_result.get("file_integrity")
-                            print(f"[FILE_INTEGRITY_DEBUG] file_integrity={fi}")
+                            logger.info(f"[verify-status] file_integrity={fi}")
                             errs = attestation_result.get("errors")
-                            print(f"[FILE_INTEGRITY_DEBUG] errors={errs}")
+                            logger.info(f"[verify-status] errors={errs}")
                             diag = attestation_result.get("diagnostics")
-                            print(f"[FILE_INTEGRITY_DEBUG] diagnostics={diag}")
+                            logger.info(f"[verify-status] diagnostics={diag}")
                         # Debug: log the raw attestation result
                         logger.info(f"[verify-status] run_attestation_sync raw result type: {type(attestation_result)}")
                         if isinstance(attestation_result, dict):
@@ -3096,13 +3173,14 @@ async def get_verify_status(
                                 # No verifier method available, mark as not_checked
                                 registry_key_status = "not_checked"
 
-                        # v0.7.0+: Extract device/play integrity from attestation result
-                        # This overrides the URL parameter-based check since CIRISVerify handles it internally
+                        # v0.9.0+: Extract device attestation from run_attestation result
+                        # Field was renamed: device_integrity → device_attestation
                         device_int = None
                         if isinstance(attestation_result, dict):
-                            device_int = attestation_result.get("device_integrity")
+                            device_int = attestation_result.get("device_attestation") or attestation_result.get("device_integrity")
                         else:
-                            device_int = getattr(attestation_result, "device_integrity", None)
+                            device_int = getattr(attestation_result, "device_attestation", None) or getattr(attestation_result, "device_integrity", None)
+                        logger.info(f"[verify-status] device_attestation raw: {device_int}")
 
                         if device_int:
                             if isinstance(device_int, dict):

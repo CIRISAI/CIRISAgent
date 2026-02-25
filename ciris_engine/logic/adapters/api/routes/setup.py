@@ -3125,6 +3125,10 @@ async def get_verify_status(
                                 f"({functions_passed_count}/{functions_checked_count} passed)"
                             )
 
+                            # Update binary_ok from actual self-verification result
+                            # (replaces the hardcoded True from "binary loaded" check)
+                            binary_ok = binary_valid and functions_valid
+
                         # v0.7.0+: Extract key attestation info
                         key_attest = None
                         if isinstance(attestation_result, dict):

@@ -41,8 +41,11 @@ class AppAttestManager {
         let currentBuild = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
         let cachedBuild = UserDefaults.standard.string(forKey: Self.cachedBuildKey) ?? ""
         if currentBuild != cachedBuild {
-            NSLog("[AppAttest] Build changed (\(cachedBuild) → \(currentBuild)), clearing cache")
+            NSLog("[AppAttest] Build changed (\(cachedBuild) → \(currentBuild)), clearing cache + key")
             clearCache()
+            // Also clear the attestation key — forces a fresh key generation
+            keyId = nil
+            UserDefaults.standard.removeObject(forKey: Self.keyIdKey)
             UserDefaults.standard.set(currentBuild, forKey: Self.cachedBuildKey)
         }
     }

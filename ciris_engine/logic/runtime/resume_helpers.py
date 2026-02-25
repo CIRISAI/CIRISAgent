@@ -181,6 +181,114 @@ async def auto_enable_android_adapters_for_resume(runtime: Any) -> None:
                 logger.warning(f"[RESUME] Failed to auto-enable Android adapters on {adapter.__class__.__name__}: {e}")
 
 
+# Bootstrap adapters that are always loaded at startup (before setup wizard)
+BOOTSTRAP_ADAPTERS = {"api", "cli", "ciris_verify"}
+
+
+async def load_post_setup_adapters_for_resume(
+    runtime: Any, log_step: Callable[[int, int, str], None], total_steps: int
+) -> None:
+    """Load adapters that were enabled during setup wizard.
+
+    This loads adapters that require setup to complete first, such as:
+    - cirisnode: Requires Portal registration and signing key provisioning
+
+    Bootstrap adapters (api, cli, ciris_verify) are already loaded and skipped.
+
+    Args:
+        runtime: The CIRISRuntime instance
+        log_step: Logging callback
+        total_steps: Total steps for progress logging
+    """
+    import os
+
+    from ciris_engine.logic.adapters import load_adapter
+    from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
+    from ciris_engine.schemas.config.essential import EssentialConfig
+    from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+
+    # Get enabled adapters from environment (set during setup as CIRIS_ADAPTER)
+    enabled_adapters_str = os.environ.get("CIRIS_ADAPTER", "")
+    if not enabled_adapters_str:
+        log_step(12, total_steps, "No CIRIS_ADAPTER configured - skipping post-setup adapter loading")
+        return
+
+    enabled_adapters = [a.strip() for a in enabled_adapters_str.split(",") if a.strip()]
+    log_step(12, total_steps, f"Enabled adapters from config: {enabled_adapters}")
+
+    # Get currently loaded adapter types
+    loaded_adapter_types = set()
+    for adapter in runtime.adapters:
+        adapter_type = getattr(adapter, "adapter_type", None)
+        if adapter_type:
+            loaded_adapter_types.add(str(adapter_type).lower())
+        # Also check class name
+        class_name = adapter.__class__.__name__.lower()
+        if "api" in class_name:
+            loaded_adapter_types.add("api")
+        if "cli" in class_name:
+            loaded_adapter_types.add("cli")
+        if "verify" in class_name:
+            loaded_adapter_types.add("ciris_verify")
+
+    log_step(12, total_steps, f"Already loaded adapters: {loaded_adapter_types}")
+
+    # Filter to adapters that need loading (not bootstrap, not already loaded)
+    adapters_to_load = [
+        a for a in enabled_adapters if a.lower() not in BOOTSTRAP_ADAPTERS and a.lower() not in loaded_adapter_types
+    ]
+
+    if not adapters_to_load:
+        log_step(12, total_steps, "All enabled adapters already loaded - nothing to do")
+        return
+
+    log_step(12, total_steps, f"Loading post-setup adapters: {adapters_to_load}")
+
+    # Create startup context for adapters
+    context = AdapterStartupContext(
+        essential_config=runtime.essential_config or EssentialConfig(),
+        modules_to_load=runtime.modules_to_load,
+        startup_channel_id=runtime.startup_channel_id or "",
+        debug=runtime.debug,
+        bus_manager=runtime.bus_manager,
+        time_service=runtime.time_service,
+        service_registry=runtime.service_registry,
+    )
+
+    for adapter_type in adapters_to_load:
+        try:
+            adapter_class = load_adapter(adapter_type)
+
+            # Get adapter-specific config from environment
+            adapter_config = AdapterConfig(adapter_type=adapter_type)
+
+            # Create and register adapter
+            adapter_instance = adapter_class(runtime, context=context, adapter_config=adapter_config.settings)
+            runtime.adapters.append(adapter_instance)
+
+            # Register adapter services with buses
+            if hasattr(adapter_instance, "get_services_to_register"):
+                services_to_register = adapter_instance.get_services_to_register()
+                for service_reg in services_to_register:
+                    if runtime.service_registry:
+                        runtime.service_registry.register_service(
+                            service_reg.service_type, service_reg.provider, service_reg.priority
+                        )
+                        logger.info(
+                            f"[RESUME] Registered {adapter_type} service: "
+                            f"{service_reg.service_type} (priority={service_reg.priority})"
+                        )
+
+            # Start the adapter
+            if hasattr(adapter_instance, "start"):
+                await adapter_instance.start()
+
+            logger.info(f"[RESUME] Successfully loaded and started post-setup adapter: {adapter_type}")
+
+        except Exception as e:
+            logger.error(f"[RESUME] Failed to load post-setup adapter '{adapter_type}': {e}", exc_info=True)
+
+
 def _ensure_config(runtime: Any) -> "EssentialConfig":
     """Ensure essential_config is available, raise if not."""
     if not runtime.essential_config:

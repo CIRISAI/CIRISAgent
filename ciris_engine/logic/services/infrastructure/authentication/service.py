@@ -1788,10 +1788,44 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                     try:
                         # Generate a random challenge nonce (required by CIRISVerify)
                         challenge = os.urandom(32)
+
+                        # Load Python module hashes from startup file
+                        python_hashes = None
+                        agent_version = None
+                        try:
+                            import json
+
+                            ciris_home = os.environ.get("CIRIS_HOME", "/data/data/ai.ciris.mobile/files/ciris")
+                            hashes_path = Path(ciris_home) / "startup_python_hashes.json"
+                            if hashes_path.exists():
+                                with open(hashes_path) as f:
+                                    hashes_data = json.load(f)
+                                # Import PythonModuleHashes type
+                                from ciris_verify.types import PythonModuleHashes
+
+                                python_hashes = PythonModuleHashes(
+                                    total_hash=hashes_data.get("total_hash", ""),
+                                    module_hashes=hashes_data.get("module_hashes", {}),
+                                    module_count=hashes_data.get("modules_hashed", 0),
+                                    agent_version=hashes_data.get("agent_version", ""),
+                                    computed_at=hashes_data.get("computed_at", 0),
+                                )
+                                agent_version = hashes_data.get("agent_version")
+                                logger.info(
+                                    f"[attestation] Loaded {python_hashes.module_count} "
+                                    f"module hashes from {hashes_path}"
+                                )
+                            else:
+                                logger.warning(f"[attestation] No startup hashes file at {hashes_path}")
+                        except Exception as he:
+                            logger.warning(f"[attestation] Failed to load Python hashes: {he}")
+
                         attestation_data = verifier.run_attestation_sync(
                             challenge=challenge,
                             spot_check_count=spot_check_count,
                             partial_file_check=(attestation_mode == "partial"),
+                            python_hashes=python_hashes,
+                            agent_version=agent_version,
                         )
                         logger.info("[attestation] run_attestation_sync completed")
                     except Exception as ae:
@@ -1940,7 +1974,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         """
         logger.info("[attestation] Starting background attestation check...")
         try:
-            result = await self.run_attestation(mode="partial")
+            result = await self.run_attestation(mode="full")
             logger.info(
                 f"[attestation] Startup attestation completed: "
                 f"level={result.max_level}/5, "

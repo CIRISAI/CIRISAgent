@@ -885,8 +885,9 @@ class ApiPlatform(Service):
         # Restore any persisted adapter configurations from previous sessions
         await self._restore_persisted_adapter_configs()
 
-        # Auto-enable Android-specific adapters (ciris_hosted_tools with web_search)
-        await self._auto_enable_android_adapters()
+        # NOTE: Auto-enable of adapters is DISABLED.
+        # All adapter loading must be explicit via setup wizard or CIRIS_ADAPTER env var.
+        # This ensures agents only load adapters they explicitly configured.
 
         # Start runtime control service now that services are available
         await self.runtime_control.start()

@@ -1091,9 +1091,17 @@ private fun buildL4ChecksInfo(status: VerifyStatusResponse): String {
     val mobileExcluded = status.mobileExcludedCount ?: 0
     val totalExpected = manifestTotal - mobileExcluded
 
-    // Use backend's deconflicted count (mobile_excluded_list is truncated so can't calculate here)
-    val trulyMissing = status.filesMissingCount ?: 0
-    val totalVerified = totalExpected - trulyMissing
+    // Filesystem verified files
+    val filesystemVerified = perFile.filterValues { it == "passed" }.keys.size
+
+    // Chaquopy verified = Python files in manifest marked "missing" (verified via hash, not filesystem)
+    val mobileExcludedSet = (status.mobileExcludedList ?: emptyList()).toSet()
+    val chaquopyCovered = perFile.filterValues { it == "missing" }.keys.count { path ->
+        (path.endsWith(".py") || path.endsWith(".pyi")) && path !in mobileExcludedSet
+    }
+
+    // Total verified = filesystem + Chaquopy
+    val totalVerified = filesystemVerified + chaquopyCovered
     val failed = status.filesFailed ?: 0
 
     return if (failed > 0) {
@@ -1359,15 +1367,19 @@ private fun L4Content(status: VerifyStatusResponse) {
     val filesystemVerifiedFiltered = filesystemVerified.filter { !isExcluded(it) }
     val filesystemVerifiedFilteredCount = filesystemVerifiedFiltered.size
 
-    // Total verified = Expected - truly missing (use backend's deconflicted count)
-    // Note: calculating from per_file_results doesn't work because mobile_excluded_list is truncated
-    val trulyMissingCount = status.filesMissingCount ?: 0
-    val totalVerified = totalExpected - trulyMissingCount
+    // Total verified = Filesystem + Chaquopy (Python files verified via hash)
+    val totalVerified = filesystemVerifiedCount + chaquopyCoveredFromManifest
 
-    // === TRULY MISSING ===
+    // === ACTUALLY UNVERIFIED ===
     // Files in manifest (not excluded) that are NOT verified by either source
-    // Backend provides deconflicted list, or we calculate from non-Python missing files
-    val trulyMissingList = status.filesMissingList ?: missingInManifest.filter { path ->
+    // = Backend's missing count MINUS the Python files we verified via Chaquopy
+    val backendMissingCount = status.filesMissingCount ?: 0
+    val actuallyUnverifiedCount = maxOf(0, backendMissingCount - chaquopyCoveredFromManifest)
+
+    // Unverified list = non-Python files that are missing (Python files are covered by Chaquopy)
+    val actuallyUnverifiedList = status.filesMissingList?.filter { path ->
+        !path.endsWith(".py") && !path.endsWith(".pyi")
+    } ?: missingInManifest.filter { path ->
         !path.endsWith(".py") && !path.endsWith(".pyi")
     }.toList()
 
@@ -1379,7 +1391,7 @@ private fun L4Content(status: VerifyStatusResponse) {
     val unreadableFiles = perFile.filterValues { it == "unreadable" }.keys.toList()
 
     // === DISPLAY ===
-    val integrityOk = failedCount == 0 && unreadableFiles.isEmpty() && trulyMissingCount == 0
+    val integrityOk = failedCount == 0 && unreadableFiles.isEmpty() && actuallyUnverifiedCount == 0
 
     // Summary header
     DetailRow(
@@ -1444,12 +1456,12 @@ private fun L4Content(status: VerifyStatusResponse) {
         DetailSubtext("  + $extraChaquopyModules extra modules (stdlib/deps, not in manifest)")
     }
 
-    // 3. Truly Missing (not verified by either source)
-    if (trulyMissingCount > 0) {
+    // 3. Actually Unverified (not verified by either filesystem or Chaquopy)
+    if (actuallyUnverifiedCount > 0) {
         CollapsibleFileSection(
-            title = "Truly Missing",
-            count = trulyMissingCount,
-            files = trulyMissingList.take(50),
+            title = "Unverified",
+            count = actuallyUnverifiedCount,
+            files = actuallyUnverifiedList.take(50),
             expanded = missingExpanded,
             onToggle = { missingExpanded = !missingExpanded },
             titleColor = Color(0xFFDC2626),

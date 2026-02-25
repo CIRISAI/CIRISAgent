@@ -146,10 +146,15 @@ class BatchContextData:
         from ciris_engine.schemas.runtime.extended import ShutdownContext
 
         self.shutdown_context: Optional[ShutdownContext] = None
-        # License disclosure from CIRISVerify
+
+        # CIRISVerify attestation context (unified schema)
+        from ciris_engine.schemas.services.attestation import VerifyAttestationContext
+
+        self.verify_attestation: Optional[VerifyAttestationContext] = None
+
+        # Legacy fields (populated from verify_attestation for backwards compatibility)
         self.license_disclosure_text: Optional[str] = None
         self.license_disclosure_severity: Optional[str] = None
-        # Attestation summary (e.g., "Level 5/5 | ✓Binary ✓Environment ✓Registry")
         self.attestation_summary: Optional[str] = None
 
 
@@ -324,10 +329,12 @@ async def prefetch_batch_context(
     if runtime and hasattr(runtime, "current_shutdown_context"):
         batch_data.shutdown_context = runtime.current_shutdown_context
 
-    # 8. License Disclosure from CIRISVerify
+    # 8. CIRISVerify Attestation Context (unified schema)
     if runtime and hasattr(runtime, "adapters"):
-        logger.debug("[DEBUG DB TIMING] Batch: fetching CIRISVerify disclosure")
+        logger.debug("[DEBUG DB TIMING] Batch: fetching CIRISVerify attestation context")
         try:
+            from ciris_engine.schemas.services.attestation import VerifyAttestationContext
+
             # Look for ciris_verify adapter in loaded adapters
             ciris_verify_adapter = None
             for adapter in runtime.adapters:
@@ -341,26 +348,76 @@ async def prefetch_batch_context(
                     ciris_verify_adapter = adapter
                     break
 
-            if ciris_verify_adapter and hasattr(ciris_verify_adapter, "get_mandatory_disclosure"):
-                disclosure = await ciris_verify_adapter.get_mandatory_disclosure()
-                if disclosure:
-                    batch_data.license_disclosure_text = disclosure.text
-                    # Convert enum to string
-                    batch_data.license_disclosure_severity = (
-                        disclosure.severity.value if hasattr(disclosure.severity, "value") else str(disclosure.severity)
-                    )
-                    logger.info(f"[BATCH] CIRISVerify disclosure loaded: {batch_data.license_disclosure_severity}")
+            if ciris_verify_adapter:
+                # Get disclosure
+                disclosure_text = ""
+                disclosure_severity = "info"
+                if hasattr(ciris_verify_adapter, "get_mandatory_disclosure"):
+                    disclosure = await ciris_verify_adapter.get_mandatory_disclosure()
+                    if disclosure:
+                        disclosure_text = disclosure.text
+                        disclosure_severity = (
+                            disclosure.severity.value
+                            if hasattr(disclosure.severity, "value")
+                            else str(disclosure.severity)
+                        )
 
-            # Also fetch attestation summary for context
-            batch_data.attestation_summary = await _get_attestation_summary()
+                # Get attestation result
+                attestation_result = None
+                if hasattr(ciris_verify_adapter, "_service") and hasattr(
+                    ciris_verify_adapter._service, "get_cached_attestation"
+                ):
+                    attestation_result = ciris_verify_adapter._service.get_cached_attestation()
+
+                # Get agent version
+                agent_version = None
+                try:
+                    from ciris_engine.constants import CIRIS_VERSION
+
+                    agent_version = CIRIS_VERSION
+                except ImportError:
+                    pass
+
+                # Build unified context
+                if attestation_result:
+                    batch_data.verify_attestation = VerifyAttestationContext.from_attestation_result(
+                        result=attestation_result,
+                        disclosure_text=disclosure_text,
+                        disclosure_severity=disclosure_severity,
+                        agent_version=agent_version,
+                    )
+                else:
+                    # Fallback: build context without full attestation result
+                    batch_data.verify_attestation = VerifyAttestationContext(
+                        attestation_status="not_attempted",
+                        disclosure_text=disclosure_text,
+                        disclosure_severity=disclosure_severity,
+                        agent_version=agent_version,
+                    )
+
+                # Populate legacy fields for backwards compatibility
+                batch_data.license_disclosure_text = batch_data.verify_attestation.disclosure_text
+                batch_data.license_disclosure_severity = batch_data.verify_attestation.disclosure_severity
+                batch_data.attestation_summary = batch_data.verify_attestation.attestation_summary
+
+                logger.info(f"[BATCH] CIRISVerify context loaded: {batch_data.verify_attestation.attestation_summary}")
+
         except Exception as e:
-            logger.warning(f"Failed to get CIRISVerify disclosure: {e}")
-            # Provide fallback disclosure when verification fails
-            batch_data.license_disclosure_text = (
-                "NOTICE: License verification unavailable. Operating in community mode "
-                "with limited capabilities. Professional features are NOT available."
+            logger.warning(f"Failed to get CIRISVerify attestation context: {e}")
+            # Provide fallback context when verification fails
+            from ciris_engine.schemas.services.attestation import VerifyAttestationContext
+
+            batch_data.verify_attestation = VerifyAttestationContext(
+                attestation_status="failed",
+                disclosure_text=(
+                    "NOTICE: License verification unavailable. Operating in community mode "
+                    "with limited capabilities. Professional features are NOT available."
+                ),
+                disclosure_severity="warning",
             )
-            batch_data.license_disclosure_severity = "WARNING"
+            batch_data.license_disclosure_text = batch_data.verify_attestation.disclosure_text
+            batch_data.license_disclosure_severity = batch_data.verify_attestation.disclosure_severity
+            batch_data.attestation_summary = batch_data.verify_attestation.attestation_summary
 
     logger.debug("[DEBUG DB TIMING] Batch context prefetch complete")
     return batch_data
@@ -676,7 +733,9 @@ async def build_system_snapshot_with_batch(
         adapter_channels=adapter_channels,  # Available channels by adapter
         available_tools=available_tools,  # Available tools by adapter
         context_enrichment_results=context_enrichment_results,  # Pre-run tool results for context
-        # License disclosure from CIRISVerify - MUST be in LLM context
+        # CIRISVerify attestation context - MUST be in LLM context
+        verify_attestation=batch_data.verify_attestation,
+        # Legacy fields for backwards compatibility
         license_disclosure_text=batch_data.license_disclosure_text,
         license_disclosure_severity=batch_data.license_disclosure_severity,
         attestation_summary=batch_data.attestation_summary,

@@ -1099,6 +1099,11 @@ class CIRISApiClient(
                         isLenient = true
                     })
                 }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 60000  // 60s for setup completion
+                    connectTimeoutMillis = 10000
+                    socketTimeoutMillis = 60000
+                }
                 // Don't throw on non-2xx responses - we handle them manually
                 expectSuccess = false
             }

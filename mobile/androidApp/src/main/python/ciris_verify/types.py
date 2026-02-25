@@ -340,9 +340,10 @@ class PythonModuleHashes(BaseModel):
 
 
 class PythonIntegrityResult(BaseModel):
-    """Result of Python module integrity verification (v0.8.1).
+    """Result of Python module integrity verification (v0.8.1+).
 
     Returned when python_hashes is provided to run_attestation().
+    As of v0.9.2+, performs per-module hash validation against registry manifest.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -354,5 +355,8 @@ class PythonIntegrityResult(BaseModel):
     total_hash_valid: bool = Field(default=False, description="Whether total_hash matched")
     expected_total_hash: Optional[str] = Field(default=None, description="Expected hash from manifest")
     actual_total_hash: str = Field(default="", description="Actual total hash from agent")
-    verification_mode: str = Field(default="", description="total_hash_only, individual_modules, or both")
+    verification_mode: str = Field(default="", description="total_hash_only, individual_modules, or record_only")
+    failed_modules: dict = Field(default_factory=dict, description="Modules that failed: path -> reason")
+    unexpected_modules: list = Field(default_factory=list, description="Modules not in registry manifest")
+    missing_modules: list = Field(default_factory=list, description="Modules in manifest but not provided")
     error: Optional[str] = Field(default=None, description="Error message if verification failed")

@@ -150,7 +150,7 @@ action_selection_pdma_overrides:
     Available actions: {available_actions}
 
     '
-auto_load_adapters: true
+auto_load_adapters: false
 cognitive_state_behaviors:
   dream:
     auto_schedule: false

@@ -1120,15 +1120,62 @@ class AccordMetricsService:
             if hasattr(snapshot, "model_dump"):
                 snapshot = snapshot.model_dump()
 
-            # GENERIC: Minimal - agent_name + cognitive state identifier
+            # Extract verify_attestation context (REQUIRED at all levels per FSD-001)
+            verify_attestation = snapshot.get("verify_attestation", {})
+            if hasattr(verify_attestation, "model_dump"):
+                verify_attestation = verify_attestation.model_dump()
+
+            # Build attestation context string (same format everywhere)
+            attestation_context = None
+            if verify_attestation:
+                attestation_level = verify_attestation.get("attestation_level", 0)
+                attestation_summary = verify_attestation.get("attestation_summary", "")
+                key_status = verify_attestation.get("key_status", "none")
+                disclosure_text = verify_attestation.get("disclosure_text", "")
+                disclosure_severity = verify_attestation.get("disclosure_severity", "info")
+                ed25519_fingerprint = verify_attestation.get("ed25519_fingerprint")
+                hardware_backed = verify_attestation.get("hardware_backed", False)
+                key_storage_mode = verify_attestation.get("key_storage_mode")
+
+                # Build the same context string used in LLM context
+                context_lines = [f"CIRIS VERIFY ATTESTATION: {attestation_summary}"]
+                if key_status != "none":
+                    key_info = f"Key: {key_status}"
+                    if ed25519_fingerprint:
+                        key_info += f" (fingerprint: {ed25519_fingerprint[:16]}...)"
+                    if hardware_backed:
+                        key_info += f" [HARDWARE-BACKED]"
+                    else:
+                        key_info += f" [SOFTWARE: {key_storage_mode or 'default'}]"
+                    context_lines.append(key_info)
+                if disclosure_text:
+                    severity_prefix = {"critical": "⚠️ CRITICAL", "warning": "⚠️ WARNING"}.get(
+                        disclosure_severity.lower(), "ℹ️ NOTICE"
+                    )
+                    context_lines.append(f"{severity_prefix}: {disclosure_text}")
+                attestation_context = "\n".join(context_lines)
+
+            # GENERIC: Minimal - agent_name + cognitive state + attestation context
             # agent_name is REQUIRED at all 3 levels for CIRISLens correlation
+            # attestation_context is REQUIRED at all 3 levels per FSD-001
             # cognitive_state might be at top level or in snapshot
             cognitive_state = event.get("cognitive_state") or snapshot.get("cognitive_state")
-            data = {
+            data: Dict[str, Any] = {
                 "agent_name": self._agent_name,
                 "cognitive_state": cognitive_state,
+                # CIRISVerify attestation - REQUIRED at all levels
+                "attestation_context": attestation_context,
+                "attestation_level": verify_attestation.get("attestation_level", 0) if verify_attestation else 0,
+                "attestation_status": (
+                    verify_attestation.get("attestation_status", "not_attempted")
+                    if verify_attestation
+                    else "not_attempted"
+                ),
+                "disclosure_severity": (
+                    verify_attestation.get("disclosure_severity", "info") if verify_attestation else "info"
+                ),
             }
-            # DETAILED: Add service list and system health info
+            # DETAILED: Add service list, system health info, and key details
             if is_detailed:
                 data["active_services"] = event.get("active_services") or snapshot.get("active_services")
                 data["context_sources"] = event.get("context_sources") or snapshot.get("context_sources")
@@ -1137,12 +1184,21 @@ class AccordMetricsService:
                 data["circuit_breaker_status"] = event.get("circuit_breaker_status") or snapshot.get(
                     "circuit_breaker_status"
                 )
+                # Add key signature details
+                if verify_attestation:
+                    data["key_status"] = verify_attestation.get("key_status")
+                    data["key_id"] = verify_attestation.get("key_id")
+                    data["ed25519_fingerprint"] = verify_attestation.get("ed25519_fingerprint")
+                    data["key_storage_mode"] = verify_attestation.get("key_storage_mode")
+                    data["hardware_backed"] = verify_attestation.get("hardware_backed")
             # FULL: Add complete snapshot and context
             if is_full:
                 data["system_snapshot"] = _serialize(snapshot)
                 data["gathered_context"] = _serialize(event.get("gathered_context"))
                 data["relevant_memories"] = _serialize(event.get("relevant_memories"))
                 data["conversation_history"] = _serialize(event.get("conversation_history"))
+                # Full attestation context object
+                data["verify_attestation"] = _serialize(verify_attestation) if verify_attestation else None
             return data
 
         elif event_type == "DMA_RESULTS":

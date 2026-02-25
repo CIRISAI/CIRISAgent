@@ -152,3 +152,157 @@ class AttestationRequest(BaseModel):
     play_integrity_token: Optional[str] = Field(None, description="Google Play Integrity token")
     play_integrity_nonce: Optional[str] = Field(None, description="Nonce used for Play Integrity request")
     force_refresh: bool = Field(default=False, description="Force refresh even if cache is valid")
+
+
+class VerifyAttestationContext(BaseModel):
+    """Unified CIRISVerify attestation and disclosure context.
+
+    This schema provides a consistent view of attestation state, mandatory disclosure,
+    and key signature/storage info for use in:
+    1. Agent LLM context (SystemSnapshot)
+    2. Accord traces (CIRISLens)
+    3. API responses
+
+    The same text format is used everywhere for consistency.
+    """
+
+    # Attestation level and status
+    attestation_level: int = Field(0, description="Attestation level achieved (0-5)")
+    attestation_status: str = Field("not_attempted", description="Status: not_attempted, pending, verified, failed")
+    attestation_mode: str = Field("partial", description="Mode: full or partial")
+
+    # Summary string (human-readable)
+    attestation_summary: str = Field(
+        "", description="Human-readable summary (e.g., 'Level 3/5 | ✓Binary ✓Environment ✓Registry')"
+    )
+
+    # Mandatory disclosure (MUST be shown to users per FSD-001)
+    disclosure_text: str = Field(
+        "", description="Mandatory disclosure text from CIRISVerify (MUST be visible in all contexts)"
+    )
+    disclosure_severity: str = Field("info", description="Disclosure severity: info, warning, critical")
+
+    # Key signature info
+    key_status: str = Field("none", description="Key status: none, ephemeral, portal_pending, portal_active")
+    key_id: Optional[str] = Field(None, description="Portal-issued key ID if activated")
+    ed25519_fingerprint: Optional[str] = Field(None, description="Ed25519 public key SHA-256 fingerprint")
+
+    # Key storage info
+    key_storage_mode: Optional[str] = Field(
+        None, description="Key storage: SOFTWARE, HARDWARE_BACKED, or specific provider"
+    )
+    hardware_backed: bool = Field(False, description="Whether the signing key is hardware-backed")
+    hardware_type: Optional[str] = Field(None, description="Hardware security type (TPM_2_0, TEE, SOFTWARE_ONLY)")
+
+    # Check results (boolean flags)
+    binary_ok: bool = Field(False, description="CIRISVerify binary loaded and functional")
+    env_ok: bool = Field(False, description="Environment properly configured")
+    registry_ok: bool = Field(False, description="Signing key registered with Portal/Registry")
+    file_integrity_ok: bool = Field(False, description="File integrity verified")
+    audit_ok: bool = Field(False, description="Audit trail intact")
+    play_integrity_ok: bool = Field(False, description="Google Play Integrity passed (mobile only)")
+
+    # Version info
+    verify_version: Optional[str] = Field(None, description="CIRISVerify library version")
+    agent_version: Optional[str] = Field(None, description="Agent version being attested")
+
+    # Timestamp
+    attested_at: Optional[datetime] = Field(None, description="When this attestation was performed")
+
+    @classmethod
+    def from_attestation_result(
+        cls,
+        result: "AttestationResult",
+        disclosure_text: str = "",
+        disclosure_severity: str = "info",
+        agent_version: Optional[str] = None,
+    ) -> "VerifyAttestationContext":
+        """Create context from an AttestationResult.
+
+        Args:
+            result: AttestationResult from authentication service
+            disclosure_text: Mandatory disclosure text
+            disclosure_severity: Disclosure severity level
+            agent_version: Agent version string
+
+        Returns:
+            VerifyAttestationContext with all fields populated
+        """
+        # Build summary string
+        checks = []
+        if result.binary_ok:
+            checks.append("✓Binary")
+        else:
+            checks.append("✗Binary")
+        if result.env_ok:
+            checks.append("✓Environment")
+        else:
+            checks.append("✗Environment")
+        if result.registry_ok:
+            checks.append("✓Registry")
+        else:
+            checks.append("✗Registry")
+        if result.file_integrity_ok:
+            checks.append("✓FileIntegrity")
+        else:
+            checks.append("✗FileIntegrity")
+        if result.audit_ok:
+            checks.append("✓Audit")
+        else:
+            checks.append("○Audit")
+
+        summary = f"Level {result.max_level}/5 | {' '.join(checks)}"
+
+        return cls(
+            attestation_level=result.max_level,
+            attestation_status=result.attestation_status,
+            attestation_mode=result.attestation_mode,
+            attestation_summary=summary,
+            disclosure_text=disclosure_text,
+            disclosure_severity=disclosure_severity,
+            key_status=result.key_status,
+            key_id=result.key_id,
+            ed25519_fingerprint=result.ed25519_fingerprint,
+            key_storage_mode=result.key_storage_mode,
+            hardware_backed=result.hardware_backed,
+            hardware_type=result.hardware_type,
+            binary_ok=result.binary_ok,
+            env_ok=result.env_ok,
+            registry_ok=result.registry_ok,
+            file_integrity_ok=result.file_integrity_ok,
+            audit_ok=result.audit_ok,
+            play_integrity_ok=result.play_integrity_ok,
+            verify_version=result.version,
+            agent_version=agent_version,
+            attested_at=result.cached_at,
+        )
+
+    def to_context_string(self) -> str:
+        """Generate the context string for LLM/traces.
+
+        This is the exact same text used everywhere for consistency.
+        """
+        lines = [
+            f"CIRIS VERIFY ATTESTATION: {self.attestation_summary}",
+            f"Status: {self.attestation_status} | Mode: {self.attestation_mode}",
+        ]
+
+        if self.key_status != "none":
+            key_info = f"Key: {self.key_status}"
+            if self.ed25519_fingerprint:
+                key_info += f" (fingerprint: {self.ed25519_fingerprint[:16]}...)"
+            if self.hardware_backed:
+                key_info += f" [HARDWARE-BACKED: {self.hardware_type or 'unknown'}]"
+            else:
+                key_info += f" [SOFTWARE: {self.key_storage_mode or 'default'}]"
+            lines.append(key_info)
+
+        if self.disclosure_text:
+            severity_prefix = {
+                "critical": "⚠️ CRITICAL",
+                "warning": "⚠️ WARNING",
+                "info": "ℹ️ NOTICE",
+            }.get(self.disclosure_severity.lower(), "ℹ️ NOTICE")
+            lines.append(f"{severity_prefix}: {self.disclosure_text}")
+
+        return "\n".join(lines)

@@ -2910,19 +2910,17 @@ async def get_verify_status(
                                     )
 
                                     # Filter out files covered by Python module hashes (Chaquopy bundle)
-                                    # Convert module names to file paths for comparison
+                                    # v0.9.2+: Keys are file paths like "ciris_engine/core.py"
                                     python_covered_paths = set()
                                     if python_hashes_obj and hasattr(python_hashes_obj, "module_hashes"):
                                         module_hashes = python_hashes_obj.module_hashes or {}
-                                        for mod_name in module_hashes.keys():
-                                            # module.name -> module/name/__init__.py and module/name.py
-                                            path_base = mod_name.replace(".", "/")
-                                            python_covered_paths.add(f"{path_base}.py")
-                                            python_covered_paths.add(f"{path_base}/__init__.py")
+                                        for path_key in module_hashes.keys():
+                                            # Keys are already file paths like "ciris_engine/core.py"
+                                            python_covered_paths.add(path_key)
 
                                     # True missing = missing from filesystem AND not covered by Python modules
                                     # Exclude server-only components not bundled in mobile APK:
-                                    # - gui_static: web UI assets
+                                    # - gui_static: web UI assets (html, js, css, images, fonts, videos)
                                     # - adapters/discord: Discord bot adapter
                                     # - adapters/reddit: Reddit adapter
                                     # - adapters/cli: CLI adapter
@@ -2935,6 +2933,27 @@ async def get_verify_status(
                                         "ciris_engine/logic/adapters/slack/",
                                     )
 
+                                    # Extensions that Chaquopy doesn't bundle (non-Python content files)
+                                    mobile_excluded_extensions = (
+                                        ".md",  # Markdown docs (README.md, SECURITY.md, etc.)
+                                        ".rst",  # ReStructuredText docs
+                                        ".html",  # HTML files outside gui_static
+                                        ".svg",  # SVG images outside gui_static
+                                        ".png",  # PNG images outside gui_static
+                                        ".jpg",
+                                        ".jpeg",
+                                        ".gif",
+                                        ".ico",
+                                        ".woff",
+                                        ".woff2",
+                                        ".ttf",
+                                        ".eot",
+                                        ".mp4",
+                                        ".webm",
+                                        ".css",
+                                        ".map",  # Source maps
+                                    )
+
                                     # Separate into true missing vs mobile-excluded
                                     true_missing: list[str] = []
                                     mobile_excluded_files: list[str] = []
@@ -2942,6 +2961,8 @@ async def get_verify_status(
                                         if filepath in python_covered_paths:
                                             continue  # Covered by Python module hashes
                                         if any(filepath.startswith(prefix) for prefix in mobile_excluded_prefixes):
+                                            mobile_excluded_files.append(filepath)
+                                        elif any(filepath.endswith(ext) for ext in mobile_excluded_extensions):
                                             mobile_excluded_files.append(filepath)
                                         else:
                                             true_missing.append(filepath)
@@ -3324,9 +3345,17 @@ async def get_verify_status(
             audit_details: dict[str, Any] = {"sources_checked": [], "sources_valid": []}
             try:
                 data_dir = os.path.expanduser(os.environ.get("CIRIS_DATA_DIR", "."))
+                # Check both direct path and data/ subdirectory (Android uses data/ subdirectory)
                 audit_db_path = os.path.join(data_dir, "ciris_audit.db")
+                audit_db_path_data = os.path.join(data_dir, "data", "ciris_audit.db")
+                if not os.path.exists(audit_db_path) and os.path.exists(audit_db_path_data):
+                    audit_db_path = audit_db_path_data
+                # Same for JSONL - check data/ subdirectory
                 jsonl_path = os.environ.get("AUDIT_LOG_PATH", os.path.join(data_dir, "audit_logs.jsonl"))
                 jsonl_path = os.path.expanduser(jsonl_path)
+                jsonl_path_data = os.path.join(data_dir, "data", "audit_logs.jsonl")
+                if not os.path.exists(jsonl_path) and os.path.exists(jsonl_path_data):
+                    jsonl_path = jsonl_path_data
                 key_id = os.environ.get("CIRIS_SIGNING_KEY_ID", "")
                 logger.info(f"[verify-status] Audit paths: db={audit_db_path}, jsonl={jsonl_path}")
 
@@ -3459,14 +3488,19 @@ async def get_verify_status(
 
             # Calculate max level
             # Level 1: Binary OK
-            # Level 2: Env OK
+            # Level 2: Env OK + Play Integrity (required on mobile)
             # Level 3: DNS/HTTPS (2 of 3 checks pass)
             # Level 4: File Integrity
             # Level 5: Portal Key + Audit Trail
+            #
+            # On mobile (Android/iOS), Play Integrity is REQUIRED for Level 2+
+            is_mobile = hardware_type in ("ANDROID_KEYSTORE", "IOS_SECURE_ENCLAVE")
+
             max_level = 0
             if binary_ok:
                 max_level = 1
-            if max_level >= 1 and env_ok:
+            # Level 2 requires env_ok, plus play_integrity_ok on mobile platforms
+            if max_level >= 1 and env_ok and (not is_mobile or play_integrity_ok):
                 max_level = 2
             # Level 3 requires 2 of 3 network checks
             network_checks_passed = sum([dns_us_ok, dns_eu_ok, https_us_ok or https_eu_ok])
@@ -3478,7 +3512,7 @@ async def get_verify_status(
                 max_level = 5
 
             logger.info(
-                f"[verify-status] Attestation levels: binary={binary_ok}, env={env_ok}, dns_us={dns_us_ok}, dns_eu={dns_eu_ok}, https_us={https_us_ok}, https_eu={https_eu_ok}, file_integrity={file_integrity_ok}, registry={registry_ok}, audit={audit_ok}, max_level={max_level}"
+                f"[verify-status] Attestation levels: binary={binary_ok}, env={env_ok}, play_integrity={play_integrity_ok}, is_mobile={is_mobile}, dns_us={dns_us_ok}, dns_eu={dns_eu_ok}, https_us={https_us_ok}, https_eu={https_eu_ok}, file_integrity={file_integrity_ok}, registry={registry_ok}, audit={audit_ok}, max_level={max_level}"
             )
 
             # Build result with simple view + detailed info for expansion

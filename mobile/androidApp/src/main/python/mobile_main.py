@@ -673,13 +673,23 @@ def _save_hashes_to_file(results: dict) -> None:
     from datetime import datetime, timezone
 
     try:
+        import time
+
         # Get CIRIS_HOME for save location
         ciris_home = os.environ.get("CIRIS_HOME", "/data/data/ai.ciris.mobile/files/ciris")
         output_path = Path(ciris_home) / "startup_python_hashes.json"
 
+        # Get agent version from ciris_engine
+        try:
+            from ciris_engine import __version__ as agent_version
+        except ImportError:
+            agent_version = "unknown"
+
         output_data = {
-            "version": "1.1",
+            "version": "1.2",  # Bumped for new format with file paths
             "generated_at": datetime.now(timezone.utc).isoformat(),
+            "computed_at": int(time.time()),
+            "agent_version": agent_version,
             "packages": ["ciris_engine", "ciris_adapters"],
             "modules_checked": results.get("modules_checked", 0),
             "modules_hashed": results["modules_hashed"],
@@ -699,10 +709,11 @@ def _save_hashes_to_file(results: dict) -> None:
 
 
 def verify_code_integrity(package_names: list = None, save_to_file: bool = True) -> Tuple[bool, dict]:
-    """Verify integrity of Python modules by hashing their source.
+    """Verify integrity of Python modules by hashing ALL .py files on disk.
 
-    Walks through all modules in the specified packages, computes SHA256 hashes,
-    and tracks which modules fail to import (unavailable on Android).
+    Walks the filesystem to find ALL .py files in the specified packages,
+    not just importable modules. This ensures we hash files that may not
+    be importable due to missing dependencies.
 
     Args:
         package_names: List of packages to verify (default: ["ciris_engine", "ciris_adapters"])
@@ -714,12 +725,9 @@ def verify_code_integrity(package_names: list = None, save_to_file: bool = True)
         - modules_hashed: int
         - total_hash: str (combined hash of all module hashes)
         - errors: list of error messages
-        - unavailable_modules: list of modules that can't be imported on Android
     """
     import hashlib
     import importlib
-    import importlib.util
-    import pkgutil
 
     if package_names is None:
         package_names = ["ciris_engine", "ciris_adapters"]
@@ -730,69 +738,63 @@ def verify_code_integrity(package_names: list = None, save_to_file: bool = True)
         "total_hash": "",
         "module_hashes": {},
         "errors": [],
-        "unavailable_modules": [],  # Modules that fail to import on Android
-        "sample_origins": [],
     }
 
     all_hashes = []
 
     for package_name in package_names:
         try:
-            # Import the package
+            # Import the package to find its location
             package = importlib.import_module(package_name)
             if not hasattr(package, "__path__"):
                 results["errors"].append(f"{package_name} is not a package")
                 continue
 
-            # Walk all modules in the package
-            for importer, modname, ispkg in pkgutil.walk_packages(package.__path__, prefix=f"{package_name}."):
+            # Get the package root directory
+            package_path = Path(package.__path__[0])
+            # Get parent directory to compute relative paths like "ciris_engine/core.py"
+            root_dir = package_path.parent
+
+            logger.info(f"[code-integrity] Walking {package_name} at {package_path}")
+
+            # Walk ALL .py files in the package directory
+            for py_file in package_path.rglob("*.py"):
                 results["modules_checked"] += 1
                 try:
-                    spec = importlib.util.find_spec(modname)
+                    # Compute relative path from root (e.g., "ciris_engine/logic/core.py")
+                    rel_path = str(py_file.relative_to(root_dir))
+                    # Normalize path separators for cross-platform consistency
+                    rel_path = rel_path.replace("\\", "/")
 
-                    # Debug: capture sample origins
-                    if len(results["sample_origins"]) < 5 and spec:
-                        results["sample_origins"].append(f"{modname}: {spec.origin}")
+                    # Read and hash the file
+                    with open(py_file, "rb") as f:
+                        file_hash = hashlib.sha256(f.read()).hexdigest()
 
-                    # Try to get module source
-                    source = _get_module_source(modname, spec)
-                    if source:
-                        mod_hash = hashlib.sha256(source).hexdigest()
-                        results["module_hashes"][modname] = mod_hash
-                        all_hashes.append(f"{modname}:{mod_hash}")
-                        results["modules_hashed"] += 1
+                    results["module_hashes"][rel_path] = file_hash
+                    all_hashes.append(f"{rel_path}:{file_hash}")
+                    results["modules_hashed"] += 1
 
-                except ImportError as e:
-                    # Track modules that can't be imported (missing dependencies)
-                    results["unavailable_modules"].append(f"{modname}: {e}")
                 except Exception as e:
                     if len(results["errors"]) < 20:
-                        results["errors"].append(f"{modname}: {e}")
+                        results["errors"].append(f"{py_file}: {e}")
 
         except ImportError as e:
             results["errors"].append(f"Cannot import {package_name}: {e}")
         except Exception as e:
             results["errors"].append(f"Failed to verify {package_name}: {e}")
 
-    # Compute combined hash of all modules (deterministic order) - OUTSIDE the loop
+    # Compute combined hash of all files (deterministic order)
     if all_hashes:
         combined = "\n".join(sorted(all_hashes))
         results["total_hash"] = hashlib.sha256(combined.encode()).hexdigest()
 
-    unavailable_count = len(results["unavailable_modules"])
     logger.info(
         f"Code integrity check: {results['modules_hashed']}/{results['modules_checked']} "
-        f"modules hashed, {unavailable_count} unavailable on Android, "
-        f"total_hash={results['total_hash'][:16] if results['total_hash'] else 'none'}..."
+        f"files hashed, total_hash={results['total_hash'][:16] if results['total_hash'] else 'none'}..."
     )
 
-    # Log unavailable modules (likely missing native dependencies)
-    if results["unavailable_modules"]:
-        logger.info(f"Unavailable modules on Android: {results['unavailable_modules'][:5]}...")
-
-    # Debug: log sample origins if no modules hashed
-    if results["modules_hashed"] == 0 and results["sample_origins"]:
-        logger.warning(f"Sample spec.origins: {results['sample_origins']}")
+    if results["errors"]:
+        logger.warning(f"Code integrity errors: {results['errors'][:5]}...")
 
     # Save hashes to JSON file for CIRISVerify
     if save_to_file and results["module_hashes"]:
@@ -844,6 +846,9 @@ def setup_android_environment():
     # Disable ciris.ai cloud components
     os.environ["CIRIS_OFFLINE_MODE"] = "true"
     os.environ["CIRIS_CLOUD_SYNC"] = "false"
+
+    # Enable CIRISVerify debug logging (logs to stderr)
+    os.environ.setdefault("RUST_LOG", "ciris_verify_core=info")
 
     # Optimize for low-resource devices
     os.environ.setdefault("CIRIS_MAX_WORKERS", "1")

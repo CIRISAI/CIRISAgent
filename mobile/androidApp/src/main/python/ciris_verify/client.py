@@ -79,13 +79,18 @@ _RUST_SEVERITY_MAP = {
 
 # Map Rust HardwareType to Python enum (from PlatformAttestation variant)
 _RUST_HARDWARE_MAP = {
+    # Serde externally-tagged enum keys (from PlatformAttestation variants)
+    "Android": HardwareType.ANDROID_KEYSTORE,
+    "Ios": HardwareType.IOS_SECURE_ENCLAVE,
+    "Tpm": HardwareType.TPM_DISCRETE,
+    "Software": HardwareType.SOFTWARE_ONLY,
+    # Legacy/alternate keys for backwards compatibility
     "AndroidKeystore": HardwareType.ANDROID_KEYSTORE,
     "AndroidStrongbox": HardwareType.ANDROID_STRONGBOX,
     "IosSecureEnclave": HardwareType.IOS_SECURE_ENCLAVE,
     "Tpm20": HardwareType.TPM_DISCRETE,
     "IntelSgx": HardwareType.INTEL_SGX,
     "SoftwareOnly": HardwareType.SOFTWARE_ONLY,
-    "Software": HardwareType.SOFTWARE_ONLY,
 }
 
 # Map Rust ValidationStatus variants to Python enum
@@ -502,6 +507,27 @@ class CIRISVerify:
         except AttributeError:
             self._has_run_attestation_support = False
 
+        # ciris_verify_set_log_callback (optional - added in 0.9.1)
+        # Register a callback to receive internal log messages
+        try:
+            # Callback signature: void callback(int level, const char* target, const char* message)
+            # Level: 1=ERROR, 2=WARN, 3=INFO, 4=DEBUG, 5=TRACE
+            self._log_callback_type = ctypes.CFUNCTYPE(
+                None,  # return type (void)
+                ctypes.c_int,  # level
+                ctypes.c_char_p,  # target
+                ctypes.c_char_p,  # message
+            )
+            self._lib.ciris_verify_set_log_callback.argtypes = [self._log_callback_type]
+            self._lib.ciris_verify_set_log_callback.restype = None
+            self._has_log_callback_support = True
+            # Keep reference to prevent garbage collection
+            self._active_log_callback = None
+        except AttributeError:
+            self._has_log_callback_support = False
+            self._log_callback_type = None
+            self._active_log_callback = None
+
         # Initialize handle
         self._handle = self._lib.ciris_verify_init()
         if not self._handle:
@@ -509,6 +535,13 @@ class CIRISVerify:
 
     def __del__(self):
         """Clean up resources."""
+        # Clear log callback first to prevent calls during destruction
+        if self._active_log_callback and self._lib and self._has_log_callback_support:
+            try:
+                self._lib.ciris_verify_set_log_callback(None)
+            except Exception:
+                pass
+            self._active_log_callback = None
         if self._handle and self._lib:
             try:
                 self._lib.ciris_verify_destroy(self._handle)
@@ -516,6 +549,52 @@ class CIRISVerify:
                 pass
         if self._executor:
             self._executor.shutdown(wait=False)
+
+    def set_log_callback(self, callback=None, level: int = 3):
+        """Set a callback to receive internal log messages.
+
+        Args:
+            callback: A callable(level: int, target: str, message: str) or None to disable.
+                      Level: 1=ERROR, 2=WARN, 3=INFO, 4=DEBUG, 5=TRACE
+            level: Minimum log level to receive (1-5). Default 3 (INFO).
+
+        Example:
+            def my_logger(level, target, message):
+                level_names = {1: "ERROR", 2: "WARN", 3: "INFO", 4: "DEBUG", 5: "TRACE"}
+                print(f"[{level_names.get(level, '?')}] [{target}] {message}")
+
+            verifier.set_log_callback(my_logger, level=4)  # DEBUG and above
+
+        Note:
+            The callback may be invoked from any thread (Rust async runtime).
+            Keep the callback fast to avoid blocking verification operations.
+        """
+        if not self._has_log_callback_support:
+            import warnings
+
+            warnings.warn("Log callback not supported in this library version (requires 0.9.1+)")
+            return
+
+        if callback is None:
+            self._lib.ciris_verify_set_log_callback(None)
+            self._active_log_callback = None
+            return
+
+        min_level = level
+
+        def c_callback(lvl: int, target: ctypes.c_char_p, message: ctypes.c_char_p):
+            if lvl > min_level:
+                return
+            try:
+                target_str = target.decode("utf-8") if target else ""
+                message_str = message.decode("utf-8") if message else ""
+                callback(lvl, target_str, message_str)
+            except Exception:
+                pass  # Never let exceptions escape to Rust
+
+        # Wrap in CFUNCTYPE and keep reference
+        self._active_log_callback = self._log_callback_type(c_callback)
+        self._lib.ciris_verify_set_log_callback(self._active_log_callback)
 
     def _sync_get_license_status(
         self,

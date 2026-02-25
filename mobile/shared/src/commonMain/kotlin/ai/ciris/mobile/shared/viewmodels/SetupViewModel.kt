@@ -589,13 +589,13 @@ class SetupViewModel : ViewModel() {
         // Source: SetupViewModel.kt:141-146
         val adminPassword = generateAdminPassword()
 
-        // Build enabled adapters list from user selections + covenant metrics
+        // Build enabled adapters list from user selections + accord metrics
         val enabledAdapters = buildList {
             // Add all user-selected adapters (api is always in the set)
             addAll(currentState.enabledAdapterIds)
-            // Add covenant metrics adapter if consented
+            // Add accord metrics adapter if consented
             if (currentState.covenantMetricsConsent) {
-                add("ciris_covenant_metrics")
+                add("ciris_accord_metrics")
             }
         }
 

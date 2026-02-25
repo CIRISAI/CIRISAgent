@@ -1235,9 +1235,15 @@ class CIRISRuntime(ServicePropertyMixin):
         """Re-inject services into running adapters during resume."""
         reinject_adapters_for_resume(self, log_step, total_steps)
 
-    async def _resume_auto_enable_android_adapters(self) -> None:
-        """Auto-enable Android-specific adapters after resume."""
-        await auto_enable_android_adapters_for_resume(self)
+    async def _resume_load_post_setup_adapters(self, log_step: Any, total_steps: int) -> None:
+        """Load adapters configured during setup wizard (explicit loading only).
+
+        This replaces auto-enable - all adapter loading must be explicit via
+        CIRIS_ADAPTER env var set during setup.
+        """
+        from ciris_engine.logic.runtime.resume_helpers import load_post_setup_adapters_for_resume
+
+        await load_post_setup_adapters_for_resume(self, log_step, total_steps)
 
     async def resume_from_first_run(self) -> None:
         """Resume initialization after setup wizard completes."""
@@ -1297,10 +1303,11 @@ class CIRISRuntime(ServicePropertyMixin):
         # Step 11: Re-inject services into adapters
         self._resume_reinject_adapters(log_step, total_steps)
 
-        # Step 12: Auto-enable Android-specific adapters
-        log_step(12, total_steps, "Auto-enabling Android adapters...")
-        await self._resume_auto_enable_android_adapters()
-        log_step(12, total_steps, "Android adapters auto-enabled")
+        # Step 12: Load post-setup adapters (explicit loading only - no auto-enable)
+        # This loads adapters configured during setup (e.g., cirisnode after Portal registration)
+        log_step(12, total_steps, "Loading post-setup adapters...")
+        await self._resume_load_post_setup_adapters(log_step, total_steps)
+        log_step(12, total_steps, "Post-setup adapters loaded")
 
         # Step 13: Build cognitive components
         log_step(13, total_steps, "Building cognitive components...")

@@ -1,51 +1,56 @@
-"""CIRISVerify Python bindings.
+"""CIRISVerify adapter package.
 
-Hardware-rooted license verification for the CIRIS ecosystem.
-Provides cryptographic proof of license status to prevent capability spoofing.
+This adapter integrates CIRISVerify license verification into the CIRIS agent.
+The core ciris_verify bindings are provided by the 'ciris-verify' PyPI package.
 
 Usage:
-    from ciris_verify import CIRISVerify, LicenseStatus
+    from ciris_adapters.ciris_verify import CIRISVerifyAdapter
 
-    verifier = CIRISVerify()
-    status = verifier.get_license_status(challenge_nonce=os.urandom(32))
-
-    if status.allows_licensed_operation():
-        # Professional capabilities available
-        pass
-    else:
-        # Community mode only
-        disclosure = status.mandatory_disclosure
-        print(disclosure.text)
+    adapter = CIRISVerifyAdapter(runtime, context)
+    await adapter.start()
 """
 
-from .client import CIRISVerify, MockCIRISVerify
-from .types import (
-    LicenseStatus,
-    LicenseTier,
-    LicenseDetails,
-    MandatoryDisclosure,
-    DisclosureSeverity,
-    LicenseStatusResponse,
-    CapabilityCheckResult,
-    FileIntegrityResult,
-    FileCheckStatus,
+# Re-export from the ciris-verify PyPI package for convenience
+from ciris_verify import (  # noqa: F401
     BinaryIntegrityStatus,
-    HardwareType,
-    ValidationStatus,
-    PythonModuleHashes,
-    PythonIntegrityResult,
-)
-from .exceptions import (
-    CIRISVerifyError,
     BinaryNotFoundError,
     BinaryTamperedError,
-    VerificationFailedError,
-    TimeoutError,
+    CapabilityCheckResult,
+    CIRISVerify,
+    CIRISVerifyError,
     CommunicationError,
+    DisclosureSeverity,
+    FileCheckStatus,
+    FileIntegrityResult,
+    HardwareType,
+    LicenseDetails,
+    LicenseStatus,
+    LicenseStatusResponse,
+    LicenseTier,
+    MandatoryDisclosure,
+    MockCIRISVerify,
+    PythonIntegrityResult,
+    PythonModuleHashes,
+    TimeoutError,
+    ValidationStatus,
+    VerificationFailedError,
 )
 
-__version__ = "0.8.13"
+# Export adapter-specific classes
+from .adapter import CIRISVerifyAdapter  # noqa: F401
+from .service import CIRISVerifyService, VerificationConfig  # noqa: F401
+
+# Alias for adapter loading code (looks for 'Adapter' class)
+Adapter = CIRISVerifyAdapter
+
+__version__ = "0.9.3"
 __all__ = [
+    # Adapter exports
+    "Adapter",
+    "CIRISVerifyAdapter",
+    "CIRISVerifyService",
+    "VerificationConfig",
+    # Re-exports from ciris-verify package
     "CIRISVerify",
     "MockCIRISVerify",
     "LicenseStatus",

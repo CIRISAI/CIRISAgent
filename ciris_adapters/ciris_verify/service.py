@@ -6,8 +6,6 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field
-
 from ciris_verify import (
     BinaryNotFoundError,
     BinaryTamperedError,
@@ -18,6 +16,7 @@ from ciris_verify import (
     LicenseTier,
     MandatoryDisclosure,
 )
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +52,9 @@ class CIRISVerifyService:
     when hardware security is unavailable (community mode).
     """
 
+    # Log level names for callback
+    _LOG_LEVEL_NAMES = {1: "ERROR", 2: "WARN", 3: "INFO", 4: "DEBUG", 5: "TRACE"}
+
     def __init__(self, config: Optional[VerificationConfig] = None):
         self.config = config or VerificationConfig()
         self._client: Optional[CIRISVerify] = None
@@ -60,6 +62,48 @@ class CIRISVerifyService:
         self._cache_lock = asyncio.Lock()
         self._initialized = False
         self._last_nonce: Optional[bytes] = None
+        self._log_callback_enabled = False
+
+    def _setup_log_callback(self) -> None:
+        """Set up log callback to capture internal CIRISVerify diagnostics.
+
+        This routes Rust-side log messages to Python logging for debugging.
+        Enabled when CIRIS_VERIFY_DEBUG=1 or log level is DEBUG.
+        """
+        if not self._client:
+            return
+
+        # Check if debug logging is enabled
+        debug_env = os.environ.get("CIRIS_VERIFY_DEBUG", "").lower() in ("1", "true", "yes")
+        debug_level = logger.isEnabledFor(logging.DEBUG)
+
+        if not (debug_env or debug_level):
+            return
+
+        # Set callback level based on environment
+        # Level: 1=ERROR, 2=WARN, 3=INFO, 4=DEBUG, 5=TRACE
+        callback_level = 5 if os.environ.get("CIRIS_VERIFY_TRACE") else 4
+
+        def log_callback(level: int, target: str, message: str) -> None:
+            """Route CIRISVerify logs to Python logging."""
+            level_name = self._LOG_LEVEL_NAMES.get(level, "?")
+            log_msg = f"[CIRISVerify/{target}] {message}"
+
+            if level == 1:  # ERROR
+                logger.error(log_msg)
+            elif level == 2:  # WARN
+                logger.warning(log_msg)
+            elif level == 3:  # INFO
+                logger.info(log_msg)
+            else:  # DEBUG/TRACE
+                logger.debug(log_msg)
+
+        try:
+            self._client.set_log_callback(log_callback, level=callback_level)
+            self._log_callback_enabled = True
+            logger.debug("CIRISVerify log callback enabled at level %d", callback_level)
+        except Exception as e:
+            logger.debug("CIRISVerify log callback not available: %s", e)
 
     async def initialize(self) -> bool:
         """Initialize the verification client.
@@ -75,6 +119,10 @@ class CIRISVerifyService:
                 binary_path=self.config.binary_path,
                 timeout_seconds=self.config.timeout_seconds,
             )
+
+            # Set up log callback for debugging (v0.9.3+)
+            self._setup_log_callback()
+
             self._initialized = True
             logger.info("CIRISVerify service initialized successfully")
             return True
@@ -93,6 +141,14 @@ class CIRISVerifyService:
 
     async def shutdown(self) -> None:
         """Shutdown the service and cleanup resources."""
+        # Clear log callback before destroying client
+        if self._client and self._log_callback_enabled:
+            try:
+                self._client.set_log_callback(None)
+            except Exception:
+                pass
+            self._log_callback_enabled = False
+
         self._client = None
         self._cache = None
         self._initialized = False

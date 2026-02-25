@@ -1,15 +1,15 @@
 {
-  "last_updated": "2026-02-24T15:14:41.736064+00:00",
+  "last_updated": "2026-02-25T14:38:10.298057+00:00",
   "version": "2.0.0-beta",
   "modules": {
     "_comment_core": "=== CORE API MODULES ===",
     "auth": {
-      "last_run": "2026-02-24T15:11:29.534322+00:00",
+      "last_run": "2026-02-25T14:38:10.298032+00:00",
       "passed": 3,
       "failed": 0,
       "total": 3,
       "status": "passing",
-      "duration_seconds": 17.54,
+      "duration_seconds": 0.64,
       "context": "Tests authentication system including login with username/password, JWT token generation/validation, token refresh, and logout. Validates OAuth integration readiness and API key authentication."
     },
     "telemetry": {
@@ -31,12 +31,12 @@
       "context": "Tests agent interaction endpoints including message submission, response retrieval, conversation history, queue status, thought processing, and the H3ERE reasoning pipeline integration."
     },
     "system": {
-      "last_run": "2026-02-24T15:11:05.768424+00:00",
-      "passed": 5,
-      "failed": 0,
+      "last_run": "2026-02-25T14:38:02.124596+00:00",
+      "passed": 3,
+      "failed": 2,
       "total": 5,
-      "status": "passing",
-      "duration_seconds": 20.06,
+      "status": "failing",
+      "duration_seconds": 9.87,
       "context": "Tests system management endpoints including health checks, runtime control (pause/resume), configuration management, emergency shutdown, and service status monitoring."
     },
     "memory": {
@@ -456,8 +456,8 @@
   },
   "summary": {
     "total_modules": 50,
-    "passing": 46,
-    "failing": 2,
+    "passing": 45,
+    "failing": 3,
     "not_run": 2
   }
 }

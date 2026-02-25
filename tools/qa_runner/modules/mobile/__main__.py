@@ -612,6 +612,169 @@ def licensed_agent_command(args) -> int:
     )
 
 
+def test_ios_physical_command(args) -> int:
+    """Handle iOS physical device test execution."""
+    from .ios.idevice_helper import IDeviceHelper
+    from .ios_physical_test_cases import (
+        PhysicalDeviceUIHelper,
+        test_physical_api_adapters,
+        test_physical_api_health,
+        test_physical_api_telemetry,
+        test_physical_api_verify_status,
+        test_physical_app_state,
+        test_physical_full_check,
+        test_physical_screenshot,
+    )
+    from .test_cases import TestReport, TestResult
+
+    print("\n" + "=" * 60)
+    print("CIRIS Mobile QA Runner — iOS Physical Device")
+    print("=" * 60)
+
+    # Initialize physical device helper
+    try:
+        helper = IDeviceHelper(device_id=args.device)
+    except RuntimeError as e:
+        print(f"\n[ERROR] {e}")
+        return 1
+
+    # Verify device is connected
+    devices = helper.get_devices()
+    connected = [d for d in devices if d.state == "device"]
+    if not connected:
+        print("\n[ERROR] No physical iOS device connected")
+        print("  Connect device via USB and trust the computer")
+        return 1
+
+    device = connected[0]
+    if args.device:
+        device = next((d for d in connected if d.identifier == args.device), connected[0])
+        helper.device_id = device.identifier
+
+    print(f"\n[INFO] Device: {device.name or 'Unknown'} ({device.identifier[:8]}...)")
+    if device.os_version:
+        print(f"[INFO] iOS {device.os_version}")
+    if device.model:
+        print(f"[INFO] Model: {device.model}")
+
+    ui = PhysicalDeviceUIHelper(helper)
+
+    # Available physical device tests
+    phys_tests = {
+        "screenshot": test_physical_screenshot,
+        "app_state": test_physical_app_state,
+        "api_health": test_physical_api_health,
+        "api_telemetry": test_physical_api_telemetry,
+        "api_verify": test_physical_api_verify_status,
+        "api_adapters": test_physical_api_adapters,
+        "full_check": test_physical_full_check,
+    }
+
+    # Map simulator test names to physical equivalents for convenience
+    test_name_map = {
+        "app_launch": "app_state",
+        "full_flow": "full_check",
+    }
+
+    # Build test config
+    test_config = {
+        "local_port": 18080,
+        "remote_port": 8080,
+    }
+
+    # Determine which tests to run
+    test_names = []
+    for name in args.tests:
+        mapped = test_name_map.get(name, name)
+        if mapped in phys_tests:
+            test_names.append(mapped)
+        else:
+            print(f"\n[WARN] Unknown physical device test: {name}")
+            print(f"  Available: {', '.join(phys_tests.keys())}")
+
+    if not test_names:
+        test_names = ["full_check"]
+
+    print(f"\nTests: {', '.join(test_names)}")
+
+    # Create output directory
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Run tests
+    print("\n" + "=" * 60)
+    print("Running Physical Device Tests")
+    print("=" * 60)
+
+    reports = []
+    for test_name in test_names:
+        test_func = phys_tests[test_name]
+        print(f"\n--- Test: {test_name} ---")
+
+        try:
+            report = test_func(helper, ui, test_config)
+            reports.append(report)
+
+            status_icon = {
+                TestResult.PASSED: "PASS",
+                TestResult.FAILED: "FAIL",
+                TestResult.SKIPPED: "SKIP",
+                TestResult.ERROR: "ERR!",
+            }
+            print(f"\n  [{status_icon.get(report.result, '????')}] {report.name} ({report.duration:.1f}s)")
+            if report.message:
+                print(f"        {report.message}")
+
+        except Exception as e:
+            error_report = TestReport(
+                name=test_name,
+                result=TestResult.ERROR,
+                duration=0.0,
+                message=f"Exception: {str(e)}",
+            )
+            reports.append(error_report)
+            print(f"\n  [ERR!] {test_name}: {e}")
+
+    # Clean up port forwarding
+    helper.stop_port_forward()
+
+    # Summary
+    passed = sum(1 for r in reports if r.result == TestResult.PASSED)
+    failed = sum(1 for r in reports if r.result == TestResult.FAILED)
+    errors = sum(1 for r in reports if r.result == TestResult.ERROR)
+
+    print("\n" + "=" * 60)
+    print("Physical Device Test Summary")
+    print("=" * 60)
+    print(f"  Total:   {len(reports)}")
+    print(f"  Passed:  {passed}")
+    print(f"  Failed:  {failed}")
+    print(f"  Errors:  {errors}")
+    print("=" * 60 + "\n")
+
+    # Save results
+    import json as json_mod
+    results_path = output_dir / f"ios_physical_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    with open(results_path, "w") as f:
+        json_mod.dump({
+            "platform": "ios_physical",
+            "device": {
+                "name": device.name,
+                "identifier": device.identifier,
+                "os_version": device.os_version,
+                "model": device.model,
+            },
+            "reports": [
+                {"name": r.name, "result": r.result.value, "duration": r.duration, "message": r.message}
+                for r in reports
+            ],
+            "summary": {"total": len(reports), "passed": passed, "failed": failed, "errors": errors},
+        }, f, indent=2)
+    print(f"Results: {results_path}")
+
+    return 0 if (failed == 0 and errors == 0) else 1
+
+
 def test_ios_command(args) -> int:
     """Handle iOS simulator test execution."""
     from .ios.ios_ui_automator import iOSUIAutomator
@@ -776,6 +939,26 @@ def test_command(args) -> int:
     # Route to iOS if platform is ios
     platform = getattr(args, "platform", "android")
     if platform == "ios":
+        # Auto-detect: prefer physical device over simulator
+        force_simulator = getattr(args, "simulator", False)
+        use_physical = getattr(args, "physical", False)
+
+        if not force_simulator and not use_physical:
+            # Auto-detect physical device
+            try:
+                from .ios.idevice_helper import IDeviceHelper
+                phys_helper = IDeviceHelper(device_id=getattr(args, "device", None))
+                phys_devices = phys_helper.get_devices()
+                connected = [d for d in phys_devices if d.state == "device"]
+                if connected:
+                    use_physical = True
+                    print("[INFO] Physical iOS device detected — using physical device tests")
+                    print("       (Use --simulator to force simulator tests)")
+            except (RuntimeError, Exception):
+                pass
+
+        if use_physical and not force_simulator:
+            return test_ios_physical_command(args)
         return test_ios_command(args)
 
     print("\n" + "=" * 60)
@@ -1122,7 +1305,7 @@ Available tests (Android):
   chat_interaction  - Test sending a message and receiving response
   full_flow         - Run complete end-to-end flow (default)
 
-Available tests (iOS - use --platform ios):
+Available tests (iOS simulator - use --platform ios --simulator):
   app_launch              - Test that app launches and shows login screen
   local_login             - Test local login flow
   setup_wizard            - Test completing the setup wizard
@@ -1132,16 +1315,28 @@ Available tests (iOS - use --platform ios):
   connect_node_auth       - Enter node URL and verify auth screen
   connect_node_error      - Test error handling for invalid node URL
 
+Available tests (iOS physical device - auto-detected or --physical):
+  screenshot              - Take screenshot and verify OCR works
+  app_state               - Verify app is running via screenshot OCR
+  api_health              - Check API health via iproxy
+  api_telemetry           - Login, check telemetry + service health
+  api_verify              - Check CIRISVerify attestation status
+  api_adapters            - List loaded adapters
+  full_check              - Run all physical device checks (default)
+
 Examples:
   # Android tests (default)
   python -m tools.qa_runner.modules.mobile test full_flow
   python -m tools.qa_runner.modules.mobile test app_launch --no-reinstall
 
-  # iOS simulator tests
-  python -m tools.qa_runner.modules.mobile test app_launch --platform ios
-  python -m tools.qa_runner.modules.mobile test connect_node --platform ios
-  python -m tools.qa_runner.modules.mobile test connect_node --platform ios --node-url https://node.ciris.ai
-  python -m tools.qa_runner.modules.mobile test connect_node --platform ios --wait-portal
+  # iOS physical device (auto-detected if connected)
+  python -m tools.qa_runner.modules.mobile test --platform ios
+  python -m tools.qa_runner.modules.mobile test full_check --platform ios
+  python -m tools.qa_runner.modules.mobile test api_health api_telemetry --platform ios
+
+  # iOS simulator (force with --simulator)
+  python -m tools.qa_runner.modules.mobile test app_launch --platform ios --simulator
+  python -m tools.qa_runner.modules.mobile test connect_node --platform ios --simulator --node-url https://node.ciris.ai
 """,
     )
     test_parser.add_argument(
@@ -1198,6 +1393,19 @@ Examples:
     test_parser.add_argument("--build", "-b", action="store_true", help="Build APK before running tests")
     test_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     test_parser.add_argument("--keep-open", action="store_true", help="Keep app running after tests (don't force-stop)")
+
+    # iOS physical/simulator selection
+    test_parser.add_argument(
+        "--physical",
+        action="store_true",
+        help="Force physical device tests (auto-detected if device is connected)",
+    )
+    test_parser.add_argument(
+        "--simulator",
+        "-s",
+        action="store_true",
+        help="Force simulator tests even if physical device is connected",
+    )
 
     # Create Licensed Agent options (iOS)
     test_parser.add_argument(

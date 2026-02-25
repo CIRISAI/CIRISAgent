@@ -32,6 +32,7 @@ class IDeviceHelper(DeviceHelper):
         """
         self.device_id = device_id
         self._log_process: Optional[subprocess.Popen] = None
+        self._port_forward_process: Optional[subprocess.Popen] = None
         self._verify_tools()
 
     def _verify_tools(self):
@@ -369,26 +370,40 @@ class IDeviceHelper(DeviceHelper):
     # ========== Screen Capture ==========
 
     def screenshot(self, output_path: str) -> bool:
-        """Take screenshot."""
-        device = self._get_device_target()
+        """Take screenshot using pymobiledevice3 (requires tunneld running).
 
-        if self._has_devicectl:
+        pymobiledevice3 developer dvt screenshot is the only reliable method
+        for iOS 17+ physical devices. Requires a background tunneld daemon:
+            sudo python3 -m pymobiledevice3 remote tunneld &
+        """
+        # pymobiledevice3 is the only working screenshot method for iOS 17+
+        # (idevicescreenshot is broken, xcrun devicectl has no screenshot command)
+        try:
             result = subprocess.run(
-                ["xcrun", "devicectl", "device", "info", "screenshot", "--device", device, "--output", output_path],
+                ["python3", "-m", "pymobiledevice3", "developer", "dvt", "screenshot", output_path],
                 capture_output=True,
                 text=True,
                 timeout=30,
             )
-            return result.returncode == 0
+            if result.returncode == 0 and Path(output_path).exists():
+                return True
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
 
+        # Fallback: idevicescreenshot (works on older iOS)
         if self._has_idevice:
-            result = subprocess.run(
-                ["idevicescreenshot", "-u", device, output_path],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            return result.returncode == 0
+            device = self._get_device_target()
+            udid = self._get_udid_for_idevice_tools(device)
+            try:
+                result = subprocess.run(
+                    ["idevicescreenshot", "-u", udid, output_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                return result.returncode == 0
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
 
         return False
 
@@ -770,15 +785,33 @@ class IDeviceHelper(DeviceHelper):
 
     def forward_port(self, local_port: int, remote_port: int) -> bool:
         """Forward port using iproxy."""
+        # Clean up any previous port forward
+        self.stop_port_forward()
+
         if self._has_idevice:
             device = self._get_device_target()
+            udid = self._get_udid_for_idevice_tools(device)
             try:
-                subprocess.Popen(
-                    ["iproxy", str(local_port), str(remote_port), "-u", device],
+                self._port_forward_process = subprocess.Popen(
+                    ["iproxy", str(local_port), str(remote_port), "-u", udid],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
+                # Give iproxy a moment to start
+                time.sleep(0.5)
                 return True
             except Exception:
                 pass
+        return False
+
+    def stop_port_forward(self) -> bool:
+        """Stop the port forwarding process."""
+        if self._port_forward_process:
+            self._port_forward_process.terminate()
+            try:
+                self._port_forward_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._port_forward_process.kill()
+            self._port_forward_process = None
+            return True
         return False

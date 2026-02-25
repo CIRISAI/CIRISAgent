@@ -76,15 +76,22 @@ def get_latest_release_version() -> str:
     return version
 
 
-def download_release(version: str, dest_dir: Path) -> Path:
-    """Download Android release tarball from GitHub."""
+def download_release(version: str, dest_dir: Path, platform: str = "android") -> Path:
+    """Download a platform release tarball from GitHub.
+
+    Args:
+        version: Release version (e.g. "0.9.4").
+        dest_dir: Directory to download into.
+        platform: "android" or "ios".
+    """
     tag = f"v{version}"
 
     asset_patterns = [
-        f"ciris-verify-v{version}-android.tar.gz",
-        f"ciris-verify-{version}-android.tar.gz",
-        "ciris-verify-ffi.tar.gz",
+        f"ciris-verify-v{version}-{platform}.tar.gz",
+        f"ciris-verify-{version}-{platform}.tar.gz",
     ]
+    if platform == "android":
+        asset_patterns.append("ciris-verify-ffi.tar.gz")
 
     for pattern in asset_patterns:
         print(f"Trying to download {pattern} from release {tag}...")
@@ -94,14 +101,14 @@ def download_release(version: str, dest_dir: Path) -> Path:
         )
 
         for f in dest_dir.iterdir():
-            if f.suffix == ".gz" and "android" in f.name.lower():
+            if f.suffix == ".gz" and platform in f.name.lower():
                 print(f"  Downloaded: {f.name}")
                 return f
             elif f.name == "ciris-verify-ffi.tar.gz":
                 print(f"  Downloaded: {f.name}")
                 return f
 
-    raise FileNotFoundError(f"Failed to download Android tarball from release {tag}")
+    raise FileNotFoundError(f"Failed to download {platform} tarball from release {tag}")
 
 
 def download_checksums(version: str, dest_dir: Path) -> Path:
@@ -181,6 +188,190 @@ def update_android_binaries(extract_dir: Path, checksums: dict[str, str]) -> Non
 # ---------------------------------------------------------------------------
 # iOS
 # ---------------------------------------------------------------------------
+
+
+def convert_static_to_dynamic(static_lib: Path, output_dylib: Path, target: str) -> bool:
+    """Convert a static archive (.a) to a dynamic library (.dylib).
+
+    Uses clang to link the static archive into a shared library suitable
+    for ctypes/dlopen on iOS.
+
+    Args:
+        static_lib: Path to the .a file.
+        output_dylib: Where to write the .dylib.
+        target: Rust-style target triple (e.g. "aarch64-apple-ios").
+
+    Returns:
+        True on success.
+    """
+    # Map target to clang -target and SDK
+    if "sim" in target:
+        sdk = "iphonesimulator"
+    else:
+        sdk = "iphoneos"
+
+    sdk_path_result = run_cmd(["xcrun", "--sdk", sdk, "--show-sdk-path"], check=False)
+    if sdk_path_result.returncode != 0:
+        print(f"  ERROR: Could not find {sdk} SDK")
+        return False
+    sdk_path = sdk_path_result.stdout.strip()
+
+    # Detect minimum deployment target from the static archive to avoid
+    # version mismatch warnings.  Falls back to 16.0 on error.
+    min_version = "16.0"
+    otool_result = run_cmd(["otool", "-l", str(static_lib)], check=False)
+    if otool_result.returncode == 0:
+        for line in otool_result.stdout.splitlines():
+            line = line.strip()
+            if line.startswith("minos ") or line.startswith("version "):
+                ver = line.split()[-1]
+                # Pick the highest version seen
+                try:
+                    if tuple(int(x) for x in ver.split(".")) > tuple(int(x) for x in min_version.split(".")):
+                        min_version = ver
+                except (ValueError, IndexError):
+                    pass
+
+    if "sim" in target:
+        clang_target = f"arm64-apple-ios{min_version}-simulator"
+    else:
+        clang_target = f"arm64-apple-ios{min_version}"
+
+    print(f"  {target}: linking with deployment target {min_version}")
+
+    cmd = [
+        "clang", "-shared",
+        "-arch", "arm64",
+        "-isysroot", sdk_path,
+        "-target", clang_target,
+        "-Wl,-all_load", str(static_lib),
+        "-o", str(output_dylib),
+        "-framework", "CoreFoundation",
+        "-framework", "Security",
+        "-framework", "SystemConfiguration",
+        "-install_name", "@rpath/CIRISVerify.framework/CIRISVerify",
+    ]
+    result = run_cmd(cmd, check=False)
+    if result.returncode != 0:
+        print(f"  ERROR: clang linking failed:\n{result.stderr}")
+        return False
+
+    # Verify it's dynamic
+    file_result = run_cmd(["file", str(output_dylib)], check=False)
+    if "dynamically linked" not in file_result.stdout:
+        print(f"  ERROR: Output is not dynamic: {file_result.stdout.strip()}")
+        return False
+
+    size_mb = output_dylib.stat().st_size / 1024 / 1024
+    print(f"  -> Converted {static_lib.name} to dylib ({size_mb:.1f}MB)")
+    return True
+
+
+def update_ios_from_release(version: str, extract_dir: Path, checksums: dict[str, str]) -> None:
+    """Update iOS binaries from a release tarball.
+
+    Downloads the iOS tarball, converts static archives to dynamic libraries,
+    builds an XCFramework, and copies the fallback dylib.
+    """
+    print("\nUpdating iOS binaries from release...")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        for label, target in IOS_TARGETS.items():
+            src_a = extract_dir / "ios" / target / "libciris_verify_ffi.a"
+            if not src_a.exists():
+                print(f"  Missing {label}: {src_a}")
+                continue
+
+            # Verify checksum
+            checksum_key = f"ios/{target}/libciris_verify_ffi.a"
+            if checksum_key in checksums:
+                if verify_checksum(src_a, checksums[checksum_key]):
+                    print(f"  {label}: checksum verified")
+                else:
+                    print(f"  {label}: CHECKSUM MISMATCH!")
+                    raise ValueError(f"Checksum mismatch for {checksum_key}")
+
+            # Convert .a → .dylib
+            dylib_dir = tmpdir / target
+            dylib_dir.mkdir(parents=True)
+            dylib_path = dylib_dir / "libciris_verify_ffi.dylib"
+
+            if not convert_static_to_dynamic(src_a, dylib_path, target):
+                print(f"  ERROR: Failed to convert {label} static lib to dynamic")
+                continue
+
+            # Determine platform
+            if "sim" in target:
+                platform_name = "iPhoneSimulator"
+                xcfw_slice = "ios-arm64-simulator"
+            else:
+                platform_name = "iPhoneOS"
+                xcfw_slice = "ios-arm64"
+
+            # Create framework bundle
+            fw_dir = tmpdir / xcfw_slice / "CIRISVerify.framework"
+            fw_dir.mkdir(parents=True)
+            headers_dir = fw_dir / "Headers"
+            headers_dir.mkdir()
+
+            shutil.copy2(dylib_path, fw_dir / "CIRISVerify")
+
+            run_cmd([
+                "install_name_tool", "-id",
+                "@rpath/CIRISVerify.framework/CIRISVerify",
+                str(fw_dir / "CIRISVerify"),
+            ])
+
+            plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleExecutable</key><string>CIRISVerify</string>
+    <key>CFBundleIdentifier</key><string>ai.ciris.verify</string>
+    <key>CFBundleName</key><string>CIRISVerify</string>
+    <key>CFBundlePackageType</key><string>FMWK</string>
+    <key>CFBundleShortVersionString</key><string>{version}</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>MinimumOSVersion</key><string>16.0</string>
+    <key>CFBundleSupportedPlatforms</key>
+    <array><string>{platform_name}</string></array>
+</dict>
+</plist>"""
+            (fw_dir / "Info.plist").write_text(plist_content)
+            print(f"  {label}: prepared framework")
+
+        # Build XCFramework
+        framework_args = []
+        for slice_name in ["ios-arm64", "ios-arm64-simulator"]:
+            fw = tmpdir / slice_name / "CIRISVerify.framework"
+            if fw.exists():
+                framework_args.extend(["-framework", str(fw)])
+
+        if not framework_args:
+            print("  ERROR: No iOS frameworks produced")
+            return
+
+        if IOS_XCFRAMEWORK_DIR.exists():
+            shutil.rmtree(IOS_XCFRAMEWORK_DIR)
+
+        cmd = ["xcodebuild", "-create-xcframework"] + framework_args + ["-output", str(IOS_XCFRAMEWORK_DIR)]
+        result = run_cmd(cmd, check=False)
+        if result.returncode != 0:
+            print(f"  ERROR: xcodebuild failed: {result.stderr}")
+            return
+
+        print(f"  -> XCFramework written to {IOS_XCFRAMEWORK_DIR.relative_to(REPO_ROOT)}")
+
+        # Copy device dylib as fallback into Python bindings dir
+        device_dylib = tmpdir / "aarch64-apple-ios" / "libciris_verify_ffi.dylib"
+        if device_dylib.exists():
+            IOS_PYTHON_DIR.mkdir(parents=True, exist_ok=True)
+            dest = IOS_PYTHON_DIR / "libciris_verify_ffi.dylib"
+            shutil.copy2(device_dylib, dest)
+            print(f"  -> Fallback dylib copied ({dest.stat().st_size / 1024 / 1024:.1f}MB)")
 
 
 def build_ios_xcframework(ciris_verify_root: Path, version: str) -> None:
@@ -518,7 +709,7 @@ def update_python_bindings(version: str, tmpdir: Path) -> None:
     """Download and extract Python bindings from PyPI."""
     print(f"\nUpdating Python bindings from PyPI...")
 
-    result = run_cmd(["pip", "download", f"ciris-verify=={version}", "--no-deps", "-d", str(tmpdir)], check=False)
+    result = run_cmd([sys.executable, "-m", "pip", "download", f"ciris-verify=={version}", "--no-deps", "-d", str(tmpdir)], check=False)
 
     wheel_file = None
     for f in tmpdir.iterdir():
@@ -668,7 +859,7 @@ Examples:
     parser.add_argument("version", nargs="?", help="Version to download (e.g., 0.6.16). Defaults to latest release.")
     parser.add_argument("--local", type=Path, metavar="PATH", help="Path to local CIRISVerify repo (skips download)")
     parser.add_argument("--skip-checksums", action="store_true", help="Skip checksum verification")
-    parser.add_argument("--ios-only", action="store_true", help="Only update iOS (requires --local)")
+    parser.add_argument("--ios-only", action="store_true", help="Only update iOS")
     parser.add_argument("--android-only", action="store_true", help="Only update Android")
     parser.add_argument("--no-zip", action="store_true", help="Skip rebuilding Resources.zip")
     args = parser.parse_args()
@@ -676,10 +867,6 @@ Examples:
     # Determine platforms
     do_android = not args.ios_only
     do_ios = not args.android_only
-
-    if args.ios_only and not args.local:
-        print("Error: --ios-only requires --local (iOS builds are not in GitHub releases)")
-        sys.exit(1)
 
     # Local build mode
     if args.local:
@@ -705,23 +892,38 @@ Examples:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
 
+        checksums = {}
+        if not args.skip_checksums:
+            try:
+                checksum_file = download_checksums(version, tmpdir)
+                checksums = parse_checksums(checksum_file)
+                print(f"  Loaded {len(checksums)} checksums")
+            except Exception as e:
+                print(f"  Could not load checksums: {e}")
+
         if do_android:
-            tarball = download_release(version, tmpdir)
-
-            checksums = {}
-            if not args.skip_checksums:
-                try:
-                    checksum_file = download_checksums(version, tmpdir)
-                    checksums = parse_checksums(checksum_file)
-                    print(f"  Loaded {len(checksums)} checksums")
-                except Exception as e:
-                    print(f"  Could not load checksums: {e}")
-
-            extract_dir = tmpdir / "extracted"
+            android_dir = tmpdir / "android_dl"
+            android_dir.mkdir()
+            tarball = download_release(version, android_dir, platform="android")
+            extract_dir = tmpdir / "android_extracted"
             extract_dir.mkdir()
             extract_tarball(tarball, extract_dir)
-
             update_android_binaries(extract_dir, checksums)
+
+        if do_ios:
+            ios_dir = tmpdir / "ios_dl"
+            ios_dir.mkdir()
+            try:
+                ios_tarball = download_release(version, ios_dir, platform="ios")
+                ios_extract_dir = tmpdir / "ios_extracted"
+                ios_extract_dir.mkdir()
+                extract_tarball(ios_tarball, ios_extract_dir)
+                update_ios_from_release(version, ios_extract_dir, checksums)
+                sync_ios_adapter()
+            except FileNotFoundError:
+                print("\n  iOS tarball not found in release.")
+                print("  For iOS, use --local with a CIRISVerify build:")
+                print("  python -m tools.update_ciris_verify --local /path/to/CIRISVerify --ios-only")
 
         # Python bindings (shared between platforms)
         update_python_bindings(version, tmpdir)
@@ -739,9 +941,9 @@ Examples:
         print("  2. adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk")
 
     if do_ios:
-        print("\niOS note: GitHub releases don't include iOS binaries.")
-        print("  For iOS, use --local with a CIRISVerify build:")
-        print("  python -m tools.update_ciris_verify --local /path/to/CIRISVerify --ios-only")
+        print("\niOS next steps:")
+        print("  1. Bump CFBundleVersion in Info.plist")
+        print("  2. Build and deploy to device")
 
 
 if __name__ == "__main__":

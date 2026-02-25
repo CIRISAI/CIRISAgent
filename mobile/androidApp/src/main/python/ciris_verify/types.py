@@ -3,10 +3,9 @@
 All types use Pydantic for validation and follow CIRIS typing conventions.
 """
 
+from enum import IntEnum, Enum
+from typing import Optional, List, Set
 from datetime import datetime
-from enum import Enum, IntEnum
-from typing import List, Optional, Set
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -15,7 +14,6 @@ class LicenseStatus(IntEnum):
 
     Matches FSD-001 Section 3.2 LicenseStatus enum.
     """
-
     # Active licensed states (100-199)
     LICENSED_PROFESSIONAL = 100
     LICENSED_PROFESSIONAL_GRACE = 101  # Offline grace period
@@ -64,11 +62,10 @@ class LicenseTier(IntEnum):
     Higher tiers unlock more capabilities.
     SOFTWARE_ONLY hardware caps at COMMUNITY regardless of license.
     """
-
-    COMMUNITY = 0  # No professional capabilities
+    COMMUNITY = 0           # No professional capabilities
     PROFESSIONAL_BASIC = 1  # Basic professional capabilities
-    PROFESSIONAL_FULL = 2  # Full professional capabilities
-    ENTERPRISE = 3  # Enterprise features
+    PROFESSIONAL_FULL = 2   # Full professional capabilities
+    ENTERPRISE = 3          # Enterprise features
 
 
 class HardwareType(str, Enum):
@@ -76,7 +73,6 @@ class HardwareType(str, Enum):
 
     Determines maximum achievable license tier.
     """
-
     ANDROID_KEYSTORE = "android_keystore"
     ANDROID_STRONGBOX = "android_strongbox"
     IOS_SECURE_ENCLAVE = "ios_secure_enclave"
@@ -105,17 +101,15 @@ class HardwareType(str, Enum):
 
 class ValidationStatus(str, Enum):
     """Multi-source validation status."""
-
     ALL_SOURCES_AGREE = "all_sources_agree"
     PARTIAL_AGREEMENT = "partial_agreement"  # 2-of-3
-    SOURCES_DISAGREE = "sources_disagree"  # Security alert
+    SOURCES_DISAGREE = "sources_disagree"    # Security alert
     NO_SOURCES_REACHABLE = "no_sources_reachable"
     VALIDATION_ERROR = "validation_error"
 
 
 class DisclosureSeverity(str, Enum):
     """Severity level for mandatory disclosures."""
-
     INFO = "info"
     WARNING = "warning"
     CRITICAL = "critical"
@@ -127,7 +121,6 @@ class MandatoryDisclosure(BaseModel):
     Per FSD-001: Agents MUST display this text when interacting with users.
     Failure to display is a violation of the CIRIS ecosystem rules.
     """
-
     model_config = ConfigDict(frozen=True)
 
     text: str = Field(..., description="Disclosure text to display")
@@ -138,7 +131,6 @@ class MandatoryDisclosure(BaseModel):
 
 class LicenseDetails(BaseModel):
     """Detailed license information when licensed."""
-
     model_config = ConfigDict(frozen=True)
 
     license_id: str = Field(..., description="Unique license identifier")
@@ -168,7 +160,6 @@ class LicenseDetails(BaseModel):
 
 class SourceDetails(BaseModel):
     """Details about multi-source validation."""
-
     model_config = ConfigDict(frozen=True)
 
     dns_us_reachable: bool = False
@@ -189,7 +180,6 @@ class SourceDetails(BaseModel):
 
 class AttestationData(BaseModel):
     """Hardware attestation data."""
-
     model_config = ConfigDict(frozen=True)
 
     hardware_type: HardwareType = HardwareType.SOFTWARE_ONLY
@@ -203,7 +193,6 @@ class LicenseStatusResponse(BaseModel):
 
     This is the primary response type returned by get_license_status().
     """
-
     model_config = ConfigDict(frozen=True)
 
     status: LicenseStatus = Field(..., description="Overall license status")
@@ -238,7 +227,6 @@ class LicenseStatusResponse(BaseModel):
 
 class CapabilityCheckResult(BaseModel):
     """Result of checking a specific capability."""
-
     model_config = ConfigDict(frozen=True)
 
     capability: str = Field(..., description="Capability that was checked")
@@ -251,7 +239,6 @@ class CapabilityCheckResult(BaseModel):
 
 class FileCheckStatus(str, Enum):
     """Status of a single file integrity check."""
-
     PASSED = "passed"
     FAILED = "failed"
     MISSING = "missing"
@@ -264,7 +251,6 @@ class FileIntegrityResult(BaseModel):
     ANY failure means the agent distribution has been tampered with
     and must be shut down immediately.
     """
-
     model_config = ConfigDict(frozen=True)
 
     integrity_valid: bool = Field(..., description="Whether all checked files passed")
@@ -298,7 +284,6 @@ class BinaryIntegrityStatus(BaseModel):
     Reports whether the running CIRISVerify binary matches its registry manifest.
     This is the "who watches the watchmen" check.
     """
-
     model_config = ConfigDict(frozen=True)
 
     status: str = Field(..., description="verified/tampered/unavailable/not_found/pending")
@@ -329,7 +314,6 @@ class PythonModuleHashes(BaseModel):
     Generated at startup by hashing all Python modules (ciris_engine, etc.).
     Used for code integrity verification on mobile where Python is embedded in APK.
     """
-
     model_config = ConfigDict(frozen=True)
 
     total_hash: str = Field(..., description="SHA-256 hex of all module hashes concatenated")
@@ -345,7 +329,6 @@ class PythonIntegrityResult(BaseModel):
     Returned when python_hashes is provided to run_attestation().
     As of v0.9.2+, performs per-module hash validation against registry manifest.
     """
-
     model_config = ConfigDict(frozen=True)
 
     valid: bool = Field(..., description="Overall integrity valid")

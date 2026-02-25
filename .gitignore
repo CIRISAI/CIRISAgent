@@ -121,6 +121,9 @@ mobile_qa_reports/
 web_ui_qa_reports/
 benchmark_results/
 
+# iOS Resources.zip (rebuilt locally, too large for git)
+mobile/iosApp/Resources.zip
+
 # Gradle cache directories (build config files like build.gradle are OK)
 .gradle/
 */.gradle/

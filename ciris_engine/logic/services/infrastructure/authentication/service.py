@@ -1919,7 +1919,12 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
                         # Load Python module hashes from startup file
                         python_hashes = None
-                        agent_version = None
+                        # Default agent_version from CIRIS_VERSION (needed for registry file manifest lookup)
+                        try:
+                            from ciris_engine.constants import CIRIS_VERSION
+                            agent_version: Optional[str] = CIRIS_VERSION.split("-")[0] if "-" in CIRIS_VERSION else CIRIS_VERSION
+                        except Exception:
+                            agent_version = None
                         try:
                             import json
 
@@ -1940,7 +1945,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                                         self.computed_at = data.get("computed_at", 0)
 
                                 python_hashes = PythonHashesWrapper(hashes_data)
-                                agent_version = hashes_data.get("agent_version")
+                                agent_version = hashes_data.get("agent_version") or agent_version
                                 # Strip -stable/-dev/-rc suffixes for registry lookup
                                 # Registry uses semantic versions like "2.0.0", not "2.0.0-stable"
                                 if agent_version and "-" in agent_version:

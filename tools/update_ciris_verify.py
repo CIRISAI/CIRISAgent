@@ -279,28 +279,46 @@ def update_ios_from_release(version: str, extract_dir: Path, checksums: dict[str
         tmpdir = Path(tmpdir)
 
         for label, target in IOS_TARGETS.items():
+            # Prefer pre-built .dylib from release (preserves registry hash)
+            src_dylib = extract_dir / "ios" / target / "libciris_verify_ffi.dylib"
             src_a = extract_dir / "ios" / target / "libciris_verify_ffi.a"
-            if not src_a.exists():
-                print(f"  Missing {label}: {src_a}")
+            use_prebuilt = src_dylib.exists()
+
+            if use_prebuilt:
+                # Verify checksum of pre-built dylib
+                checksum_key = f"ios/{target}/libciris_verify_ffi.dylib"
+                if checksum_key in checksums:
+                    if verify_checksum(src_dylib, checksums[checksum_key]):
+                        print(f"  {label}: checksum verified")
+                    else:
+                        print(f"  {label}: CHECKSUM MISMATCH!")
+                        raise ValueError(f"Checksum mismatch for {checksum_key}")
+            elif src_a.exists():
+                # Fallback: verify .a checksum
+                checksum_key = f"ios/{target}/libciris_verify_ffi.a"
+                if checksum_key in checksums:
+                    if verify_checksum(src_a, checksums[checksum_key]):
+                        print(f"  {label}: checksum verified")
+                    else:
+                        print(f"  {label}: CHECKSUM MISMATCH!")
+                        raise ValueError(f"Checksum mismatch for {checksum_key}")
+            else:
+                print(f"  Missing {label}: no .dylib or .a found")
                 continue
 
-            # Verify checksum
-            checksum_key = f"ios/{target}/libciris_verify_ffi.a"
-            if checksum_key in checksums:
-                if verify_checksum(src_a, checksums[checksum_key]):
-                    print(f"  {label}: checksum verified")
-                else:
-                    print(f"  {label}: CHECKSUM MISMATCH!")
-                    raise ValueError(f"Checksum mismatch for {checksum_key}")
-
-            # Convert .a → .dylib
             dylib_dir = tmpdir / target
             dylib_dir.mkdir(parents=True)
             dylib_path = dylib_dir / "libciris_verify_ffi.dylib"
 
-            if not convert_static_to_dynamic(src_a, dylib_path, target):
-                print(f"  ERROR: Failed to convert {label} static lib to dynamic")
-                continue
+            if use_prebuilt:
+                # Use pre-built dylib directly (preserves binary hash for registry verification)
+                shutil.copy2(src_dylib, dylib_path)
+                print(f"  {label}: using pre-built dylib ({dylib_path.stat().st_size / 1024 / 1024:.1f}MB)")
+            else:
+                # Convert .a → .dylib (legacy path for older releases)
+                if not convert_static_to_dynamic(src_a, dylib_path, target):
+                    print(f"  ERROR: Failed to convert {label} static lib to dynamic")
+                    continue
 
             # Determine platform
             if "sim" in target:
@@ -318,6 +336,10 @@ def update_ios_from_release(version: str, extract_dir: Path, checksums: dict[str
 
             shutil.copy2(dylib_path, fw_dir / "CIRISVerify")
 
+            # Set install name so dyld can find it at runtime.
+            # NOTE: This modifies the binary hash. For registry binary self-verification
+            # to pass, CIRISVerify CI should build dylibs with:
+            #   -install_name @rpath/CIRISVerify.framework/CIRISVerify
             run_cmd([
                 "install_name_tool", "-id",
                 "@rpath/CIRISVerify.framework/CIRISVerify",

@@ -337,14 +337,18 @@ def update_ios_from_release(version: str, extract_dir: Path, checksums: dict[str
             shutil.copy2(dylib_path, fw_dir / "CIRISVerify")
 
             # Set install name so dyld can find it at runtime.
-            # NOTE: This modifies the binary hash. For registry binary self-verification
-            # to pass, CIRISVerify CI should build dylibs with:
-            #   -install_name @rpath/CIRISVerify.framework/CIRISVerify
-            run_cmd([
-                "install_name_tool", "-id",
-                "@rpath/CIRISVerify.framework/CIRISVerify",
-                str(fw_dir / "CIRISVerify"),
-            ])
+            # Skip if already correct (v0.10.1+ bakes it in) to preserve registry hash.
+            expected_id = "@rpath/CIRISVerify.framework/CIRISVerify"
+            current_id = run_cmd(["otool", "-D", str(fw_dir / "CIRISVerify")], check=False)
+            needs_id_fix = expected_id not in (current_id.stdout or "")
+            if needs_id_fix:
+                run_cmd([
+                    "install_name_tool", "-id", expected_id,
+                    str(fw_dir / "CIRISVerify"),
+                ])
+                print(f"  {label}: applied install_name_tool")
+            else:
+                print(f"  {label}: install name already correct, skipping (preserves hash)")
 
             plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

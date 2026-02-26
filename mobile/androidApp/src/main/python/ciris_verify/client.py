@@ -417,7 +417,9 @@ class CIRISVerify:
         self._lib.ciris_verify_export_attestation.restype = ctypes.c_int
 
         # ciris_verify_free(data)
-        self._lib.ciris_verify_free.argtypes = [ctypes.c_char_p]
+        # NOTE: MUST be c_void_p, not c_char_p! c_char_p treats the pointer as a
+        # null-terminated string and can corrupt memory by reading past allocation.
+        self._lib.ciris_verify_free.argtypes = [ctypes.c_void_p]
         self._lib.ciris_verify_free.restype = None
 
         # ciris_verify_destroy(handle)
@@ -648,7 +650,7 @@ class CIRISVerify:
             return self._parse_response(response_bytes)
         finally:
             if response_data.value:
-                self._lib.ciris_verify_free(ctypes.c_char_p(response_data.value))
+                self._lib.ciris_verify_free(response_data.value)
 
     def _parse_response(self, data: bytes) -> LicenseStatusResponse:
         """Parse JSON response from Rust FFI into LicenseStatusResponse."""
@@ -925,7 +927,7 @@ class CIRISVerify:
                 return FileIntegrityResult(**result_dict)
             finally:
                 if response_data.value:
-                    self._lib.ciris_verify_free(ctypes.c_char_p(response_data.value))
+                    self._lib.ciris_verify_free(response_data.value)
 
         loop = asyncio.get_event_loop()
         try:
@@ -979,7 +981,7 @@ class CIRISVerify:
                 return ctypes.string_at(sig_data.value, sig_len.value)
             finally:
                 if sig_data.value:
-                    self._lib.ciris_verify_free(ctypes.c_char_p(sig_data.value))
+                    self._lib.ciris_verify_free(sig_data.value)
 
         loop = asyncio.get_event_loop()
         try:
@@ -1030,9 +1032,9 @@ class CIRISVerify:
                 return key_bytes, algo_str
             finally:
                 if key_data.value:
-                    self._lib.ciris_verify_free(ctypes.c_char_p(key_data.value))
+                    self._lib.ciris_verify_free(key_data.value)
                 if algo_data.value:
-                    self._lib.ciris_verify_free(ctypes.c_char_p(algo_data.value))
+                    self._lib.ciris_verify_free(algo_data.value)
 
         loop = asyncio.get_event_loop()
         try:
@@ -1099,7 +1101,7 @@ class CIRISVerify:
                 return json.loads(proof_bytes)
             finally:
                 if proof_data.value:
-                    self._lib.ciris_verify_free(ctypes.c_char_p(proof_data.value))
+                    self._lib.ciris_verify_free(proof_data.value)
 
         loop = asyncio.get_event_loop()
         try:
@@ -1148,7 +1150,7 @@ class CIRISVerify:
             return json.loads(proof_bytes)
         finally:
             if proof_data.value:
-                self._lib.ciris_verify_free(ctypes.c_char_p(proof_data.value))
+                self._lib.ciris_verify_free(proof_data.value)
 
     # ========================================================================
     # Audit Trail Verification
@@ -1235,7 +1237,7 @@ class CIRISVerify:
                 return json.loads(result_bytes)
             finally:
                 if result_data.value:
-                    self._lib.ciris_verify_free(ctypes.c_char_p(result_data.value))
+                    self._lib.ciris_verify_free(result_data.value)
 
         loop = asyncio.get_event_loop()
         try:
@@ -1294,7 +1296,7 @@ class CIRISVerify:
             return json.loads(result_bytes)
         finally:
             if result_data.value:
-                self._lib.ciris_verify_free(ctypes.c_char_p(result_data.value))
+                self._lib.ciris_verify_free(result_data.value)
 
     # ========================================================================
     # Full Unified Attestation
@@ -1434,7 +1436,7 @@ class CIRISVerify:
                 return json.loads(result_bytes)
             finally:
                 if result_data.value:
-                    self._lib.ciris_verify_free(ctypes.c_char_p(result_data.value))
+                    self._lib.ciris_verify_free(result_data.value)
 
         loop = asyncio.get_event_loop()
         try:
@@ -1545,7 +1547,7 @@ class CIRISVerify:
             return json.loads(result_bytes)
         finally:
             if result_data.value:
-                self._lib.ciris_verify_free(ctypes.c_char_p(result_data.value))
+                self._lib.ciris_verify_free(result_data.value)
 
     def get_mandatory_disclosure(self, status: LicenseStatus) -> MandatoryDisclosure:
         """Get mandatory disclosure for a given status.
@@ -1683,7 +1685,7 @@ class CIRISVerify:
             return ctypes.string_at(sig_data.value, sig_len.value)
         finally:
             if sig_data.value:
-                self._lib.ciris_verify_free(ctypes.c_char_p(sig_data.value))
+                self._lib.ciris_verify_free(sig_data.value)
 
     def get_ed25519_public_key_sync(self) -> bytes:
         """Get the Ed25519 public key from the Portal-issued key.
@@ -1715,7 +1717,7 @@ class CIRISVerify:
             return ctypes.string_at(key_data.value, key_len.value)
         finally:
             if key_data.value:
-                self._lib.ciris_verify_free(ctypes.c_char_p(key_data.value))
+                self._lib.ciris_verify_free(key_data.value)
 
     def get_diagnostics_sync(self) -> str:
         """Get diagnostic information about the Ed25519 signer state.
@@ -1752,7 +1754,7 @@ class CIRISVerify:
             return ctypes.string_at(diag_data.value, diag_len.value).decode("utf-8")
         finally:
             if diag_data.value:
-                self._lib.ciris_verify_free(ctypes.c_char_p(diag_data.value))
+                self._lib.ciris_verify_free(diag_data.value)
 
 
 class MockCIRISVerify(CIRISVerify):

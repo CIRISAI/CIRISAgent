@@ -993,7 +993,9 @@ private fun buildL1ChecksInfo(status: VerifyStatusResponse): String {
     val binaryOk = status.binarySelfCheck == "verified"
     val funcOk = status.functionSelfCheck == "verified" || status.functionIntegrity == "verified"
     val passed = listOf(binaryOk, funcOk).count { it }
-    return "$passed/2 checks • ${if (binaryOk) "Binary ✓" else "Binary ✗"}"
+    val isIos = status.targetTriple?.contains("apple-ios") == true
+    val binLabel = if (isIos) "__TEXT" else "Binary"
+    return "$passed/2 checks • $binLabel: ${if (binaryOk) "✓" else "○"} Func: ${if (funcOk) "✓" else "○"}"
 }
 
 private fun buildL2ChecksInfo(status: VerifyStatusResponse, deviceResult: DeviceAttestationResult?): String {
@@ -1111,16 +1113,17 @@ private fun L1Content(status: VerifyStatusResponse) {
     val target = status.targetTriple ?: "${status.platformArch ?: "?"}-${status.platformOs?.lowercase() ?: "?"}"
     DetailRow(icon = "📦", label = "Registry Target", value = target, ok = true)
 
-    // Binary Hash
+    // Binary self-check (iOS: __TEXT segment hash; other platforms: full binary hash)
     val binaryOk = status.binarySelfCheck == "verified"
+    val isIosPlatform = status.targetTriple?.contains("apple-ios") == true
     DetailRow(
-        label = "Binary Hash",
+        label = if (isIosPlatform) "__TEXT Segment" else "Binary Hash",
         value = if (binaryOk) "Verified" else (status.binarySelfCheck ?: "Unknown"),
         ok = binaryOk
     )
-    status.binaryHash?.let { DetailSubtext("Local: ${it.take(20)}...") }
+    status.binaryHash?.let { DetailSubtext("Hash: ${it.take(20)}...") }
 
-    // Function Integrity
+    // Function Integrity (exported symbol verification)
     val funcStatus = status.functionSelfCheck ?: status.functionIntegrity ?: "not_checked"
     val funcOk = funcStatus == "verified"
     DetailRow(

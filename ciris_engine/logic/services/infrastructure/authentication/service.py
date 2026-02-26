@@ -1719,7 +1719,10 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         with self._verifier_sync_lock:
             if self._verifier is None:
                 try:
-                    from ciris_verify import CIRISVerify, setup_logging
+                    import ciris_verify
+                    from ciris_verify import CIRISVerify
+
+                    setup_logging = getattr(ciris_verify, "setup_logging", None)
 
                     # CIRISVerify() triggers Rust/Tokio init which needs 8MB stack
                     holder: list[Any] = [None, None]  # [verifier, error]
@@ -1746,11 +1749,12 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                     self._verifier = holder[0]
 
                     # Enable CIRISVerify Rust logging → Python logging (v0.9.3+)
-                    try:
-                        setup_logging(self._verifier, level="DEBUG")
-                        logger.info("[CIRISVerify] Rust logging enabled at DEBUG level")
-                    except Exception as log_err:
-                        logger.debug(f"[CIRISVerify] Could not enable Rust logging: {log_err}")
+                    if setup_logging is not None:
+                        try:
+                            setup_logging(self._verifier, level="DEBUG")
+                            logger.info("[CIRISVerify] Rust logging enabled at DEBUG level")
+                        except Exception as log_err:
+                            logger.debug(f"[CIRISVerify] Could not enable Rust logging: {log_err}")
 
                     logger.info("[CIRISVerify] Singleton created successfully")
 
@@ -1928,7 +1932,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                                 # CIRISVerify v0.9.7+ expects object with attributes, not dict
                                 # Create a simple wrapper class for attribute access
                                 class PythonHashesWrapper:
-                                    def __init__(self, data: dict) -> None:
+                                    def __init__(self, data: Dict[str, Any]) -> None:
                                         self.total_hash = data.get("total_hash", "")
                                         self.module_hashes = data.get("module_hashes", {})
                                         self.module_count = data.get("modules_hashed", 0)

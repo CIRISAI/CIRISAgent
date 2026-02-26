@@ -96,7 +96,8 @@ class TestSetupStatusEndpoint:
 class TestProvidersEndpoint:
     """Test GET /v1/setup/providers endpoint."""
 
-    def test_list_providers(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run", return_value=True)
+    def test_list_providers(self, mock_first_run, client):
         """Test listing LLM providers."""
         response = client.get("/v1/setup/providers")
 
@@ -137,7 +138,8 @@ class TestProvidersEndpoint:
 class TestTemplatesEndpoint:
     """Test GET /v1/setup/templates endpoint."""
 
-    def test_list_templates(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run", return_value=True)
+    def test_list_templates(self, mock_first_run, client):
         """Test listing agent templates from ciris_templates directory."""
         response = client.get("/v1/setup/templates")
 
@@ -181,7 +183,8 @@ class TestTemplatesEndpoint:
 class TestAdaptersEndpoint:
     """Test GET /v1/setup/adapters endpoint."""
 
-    def test_list_adapters(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run", return_value=True)
+    def test_list_adapters(self, mock_first_run, client):
         """Test listing available adapters."""
         response = client.get("/v1/setup/adapters")
 
@@ -212,7 +215,8 @@ class TestValidateLLMEndpoint:
     """Test POST /v1/setup/validate-llm endpoint."""
 
     @pytest.mark.asyncio
-    async def test_validate_openai_success(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run", return_value=True)
+    async def test_validate_openai_success(self, mock_first_run, client):
         """Test successful OpenAI validation."""
         with patch("openai.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
@@ -239,7 +243,8 @@ class TestValidateLLMEndpoint:
             assert "successful" in data["message"].lower()
 
     @pytest.mark.asyncio
-    async def test_validate_openai_invalid_key(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run", return_value=True)
+    async def test_validate_openai_invalid_key(self, mock_first_run, client):
         """Test OpenAI validation with invalid key."""
         response = client.post(
             "/v1/setup/validate-llm",
@@ -257,7 +262,8 @@ class TestValidateLLMEndpoint:
         assert "api key" in data["message"].lower()
 
     @pytest.mark.asyncio
-    async def test_validate_local_llm_success(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run", return_value=True)
+    async def test_validate_local_llm_success(self, mock_first_run, client):
         """Test successful local LLM validation."""
         with patch("openai.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
@@ -283,7 +289,8 @@ class TestValidateLLMEndpoint:
             assert data["valid"] is True
 
     @pytest.mark.asyncio
-    async def test_validate_llm_connection_timeout(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run", return_value=True)
+    async def test_validate_llm_connection_timeout(self, mock_first_run, client):
         """Test LLM validation with connection timeout."""
         with patch("openai.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
@@ -406,7 +413,7 @@ class TestCompleteSetupEndpoint:
         )
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "already completed" in response.json()["detail"]
+        assert "first-run" in response.json()["detail"] or "already completed" in response.json()["detail"]
 
     def test_complete_setup_no_auth_required_during_first_run(self, client):
         """Test that setup completion doesn't require auth during first-run."""

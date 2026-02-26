@@ -296,7 +296,8 @@ private fun TrustSummaryCard(
                     level >= 3 -> "Good Attestation - Registry validation complete"
                     level >= 2 -> "Basic Attestation - Environment validation complete"
                     level >= 1 -> "Minimal Attestation - Binary loaded"
-                    else -> "Incomplete - Attestation not started"
+                    status.attestationStatus == "not_attempted" -> "Incomplete - Attestation not started"
+                    else -> "Level 0 - No checks passed"
                 },
                 fontSize = 14.sp,
                 color = textColor.copy(alpha = 0.8f)
@@ -320,7 +321,7 @@ private fun TrustSummaryCard(
             // Timestamp badge showing when attestation was performed
             status.cachedAt?.let { timestamp ->
                 Text(
-                    text = "Verified: ${formatAttestationTimestamp(timestamp)}",
+                    text = "Verify Last Ran: ${formatAttestationTimestamp(timestamp)}",
                     fontSize = 11.sp,
                     color = textColor.copy(alpha = 0.6f)
                 )
@@ -329,28 +330,15 @@ private fun TrustSummaryCard(
     }
 }
 
-/** Format ISO 8601 timestamp for display */
+/** Format ISO 8601 timestamp for display with microseconds and UTC */
 private fun formatAttestationTimestamp(timestamp: String): String {
     return try {
-        // Format: 2026-02-25T15:02:44.666000+00:00 -> Feb 25, 3:02 PM
+        // Format: 2026-02-25T15:02:44.666000+00:00 -> 2026-02-25 15:02:44.666000 UTC
         val date = timestamp.substringBefore("T")
-        val time = timestamp.substringAfter("T").substringBefore(".")
-        val parts = date.split("-")
-        val months = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-        val month = months.getOrNull(parts.getOrNull(1)?.toIntOrNull()?.minus(1) ?: 0) ?: parts.getOrNull(1)
-        val day = parts.getOrNull(2)?.toIntOrNull() ?: parts.getOrNull(2)
-        val timeParts = time.split(":")
-        val hour = timeParts.getOrNull(0)?.toIntOrNull() ?: 0
-        val minute = timeParts.getOrNull(1) ?: "00"
-        val ampm = if (hour >= 12) "PM" else "AM"
-        val hour12 = when {
-            hour == 0 -> 12
-            hour > 12 -> hour - 12
-            else -> hour
-        }
-        "$month $day, $hour12:$minute $ampm"
+        val timeWithMicros = timestamp.substringAfter("T").substringBefore("+").substringBefore("-")
+        "$date $timeWithMicros UTC"
     } catch (e: Exception) {
-        timestamp.substringBefore("+").replace("T", " ")
+        timestamp.substringBefore("+").replace("T", " ") + " UTC"
     }
 }
 

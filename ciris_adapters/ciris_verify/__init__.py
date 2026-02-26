@@ -30,6 +30,7 @@ from ciris_verify import (  # noqa: F401
     TimeoutError,
     ValidationStatus,
     VerificationFailedError,
+    get_library_version,
 )
 
 # Export adapter-specific classes
@@ -39,7 +40,8 @@ from .service import CIRISVerifyService, VerificationConfig  # noqa: F401
 # Alias for adapter loading code (looks for 'Adapter' class)
 Adapter = CIRISVerifyAdapter
 
-__version__ = "0.9.6"
+# Fallback version - actual version should be queried via get_library_version()
+__version__ = "0.9.7"
 __all__ = [
     # Adapter exports
     "Adapter",
@@ -49,6 +51,7 @@ __all__ = [
     # Re-exports from ciris-verify package
     "CIRISVerify",
     "MockCIRISVerify",
+    "get_library_version",
     "LicenseStatus",
     "LicenseTier",
     "LicenseDetails",

@@ -102,7 +102,7 @@ def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str =
     verifier.set_log_callback(log_callback, level=rust_level)
 
 
-__version__ = "0.10.1"
+__version__ = "0.10.2"
 __all__ = [
     "CIRISVerify",
     "MockCIRISVerify",

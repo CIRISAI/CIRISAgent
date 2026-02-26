@@ -29,29 +29,29 @@ Logging:
 import logging as _logging
 
 from .client import CIRISVerify, MockCIRISVerify
+from .types import (
+    LicenseStatus,
+    LicenseTier,
+    LicenseDetails,
+    MandatoryDisclosure,
+    DisclosureSeverity,
+    LicenseStatusResponse,
+    CapabilityCheckResult,
+    FileIntegrityResult,
+    FileCheckStatus,
+    BinaryIntegrityStatus,
+    HardwareType,
+    ValidationStatus,
+    PythonModuleHashes,
+    PythonIntegrityResult,
+)
 from .exceptions import (
+    CIRISVerifyError,
     BinaryNotFoundError,
     BinaryTamperedError,
-    CIRISVerifyError,
-    CommunicationError,
-    TimeoutError,
     VerificationFailedError,
-)
-from .types import (
-    BinaryIntegrityStatus,
-    CapabilityCheckResult,
-    DisclosureSeverity,
-    FileCheckStatus,
-    FileIntegrityResult,
-    HardwareType,
-    LicenseDetails,
-    LicenseStatus,
-    LicenseStatusResponse,
-    LicenseTier,
-    MandatoryDisclosure,
-    PythonIntegrityResult,
-    PythonModuleHashes,
-    ValidationStatus,
+    TimeoutError,
+    CommunicationError,
 )
 
 
@@ -77,11 +77,11 @@ def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str =
 
     # Map Rust levels to Python logging levels
     level_map = {
-        1: _logging.ERROR,  # ERROR
+        1: _logging.ERROR,    # ERROR
         2: _logging.WARNING,  # WARN
-        3: _logging.INFO,  # INFO
-        4: _logging.DEBUG,  # DEBUG
-        5: _logging.DEBUG,  # TRACE (Python has no TRACE, use DEBUG)
+        3: _logging.INFO,     # INFO
+        4: _logging.DEBUG,    # DEBUG
+        5: _logging.DEBUG,    # TRACE (Python has no TRACE, use DEBUG)
     }
 
     # Map level string to Rust level int
@@ -102,33 +102,11 @@ def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str =
     verifier.set_log_callback(log_callback, level=rust_level)
 
 
-def get_library_version(verifier: CIRISVerify = None) -> str:
-    """Get the CIRISVerify library version from the binary.
-
-    Args:
-        verifier: Optional existing CIRISVerify instance. If None, creates a temporary one.
-
-    Returns:
-        Version string from the binary (e.g., "0.9.7") or "unknown" if unavailable.
-    """
-    if verifier is not None:
-        return verifier.get_version()
-
-    # Try to create a temporary instance to query version
-    try:
-        temp = CIRISVerify(skip_integrity_check=True)
-        return temp.get_version()
-    except Exception:
-        return "unknown"
-
-
-# Fallback version - actual version should be queried via get_library_version()
-__version__ = "0.9.7"
+__version__ = "0.9.8"
 __all__ = [
     "CIRISVerify",
     "MockCIRISVerify",
     "setup_logging",
-    "get_library_version",
     "LicenseStatus",
     "LicenseTier",
     "LicenseDetails",

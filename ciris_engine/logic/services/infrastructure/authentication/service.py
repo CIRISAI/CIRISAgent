@@ -1958,9 +1958,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                             logger.warning(f"[attestation] Failed to load Python hashes: {he}")
 
                         # Get agent root for file integrity checking
-                        # On mobile, use Python package path (where Chaquopy extracts files)
+                        # On mobile, use Python package path (where the runtime extracts files)
                         # not CIRIS_HOME (which is for runtime data)
-                        is_mobile = os.environ.get("ANDROID_ROOT") is not None
+                        is_android = os.environ.get("ANDROID_ROOT") is not None
+                        is_ios = os.environ.get("CIRIS_IOS_FRAMEWORK_PATH") is not None or os.environ.get("CIRIS_IOS_STATIC_LINK") is not None
+                        is_mobile = is_android or is_ios
                         if is_mobile:
                             try:
                                 import ciris_engine

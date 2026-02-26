@@ -854,7 +854,7 @@ private fun TierCardsSection(
         ExpandableTierCard(
             level = 2,
             title = "Environment",
-            passed = status.hardwareBacked && (deviceOk || status.playIntegrityOk),
+            passed = status.hardwareBacked && status.hardwareType?.contains("Software", ignoreCase = true) != true && (deviceOk || status.playIntegrityOk),
             checksInfo = buildL2ChecksInfo(status, deviceAttestationResult),
             expanded = expandedTier == 2,
             onToggle = { expandedTier = if (expandedTier == 2) null else 2 }
@@ -999,7 +999,8 @@ private fun buildL1ChecksInfo(status: VerifyStatusResponse): String {
 private fun buildL2ChecksInfo(status: VerifyStatusResponse, deviceResult: DeviceAttestationResult?): String {
     val isIos = status.platformOs?.lowercase() in listOf("ios", "ipados") ||
         status.hardwareType?.contains("IOS", ignoreCase = true) == true
-    val hwOk = status.hardwareBacked
+    val isSoftwareOnly = status.hardwareType?.contains("Software", ignoreCase = true) == true
+    val hwOk = status.hardwareBacked && !isSoftwareOnly
     val playOk = (deviceResult as? DeviceAttestationResult.Success)?.verified == true || status.playIntegrityOk
     val passed = listOf(hwOk, playOk).count { it }
     val attestLabel = if (isIos) "Attest" else "Play"

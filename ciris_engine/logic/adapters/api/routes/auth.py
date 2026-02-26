@@ -2009,3 +2009,166 @@ async def delete_api_key(
     logger.info(f"User {auth.user_id} deleted API key {key_id}")
 
     return None
+
+
+# ========== Attestation Endpoint ==========
+
+
+@router.get("/auth/attestation")
+async def get_attestation(request: Request) -> Dict[str, Any]:
+    """Get cached CIRISVerify attestation from AuthenticationService.
+
+    Returns the cached attestation result from startup attestation.
+    This endpoint does NOT trigger a new attestation - it only returns
+    the cached result from when the agent started.
+
+    This is the preferred endpoint for Trust & Security display as it:
+    1. Returns instantly (no network calls)
+    2. Uses the authoritative cached result from auth service
+    3. Ensures consistency with other auth-dependent features
+
+    Returns:
+        Cached attestation result in the same format as /v1/setup/verify-status
+    """
+    # Get AuthenticationService from app state (this is the infrastructure service)
+    auth_service = getattr(request.app.state, "auth_service", None)
+
+    if not auth_service:
+        logger.warning("[attestation] Auth service not available")
+        return {
+            "data": {
+                "loaded": False,
+                "error": "Authentication service not available",
+                "attestation_status": "not_attempted",
+            }
+        }
+
+    # Check for cached attestation
+    if not hasattr(auth_service, "get_cached_attestation"):
+        logger.warning("[attestation] Auth service does not support attestation caching")
+        return {
+            "data": {
+                "loaded": False,
+                "error": "Attestation caching not supported",
+                "attestation_status": "not_attempted",
+            }
+        }
+
+    cached = auth_service.get_cached_attestation()
+
+    if not cached:
+        logger.info("[attestation] No cached attestation available")
+        return {
+            "data": {
+                "loaded": True,
+                "attestation_status": "not_attempted",
+                "error": "No cached attestation - startup attestation may not have completed",
+            }
+        }
+
+    # Convert cached AttestationResult to response format
+    # This matches the format returned by /v1/setup/verify-status
+    logger.info(f"[attestation] === API RESPONSE DEBUG ===")
+    logger.info(f"[attestation] max_level={cached.max_level}, file_integrity_ok={cached.file_integrity_ok}")
+    logger.info(
+        f"[attestation] files_checked={cached.files_checked}, files_passed={cached.files_passed}, files_failed={cached.files_failed}"
+    )
+    logger.info(
+        f"[attestation] per_file_results count={len(cached.per_file_results) if cached.per_file_results else 0}"
+    )
+    logger.info(
+        f"[attestation] python_modules_checked={cached.python_modules_checked}, python_modules_passed={cached.python_modules_passed}"
+    )
+    logger.info(
+        f"[attestation] FUNCTION INTEGRITY: functions_checked={cached.functions_checked}, functions_passed={cached.functions_passed}"
+    )
+    logger.info(f"[attestation] module_integrity_ok={cached.module_integrity_ok}")
+    logger.info(f"[attestation] module_integrity_summary={cached.module_integrity_summary}")
+    logger.info(
+        f"[attestation] cross_validated_files count={len(cached.cross_validated_files) if cached.cross_validated_files else 0}"
+    )
+    logger.info(
+        f"[attestation] filesystem_verified_files count={len(cached.filesystem_verified_files) if cached.filesystem_verified_files else 0}"
+    )
+    logger.info(
+        f"[attestation] agent_verified_files count={len(cached.agent_verified_files) if cached.agent_verified_files else 0}"
+    )
+    logger.info(f"[attestation] === END API RESPONSE DEBUG ===")
+
+    return {
+        "data": {
+            "loaded": cached.loaded,
+            "version": cached.version,
+            "hardware_type": cached.hardware_type,
+            "key_status": cached.key_status,
+            "key_id": cached.key_id,
+            "attestation_status": cached.attestation_status,
+            "error": cached.error,
+            "diagnostic_info": cached.diagnostic_info,
+            # Attestation level checks
+            "dns_us_ok": cached.dns_us_ok,
+            "dns_eu_ok": cached.dns_eu_ok,
+            "https_us_ok": cached.https_us_ok,
+            "https_eu_ok": cached.https_eu_ok,
+            "binary_ok": cached.binary_ok,
+            "file_integrity_ok": cached.file_integrity_ok,
+            "registry_ok": cached.registry_ok,
+            "audit_ok": cached.audit_ok,
+            "env_ok": cached.env_ok,
+            "play_integrity_ok": cached.play_integrity_ok,
+            "play_integrity_verdict": cached.play_integrity_verdict,
+            "max_level": cached.max_level,
+            # Key attestation
+            "ed25519_fingerprint": cached.ed25519_fingerprint,
+            "key_storage_mode": cached.key_storage_mode,
+            "hardware_backed": cached.hardware_backed,
+            # Registry key status
+            "registry_key_status": cached.registry_key_status,
+            # Sources agreement
+            "sources_agreeing": cached.sources_agreeing,
+            # Attestation mode
+            "attestation_mode": cached.attestation_mode,
+            # File integrity details
+            "total_files": cached.total_files,
+            "files_checked": cached.files_checked,
+            "files_passed": cached.files_passed,
+            "files_failed": cached.files_failed,
+            # Function integrity
+            "function_integrity": cached.function_integrity,
+            "functions_checked": cached.functions_checked,
+            "functions_passed": cached.functions_passed,
+            # Binary self-check details
+            "binary_self_check": cached.binary_self_check,
+            "binary_hash": cached.binary_hash,
+            "function_self_check": cached.function_self_check,
+            "target_triple": cached.target_triple,
+            # Python integrity
+            "python_integrity_ok": cached.python_integrity_ok,
+            "python_modules_checked": cached.python_modules_checked,
+            "python_modules_passed": cached.python_modules_passed,
+            "python_modules_failed": cached.python_modules_failed,
+            "python_total_hash": cached.python_total_hash,
+            "python_hash_valid": cached.python_hash_valid,
+            "python_failed_modules": cached.python_failed_modules,
+            # v0.9.7: Unified module integrity (cross-validation)
+            "module_integrity_ok": cached.module_integrity_ok,
+            "module_integrity_summary": cached.module_integrity_summary,
+            "cross_validated_files": cached.cross_validated_files,
+            "filesystem_verified_files": cached.filesystem_verified_files,
+            "agent_verified_files": cached.agent_verified_files,
+            "disk_agent_mismatch": cached.disk_agent_mismatch,
+            "registry_mismatch_files": cached.registry_mismatch_files,
+            # L4 detail lists (v0.8.4+)
+            "per_file_results": cached.per_file_results,
+            "files_missing_count": cached.files_missing_count,
+            "files_missing_list": cached.files_missing_list,
+            "files_failed_list": cached.files_failed_list,
+            "files_unexpected_list": cached.files_unexpected_list,
+            "functions_failed_list": cached.functions_failed_list,
+            # Mobile exclusions (v0.8.6+)
+            "mobile_excluded_count": cached.mobile_excluded_count,
+            "mobile_excluded_list": cached.mobile_excluded_list,
+            # Cache metadata
+            "cached_at": cached.cached_at.isoformat() if cached.cached_at else None,
+        }
+    }

@@ -518,7 +518,7 @@ fun CIRISApp(
                                 launch(kotlinx.coroutines.Dispatchers.IO) {
                                     try {
                                         println("[$TAG][INFO] Running boot-time attestation check...")
-                                        val verifyResult = apiClient.getVerifyStatus(mode = "partial")
+                                        val verifyResult = apiClient.getVerifyStatus()
                                         println("[$TAG][INFO] Boot attestation: loaded=${verifyResult.loaded}, maxLevel=${verifyResult.maxLevel}, " +
                                             "dns_us=${verifyResult.dnsUsOk}, dns_eu=${verifyResult.dnsEuOk}, https=${verifyResult.httpsUsOk}")
                                     } catch (e: Exception) {

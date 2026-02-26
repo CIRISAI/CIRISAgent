@@ -782,16 +782,15 @@ class CIRISApiClient(
      * - Attestation status
      */
     suspend fun getVerifyStatus(
-        mode: String = "partial",
         playIntegrityToken: String? = null,
         playIntegrityNonce: String? = null
     ): VerifyStatusResponse {
         val method = "getVerifyStatus"
-        logDebug(method, "Fetching CIRISVerify status (mode=$mode, hasPlayIntegrity=${playIntegrityToken != null})")
+        logDebug(method, "Fetching CIRISVerify status (hasPlayIntegrity=${playIntegrityToken != null})")
 
-        // Longer timeout for verify-status since attestation does network checks (DNS, HTTPS)
-        // Full mode takes longer due to complete file integrity check
-        val timeoutMs = if (mode == "full") 60000L else 30000L
+        // Uses cached attestation from auth service - should be fast
+        // Full attestation with Play Integrity may take longer
+        val timeoutMs = 30000L
         val client = HttpClient {
             install(ContentNegotiation) { json(jsonConfig) }
             install(HttpTimeout) {
@@ -802,10 +801,14 @@ class CIRISApiClient(
         }
 
         return try {
-            // Build URL with optional play integrity parameters
-            var url = "$baseUrl/v1/setup/verify-status?mode=$mode"
-            if (playIntegrityToken != null && playIntegrityNonce != null) {
-                url += "&play_integrity_token=$playIntegrityToken&play_integrity_nonce=$playIntegrityNonce"
+            // Use auth/attestation endpoint for cached attestation (fast, no network calls)
+            // Falls back to setup/verify-status only during first-run setup with Play Integrity
+            val url = if (playIntegrityToken != null && playIntegrityNonce != null) {
+                // Full attestation with Play Integrity - use setup endpoint (first-run only)
+                "$baseUrl/v1/setup/verify-status?mode=full&play_integrity_token=$playIntegrityToken&play_integrity_nonce=$playIntegrityNonce"
+            } else {
+                // Cached attestation from auth service - instant response
+                "$baseUrl/v1/auth/attestation"
             }
             val response = client.get(url)
 
@@ -820,6 +823,20 @@ class CIRISApiClient(
             val body = response.body<JsonObject>()
             val data = body["data"] as? JsonObject
                 ?: throw Exception("Invalid response format")
+
+            // DEBUG: Log raw API response fields
+            logInfo(method, "=== RAW API RESPONSE DEBUG ===")
+            logInfo(method, "files_checked=${data["files_checked"]}")
+            logInfo(method, "files_passed=${data["files_passed"]}")
+            logInfo(method, "per_file_results keys=${(data["per_file_results"] as? JsonObject)?.keys?.size ?: 0}")
+            logInfo(method, "python_modules_checked=${data["python_modules_checked"]}")
+            logInfo(method, "python_modules_passed=${data["python_modules_passed"]}")
+            logInfo(method, "module_integrity_ok=${data["module_integrity_ok"]}")
+            logInfo(method, "module_integrity_summary=${data["module_integrity_summary"]}")
+            logInfo(method, "cross_validated_files count=${(data["cross_validated_files"] as? kotlinx.serialization.json.JsonArray)?.size ?: 0}")
+            logInfo(method, "filesystem_verified_files count=${(data["filesystem_verified_files"] as? kotlinx.serialization.json.JsonArray)?.size ?: 0}")
+            logInfo(method, "agent_verified_files count=${(data["agent_verified_files"] as? kotlinx.serialization.json.JsonArray)?.size ?: 0}")
+            logInfo(method, "=== END RAW API RESPONSE DEBUG ===")
 
             val loaded = (data["loaded"] as? JsonPrimitive)?.content?.toBoolean() ?: false
             val verifyStatus = VerifyStatusResponse(
@@ -895,10 +912,39 @@ class CIRISApiClient(
                 // Attestation proof hardware type (nested in attestation_proof object)
                 attestationProofHardwareType = (data["attestation_proof"] as? JsonObject)?.let {
                     (it["hardware_type"] as? JsonPrimitive)?.content
+                },
+                // v0.9.7: Cache timestamp
+                cachedAt = (data["cached_at"] as? JsonPrimitive)?.content,
+                // v0.9.7: Unified module integrity (cross-validation)
+                moduleIntegrityOk = (data["module_integrity_ok"] as? JsonPrimitive)?.content?.toBooleanStrictOrNull() ?: false,
+                moduleIntegritySummary = (data["module_integrity_summary"] as? JsonObject)?.let { obj ->
+                    obj.entries.associate { (k, v) -> k to ((v as? JsonPrimitive)?.content?.toIntOrNull() ?: 0) }
+                },
+                crossValidatedFiles = (data["cross_validated_files"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                filesystemVerifiedFiles = (data["filesystem_verified_files"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                agentVerifiedFiles = (data["agent_verified_files"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                diskAgentMismatch = (data["disk_agent_mismatch"] as? JsonObject)?.let { obj ->
+                    obj.entries.associate { (k, v) -> k to v }
+                },
+                registryMismatchFiles = (data["registry_mismatch_files"] as? JsonObject)?.let { obj ->
+                    obj.entries.associate { (k, v) -> k to v }
                 }
             )
 
             logInfo(method, "Verify status: loaded=$loaded, keyStatus=${verifyStatus.keyStatus}, hwType=${verifyStatus.attestationProofHardwareType ?: verifyStatus.hardwareType}, sourcesAgreeing=${verifyStatus.sourcesAgreeing}/3, playOk=${verifyStatus.playIntegrityOk}")
+
+            // DEBUG: Log parsed values
+            logInfo(method, "=== PARSED VALUES DEBUG ===")
+            logInfo(method, "filesChecked=${verifyStatus.filesChecked}, filesPassed=${verifyStatus.filesPassed}")
+            logInfo(method, "perFileResults count=${verifyStatus.perFileResults?.size ?: 0}")
+            logInfo(method, "pythonModulesChecked=${verifyStatus.pythonModulesChecked}, pythonModulesPassed=${verifyStatus.pythonModulesPassed}")
+            logInfo(method, "moduleIntegrityOk=${verifyStatus.moduleIntegrityOk}")
+            logInfo(method, "moduleIntegritySummary=${verifyStatus.moduleIntegritySummary}")
+            logInfo(method, "crossValidatedFiles count=${verifyStatus.crossValidatedFiles?.size ?: 0}")
+            logInfo(method, "filesystemVerifiedFiles count=${verifyStatus.filesystemVerifiedFiles?.size ?: 0}")
+            logInfo(method, "agentVerifiedFiles count=${verifyStatus.agentVerifiedFiles?.size ?: 0}")
+            logInfo(method, "=== END PARSED VALUES DEBUG ===")
+
             verifyStatus
         } catch (e: Exception) {
             logException(method, e)

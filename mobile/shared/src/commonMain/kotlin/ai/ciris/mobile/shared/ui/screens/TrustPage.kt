@@ -53,7 +53,6 @@ fun TrustPage(
     var verifyStatus by remember { mutableStateOf<VerifyStatusResponse?>(null) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    var attestationMode by remember { mutableStateOf("partial") }
     val coroutineScope = rememberCoroutineScope()
 
     // Device attestation state (App Attest on iOS, Play Integrity on Android)
@@ -74,11 +73,10 @@ fun TrustPage(
         }
     }
 
-    // Fetch verify status on mount
+    // Fetch verify status on mount (always full mode from cached attestation)
     LaunchedEffect(Unit) {
         fetchVerifyStatus(
             apiClient = apiClient,
-            mode = attestationMode,
             onSuccess = { verifyStatus = it; loading = false; error = null },
             onError = { error = it; loading = false }
         )
@@ -100,7 +98,6 @@ fun TrustPage(
                             coroutineScope.launch {
                                 fetchVerifyStatus(
                                     apiClient = apiClient,
-                                    mode = attestationMode,
                                     onSuccess = { verifyStatus = it; loading = false; error = null },
                                     onError = { error = it; loading = false }
                                 )
@@ -135,7 +132,6 @@ fun TrustPage(
                             coroutineScope.launch {
                                 fetchVerifyStatus(
                                     apiClient = apiClient,
-                                    mode = attestationMode,
                                     onSuccess = { verifyStatus = it; loading = false; error = null },
                                     onError = { error = it; loading = false }
                                 )
@@ -148,35 +144,6 @@ fun TrustPage(
 
                     // Header card with summary
                     TrustSummaryCard(status = status)
-
-                    // Mode toggle
-                    ModeToggleCard(
-                        currentMode = attestationMode,
-                        isLoading = loading,
-                        onModeChange = { newMode ->
-                            attestationMode = newMode
-                            loading = true
-                            coroutineScope.launch {
-                                fetchVerifyStatus(
-                                    apiClient = apiClient,
-                                    mode = newMode,
-                                    onSuccess = { verifyStatus = it; loading = false; error = null },
-                                    onError = { error = it; loading = false }
-                                )
-                            }
-                        },
-                        onRun = {
-                            loading = true
-                            coroutineScope.launch {
-                                fetchVerifyStatus(
-                                    apiClient = apiClient,
-                                    mode = attestationMode,
-                                    onSuccess = { verifyStatus = it; loading = false; error = null },
-                                    onError = { error = it; loading = false }
-                                )
-                            }
-                        }
-                    )
 
                     // 5 Expandable Tier Cards - consolidated view
                     TierCardsSection(
@@ -206,13 +173,13 @@ fun TrustPage(
 
 private suspend fun fetchVerifyStatus(
     apiClient: CIRISApiClient,
-    mode: String,
     onSuccess: (VerifyStatusResponse) -> Unit,
     onError: (String) -> Unit
 ) {
     try {
         val result = withContext(Dispatchers.IO) {
-            apiClient.getVerifyStatus(mode)
+            // Always use full mode - gets cached attestation from /v1/auth/attestation
+            apiClient.getVerifyStatus()
         }
         onSuccess(result)
     } catch (e: Exception) {
@@ -349,63 +316,41 @@ private fun TrustSummaryCard(
                     )
                 }
             }
+
+            // Timestamp badge showing when attestation was performed
+            status.cachedAt?.let { timestamp ->
+                Text(
+                    text = "Verified: ${formatAttestationTimestamp(timestamp)}",
+                    fontSize = 11.sp,
+                    color = textColor.copy(alpha = 0.6f)
+                )
+            }
         }
     }
 }
 
-@Composable
-private fun ModeToggleCard(
-    currentMode: String,
-    isLoading: Boolean,
-    onModeChange: (String) -> Unit,
-    onRun: () -> Unit
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Attestation Mode", fontWeight = FontWeight.Medium)
-
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Partial mode button
-                OutlinedButton(
-                    onClick = { onModeChange("partial") },
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = if (currentMode == "partial") Color(0xFF2563EB).copy(alpha = 0.1f) else Color.Transparent,
-                        contentColor = if (currentMode == "partial") Color(0xFF2563EB) else Color(0xFF6B7280)
-                    ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    modifier = Modifier.height(32.dp)
-                ) {
-                    Text("Partial", fontSize = 12.sp)
-                }
-                // Full mode button
-                OutlinedButton(
-                    onClick = { onModeChange("full") },
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = if (currentMode == "full") Color(0xFF2563EB).copy(alpha = 0.1f) else Color.Transparent,
-                        contentColor = if (currentMode == "full") Color(0xFF2563EB) else Color(0xFF6B7280)
-                    ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    modifier = Modifier.height(32.dp)
-                ) {
-                    Text("Full", fontSize = 12.sp)
-                }
-                // Run button
-                Button(
-                    onClick = onRun,
-                    enabled = !isLoading,
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    modifier = Modifier.height(32.dp)
-                ) {
-                    Text(if (isLoading) "..." else "Run", fontSize = 12.sp)
-                }
-            }
+/** Format ISO 8601 timestamp for display */
+private fun formatAttestationTimestamp(timestamp: String): String {
+    return try {
+        // Format: 2026-02-25T15:02:44.666000+00:00 -> Feb 25, 3:02 PM
+        val date = timestamp.substringBefore("T")
+        val time = timestamp.substringAfter("T").substringBefore(".")
+        val parts = date.split("-")
+        val months = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+        val month = months.getOrNull(parts.getOrNull(1)?.toIntOrNull()?.minus(1) ?: 0) ?: parts.getOrNull(1)
+        val day = parts.getOrNull(2)?.toIntOrNull() ?: parts.getOrNull(2)
+        val timeParts = time.split(":")
+        val hour = timeParts.getOrNull(0)?.toIntOrNull() ?: 0
+        val minute = timeParts.getOrNull(1) ?: "00"
+        val ampm = if (hour >= 12) "PM" else "AM"
+        val hour12 = when {
+            hour == 0 -> 12
+            hour > 12 -> hour - 12
+            else -> hour
         }
+        "$month $day, $hour12:$minute $ampm"
+    } catch (e: Exception) {
+        timestamp.substringBefore("+").replace("T", " ")
     }
 }
 
@@ -1086,21 +1031,41 @@ private fun buildL3ChecksInfo(status: VerifyStatusResponse): String {
 }
 
 private fun buildL4ChecksInfo(status: VerifyStatusResponse): String {
+    // v0.9.7+: Use unified module_integrity summary when available
+    val summary = status.moduleIntegritySummary
+    if (summary != null) {
+        val totalManifest = summary["total_manifest"] ?: 0
+        val verified = summary["verified"] ?: 0
+        val failed = summary["failed"] ?: 0
+        // Use mobileExcludedCount (server-only files like discord, gui_static)
+        val mobileExcluded = status.mobileExcludedCount ?: 0
+        val expected = totalManifest - mobileExcluded
+
+        return if (failed > 0) {
+            "$verified/$expected • $failed failed"
+        } else {
+            "$verified/$expected files"
+        }
+    }
+
+    // Legacy fallback
     val perFile = status.perFileResults ?: emptyMap()
     val manifestTotal = perFile.size.takeIf { it > 0 } ?: (status.filesChecked ?: 0)
     val mobileExcluded = status.mobileExcludedCount ?: 0
     val totalExpected = manifestTotal - mobileExcluded
 
-    // Filesystem verified files
-    val filesystemVerified = perFile.filterValues { it == "passed" }.keys.size
+    // Mobile excluded set for filtering
+    val mobileExcludedSet = (status.mobileExcludedList ?: emptyList()).toSet()
+
+    // Filesystem verified files (excluding mobile-excluded)
+    val filesystemVerified = perFile.filterValues { it == "passed" }.keys.count { it !in mobileExcludedSet }
 
     // Chaquopy verified = Python files in manifest marked "missing" (verified via hash, not filesystem)
-    val mobileExcludedSet = (status.mobileExcludedList ?: emptyList()).toSet()
     val chaquopyCovered = perFile.filterValues { it == "missing" }.keys.count { path ->
         (path.endsWith(".py") || path.endsWith(".pyi")) && path !in mobileExcludedSet
     }
 
-    // Total verified = filesystem + Chaquopy
+    // Total verified = filesystem (filtered) + Chaquopy
     val totalVerified = filesystemVerified + chaquopyCovered
     val failed = status.filesFailed ?: 0
 
@@ -1323,7 +1288,10 @@ private fun L3Content(status: VerifyStatusResponse) {
 
 // L4 Content: Code Integrity
 //
-// Deconfliction logic:
+// v0.9.7+: Uses unified module_integrity when available (cross-validation of disk/agent/registry)
+// Fallback: Legacy deconfliction logic for older CIRISVerify versions
+//
+// Deconfliction logic (legacy):
 // 1. EXPECTED (denominator) = Registry Manifest - Mobile Exclusions
 // 2. VERIFIED (numerator) = Filesystem verified + Chaquopy verified (by full path)
 // 3. MISSING = Files in expected but not verified by either source
@@ -1331,6 +1299,14 @@ private fun L3Content(status: VerifyStatusResponse) {
 //
 @Composable
 private fun L4Content(status: VerifyStatusResponse) {
+    // v0.9.7+: Check if unified module_integrity is available
+    val summary = status.moduleIntegritySummary
+    if (summary != null) {
+        L4ContentUnified(status, summary)
+        return
+    }
+
+    // Legacy fallback for older CIRISVerify versions
     val perFile = status.perFileResults ?: emptyMap()
 
     // === SOURCE 1: Registry Manifest ===
@@ -1367,8 +1343,8 @@ private fun L4Content(status: VerifyStatusResponse) {
     val filesystemVerifiedFiltered = filesystemVerified.filter { !isExcluded(it) }
     val filesystemVerifiedFilteredCount = filesystemVerifiedFiltered.size
 
-    // Total verified = Filesystem + Chaquopy (Python files verified via hash)
-    val totalVerified = filesystemVerifiedCount + chaquopyCoveredFromManifest
+    // Total verified = Filesystem (filtered) + Chaquopy (Python files verified via hash)
+    val totalVerified = filesystemVerifiedFilteredCount + chaquopyCoveredFromManifest
 
     // === ACTUALLY UNVERIFIED ===
     // Files in manifest (not excluded) that are NOT verified by either source
@@ -1521,6 +1497,222 @@ private fun L4Content(status: VerifyStatusResponse) {
             onToggle = { unexpectedExpanded = !unexpectedExpanded },
             titleColor = Color(0xFFB45309),
             fileColor = Color(0xFF92400E)
+        )
+    }
+}
+
+// v0.9.7+: Unified Module Integrity Display
+// Uses pre-calculated cross-validation from CIRISVerify
+@Composable
+private fun L4ContentUnified(status: VerifyStatusResponse, summary: Map<String, Int>) {
+    val totalManifest = summary["total_manifest"] ?: 0
+    val verified = summary["verified"] ?: 0
+    val failed = summary["failed"] ?: 0
+    val missing = summary["missing"] ?: 0
+    val excluded = summary["excluded"] ?: 0
+    val crossValidated = summary["cross_validated"] ?: 0
+
+    // Mobile excluded comes from status (files like discord, cli adapters not on mobile)
+    val mobileExcluded = status.mobileExcludedCount ?: 0
+
+    // Expected = manifest - mobile excluded (not general excluded which is 0)
+    val expected = totalManifest - mobileExcluded
+    // Remainder = files in manifest, not excluded, but not verified or failed
+    val remainder = expected - verified - failed
+    val integrityOk = status.moduleIntegrityOk
+
+    // Summary header
+    DetailRow(
+        label = "Code Integrity",
+        value = if (integrityOk) "Verified" else "Issues Found",
+        ok = integrityOk
+    )
+
+    // Main count: Verified / Expected (excluding mobile-excluded files)
+    DetailSubtext("$verified / $expected verified")
+
+    // Diagnostic breakdown
+    Spacer(modifier = Modifier.height(4.dp))
+    DetailSubtext("  Manifest: $totalManifest | Mobile Excluded: $mobileExcluded | Expected: $expected")
+    DetailSubtext("  Cross-validated: $crossValidated (disk = agent = registry)")
+    if (failed > 0) {
+        DetailSubtext("  Failed: $failed (hash mismatch)")
+    }
+    if (remainder > 0) {
+        DetailSubtext("  Not found: $remainder (in manifest but not on device)")
+    }
+
+    // Collapsible state
+    var crossValidatedExpanded by remember { mutableStateOf(false) }
+    var filesystemExpanded by remember { mutableStateOf(false) }
+    var agentExpanded by remember { mutableStateOf(false) }
+    var diskAgentMismatchExpanded by remember { mutableStateOf(false) }
+    var registryMismatchExpanded by remember { mutableStateOf(false) }
+    var notOnDeviceExpanded by remember { mutableStateOf(false) }
+    var unexpectedExpanded by remember { mutableStateOf(false) }
+    var excludedExpanded by remember { mutableStateOf(false) }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    // 1. Cross-validated (STRONGEST: disk == agent == registry)
+    val crossValidatedFiles = status.crossValidatedFiles ?: emptyList()
+    if (crossValidatedFiles.isNotEmpty() || crossValidated > 0) {
+        CollapsibleFileSection(
+            title = "✓ Fully Verified (disk = agent = registry)",
+            count = crossValidated,
+            files = crossValidatedFiles.take(50),
+            expanded = crossValidatedExpanded,
+            onToggle = { crossValidatedExpanded = !crossValidatedExpanded },
+            titleColor = Color(0xFF047857),
+            fileColor = Color(0xFF059669)
+        )
+    }
+
+    // 2. Filesystem Verified (disk == registry, no agent hash provided)
+    val filesystemVerifiedFiles = status.filesystemVerifiedFiles ?: emptyList()
+    val filesystemVerifiedCount = verified - crossValidated
+    if (filesystemVerifiedFiles.isNotEmpty() || filesystemVerifiedCount > 0) {
+        CollapsibleFileSection(
+            title = "✓ Disk Matches Registry (no agent hash)",
+            count = filesystemVerifiedCount,
+            files = filesystemVerifiedFiles.take(50),
+            expanded = filesystemExpanded,
+            onToggle = { filesystemExpanded = !filesystemExpanded },
+            titleColor = Color(0xFF059669),
+            fileColor = Color(0xFF10B981)
+        )
+    }
+
+    // 3. Agent/Chaquopy Verified (agent == registry, not on disk)
+    val agentVerifiedFiles = status.agentVerifiedFiles ?: emptyList()
+    val agentVerifiedCount = summary["agent_only_verified"] ?: agentVerifiedFiles.size
+    if (agentVerifiedFiles.isNotEmpty() || agentVerifiedCount > 0) {
+        CollapsibleFileSection(
+            title = "✓ Agent Hash Matches Registry (not on disk)",
+            count = agentVerifiedCount,
+            files = agentVerifiedFiles.take(50),
+            expanded = agentExpanded,
+            onToggle = { agentExpanded = !agentExpanded },
+            titleColor = Color(0xFF059669),
+            fileColor = Color(0xFF10B981)
+        )
+    }
+
+    // 4. DISK/AGENT MISMATCH - RED FLAG for tampering!
+    val diskAgentMismatch = status.diskAgentMismatch ?: emptyMap()
+    if (diskAgentMismatch.isNotEmpty()) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { diskAgentMismatchExpanded = !diskAgentMismatchExpanded }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (diskAgentMismatchExpanded) "▼" else "▶",
+                    fontSize = 10.sp,
+                    color = Color(0xFFDC2626)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "⚠️ TAMPERING: Disk ≠ Agent Hash (${diskAgentMismatch.size}):",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFDC2626)
+                )
+            }
+            if (diskAgentMismatchExpanded) {
+                diskAgentMismatch.keys.take(20).forEach { path ->
+                    Text(
+                        text = "    • $path",
+                        fontSize = 10.sp,
+                        color = Color(0xFFEF4444),
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+                DetailSubtext("    (File changed after startup - possible tampering)")
+            }
+        }
+    }
+
+    // 5. Registry Mismatch (hash doesn't match official registry)
+    val registryMismatch = status.registryMismatchFiles ?: emptyMap()
+    if (registryMismatch.isNotEmpty()) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { registryMismatchExpanded = !registryMismatchExpanded }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (registryMismatchExpanded) "▼" else "▶",
+                    fontSize = 10.sp,
+                    color = Color(0xFFDC2626)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "✗ Hash ≠ Registry (modified files) (${registryMismatch.size}):",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFDC2626)
+                )
+            }
+            if (registryMismatchExpanded) {
+                registryMismatch.keys.take(20).forEach { path ->
+                    Text(
+                        text = "    • $path",
+                        fontSize = 10.sp,
+                        color = Color(0xFFEF4444),
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
+    }
+
+    // 6. In Manifest but Not on Device (files expected but missing)
+    val filesMissingList = status.filesMissingList ?: emptyList()
+    if (remainder > 0 || filesMissingList.isNotEmpty()) {
+        CollapsibleFileSection(
+            title = "? In Manifest but Not on Device",
+            count = remainder,
+            files = filesMissingList.take(50),
+            expanded = notOnDeviceExpanded,
+            onToggle = { notOnDeviceExpanded = !notOnDeviceExpanded },
+            titleColor = Color(0xFFD97706),  // Orange/amber
+            fileColor = Color(0xFFF59E0B)
+        )
+    }
+
+    // 7. On Device but Not in Manifest (unexpected files)
+    val filesUnexpectedList = status.filesUnexpectedList ?: emptyList()
+    if (filesUnexpectedList.isNotEmpty()) {
+        CollapsibleFileSection(
+            title = "? On Device but Not in Manifest",
+            count = filesUnexpectedList.size,
+            files = filesUnexpectedList.take(50),
+            expanded = unexpectedExpanded,
+            onToggle = { unexpectedExpanded = !unexpectedExpanded },
+            titleColor = Color(0xFFD97706),  // Orange/amber
+            fileColor = Color(0xFFF59E0B)
+        )
+    }
+
+    // 8. Mobile Excluded (server-only files not bundled in APK)
+    val mobileExcludedCount = status.mobileExcludedCount ?: excluded
+    val mobileExcludedList = status.mobileExcludedList ?: emptyList()
+    if (mobileExcludedCount > 0) {
+        CollapsibleFileSection(
+            title = "— Server-Only (not bundled in mobile)",
+            count = mobileExcludedCount,
+            files = mobileExcludedList.take(50),
+            expanded = excludedExpanded,
+            onToggle = { excludedExpanded = !excludedExpanded },
+            titleColor = Color(0xFF6B7280),
+            fileColor = Color(0xFF9CA3AF)
         )
     }
 }

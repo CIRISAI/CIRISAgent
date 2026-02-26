@@ -365,12 +365,36 @@ async def prefetch_batch_context(
                             else str(disclosure.severity)
                         )
 
-                # Get attestation result
+                # Get attestation result from AuthenticationService cache
+                # CRITICAL: Attestation MUST have run at startup and be cached
+                # If it's not there, something has gone wrong - fail fast
                 attestation_result = None
-                if hasattr(ciris_verify_adapter, "_service") and hasattr(
-                    ciris_verify_adapter._service, "get_cached_attestation"
-                ):
-                    attestation_result = ciris_verify_adapter._service.get_cached_attestation()
+                if service_registry:
+                    try:
+                        auth_service = service_registry.get_service("authentication")
+                        if auth_service and hasattr(auth_service, "get_cached_attestation"):
+                            attestation_result = auth_service.get_cached_attestation()
+                            if attestation_result:
+                                logger.debug(
+                                    f"[BATCH] Got cached attestation from auth service: level={attestation_result.max_level}"
+                                )
+                    except Exception as e:
+                        logger.error(f"[BATCH] CRITICAL: Could not get auth service for attestation: {e}")
+
+                # Fallback: try through adapter's service (legacy path)
+                if attestation_result is None:
+                    if hasattr(ciris_verify_adapter, "_service") and hasattr(
+                        ciris_verify_adapter._service, "get_cached_attestation"
+                    ):
+                        attestation_result = ciris_verify_adapter._service.get_cached_attestation()
+
+                # FAIL FAST: Attestation MUST exist by the time we build context
+                if attestation_result is None:
+                    raise RuntimeError(
+                        "CRITICAL: No attestation result available. "
+                        "CIRISVerify startup attestation must complete before batch context. "
+                        "Check that run_startup_attestation() completed successfully."
+                    )
 
                 # Get agent version
                 agent_version = None
@@ -381,22 +405,13 @@ async def prefetch_batch_context(
                 except ImportError:
                     pass
 
-                # Build unified context
-                if attestation_result:
-                    batch_data.verify_attestation = VerifyAttestationContext.from_attestation_result(
-                        result=attestation_result,
-                        disclosure_text=disclosure_text,
-                        disclosure_severity=disclosure_severity,
-                        agent_version=agent_version,
-                    )
-                else:
-                    # Fallback: build context without full attestation result
-                    batch_data.verify_attestation = VerifyAttestationContext(
-                        attestation_status="not_attempted",
-                        disclosure_text=disclosure_text,
-                        disclosure_severity=disclosure_severity,
-                        agent_version=agent_version,
-                    )
+                # Build unified context from attestation result
+                batch_data.verify_attestation = VerifyAttestationContext.from_attestation_result(
+                    result=attestation_result,
+                    disclosure_text=disclosure_text,
+                    disclosure_severity=disclosure_severity,
+                    agent_version=agent_version,
+                )
 
                 # Populate legacy fields for backwards compatibility
                 batch_data.license_disclosure_text = batch_data.verify_attestation.disclosure_text

@@ -96,8 +96,33 @@ class AttestationResult(BaseModel):
     python_integrity_ok: bool = Field(default=False, description="Python module integrity verified")
     python_modules_checked: Optional[int] = Field(default=None, description="Number of Python modules checked")
     python_modules_passed: Optional[int] = Field(default=None, description="Number of Python modules that passed")
+    python_modules_failed: Optional[int] = Field(default=None, description="Number of Python modules that failed")
     python_total_hash: Optional[str] = Field(default=None, description="Total hash of all Python modules")
     python_hash_valid: bool = Field(default=False, description="Whether Python total hash matches expected")
+    python_failed_modules: Optional[Dict[str, str]] = Field(
+        default=None, description="Map of failed module paths to error messages"
+    )
+
+    # v0.9.7: Unified module integrity (cross-validation of disk/agent/registry)
+    module_integrity_ok: bool = Field(default=False, description="Unified module integrity verified")
+    module_integrity_summary: Optional[Dict[str, int]] = Field(
+        default=None, description="Summary counts: total_manifest, verified, failed, missing, excluded, cross_validated"
+    )
+    cross_validated_files: Optional[List[str]] = Field(
+        default=None, description="Files where disk == agent == registry (strongest verification)"
+    )
+    filesystem_verified_files: Optional[List[str]] = Field(
+        default=None, description="Files where disk == registry (no agent hash)"
+    )
+    agent_verified_files: Optional[List[str]] = Field(
+        default=None, description="Files where agent == registry (not on disk, e.g., Chaquopy)"
+    )
+    disk_agent_mismatch: Optional[Dict[str, Dict[str, Optional[str]]]] = Field(
+        default=None, description="RED FLAG: Files with disk != agent hash (tampering indicator)"
+    )
+    registry_mismatch_files: Optional[Dict[str, Dict[str, Optional[str]]]] = Field(
+        default=None, description="Files that don't match registry (some hash fields may be None)"
+    )
 
     # v0.8.4: Enhanced detail lists for UI
     files_missing_count: Optional[int] = Field(default=None, description="Number of manifest files not on device")

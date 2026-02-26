@@ -535,7 +535,35 @@ data class VerifyStatusResponse(
     // v0.8.5: Attestation proof hardware type (SoftwareOnly, TEE, StrongBox, etc.)
     // This is the actual hardware security level from attestation_proof.hardware_type
     @SerialName("attestation_proof_hardware_type")
-    val attestationProofHardwareType: String? = null
+    val attestationProofHardwareType: String? = null,
+
+    // v0.9.7: Cache timestamp
+    /** When this attestation result was cached (ISO 8601 timestamp) */
+    @SerialName("cached_at")
+    val cachedAt: String? = null,
+
+    // v0.9.7: Unified module integrity (cross-validation of disk/agent/registry)
+    /** Whether unified module integrity check passed */
+    @SerialName("module_integrity_ok")
+    val moduleIntegrityOk: Boolean = false,
+    /** Summary counts: total_manifest, verified, failed, missing, excluded, cross_validated */
+    @SerialName("module_integrity_summary")
+    val moduleIntegritySummary: Map<String, Int>? = null,
+    /** Files where disk == agent == registry (strongest verification) */
+    @SerialName("cross_validated_files")
+    val crossValidatedFiles: List<String>? = null,
+    /** Files where disk == registry (no agent hash) */
+    @SerialName("filesystem_verified_files")
+    val filesystemVerifiedFiles: List<String>? = null,
+    /** Files where agent == registry (not on disk, e.g., Chaquopy) */
+    @SerialName("agent_verified_files")
+    val agentVerifiedFiles: List<String>? = null,
+    /** RED FLAG: Files with disk != agent hash (tampering indicator) */
+    @SerialName("disk_agent_mismatch")
+    val diskAgentMismatch: Map<String, JsonElement>? = null,
+    /** Files that don't match registry */
+    @SerialName("registry_mismatch_files")
+    val registryMismatchFiles: Map<String, JsonElement>? = null
 ) {
     /**
      * Calculate actual achieved attestation level (0-5).

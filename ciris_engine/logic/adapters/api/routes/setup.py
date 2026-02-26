@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from ciris_engine.config.model_capabilities import ModelCapabilities, get_model_capabilities
@@ -34,6 +34,32 @@ from ._common import (
 )
 
 router = APIRouter(prefix="/setup", tags=["setup"])
+
+
+# ============================================================================
+# Setup-Only Route Protection
+# ============================================================================
+
+
+def require_setup_mode() -> None:
+    """Dependency that ensures setup routes are only accessible during first-run setup.
+
+    After setup is complete, these routes return 403 Forbidden.
+    Use /v1/auth/attestation for cached attestation after setup.
+
+    Raises:
+        HTTPException: 403 if setup is already complete
+    """
+    if not is_first_run():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Setup routes are only available during first-run setup. "
+            "Use /v1/auth/attestation for attestation status after setup.",
+        )
+
+
+# Type alias for the dependency
+SetupOnlyDep = Depends(require_setup_mode)
 logger = logging.getLogger(__name__)
 
 # Module-level CIRISVerify singleton so App Attest endpoints and verify-status
@@ -2338,7 +2364,7 @@ async def verify_app_attest(request: AppAttestVerifyRequest) -> SuccessResponse[
     return SuccessResponse(data=verify_data)
 
 
-@router.get("/verify-status")
+@router.get("/verify-status", dependencies=[SetupOnlyDep])
 async def get_verify_status(
     mode: str = "partial",
     play_integrity_token: Optional[str] = None,
@@ -3737,7 +3763,7 @@ async def get_verify_status(
     )
 
 
-@router.get("/providers")
+@router.get("/providers", dependencies=[SetupOnlyDep])
 async def list_providers() -> SuccessResponse[List[LLMProvider]]:
     """List available LLM providers.
 
@@ -3748,7 +3774,7 @@ async def list_providers() -> SuccessResponse[List[LLMProvider]]:
     return SuccessResponse(data=providers)
 
 
-@router.get("/templates")
+@router.get("/templates", dependencies=[SetupOnlyDep])
 async def list_templates() -> SuccessResponse[List[AgentTemplate]]:
     """List available agent templates.
 
@@ -3759,7 +3785,7 @@ async def list_templates() -> SuccessResponse[List[AgentTemplate]]:
     return SuccessResponse(data=templates)
 
 
-@router.get("/adapters")
+@router.get("/adapters", dependencies=[SetupOnlyDep])
 async def list_adapters() -> SuccessResponse[List[AdapterConfig]]:
     """List available adapters with platform requirements.
 
@@ -3793,7 +3819,7 @@ async def list_available_adapters_for_setup() -> SuccessResponse[Dict[str, Any]]
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/models", responses=RESPONSES_500)
+@router.get("/models", responses=RESPONSES_500, dependencies=[SetupOnlyDep])
 async def get_model_capabilities_endpoint() -> SuccessResponse[Dict[str, Any]]:
     """Get CIRIS-compatible LLM model capabilities.
 
@@ -3838,7 +3864,7 @@ async def get_model_capabilities_endpoint() -> SuccessResponse[Dict[str, Any]]:
         )
 
 
-@router.get("/models/{provider_id}", responses=RESPONSES_404_500)
+@router.get("/models/{provider_id}", responses=RESPONSES_404_500, dependencies=[SetupOnlyDep])
 async def get_provider_models(provider_id: str) -> SuccessResponse[Dict[str, Any]]:
     """Get CIRIS-compatible models for a specific provider.
 
@@ -3890,7 +3916,7 @@ async def get_provider_models(provider_id: str) -> SuccessResponse[Dict[str, Any
         )
 
 
-@router.post("/validate-llm")
+@router.post("/validate-llm", dependencies=[SetupOnlyDep])
 async def validate_llm(config: LLMValidationRequest) -> SuccessResponse[LLMValidationResponse]:
     """Validate LLM configuration.
 
@@ -3901,7 +3927,7 @@ async def validate_llm(config: LLMValidationRequest) -> SuccessResponse[LLMValid
     return SuccessResponse(data=validation_result)
 
 
-@router.post("/list-models")
+@router.post("/list-models", dependencies=[SetupOnlyDep])
 async def list_models(config: LLMValidationRequest) -> SuccessResponse[ListModelsResponse]:
     """List available models from a provider's live API.
 
@@ -3954,7 +3980,7 @@ class ConnectNodeStatusResponse(BaseModel):
     package_template_id: Optional[str] = Field(None, description="Template ID within the licensed package")
 
 
-@router.post("/connect-node", responses=RESPONSES_500)
+@router.post("/connect-node", responses=RESPONSES_500, dependencies=[SetupOnlyDep])
 async def connect_node(req: ConnectNodeRequest) -> SuccessResponse[ConnectNodeResponse]:
     """Initiate device auth via CIRISPortal.
 
@@ -4056,7 +4082,7 @@ async def connect_node(req: ConnectNodeRequest) -> SuccessResponse[ConnectNodeRe
     )
 
 
-@router.get("/connect-node/status", responses=RESPONSES_500)
+@router.get("/connect-node/status", responses=RESPONSES_500, dependencies=[SetupOnlyDep])
 async def connect_node_status(device_code: str, portal_url: str) -> SuccessResponse[ConnectNodeStatusResponse]:
     """Poll device auth status.
 
@@ -4147,7 +4173,7 @@ async def connect_node_status(device_code: str, portal_url: str) -> SuccessRespo
     )
 
 
-@router.post("/reset-device-auth", responses=RESPONSES_500)
+@router.post("/reset-device-auth", responses=RESPONSES_500, dependencies=[SetupOnlyDep])
 async def reset_device_auth() -> SuccessResponse[Dict[str, Any]]:
     """Reset device auth session state.
 
@@ -4379,14 +4405,16 @@ async def _activate_key_inline(private_key_b64: str, device_code: str, portal_ur
 
     proof_dict = activate_result[0]
 
-    # Verify key_type is "portal" (not "ephemeral")
+    # Verify key_type indicates portal key (portal=verified, registry_unavailable=offline)
     key_type = proof_dict.get("key_type", "unknown")
-    if key_type != "portal":
+    if key_type not in ("portal", "registry_unavailable"):
         logger.warning(
-            "Key activation: unexpected key_type '%s' (expected 'portal'). "
+            "Key activation: unexpected key_type '%s' (expected 'portal' or 'registry_unavailable'). "
             "Key may not have been imported correctly.",
             key_type,
         )
+    elif key_type == "registry_unavailable":
+        logger.info("Key activation: registry unavailable, key will be verified when online.")
 
     # POST to Portal's /api/device/activate
     try:
@@ -4449,7 +4477,7 @@ class DownloadPackageResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error message if status is error")
 
 
-@router.post("/download-package", responses=RESPONSES_500)
+@router.post("/download-package", responses=RESPONSES_500, dependencies=[SetupOnlyDep])
 async def download_package(req: DownloadPackageRequest) -> SuccessResponse[DownloadPackageResponse]:
     """Download and install a licensed module package from Portal.
 
@@ -4603,23 +4631,16 @@ async def download_package(req: DownloadPackageRequest) -> SuccessResponse[Downl
         )
 
 
-@router.post("/complete", responses=RESPONSES_400_403_500)
+@router.post("/complete", responses=RESPONSES_400_403_500, dependencies=[SetupOnlyDep])
 async def complete_setup(setup: SetupCompleteRequest, request: Request) -> SuccessResponse[Dict[str, str]]:
     """Complete initial setup.
 
     Saves configuration and creates initial admin user.
-    Only accessible during first-run (no authentication required).
+    Only accessible during first-run (SetupOnlyDep enforces this).
     After setup, authentication is required for reconfiguration.
     """
     # Log debug info and determine if OAuth linking will happen
     _log_setup_debug_info(setup)
-
-    # Only allow during first-run
-    if not is_first_run():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Setup already completed. Use PUT /v1/setup/config to update configuration.",
-        )
 
     # Determine if this is an OAuth user (password is optional for OAuth users)
     is_oauth_user = bool(setup.oauth_provider)

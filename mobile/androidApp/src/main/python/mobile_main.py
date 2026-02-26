@@ -793,6 +793,12 @@ def verify_code_integrity(package_names: list = None, save_to_file: bool = True)
         f"files hashed, total_hash={results['total_hash'][:16] if results['total_hash'] else 'none'}..."
     )
 
+    # Log first 5 file names for debugging
+    if results["module_hashes"]:
+        first_5_files = list(results["module_hashes"].keys())[:5]
+        logger.info(f"[code-integrity] First 5 files hashed: {first_5_files}")
+        logger.info(f"[code-integrity] Total files in module_hashes: {len(results['module_hashes'])}")
+
     if results["errors"]:
         logger.warning(f"Code integrity errors: {results['errors'][:5]}...")
 

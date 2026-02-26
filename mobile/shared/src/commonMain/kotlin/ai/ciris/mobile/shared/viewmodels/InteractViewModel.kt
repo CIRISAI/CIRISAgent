@@ -422,9 +422,9 @@ class InteractViewModel(
                 logWarn(method, "Failed to fetch LLM config: ${e.message}")
             }
 
-            // Fetch trust status (partial mode for quick check)
+            // Fetch trust status (uses cached attestation from auth service)
             try {
-                val verifyStatus = apiClient.getVerifyStatus("partial")
+                val verifyStatus = apiClient.getVerifyStatus()
                 _trustStatus.value = TrustStatus(
                     maxLevel = verifyStatus.maxLevel,  // Use backend's authoritative level
                     isLoaded = verifyStatus.loaded,
@@ -446,7 +446,7 @@ class InteractViewModel(
     fun refreshTrustStatus() {
         viewModelScope.launch {
             try {
-                val verifyStatus = apiClient.getVerifyStatus("partial")
+                val verifyStatus = apiClient.getVerifyStatus()
                 _trustStatus.value = TrustStatus(
                     maxLevel = verifyStatus.maxLevel,  // Use backend's authoritative level
                     isLoaded = verifyStatus.loaded,

@@ -593,7 +593,6 @@ private fun TrustSecurityCard(
     var verifyStatus by remember { mutableStateOf<VerifyStatusResponse?>(null) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    var attestationMode by remember { mutableStateOf("partial") }  // "partial" or "full"
     var logMessages by remember { mutableStateOf(listOf<String>()) }
     var showLogView by remember { mutableStateOf(true) }  // Keep log view visible on error
     val uriHandler = LocalUriHandler.current
@@ -615,9 +614,9 @@ private fun TrustSecurityCard(
             logMessages = logMessages + "[verify] Initiating network validation (DNS-over-HTTPS)..."
             logMessages = logMessages + "[verify] Querying registry.ciris.ai..."
 
-            // Start the actual API call
+            // Start the actual API call (uses cached attestation from auth service)
             val result = withContext(Dispatchers.IO) {
-                apiClient.getVerifyStatus(attestationMode)
+                apiClient.getVerifyStatus()
             }
             verifyStatus = result
 
@@ -713,7 +712,7 @@ private fun TrustSecurityCard(
                                             kotlinx.coroutines.delay(300)
                                             logMessages = logMessages + "[verify] Querying registry..."
                                             val result = withContext(Dispatchers.IO) {
-                                                apiClient.getVerifyStatus(attestationMode)
+                                                apiClient.getVerifyStatus()
                                             }
                                             verifyStatus = result
                                             if (result.loaded) {
@@ -956,83 +955,47 @@ private fun TrustSecurityCard(
                             fontWeight = FontWeight.Bold,
                             color = TrustColors.EmeraldDark
                         )
-                        // Mode toggle + Run button
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Partial button
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = if (attestationMode == "partial") TrustColors.EmeraldDark else Color.LightGray,
-                                modifier = Modifier.clickable {
-                                    attestationMode = "partial"
-                                }
-                            ) {
-                                Text(
-                                    text = "Partial",
-                                    fontSize = 9.sp,
-                                    color = if (attestationMode == "partial") Color.White else Color.DarkGray,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                                )
-                            }
-                            // Full button
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = if (attestationMode == "full") TrustColors.EmeraldDark else Color.LightGray,
-                                modifier = Modifier.clickable {
-                                    attestationMode = "full"
-                                }
-                            ) {
-                                Text(
-                                    text = "Full",
-                                    fontSize = 9.sp,
-                                    color = if (attestationMode == "full") Color.White else Color.DarkGray,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                                )
-                            }
-                            // Run button
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = TrustColors.EmeraldDark,
-                                modifier = Modifier.clickable {
-                                    loading = true
-                                    error = null
-                                    showLogView = true
-                                    logMessages = listOf("[verify] Starting attestation check...")
-                                    coroutineScope.launch {
-                                        try {
-                                            logMessages = logMessages + "[verify] Loading CIRISVerify binary..."
-                                            kotlinx.coroutines.delay(300)
-                                            logMessages = logMessages + "[verify] Querying registry..."
-                                            val result = withContext(Dispatchers.IO) {
-                                                apiClient.getVerifyStatus(attestationMode)
-                                            }
-                                            verifyStatus = result
-                                            if (result.loaded) {
-                                                logMessages = logMessages + "[verify] ✓ Attestation complete"
-                                                showLogView = false
-                                            } else {
-                                                logMessages = logMessages + "[verify] ✗ ${result.error ?: "Verification failed"}"
-                                                error = result.error
-                                            }
-                                        } catch (e: Exception) {
-                                            logMessages = logMessages + "[verify] ✗ Error: ${e.message}"
-                                            error = e.message
-                                            // Keep showLogView = true on error
-                                        } finally {
-                                            loading = false
+                        // Refresh button
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = TrustColors.EmeraldDark,
+                            modifier = Modifier.clickable {
+                                loading = true
+                                error = null
+                                showLogView = true
+                                logMessages = listOf("[verify] Starting attestation check...")
+                                coroutineScope.launch {
+                                    try {
+                                        logMessages = logMessages + "[verify] Loading CIRISVerify binary..."
+                                        kotlinx.coroutines.delay(300)
+                                        logMessages = logMessages + "[verify] Querying registry..."
+                                        val result = withContext(Dispatchers.IO) {
+                                            apiClient.getVerifyStatus()
                                         }
+                                        verifyStatus = result
+                                        if (result.loaded) {
+                                            logMessages = logMessages + "[verify] ✓ Attestation complete"
+                                            showLogView = false
+                                        } else {
+                                            logMessages = logMessages + "[verify] ✗ ${result.error ?: "Verification failed"}"
+                                            error = result.error
+                                        }
+                                    } catch (e: Exception) {
+                                        logMessages = logMessages + "[verify] ✗ Error: ${e.message}"
+                                        error = e.message
+                                        // Keep showLogView = true on error
+                                    } finally {
+                                        loading = false
                                     }
                                 }
-                            ) {
-                                Text(
-                                    text = if (loading) "..." else "Run",
-                                    fontSize = 10.sp,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
                             }
+                        ) {
+                            Text(
+                                text = if (loading) "..." else "🔄",
+                                fontSize = 10.sp,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
                         }
                     }
 

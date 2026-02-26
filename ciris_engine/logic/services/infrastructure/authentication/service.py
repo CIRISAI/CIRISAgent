@@ -25,6 +25,12 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from ciris_engine.logic.persistence.stores import authentication_store
 from ciris_engine.logic.services.base_infrastructure_service import BaseInfrastructureService
 from ciris_engine.logic.services.lifecycle.time import TimeService
+from ciris_engine.logic.utils.mobile_exclusions import (
+    compute_files_missing_list,
+    compute_files_unexpected_list,
+    compute_mobile_excluded_count,
+    compute_mobile_excluded_list,
+)
 from ciris_engine.logic.utils.path_resolution import get_secrets_home
 from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
@@ -1713,7 +1719,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         with self._verifier_sync_lock:
             if self._verifier is None:
                 try:
-                    from ciris_verify import CIRISVerify
+                    from ciris_verify import CIRISVerify, setup_logging
 
                     # CIRISVerify() triggers Rust/Tokio init which needs 8MB stack
                     holder: list[Any] = [None, None]  # [verifier, error]
@@ -1738,6 +1744,14 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                         return None
 
                     self._verifier = holder[0]
+
+                    # Enable CIRISVerify Rust logging → Python logging (v0.9.3+)
+                    try:
+                        setup_logging(self._verifier, level="DEBUG")
+                        logger.info("[CIRISVerify] Rust logging enabled at DEBUG level")
+                    except Exception as log_err:
+                        logger.debug(f"[CIRISVerify] Could not enable Rust logging: {log_err}")
+
                     logger.info("[CIRISVerify] Singleton created successfully")
 
                 except ImportError:
@@ -1910,32 +1924,136 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                             if hashes_path.exists():
                                 with open(hashes_path) as f:
                                     hashes_data = json.load(f)
-                                # Use dict-like object for python hashes
-                                python_hashes = {
-                                    "total_hash": hashes_data.get("total_hash", ""),
-                                    "module_hashes": hashes_data.get("module_hashes", {}),
-                                    "module_count": hashes_data.get("modules_hashed", 0),
-                                    "agent_version": hashes_data.get("agent_version", ""),
-                                    "computed_at": hashes_data.get("computed_at", 0),
-                                }
+
+                                # CIRISVerify v0.9.7+ expects object with attributes, not dict
+                                # Create a simple wrapper class for attribute access
+                                class PythonHashesWrapper:
+                                    def __init__(self, data: dict) -> None:
+                                        self.total_hash = data.get("total_hash", "")
+                                        self.module_hashes = data.get("module_hashes", {})
+                                        self.module_count = data.get("modules_hashed", 0)
+                                        self.agent_version = data.get("agent_version", "")
+                                        self.computed_at = data.get("computed_at", 0)
+
+                                python_hashes = PythonHashesWrapper(hashes_data)
                                 agent_version = hashes_data.get("agent_version")
+                                # Strip -stable/-dev/-rc suffixes for registry lookup
+                                # Registry uses semantic versions like "2.0.0", not "2.0.0-stable"
+                                if agent_version and "-" in agent_version:
+                                    agent_version = agent_version.split("-")[0]
                                 logger.info(
-                                    f"[attestation] Loaded {python_hashes['module_count']} "
+                                    f"[attestation] Loaded {python_hashes.module_count} "
                                     f"module hashes from {hashes_path}"
                                 )
+                                # Debug: show first 5 module paths being passed to CIRISVerify
+                                first_5 = list(python_hashes.module_hashes.keys())[:5]
+                                logger.info(f"[attestation] First 5 agent hash paths: {first_5}")
                             else:
                                 logger.warning(f"[attestation] No startup hashes file at {hashes_path}")
                         except Exception as he:
                             logger.warning(f"[attestation] Failed to load Python hashes: {he}")
 
+                        # Get agent root for file integrity checking
+                        # On mobile, use Python package path (where Chaquopy extracts files)
+                        # not CIRIS_HOME (which is for runtime data)
+                        is_mobile = os.environ.get("ANDROID_ROOT") is not None
+                        if is_mobile:
+                            try:
+                                import ciris_engine
+
+                                agent_root = os.path.dirname(os.path.dirname(ciris_engine.__file__))
+                                logger.info(f"[attestation] Mobile agent_root from ciris_engine: {agent_root}")
+                            except Exception as e:
+                                logger.warning(f"[attestation] Mobile agent_root detection failed: {e}")
+                                agent_root = os.getcwd()
+                        else:
+                            agent_root = os.environ.get("CIRIS_AGENT_ROOT", os.getcwd())
+
+                        # Get Ed25519 fingerprint for audit signature verification
+                        key_fingerprint = None
+                        try:
+                            if hasattr(verifier, "get_ed25519_public_key_sync"):
+                                pub_key = verifier.get_ed25519_public_key_sync()
+                                if pub_key:
+                                    import hashlib
+
+                                    key_fingerprint = hashlib.sha256(pub_key).hexdigest()
+                                    logger.info(f"[attestation] Ed25519 fingerprint: {key_fingerprint[:16]}...")
+                        except Exception as ke:
+                            logger.warning(f"[attestation] Failed to get Ed25519 fingerprint: {ke}")
+
+                        # Get audit database path for audit trail verification
+                        audit_db_path = None
+                        try:
+                            # Check multiple possible locations for ciris_audit.db
+                            # Note: audit DB is in the 'data/' subdirectory
+                            ciris_home = os.environ.get("CIRIS_HOME", "")
+                            possible_paths = [
+                                Path(ciris_home) / "data" / "ciris_audit.db",
+                                Path(ciris_home) / "ciris_audit.db",
+                                Path("/data/user/0/ai.ciris.mobile/files/ciris/data") / "ciris_audit.db",
+                                Path("/data/data/ai.ciris.mobile/files/ciris/data") / "ciris_audit.db",
+                                Path.cwd() / "data" / "ciris_audit.db",
+                                Path.cwd() / "ciris_audit.db",
+                            ]
+                            for audit_path in possible_paths:
+                                if audit_path.exists():
+                                    audit_db_path = str(audit_path)
+                                    logger.info(f"[attestation] Found audit DB at: {audit_db_path}")
+                                    break
+                            if not audit_db_path:
+                                logger.info(
+                                    f"[attestation] No audit DB found at any of: {[str(p) for p in possible_paths]}"
+                                )
+                        except Exception as ae:
+                            logger.warning(f"[attestation] Failed to get audit DB path: {ae}")
+
+                        logger.info(
+                            f"[attestation] Calling run_attestation_sync with agent_root={agent_root}, agent_version={agent_version}, python_hashes_count={python_hashes.module_count if python_hashes else 0}"
+                        )
                         attestation_data = verifier.run_attestation_sync(
                             challenge=challenge,
                             spot_check_count=spot_check_count,
                             partial_file_check=(attestation_mode == "partial"),
                             python_hashes=python_hashes,
                             agent_version=agent_version,
+                            agent_root=agent_root,
+                            key_fingerprint=key_fingerprint,
+                            portal_key_id=key_fingerprint,  # Same as key_fingerprint for signature verification
                         )
                         logger.info("[attestation] run_attestation_sync completed")
+
+                        # Verify audit trail separately if we have a DB path
+                        if audit_db_path and hasattr(verifier, "verify_audit_trail_sync"):
+                            try:
+                                logger.info(
+                                    f"[attestation] Calling verify_audit_trail_sync with db_path={audit_db_path}"
+                                )
+                                audit_result = verifier.verify_audit_trail_sync(
+                                    db_path=audit_db_path,
+                                    portal_key_id=key_fingerprint,
+                                )
+                                logger.info(f"[attestation] Audit trail verification result: {audit_result}")
+                                # Merge audit result into attestation_data
+                                if attestation_data and audit_result:
+                                    attestation_data["audit_trail"] = audit_result
+                            except Exception as ate:
+                                logger.warning(f"[attestation] verify_audit_trail_sync failed: {ate}")
+
+                        # Log raw response structure for debugging field mappings
+                        logger.info(
+                            f"[attestation] Raw response keys: {list(attestation_data.keys()) if attestation_data else 'None'}"
+                        )
+                        if attestation_data:
+                            logger.info(
+                                f"[attestation] level={attestation_data.get('level')}, valid={attestation_data.get('valid')}"
+                            )
+                            logger.info(f"[attestation] sources={attestation_data.get('sources')}")
+                            logger.info(f"[attestation] key_attestation={attestation_data.get('key_attestation')}")
+                            logger.info(f"[attestation] python_integrity={attestation_data.get('python_integrity')}")
+                            logger.info(f"[attestation] self_verification={attestation_data.get('self_verification')}")
+                            logger.info(f"[attestation] file_integrity={attestation_data.get('file_integrity')}")
+                            logger.info(f"[attestation] audit_trail={attestation_data.get('audit_trail')}")
                     except Exception as ae:
                         logger.warning(f"[attestation] run_attestation_sync failed: {ae}")
                         attestation_data = {"error": str(ae)}
@@ -1976,48 +2094,141 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 attestation_mode=attestation_mode,
             )
 
-        # Parse attestation data
+        # Parse attestation data from run_attestation_sync response
         data = verify_result[0] or {}
         attestation = data.get("attestation", {}) or {}
 
-        # Extract self_verification for binary/function integrity
-        self_verification = attestation.get("self_verification", {}) or {}
+        # Extract sub-sections from run_attestation_sync response
+        # Note: CIRISVerify v0.9.6+ uses flat source fields (dns_us_valid, not dns_us.valid)
+        sources = attestation.get("sources", {}) or {}
+        key_attestation = attestation.get("key_attestation", {}) or {}
+        file_integrity_raw = attestation.get("file_integrity") or {}  # Can be None
+        # file_integrity response may be nested under 'full' key
+        file_integrity = (
+            file_integrity_raw.get("full", file_integrity_raw) if isinstance(file_integrity_raw, dict) else {}
+        )
+        # v0.9.7: Unified module integrity (cross-validation)
+        module_integrity = attestation.get("module_integrity") or {}
+        if module_integrity:
+            logger.info(f"[attestation] module_integrity keys: {list(module_integrity.keys())}")
+            summary = module_integrity.get("summary")
+            if summary:
+                logger.info(f"[attestation] module_integrity summary: {summary}")
+            # Debug: show list sizes
+            cv_list = module_integrity.get("cross_validated", [])
+            fs_list = module_integrity.get("filesystem_verified", [])
+            av_list = module_integrity.get("agent_verified", [])
+            logger.info(
+                f"[attestation] cross_validated count={len(cv_list)}, filesystem_verified count={len(fs_list)}, agent_verified count={len(av_list)}"
+            )
+        audit_trail = attestation.get("audit_trail") or {}  # Can be None
+        python_integrity = attestation.get("python_integrity") or {}
+        self_verification = attestation.get("self_verification") or {}
+        device_attestation = attestation.get("device_attestation") or {}
 
         # Build result from attestation data
         result = AttestationResult(
             loaded=True,
-            version=data.get("version"),
-            hardware_type=attestation.get("hardware_type"),
-            key_status=attestation.get("key_status", "none"),
-            key_id=attestation.get("key_id"),
-            attestation_status="verified" if attestation.get("attestation_valid") else "failed",
+            version=data.get("version") or self_verification.get("binary_version"),
+            hardware_type=key_attestation.get("hardware_type") or attestation.get("hardware_type"),
+            key_status=key_attestation.get("key_type", "none"),  # portal, local, registry_unavailable, etc.
+            key_id=key_attestation.get("key_id"),
+            attestation_status="verified" if attestation.get("valid") else "partial",
             attestation_mode=attestation_mode,
-            # Level checks from attestation
-            binary_ok=self_verification.get("binary_valid", False),
-            registry_ok=attestation.get("registry_valid", False),
-            audit_ok=attestation.get("audit_valid", False),
-            play_integrity_ok=attestation.get("play_integrity_valid", False),
-            play_integrity_verdict=attestation.get("play_integrity_verdict"),
+            # Level from run_attestation_sync
             max_level=attestation.get("level", 0),
+            # Source validation (Level 3) - flat structure in v0.9.6+
+            dns_us_ok=sources.get("dns_us_valid", False),
+            dns_eu_ok=sources.get("dns_eu_valid", False),
+            https_us_ok=sources.get("https_valid", False),
+            https_eu_ok=sources.get("https_valid", False),  # Same endpoint
+            # Binary/key attestation (Level 1-2)
+            binary_ok=self_verification.get("binary_valid", False),
+            env_ok=not key_attestation.get("running_in_vm", False),  # Not in VM = env OK
+            # Registry validation (Level 3)
+            registry_ok=key_attestation.get("registry_key_status") == "active",
+            registry_key_status=key_attestation.get("registry_key_status") or attestation.get("registry_key_status"),
+            sources_agreeing=sum(
+                [
+                    sources.get("dns_us_valid", False),
+                    sources.get("dns_eu_valid", False),
+                    sources.get("https_valid", False),
+                ]
+            ),
+            # File integrity (Level 4) - may be None if not checked
+            file_integrity_ok=(
+                file_integrity.get("valid", False) if file_integrity else (attestation.get("level", 0) >= 4)
+            ),
+            total_files=file_integrity.get("total_files") if file_integrity else None,
+            files_checked=file_integrity.get("files_checked") if file_integrity else None,
+            files_passed=file_integrity.get("files_passed") if file_integrity else None,
+            files_failed=file_integrity.get("files_failed") if file_integrity else None,
+            # L4 detail lists (v0.8.4+)
+            per_file_results=file_integrity.get("per_file_results") if file_integrity else None,
+            files_missing_count=file_integrity.get("files_missing_count") if file_integrity else None,
+            files_missing_list=(
+                compute_files_missing_list(file_integrity.get("per_file_results")) if file_integrity else None
+            ),
+            files_failed_list=file_integrity.get("files_failed_list") if file_integrity else None,
+            files_unexpected_list=(
+                compute_files_unexpected_list(file_integrity.get("per_file_results")) if file_integrity else None
+            ),
+            # Mobile exclusions (v0.8.6+) - computed from per_file_results
+            mobile_excluded_count=(
+                compute_mobile_excluded_count(file_integrity.get("per_file_results")) if file_integrity else None
+            ),
+            mobile_excluded_list=(
+                compute_mobile_excluded_list(file_integrity.get("per_file_results")) if file_integrity else None
+            ),
+            # Audit trail (Level 5)
+            audit_ok=audit_trail.get("valid", False) if audit_trail else False,
+            # Play/Device Integrity
+            play_integrity_ok=device_attestation.get("valid", False),
+            play_integrity_verdict=device_attestation.get("verdict"),
+            # Python integrity (mobile)
+            python_integrity_ok=python_integrity.get("valid", False) if python_integrity else False,
+            python_modules_checked=python_integrity.get("modules_checked") if python_integrity else None,
+            python_modules_passed=python_integrity.get("modules_passed") if python_integrity else None,
+            python_modules_failed=python_integrity.get("modules_failed") if python_integrity else None,
+            python_total_hash=python_integrity.get("actual_total_hash") if python_integrity else None,
+            python_hash_valid=python_integrity.get("total_hash_valid", False) if python_integrity else False,
+            python_failed_modules=python_integrity.get("failed_modules") if python_integrity else None,
+            # v0.9.7: Unified module integrity (cross-validation of disk/agent/registry)
+            module_integrity_ok=module_integrity.get("valid", False) if module_integrity else False,
+            module_integrity_summary=module_integrity.get("summary") if module_integrity else None,
+            cross_validated_files=module_integrity.get("cross_validated", [])[:50] if module_integrity else None,
+            filesystem_verified_files=(
+                module_integrity.get("filesystem_verified", [])[:50] if module_integrity else None
+            ),
+            agent_verified_files=module_integrity.get("agent_verified", [])[:50] if module_integrity else None,
+            disk_agent_mismatch=module_integrity.get("disk_agent_mismatch") if module_integrity else None,
+            registry_mismatch_files=module_integrity.get("registry_mismatch") if module_integrity else None,
             # Self-verification details
             binary_self_check="verified" if self_verification.get("binary_valid") else "failed",
             binary_hash=self_verification.get("binary_hash"),
             function_self_check="verified" if self_verification.get("functions_valid") else "failed",
-            functions_checked=self_verification.get("functions_checked"),
-            functions_passed=self_verification.get("functions_passed"),
+            # Use explicit None check - 0 is valid and should NOT fall through to python_integrity
+            functions_checked=(
+                self_verification.get("functions_checked")
+                if self_verification.get("functions_checked") is not None
+                else python_integrity.get("modules_checked")
+            ),
+            functions_passed=(
+                self_verification.get("functions_passed")
+                if self_verification.get("functions_passed") is not None
+                else python_integrity.get("modules_passed")
+            ),
+            functions_failed_list=self_verification.get("functions_failed_list") if self_verification else None,
             function_integrity="verified" if self_verification.get("functions_valid") else "failed",
             # Platform info
-            platform_os=attestation.get("platform", {}).get("os"),
-            platform_arch=attestation.get("platform", {}).get("arch"),
-            target_triple=attestation.get("target_triple"),
+            target_triple=self_verification.get("target"),
             # Key info
-            ed25519_fingerprint=attestation.get("ed25519_fingerprint"),
-            key_storage_mode=attestation.get("key_storage_mode"),
-            hardware_backed=attestation.get("hardware_backed", False),
+            ed25519_fingerprint=key_attestation.get("ed25519_fingerprint"),
+            key_storage_mode=key_attestation.get("storage_mode"),
+            hardware_backed=key_attestation.get("hardware_backed", False),
             # Full details for expanded view
             details=attestation,
             attestation_proof=attestation.get("proof"),
-            sources_agreeing=attestation.get("sources_agreeing", 0),
         )
 
         return result

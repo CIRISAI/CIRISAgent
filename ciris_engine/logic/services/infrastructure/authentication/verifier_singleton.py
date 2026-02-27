@@ -96,7 +96,7 @@ def get_verifier() -> Any:
 def _setup_logging(verifier: Any) -> None:
     """Set up Rust logging callback to forward to Python logging."""
     try:
-        from ciris_verify import setup_logging
+        from ciris_verify import setup_logging  # type: ignore[attr-defined]
 
         # Use TRACE level for maximum detail during attestation debugging
         setup_logging(verifier, level="TRACE")

@@ -409,6 +409,9 @@ data class VerifyStatusResponse(
     /** Maximum attestation level achieved (0-5) */
     @SerialName("max_level")
     val maxLevel: Int = 0,
+    /** True if waiting for device attestation (Play Integrity/App Attest) */
+    @SerialName("level_pending")
+    val levelPending: Boolean = false,
     /** Attestation mode: 'full' or 'partial' */
     @SerialName("attestation_mode")
     val attestationMode: String = "partial",

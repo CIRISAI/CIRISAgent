@@ -62,17 +62,6 @@ fun TrustPage(
     val uriHandler = LocalUriHandler.current
     val clipboardManager = LocalClipboardManager.current
 
-    // Trigger device attestation on mount if callback available
-    LaunchedEffect(deviceAttestationCallback) {
-        if (deviceAttestationCallback != null && deviceAttestationResult == null) {
-            deviceAttestationLoading = true
-            deviceAttestationCallback.onDeviceAttestationRequested { result ->
-                deviceAttestationResult = result
-                deviceAttestationLoading = false
-            }
-        }
-    }
-
     // Fetch verify status on mount (always full mode from cached attestation)
     LaunchedEffect(Unit) {
         fetchVerifyStatus(
@@ -80,6 +69,22 @@ fun TrustPage(
             onSuccess = { verifyStatus = it; loading = false; error = null },
             onError = { error = it; loading = false }
         )
+    }
+
+    // Only trigger device attestation if level_pending=true (backend needs it)
+    // Otherwise use the cached result from the backend
+    LaunchedEffect(verifyStatus?.levelPending, deviceAttestationCallback) {
+        val needsAttestation = verifyStatus?.levelPending == true
+        if (needsAttestation && deviceAttestationCallback != null && deviceAttestationResult == null) {
+            println("[TrustPage] level_pending=true, triggering device attestation...")
+            deviceAttestationLoading = true
+            deviceAttestationCallback.onDeviceAttestationRequested { result ->
+                deviceAttestationResult = result
+                deviceAttestationLoading = false
+            }
+        } else if (verifyStatus != null && !needsAttestation) {
+            println("[TrustPage] level_pending=false, using cached attestation (level=${verifyStatus?.maxLevel})")
+        }
     }
 
     Scaffold(
@@ -1080,9 +1085,9 @@ private fun L1Content(status: VerifyStatusResponse) {
     // Explanation dropdown
     ExplanationDropdown(
         title = "What is Binary Verification?",
-        whatItDoes = "Verifies that the CIRISVerify security library loaded correctly and hasn't been tampered with. Checks the cryptographic hash of the native binary code and validates that critical security functions exist and are authentic.",
-        whyItMatters = "This is the foundation of trust. If the security library itself is compromised, all other checks could be bypassed. This ensures the code doing the verification is legitimate.",
-        howItWorks = "The library computes a SHA-256 hash of its own binary code at runtime and compares it against the expected hash from the CIRIS Registry. It also verifies that exported functions like signing and verification haven't been replaced."
+        whatItDoes = "Checks that the CIRISVerify security library loaded correctly. Computes a hash of the native binary and validates that critical security functions exist.",
+        whyItMatters = "Helps detect tampering with the security library itself. If the verification code is modified, other checks may not be reliable.",
+        howItWorks = "The library computes a SHA-256 hash of its own binary at runtime and compares it against the expected hash from the CIRIS Registry. Also checks that exported functions like signing haven't been replaced."
     )
 
     Spacer(modifier = Modifier.height(8.dp))
@@ -1185,9 +1190,9 @@ private fun L2Content(
     // Explanation dropdown
     ExplanationDropdown(
         title = "What is Environment Verification?",
-        whatItDoes = "Verifies that your device has secure hardware (like Android's StrongBox or iOS Secure Enclave) and confirms the app is running in a genuine, unmodified environment using ${if (isIos) "Apple App Attest" else "Google Play Integrity"}.",
-        whyItMatters = "Hardware security modules protect cryptographic keys from extraction. ${if (isIos) "App Attest" else "Play Integrity"} confirms the app hasn't been modified, isn't running on a rooted/jailbroken device, and was installed from the official store.",
-        howItWorks = "${if (isIos) "App Attest uses the Secure Enclave to generate device-bound attestations that Apple verifies." else "Play Integrity contacts Google's servers to verify device integrity, app authenticity, and license status."} Your signing keys are stored in hardware-backed storage so they can't be extracted even if the device is compromised."
+        whatItDoes = "Checks for secure hardware (Android StrongBox or iOS Secure Enclave) and uses ${if (isIos) "Apple App Attest" else "Google Play Integrity"} to assess device and app integrity.",
+        whyItMatters = "Hardware security modules make key extraction harder. ${if (isIos) "App Attest" else "Play Integrity"} helps detect modified apps, rooted/jailbroken devices, or unofficial installs.",
+        howItWorks = "${if (isIos) "App Attest uses the Secure Enclave to generate attestations verified by Apple." else "Play Integrity contacts Google's servers to check device integrity and app authenticity."} Signing keys are stored in hardware-backed storage when available."
     )
 
     Spacer(modifier = Modifier.height(8.dp))
@@ -1261,9 +1266,9 @@ private fun L3Content(status: VerifyStatusResponse) {
     // Explanation dropdown
     ExplanationDropdown(
         title = "What is Registry Cross-Validation?",
-        whatItDoes = "Contacts the CIRIS Registry through 3 independent channels (DNS servers in US, DNS servers in EU, and direct HTTPS) to verify that your agent's public key and file hashes are registered correctly.",
-        whyItMatters = "Using multiple sources prevents single points of failure or compromise. If an attacker controls one channel, the others will detect the discrepancy. At least 2 of 3 sources must agree for validation to pass.",
-        howItWorks = "Your agent's Ed25519 public key fingerprint is queried through DNS TXT records in both US and EU regions, plus a direct HTTPS API call. All three should return matching data. This ensures the registry data hasn't been tampered with in transit."
+        whatItDoes = "Contacts the CIRIS Registry through 3 independent channels (DNS US, DNS EU, and direct HTTPS) to check that your Steward Key and file hashes are registered.",
+        whyItMatters = "Multiple sources reduce single points of failure. If one channel is compromised or unavailable, discrepancies may be detected. At least 2 of 3 sources must agree.",
+        howItWorks = "Your Ed25519 public key fingerprint is queried via DNS TXT records in US and EU regions, plus a direct HTTPS API call. Matching responses indicate consistent registry data."
     )
 
     Spacer(modifier = Modifier.height(8.dp))
@@ -1333,9 +1338,9 @@ private fun L4Content(status: VerifyStatusResponse) {
     // Explanation dropdown (legacy mode)
     ExplanationDropdown(
         title = "What is Code Integrity?",
-        whatItDoes = "Verifies that every file in the CIRIS agent matches the official version registered with the CIRIS Registry. This includes Python code, configuration files, and all dependencies.",
-        whyItMatters = "Code integrity ensures no files have been modified, added, or removed since the official release. This prevents code injection attacks, backdoors, or unauthorized modifications to the agent's behavior.",
-        howItWorks = "Each file's SHA-256 hash is computed and compared against the registry's manifest. Files are verified through multiple sources: filesystem scan, Python module hashes at startup, and registry cross-validation."
+        whatItDoes = "Compares file hashes against the official CIRIS Registry manifest. Checks Python code, configuration files, and dependencies.",
+        whyItMatters = "Helps detect if files have been modified, added, or removed since the official release. Can reveal code injection, backdoors, or unauthorized modifications.",
+        howItWorks = "Files are verified through up to 3 sources: (1) Disk - files extracted to filesystem, (2) Agent Cache - Python files loaded by Chaquopy at startup but kept in memory, not on disk, (3) Registry manifest. A file passes if ANY local source matches the registry."
     )
 
     Spacer(modifier = Modifier.height(8.dp))
@@ -1542,9 +1547,9 @@ private fun L4ContentUnified(status: VerifyStatusResponse, summary: Map<String, 
     // Explanation dropdown
     ExplanationDropdown(
         title = "What is Code Integrity?",
-        whatItDoes = "Verifies that every file in the CIRIS agent matches the official version registered with the CIRIS Registry. This includes Python code, configuration files, and all dependencies.",
-        whyItMatters = "Code integrity ensures no files have been modified, added, or removed since the official release. This prevents code injection attacks, backdoors, or unauthorized modifications to the agent's behavior.",
-        howItWorks = "Each file's SHA-256 hash is computed and compared against the registry's manifest. Files are cross-validated through 3 sources: disk filesystem, agent's startup hash cache, and the CIRIS Registry. All three must agree for full verification."
+        whatItDoes = "Compares file hashes against the official CIRIS Registry manifest. Checks Python code, configuration files, and dependencies.",
+        whyItMatters = "Helps detect if files have been modified, added, or removed since the official release. Can reveal code injection, backdoors, or unauthorized modifications.",
+        howItWorks = "Files are verified through up to 3 sources: (1) Disk - files extracted to filesystem, (2) Agent Cache - Python files loaded by Chaquopy at startup but kept in memory, not on disk, (3) Registry manifest. A file passes if ANY local source matches the registry."
     )
 
     Spacer(modifier = Modifier.height(8.dp))
@@ -1818,9 +1823,9 @@ private fun L5Content(status: VerifyStatusResponse, onCopyDiagnostics: () -> Uni
     // Explanation dropdown
     ExplanationDropdown(
         title = "What is Registry & Audit?",
-        whatItDoes = "Verifies that your agent's cryptographic identity (Portal Key) is registered and active in the CIRIS Registry, and that all security-critical operations are being properly logged to an immutable audit trail.",
-        whyItMatters = "The Portal Key proves your agent was legitimately purchased and activated through the CIRIS Portal. The audit trail creates a tamper-evident record of all attestation checks, making it impossible to hide evidence of compromise attempts.",
-        howItWorks = "Your Ed25519 public key is registered at purchase time. The registry confirms it's active and not revoked. Every attestation event is cryptographically signed and logged, creating an unbreakable chain of evidence."
+        whatItDoes = "Checks that YOUR cryptographic identity (Steward Key) is registered and active in the CIRIS Registry, and that security events are being logged to an audit trail.",
+        whyItMatters = "The Steward Key identifies YOU as the human operator who purchased this agent through the Portal. This is your identity, not the agent's. The audit trail helps reveal tampering by logging attestation events.",
+        howItWorks = "Your Ed25519 Steward Key is registered at purchase. The registry checks if it's active and not revoked. Attestation events are signed with your Steward Key and logged."
     )
 
     Spacer(modifier = Modifier.height(8.dp))

@@ -863,6 +863,7 @@ class CIRISApiClient(
                 playIntegrityOk = (data["play_integrity_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
                 playIntegrityVerdict = (data["play_integrity_verdict"] as? JsonPrimitive)?.content,
                 maxLevel = (data["max_level"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0,
+                levelPending = (data["level_pending"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
                 // New detailed fields
                 attestationMode = (data["attestation_mode"] as? JsonPrimitive)?.content ?: "partial",
                 platformOs = (data["platform_os"] as? JsonPrimitive)?.content,
@@ -931,7 +932,7 @@ class CIRISApiClient(
                 }
             )
 
-            logInfo(method, "Verify status: loaded=$loaded, keyStatus=${verifyStatus.keyStatus}, hwType=${verifyStatus.attestationProofHardwareType ?: verifyStatus.hardwareType}, sourcesAgreeing=${verifyStatus.sourcesAgreeing}/3, playOk=${verifyStatus.playIntegrityOk}")
+            logInfo(method, "Verify status: loaded=$loaded, keyStatus=${verifyStatus.keyStatus}, maxLevel=${verifyStatus.maxLevel}, levelPending=${verifyStatus.levelPending}, hwType=${verifyStatus.attestationProofHardwareType ?: verifyStatus.hardwareType}, sourcesAgreeing=${verifyStatus.sourcesAgreeing}/3, playOk=${verifyStatus.playIntegrityOk}")
 
             // DEBUG: Log parsed values
             logInfo(method, "=== PARSED VALUES DEBUG ===")

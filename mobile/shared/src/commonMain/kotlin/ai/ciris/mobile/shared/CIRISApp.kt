@@ -373,6 +373,8 @@ fun CIRISApp(
     val interactViewModel: InteractViewModel = viewModel {
         InteractViewModel(apiClient)
     }
+    // Set device attestation callback so InteractViewModel can trigger Play Integrity at startup
+    interactViewModel.setDeviceAttestationCallback(deviceAttestationCallback)
     val settingsViewModel: SettingsViewModel = viewModel {
         SettingsViewModel(secureStorage, apiClient, envFileUpdater)
     }

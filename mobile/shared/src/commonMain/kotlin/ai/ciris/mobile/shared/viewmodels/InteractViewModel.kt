@@ -81,7 +81,8 @@ data class TrustStatus(
     val maxLevel: Int = 0,
     val isLoaded: Boolean = false,
     val keyStatus: String = "none",
-    val attestationStatus: String = "not_attempted"
+    val attestationStatus: String = "not_attempted",
+    val levelPending: Boolean = false  // True when waiting for Play Integrity
 )
 
 class InteractViewModel(
@@ -93,11 +94,25 @@ class InteractViewModel(
         private const val POLL_INTERVAL_MS = 3000L
         private const val STATUS_POLL_INTERVAL_MS = 5000L
         private const val HEALTH_POLL_INTERVAL_MS = 30000L  // Less frequent health checks
+        private const val TRUST_PENDING_POLL_INTERVAL_MS = 5000L  // Fast polling when Play Integrity pending
         private const val MAX_BUBBLES = 8
         private const val BUBBLE_LIFETIME_MS = 2000L
         private const val MAX_TIMELINE_EVENTS = 100
         private const val SSE_RECONNECT_BASE_MS = 1000L
         private const val SSE_RECONNECT_MAX_MS = 30000L
+    }
+
+    // Device attestation callback for triggering Play Integrity at startup
+    private var deviceAttestationCallback: ai.ciris.mobile.shared.DeviceAttestationCallback? = null
+    private var deviceAttestationTriggered = false  // Track if we've already triggered it
+
+    /**
+     * Set the device attestation callback for Play Integrity.
+     * Should be called after ViewModel creation from CIRISApp.
+     */
+    fun setDeviceAttestationCallback(callback: ai.ciris.mobile.shared.DeviceAttestationCallback?) {
+        logInfo("setDeviceAttestationCallback", "Device attestation callback ${if (callback != null) "SET" else "CLEARED"}")
+        deviceAttestationCallback = callback
     }
 
     private fun log(level: String, method: String, message: String) {
@@ -172,6 +187,7 @@ class InteractViewModel(
     private var pollingJob: Job? = null
     private var statusJob: Job? = null
     private var healthJob: Job? = null
+    private var trustPollJob: Job? = null  // Separate fast polling for trust when pending
     private var sseJob: Job? = null
     private var isFirstLoad = true
     private var authErrorCount = 0
@@ -383,6 +399,74 @@ class InteractViewModel(
                 fetchHealthData()
             }
         }
+
+        // Start separate fast trust polling for when Play Integrity is pending
+        startTrustPendingPolling()
+    }
+
+    /**
+     * Fast polling for trust status when Play Integrity is pending.
+     * Polls every 5 seconds until Play Integrity completes, then stops.
+     * Also triggers Play Integrity automatically if levelPending=true.
+     */
+    private fun startTrustPendingPolling() {
+        val method = "startTrustPendingPolling"
+        logInfo(method, "Starting trust pending polling (interval=${TRUST_PENDING_POLL_INTERVAL_MS}ms)")
+
+        trustPollJob = viewModelScope.launch {
+            // Wait a bit for initial health fetch to complete
+            delay(2000)
+
+            while (isActive) {
+                // Fetch fresh trust status
+                fetchTrustStatus()
+                val currentTrust = _trustStatus.value
+
+                // If levelPending is true, trigger Play Integrity if not already triggered
+                if (currentTrust.levelPending) {
+                    if (!deviceAttestationTriggered && deviceAttestationCallback != null) {
+                        logInfo(method, "Level pending=true, triggering Play Integrity automatically...")
+                        deviceAttestationTriggered = true
+                        deviceAttestationCallback?.onDeviceAttestationRequested { result ->
+                            logInfo(method, "Play Integrity completed: $result")
+                        }
+                    }
+                    logDebug(method, "Level pending=true (level=${currentTrust.maxLevel}), continuing fast poll...")
+                    delay(TRUST_PENDING_POLL_INTERVAL_MS)
+                } else {
+                    // Play Integrity is complete, stop fast polling
+                    logInfo(method, "Level pending=false (level=${currentTrust.maxLevel}/5), stopping fast poll")
+                    break
+                }
+            }
+        }
+    }
+
+    /**
+     * Fetch just trust status (for fast polling when pending)
+     */
+    private suspend fun fetchTrustStatus() {
+        val method = "fetchTrustStatus"
+        try {
+            val verifyStatus = apiClient.getVerifyStatus()
+            val previousLevel = _trustStatus.value.maxLevel
+            val previousPending = _trustStatus.value.levelPending
+            _trustStatus.value = TrustStatus(
+                maxLevel = verifyStatus.maxLevel,
+                isLoaded = verifyStatus.loaded,
+                keyStatus = verifyStatus.keyStatus,
+                attestationStatus = verifyStatus.attestationStatus,
+                levelPending = verifyStatus.levelPending
+            )
+            if (verifyStatus.maxLevel != previousLevel) {
+                logInfo(method, "Trust level changed: $previousLevel -> ${verifyStatus.maxLevel}")
+            }
+            if (verifyStatus.levelPending != previousPending) {
+                logInfo(method, "Level pending changed: $previousPending -> ${verifyStatus.levelPending}")
+            }
+        } catch (e: Exception) {
+            logWarn(method, "Failed to fetch trust status: ${e.message}")
+        }
     }
 
     /**
@@ -429,9 +513,10 @@ class InteractViewModel(
                     maxLevel = verifyStatus.maxLevel,  // Use backend's authoritative level
                     isLoaded = verifyStatus.loaded,
                     keyStatus = verifyStatus.keyStatus,
-                    attestationStatus = verifyStatus.attestationStatus
+                    attestationStatus = verifyStatus.attestationStatus,
+                    levelPending = verifyStatus.levelPending
                 )
-                logDebug(method, "Trust: level=${verifyStatus.maxLevel}/5, keyStatus=${verifyStatus.keyStatus}")
+                logDebug(method, "Trust: level=${verifyStatus.maxLevel}/5, keyStatus=${verifyStatus.keyStatus}, pending=${verifyStatus.levelPending}")
             } catch (e: Exception) {
                 logWarn(method, "Failed to fetch trust status: ${e.message}")
             }
@@ -442,17 +527,33 @@ class InteractViewModel(
 
     /**
      * Refresh trust status (called when opening trust page)
+     * Also restarts fast polling if Play Integrity is still pending.
      */
     fun refreshTrustStatus() {
         viewModelScope.launch {
             try {
                 val verifyStatus = apiClient.getVerifyStatus()
+                val previousLevel = _trustStatus.value.maxLevel
                 _trustStatus.value = TrustStatus(
                     maxLevel = verifyStatus.maxLevel,  // Use backend's authoritative level
                     isLoaded = verifyStatus.loaded,
                     keyStatus = verifyStatus.keyStatus,
-                    attestationStatus = verifyStatus.attestationStatus
+                    attestationStatus = verifyStatus.attestationStatus,
+                    levelPending = verifyStatus.levelPending
                 )
+
+                // Log level change
+                if (verifyStatus.maxLevel != previousLevel) {
+                    logInfo("refreshTrustStatus", "Trust level changed: $previousLevel -> ${verifyStatus.maxLevel}")
+                }
+
+                // Restart fast polling if still pending and job isn't active
+                if (verifyStatus.levelPending) {
+                    if (trustPollJob?.isActive != true) {
+                        logInfo("refreshTrustStatus", "Restarting fast trust polling (levelPending=true)")
+                        startTrustPendingPolling()
+                    }
+                }
             } catch (e: Exception) {
                 logWarn("refreshTrustStatus", "Failed: ${e.message}")
             }
@@ -716,6 +817,7 @@ class InteractViewModel(
         pollingJob?.cancel()
         statusJob?.cancel()
         healthJob?.cancel()
+        trustPollJob?.cancel()
         sseJob?.cancel()
     }
 }

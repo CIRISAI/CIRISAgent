@@ -1824,7 +1824,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 result.cached_at = self._get_current_time()
                 result.cache_ttl_seconds = self._attestation_cache_ttl
                 self._attestation_cache = result
-                logger.info(f"[attestation] Completed: level={result.max_level}, mode={mode}")
+                logger.info(f"[attestation] Completed: level={result.max_level}, mode={mode}, instance_id={id(self)}")
                 return result
         finally:
             self._attestation_in_progress = False
@@ -2100,7 +2100,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             f"[attestation] DIAGNOSTIC: attestation keys: {list(attestation.keys()) if attestation else 'None'}"
         )
         if attestation:
-            logger.info(f"[attestation] DIAGNOSTIC: level={attestation.get('level')}, valid={attestation.get('valid')}")
+            logger.info(
+                f"[attestation] DIAGNOSTIC: level={attestation.get('level')}, valid={attestation.get('valid')}, level_pending={attestation.get('level_pending')}"
+            )
             logger.info(f"[attestation] DIAGNOSTIC: python_integrity={attestation.get('python_integrity')}")
             logger.info(f"[attestation] DIAGNOSTIC: file_integrity={attestation.get('file_integrity')}")
             logger.info(f"[attestation] DIAGNOSTIC: self_verification={attestation.get('self_verification')}")
@@ -2133,6 +2135,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         python_integrity = attestation.get("python_integrity") or {}
         self_verification = attestation.get("self_verification") or {}
         device_attestation = attestation.get("device_attestation") or {}
+        logger.info(f"[attestation] DIAGNOSTIC: device_attestation={device_attestation}")
 
         # Build result from attestation data
         result = AttestationResult(
@@ -2191,7 +2194,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             # Audit trail (Level 5)
             audit_ok=audit_trail.get("valid", False) if audit_trail else False,
             # Play/Device Integrity
-            play_integrity_ok=device_attestation.get("valid", False),
+            play_integrity_ok=device_attestation.get("verified", False),  # Note: key is 'verified', not 'valid'
             play_integrity_verdict=device_attestation.get("verdict"),
             # Two-phase attestation support (from CIRISVerify response)
             level_pending=attestation.get("level_pending", False),
@@ -2251,6 +2254,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             Cached AttestationResult or None if cache is empty/expired
         """
         if self._attestation_cache is None:
+            logger.debug(f"[attestation] get_cached_attestation: cache is None, instance_id={id(self)}")
             return None
 
         # Check if cache has expired

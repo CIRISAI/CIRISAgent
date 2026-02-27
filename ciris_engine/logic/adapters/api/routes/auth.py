@@ -2068,20 +2068,25 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
             }
         }
 
+    logger.debug(f"[attestation] Querying cache from instance_id={id(infra_auth_service)}")
     cached = infra_auth_service.get_cached_attestation()
 
     if not cached:
         # Check if attestation is currently in progress on the infrastructure service
         has_method = hasattr(infra_auth_service, "is_attestation_in_progress")
         in_progress = has_method and infra_auth_service.is_attestation_in_progress()
-        logger.info(f"[attestation] Cache empty. has_method={has_method}, in_progress={in_progress}")
+        logger.info(
+            f"[attestation] Cache empty. has_method={has_method}, in_progress={in_progress}, instance_id={id(infra_auth_service)}"
+        )
 
         if in_progress:
-            logger.info("[attestation] Returning in_progress status")
+            logger.info("[attestation] Returning in_progress status with level_pending=True")
             return {
                 "data": {
                     "loaded": True,
                     "attestation_status": "in_progress",
+                    "level_pending": True,  # Keep polling while attestation runs
+                    "max_level": 0,
                     "error": None,
                 }
             }
@@ -2090,6 +2095,8 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
             "data": {
                 "loaded": True,
                 "attestation_status": "not_attempted",
+                "level_pending": True,  # Keep polling until attestation runs
+                "max_level": 0,
                 "error": "No cached attestation - startup attestation may not have completed",
             }
         }
@@ -2097,7 +2104,9 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
     # Convert cached AttestationResult to response format
     # This matches the format returned by /v1/setup/verify-status
     logger.info(f"[attestation] === API RESPONSE DEBUG ===")
-    logger.info(f"[attestation] max_level={cached.max_level}, file_integrity_ok={cached.file_integrity_ok}")
+    logger.info(
+        f"[attestation] max_level={cached.max_level}, level_pending={cached.level_pending}, file_integrity_ok={cached.file_integrity_ok}, play_integrity_ok={cached.play_integrity_ok}"
+    )
     logger.info(
         f"[attestation] files_checked={cached.files_checked}, files_passed={cached.files_passed}, files_failed={cached.files_failed}"
     )
@@ -2146,6 +2155,7 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
             "play_integrity_ok": cached.play_integrity_ok,
             "play_integrity_verdict": cached.play_integrity_verdict,
             "max_level": cached.max_level,
+            "level_pending": cached.level_pending,  # True when waiting for device attestation
             # Key attestation
             "ed25519_fingerprint": cached.ed25519_fingerprint,
             "key_storage_mode": cached.key_storage_mode,

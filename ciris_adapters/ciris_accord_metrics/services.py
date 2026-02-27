@@ -242,7 +242,7 @@ class Ed25519TraceSigner:
                     "component_type": c.component_type,
                     "data": _strip_empty(c.data),
                     "event_type": c.event_type,
-                    "timestamp": c.timestamp,
+                    "timestamp": c.timestamp.isoformat() if hasattr(c.timestamp, "isoformat") else str(c.timestamp),
                 }
                 for c in trace.components
             ]
@@ -298,7 +298,7 @@ class Ed25519TraceSigner:
                     "component_type": c.component_type,
                     "data": _strip_empty(c.data),
                     "event_type": c.event_type,
-                    "timestamp": c.timestamp,
+                    "timestamp": c.timestamp.isoformat() if hasattr(c.timestamp, "isoformat") else str(c.timestamp),
                 }
                 for c in trace.components
             ]

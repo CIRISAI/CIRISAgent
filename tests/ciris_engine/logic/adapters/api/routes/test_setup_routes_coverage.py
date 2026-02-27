@@ -715,7 +715,7 @@ class TestListModelsForProvider:
         )
 
         with async_patch(
-            "ciris_engine.logic.adapters.api.routes.setup._fetch_live_models",
+            "ciris_engine.logic.adapters.api.routes._setup_legacy._fetch_live_models",
             side_effect=TimeoutError("Connection timed out"),
         ):
             result = await _list_models_for_provider(config)
@@ -744,7 +744,7 @@ class TestListModelsForProvider:
         ]
 
         with async_patch(
-            "ciris_engine.logic.adapters.api.routes.setup._fetch_live_models",
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._fetch_live_models",
             return_value=mock_models,
         ):
             result = await _list_models_for_provider(config)
@@ -772,7 +772,7 @@ class TestListModelsForProvider:
         mock_models = [LiveModelInfo(id="llama3", display_name="llama3", source="live")]
 
         with async_patch(
-            "ciris_engine.logic.adapters.api.routes.setup._fetch_live_models",
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._fetch_live_models",
             return_value=mock_models,
         ):
             result = await _list_models_for_provider(config)
@@ -792,7 +792,7 @@ class TestFetchLiveModels:
         config = LLMValidationRequest(provider="anthropic", api_key="sk-ant-test123")
 
         with async_patch(
-            "ciris_engine.logic.adapters.api.routes.setup._list_models_anthropic",
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._list_models_anthropic",
             return_value=[LiveModelInfo(id="claude-3-opus", display_name="Claude 3 Opus", source="live")],
         ) as mock_anthropic:
             result = await _fetch_live_models(config)
@@ -810,7 +810,7 @@ class TestFetchLiveModels:
         config = LLMValidationRequest(provider="google", api_key="AIza-test123")
 
         with async_patch(
-            "ciris_engine.logic.adapters.api.routes.setup._list_models_google",
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._list_models_google",
             return_value=[LiveModelInfo(id="gemini-2.0-flash-exp", display_name="Gemini 2.0 Flash", source="live")],
         ) as mock_google:
             result = await _fetch_live_models(config)
@@ -827,7 +827,7 @@ class TestFetchLiveModels:
         config = LLMValidationRequest(provider="local", api_key="", base_url="http://localhost:11434")
 
         with async_patch(
-            "ciris_engine.logic.adapters.api.routes.setup._list_models_ollama",
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._list_models_ollama",
             return_value=[LiveModelInfo(id="llama3:latest", display_name="llama3:latest", source="live")],
         ) as mock_ollama:
             result = await _fetch_live_models(config)
@@ -844,7 +844,7 @@ class TestFetchLiveModels:
         config = LLMValidationRequest(provider="openai", api_key="sk-test123")
 
         with async_patch(
-            "ciris_engine.logic.adapters.api.routes.setup._list_models_openai_compatible",
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._list_models_openai_compatible",
             return_value=[LiveModelInfo(id="gpt-4o", display_name="gpt-4o", source="live")],
         ) as mock_openai:
             result = await _fetch_live_models(config)
@@ -861,7 +861,7 @@ class TestFetchLiveModels:
         config = LLMValidationRequest(provider="groq", api_key="gsk_test123")
 
         with async_patch(
-            "ciris_engine.logic.adapters.api.routes.setup._list_models_openai_compatible",
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._list_models_openai_compatible",
             return_value=[],
         ) as mock_openai:
             await _fetch_live_models(config)

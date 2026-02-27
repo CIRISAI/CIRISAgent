@@ -31,10 +31,68 @@ Path Resolution Strategy:
    d. <package_root>/ciris_templates/ (bundled templates)
 """
 
+import logging
 import os
 import sys
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+# Directories that should never be written to (security measure)
+# These are system-critical directories that could be abused
+FORBIDDEN_PATH_PREFIXES = frozenset(
+    {
+        "/bin",
+        "/sbin",
+        "/usr/bin",
+        "/usr/sbin",
+        "/etc",
+        "/root",
+        "/var/run",
+        "/var/lock",
+        "/boot",
+        "/dev",
+        "/proc",
+        "/sys",
+    }
+)
+
+
+def validate_path_safety(path: Path, context: str = "path") -> Path:
+    """Validate that a path is safe to use for file operations.
+
+    Security checks performed:
+    1. Path must be absolute after resolution (no relative path tricks)
+    2. Path must not be in system-critical directories
+    3. Path must not contain null bytes or other dangerous characters
+
+    Args:
+        path: The path to validate
+        context: Description of where this path came from (for logging)
+
+    Returns:
+        The validated, resolved path
+
+    Raises:
+        ValueError: If the path fails validation
+    """
+    # Resolve to absolute path (handles symlinks and ..)
+    # Note: Path.resolve() raises ValueError for null bytes, which is correct
+    try:
+        resolved = path.resolve()
+    except ValueError:
+        # Re-raise with context (null bytes, invalid characters, etc.)
+        raise
+
+    resolved_str = str(resolved)
+
+    # Check against forbidden prefixes
+    for forbidden in FORBIDDEN_PATH_PREFIXES:
+        if resolved_str == forbidden or resolved_str.startswith(f"{forbidden}/"):
+            raise ValueError(f"Invalid {context}: path '{resolved}' is in forbidden system directory '{forbidden}'")
+
+    return resolved
 
 
 def is_android() -> bool:
@@ -174,9 +232,17 @@ def get_ciris_home() -> Path:
         return Path.cwd()
 
     # Priority 4: CIRIS_HOME environment variable
+    # Security: Validate user-provided path to prevent path injection attacks
     env_home = os.getenv("CIRIS_HOME")
     if env_home:
-        return Path(env_home).expanduser().resolve()
+        try:
+            validated_path = validate_path_safety(
+                Path(env_home).expanduser(), context="CIRIS_HOME environment variable"
+            )
+            return validated_path
+        except ValueError as e:
+            logger.warning(f"Ignoring invalid CIRIS_HOME: {e}")
+            # Fall through to default path
 
     # Priority 5: Default installed mode - ~/ciris/
     return Path.home() / "ciris"
@@ -270,9 +336,16 @@ def find_template_file(template_name: str) -> Optional[Path]:
         search_paths.append(Path.cwd() / "ciris_engine" / "ciris_templates" / template_name)
 
     # 3. CIRIS_HOME if set (custom location)
+    # Security: Validate user-provided path before use
     env_home = os.getenv("CIRIS_HOME")
     if env_home:
-        search_paths.append(Path(env_home).expanduser() / "ciris_templates" / template_name)
+        try:
+            validated_path = validate_path_safety(
+                Path(env_home).expanduser(), context="CIRIS_HOME environment variable"
+            )
+            search_paths.append(validated_path / "ciris_templates" / template_name)
+        except ValueError:
+            pass  # Skip invalid CIRIS_HOME, fall through to other locations
 
     # 4. User home directory (~/ciris/ciris_templates/)
     search_paths.append(Path.home() / "ciris" / "ciris_templates" / template_name)
@@ -319,11 +392,18 @@ def get_template_directory() -> Path:
             return dev_engine_templates
 
     # CIRIS_HOME
+    # Security: Validate user-provided path before use
     env_home = os.getenv("CIRIS_HOME")
     if env_home:
-        env_templates = Path(env_home).expanduser() / "ciris_templates"
-        if env_templates.exists():
-            return env_templates
+        try:
+            validated_path = validate_path_safety(
+                Path(env_home).expanduser(), context="CIRIS_HOME environment variable"
+            )
+            env_templates = validated_path / "ciris_templates"
+            if env_templates.exists():
+                return env_templates
+        except ValueError:
+            pass  # Skip invalid CIRIS_HOME, fall through to other locations
 
     # User home
     user_templates = Path.home() / "ciris" / "ciris_templates"

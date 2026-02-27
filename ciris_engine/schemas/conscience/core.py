@@ -144,6 +144,9 @@ class ConscienceCheckResult(BaseModel):
     updated_status_detected: Optional[bool] = Field(
         default=None, description="Whether the updated status conscience detected changes"
     )
+    action_sequence_triggered: Optional[bool] = Field(
+        default=None, description="Whether the action sequence conscience blocked a repeated SPEAK"
+    )
 
     model_config = ConfigDict(defer_build=True, extra="forbid")
 

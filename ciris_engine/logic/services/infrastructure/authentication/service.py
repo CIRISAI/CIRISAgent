@@ -105,9 +105,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # Attestation cache (CIRISVerify integration)
         self._attestation_cache: Optional[AttestationResult] = None
+        self._last_known_attestation: Optional[AttestationResult] = None  # Stale-while-revalidate
         self._attestation_in_progress = False
         self._attestation_lock = asyncio.Lock()
-        self._attestation_cache_ttl = 300  # 5 minutes default
+        self._attestation_cache_ttl = 3600  # 1 hour cache TTL
+        self._attestation_stale_ttl = 7200  # 2 hour max stale data (fallback after TTL)
 
         # CIRISVerify singleton - all code should use get_verifier() instead of creating instances
         self._verifier: Any = None
@@ -1824,6 +1826,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 result.cached_at = self._get_current_time()
                 result.cache_ttl_seconds = self._attestation_cache_ttl
                 self._attestation_cache = result
+                # Also save as last known (for stale-while-revalidate)
+                self._last_known_attestation = result
                 logger.info(f"[attestation] Completed: level={result.max_level}, mode={mode}, instance_id={id(self)}")
                 return result
         finally:
@@ -2247,14 +2251,21 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         return result
 
-    def get_cached_attestation(self) -> Optional[AttestationResult]:
-        """Get the cached attestation result if available and not expired.
+    def get_cached_attestation(self, allow_stale: bool = False) -> Optional[AttestationResult]:
+        """Get the cached attestation result if available.
+
+        Args:
+            allow_stale: If True, return last known result even if TTL expired (stale-while-revalidate)
 
         Returns:
-            Cached AttestationResult or None if cache is empty/expired
+            Cached AttestationResult or None if cache is empty/expired (unless allow_stale=True)
         """
         if self._attestation_cache is None:
             logger.debug(f"[attestation] get_cached_attestation: cache is None, instance_id={id(self)}")
+            # If allowing stale, return last known
+            if allow_stale and self._last_known_attestation is not None:
+                logger.debug("[attestation] Returning stale last_known_attestation")
+                return self._last_known_attestation
             return None
 
         # Check if cache has expired
@@ -2262,6 +2273,10 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             cache_age = (self._get_current_time() - self._attestation_cache.cached_at).total_seconds()
             if cache_age > self._attestation_cache.cache_ttl_seconds:
                 logger.debug(f"Attestation cache expired (age={cache_age:.1f}s)")
+                # If allowing stale, check if within stale TTL (1 hour)
+                if allow_stale and cache_age <= self._attestation_stale_ttl:
+                    logger.debug(f"[attestation] Returning stale cache (age={cache_age:.1f}s)")
+                    return self._attestation_cache
                 return None
 
         return self._attestation_cache
@@ -2283,6 +2298,21 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             cache_expired = cache_age > (self._attestation_cache.cache_ttl_seconds if self._attestation_cache else 300)
             max_level = self._attestation_cache.max_level if self._attestation_cache else None
 
+        # Check for stale data (expired but within stale TTL)
+        has_stale = False
+        stale_level = None
+        if cache_expired and has_cached and cache_age is not None:
+            if cache_age <= self._attestation_stale_ttl:
+                has_stale = True
+                stale_level = max_level
+        elif not has_cached and self._last_known_attestation is not None:
+            # No current cache but have last known
+            if self._last_known_attestation.cached_at:
+                last_age = (self._get_current_time() - self._last_known_attestation.cached_at).total_seconds()
+                if last_age <= self._attestation_stale_ttl:
+                    has_stale = True
+                    stale_level = self._last_known_attestation.max_level
+
         return AttestationCacheStatus(
             has_cached_result=has_cached and not cache_expired,
             cached_at=cached_at,
@@ -2290,6 +2320,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             cache_expired=cache_expired,
             attestation_in_progress=self._attestation_in_progress,
             max_level=max_level,
+            has_stale_result=has_stale,
+            stale_level=stale_level,
         )
 
     def is_attestation_in_progress(self) -> bool:

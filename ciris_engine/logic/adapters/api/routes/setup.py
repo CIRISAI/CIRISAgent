@@ -2080,20 +2080,51 @@ async def get_attestation_status(
 
             asyncio.create_task(auth_service.run_attestation(mode="partial", force_refresh=force_refresh))
 
+        # Stale-while-revalidate: return stale data if available
+        if cache_status.has_stale_result or cache_status.stale_level is not None:
+            stale_cached = auth_service.get_cached_attestation(allow_stale=True)
+            if stale_cached:
+                return SuccessResponse(
+                    data={
+                        "has_cached_result": True,
+                        "stale": True,  # Indicates this is stale data being refreshed
+                        "attestation_in_progress": True,
+                        "cached_at": stale_cached.cached_at.isoformat() if stale_cached.cached_at else None,
+                        "cache_age_seconds": cache_status.cache_age_seconds,
+                        "max_level": stale_cached.max_level,
+                        "loaded": stale_cached.loaded,
+                        "version": stale_cached.version,
+                        "key_status": stale_cached.key_status,
+                        "attestation_status": stale_cached.attestation_status,
+                        "binary_ok": stale_cached.binary_ok,
+                        "function_integrity": stale_cached.function_integrity,
+                        "functions_checked": stale_cached.functions_checked,
+                        "functions_passed": stale_cached.functions_passed,
+                        "registry_ok": stale_cached.registry_ok,
+                        "audit_ok": stale_cached.audit_ok,
+                        "play_integrity_ok": stale_cached.play_integrity_ok,
+                        "hardware_backed": stale_cached.hardware_backed,
+                        "error": stale_cached.error,
+                        "message": "Returning stale data while refreshing",
+                    }
+                )
+
         return SuccessResponse(
             data={
                 "has_cached_result": False,
+                "stale": False,
                 "attestation_in_progress": True,
                 "message": "Attestation started, poll again for results",
             }
         )
 
-    # Return cached result
+    # Return fresh cached result
     cached = auth_service.get_cached_attestation()
     if cached:
         return SuccessResponse(
             data={
                 "has_cached_result": True,
+                "stale": False,
                 "attestation_in_progress": False,
                 "cached_at": cached.cached_at.isoformat() if cached.cached_at else None,
                 "cache_age_seconds": cache_status.cache_age_seconds,
@@ -2117,6 +2148,7 @@ async def get_attestation_status(
     return SuccessResponse(
         data={
             "has_cached_result": False,
+            "stale": False,
             "attestation_in_progress": cache_status.attestation_in_progress,
         }
     )
@@ -2901,7 +2933,7 @@ async def get_verify_status(
                                         hashes_data = json.load(f)
                                     # Import PythonModuleHashes type
                                     try:
-                                        from ciris_verify.types import PythonModuleHashes
+                                        from ciris_verify.types import PythonModuleHashes  # type: ignore[attr-defined]
 
                                         python_hashes_obj = PythonModuleHashes(
                                             total_hash=hashes_data.get("total_hash", ""),

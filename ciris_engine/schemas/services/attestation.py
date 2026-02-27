@@ -168,7 +168,7 @@ class AttestationResult(BaseModel):
 
     # Cache metadata
     cached_at: Optional[datetime] = Field(default=None, description="When this result was cached")
-    cache_ttl_seconds: int = Field(default=300, description="Cache TTL in seconds (default 5 minutes)")
+    cache_ttl_seconds: int = Field(default=3600, description="Cache TTL in seconds (default 1 hour)")
 
 
 class AttestationCacheStatus(BaseModel):
@@ -180,6 +180,9 @@ class AttestationCacheStatus(BaseModel):
     cache_expired: bool = Field(default=False, description="Whether cache has expired")
     attestation_in_progress: bool = Field(default=False, description="Whether attestation is currently running")
     max_level: Optional[int] = Field(None, description="Cached max attestation level (0-5)")
+    # Stale-while-revalidate fields
+    has_stale_result: bool = Field(default=False, description="Whether stale data is available during refresh")
+    stale_level: Optional[int] = Field(None, description="Last known level from stale cache (0-5)")
 
 
 class AttestationRequest(BaseModel):

@@ -14,6 +14,7 @@ from ciris_engine.logic.conscience import (
     OptimizationVetoConscience,
     conscienceRegistry,
 )
+from ciris_engine.logic.conscience.action_sequence_conscience import ActionSequenceConscience
 from ciris_engine.logic.conscience.thought_depth_guardrail import ThoughtDepthGuardrail
 from ciris_engine.logic.conscience.updated_status_conscience import UpdatedStatusConscience
 from ciris_engine.logic.context.builder import ContextBuilder
@@ -125,6 +126,13 @@ class ComponentBuilder:
             priority=4,
         )
 
+        # ActionSequenceConscience - prevents repeated SPEAK without intervening actions
+        registry.register_conscience(
+            "action_sequence",
+            ActionSequenceConscience(time_service=time_service),
+            priority=5,
+        )
+
         return registry
 
     def _register_llm_consciences(self, registry: Any, conscience_config: Any, time_service: Any) -> None:
@@ -161,9 +169,7 @@ class ComponentBuilder:
         ethical_pdma = EthicalPDMAEvaluator(
             prompt_overrides=self._get_prompt_overrides("pdma_overrides"), **common_args
         )
-        csdma = CSDMAEvaluator(
-            prompt_overrides=self._get_prompt_overrides("csdma_overrides"), **common_args
-        )
+        csdma = CSDMAEvaluator(prompt_overrides=self._get_prompt_overrides("csdma_overrides"), **common_args)
         action_pdma = ActionSelectionPDMAEvaluator(
             prompt_overrides=self._get_prompt_overrides("action_selection_pdma_overrides"), **common_args
         )

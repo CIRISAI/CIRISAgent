@@ -4466,9 +4466,44 @@ async def _activate_key_inline(private_key_b64: str, device_code: str, portal_ur
                 logger.error("[KEY-IMPORT] CRITICAL: Key import succeeded but has_key_sync() returns False!")
                 logger.error("[KEY-IMPORT] This suggests the key was NOT persisted to Android Keystore")
 
-            # Generate second attestation (now with key_type="portal")
-            logger.info("[KEY-IMPORT] Generating attestation proof...")
-            proof = verifier.export_attestation_sync(challenge_bytes)
+            # Generate second attestation using run_attestation_sync which contacts registry
+            # This ensures key_type is properly set to "portal" or "registry_unavailable"
+            # (export_attestation_sync returns "persisted" since it doesn't contact registry)
+            logger.info("[KEY-IMPORT] Generating attestation proof via run_attestation_sync...")
+
+            # Get minimal agent info for attestation
+            import ciris_engine
+
+            agent_version = getattr(ciris_engine, "__version__", "0.0.0")
+            agent_root = os.environ.get("CIRIS_AGENT_ROOT", os.environ.get("CIRIS_HOME", "/app"))
+
+            # Get Ed25519 key fingerprint for registry verification
+            key_fingerprint_hex = None
+            try:
+                if hasattr(verifier, "get_ed25519_public_key_sync"):
+                    import hashlib
+
+                    ed25519_pubkey = verifier.get_ed25519_public_key_sync()
+                    if ed25519_pubkey:
+                        key_fingerprint_hex = hashlib.sha256(ed25519_pubkey).hexdigest()
+                        logger.info(f"[KEY-IMPORT] Ed25519 fingerprint: {key_fingerprint_hex[:16]}...")
+            except Exception as key_err:
+                logger.warning(f"[KEY-IMPORT] Could not get Ed25519 fingerprint: {key_err}")
+
+            # Use run_attestation_sync if available (v0.6.17+), fallback to export_attestation_sync
+            if hasattr(verifier, "run_attestation_sync"):
+                proof = verifier.run_attestation_sync(
+                    challenge=challenge_bytes,
+                    agent_version=agent_version,
+                    agent_root=agent_root,
+                    spot_check_count=0,  # Skip file checks during key activation
+                    key_fingerprint=key_fingerprint_hex,
+                )
+            else:
+                # Fallback for older CIRISVerify versions
+                logger.warning("[KEY-IMPORT] run_attestation_sync not available, using export_attestation_sync")
+                proof = verifier.export_attestation_sync(challenge_bytes)
+
             key_type = proof.get("key_type", "unknown") if isinstance(proof, dict) else "unknown"
             logger.info(f"[KEY-IMPORT] Attestation generated: key_type={key_type}")
             activate_result[0] = proof

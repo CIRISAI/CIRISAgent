@@ -1077,6 +1077,16 @@ private fun buildL5ChecksInfo(status: VerifyStatusResponse): String {
 // L1 Content: Binary & Self-Verification
 @Composable
 private fun L1Content(status: VerifyStatusResponse) {
+    // Explanation dropdown
+    ExplanationDropdown(
+        title = "What is Binary Verification?",
+        whatItDoes = "Verifies that the CIRISVerify security library loaded correctly and hasn't been tampered with. Checks the cryptographic hash of the native binary code and validates that critical security functions exist and are authentic.",
+        whyItMatters = "This is the foundation of trust. If the security library itself is compromised, all other checks could be bypassed. This ensures the code doing the verification is legitimate.",
+        howItWorks = "The library computes a SHA-256 hash of its own binary code at runtime and compares it against the expected hash from the CIRIS Registry. It also verifies that exported functions like signing and verification haven't been replaced."
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
     // Identity Key - check for hardware-backed storage
     // Ed25519 signing key is wrapped (encrypted) by HW key if: hardware_backed=true AND key_storage_mode contains "HW"
     val hasHardwareStorage = status.hardwareBacked &&
@@ -1170,6 +1180,18 @@ private fun L2Content(
     deviceResult: DeviceAttestationResult?,
     loading: Boolean
 ) {
+    val isIos = status.platformOs?.lowercase() in listOf("ios", "ipados")
+
+    // Explanation dropdown
+    ExplanationDropdown(
+        title = "What is Environment Verification?",
+        whatItDoes = "Verifies that your device has secure hardware (like Android's StrongBox or iOS Secure Enclave) and confirms the app is running in a genuine, unmodified environment using ${if (isIos) "Apple App Attest" else "Google Play Integrity"}.",
+        whyItMatters = "Hardware security modules protect cryptographic keys from extraction. ${if (isIos) "App Attest" else "Play Integrity"} confirms the app hasn't been modified, isn't running on a rooted/jailbroken device, and was installed from the official store.",
+        howItWorks = "${if (isIos) "App Attest uses the Secure Enclave to generate device-bound attestations that Apple verifies." else "Play Integrity contacts Google's servers to verify device integrity, app authenticity, and license status."} Your signing keys are stored in hardware-backed storage so they can't be extracted even if the device is compromised."
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
     // Platform
     DetailRow(
         icon = "📱",
@@ -1236,6 +1258,16 @@ private fun L2Content(
 // L3 Content: Registry Cross-Validation
 @Composable
 private fun L3Content(status: VerifyStatusResponse) {
+    // Explanation dropdown
+    ExplanationDropdown(
+        title = "What is Registry Cross-Validation?",
+        whatItDoes = "Contacts the CIRIS Registry through 3 independent channels (DNS servers in US, DNS servers in EU, and direct HTTPS) to verify that your agent's public key and file hashes are registered correctly.",
+        whyItMatters = "Using multiple sources prevents single points of failure or compromise. If an attacker controls one channel, the others will detect the discrepancy. At least 2 of 3 sources must agree for validation to pass.",
+        howItWorks = "Your agent's Ed25519 public key fingerprint is queried through DNS TXT records in both US and EU regions, plus a direct HTTPS API call. All three should return matching data. This ensures the registry data hasn't been tampered with in transit."
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
     // Registry uses 3 sources: DNS US, DNS EU, HTTPS
     val sources = 3
     val agreement = status.sourcesAgreeing ?: 0
@@ -1297,6 +1329,16 @@ private fun L4Content(status: VerifyStatusResponse) {
         L4ContentUnified(status, summary)
         return
     }
+
+    // Explanation dropdown (legacy mode)
+    ExplanationDropdown(
+        title = "What is Code Integrity?",
+        whatItDoes = "Verifies that every file in the CIRIS agent matches the official version registered with the CIRIS Registry. This includes Python code, configuration files, and all dependencies.",
+        whyItMatters = "Code integrity ensures no files have been modified, added, or removed since the official release. This prevents code injection attacks, backdoors, or unauthorized modifications to the agent's behavior.",
+        howItWorks = "Each file's SHA-256 hash is computed and compared against the registry's manifest. Files are verified through multiple sources: filesystem scan, Python module hashes at startup, and registry cross-validation."
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
 
     // Legacy fallback for older CIRISVerify versions
     val perFile = status.perFileResults ?: emptyMap()
@@ -1497,6 +1539,16 @@ private fun L4Content(status: VerifyStatusResponse) {
 // Uses pre-calculated cross-validation from CIRISVerify
 @Composable
 private fun L4ContentUnified(status: VerifyStatusResponse, summary: Map<String, Int>) {
+    // Explanation dropdown
+    ExplanationDropdown(
+        title = "What is Code Integrity?",
+        whatItDoes = "Verifies that every file in the CIRIS agent matches the official version registered with the CIRIS Registry. This includes Python code, configuration files, and all dependencies.",
+        whyItMatters = "Code integrity ensures no files have been modified, added, or removed since the official release. This prevents code injection attacks, backdoors, or unauthorized modifications to the agent's behavior.",
+        howItWorks = "Each file's SHA-256 hash is computed and compared against the registry's manifest. Files are cross-validated through 3 sources: disk filesystem, agent's startup hash cache, and the CIRIS Registry. All three must agree for full verification."
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
     val totalManifest = summary["total_manifest"] ?: 0
     val verified = summary["verified"] ?: 0
     val failed = summary["failed"] ?: 0
@@ -1763,6 +1815,16 @@ private fun CollapsibleFileSection(
 // L5 Content: Registry & Audit
 @Composable
 private fun L5Content(status: VerifyStatusResponse, onCopyDiagnostics: () -> Unit) {
+    // Explanation dropdown
+    ExplanationDropdown(
+        title = "What is Registry & Audit?",
+        whatItDoes = "Verifies that your agent's cryptographic identity (Portal Key) is registered and active in the CIRIS Registry, and that all security-critical operations are being properly logged to an immutable audit trail.",
+        whyItMatters = "The Portal Key proves your agent was legitimately purchased and activated through the CIRIS Portal. The audit trail creates a tamper-evident record of all attestation checks, making it impossible to hide evidence of compromise attempts.",
+        howItWorks = "Your Ed25519 public key is registered at purchase time. The registry confirms it's active and not revoked. Every attestation event is cryptographically signed and logged, creating an unbreakable chain of evidence."
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
     // Registry Key
     val keyStatus = status.registryKeyStatus ?: "not_checked"
     val keyOk = keyStatus.contains("active", ignoreCase = true)
@@ -1848,6 +1910,114 @@ private fun DetailSubtext(text: String) {
         color = Color(0xFF9CA3AF),
         modifier = Modifier.padding(start = 18.dp)
     )
+}
+
+/**
+ * Expandable explanation dropdown for each attestation tier.
+ * Shows "ℹ️ What is this?" header that expands to show detailed explanation.
+ */
+@Composable
+private fun ExplanationDropdown(
+    title: String,
+    whatItDoes: String,
+    whyItMatters: String,
+    howItWorks: String
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+    ) {
+        // Header row - clickable to expand
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .background(Color(0xFFF0F9FF), RoundedCornerShape(6.dp))
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = "ℹ️", fontSize = 12.sp)
+                Text(
+                    text = title,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF0369A1)
+                )
+            }
+            Text(
+                text = if (expanded) "▼" else "▶",
+                fontSize = 10.sp,
+                color = Color(0xFF0369A1)
+            )
+        }
+
+        // Expanded content
+        if (expanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFF0F9FF).copy(alpha = 0.5f), RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp))
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // What it does
+                Column {
+                    Text(
+                        text = "What it checks:",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF1E40AF)
+                    )
+                    Text(
+                        text = whatItDoes,
+                        fontSize = 10.sp,
+                        color = Color(0xFF374151),
+                        lineHeight = 14.sp
+                    )
+                }
+
+                // Why it matters
+                Column {
+                    Text(
+                        text = "Why it matters:",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF1E40AF)
+                    )
+                    Text(
+                        text = whyItMatters,
+                        fontSize = 10.sp,
+                        color = Color(0xFF374151),
+                        lineHeight = 14.sp
+                    )
+                }
+
+                // How it works
+                Column {
+                    Text(
+                        text = "How it works:",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF1E40AF)
+                    )
+                    Text(
+                        text = howItWorks,
+                        fontSize = 10.sp,
+                        color = Color(0xFF374151),
+                        lineHeight = 14.sp
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

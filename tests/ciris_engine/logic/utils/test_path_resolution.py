@@ -291,7 +291,8 @@ class TestValidatePathSafety:
         """Null bytes are rejected at the system level (Path.resolve)."""
         # Note: Python's pathlib.Path.resolve() raises ValueError for null bytes
         # before our custom validation runs, which is the desired behavior
-        with pytest.raises(ValueError, match="embedded null byte"):
+        # Error message varies: "embedded null byte" or "embedded null character"
+        with pytest.raises(ValueError, match="embedded null"):
             validate_path_safety(Path("/tmp/safe\x00/attack"), "test")
 
     def test_resolves_relative_paths(self, tmp_path, monkeypatch):
@@ -325,8 +326,9 @@ class TestGetCirisHomeWithInvalidPath:
         """Null bytes in environment variables are rejected by the OS."""
         # Note: The OS rejects null bytes in environment variable values,
         # so this attack vector is already blocked at the system level
+        # Error message varies: "embedded null byte" or "embedded null character"
         monkeypatch.chdir(tmp_path)
-        with pytest.raises(ValueError, match="embedded null byte"):
+        with pytest.raises(ValueError, match="embedded null"):
             monkeypatch.setenv("CIRIS_HOME", f"{tmp_path}/safe\x00/evil")
 
 

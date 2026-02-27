@@ -2365,14 +2365,15 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                     result["verified"] = False
                     return
 
+                # Set argtypes - Rust FFI expects null-terminated c_char pointers
+                # NOTE: The Rust function does NOT take length parameters!
+                # Signature: (handle, token, nonce, result_ptr, result_len) -> i32
                 lib.ciris_verify_verify_integrity_token.argtypes = [
-                    ctypes.c_void_p,
-                    ctypes.c_char_p,
-                    ctypes.c_size_t,
-                    ctypes.c_char_p,
-                    ctypes.c_size_t,
-                    ctypes.POINTER(ctypes.c_void_p),
-                    ctypes.POINTER(ctypes.c_size_t),
+                    ctypes.c_void_p,  # handle
+                    ctypes.c_char_p,  # token (null-terminated)
+                    ctypes.c_char_p,  # nonce (null-terminated)
+                    ctypes.POINTER(ctypes.c_void_p),  # result_ptr
+                    ctypes.POINTER(ctypes.c_size_t),  # result_len
                 ]
                 lib.ciris_verify_verify_integrity_token.restype = ctypes.c_int
 
@@ -2382,17 +2383,18 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                     result["verified"] = False
                     return
 
-                token_bytes = token.encode("utf-8")
-                nonce_bytes = nonce.encode("utf-8")
+                # Encode to bytes with null terminator for C strings
+                token_bytes = token.encode("utf-8") + b"\x00"
+                nonce_bytes = nonce.encode("utf-8") + b"\x00"
                 result_ptr = ctypes.c_void_p()
                 result_len = ctypes.c_size_t()
 
+                # Pass bytes directly - argtypes converts to c_char_p
+                # Only 5 args: handle, token, nonce, result_ptr, result_len
                 ret = lib.ciris_verify_verify_integrity_token(
                     handle,
-                    ctypes.c_char_p(token_bytes),
-                    ctypes.c_size_t(len(token_bytes)),
-                    ctypes.c_char_p(nonce_bytes),
-                    ctypes.c_size_t(len(nonce_bytes)),
+                    token_bytes,
+                    nonce_bytes,
                     ctypes.byref(result_ptr),
                     ctypes.byref(result_len),
                 )

@@ -602,7 +602,13 @@ class ApiPlatform(Service):
             logger.info(f"Registered configurable adapter: {adapter_type}")
             return True
         except Exception as e:
-            logger.warning(f"Failed to load configurable class for {adapter_type}: {e}")
+            # Only warn for unexpected errors, not for adapters that simply don't have configurable
+            error_msg = str(e)
+            if "No module named" in error_msg and "configurable" in error_msg:
+                # Expected - adapter doesn't have interactive configuration
+                logger.debug(f"Adapter {adapter_type} has no configurable class (expected for non-interactive adapters)")
+            else:
+                logger.warning(f"Failed to load configurable class for {adapter_type}: {e}")
             return False
 
     def _discover_adapters_via_importlib(self) -> None:

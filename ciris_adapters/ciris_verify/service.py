@@ -18,6 +18,9 @@ from ciris_verify import (
 )
 from pydantic import BaseModel, Field
 
+# Import singleton - CRITICAL: Only one CIRISVerify instance should exist
+from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier, has_verifier
+
 logger = logging.getLogger(__name__)
 
 
@@ -108,6 +111,9 @@ class CIRISVerifyService:
     async def initialize(self) -> bool:
         """Initialize the verification client.
 
+        IMPORTANT: Uses the global singleton to avoid multiple FFI initializations.
+        Multiple CIRISVerify instances can cause tokio runtime conflicts.
+
         Returns:
             True if initialization successful, False otherwise.
         """
@@ -115,16 +121,14 @@ class CIRISVerifyService:
             return True
 
         try:
-            self._client = CIRISVerify(
-                binary_path=self.config.binary_path,
-                timeout_seconds=self.config.timeout_seconds,
-            )
+            # Use the global singleton - CRITICAL for avoiding FFI conflicts
+            self._client = get_verifier()
 
             # Set up log callback for debugging (v0.9.3+)
             self._setup_log_callback()
 
             self._initialized = True
-            logger.info("CIRISVerify service initialized successfully")
+            logger.info("CIRISVerify service initialized successfully (using singleton)")
             return True
 
         except BinaryNotFoundError as e:
@@ -140,18 +144,19 @@ class CIRISVerifyService:
             return False
 
     async def shutdown(self) -> None:
-        """Shutdown the service and cleanup resources."""
-        # Clear log callback before destroying client
-        if self._client and self._log_callback_enabled:
-            try:
-                self._client.set_log_callback(None)  # type: ignore[attr-defined]
-            except Exception:
-                pass
-            self._log_callback_enabled = False
+        """Shutdown the service and cleanup resources.
 
-        self._client = None
+        NOTE: Does NOT destroy the singleton client - other services may still need it.
+        Only clears local state and cache.
+        """
+        # Don't clear log callback on singleton - other code may still need it
+        self._log_callback_enabled = False
+
+        # Don't set _client to None - it's a singleton reference
+        # Just clear local cache and state
         self._cache = None
         self._initialized = False
+        logger.info("CIRISVerify service shutdown (singleton preserved)")
 
     async def get_license_status(
         self,

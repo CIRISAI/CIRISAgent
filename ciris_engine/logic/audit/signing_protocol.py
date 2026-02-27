@@ -323,11 +323,14 @@ class CIRISVerifySigner(BaseSigner):
         # [client, key_bytes, algo, error, has_key]
         result: list[Any] = [None, None, None, None, False]
 
-        def _init_on_large_stack() -> None:
-            try:
-                from ciris_verify import CIRISVerify
+        # Use the global singleton instead of creating a new instance
+        try:
+            from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
 
-                client = CIRISVerify(skip_integrity_check=True)
+            client = get_verifier()
+            if client is None:
+                result[3] = RuntimeError("CIRISVerify singleton not available")
+            else:
                 # Check if key already exists in secure storage
                 has_key = client.has_key_sync()  # type: ignore[attr-defined, unused-ignore]
                 result[4] = has_key
@@ -341,18 +344,8 @@ class CIRISVerifySigner(BaseSigner):
                 else:
                     # No key yet - client is ready for import
                     result[0] = client
-            except Exception as e:
-                result[3] = e
-
-        # Spawn a helper thread with 8MB stack for the heavy Rust/Tokio init.
-        old_stack_size = threading.stack_size()
-        try:
-            threading.stack_size(8 * 1024 * 1024)  # 8MB
-            t = threading.Thread(target=_init_on_large_stack, daemon=True)
-            t.start()
-            t.join(timeout=15)
-        finally:
-            threading.stack_size(old_stack_size)
+        except Exception as e:
+            result[3] = e
 
         if result[3] is not None:
             logger.debug(f"CIRISVerify not available: {result[3]}")
@@ -570,21 +563,18 @@ class UnifiedSigningKey:
                     encryption_algorithm=serialization.NoEncryption(),
                 )
 
-                def _import_to_verify() -> None:
-                    try:
-                        from ciris_verify import CIRISVerify
+                # Use the global singleton instead of creating a new instance
+                try:
+                    from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+                        get_verifier,
+                    )
 
-                        client = CIRISVerify(skip_integrity_check=True)
+                    client = get_verifier()
+                    if client is not None:
                         client.import_key_sync(private_bytes)
                         logger.info("Imported generated key into CIRISVerify vault")
-                    except Exception as ie:
-                        logger.debug(f"Could not import key into CIRISVerify: {ie}")
-
-                t = threading.Thread(target=_import_to_verify)
-                t.daemon = True
-                threading.stack_size(8 * 1024 * 1024)
-                t.start()
-                t.join(timeout=10.0)
+                except Exception as ie:
+                    logger.debug(f"Could not import key into CIRISVerify: {ie}")
             except Exception as e:
                 logger.debug(f"CIRISVerify import skipped: {e}")
 
@@ -635,23 +625,22 @@ class UnifiedSigningKey:
 
             import_result: list[Any] = [None, None, None]  # [success, pub_key, error]
 
-            def _import_on_large_stack() -> None:
-                try:
-                    from ciris_verify import CIRISVerify
+            # Use the global singleton instead of creating a new instance
+            try:
+                from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
 
-                    client = CIRISVerify(skip_integrity_check=True)
+                client = get_verifier()
+                if client is not None:
                     # Import the portal-issued key (algorithm=2 for Ed25519)
                     client.import_key_sync(private_bytes)
                     # Validate by fetching public key
                     pub_key = client.get_ed25519_public_key_sync()
                     import_result[0] = client
                     import_result[1] = pub_key
-                except Exception as e:
-                    import_result[2] = e
-
-            thread = threading.Thread(target=_import_on_large_stack)
-            thread.start()
-            thread.join(timeout=10.0)
+                else:
+                    import_result[2] = RuntimeError("CIRISVerify singleton not available")
+            except Exception as e:
+                import_result[2] = e
 
             if import_result[2] is not None:
                 raise import_result[2]

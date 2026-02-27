@@ -151,6 +151,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             "get_attestation_cache_status",
             "is_attestation_in_progress",
             "run_startup_attestation",
+            "verify_play_integrity_token",
         ]
 
     def _check_dependencies(self) -> bool:
@@ -1711,58 +1712,18 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         Returns:
             CIRISVerify instance, or None if not available.
         """
-        import threading
+        try:
+            from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+                get_verifier as get_global_verifier,
+            )
 
-        if self._verifier_sync_lock is None:
-            self._verifier_sync_lock = threading.Lock()
-
-        with self._verifier_sync_lock:
-            if self._verifier is None:
-                try:
-                    import ciris_verify
-                    from ciris_verify import CIRISVerify
-
-                    setup_logging = getattr(ciris_verify, "setup_logging", None)
-
-                    # CIRISVerify() triggers Rust/Tokio init which needs 8MB stack
-                    holder: list[Any] = [None, None]  # [verifier, error]
-
-                    def _create() -> None:
-                        try:
-                            holder[0] = CIRISVerify(skip_integrity_check=True)
-                        except Exception as exc:
-                            holder[1] = exc
-
-                    threading.stack_size(8 * 1024 * 1024)
-                    t = threading.Thread(target=_create, daemon=True)
-                    t.start()
-                    t.join(timeout=30)
-                    threading.stack_size(0)
-
-                    if holder[1] is not None:
-                        logger.warning(f"[CIRISVerify] Failed to create singleton: {holder[1]}")
-                        return None
-                    if holder[0] is None:
-                        logger.warning("[CIRISVerify] Creation timed out")
-                        return None
-
-                    self._verifier = holder[0]
-
-                    # Enable CIRISVerify Rust logging → Python logging (v0.9.3+)
-                    if setup_logging is not None:
-                        try:
-                            setup_logging(self._verifier, level="DEBUG")
-                            logger.info("[CIRISVerify] Rust logging enabled at DEBUG level")
-                        except Exception as log_err:
-                            logger.debug(f"[CIRISVerify] Could not enable Rust logging: {log_err}")
-
-                    logger.info("[CIRISVerify] Singleton created successfully")
-
-                except ImportError:
-                    logger.debug("[CIRISVerify] Not available (import failed)")
-                    return None
-
-            return self._verifier
+            return get_global_verifier()
+        except ImportError:
+            logger.debug("[CIRISVerify] Not available (import failed)")
+            return None
+        except Exception as e:
+            logger.warning(f"[CIRISVerify] Failed to get singleton: {e}")
+            return None
 
     def import_portal_key(self, private_key_bytes: bytes) -> bool:
         """Import a Portal-issued Ed25519 signing key into the CIRISVerify vault.
@@ -1842,16 +1803,18 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 logger.debug("Returning cached attestation result")
                 return cached
 
-        # Acquire lock to prevent concurrent attestation runs
-        async with self._attestation_lock:
-            # Double-check cache after acquiring lock
-            if not force_refresh:
-                cached = self.get_cached_attestation()
-                if cached is not None:
-                    return cached
+        # Set in_progress flag BEFORE acquiring lock so callers can see it
+        self._attestation_in_progress = True
+        logger.info("[attestation] Setting _attestation_in_progress=True")
+        try:
+            # Acquire lock to prevent concurrent attestation runs
+            async with self._attestation_lock:
+                # Double-check cache after acquiring lock
+                if not force_refresh:
+                    cached = self.get_cached_attestation()
+                    if cached is not None:
+                        return cached
 
-            self._attestation_in_progress = True
-            try:
                 result = await self._run_attestation_internal(
                     mode=mode,
                     play_integrity_token=play_integrity_token,
@@ -1861,10 +1824,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 result.cached_at = self._get_current_time()
                 result.cache_ttl_seconds = self._attestation_cache_ttl
                 self._attestation_cache = result
-                logger.info(f"Attestation completed: level={result.max_level}, mode={mode}")
+                logger.info(f"[attestation] Completed: level={result.max_level}, mode={mode}")
                 return result
-            finally:
-                self._attestation_in_progress = False
+        finally:
+            self._attestation_in_progress = False
+            logger.info("[attestation] Setting _attestation_in_progress=False")
 
     async def _run_attestation_internal(
         self,
@@ -1883,6 +1847,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         spot_check_count = 0 if attestation_mode == "full" else 10
 
         logger.info(f"[attestation] Starting CIRISVerify attestation (mode={attestation_mode})")
+        logger.info("[attestation] BUILD_MARKER_20260226_V2 - code updated with DIAGNOSTIC logs")
 
         # Result container for thread
         verify_result: list[Any] = [None, None]  # [result_dict | None, error | None]
@@ -1922,7 +1887,10 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                         # Default agent_version from CIRIS_VERSION (needed for registry file manifest lookup)
                         try:
                             from ciris_engine.constants import CIRIS_VERSION
-                            agent_version: Optional[str] = CIRIS_VERSION.split("-")[0] if "-" in CIRIS_VERSION else CIRIS_VERSION
+
+                            agent_version: Optional[str] = (
+                                CIRIS_VERSION.split("-")[0] if "-" in CIRIS_VERSION else CIRIS_VERSION
+                            )
                         except Exception:
                             agent_version = None
                         try:
@@ -1966,7 +1934,10 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                         # On mobile, use Python package path (where the runtime extracts files)
                         # not CIRIS_HOME (which is for runtime data)
                         is_android = os.environ.get("ANDROID_ROOT") is not None
-                        is_ios = os.environ.get("CIRIS_IOS_FRAMEWORK_PATH") is not None or os.environ.get("CIRIS_IOS_STATIC_LINK") is not None
+                        is_ios = (
+                            os.environ.get("CIRIS_IOS_FRAMEWORK_PATH") is not None
+                            or os.environ.get("CIRIS_IOS_STATIC_LINK") is not None
+                        )
                         is_mobile = is_android or is_ios
                         if is_mobile:
                             try:
@@ -2085,18 +2056,32 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             daemon=True,
         )
         thread.start()
-        thread.join(timeout=60)  # 60 second timeout
+
+        # Non-blocking wait: poll thread status while yielding to event loop
+        # This prevents blocking the entire asyncio event loop during attestation
+        import time
+
+        deadline = time.time() + 90  # 90 second timeout (attestation can take ~60s due to DNS timeouts)
+        while thread.is_alive() and time.time() < deadline:
+            await asyncio.sleep(0.1)  # Yield to event loop every 100ms
 
         if thread.is_alive():
+            logger.warning(f"[attestation] TIMEOUT: Thread still alive after 90 seconds! verify_result={verify_result}")
             return AttestationResult(
                 loaded=False,
                 key_status="none",
                 attestation_status="failed",
-                error="Attestation timed out after 60 seconds",
+                error="Attestation timed out after 90 seconds",
                 attestation_mode=attestation_mode,
             )
 
+        # DIAGNOSTIC: Log verify_result to debug early returns
+        logger.info(
+            f"[attestation] DIAGNOSTIC: verify_result[0] type: {type(verify_result[0])}, verify_result[1]: {verify_result[1]}"
+        )
+
         if verify_result[1]:
+            logger.info(f"[attestation] DIAGNOSTIC: Early return due to error: {verify_result[1]}")
             return AttestationResult(
                 loaded=False,
                 key_status="none",
@@ -2108,6 +2093,18 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # Parse attestation data from run_attestation_sync response
         data = verify_result[0] or {}
         attestation = data.get("attestation", {}) or {}
+
+        # DIAGNOSTIC: Log raw response to debug missing fields
+        logger.info(f"[attestation] DIAGNOSTIC: verify_result[0] keys: {list(data.keys()) if data else 'None'}")
+        logger.info(
+            f"[attestation] DIAGNOSTIC: attestation keys: {list(attestation.keys()) if attestation else 'None'}"
+        )
+        if attestation:
+            logger.info(f"[attestation] DIAGNOSTIC: level={attestation.get('level')}, valid={attestation.get('valid')}")
+            logger.info(f"[attestation] DIAGNOSTIC: python_integrity={attestation.get('python_integrity')}")
+            logger.info(f"[attestation] DIAGNOSTIC: file_integrity={attestation.get('file_integrity')}")
+            logger.info(f"[attestation] DIAGNOSTIC: self_verification={attestation.get('self_verification')}")
+            logger.info(f"[attestation] DIAGNOSTIC: error={attestation.get('error')}")
 
         # Extract sub-sections from run_attestation_sync response
         # Note: CIRISVerify v0.9.6+ uses flat source fields (dns_us_valid, not dns_us.valid)
@@ -2196,6 +2193,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             # Play/Device Integrity
             play_integrity_ok=device_attestation.get("valid", False),
             play_integrity_verdict=device_attestation.get("verdict"),
+            # Two-phase attestation support (from CIRISVerify response)
+            level_pending=attestation.get("level_pending", False),
+            device_attestation=device_attestation if device_attestation else None,
             # Python integrity (mobile)
             python_integrity_ok=python_integrity.get("valid", False) if python_integrity else False,
             python_modules_checked=python_integrity.get("modules_checked") if python_integrity else None,
@@ -2313,3 +2313,147 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             )
         except Exception as e:
             logger.error(f"[attestation] Startup attestation failed: {e}")
+
+    async def verify_play_integrity_token(
+        self,
+        token: str,
+        nonce: str,
+    ) -> Dict[str, Any]:
+        """Verify a Google Play Integrity token via CIRISVerify FFI.
+
+        This method provides crash protection by running the FFI call in a
+        separate thread with timeout. If the FFI crashes, it returns an error
+        instead of crashing the entire process.
+
+        Args:
+            token: The Play Integrity token from Google
+            nonce: The nonce used when requesting the token
+
+        Returns:
+            Dict with verification result or error
+        """
+        import asyncio
+        import ctypes
+        import json
+        import threading
+
+        from .verifier_singleton import get_verifier
+
+        logger.info("[play-integrity] Verifying Play Integrity token via auth service")
+
+        # Validate inputs
+        if not token or not nonce:
+            return {"error": "Token and nonce are required", "verified": False}
+
+        try:
+            verifier = get_verifier()
+        except Exception as e:
+            logger.warning(f"[play-integrity] CIRISVerify not available: {e}")
+            return {"error": f"CIRISVerify not available: {e}", "verified": False}
+
+        if not verifier:
+            return {"error": "CIRISVerify not initialized", "verified": False}
+
+        # Run FFI call in separate thread with timeout for crash protection
+        result: Dict[str, Any] = {}
+
+        def _verify_on_large_stack() -> None:
+            try:
+                lib = getattr(verifier, "_lib", None)
+                if not lib or not hasattr(lib, "ciris_verify_verify_integrity_token"):
+                    result["error"] = "Play Integrity FFI not available (need CIRISVerify >= 0.10.0)"
+                    result["verified"] = False
+                    return
+
+                lib.ciris_verify_verify_integrity_token.argtypes = [
+                    ctypes.c_void_p,
+                    ctypes.c_char_p,
+                    ctypes.c_size_t,
+                    ctypes.c_char_p,
+                    ctypes.c_size_t,
+                    ctypes.POINTER(ctypes.c_void_p),
+                    ctypes.POINTER(ctypes.c_size_t),
+                ]
+                lib.ciris_verify_verify_integrity_token.restype = ctypes.c_int
+
+                handle = getattr(verifier, "_handle", None)
+                if not handle:
+                    result["error"] = "CIRISVerify handle not available"
+                    result["verified"] = False
+                    return
+
+                token_bytes = token.encode("utf-8")
+                nonce_bytes = nonce.encode("utf-8")
+                result_ptr = ctypes.c_void_p()
+                result_len = ctypes.c_size_t()
+
+                ret = lib.ciris_verify_verify_integrity_token(
+                    handle,
+                    ctypes.c_char_p(token_bytes),
+                    ctypes.c_size_t(len(token_bytes)),
+                    ctypes.c_char_p(nonce_bytes),
+                    ctypes.c_size_t(len(nonce_bytes)),
+                    ctypes.byref(result_ptr),
+                    ctypes.byref(result_len),
+                )
+
+                if ret != 0:
+                    result["error"] = f"FFI error code: {ret}"
+                    result["verified"] = False
+                    return
+
+                if result_ptr.value and result_len.value > 0:
+                    result_bytes = ctypes.string_at(result_ptr.value, result_len.value)
+                    lib.ciris_verify_free(ctypes.cast(result_ptr, ctypes.c_char_p))
+                    data = json.loads(result_bytes.decode("utf-8"))
+                    result.update(data)
+                else:
+                    result["error"] = "Empty response from FFI"
+                    result["verified"] = False
+
+            except Exception as e:
+                logger.warning(f"[play-integrity] FFI exception: {e}")
+                result["error"] = str(e)
+                result["verified"] = False
+
+        def _run_verify() -> Dict[str, Any]:
+            old_stack_size = threading.stack_size()
+            try:
+                threading.stack_size(8 * 1024 * 1024)  # 8MB for Rust/Tokio
+                t = threading.Thread(target=_verify_on_large_stack, daemon=True)
+                t.start()
+                t.join(timeout=45)  # 45 second timeout
+
+                if t.is_alive():
+                    logger.warning("[play-integrity] FFI call timed out after 45 seconds")
+                    return {"error": "Play Integrity verification timed out", "verified": False}
+
+                return result
+            finally:
+                threading.stack_size(old_stack_size)
+
+        loop = asyncio.get_event_loop()
+        verify_result = await loop.run_in_executor(None, _run_verify)
+
+        if verify_result.get("verified"):
+            logger.info(
+                f"[play-integrity] Verification successful: verdict={verify_result.get('device_verdict', verify_result.get('verdict'))}"
+            )
+            # Two-phase attestation: After successful Play Integrity verification,
+            # re-run attestation to pick up the cached device attestation and get L2+ level
+            logger.info("[play-integrity] Re-running attestation to update level with device attestation")
+            try:
+                # Force refresh to pick up the new device attestation
+                updated_result = await self.run_attestation(mode="full", force_refresh=True)
+                logger.info(
+                    f"[play-integrity] Attestation updated: level={updated_result.max_level}/5, "
+                    f"level_pending={updated_result.level_pending}"
+                )
+                verify_result["attestation_level"] = updated_result.max_level
+                verify_result["level_pending"] = updated_result.level_pending
+            except Exception as e:
+                logger.warning(f"[play-integrity] Failed to re-run attestation: {e}")
+        else:
+            logger.warning(f"[play-integrity] Verification failed: {verify_result.get('error', 'unknown')}")
+
+        return verify_result

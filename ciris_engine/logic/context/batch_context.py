@@ -26,9 +26,11 @@ async def _get_attestation_summary() -> Optional[str]:
     try:
         import secrets
 
-        from ciris_verify import CIRISVerify
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
 
-        cv = CIRISVerify(skip_integrity_check=True)
+        cv = get_verifier()
+        if cv is None:
+            return None
 
         # Get attestation result (uses cached data if available)
         challenge_nonce = secrets.token_bytes(32)

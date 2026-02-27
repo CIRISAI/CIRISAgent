@@ -2977,10 +2977,167 @@ class CIRISApiClient(
         }
     }
 
+    // ===== Play Integrity (Android Device Attestation) =====
+
+    /**
+     * Get a nonce for Play Integrity verification from Python backend.
+     * The backend calls CIRISVerify FFI to get the nonce from the registry.
+     */
+    suspend fun getPlayIntegrityNonce(): PlayIntegrityNonceResult {
+        val method = "getPlayIntegrityNonce"
+        logInfo(method, "Requesting Play Integrity nonce from Python API")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 30000
+                    connectTimeoutMillis = 15000
+                    socketTimeoutMillis = 30000
+                }
+            }
+
+            val response = client.get("$baseUrl/v1/setup/play-integrity/nonce") {
+                headers {
+                    accessToken?.let { append(HttpHeaders.Authorization, "Bearer $it") }
+                }
+            }
+
+            client.close()
+
+            if (response.status.isSuccess()) {
+                val body = response.bodyAsText()
+                logDebug(method, "Response body: $body")
+
+                // Parse response - expect {"data": {"nonce": "..."}}
+                val json = Json { ignoreUnknownKeys = true }
+                val parsed = json.decodeFromString<PlayIntegrityNonceApiResponse>(body)
+                val nonce = parsed.data?.get("nonce")
+
+                if (nonce != null) {
+                    logInfo(method, "Got nonce: ${nonce.take(20)}...")
+                    PlayIntegrityNonceResult(nonce = nonce)
+                } else {
+                    logError(method, "No nonce in response")
+                    PlayIntegrityNonceResult(error = "No nonce in response")
+                }
+            } else {
+                val errorBody = response.bodyAsText()
+                logError(method, "HTTP ${response.status}: $errorBody")
+                PlayIntegrityNonceResult(error = "HTTP ${response.status}: $errorBody")
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            PlayIntegrityNonceResult(error = e.message ?: "Unknown error")
+        }
+    }
+
+    /**
+     * Verify a Play Integrity token via Python backend.
+     * The backend calls CIRISVerify FFI to verify the token with the registry.
+     */
+    suspend fun verifyPlayIntegrity(token: String, nonce: String): PlayIntegrityVerifyResult {
+        val method = "verifyPlayIntegrity"
+        logInfo(method, "Verifying Play Integrity token via Python API")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 45000
+                    connectTimeoutMillis = 15000
+                    socketTimeoutMillis = 45000
+                }
+            }
+
+            val response = client.post("$baseUrl/v1/setup/play-integrity/verify") {
+                headers {
+                    accessToken?.let { append(HttpHeaders.Authorization, "Bearer $it") }
+                }
+                contentType(ContentType.Application.Json)
+                setBody("""{"token": "$token", "nonce": "$nonce"}""")
+            }
+
+            client.close()
+
+            if (response.status.isSuccess()) {
+                val body = response.bodyAsText()
+                logDebug(method, "Response body: $body")
+
+                val json = Json { ignoreUnknownKeys = true }
+                val parsed = json.decodeFromString<PlayIntegrityVerifyApiResponse>(body)
+                val data = parsed.data
+
+                if (data != null) {
+                    logInfo(method, "Verification result: verified=${data.verified}, verdict=${data.verdict}")
+                    PlayIntegrityVerifyResult(
+                        verified = data.verified,
+                        verdict = data.verdict,
+                        meetsStrongIntegrity = data.meetsStrongIntegrity,
+                        meetsDeviceIntegrity = data.meetsDeviceIntegrity,
+                        meetsBasicIntegrity = data.meetsBasicIntegrity
+                    )
+                } else {
+                    logError(method, "No data in response")
+                    PlayIntegrityVerifyResult(error = "No data in response")
+                }
+            } else {
+                val errorBody = response.bodyAsText()
+                logError(method, "HTTP ${response.status}: $errorBody")
+                PlayIntegrityVerifyResult(error = "HTTP ${response.status}: $errorBody")
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            PlayIntegrityVerifyResult(error = e.message ?: "Unknown error")
+        }
+    }
+
     override fun close() {
     logInfo("close", "Closing CIRISApiClient")
     }
 }
+
+// ===== Play Integrity Data Models =====
+
+@Serializable
+data class PlayIntegrityNonceApiResponse(
+    val data: Map<String, String>? = null
+)
+
+@Serializable
+data class PlayIntegrityVerifyApiResponse(
+    val data: PlayIntegrityVerifyData? = null
+)
+
+@Serializable
+data class PlayIntegrityVerifyData(
+    val verified: Boolean = false,
+    val verdict: String? = null,
+    @SerialName("meets_strong_integrity")
+    val meetsStrongIntegrity: Boolean = false,
+    @SerialName("meets_device_integrity")
+    val meetsDeviceIntegrity: Boolean = false,
+    @SerialName("meets_basic_integrity")
+    val meetsBasicIntegrity: Boolean = false
+)
+
+data class PlayIntegrityNonceResult(
+    val nonce: String? = null,
+    val error: String? = null
+)
+
+data class PlayIntegrityVerifyResult(
+    val verified: Boolean = false,
+    val verdict: String? = null,
+    val meetsStrongIntegrity: Boolean = false,
+    val meetsDeviceIntegrity: Boolean = false,
+    val meetsBasicIntegrity: Boolean = false,
+    val error: String? = null
+)
 
 // ===== Config Data Models =====
 

@@ -2030,11 +2030,11 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
     Returns:
         Cached attestation result in the same format as /v1/setup/verify-status
     """
-    # Get AuthenticationService from app state (this is the infrastructure service)
-    auth_service = getattr(request.app.state, "auth_service", None)
+    # Get APIAuthService from app state, then access the underlying AuthenticationService
+    api_auth_service = getattr(request.app.state, "auth_service", None)
 
-    if not auth_service:
-        logger.warning("[attestation] Auth service not available")
+    if not api_auth_service:
+        logger.warning("[attestation] API Auth service not available")
         return {
             "data": {
                 "loaded": False,
@@ -2043,8 +2043,22 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
             }
         }
 
-    # Check for cached attestation
-    if not hasattr(auth_service, "get_cached_attestation"):
+    # Access the underlying infrastructure AuthenticationService
+    # APIAuthService wraps it as _auth_service
+    infra_auth_service = getattr(api_auth_service, "_auth_service", None)
+
+    if not infra_auth_service:
+        logger.warning("[attestation] Infrastructure auth service not available")
+        return {
+            "data": {
+                "loaded": False,
+                "error": "Infrastructure authentication service not available",
+                "attestation_status": "not_attempted",
+            }
+        }
+
+    # Check for cached attestation on the infrastructure service
+    if not hasattr(infra_auth_service, "get_cached_attestation"):
         logger.warning("[attestation] Auth service does not support attestation caching")
         return {
             "data": {
@@ -2054,10 +2068,24 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
             }
         }
 
-    cached = auth_service.get_cached_attestation()
+    cached = infra_auth_service.get_cached_attestation()
 
     if not cached:
-        logger.info("[attestation] No cached attestation available")
+        # Check if attestation is currently in progress on the infrastructure service
+        has_method = hasattr(infra_auth_service, "is_attestation_in_progress")
+        in_progress = has_method and infra_auth_service.is_attestation_in_progress()
+        logger.info(f"[attestation] Cache empty. has_method={has_method}, in_progress={in_progress}")
+
+        if in_progress:
+            logger.info("[attestation] Returning in_progress status")
+            return {
+                "data": {
+                    "loaded": True,
+                    "attestation_status": "in_progress",
+                    "error": None,
+                }
+            }
+        logger.info("[attestation] No cached attestation and not in progress")
         return {
             "data": {
                 "loaded": True,

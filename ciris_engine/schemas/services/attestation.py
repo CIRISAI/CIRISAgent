@@ -42,6 +42,18 @@ class AttestationResult(BaseModel):
     )
     max_level: int = Field(default=0, description="Maximum attestation level achieved (0-5)")
 
+    # Two-phase attestation support (mobile device attestation)
+    level_pending: bool = Field(
+        default=False,
+        description="True if waiting for device attestation (Play Integrity/App Attest). "
+        "Agent should request device token and re-run attestation.",
+    )
+    device_attestation: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Device attestation result from Play Integrity or App Attest. "
+        "Contains: platform, verified, summary, error (if failed).",
+    )
+
     # Attestation mode
     attestation_mode: str = Field(default="partial", description="Attestation mode: 'full' or 'partial'")
 

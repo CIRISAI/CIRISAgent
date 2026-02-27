@@ -263,10 +263,9 @@ class MainActivity : ComponentActivity() {
         billingManager.initialize()
         Log.i(TAG, "Google Play Billing initialized")
 
-        // Initialize Play Integrity
-        playIntegrityManager = PlayIntegrityManager(this)
-        playIntegrityManager.initialize()
-        Log.i(TAG, "Google Play Integrity initialized")
+        // Initialize Play Integrity (uses Python API, not Kotlin JNI)
+        playIntegrityManager = PlayIntegrityManager(this, apiClient!!)
+        Log.i(TAG, "Google Play Integrity initialized (via Python API)")
     }
 
     /**

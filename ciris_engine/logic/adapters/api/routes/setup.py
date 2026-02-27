@@ -69,78 +69,28 @@ _shared_verifier: Any = None
 _shared_verifier_lock: Any = None
 _rust_log_cb: Any = None  # Prevent GC of ctypes callback
 
+# Circuit breaker for Play Integrity FFI - prevents repeated crashes
+# If the FFI crashes (SIGSEGV), this flag prevents further calls
+_play_integrity_ffi_disabled: bool = False
+_play_integrity_ffi_error: Optional[str] = None
+
 
 def _get_shared_verifier() -> Any:
-    """Get or create the shared CIRISVerify instance (thread-safe).
+    """Get the global CIRISVerify singleton instance.
 
-    On iOS the CIRISVerify constructor calls into Rust FFI which needs an 8MB
-    stack.  If the caller is already on a large-stack thread the construction
-    happens inline; otherwise we spawn a dedicated 8MB thread for it.
+    Uses the global singleton from verifier_singleton module to ensure
+    only ONE CIRISVerify instance exists across the entire application.
     """
-    global _shared_verifier, _shared_verifier_lock
-    import threading
+    try:
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
 
-    if _shared_verifier_lock is None:
-        _shared_verifier_lock = threading.Lock()
-
-    with _shared_verifier_lock:
-        if _shared_verifier is None:
-            try:
-                from ciris_verify import CIRISVerify
-
-                # CIRISVerify() triggers Rust/Tokio init which needs 8MB stack on iOS.
-                # Spawn a dedicated thread so callers from async handlers don't crash.
-                holder: list[Any] = [None, None]  # [verifier, error]
-
-                def _create() -> None:
-                    try:
-                        holder[0] = CIRISVerify(skip_integrity_check=True)
-                    except Exception as exc:
-                        holder[1] = exc
-
-                threading.stack_size(8 * 1024 * 1024)
-                t = threading.Thread(target=_create, daemon=True)
-                t.start()
-                t.join(timeout=30)
-                threading.stack_size(0)
-
-                if holder[1] is not None:
-                    raise holder[1]
-                if holder[0] is None:
-                    raise RuntimeError("CIRISVerify creation timed out")
-
-                _shared_verifier = holder[0]
-                logger.info("[setup] Created shared CIRISVerify instance (8MB stack thread)")
-
-                # Register log callback so Rust tracing flows to Python logging
-                try:
-                    import ctypes
-
-                    lib = _shared_verifier._lib
-                    if lib and hasattr(lib, "ciris_verify_set_log_callback"):
-                        LOGCB = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p)
-                        _level_map = {1: 40, 2: 30, 3: 20, 4: 10, 5: 5}  # ERROR,WARN,INFO,DEBUG,TRACE
-
-                        def _rust_log(level: int, target: Any, message: Any) -> None:
-                            try:
-                                t = target.decode("utf-8", errors="replace") if target else "ciris_verify"
-                                m = message.decode("utf-8", errors="replace") if message else ""
-                                py_level = _level_map.get(level, 20)
-                                logging.getLogger(f"ciris_verify.{t}").log(py_level, m)
-                            except Exception:
-                                pass
-
-                        # prevent GC by stashing on the module (declared at module level)
-                        global _rust_log_cb
-                        _rust_log_cb = LOGCB(_rust_log)
-                        lib.ciris_verify_set_log_callback(_rust_log_cb)
-                        logger.info("[setup] Registered CIRISVerify Rust log callback")
-                except Exception as cb_err:
-                    logger.warning(f"[setup] Could not register log callback: {cb_err}")
-            except Exception as e:
-                logger.warning(f"[setup] Failed to create shared CIRISVerify: {e}")
-                return None
-        return _shared_verifier
+        return get_verifier()
+    except ImportError:
+        logger.debug("[setup] CIRISVerify not available (import failed)")
+        return None
+    except Exception as e:
+        logger.warning(f"[setup] Failed to get CIRISVerify singleton: {e}")
+        return None
 
 
 def _fetch_manifest_files_from_registry(version: str) -> Optional[set[str]]:
@@ -2364,6 +2314,148 @@ async def verify_app_attest(request: AppAttestVerifyRequest) -> SuccessResponse[
     return SuccessResponse(data=verify_data)
 
 
+# =============================================================================
+# Play Integrity (Android Device Attestation)
+# =============================================================================
+
+
+class PlayIntegrityVerifyRequest(BaseModel):
+    """Request body for Play Integrity verification."""
+
+    token: str = Field(..., description="Play Integrity token from Google Play API")
+    nonce: str = Field(..., description="Nonce used when requesting the token")
+
+
+@router.get("/play-integrity/nonce")
+async def get_play_integrity_nonce() -> SuccessResponse[Dict[str, Any]]:
+    """Get a nonce for Android Play Integrity verification.
+
+    Calls CIRISVerify FFI -> registry to get a nonce.
+    """
+    verifier = _get_shared_verifier()
+    if not verifier:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="CIRISVerify not available",
+        )
+
+    def _get_nonce() -> dict[str, Any]:
+        import ctypes
+        import threading
+
+        result: dict[str, Any] = {}
+
+        def _inner() -> None:
+            try:
+                lib = verifier._lib
+                if not lib or not hasattr(lib, "ciris_verify_get_integrity_nonce"):
+                    result["error"] = "Play Integrity FFI not available (need CIRISVerify >= 0.10.0)"
+                    return
+
+                lib.ciris_verify_get_integrity_nonce.argtypes = [
+                    ctypes.c_void_p,
+                    ctypes.POINTER(ctypes.c_void_p),
+                    ctypes.POINTER(ctypes.c_size_t),
+                ]
+                lib.ciris_verify_get_integrity_nonce.restype = ctypes.c_int
+
+                handle = verifier._handle
+                nonce_ptr = ctypes.c_void_p()
+                nonce_len = ctypes.c_size_t()
+
+                ret = lib.ciris_verify_get_integrity_nonce(handle, ctypes.byref(nonce_ptr), ctypes.byref(nonce_len))
+
+                if ret != 0:
+                    result["error"] = f"FFI error code: {ret}"
+                    return
+
+                nonce_bytes = ctypes.string_at(nonce_ptr.value, nonce_len.value)  # type: ignore[arg-type]
+                lib.ciris_verify_free(ctypes.cast(nonce_ptr, ctypes.c_char_p))
+                result["data"] = json.loads(nonce_bytes.decode("utf-8"))
+            except Exception as e:
+                result["error"] = str(e)
+
+        threading.stack_size(8 * 1024 * 1024)
+        t = threading.Thread(target=_inner)
+        t.start()
+        t.join(timeout=30)
+        threading.stack_size(0)
+        return result
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, _get_nonce)
+
+    if "error" in result:
+        logger.warning(f"[play-integrity] Nonce request failed: {result['error']}")
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=result["error"])
+
+    logger.info("[play-integrity] Got nonce from registry via FFI")
+    return SuccessResponse(data=result["data"])
+
+
+@router.post("/play-integrity/verify")
+async def verify_play_integrity(
+    request: PlayIntegrityVerifyRequest,
+    http_request: Request,
+) -> SuccessResponse[Dict[str, Any]]:
+    """Verify an Android Play Integrity token.
+
+    Delegates to AuthenticationService which handles FFI calls with crash protection.
+    The auth service caches results and provides consistent attestation state.
+    """
+    # Get APIAuthService from app state, then access the underlying AuthenticationService
+    # APIAuthService wraps the infrastructure service as _auth_service
+    api_auth_service = getattr(http_request.app.state, "auth_service", None)
+    auth_service = getattr(api_auth_service, "_auth_service", None) if api_auth_service else None
+
+    if auth_service and hasattr(auth_service, "verify_play_integrity_token"):
+        # Use auth service method (preferred - includes crash protection)
+        try:
+            result = await auth_service.verify_play_integrity_token(
+                token=request.token,
+                nonce=request.nonce,
+            )
+            if result.get("error"):
+                logger.warning(f"[play-integrity] Auth service verification failed: {result['error']}")
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=result["error"],
+                )
+
+            verified = result.get("verified", False)
+            verdict = result.get("device_verdict", result.get("verdict"))
+            logger.info(
+                f"[play-integrity] Verification result via auth service: verified={verified}, verdict={verdict}"
+            )
+
+            return SuccessResponse(
+                data={
+                    "verified": verified,
+                    "verdict": verdict,
+                    "device_verdict": verdict,
+                    "meets_strong_integrity": result.get("meets_strong_integrity", False),
+                    "meets_device_integrity": result.get("meets_device_integrity", False),
+                    "meets_basic_integrity": result.get("meets_basic_integrity", False),
+                }
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"[play-integrity] Auth service call failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Play Integrity verification failed: {e}",
+            )
+
+    # Fallback: Auth service not available or doesn't have the method
+    # This should not happen in production, but provides graceful degradation
+    logger.warning("[play-integrity] Auth service not available, Play Integrity verification disabled")
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Play Integrity verification not available - auth service required",
+    )
+
+
 @router.get("/verify-status", dependencies=[SetupOnlyDep])
 async def get_verify_status(
     mode: str = "partial",
@@ -4355,6 +4447,13 @@ async def _activate_key_inline(private_key_b64: str, device_code: str, portal_ur
             logger.info(f"[KEY-IMPORT] Calling import_key_sync() with {len(key_bytes)} byte key...")
             verifier.import_key_sync(key_bytes)
             logger.info("[KEY-IMPORT] import_key_sync() completed")
+
+            # Reset UnifiedSigningKey singleton to force re-initialization with portal key
+            # This fixes startup order bug where singleton cached a generated key before portal import
+            from ciris_engine.logic.audit.signing_protocol import reset_unified_signing_key
+
+            reset_unified_signing_key()
+            logger.info("[KEY-IMPORT] UnifiedSigningKey singleton reset - will use portal key")
 
             # Check key state AFTER import
             has_key_after = False

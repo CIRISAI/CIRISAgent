@@ -58,6 +58,9 @@ FORBIDDEN_PATH_PREFIXES = frozenset(
     }
 )
 
+# Context string for CIRIS_HOME validation errors
+CIRIS_HOME_ENV_CONTEXT = "CIRIS_HOME environment variable"
+
 
 def validate_path_safety(path: Path, context: str = "path") -> Path:
     """Validate that a path is safe to use for file operations.
@@ -81,9 +84,9 @@ def validate_path_safety(path: Path, context: str = "path") -> Path:
     # Note: Path.resolve() raises ValueError for null bytes, which is correct
     try:
         resolved = path.resolve()
-    except ValueError:
+    except ValueError as e:
         # Re-raise with context (null bytes, invalid characters, etc.)
-        raise
+        raise ValueError(f"Invalid {context}: {e}") from e
 
     resolved_str = str(resolved)
 
@@ -190,6 +193,29 @@ def is_development_mode() -> bool:
     return (Path.cwd() / ".git").exists()
 
 
+def _validate_ciris_home_env(platform_suffix: str = "") -> Optional[Path]:
+    """Validate CIRIS_HOME environment variable and return validated path.
+
+    Args:
+        platform_suffix: Optional suffix for context (e.g., " (Android)", " (iOS)")
+
+    Returns:
+        Validated Path if CIRIS_HOME is set and valid, None otherwise
+    """
+    env_home = os.getenv("CIRIS_HOME")
+    if not env_home:
+        return None
+
+    context = f"{CIRIS_HOME_ENV_CONTEXT}{platform_suffix}"
+    try:
+        # Use expanduser for desktop, raw path for mobile
+        path = Path(env_home).expanduser() if not platform_suffix else Path(env_home)
+        return validate_path_safety(path, context=context)
+    except ValueError as e:
+        logger.warning(f"Ignoring invalid CIRIS_HOME{platform_suffix}: {e}")
+        return None
+
+
 def get_ciris_home() -> Path:
     """Get the CIRIS home directory.
 
@@ -207,39 +233,18 @@ def get_ciris_home() -> Path:
         return Path("/app")
 
     # Priority 2: Android mode - use app's files directory
-    # On Android, Path.home() returns /data/user/0/ai.ciris.mobile
-    # but the writable files dir is /data/user/0/ai.ciris.mobile/files/
     if is_android():
-        # CIRIS_HOME env var is set by mobile_main.py to the app's files dir
-        # Security: Validate path to prevent path injection attacks
-        env_home = os.getenv("CIRIS_HOME")
-        if env_home:
-            try:
-                validated_path = validate_path_safety(
-                    Path(env_home), context="CIRIS_HOME environment variable (Android)"
-                )
-                return validated_path
-            except ValueError as e:
-                logger.warning(f"Ignoring invalid CIRIS_HOME on Android: {e}")
-                # Fall through to default path
+        validated = _validate_ciris_home_env(" (Android)")
+        if validated:
+            return validated
         # Fallback: use Path.home()/files/ciris (Android app files structure)
         return Path.home() / "files" / "ciris"
 
     # Priority 2b: iOS mode - use app's Documents directory
-    # On iOS, Path.home() returns the app container root but only Documents/ is writable
     if is_ios():
-        # CIRIS_HOME env var is set by ios_main.py to Documents/ciris
-        # Security: Validate path to prevent path injection attacks
-        env_home = os.getenv("CIRIS_HOME")
-        if env_home:
-            try:
-                validated_path = validate_path_safety(
-                    Path(env_home), context="CIRIS_HOME environment variable (iOS)"
-                )
-                return validated_path
-            except ValueError as e:
-                logger.warning(f"Ignoring invalid CIRIS_HOME on iOS: {e}")
-                # Fall through to default path
+        validated = _validate_ciris_home_env(" (iOS)")
+        if validated:
+            return validated
         # Fallback: use Documents/ciris (iOS app sandbox structure)
         return Path.home() / "Documents" / "ciris"
 
@@ -248,17 +253,9 @@ def get_ciris_home() -> Path:
         return Path.cwd()
 
     # Priority 4: CIRIS_HOME environment variable
-    # Security: Validate user-provided path to prevent path injection attacks
-    env_home = os.getenv("CIRIS_HOME")
-    if env_home:
-        try:
-            validated_path = validate_path_safety(
-                Path(env_home).expanduser(), context="CIRIS_HOME environment variable"
-            )
-            return validated_path
-        except ValueError as e:
-            logger.warning(f"Ignoring invalid CIRIS_HOME: {e}")
-            # Fall through to default path
+    validated = _validate_ciris_home_env()
+    if validated:
+        return validated
 
     # Priority 5: Default installed mode - ~/ciris/
     return Path.home() / "ciris"

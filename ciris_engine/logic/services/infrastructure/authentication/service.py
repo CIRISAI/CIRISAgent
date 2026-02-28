@@ -56,6 +56,9 @@ logger = logging.getLogger(__name__)
 # Type variable for decorators
 F = TypeVar("F", bound=Callable[..., Any])
 
+# Database filename constant (used in multiple path checks)
+AUDIT_DB_FILENAME = "ciris_audit.db"
+
 
 class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProtocol):
     """Infrastructure service for WA authentication and identity management."""
@@ -90,6 +93,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # Track service state
         self._started = False
         self._start_time: Optional[datetime] = None
+
+        # Set to hold references to background tasks, preventing garbage collection
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
         # Authentication metrics tracking
         self._auth_attempts = 0
@@ -1626,7 +1632,10 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         logger.info("AuthenticationService started")
 
         # Kick off startup attestation in background (non-blocking)
-        asyncio.create_task(self.run_startup_attestation())
+        # Store task reference to prevent garbage collection
+        attestation_task = asyncio.create_task(self.run_startup_attestation())
+        self._background_tasks.add(attestation_task)
+        attestation_task.add_done_callback(self._background_tasks.discard)
 
     async def stop(self) -> None:
         """Stop the service."""
@@ -1971,16 +1980,16 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                         # Get audit database path for audit trail verification
                         audit_db_path = None
                         try:
-                            # Check multiple possible locations for ciris_audit.db
+                            # Check multiple possible locations for audit database
                             # Note: audit DB is in the 'data/' subdirectory
                             ciris_home = os.environ.get("CIRIS_HOME", "")
                             possible_paths = [
-                                Path(ciris_home) / "data" / "ciris_audit.db",
-                                Path(ciris_home) / "ciris_audit.db",
-                                Path("/data/user/0/ai.ciris.mobile/files/ciris/data") / "ciris_audit.db",
-                                Path("/data/data/ai.ciris.mobile/files/ciris/data") / "ciris_audit.db",
-                                Path.cwd() / "data" / "ciris_audit.db",
-                                Path.cwd() / "ciris_audit.db",
+                                Path(ciris_home) / "data" / AUDIT_DB_FILENAME,
+                                Path(ciris_home) / AUDIT_DB_FILENAME,
+                                Path("/data/user/0/ai.ciris.mobile/files/ciris/data") / AUDIT_DB_FILENAME,
+                                Path("/data/data/ai.ciris.mobile/files/ciris/data") / AUDIT_DB_FILENAME,
+                                Path.cwd() / "data" / AUDIT_DB_FILENAME,
+                                Path.cwd() / AUDIT_DB_FILENAME,
                             ]
                             for audit_path in possible_paths:
                                 if audit_path.exists():

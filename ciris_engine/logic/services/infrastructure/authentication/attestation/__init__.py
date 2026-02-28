@@ -10,11 +10,13 @@ Modules:
 - paths: Agent root and audit DB path resolution
 - verifier_runner: Thread-based CIRISVerify invocation
 - result_builder: Build AttestationResult from raw verification data
+- play_integrity: Play Integrity token verification
 """
 
 from .hashes import load_python_hashes
 from .paths import find_audit_db_path, get_agent_root, get_ed25519_fingerprint
 from .platform import is_android, is_ios, is_mobile
+from .play_integrity import get_verifier_or_error, run_play_integrity_verification
 from .result_builder import build_attestation_result
 from .types import PythonHashesWrapper, VerifyThreadResult
 from .verifier_runner import run_verification_thread
@@ -37,4 +39,7 @@ __all__ = [
     "run_verification_thread",
     # Result builder
     "build_attestation_result",
+    # Play Integrity
+    "get_verifier_or_error",
+    "run_play_integrity_verification",
 ]

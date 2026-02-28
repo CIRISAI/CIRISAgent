@@ -481,9 +481,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                         confidence=1.0,
                         source="oauth",
                     )
-                    logger.info(
-                        f"Created identity mapping: wa_id:{wa_id} -> {provider}_id:{external_id}"
-                    )  # NOSONAR - IDs not secrets
+                    logger.info("Created identity mapping for OAuth link")
                 except Exception as e:
                     logger.warning(f"Failed to create identity mapping for OAuth link: {e}")
                     # Non-fatal - OAuth link still works even if graph mapping fails
@@ -1834,7 +1832,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 self._attestation_cache = result
                 # Also save as last known (for stale-while-revalidate)
                 self._last_known_attestation = result
-                logger.info(f"[attestation] Completed: level={result.max_level}, mode={mode}, instance_id={id(self)}")
+                logger.info(f"[attestation] Completed: level={result.max_level}")
                 return result
         finally:
             self._attestation_in_progress = False
@@ -1863,7 +1861,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         attestation_mode = "partial" if mode not in ("full", "partial") else mode
 
-        logger.info(f"[attestation] Starting CIRISVerify attestation (mode={attestation_mode})")
+        logger.info("[attestation] Starting CIRISVerify attestation")
 
         # Run verification in a separate thread (Rust Tokio stack requirement)
         verify_result = await run_verification_thread(
@@ -1904,6 +1902,32 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         return self._attestation_cache
 
+    def _get_stale_data_info(
+        self, has_cached: bool, cache_expired: bool, cache_age: Optional[float], max_level: Optional[int]
+    ) -> Tuple[bool, Optional[int]]:
+        """Check for stale attestation data (expired but within stale TTL).
+
+        Args:
+            has_cached: Whether we have cached data
+            cache_expired: Whether the cache has expired
+            cache_age: Age of cache in seconds
+            max_level: Current max attestation level
+
+        Returns:
+            Tuple of (has_stale, stale_level)
+        """
+        # Expired cache within stale TTL
+        if cache_expired and has_cached and cache_age is not None and cache_age <= self._attestation_stale_ttl:
+            return True, max_level
+
+        # No current cache but have last known within stale TTL
+        if not has_cached and self._last_known_attestation is not None and self._last_known_attestation.cached_at:
+            last_age = (self._get_current_time() - self._last_known_attestation.cached_at).total_seconds()
+            if last_age <= self._attestation_stale_ttl:
+                return True, self._last_known_attestation.max_level
+
+        return False, None
+
     def get_attestation_cache_status(self) -> AttestationCacheStatus:
         """Get status of the attestation cache.
 
@@ -1912,29 +1936,16 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         """
         has_cached = self._attestation_cache is not None
         cached_at = self._attestation_cache.cached_at if self._attestation_cache else None
-        cache_age = None
+        cache_age: Optional[float] = None
         cache_expired = False
-        max_level = None
+        max_level: Optional[int] = None
 
         if has_cached and cached_at:
             cache_age = (self._get_current_time() - cached_at).total_seconds()
             cache_expired = cache_age > (self._attestation_cache.cache_ttl_seconds if self._attestation_cache else 300)
             max_level = self._attestation_cache.max_level if self._attestation_cache else None
 
-        # Check for stale data (expired but within stale TTL)
-        has_stale = False
-        stale_level = None
-        if cache_expired and has_cached and cache_age is not None:
-            if cache_age <= self._attestation_stale_ttl:
-                has_stale = True
-                stale_level = max_level
-        elif not has_cached and self._last_known_attestation is not None:
-            # No current cache but have last known
-            if self._last_known_attestation.cached_at:
-                last_age = (self._get_current_time() - self._last_known_attestation.cached_at).total_seconds()
-                if last_age <= self._attestation_stale_ttl:
-                    has_stale = True
-                    stale_level = self._last_known_attestation.max_level
+        has_stale, stale_level = self._get_stale_data_info(has_cached, cache_expired, cache_age, max_level)
 
         return AttestationCacheStatus(
             has_cached_result=has_cached and not cache_expired,
@@ -1992,11 +2003,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             Dict with verification result or error
         """
         import asyncio
-        import ctypes
-        import json
-        import threading
 
-        from .verifier_singleton import get_verifier
+        from .attestation import get_verifier_or_error, run_play_integrity_verification
 
         logger.info("[play-integrity] Verifying Play Integrity token via auth service")
 
@@ -2004,117 +2012,41 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         if not token or not nonce:
             return {"error": "Token and nonce are required", "verified": False}
 
-        try:
-            verifier = get_verifier()
-        except Exception as e:
-            logger.warning(f"[play-integrity] CIRISVerify not available: {e}")
-            return {"error": f"CIRISVerify not available: {e}", "verified": False}
+        # Get verifier
+        verifier, error = get_verifier_or_error()
+        if error:
+            return error
 
-        if not verifier:
-            return {"error": "CIRISVerify not initialized", "verified": False}
-
-        # Run FFI call in separate thread with timeout for crash protection
-        result: Dict[str, Any] = {}
-
-        def _verify_on_large_stack() -> None:
-            try:
-                lib = getattr(verifier, "_lib", None)
-                if not lib or not hasattr(lib, "ciris_verify_verify_integrity_token"):
-                    result["error"] = "Play Integrity FFI not available (need CIRISVerify >= 0.10.0)"
-                    result["verified"] = False
-                    return
-
-                # Set argtypes - Rust FFI expects null-terminated c_char pointers
-                # NOTE: The Rust function does NOT take length parameters!
-                # Signature: (handle, token, nonce, result_ptr, result_len) -> i32
-                lib.ciris_verify_verify_integrity_token.argtypes = [
-                    ctypes.c_void_p,  # handle
-                    ctypes.c_char_p,  # token (null-terminated)
-                    ctypes.c_char_p,  # nonce (null-terminated)
-                    ctypes.POINTER(ctypes.c_void_p),  # result_ptr
-                    ctypes.POINTER(ctypes.c_size_t),  # result_len
-                ]
-                lib.ciris_verify_verify_integrity_token.restype = ctypes.c_int
-
-                handle = getattr(verifier, "_handle", None)
-                if not handle:
-                    result["error"] = "CIRISVerify handle not available"
-                    result["verified"] = False
-                    return
-
-                # Encode to bytes with null terminator for C strings
-                token_bytes = token.encode("utf-8") + b"\x00"
-                nonce_bytes = nonce.encode("utf-8") + b"\x00"
-                result_ptr = ctypes.c_void_p()
-                result_len = ctypes.c_size_t()
-
-                # Pass bytes directly - argtypes converts to c_char_p
-                # Only 5 args: handle, token, nonce, result_ptr, result_len
-                ret = lib.ciris_verify_verify_integrity_token(
-                    handle,
-                    token_bytes,
-                    nonce_bytes,
-                    ctypes.byref(result_ptr),
-                    ctypes.byref(result_len),
-                )
-
-                if ret != 0:
-                    result["error"] = f"FFI error code: {ret}"
-                    result["verified"] = False
-                    return
-
-                if result_ptr.value and result_len.value > 0:
-                    result_bytes = ctypes.string_at(result_ptr.value, result_len.value)
-                    lib.ciris_verify_free(ctypes.cast(result_ptr, ctypes.c_char_p))
-                    data = json.loads(result_bytes.decode("utf-8"))
-                    result.update(data)
-                else:
-                    result["error"] = "Empty response from FFI"
-                    result["verified"] = False
-
-            except Exception as e:
-                logger.warning(f"[play-integrity] FFI exception: {e}")
-                result["error"] = str(e)
-                result["verified"] = False
-
-        def _run_verify() -> Dict[str, Any]:
-            old_stack_size = threading.stack_size()
-            try:
-                threading.stack_size(8 * 1024 * 1024)  # 8MB for Rust/Tokio
-                t = threading.Thread(target=_verify_on_large_stack, daemon=True)
-                t.start()
-                t.join(timeout=45)  # 45 second timeout
-
-                if t.is_alive():
-                    logger.warning("[play-integrity] FFI call timed out after 45 seconds")
-                    return {"error": "Play Integrity verification timed out", "verified": False}
-
-                return result
-            finally:
-                threading.stack_size(old_stack_size)
-
+        # Run verification in thread with crash protection
         loop = asyncio.get_event_loop()
-        verify_result = await loop.run_in_executor(None, _run_verify)
+        verify_result = await loop.run_in_executor(
+            None, run_play_integrity_verification, verifier, token, nonce, 45
+        )
 
+        # Handle post-verification
+        return await self._handle_play_integrity_result(verify_result)
+
+    async def _handle_play_integrity_result(self, verify_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle Play Integrity verification result and update attestation.
+
+        Args:
+            verify_result: Result from Play Integrity verification
+
+        Returns:
+            Updated verify_result with attestation info if successful
+        """
         if verify_result.get("verified"):
-            logger.info(
-                f"[play-integrity] Verification successful: verdict={verify_result.get('device_verdict', verify_result.get('verdict'))}"
-            )
-            # Two-phase attestation: After successful Play Integrity verification,
-            # re-run attestation to pick up the cached device attestation and get L2+ level
+            logger.info("[play-integrity] Verification successful")
+            # Re-run attestation to pick up the cached device attestation
             logger.info("[play-integrity] Re-running attestation to update level with device attestation")
             try:
-                # Force refresh to pick up the new device attestation
                 updated_result = await self.run_attestation(mode="full", force_refresh=True)
-                logger.info(
-                    f"[play-integrity] Attestation updated: level={updated_result.max_level}/5, "
-                    f"level_pending={updated_result.level_pending}"
-                )
+                logger.info(f"[play-integrity] Attestation updated: level={updated_result.max_level}/5")
                 verify_result["attestation_level"] = updated_result.max_level
                 verify_result["level_pending"] = updated_result.level_pending
             except Exception as e:
                 logger.warning(f"[play-integrity] Failed to re-run attestation: {e}")
         else:
-            logger.warning(f"[play-integrity] Verification failed: {verify_result.get('error', 'unknown')}")
+            logger.warning("[play-integrity] Verification failed")
 
         return verify_result

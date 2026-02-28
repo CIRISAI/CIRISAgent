@@ -211,9 +211,17 @@ def get_ciris_home() -> Path:
     # but the writable files dir is /data/user/0/ai.ciris.mobile/files/
     if is_android():
         # CIRIS_HOME env var is set by mobile_main.py to the app's files dir
+        # Security: Validate path to prevent path injection attacks
         env_home = os.getenv("CIRIS_HOME")
         if env_home:
-            return Path(env_home)
+            try:
+                validated_path = validate_path_safety(
+                    Path(env_home), context="CIRIS_HOME environment variable (Android)"
+                )
+                return validated_path
+            except ValueError as e:
+                logger.warning(f"Ignoring invalid CIRIS_HOME on Android: {e}")
+                # Fall through to default path
         # Fallback: use Path.home()/files/ciris (Android app files structure)
         return Path.home() / "files" / "ciris"
 
@@ -221,9 +229,17 @@ def get_ciris_home() -> Path:
     # On iOS, Path.home() returns the app container root but only Documents/ is writable
     if is_ios():
         # CIRIS_HOME env var is set by ios_main.py to Documents/ciris
+        # Security: Validate path to prevent path injection attacks
         env_home = os.getenv("CIRIS_HOME")
         if env_home:
-            return Path(env_home)
+            try:
+                validated_path = validate_path_safety(
+                    Path(env_home), context="CIRIS_HOME environment variable (iOS)"
+                )
+                return validated_path
+            except ValueError as e:
+                logger.warning(f"Ignoring invalid CIRIS_HOME on iOS: {e}")
+                # Fall through to default path
         # Fallback: use Documents/ciris (iOS app sandbox structure)
         return Path.home() / "Documents" / "ciris"
 

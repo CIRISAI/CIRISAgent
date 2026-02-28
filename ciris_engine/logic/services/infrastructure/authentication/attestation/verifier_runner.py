@@ -8,7 +8,6 @@ import asyncio
 import logging
 import os
 import threading
-import time
 from typing import Any, Callable, Dict, Optional
 
 from .hashes import load_python_hashes
@@ -223,7 +222,6 @@ def create_verification_thread_target(
 async def run_verification_thread(
     get_verifier: Callable[[], Any],
     attestation_mode: str,
-    timeout: float = ATTESTATION_TIMEOUT,
 ) -> VerifyThreadResult:
     """Run CIRISVerify attestation in a separate thread.
 
@@ -233,7 +231,6 @@ async def run_verification_thread(
     Args:
         get_verifier: Function to get the verifier instance
         attestation_mode: "full" or "partial"
-        timeout: Maximum time to wait in seconds
 
     Returns:
         VerifyThreadResult with result or error
@@ -249,12 +246,13 @@ async def run_verification_thread(
     thread.start()
 
     # Non-blocking wait: poll thread status while yielding to event loop
-    deadline = time.time() + timeout
-    while thread.is_alive() and time.time() < deadline:
-        await asyncio.sleep(0.1)  # Yield to event loop every 100ms
-
-    if thread.is_alive():
-        logger.warning(f"[attestation] TIMEOUT: Thread still alive after {timeout} seconds!")
-        result.error = f"Attestation timed out after {timeout} seconds"
+    # Use asyncio.timeout() context manager for proper async timeout handling
+    try:
+        async with asyncio.timeout(ATTESTATION_TIMEOUT):
+            while thread.is_alive():
+                await asyncio.sleep(0.1)  # Yield to event loop every 100ms
+    except asyncio.TimeoutError:
+        logger.warning(f"[attestation] TIMEOUT: Thread still alive after {ATTESTATION_TIMEOUT} seconds!")
+        result.error = f"Attestation timed out after {ATTESTATION_TIMEOUT} seconds"
 
     return result

@@ -51,11 +51,13 @@ def client_with_runtime(client, tmp_path):
 class TestSetupStatusEndpoint:
     """Test GET /v1/setup/status endpoint."""
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run")
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.get_default_config_path")
-    def test_get_setup_status_first_run(self, mock_config_path, mock_first_run, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path")
+    def test_get_setup_status_first_run(self, mock_config_path, mock_status_first_run, mock_dep_first_run, client):
         """Test status endpoint when this is first run."""
-        mock_first_run.return_value = True
+        mock_dep_first_run.return_value = True
+        mock_status_first_run.return_value = True
         mock_config_path.return_value = Path("/home/user/ciris/.env")
 
         response = client.get("/v1/setup/status")
@@ -67,11 +69,15 @@ class TestSetupStatusEndpoint:
         assert data["setup_required"] is True
         assert data["config_path"] is None
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run")
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.get_default_config_path")
-    def test_get_setup_status_already_configured(self, mock_config_path, mock_first_run, client, tmp_path):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path")
+    def test_get_setup_status_already_configured(
+        self, mock_config_path, mock_status_first_run, mock_dep_first_run, client, tmp_path
+    ):
         """Test status endpoint when already configured."""
-        mock_first_run.return_value = False
+        mock_dep_first_run.return_value = False
+        mock_status_first_run.return_value = False
         config_file = tmp_path / ".env"
         config_file.write_text("CIRIS_CONFIGURED=true")
         mock_config_path.return_value = config_file
@@ -96,7 +102,7 @@ class TestSetupStatusEndpoint:
 class TestProvidersEndpoint:
     """Test GET /v1/setup/providers endpoint."""
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
     def test_list_providers(self, mock_first_run, client):
         """Test listing LLM providers."""
         response = client.get("/v1/setup/providers")
@@ -138,7 +144,7 @@ class TestProvidersEndpoint:
 class TestTemplatesEndpoint:
     """Test GET /v1/setup/templates endpoint."""
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
     def test_list_templates(self, mock_first_run, client):
         """Test listing agent templates from ciris_templates directory."""
         response = client.get("/v1/setup/templates")
@@ -183,7 +189,7 @@ class TestTemplatesEndpoint:
 class TestAdaptersEndpoint:
     """Test GET /v1/setup/adapters endpoint."""
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
     def test_list_adapters(self, mock_first_run, client):
         """Test listing available adapters."""
         response = client.get("/v1/setup/adapters")
@@ -215,7 +221,7 @@ class TestValidateLLMEndpoint:
     """Test POST /v1/setup/validate-llm endpoint."""
 
     @pytest.mark.asyncio
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
     async def test_validate_openai_success(self, mock_first_run, client):
         """Test successful OpenAI validation."""
         with patch("openai.AsyncOpenAI") as mock_openai:
@@ -243,7 +249,7 @@ class TestValidateLLMEndpoint:
             assert "successful" in data["message"].lower()
 
     @pytest.mark.asyncio
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
     async def test_validate_openai_invalid_key(self, mock_first_run, client):
         """Test OpenAI validation with invalid key."""
         response = client.post(
@@ -262,7 +268,7 @@ class TestValidateLLMEndpoint:
         assert "api key" in data["message"].lower()
 
     @pytest.mark.asyncio
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
     async def test_validate_local_llm_success(self, mock_first_run, client):
         """Test successful local LLM validation."""
         with patch("openai.AsyncOpenAI") as mock_openai:
@@ -289,7 +295,7 @@ class TestValidateLLMEndpoint:
             assert data["valid"] is True
 
     @pytest.mark.asyncio
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
     async def test_validate_llm_connection_timeout(self, mock_first_run, client):
         """Test LLM validation with connection timeout."""
         with patch("openai.AsyncOpenAI") as mock_openai:
@@ -333,10 +339,10 @@ class TestValidateLLMEndpoint:
 class TestCompleteSetupEndpoint:
     """Test POST /v1/setup/complete endpoint."""
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run")
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.get_default_config_path")
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy._save_setup_config")
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy._create_setup_users")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete._save_setup_config")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete._create_setup_users")
     def test_complete_setup_success(
         self, mock_create_users, mock_save, mock_config_path, mock_first_run, client_with_runtime, tmp_path
     ):
@@ -367,7 +373,7 @@ class TestCompleteSetupEndpoint:
         assert "successful" in data["message"].lower()
         mock_save.assert_called_once()
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
     def test_complete_setup_password_too_short(self, mock_first_run, client):
         """Test setup completion with password too short."""
         mock_first_run.return_value = True
@@ -391,7 +397,7 @@ class TestCompleteSetupEndpoint:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "8 characters" in response.json()["detail"]
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
     def test_complete_setup_already_configured(self, mock_first_run, client):
         """Test setup completion when already configured."""
         mock_first_run.return_value = False  # Already configured
@@ -417,7 +423,7 @@ class TestCompleteSetupEndpoint:
 
     def test_complete_setup_no_auth_required_during_first_run(self, client):
         """Test that setup completion doesn't require auth during first-run."""
-        with patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run", return_value=False):
+        with patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=False):
             response = client.post(
                 "/v1/setup/complete",
                 json={
@@ -434,7 +440,7 @@ class TestCompleteSetupEndpoint:
 class TestGetConfigEndpoint:
     """Test GET /v1/setup/config endpoint."""
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy._is_setup_allowed_without_auth")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._is_setup_allowed_without_auth")
     def test_get_config_during_first_run(self, mock_allowed, client):
         """Test getting config during first-run (no auth required)."""
         mock_allowed.return_value = True  # First-run, no auth required
@@ -455,7 +461,7 @@ class TestGetConfigEndpoint:
             assert data["llm_model"] == "gpt-4"
             assert data["agent_port"] == 8080
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy._is_setup_allowed_without_auth")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._is_setup_allowed_without_auth")
     def test_get_config_after_setup_requires_auth(self, mock_allowed, client):
         """Test that getting config after setup requires authentication."""
         mock_allowed.return_value = False  # Setup completed, auth required
@@ -490,8 +496,8 @@ class TestUpdateConfigEndpoint:
         # Should require auth
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.get_default_config_path")
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy._save_setup_config")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete._save_setup_config")
     def test_update_config_with_admin_auth(self, mock_save, mock_config_path, client, auth_headers, tmp_path):
         """Test config update with admin authentication."""
         mock_config_path.return_value = tmp_path / ".env"
@@ -576,10 +582,10 @@ class TestHelperFunctions:
 class TestDualPasswordSupport:
     """Test dual password support (new user + system admin)."""
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run")
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.get_default_config_path")
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy._save_setup_config")
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy._create_setup_users")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete._save_setup_config")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete._create_setup_users")
     def test_setup_creates_new_user_and_updates_admin(
         self, mock_create_users, mock_save, mock_config_path, mock_first_run, client_with_runtime, tmp_path
     ):
@@ -615,7 +621,7 @@ class TestDualPasswordSupport:
 class TestSetupHelperFunctions:
     """Test setup route helper functions for saving config and creating users."""
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.create_env_file")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete.create_env_file")
     def test_save_setup_config_openai(self, mock_create_env, tmp_path):
         """Test _save_setup_config with OpenAI provider."""
         from ciris_engine.logic.adapters.api.routes.setup import _save_setup_config
@@ -656,7 +662,7 @@ class TestSetupHelperFunctions:
         assert "CIRIS_TEMPLATE=general" in content
         assert "CIRIS_ADAPTER=api,cli" in content
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.create_env_file")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete.create_env_file")
     def test_save_setup_config_with_adapter_config(self, mock_create_env, tmp_path):
         """Test _save_setup_config with adapter-specific configuration."""
         from ciris_engine.logic.adapters.api.routes.setup import _save_setup_config
@@ -797,10 +803,10 @@ class TestSetupHelperFunctions:
 class TestResumeFromFirstRun:
     """Test resume from first-run functionality."""
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run")
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.get_default_config_path")
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy._save_setup_config")
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy._create_setup_users")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete._save_setup_config")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete._create_setup_users")
     def test_complete_setup_triggers_resume(
         self, mock_create_users, mock_save, mock_config_path, mock_first_run, client, tmp_path
     ):
@@ -947,8 +953,8 @@ class TestValidateSetupPasswords:
 class TestListModelsEndpoint:
     """Test POST /v1/setup/list-models endpoint."""
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run", return_value=True)
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy._list_models_for_provider")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.llm_routes._list_models_for_provider")
     def test_list_models_success(self, mock_list, mock_first_run, client):
         """Test successful model listing returns expected structure."""
         from ciris_engine.logic.adapters.api.routes.setup import ListModelsResponse, LiveModelInfo
@@ -980,8 +986,8 @@ class TestListModelsEndpoint:
         assert data["models"][0]["id"] == "gpt-4o"
         assert data["models"][0]["ciris_compatible"] is True
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run", return_value=True)
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy._list_models_for_provider")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.llm_routes._list_models_for_provider")
     def test_list_models_static_fallback(self, mock_list, mock_first_run, client):
         """Test fallback response when live query fails."""
         from ciris_engine.logic.adapters.api.routes.setup import ListModelsResponse, LiveModelInfo
@@ -1007,8 +1013,8 @@ class TestListModelsEndpoint:
         assert data["error"] is not None
         assert "Connection timeout" in data["error"]
 
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy.is_first_run", return_value=True)
-    @patch("ciris_engine.logic.adapters.api.routes._setup_legacy._list_models_for_provider")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.llm_routes._list_models_for_provider")
     def test_list_models_no_auth_required(self, mock_list, mock_first_run, client):
         """Test endpoint is accessible without auth during first-run."""
         from ciris_engine.logic.adapters.api.routes.setup import ListModelsResponse

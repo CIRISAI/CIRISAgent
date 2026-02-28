@@ -715,7 +715,7 @@ class TestListModelsForProvider:
         )
 
         with async_patch(
-            "ciris_engine.logic.adapters.api.routes._setup_legacy._fetch_live_models",
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._fetch_live_models",
             side_effect=TimeoutError("Connection timed out"),
         ):
             result = await _list_models_for_provider(config)

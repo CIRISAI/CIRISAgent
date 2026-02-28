@@ -2,33 +2,36 @@
 
 This module provides the setup wizard endpoints for initial configuration.
 
-MIGRATION STATUS (Phase 2 Complete):
-The monolithic setup.py (4987 lines) has been refactored significantly.
+MIGRATION STATUS (Phase 3 Complete - Full Modularization):
+The monolithic setup.py (4987 lines) has been fully refactored into modules.
 
-Extracted Modules (~2450 lines total):
-- attestation.py: All /verify-status, /attestation-status, /app-attest/*,
-  /play-integrity/* endpoints - delegates to auth service (~560 lines)
+Modules:
+- status.py: /status endpoint (~35 lines)
+- providers.py: /providers, /templates, /adapters endpoints (~70 lines)
+- llm_routes.py: /models, /validate-llm, /list-models endpoints (~130 lines)
+- device_auth_routes.py: /connect-node, /download-package endpoints (~350 lines)
+- config.py: /config GET/PUT endpoints (~90 lines)
+- complete.py: /complete endpoint and user creation helpers (~450 lines)
+- attestation.py: Verification endpoints delegating to auth service (~560 lines)
 - models.py: Pydantic schemas for all setup endpoints (~430 lines)
-- helpers.py: adapter/template/password helpers (~260 lines)
+- helpers.py: Adapter/template/password helpers (~260 lines)
 - llm_validation.py: LLM provider/model validation (~620 lines)
-- device_auth.py: node connection session helpers (~420 lines)
-- constants.py: shared constants (~20 lines)
+- device_auth.py: Node connection session helpers (~420 lines)
+- dependencies.py: Shared FastAPI dependencies (~25 lines)
+- constants.py: Shared constants (~20 lines)
 
-Legacy file reduced from 4987 to 1612 lines (68% reduction).
-
-Remaining in _setup_legacy.py (~1600 lines):
-- Setup completion helpers and endpoint (/complete)
-- Config endpoints (/config GET/PUT)
-- Provider/template/adapter listing endpoints
-- Device auth endpoint wrappers (use device_auth.py helpers)
-- LLM model listing endpoint wrappers (use llm_validation.py)
+The legacy _setup_legacy.py file has been deleted.
 """
 
-# Re-export the legacy router for backwards compatibility
-# The legacy file was renamed from setup.py to _setup_legacy.py
-from .._setup_legacy import _create_setup_users, _save_setup_config, router
+from fastapi import APIRouter
 
-# Device auth - imported from the new device_auth.py module
+# Import sub-routers
+from . import attestation, complete, config, device_auth_routes, llm_routes, providers, status
+
+# Complete helpers - imported from complete.py module
+from .complete import _create_setup_users, _save_setup_config
+
+# Device auth helpers - imported from device_auth.py module
 from .device_auth import (
     _activate_key_inline,
     _clear_device_auth_session,
@@ -38,7 +41,7 @@ from .device_auth import (
     _submit_attestation_inline,
 )
 
-# Helpers - imported from the new helpers.py module
+# Helpers - imported from helpers.py module
 from .helpers import (
     _create_adapter_from_manifest,
     _get_agent_templates,
@@ -49,7 +52,7 @@ from .helpers import (
     _validate_setup_passwords,
 )
 
-# LLM validation - imported from the new llm_validation.py module
+# LLM validation - imported from llm_validation.py module
 from .llm_validation import (
     _annotate_models_with_capabilities,
     _build_fallback_response,
@@ -65,7 +68,7 @@ from .llm_validation import (
     _validate_llm_connection,
 )
 
-# Models - imported from the new models.py module
+# Models - imported from models.py module
 from .models import (
     AdapterConfig,
     AgentTemplate,
@@ -89,18 +92,20 @@ from .models import (
     VerifyStatusResponse,
 )
 
-# Note: The attestation module is created but not yet wired in.
-# To complete the migration:
-# 1. Update _setup_legacy.py to remove attestation endpoints
-# 2. Wire in attestation.router here
-# 3. Repeat for other modules (llm_validation, device_auth, etc.)
-# 4. Delete _setup_legacy.py when all modules are migrated
+# Create the main router and include all sub-routers
+router = APIRouter(prefix="/setup", tags=["setup"])
+
+# Include all sub-routers
+router.include_router(status.router)
+router.include_router(providers.router)
+router.include_router(llm_routes.router)
+router.include_router(device_auth_routes.router)
+router.include_router(config.router)
+router.include_router(complete.router)
+router.include_router(attestation.router, tags=["attestation"])
 
 __all__ = [
     "router",
-    # Legacy functions (still in _setup_legacy.py)
-    "_save_setup_config",
-    "_create_setup_users",
     # Models
     "AdapterConfig",
     "AgentTemplate",
@@ -149,4 +154,7 @@ __all__ = [
     "_clear_device_auth_session",
     "_submit_attestation_inline",
     "_activate_key_inline",
+    # Complete helpers (for test compatibility)
+    "_save_setup_config",
+    "_create_setup_users",
 ]

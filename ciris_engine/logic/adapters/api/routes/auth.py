@@ -118,7 +118,7 @@ def _validate_redirect_scheme(scheme: str, is_private: bool, redirect_uri: str, 
     """Validate URL scheme for redirect URI. Returns True if valid."""
     if scheme == "http":
         if not is_private:
-            logger.warning(f"Rejected HTTP redirect_uri to public host: {redirect_uri[:50]}")
+            logger.warning("Rejected HTTP redirect_uri to public host")
             return False
         logger.debug(f"Allowing HTTP redirect to private network: {netloc}")
         return True
@@ -167,14 +167,14 @@ def validate_redirect_uri(redirect_uri: Optional[str]) -> Optional[str]:
     # Relative paths are always safe (same-origin), but prevent //evil.com tricks
     if redirect_uri.startswith("/"):
         if redirect_uri.startswith("//"):
-            logger.warning(f"Rejected redirect_uri with protocol-relative path: {redirect_uri[:50]}")
+            logger.warning("Rejected redirect_uri with protocol-relative path")
             return None
         return redirect_uri
 
     try:
         parsed = urllib.parse.urlparse(redirect_uri)
         if not parsed.scheme or not parsed.netloc:
-            logger.warning(f"Rejected malformed redirect_uri: {redirect_uri[:50]}")
+            logger.warning("Rejected malformed redirect_uri")
             return None
 
         is_private = _is_private_network_host(parsed.netloc)
@@ -472,7 +472,7 @@ async def configure_oauth_provider(
         oauth_config_file.write_text(json.dumps(config, indent=2))
         oauth_config_file.chmod(0o600)
 
-        logger.info(f"OAuth provider '{body.provider}' configured by {auth.user_id}")
+        logger.info(f"OAuth provider '{body.provider}' configured successfully")
 
         return ConfigureOAuthProviderResponse(
             provider=body.provider,
@@ -545,7 +545,7 @@ async def oauth_login(provider: str, request: Request, redirect_uri: Optional[st
         state_data = {"csrf": csrf_token}
         if validated_redirect_uri:
             state_data["redirect_uri"] = validated_redirect_uri
-            logger.info(f"OAuth login initiated with validated redirect_uri: {validated_redirect_uri}")
+            logger.info("OAuth login initiated with validated redirect_uri")
 
         # Base64 encode the state JSON
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
@@ -1544,7 +1544,7 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
     """
     import httpx
 
-    logger.info(f"[NativeAuth] Verifying Google ID token (length: {len(id_token)}, prefix: {id_token[:20]}...)")
+    logger.info(f"[NativeAuth] Verifying Google ID token (length: {len(id_token)})")
 
     # Load our expected client ID from OAuth config
     allowed_audiences = _get_allowed_audiences_from_config()
@@ -1610,7 +1610,7 @@ async def native_google_token_exchange(
     Unlike the web OAuth flow (which uses authorization codes), native apps get
     ID tokens directly from Google Sign-In SDK and send them here.
     """
-    logger.info(f"[NativeAuth] Native Google token exchange request - provider: {native_request.provider}")
+    logger.info("[NativeAuth] Native Google token exchange request")
 
     if native_request.provider != "google":
         logger.warning(f"[NativeAuth] Unsupported provider: {native_request.provider}")
@@ -1773,7 +1773,7 @@ async def _verify_apple_id_token(id_token: str) -> Dict[str, Optional[str]]:
     the signature against Apple's public keys at:
     https://appleid.apple.com/auth/keys
     """
-    logger.info(f"[AppleNativeAuth] Verifying Apple ID token (length: {len(id_token)}, prefix: {id_token[:20]}...)")
+    logger.info(f"[AppleNativeAuth] Verifying Apple ID token (length: {len(id_token)})")
 
     # For on-device mode, decode locally
     # The token is trusted because it came from Apple Sign-In SDK
@@ -1837,7 +1837,7 @@ async def native_apple_token_exchange(
     Unlike the web OAuth flow (which uses authorization codes), native apps get
     ID tokens directly from Apple Sign-In SDK and send them here.
     """
-    logger.info(f"[AppleNativeAuth] Native Apple token exchange request - provider: {native_request.provider}")
+    logger.info("[AppleNativeAuth] Native Apple token exchange request")
 
     if native_request.provider != "apple":
         logger.warning(f"[AppleNativeAuth] Unsupported provider: {native_request.provider}")

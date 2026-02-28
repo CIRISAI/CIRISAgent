@@ -7,10 +7,46 @@ stack size, as required by Rust Tokio compatibility.
 import asyncio
 import logging
 import os
+import sys
 import threading
-from typing import Any, Callable, Dict, Optional
+from contextlib import asynccontextmanager
+from typing import Any, AsyncGenerator, Callable, Dict, Optional
 
 from .hashes import load_python_hashes
+
+# Python 3.10 compatibility: asyncio.timeout was added in Python 3.11
+if sys.version_info >= (3, 11):
+    _async_timeout = asyncio.timeout
+else:
+
+    @asynccontextmanager
+    async def _async_timeout(delay: float) -> AsyncGenerator[None, None]:
+        """Python 3.10 compatible timeout context manager."""
+        loop = asyncio.get_event_loop()
+        task = asyncio.current_task()
+        if task is None:
+            raise RuntimeError("No current task")
+
+        timed_out = False
+
+        def timeout_callback() -> None:
+            nonlocal timed_out
+            timed_out = True
+            task.cancel()  # type: ignore[union-attr]
+
+        handle = loop.call_later(delay, timeout_callback)
+        try:
+            yield
+        except asyncio.CancelledError:
+            handle.cancel()
+            if timed_out:
+                raise asyncio.TimeoutError() from None
+            else:
+                raise  # Re-raise CancelledError if not from timeout
+        else:
+            handle.cancel()
+
+
 from .paths import find_audit_db_path, get_agent_root, get_ed25519_fingerprint
 from .types import PythonHashesWrapper, VerifyThreadResult
 
@@ -136,9 +172,7 @@ def _log_attestation_response(attestation_data: Optional[dict[str, Any]]) -> Non
     Args:
         attestation_data: Attestation response dict
     """
-    logger.info(
-        f"[attestation] Raw response keys: {list(attestation_data.keys()) if attestation_data else 'None'}"
-    )
+    logger.info(f"[attestation] Raw response keys: {list(attestation_data.keys()) if attestation_data else 'None'}")
     if attestation_data:
         logger.info(f"[attestation] level={attestation_data.get('level')}, valid={attestation_data.get('valid')}")
         logger.info(f"[attestation] sources={attestation_data.get('sources')}")
@@ -200,9 +234,7 @@ def create_verification_thread_target(
 
             # Verify audit trail if we have a DB path
             if audit_db_path and attestation_data:
-                attestation_data = _verify_audit_trail(
-                    verifier, audit_db_path, key_fingerprint, attestation_data
-                )
+                attestation_data = _verify_audit_trail(verifier, audit_db_path, key_fingerprint, attestation_data)
 
             _log_attestation_response(attestation_data)
 
@@ -237,18 +269,16 @@ async def run_verification_thread(
     """
     result = VerifyThreadResult()
 
-    thread_target = create_verification_thread_target(
-        get_verifier, attestation_mode, result
-    )
+    thread_target = create_verification_thread_target(get_verifier, attestation_mode, result)
 
     # Run on thread with 8MB stack (Rust Tokio requirement)
     thread = threading.Thread(target=thread_target, daemon=True)
     thread.start()
 
     # Non-blocking wait: poll thread status while yielding to event loop
-    # Use asyncio.timeout() context manager for proper async timeout handling
+    # Use _async_timeout for Python 3.10 compatibility
     try:
-        async with asyncio.timeout(ATTESTATION_TIMEOUT):
+        async with _async_timeout(ATTESTATION_TIMEOUT):
             while thread.is_alive():
                 await asyncio.sleep(0.1)  # Yield to event loop every 100ms
     except asyncio.TimeoutError:

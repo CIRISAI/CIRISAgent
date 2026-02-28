@@ -53,6 +53,9 @@ DEFAULT_OAUTH_BASE_URL = "https://agents.ciris.ai"
 # Error messages
 FETCH_USER_INFO_ERROR = "Failed to fetch user info"
 
+# Module-level flag to prevent multiple attestation triggers from the endpoint
+_attestation_triggered_from_endpoint = False
+
 # OAuth Frontend Redirect Configuration
 # These environment variables control where users are redirected after OAuth and what parameters are included
 OAUTH_FRONTEND_URL = os.getenv("OAUTH_FRONTEND_URL")  # e.g., https://scout.ciris.ai
@@ -2068,7 +2071,6 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
             }
         }
 
-    logger.debug(f"[attestation] Querying cache from instance_id={id(infra_auth_service)}")
     cached = infra_auth_service.get_cached_attestation()
 
     if not cached:
@@ -2090,7 +2092,46 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
                     "error": None,
                 }
             }
-        logger.info("[attestation] No cached attestation and not in progress")
+
+        # Trigger attestation as a fallback if startup attestation didn't run
+        # Use module-level flag to prevent multiple triggers
+        global _attestation_triggered_from_endpoint
+        if not _attestation_triggered_from_endpoint and hasattr(infra_auth_service, "run_attestation"):
+            import asyncio
+
+            try:
+                _attestation_triggered_from_endpoint = True
+                logger.info("[attestation] No cached attestation - triggering attestation now")
+                # Run attestation in background and return in_progress status
+                # This handles cases where startup attestation was skipped/failed
+                asyncio.create_task(infra_auth_service.run_attestation(mode="full"))
+                logger.info("[attestation] Background attestation triggered, returning in_progress")
+                return {
+                    "data": {
+                        "loaded": True,
+                        "attestation_status": "in_progress",
+                        "level_pending": True,
+                        "max_level": 0,
+                        "error": None,
+                    }
+                }
+            except Exception as e:
+                logger.warning(f"[attestation] Failed to trigger attestation: {e}")
+                _attestation_triggered_from_endpoint = False  # Reset on failure
+        elif _attestation_triggered_from_endpoint:
+            # Already triggered, return in_progress
+            logger.debug("[attestation] Attestation already triggered, returning in_progress")
+            return {
+                "data": {
+                    "loaded": True,
+                    "attestation_status": "in_progress",
+                    "level_pending": True,
+                    "max_level": 0,
+                    "error": None,
+                }
+            }
+
+        logger.info("[attestation] No cached attestation and could not trigger")
         return {
             "data": {
                 "loaded": True,

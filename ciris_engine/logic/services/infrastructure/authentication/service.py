@@ -1820,7 +1820,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                     cached = self.get_cached_attestation()
                     if cached is not None:
                         return cached
-
                 result = await self._run_attestation_internal(
                     mode=mode,
                     play_integrity_token=play_integrity_token,
@@ -1832,7 +1831,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 self._attestation_cache = result
                 # Also save as last known (for stale-while-revalidate)
                 self._last_known_attestation = result
-                logger.info(f"[attestation] Completed: level={result.max_level}")
+                logger.info(f"[attestation] Cached result: level={result.max_level}")
                 return result
         finally:
             self._attestation_in_progress = False
@@ -1870,7 +1869,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         )
 
         # Build and return attestation result
-        return build_attestation_result(verify_result, attestation_mode)
+        result = build_attestation_result(verify_result, attestation_mode)
+        return result
 
     def get_cached_attestation(self, allow_stale: bool = False) -> Optional[AttestationResult]:
         """Get the cached attestation result if available.
@@ -2019,9 +2019,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # Run verification in thread with crash protection
         loop = asyncio.get_event_loop()
-        verify_result = await loop.run_in_executor(
-            None, run_play_integrity_verification, verifier, token, nonce, 45
-        )
+        verify_result = await loop.run_in_executor(None, run_play_integrity_verification, verifier, token, nonce, 45)
 
         # Handle post-verification
         return await self._handle_play_integrity_result(verify_result)

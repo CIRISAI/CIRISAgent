@@ -614,6 +614,35 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
 
             # Clear the key from the request to avoid logging it
             setup.provisioned_signing_key_b64 = None
+        else:
+            # No portal key - ensure ephemeral signing key exists and audit it
+            # This is critical: attestation verifies audit_log exists, so we must
+            # have at least one entry before attestation runs post-setup
+            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+
+            ephemeral_key = get_unified_signing_key()
+            ephemeral_key_id = ephemeral_key.key_id
+            logger.info(f"[Setup Complete] Using ephemeral signing key (key_id={ephemeral_key_id})")
+
+            # Audit the ephemeral key generation - ensures audit_log table exists
+            audit_service = getattr(request.app.state, "audit_service", None)
+            if audit_service:
+                from ciris_engine.schemas.services.graph.audit import AuditEventData
+
+                audit_event = AuditEventData(
+                    event_type="signing_key_initialized",
+                    details={
+                        "key_id": ephemeral_key_id,
+                        "source": "ephemeral_generated",
+                        "algorithm": ephemeral_key.algorithm.value,
+                        "note": "Ephemeral key - purchase portal key at portal.ciris.ai for attestation Level 5",
+                    },
+                    severity="info",
+                    source="setup_complete",
+                )
+                audit_task = asyncio.create_task(audit_service.log_event("signing_key_initialized", audit_event))
+                await audit_task
+                logger.info("[Setup Complete] Audit entry created for ephemeral key initialization")
 
         # Get runtime and database path from the running application
         runtime = getattr(request.app.state, "runtime", None)

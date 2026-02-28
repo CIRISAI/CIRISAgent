@@ -471,22 +471,22 @@ async def get_play_integrity_nonce(request: Request) -> SuccessResponse[Dict[str
         def _inner() -> None:
             try:
                 lib = verifier._lib
-                if not lib or not hasattr(lib, "ciris_verify_get_play_integrity_nonce"):
-                    result["error"] = "Play Integrity FFI not available (need CIRISVerify >= 0.9.0)"
+                if not lib or not hasattr(lib, "ciris_verify_get_integrity_nonce"):
+                    result["error"] = "Play Integrity FFI not available (need CIRISVerify >= 1.0.0)"
                     return
 
-                lib.ciris_verify_get_play_integrity_nonce.argtypes = [
+                lib.ciris_verify_get_integrity_nonce.argtypes = [
                     ctypes.c_void_p,
                     ctypes.POINTER(ctypes.c_void_p),
                     ctypes.POINTER(ctypes.c_size_t),
                 ]
-                lib.ciris_verify_get_play_integrity_nonce.restype = ctypes.c_int
+                lib.ciris_verify_get_integrity_nonce.restype = ctypes.c_int
 
                 handle = verifier._handle
                 nonce_ptr = ctypes.c_void_p()
                 nonce_len = ctypes.c_size_t()
 
-                ret = lib.ciris_verify_get_play_integrity_nonce(
+                ret = lib.ciris_verify_get_integrity_nonce(
                     handle,
                     ctypes.byref(nonce_ptr),
                     ctypes.byref(nonce_len),

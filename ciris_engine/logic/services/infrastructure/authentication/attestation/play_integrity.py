@@ -31,7 +31,7 @@ def _verify_on_large_stack(
     try:
         lib = getattr(verifier, "_lib", None)
         if not lib or not hasattr(lib, "ciris_verify_verify_integrity_token"):
-            result["error"] = "Play Integrity FFI not available (need CIRISVerify >= 0.10.0)"
+            result["error"] = "Play Integrity FFI not available (need CIRISVerify >= 1.0.0)"
             result["verified"] = False
             return
 

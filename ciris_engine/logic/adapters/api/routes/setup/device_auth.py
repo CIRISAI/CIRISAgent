@@ -11,12 +11,45 @@ import json
 import logging
 import os
 import time
+import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, status
 
 from ciris_engine.schemas.api.responses import SuccessResponse
+
+
+def _validate_portal_url(url: str) -> str:
+    """Validate portal URL to prevent SSRF attacks.
+
+    Args:
+        url: The portal URL to validate
+
+    Returns:
+        The validated URL
+
+    Raises:
+        ValueError: If the URL is invalid or untrusted
+    """
+    parsed = urllib.parse.urlparse(url)
+
+    # Must have scheme and netloc
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError("Invalid URL format")
+
+    # Only allow https (or http for localhost in development)
+    if parsed.scheme not in ("https", "http"):
+        raise ValueError("URL must use https")
+
+    # For http, only allow localhost/127.0.0.1 (development only)
+    if parsed.scheme == "http":
+        host = parsed.netloc.split(":")[0].lower()
+        if host not in ("localhost", "127.0.0.1"):
+            raise ValueError("HTTP only allowed for localhost")
+
+    return url
+
 
 from .models import (
     ConnectNodeRequest,
@@ -125,6 +158,13 @@ async def _submit_attestation_inline(challenge_nonce: str, device_code: str, por
 
     import httpx
 
+    # Validate portal URL to prevent SSRF
+    try:
+        _validate_portal_url(portal_url)
+    except ValueError as e:
+        logger.warning("Invalid portal URL for attestation: %s", e)
+        return
+
     challenge_bytes = bytes.fromhex(challenge_nonce)
 
     # Attempt attestation on 8MB stack thread (Rust Tokio runtime needs it)
@@ -229,6 +269,13 @@ async def _activate_key_inline(private_key_b64: str, device_code: str, portal_ur
     import threading
 
     import httpx
+
+    # Validate portal URL to prevent SSRF
+    try:
+        _validate_portal_url(portal_url)
+    except ValueError as e:
+        logger.warning("Invalid portal URL for key activation: %s", e)
+        return
 
     # Decode the private key from base64
     try:

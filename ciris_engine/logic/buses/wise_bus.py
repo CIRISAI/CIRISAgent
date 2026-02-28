@@ -296,8 +296,12 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                     break
 
             if not wa_cert:
+                # Hash the key_id for logging to avoid exposing user-controlled data
+                import hashlib
+
+                key_id_hash = hashlib.sha256(signing_key_id.encode()).hexdigest()[:16]
                 logger.error(
-                    f"SECURITY ALERT: Accord invocation from unknown key_id '{signing_key_id}' — "
+                    f"SECURITY ALERT: Accord invocation from unknown key_id (hash: {key_id_hash}) — "
                     "WA certificate not found or not active"
                 )
                 return False
@@ -330,9 +334,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 signature_bytes = bytes.fromhex(signature_hex)
                 public_key.verify(signature_bytes, canonical_json)
 
-                logger.info(
-                    f"Accord invocation signature verified from {wa_cert.wa_id} (role: {wa_cert.role.value})"
-                )
+                logger.info(f"Accord invocation signature verified from {wa_cert.wa_id} (role: {wa_cert.role.value})")
             except Exception as sig_err:
                 logger.error(
                     f"SECURITY ALERT: Accord invocation signature verification FAILED "

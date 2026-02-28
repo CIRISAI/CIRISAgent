@@ -279,7 +279,7 @@ class ServiceInitializer:
                 cache_ttl_seconds=cache_ttl,
                 fail_open=fail_open,
             )
-            logger.info("Using CIRISBillingProvider with API key auth (URL: %s)", base_url)
+            logger.info("Using CIRISBillingProvider with API key auth")
 
         elif is_android and using_ciris_proxy:
             # Android using CIRIS LLM proxy - requires billing

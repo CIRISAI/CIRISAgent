@@ -27,6 +27,7 @@ from .device_auth import (
     _load_device_auth_session,
     _save_device_auth_session,
     _submit_attestation_inline,
+    _validate_portal_url,
 )
 from .models import (
     ConnectNodeRequest,
@@ -64,6 +65,15 @@ async def connect_node(req: ConnectNodeRequest) -> SuccessResponse[ConnectNodeRe
     # Normalize URL — add https:// if no scheme provided
     if not portal_url.startswith("http://") and not portal_url.startswith("https://"):
         portal_url = f"https://{portal_url}"
+
+    # Validate portal URL to prevent SSRF attacks
+    try:
+        _validate_portal_url(portal_url)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid portal URL: {e}",
+        )
 
     # Check for existing non-expired session — reuse it if found
     existing_session = _load_device_auth_session()
@@ -158,6 +168,15 @@ async def connect_node_status(device_code: str, portal_url: str) -> SuccessRespo
         Status: pending (keep polling), complete (key ready), or error.
     """
     import httpx
+
+    # Validate portal URL to prevent SSRF attacks
+    try:
+        _validate_portal_url(portal_url)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid portal URL: {e}",
+        )
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:

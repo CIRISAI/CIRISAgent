@@ -250,16 +250,16 @@ class AdapterConfigurationService:
         """Store OAuth-related data from step_data into session."""
         if "base_url" in step_data and step_data["base_url"]:
             session.collected_config["base_url"] = step_data["base_url"]
-            logger.info(f"[OAUTH STEP] Stored base_url from step_data: {step_data['base_url']}")
+            logger.info("[OAUTH STEP] Stored base_url from step_data")
 
         if step_data.get("callback_base_url"):
             session.collected_config["callback_base_url"] = step_data["callback_base_url"]
-            logger.info(f"[OAUTH STEP] Using local callback base URL: {step_data['callback_base_url']}")
+            logger.info("[OAUTH STEP] Using local callback base URL")
 
         if step_data.get("redirect_uri"):
             session.collected_config["redirect_uri"] = step_data["redirect_uri"]
             session.collected_config["platform"] = step_data.get("platform")
-            logger.info(f"[OAUTH STEP] Using custom redirect URI: {step_data['redirect_uri']}")
+            logger.info("[OAUTH STEP] Using custom redirect URI")
 
     async def _generate_oauth_url(
         self,
@@ -270,7 +270,7 @@ class AdapterConfigurationService:
     ) -> StepResult:
         """Generate OAuth authorization URL."""
         base_url = session.collected_config.get("base_url", "")
-        logger.info(f"[OAUTH STEP] Generating OAuth URL with base_url={base_url}")
+        logger.info("[OAUTH STEP] Generating OAuth URL")
 
         if not base_url:
             logger.error("[OAUTH STEP] ERROR: No base_url in collected_config!")
@@ -291,7 +291,7 @@ class AdapterConfigurationService:
                 redirect_uri=step_data.get("redirect_uri"),
                 platform=step_data.get("platform"),
             )
-            logger.info(f"[OAUTH STEP] Generated OAuth URL: {oauth_url}")
+            logger.info("[OAUTH STEP] Generated OAuth URL successfully")
         except Exception as e:
             logger.error(f"[OAUTH STEP] Failed to generate OAuth URL: {e}")
             return StepResult(step_id=step.step_id, success=False, error=f"Failed to get OAuth URL: {str(e)}")
@@ -313,11 +313,9 @@ class AdapterConfigurationService:
     ) -> StepResult:
         """Execute an OAuth step."""
         logger.info(f"[OAUTH STEP] Executing OAuth step for session {session.session_id}")
-        logger.info(f"[OAUTH STEP] step_data keys: {list(step_data.keys())}")
-        logger.info(f"[OAUTH STEP] collected_config before: {session.collected_config}")
+        logger.debug(f"[OAUTH STEP] step_data keys: {list(step_data.keys())}")
 
         self._store_oauth_step_data(session, step_data)
-        logger.info(f"[OAUTH STEP] collected_config after: {session.collected_config}")
 
         if "code" in step_data:
             return await self._handle_oauth_callback(session, step, adapter, step_data)
@@ -334,16 +332,15 @@ class AdapterConfigurationService:
         logger.info(
             f"[SELECT STEP] Processing step {step.step_id}, step_data keys: {list(step_data.keys()) if step_data else 'None'}"
         )
-        logger.info(f"[SELECT STEP] Raw step_data: {step_data}")
+        logger.debug(f"[SELECT STEP] step_data keys: {list(step_data.keys()) if step_data else 'None'}")
 
         selection = step_data.get("selection") or step_data.get("selected")
-        logger.info(f"[SELECT STEP] Extracted selection: {selection}")
 
         if selection:
             session.collected_config[step.step_id] = selection
             session.current_step_index += 1
             logger.info(
-                f"[SELECT STEP] Stored selection for {step.step_id}: {selection}, advancing to step {session.current_step_index}"
+                f"[SELECT STEP] Stored selection for {step.step_id}, advancing to step {session.current_step_index}"
             )
             return StepResult(step_id=step.step_id, success=True, next_step_index=session.current_step_index)
 
@@ -387,7 +384,7 @@ class AdapterConfigurationService:
         3. On completion: Store tokens/keys and advance
         """
         logger.info(f"[DEVICE_AUTH STEP] Executing for session {session.session_id}")
-        logger.info(f"[DEVICE_AUTH STEP] step_data: {step_data}")
+        logger.debug(f"[DEVICE_AUTH STEP] step_data keys: {list(step_data.keys()) if step_data else 'None'}")
 
         # Store portal URL if provided
         if "portal_url" in step_data:
@@ -627,7 +624,7 @@ class AdapterConfigurationService:
             all_configs = await config_service.list_configs(prefix=prefix)
 
             if not all_configs:
-                logger.info(f"No persisted configs found for adapter type: {adapter_type}")
+                logger.info("No persisted configs found for requested adapter type")
                 return False
 
             # Remove each config by setting to None (or use delete if available)
@@ -641,9 +638,9 @@ class AdapterConfigurationService:
                 except Exception as e:
                     logger.warning(f"Failed to remove config {key}: {e}")
 
-            logger.info(f"Removed {removed_count} persisted configs for {adapter_type}")
+            logger.info(f"Removed {removed_count} persisted configs for adapter")
             return removed_count > 0
 
         except Exception as e:
-            logger.error(f"Failed to remove persisted config for {adapter_type}: {e}")
+            logger.error(f"Failed to remove persisted config for adapter: {e}")
             return False

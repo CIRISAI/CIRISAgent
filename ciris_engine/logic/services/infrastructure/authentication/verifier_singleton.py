@@ -46,9 +46,14 @@ def get_verifier() -> Any:
         if _verifier is not None:
             return _verifier
 
-        # Re-raise previous init error
+        # Re-raise previous init error (but allow retry for transient failures)
         if _init_error is not None:
-            raise _init_error
+            # Only cache permanent errors (ImportError = library not installed)
+            # For other errors (timing, thread, etc.), clear and retry
+            if isinstance(_init_error, ImportError):
+                raise _init_error
+            logger.info(f"[verifier_singleton] Clearing previous init error and retrying: {_init_error}")
+            _init_error = None
 
         try:
             from ciris_verify import CIRISVerify

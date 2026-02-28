@@ -1806,7 +1806,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         if not force_refresh:
             cached = self.get_cached_attestation()
             if cached is not None:
-                logger.debug("Returning cached attestation result")
+                logger.info(f"[attestation] Returning cached result (early check), instance={hex(id(self))}, level={cached.max_level}")
                 return cached
 
         # Set in_progress flag BEFORE acquiring lock so callers can see it
@@ -1819,6 +1819,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 if not force_refresh:
                     cached = self.get_cached_attestation()
                     if cached is not None:
+                        logger.info(f"[attestation] Returning cached result (lock-check), instance={hex(id(self))}, level={cached.max_level}")
                         return cached
                 result = await self._run_attestation_internal(
                     mode=mode,
@@ -1831,7 +1832,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 self._attestation_cache = result
                 # Also save as last known (for stale-while-revalidate)
                 self._last_known_attestation = result
-                logger.info(f"[attestation] Cached result: level={result.max_level}")
+                logger.info(f"[attestation] Cached result: level={result.max_level}, instance={hex(id(self))}, binary={'OK' if result.binary_ok else 'FAIL'}")
                 return result
         finally:
             self._attestation_in_progress = False
@@ -1882,7 +1883,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             Cached AttestationResult or None if cache is empty/expired (unless allow_stale=True)
         """
         if self._attestation_cache is None:
-            logger.debug(f"[attestation] get_cached_attestation: cache is None, instance_id={id(self)}")
+            logger.info(f"[attestation] get_cached_attestation: cache is None, instance={hex(id(self))}")
             # If allowing stale, return last known
             if allow_stale and self._last_known_attestation is not None:
                 logger.debug("[attestation] Returning stale last_known_attestation")
@@ -1972,17 +1973,18 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         This is called during service startup to pre-populate the cache.
         It runs in parallel with other startup tasks and logs progress.
         """
-        logger.info("[attestation] Starting background attestation check...")
+        logger.info(f"[attestation] Starting background attestation check on instance={hex(id(self))}...")
         try:
             result = await self.run_attestation(mode="full")
             logger.info(
                 f"[attestation] Startup attestation completed: "
                 f"level={result.max_level}/5, "
                 f"binary={'OK' if result.binary_ok else 'FAIL'}, "
-                f"functions={'OK' if result.function_integrity == 'verified' else 'FAIL'}"
+                f"functions={'OK' if result.function_integrity == 'verified' else 'FAIL'}, "
+                f"instance={hex(id(self))}, cache_set={self._attestation_cache is not None}"
             )
         except Exception as e:
-            logger.error(f"[attestation] Startup attestation failed: {e}")
+            logger.error(f"[attestation] Startup attestation failed on instance={hex(id(self))}: {e}")
 
     async def verify_play_integrity_token(
         self,

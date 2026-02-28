@@ -352,12 +352,27 @@ class ApiPlatform(Service):
         # because the existing instance has in-memory API keys that would be lost!
         existing_auth_service = getattr(self.app.state, "auth_service", None)
         if existing_auth_service is not None and isinstance(existing_auth_service, APIAuthService):
+            # Propagate attestation cache from old auth service to new one
+            old_auth = existing_auth_service._auth_service
+            if old_auth and hasattr(old_auth, '_attestation_cache') and old_auth._attestation_cache is not None:
+                if hasattr(auth_service, '_attestation_cache'):
+                    auth_service._attestation_cache = old_auth._attestation_cache
+                    auth_service._last_known_attestation = getattr(old_auth, '_last_known_attestation', None)
+                    logger.info(
+                        f"[AUTH SERVICE DEBUG] Propagated attestation cache from old instance={hex(id(old_auth))} "
+                        f"to new instance={hex(id(auth_service))}, level={old_auth._attestation_cache.max_level}"
+                    )
+            else:
+                old_id = hex(id(old_auth)) if old_auth else "None"
+                logger.info(
+                    f"[AUTH SERVICE DEBUG] No attestation cache to propagate from old instance={old_id}"
+                )
             # Update the existing instance's auth_service reference but preserve API keys
             existing_auth_service._auth_service = auth_service
             # Reset users_loaded so users are reloaded from DB on next access
             existing_auth_service._users_loaded = False
             logger.info(
-                f"[AUTH SERVICE DEBUG] Preserved existing APIAuthService (instance #{existing_auth_service._instance_id}) with {len(existing_auth_service._api_keys)} API keys - updated _auth_service reference, reset _users_loaded"
+                f"[AUTH SERVICE DEBUG] Preserved existing APIAuthService (instance #{existing_auth_service._instance_id}) with {len(existing_auth_service._api_keys)} API keys - updated _auth_service reference (new={hex(id(auth_service))}), reset _users_loaded"
             )
         else:
             # First time initialization - create new instance

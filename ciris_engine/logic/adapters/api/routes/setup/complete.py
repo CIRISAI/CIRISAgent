@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Module-level set to hold references to background tasks, preventing garbage collection
+_background_tasks: set[asyncio.Task[None]] = set()
+
 
 # =============================================================================
 # SETUP USER HELPER FUNCTIONS
@@ -541,8 +544,10 @@ async def _schedule_runtime_resume(runtime: Any) -> None:
             # If resume fails, fall back to restart
             runtime.request_shutdown("Resume failed - restarting to apply configuration")
 
-    # Store task to prevent garbage collection and log task creation
+    # Store task in module-level set to prevent garbage collection
     resume_task = asyncio.create_task(_resume_runtime())
+    _background_tasks.add(resume_task)
+    resume_task.add_done_callback(_background_tasks.discard)
     logger.info(f"Scheduled background resume task: {resume_task.get_name()}")
 
 
@@ -601,7 +606,10 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
                     severity="info",
                     source="setup_complete",
                 )
-                asyncio.create_task(audit_service.log_event("signing_key_provisioned", audit_event))
+                # Store task reference to prevent garbage collection before completion
+                audit_task = asyncio.create_task(audit_service.log_event("signing_key_provisioned", audit_event))
+                # Await to ensure completion (audit is important)
+                await audit_task
                 logger.info("[Setup Complete] Audit entry created for key provisioning")
 
             # Clear the key from the request to avoid logging it

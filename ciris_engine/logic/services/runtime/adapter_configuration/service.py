@@ -525,7 +525,11 @@ class AdapterConfigurationService:
         success = await adapter.apply_config(session.collected_config)
         if success:
             session.status = SessionStatus.COMPLETED
-            logger.info(f"Configuration applied for session {session_id}")
+            # Sanitize session_id before logging (user-controlled data)
+            import hashlib
+
+            session_hash = hashlib.sha256(session_id.encode()).hexdigest()[:8]
+            logger.info(f"Configuration applied for session [id_hash:{session_hash}]")
         else:
             session.status = SessionStatus.FAILED
 

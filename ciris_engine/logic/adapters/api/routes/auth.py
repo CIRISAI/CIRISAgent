@@ -475,7 +475,10 @@ async def configure_oauth_provider(
         oauth_config_file.write_text(json.dumps(config, indent=2))
         oauth_config_file.chmod(0o600)
 
-        logger.info(f"OAuth provider '{body.provider}' configured successfully")
+        # Sanitize user-controlled data before logging
+        from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
+
+        logger.info(f"OAuth provider '{sanitize_for_log(body.provider, max_length=50)}' configured successfully")
 
         return ConfigureOAuthProviderResponse(
             provider=body.provider,

@@ -419,10 +419,12 @@ async def _activate_key_inline(private_key_b64: str, device_code: str, portal_ur
         logger.info("Key activation: registry unavailable, key will be verified when online.")
 
     # POST to Portal's /api/device/activate
+    # Use urljoin for safe URL construction (prevents URL injection)
+    activate_url = urllib.parse.urljoin(portal_url.rstrip("/") + "/", "api/device/activate")
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             activate_resp = await client.post(
-                f"{portal_url.rstrip('/')}/api/device/activate",
+                activate_url,
                 json={
                     "device_code": device_code,
                     "attestation_proof": proof_dict,

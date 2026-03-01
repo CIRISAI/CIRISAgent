@@ -194,7 +194,8 @@ async def resolve_deferral(
 
         safe_resolution = sanitize_for_log(resolve_request.resolution)
         safe_deferral_id = sanitize_for_log(deferral_id)
-        logger.info(f"Deferral {safe_deferral_id} resolved by {auth.user_id} with resolution: {safe_resolution}")
+        safe_user_id = sanitize_for_log(auth.user_id)
+        logger.info(f"Deferral {safe_deferral_id} resolved by {safe_user_id} with resolution: {safe_resolution}")
 
         return create_wa_success_response(response)
 

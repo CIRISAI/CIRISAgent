@@ -106,8 +106,8 @@ jobs:
         include:
           - os: macos-14
             name: macOS ARM64
-          # macOS Intel (macos-12/13) runners have severe capacity issues
-          # Intel Mac users can use the headless wheel or Rosetta 2
+          - os: macos-13
+            name: macOS Intel
           - os: ubuntu-latest
             name: Linux x64
           - os: windows-latest

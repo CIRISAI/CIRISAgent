@@ -28,6 +28,7 @@ try:
 except ImportError:
     pass  # dotenv is optional; skip if not installed
 import asyncio
+import atexit
 import json
 import logging
 import os
@@ -49,29 +50,61 @@ from ciris_engine.schemas.runtime.models import Thought
 
 logger = logging.getLogger(__name__)
 
+# Track if we've logged a proper shutdown reason
+_shutdown_reason_logged = {"value": False}
+
+
+def _atexit_handler() -> None:
+    """Log when Python exits - helps diagnose unexpected shutdowns."""
+    if not _shutdown_reason_logged["value"]:
+        # Only log if we haven't already logged a shutdown reason
+        # This catches cases where the process exits without going through signal handlers
+        logger.critical(f"[ATEXIT] Python interpreter exiting (PID={os.getpid()}) - no shutdown signal logged")
+        logger.critical("[ATEXIT] This may indicate: SIGKILL, parent process death, or clean exit without signal")
+    else:
+        logger.info(f"[ATEXIT] Python interpreter exiting normally (PID={os.getpid()})")
+
+
+atexit.register(_atexit_handler)
+
 
 def setup_signal_handlers(runtime: CIRISRuntime) -> None:
     """Setup signal handlers for graceful shutdown."""
     shutdown_initiated = {"value": False}  # Use dict to allow modification in nested function
 
+    # Map signal numbers to names for better logging
+    signal_names: dict[int, str] = {
+        int(signal.SIGTERM): "SIGTERM",
+        int(signal.SIGINT): "SIGINT",
+        int(signal.SIGHUP): "SIGHUP",
+    }
+    # SIGQUIT may not exist on all platforms
+    if hasattr(signal, "SIGQUIT"):
+        signal_names[int(signal.SIGQUIT)] = "SIGQUIT"
+
     def signal_handler(signum: int, frame: Any) -> None:
+        sig_name = signal_names.get(signum, f"signal {signum}")
+        _shutdown_reason_logged["value"] = True  # Mark that we logged a shutdown reason
         if shutdown_initiated["value"]:
-            logger.warning(f"Signal {signum} received again, forcing immediate exit")
+            logger.critical(f"[SIGNAL] {sig_name} received again (PID={os.getpid()}), forcing immediate exit")
             # Don't call sys.exit() in async context - just raise to let Python handle it
             raise KeyboardInterrupt("Forced shutdown")
 
         shutdown_initiated["value"] = True
-        logger.info(f"Received signal {signum}, requesting graceful shutdown...")
+        logger.critical(f"[SIGNAL] {sig_name} received (PID={os.getpid()}), requesting graceful shutdown...")
 
         try:
-            runtime.request_shutdown(f"Signal {signum}")
+            runtime.request_shutdown(f"Signal {sig_name}")
         except Exception as e:
-            logger.error(f"Error during shutdown request: {e}")
+            logger.critical(f"[SIGNAL] Error during shutdown request: {e}")
             # Don't call sys.exit() in async context - raise instead
             raise KeyboardInterrupt("Shutdown error") from e
 
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGHUP, signal_handler)
+    if hasattr(signal, "SIGQUIT"):
+        signal.signal(signal.SIGQUIT, signal_handler)
 
 
 def setup_global_exception_handler() -> None:
@@ -521,9 +554,10 @@ def _handle_final_exit() -> None:
     """Handle final exit logic for main function."""
     import time
 
+    _shutdown_reason_logged["value"] = True  # Mark normal exit
     sys.stdout.flush()
     sys.stderr.flush()
-    logger.info("CIRIS agent exiting cleanly")
+    logger.info(f"[EXIT] CIRIS agent exiting cleanly (PID={os.getpid()})")
 
     if "--adapter" in sys.argv and "api" in sys.argv and "--timeout" in sys.argv:
         logger.debug("EXITING NOW VIA os._exit(0) AT API mode subprocess tests")
@@ -662,6 +696,9 @@ def main(
         enable_incident_capture=False,  # Will be enabled later with TimeService
     )
 
+    # Log startup with PID for debugging unexpected shutdowns
+    logger.info(f"[STARTUP] CIRIS agent starting (PID={os.getpid()}, PPID={os.getppid()})")
+
     async def _async_main() -> None:
         nonlocal mock_llm
         from ciris_engine.logic.config.env_utils import get_env_var
@@ -798,13 +835,16 @@ def main(
     try:
         asyncio.run(_async_main())
     except KeyboardInterrupt:
-        logger.info("Interrupted by user, exiting...")
+        _shutdown_reason_logged["value"] = True
+        logger.info(f"[EXIT] Interrupted by user (PID={os.getpid()}), exiting...")
         logger.debug("EXITING NOW VIA sys.exit(0) AT KeyboardInterrupt in main")
         sys.exit(0)
     except SystemExit:
+        _shutdown_reason_logged["value"] = True
         raise  # Re-raise SystemExit to exit with the correct code
     except Exception as e:
-        logger.error(f"Fatal error in main: {e}", exc_info=True)
+        _shutdown_reason_logged["value"] = True
+        logger.error(f"[EXIT] Fatal error in main (PID={os.getpid()}): {e}", exc_info=True)
         logger.debug("EXITING NOW VIA sys.exit(1) AT Fatal error in main")
         sys.exit(1)
 

@@ -778,9 +778,7 @@ class DiscordToolService(ToolService):
             last_error=None,
             metrics={
                 "tools_available": len(self._tools),
-                "client_connected": (
-                    not self._client.is_closed() if self._client else False
-                ),
+                "client_connected": (not self._client.is_closed() if self._client else False),
             },
             last_health_check=datetime.now(timezone.utc) if self._time_service is None else self._time_service.now(),
         )

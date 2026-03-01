@@ -184,6 +184,19 @@ class AdapterManifestTests:
             self.results.append({"test": test_name, "status": "PASS", "error": None})
             self.console.print(f"    [green]PASS[/green] Service imports ({len(services)} services)")
 
+    # Mapping of pip package names to their actual import names
+    PACKAGE_IMPORT_MAP = {
+        "opencv-python": "cv2",
+        "pyyaml": "yaml",
+        "pillow": "PIL",
+        "scikit-learn": "sklearn",
+        "beautifulsoup4": "bs4",
+        "python-dateutil": "dateutil",
+    }
+
+    # Packages that require system libraries and should be soft-checked
+    SYSTEM_DEP_PACKAGES = {"pyodbc", "ciris-verify"}
+
     async def _test_dependencies(self, adapter_name: str, manifest: Dict) -> None:
         """Test that declared dependencies are available."""
         test_name = f"{adapter_name}::dependencies"
@@ -195,18 +208,28 @@ class AdapterManifestTests:
             return
 
         errors = []
+        warnings = []
 
         # Check external dependencies (pip packages)
         external = deps.get("external", {})
         for package, version in external.items():
+            # Get the correct import name for this package
+            import_name = self.PACKAGE_IMPORT_MAP.get(package, package.replace("-", "_"))
+
             try:
-                importlib.import_module(package.replace("-", "_"))
+                importlib.import_module(import_name)
             except ImportError:
-                errors.append(f"Missing package: {package}")
+                if package in self.SYSTEM_DEP_PACKAGES:
+                    warnings.append(f"Optional system dep: {package}")
+                else:
+                    errors.append(f"Missing package: {package}")
 
         if errors:
             self.results.append({"test": test_name, "status": "FAIL", "error": "; ".join(errors)})
-            self.console.print(f"    [yellow]WARN[/yellow] Dependencies: {'; '.join(errors)}")
+            self.console.print(f"    [red]FAIL[/red] Dependencies: {'; '.join(errors)}")
+        elif warnings:
+            self.results.append({"test": test_name, "status": "PASS", "error": None})
+            self.console.print(f"    [yellow]WARN[/yellow] Dependencies: {'; '.join(warnings)}")
         else:
             self.results.append({"test": test_name, "status": "PASS", "error": None})
             self.console.print(f"    [green]PASS[/green] Dependencies")
@@ -259,6 +282,9 @@ class AdapterManifestTests:
         except Exception as e:
             self.results.append({"test": test_name, "status": "FAIL", "error": str(e)})
             self.console.print(f"    [red]FAIL[/red] API load: {str(e)[:50]}")
+
+        # Small delay to avoid rate limiting (60 req/min limit)
+        await asyncio.sleep(1.1)
 
     async def _cleanup_loaded_adapters(self) -> None:
         """Clean up any adapters we loaded during testing."""

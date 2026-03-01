@@ -325,7 +325,7 @@ class TestTSASPDMAEvaluator:
             mock_template = MagicMock()
             mock_loader_instance = MagicMock()
             mock_loader_instance.load_prompt_template.return_value = mock_template
-            mock_loader_instance.uses_covenant_header.return_value = True
+            mock_loader_instance.uses_accord_header.return_value = True
             mock_loader_instance.get_system_message.return_value = "System message"
             mock_loader_instance.get_user_message.return_value = "User message"
             mock_loader.return_value = mock_loader_instance
@@ -342,7 +342,7 @@ class TestTSASPDMAEvaluator:
             original_thought_content="Read /tmp/test.txt",
         )
 
-        # Should have covenant, system, and user messages
+        # Should have accord, system, and user messages
         assert len(messages) >= 2
         roles = [m["role"] for m in messages]
         assert "system" in roles
@@ -360,7 +360,7 @@ class TestTSASPDMAEvaluator:
         with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
             mock_loader_instance = MagicMock()
             mock_loader_instance.load_prompt_template.return_value = {}
-            mock_loader_instance.uses_covenant_header.return_value = False
+            mock_loader_instance.uses_accord_header.return_value = False
             mock_loader_instance.get_system_message.return_value = "System"
             mock_loader_instance.get_user_message.return_value = "User"
             mock_loader.return_value = mock_loader_instance
@@ -401,7 +401,7 @@ class TestTSASPDMAEvaluator:
         with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
             mock_loader_instance = MagicMock()
             mock_loader_instance.load_prompt_template.return_value = {}
-            mock_loader_instance.uses_covenant_header.return_value = False
+            mock_loader_instance.uses_accord_header.return_value = False
             mock_loader_instance.get_system_message.return_value = "System"
             mock_loader_instance.get_user_message.return_value = "User"
             mock_loader.return_value = mock_loader_instance
@@ -440,7 +440,7 @@ class TestTSASPDMAEvaluator:
         with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
             mock_loader_instance = MagicMock()
             mock_loader_instance.load_prompt_template.return_value = {}
-            mock_loader_instance.uses_covenant_header.return_value = False
+            mock_loader_instance.uses_accord_header.return_value = False
             mock_loader_instance.get_system_message.return_value = "System"
             mock_loader_instance.get_user_message.return_value = "User"
             mock_loader.return_value = mock_loader_instance
@@ -479,7 +479,7 @@ class TestTSASPDMAEvaluator:
         with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
             mock_loader_instance = MagicMock()
             mock_loader_instance.load_prompt_template.return_value = {}
-            mock_loader_instance.uses_covenant_header.return_value = False
+            mock_loader_instance.uses_accord_header.return_value = False
             mock_loader_instance.get_system_message.return_value = "System"
             mock_loader_instance.get_user_message.return_value = "User"
             mock_loader.return_value = mock_loader_instance
@@ -511,7 +511,7 @@ class TestTSASPDMAEvaluator:
         with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
             mock_loader_instance = MagicMock()
             mock_loader_instance.load_prompt_template.return_value = {}
-            mock_loader_instance.uses_covenant_header.return_value = False
+            mock_loader_instance.uses_accord_header.return_value = False
             mock_loader_instance.get_system_message.return_value = "System"
             mock_loader_instance.get_user_message.return_value = "User"
             mock_loader.return_value = mock_loader_instance

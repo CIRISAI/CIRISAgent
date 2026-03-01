@@ -83,10 +83,10 @@ class TestOTLPMetricsConverter:
         assert service_attr is not None
         assert service_attr["value"]["stringValue"] == "test_service"
 
-    def test_convert_covenant_metrics(self):
-        """Test conversion of covenant metrics."""
+    def test_convert_accord_metrics(self):
+        """Test conversion of accord metrics."""
         telemetry_data = {
-            "covenant_metrics": {
+            "accord_metrics": {
                 "wise_authority_deferrals": 3,
                 "filter_matches": 5,
                 "thoughts_processed": 10,
@@ -98,12 +98,12 @@ class TestOTLPMetricsConverter:
 
         metrics = result["resourceMetrics"][0]["scopeMetrics"][0]["metrics"]
 
-        # Check covenant metrics
-        covenant_metrics = [m for m in metrics if "covenant." in m["name"]]
-        assert len(covenant_metrics) == 4
+        # Check accord metrics
+        accord_metrics = [m for m in metrics if "accord." in m["name"]]
+        assert len(accord_metrics) == 4
 
-        # Check specific covenant metric
-        deferrals_metric = next((m for m in metrics if m["name"] == "covenant.wise_authority.deferrals"), None)
+        # Check specific accord metric
+        deferrals_metric = next((m for m in metrics if m["name"] == "accord.wise_authority.deferrals"), None)
         assert deferrals_metric is not None
         assert deferrals_metric["sum"]["dataPoints"][0]["asDouble"] == 3.0
 
@@ -375,10 +375,10 @@ class TestOTLPIntegration:
                 "memory_service": service_mock,
                 "telemetry_service": service_mock,
             },
-            "covenant_metrics": {
+            "accord_metrics": {
                 "wise_authority_deferrals": 5,
                 "ethical_decisions": 100,
-                "covenant_compliance_rate": 0.98,
+                "accord_compliance_rate": 0.98,
                 "transparency_score": 0.92,
             },
         }
@@ -391,7 +391,7 @@ class TestOTLPIntegration:
         # Check we have all metrics
         metrics = result["resourceMetrics"][0]["scopeMetrics"][0]["metrics"]
 
-        # System metrics (7) + Service metrics (6 * 2 services) + Covenant metrics (4)
+        # System metrics (7) + Service metrics (6 * 2 services) + Accord metrics (4)
         assert len(metrics) >= 19
 
         # Verify JSON serializable

@@ -34,12 +34,12 @@ class TestIDMAEvaluator:
         """Mock the prompt loader to return proper PromptCollection."""
         mock_loader = Mock()
         mock_collection = Mock()
-        mock_collection.uses_covenant_header = Mock(return_value=True)
+        mock_collection.uses_accord_header = Mock(return_value=True)
         mock_collection.get_system_message = Mock(return_value="Evaluate epistemic diversity.")
         mock_collection.get_user_message = Mock(return_value="Prior DMA context to analyze")
 
         mock_loader.load_prompt_template = Mock(return_value=mock_collection)
-        mock_loader.uses_covenant_header = Mock(return_value=True)
+        mock_loader.uses_accord_header = Mock(return_value=True)
         mock_loader.get_system_message = Mock(return_value="Evaluate epistemic diversity.")
         mock_loader.get_user_message = Mock(return_value="Prior DMA context to analyze")
 
@@ -295,7 +295,7 @@ class TestIDMAEvaluator:
         call_args = evaluator.call_llm_structured.call_args
         messages = call_args.kwargs["messages"]
 
-        # Should have multiple messages (covenant, system, user)
+        # Should have multiple messages (accord, system, user)
         assert len(messages) >= 2
         # Response model should be IDMAResult
         assert call_args.kwargs["response_model"] == IDMAResult

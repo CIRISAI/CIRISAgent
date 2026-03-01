@@ -1455,11 +1455,16 @@ def _create_dma_results_event(
     if not dma_results.ethical_pdma:
         raise ValueError(f"Ethical PDMA result is None: {dma_results.ethical_pdma}")
 
-    # Extract prompts if available (for debugging/transparency)
+    # Extract user prompts if available (for debugging/transparency)
     # Note: IDMA is emitted as a separate IDMA_RESULT event (v1.9.3), not in DMA_RESULTS
     csdma_prompt = getattr(dma_results, "csdma_prompt", None)
     dsdma_prompt = getattr(dma_results, "dsdma_prompt", None)
     pdma_prompt = getattr(dma_results, "ethical_pdma_prompt", None)
+
+    # Extract system prompts for debugging format instructions (HE-300 etc)
+    csdma_system_prompt = getattr(dma_results, "csdma_system_prompt", None)
+    dsdma_system_prompt = getattr(dma_results, "dsdma_system_prompt", None)
+    pdma_system_prompt = getattr(dma_results, "ethical_pdma_system_prompt", None)
 
     return create_reasoning_event(
         event_type=ReasoningEvent.DMA_RESULTS,
@@ -1473,6 +1478,10 @@ def _create_dma_results_event(
         csdma_prompt=csdma_prompt,  # User prompt passed to CSDMA
         dsdma_prompt=dsdma_prompt,  # User prompt passed to DSDMA
         pdma_prompt=pdma_prompt,  # User prompt passed to PDMA
+        # System prompts for debugging format instructions
+        csdma_system_prompt=csdma_system_prompt,
+        dsdma_system_prompt=dsdma_system_prompt,
+        pdma_system_prompt=pdma_system_prompt,
     )
 
 

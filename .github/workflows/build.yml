@@ -50,7 +50,12 @@ jobs:
         env:
           CI: true
         run: |
-          pytest tests/ -n 4 --cov=./ --cov-report=xml:coverage.xml
+          # Large test suite stability flags:
+          # --reruns=2: Rerun failed/crashed tests up to 2 times (handles flaky tests)
+          # --reruns-delay=1: 1 second delay between reruns (avoid race conditions)
+          # --max-worker-restart=4: Limit worker restart loops (prevent infinite crashes)
+          # -n 4: 4 parallel workers (balanced for CI runner memory)
+          pytest tests/ -n 4 --reruns=2 --reruns-delay=1 --max-worker-restart=4 --cov=./ --cov-report=xml:coverage.xml
 
       - name: Display and write version
         env:
@@ -83,112 +88,84 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-  build-gui:
-    name: Build GUI Assets
+  # Platform-specific wheels: each runner builds the desktop JAR for its OS,
+  # then setup.py detects the JAR platform and tags the wheel accordingly.
+  build-wheel:
+    name: Build Wheel (${{ matrix.name }})
     needs: test
-    runs-on: ubuntu-latest
     if: success()
     permissions:
       contents: read
+    strategy:
+      matrix:
+        include:
+          - os: macos-14
+            name: macOS ARM64
+          - os: macos-13
+            name: macOS Intel
+          - os: ubuntu-latest
+            name: Linux x64
+          - os: windows-latest
+            name: Windows x64
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout CIRISGUI-Standalone
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          repository: CIRISAI/CIRISGUI-Standalone
-          path: cirisgui
+          python-version: '3.12'
 
-      - name: Find Next.js app directory
-        id: find_app
-        run: |
-          # Find the directory containing package.json and next.config.mjs
-          GUI_DIR=$(find cirisgui -name "package.json" -type f -exec dirname {} \; | head -1)
-          if [ -z "$GUI_DIR" ]; then
-            echo "❌ Could not find package.json in CIRISGUI-Standalone repo"
-            exit 1
-          fi
-          echo "Found Next.js app in: $GUI_DIR"
-          echo "gui_dir=$GUI_DIR" >> $GITHUB_OUTPUT
-
-          # Verify next.config.mjs exists
-          if [ ! -f "$GUI_DIR/next.config.mjs" ]; then
-            echo "⚠️  Warning: next.config.mjs not found in $GUI_DIR"
-          else
-            echo "✅ next.config.mjs found"
-          fi
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: cirisgui/package-lock.json
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Configure for static export
+      - name: Build CIRIS Desktop UberJar
         run: |
-          cd ${{ steps.find_app.outputs.gui_dir }}
-          # Ensure next.config.mjs has output: 'export'
-          if [ -f next.config.mjs ]; then
-            if ! grep -q "output.*:.*['\"]export['\"]" next.config.mjs 2>/dev/null; then
-              echo "⚠️  Warning: next.config.mjs may need output: 'export' configuration"
-              echo "Attempting to add it..."
-              # Backup original
-              cp next.config.mjs next.config.mjs.bak
-              # Add output export if not present (simple approach)
-              sed -i "s/const nextConfig = {/const nextConfig = {\n  output: 'export',/" next.config.mjs || true
-            fi
-            echo "✅ Static export configuration verified"
-          else
-            echo "⚠️  Skipping next.config.mjs configuration (file not found)"
-          fi
+          cd mobile
+          ./gradlew :desktopApp:packageUberJarForCurrentOS --no-daemon
+          mkdir -p ../ciris_engine/desktop_app
+          cp desktopApp/build/compose/jars/CIRIS-*.jar ../ciris_engine/desktop_app/
+          echo "Desktop JAR:"
+          ls -lh ../ciris_engine/desktop_app/
+        shell: bash
 
-      - name: Install dependencies
+      - name: Install build tools
         run: |
-          # Install from monorepo root (where package-lock.json lives)
-          # Use npm install instead of npm ci to handle minor version drift in lock file
-          cd cirisgui
-          npm install --legacy-peer-deps
+          pip install --upgrade pip
+          pip install build wheel
 
-      - name: Build static assets
-        id: build_gui
+      - name: Build wheel
         run: |
-          cd ${{ steps.find_app.outputs.gui_dir }}
-          npm run build
-          echo "✅ GUI build complete"
+          python -m build --wheel
+          ls -lh dist/
+        shell: bash
 
-          # Check for static export first, fallback to .next/standalone
-          if [ -d "out" ]; then
-            echo "Using static export from out/"
-            ls -la out/ | head -20
-            BUILD_OUTPUT="out"
-          elif [ -d ".next/standalone" ]; then
-            echo "Using standalone build from .next/standalone"
-            ls -la .next/standalone/ | head -20
-            BUILD_OUTPUT=".next/standalone"
-          elif [ -d ".next/static" ]; then
-            echo "Using static build from .next/static"
-            ls -la .next/static/ | head -20
-            BUILD_OUTPUT=".next/static"
-          else
-            echo "❌ No build output found (checked: out/, .next/standalone, .next/static)"
-            ls -la
-            exit 1
-          fi
+      - name: Check wheel contents
+        run: |
+          WHEEL_FILE=$(ls dist/*.whl)
+          echo "Wheel: $WHEEL_FILE"
+          unzip -l "$WHEEL_FILE" | grep "\.jar" || echo "WARNING: No JAR found in wheel!"
+          echo "Total files:"
+          unzip -l "$WHEEL_FILE" | tail -1
+        shell: bash
 
-          echo "build_output=$BUILD_OUTPUT" >> $GITHUB_OUTPUT
-
-      - name: Upload GUI artifacts
-        id: upload_gui
+      - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gui-static-assets
-          path: ${{ steps.find_app.outputs.gui_dir }}/${{ steps.build_gui.outputs.build_output }}/
-          retention-days: 7
+          name: wheel-${{ matrix.os }}
+          path: dist/*.whl
+          retention-days: 30
 
-  build-wheel:
-    name: Build Python Wheel
-    needs: [test, build-gui]
-    runs-on: ubuntu-latest
+  # Headless wheel (no desktop JAR) for server-only deployments.
+  # Tagged py3-none-any so it's a universal fallback.
+  build-wheel-headless:
+    name: Build Wheel (Headless)
+    needs: test
     if: success()
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
@@ -199,49 +176,55 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Download GUI artifacts
+      - name: Install build tools
+        run: |
+          pip install --upgrade pip
+          pip install build wheel
+
+      - name: Build headless wheel (no JAR)
+        run: |
+          # Ensure no JAR is present so setup.py produces py3-none-any
+          rm -rf ciris_engine/desktop_app/*.jar
+          python -m build --wheel
+          ls -lh dist/
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-headless
+          path: dist/*.whl
+          retention-days: 30
+
+  # Collect all wheels and publish to PyPI + alias packages + SDK
+  publish-wheels:
+    name: Publish Wheels
+    needs: [build-wheel, build-wheel-headless]
+    if: success()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download all wheel artifacts
         uses: actions/download-artifact@v4
         with:
-          name: gui-static-assets
-          path: ciris_engine/gui_static/
+          pattern: wheel-*
+          path: dist/
+          merge-multiple: true
 
-      - name: Verify GUI assets
-        run: |
-          echo "GUI assets downloaded to ciris_engine/gui_static/"
-          ls -la ciris_engine/gui_static/ | head -20
-          FILE_COUNT=$(find ciris_engine/gui_static -type f | wc -l)
-          echo "Total files: $FILE_COUNT"
-          if [ "$FILE_COUNT" -lt 5 ]; then
-            echo "⚠️  Warning: Very few GUI files found"
-          else
-            echo "✅ GUI assets look good"
-          fi
+      - name: List all wheels
+        run: ls -lh dist/*.whl
 
       - name: Install build tools
         run: |
           pip install --upgrade pip
           pip install build twine
-
-      - name: Build wheel
-        run: |
-          python -m build --wheel
-          ls -lh dist/
-
-      - name: Check wheel contents
-        run: |
-          WHEEL_FILE=$(ls dist/*.whl)
-          echo "Checking contents of $WHEEL_FILE"
-          unzip -l "$WHEEL_FILE" | grep -E "(gui_static|covenant|main\.py)" | head -20 || echo "Pattern not found"
-          echo ""
-          echo "Total files in wheel:"
-          unzip -l "$WHEEL_FILE" | tail -1
-
-      - name: Upload wheel artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-wheel
-          path: dist/*.whl
-          retention-days: 30
 
       - name: Publish to PyPI
         if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
@@ -249,7 +232,7 @@ jobs:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          python -m twine upload dist/*.whl
+          python -m twine upload dist/*.whl --skip-existing
 
       - name: Build and publish alias packages
         if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'

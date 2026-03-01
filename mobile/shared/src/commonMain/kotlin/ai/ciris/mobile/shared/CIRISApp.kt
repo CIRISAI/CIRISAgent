@@ -38,7 +38,10 @@ import ai.ciris.mobile.shared.viewmodels.UsersViewModel
 import ai.ciris.mobile.shared.viewmodels.WiseAuthorityViewModel
 import ai.ciris.mobile.shared.ui.screens.graph.GraphMemoryScreen
 import androidx.compose.foundation.layout.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.MoreVert
@@ -54,8 +57,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * Main CIRIS app entry point
@@ -84,6 +85,35 @@ interface NativeSignInCallback {
      * Returns a fresh token if user is already signed in, or signals that interactive login is needed.
      */
     fun onSilentSignInRequested(onResult: (NativeSignInResult) -> Unit)
+}
+
+/**
+ * Callback interface for Play Integrity / App Attest device attestation.
+ * Android implements with Google Play Integrity API.
+ * iOS implements with App Attest (placeholder).
+ */
+interface DeviceAttestationCallback {
+    /**
+     * Request device attestation.
+     * @param onResult Callback with attestation result
+     */
+    fun onDeviceAttestationRequested(onResult: (DeviceAttestationResult) -> Unit)
+}
+
+/**
+ * Result of device attestation (Play Integrity on Android, App Attest on iOS)
+ */
+sealed class DeviceAttestationResult {
+    data class Success(
+        val verified: Boolean,
+        val verdict: String,  // e.g., "MEETS_STRONG_INTEGRITY", "MEETS_DEVICE_INTEGRITY"
+        val meetsStrongIntegrity: Boolean = false,
+        val meetsDeviceIntegrity: Boolean = false,
+        val meetsBasicIntegrity: Boolean = false
+    ) : DeviceAttestationResult()
+
+    data class Error(val message: String) : DeviceAttestationResult()
+    object NotSupported : DeviceAttestationResult()
 }
 
 /**
@@ -213,6 +243,7 @@ fun CIRISApp(
     envFileUpdater: EnvFileUpdater = createEnvFileUpdater(),
     googleSignInCallback: GoogleSignInCallback? = null,
     purchaseLauncher: PurchaseLauncher? = null,
+    deviceAttestationCallback: DeviceAttestationCallback? = null,
     onTokenUpdated: ((String) -> Unit)? = null
 ) {
     val TAG = "CIRISApp"
@@ -239,6 +270,7 @@ fun CIRISApp(
     // Login state
     var isLoginLoading by remember { mutableStateOf(false) }
     var loginStatusMessage by remember { mutableStateOf<String?>(null) }
+    var loginErrorMessage by remember { mutableStateOf<String?>(null) }
 
     // OAuth auth state for token exchange after setup (works for both Google and Apple)
     var pendingIdToken by remember { mutableStateOf<String?>(null) }
@@ -337,11 +369,13 @@ fun CIRISApp(
     val startupViewModel: StartupViewModel = viewModel {
         StartupViewModel(pythonRuntimeProtocol, apiClient)
     }
-    // SetupViewModel is a plain class, not an androidx ViewModel
-    val setupViewModel = remember { SetupViewModel() }
+    // SetupViewModel needs to survive configuration changes and app backgrounding
+    val setupViewModel: SetupViewModel = viewModel { SetupViewModel() }
     val interactViewModel: InteractViewModel = viewModel {
         InteractViewModel(apiClient)
     }
+    // Set device attestation callback so InteractViewModel can trigger Play Integrity at startup
+    interactViewModel.setDeviceAttestationCallback(deviceAttestationCallback)
     val settingsViewModel: SettingsViewModel = viewModel {
         SettingsViewModel(secureStorage, apiClient, envFileUpdater)
     }
@@ -482,6 +516,19 @@ fun CIRISApp(
                                 billingViewModel.loadBalance()
                                 adaptersViewModel.fetchAdapters()
                                 interactViewModel.startPolling() // Start polling now that token is set
+
+                                // Run CIRISVerify attestation at boot (not first run)
+                                launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    try {
+                                        println("[$TAG][INFO] Running boot-time attestation check...")
+                                        val verifyResult = apiClient.getVerifyStatus()
+                                        println("[$TAG][INFO] Boot attestation: loaded=${verifyResult.loaded}, maxLevel=${verifyResult.maxLevel}, " +
+                                            "dns_us=${verifyResult.dnsUsOk}, dns_eu=${verifyResult.dnsEuOk}, https=${verifyResult.httpsUsOk}")
+                                    } catch (e: Exception) {
+                                        println("[$TAG][WARN] Boot attestation failed: ${e.message}")
+                                    }
+                                }
+
                                 currentScreen = Screen.Interact
                             } else {
                                 // Token invalid and couldn't refresh - need interactive login
@@ -508,7 +555,26 @@ fun CIRISApp(
             }
 
             Screen.Login -> {
-                platformLog(TAG, "[DEBUG][Screen.Login] Rendering login screen, googleSignInCallback=${if (googleSignInCallback != null) "PRESENT" else "NULL"}")
+                platformLog(TAG, "[DEBUG][Screen.Login] Rendering login screen, googleSignInCallback=${if (googleSignInCallback != null) "PRESENT" else "NULL"}, isFirstRun=$isFirstRun")
+
+                // On desktop during FIRST RUN ONLY, auto-trigger setup since OAuth is not available
+                // For existing users (isFirstRun=false), show the login screen to enter admin credentials
+                LaunchedEffect(googleSignInCallback, isFirstRun) {
+                    if (googleSignInCallback == null && isFirstRun == true) {
+                        platformLog(TAG, "[INFO][Screen.Login] Desktop first-run detected (no OAuth) - going to setup")
+                        setupViewModel.setGoogleAuthState(
+                            isAuth = false,
+                            idToken = null,
+                            email = null,
+                            userId = null
+                        )
+                        currentScreen = Screen.Setup
+                    } else if (googleSignInCallback == null && isFirstRun == false) {
+                        platformLog(TAG, "[INFO][Screen.Login] Desktop existing user - showing local login form")
+                        // Stay on login screen - user needs to enter admin credentials
+                    }
+                }
+
                 LoginScreen(
                     onGoogleSignIn = {
                         platformLog(TAG, "[INFO][onGoogleSignIn] Button click handler invoked, googleSignInCallback=${if (googleSignInCallback != null) "PRESENT" else "NULL"}")
@@ -517,6 +583,7 @@ fun CIRISApp(
                             platformLog(TAG, "[INFO][onGoogleSignIn] Callback is not null, calling onGoogleSignInRequested...")
                             isLoginLoading = true
                             loginStatusMessage = "Signing in with ${getOAuthProviderName()}..."
+                            loginErrorMessage = null
 
                             googleSignInCallback.onGoogleSignInRequested { result ->
                                 platformLog(TAG, "[INFO][onGoogleSignIn] Got result from native sign-in: ${result::class.simpleName}")
@@ -580,7 +647,7 @@ fun CIRISApp(
                                                     currentScreen = Screen.Interact
                                                 } catch (e: Exception) {
                                                     platformLog(TAG, "[ERROR] Token exchange failed: ${e::class.simpleName}: ${e.message}")
-                                                    loginStatusMessage = "Token exchange failed: ${e.message}"
+                                                    loginErrorMessage = "Token exchange failed: ${e.message}"
                                                 }
                                             } else {
                                                 // Setup needed - go through wizard
@@ -601,7 +668,7 @@ fun CIRISApp(
                                         }
                                     }
                                     is NativeSignInResult.Error -> {
-                                        loginStatusMessage = "Sign-in failed: ${result.message}"
+                                        loginErrorMessage = "Sign-in failed: ${result.message}"
                                     }
                                     NativeSignInResult.Cancelled -> {
                                         // User cancelled, stay on login screen
@@ -611,11 +678,13 @@ fun CIRISApp(
                         } else {
                             // No callback provided - show error
                             platformLog(TAG, "[ERROR][onGoogleSignIn] googleSignInCallback is NULL - cannot invoke native sign-in!")
-                            loginStatusMessage = "${getOAuthProviderName()} Sign-In not available"
+                            loginErrorMessage = "${getOAuthProviderName()} Sign-In not available"
                         }
                     },
                     onLocalLogin = {
-                        // Local login - no Google auth, BYOK only
+                        // First run - go to setup wizard for BYOK setup
+                        platformLog(TAG, "[INFO][onLocalLogin] First run - going to setup for BYOK")
+                        loginErrorMessage = null
                         setupViewModel.setGoogleAuthState(
                             isAuth = false,
                             idToken = null,
@@ -624,8 +693,54 @@ fun CIRISApp(
                         )
                         currentScreen = Screen.Setup
                     },
+                    onLocalLoginSubmit = { username, password ->
+                        // Handle local login form submission
+                        platformLog(TAG, "[INFO][onLocalLoginSubmit] Logging in with username: $username")
+                        isLoginLoading = true
+                        loginStatusMessage = "Logging in..."
+                        loginErrorMessage = null
+
+                        coroutineScope.launch {
+                            try {
+                                val cirisToken = withContext(Dispatchers.IO) {
+                                    val authResponse = apiClient.login(username, password)
+                                    authResponse.access_token
+                                }
+
+                                platformLog(TAG, "[INFO] Got CIRIS access token: ${cirisToken.take(8)}...${cirisToken.takeLast(4)}")
+
+                                // Set the token on the API client
+                                apiClient.setAccessToken(cirisToken)
+                                currentAccessToken = cirisToken
+                                apiClient.logTokenState()
+
+                                // Save to secure storage
+                                secureStorage.saveAccessToken(cirisToken)
+                                    .onSuccess { println("[$TAG][INFO] CIRIS token saved to secure storage") }
+                                    .onFailure { e -> println("[$TAG][WARN] Failed to save token: ${e.message}") }
+
+                                // Trigger data loading
+                                println("[$TAG][INFO] Local login successful, triggering data load...")
+                                billingViewModel.loadBalance()
+                                adaptersViewModel.fetchAdapters()
+                                interactViewModel.startPolling()
+
+                                isLoginLoading = false
+                                loginStatusMessage = null
+                                currentScreen = Screen.Interact
+                            } catch (e: Exception) {
+                                platformLog(TAG, "[ERROR] Local login failed: ${e::class.simpleName}: ${e.message}")
+                                isLoginLoading = false
+                                loginStatusMessage = null
+                                loginErrorMessage = "Login failed: ${e.message}"
+                            }
+                        }
+                    },
                     isLoading = isLoginLoading,
-                    statusMessage = loginStatusMessage
+                    statusMessage = loginStatusMessage,
+                    errorMessage = loginErrorMessage,
+                    showLocalLoginForm = (googleSignInCallback == null && isFirstRun == false),
+                    isFirstRun = isFirstRun ?: true
                 )
             }
 
@@ -637,6 +752,7 @@ fun CIRISApp(
                     onSetupComplete = {
                         platformLog(TAG, "[INFO] onSetupComplete called - exchanging tokens...")
                         // After setup completes, exchange OAuth ID token for CIRIS access token
+                        // Run on IO dispatcher to avoid blocking main thread during network/file operations
                         coroutineScope.launch {
                             try {
                                 val idToken = pendingIdToken
@@ -644,29 +760,34 @@ fun CIRISApp(
                                 val provider = pendingProvider
 
                                 if (idToken != null) {
-                                    println("[$TAG][INFO] Exchanging OAuth ID token for CIRIS access token (provider=$provider)")
-                                    val authResponse = apiClient.nativeAuth(idToken, userId, provider)
-                                    val cirisToken = authResponse.access_token
-                                    println("[$TAG][INFO] Got CIRIS access token: ${cirisToken.take(8)}...${cirisToken.takeLast(4)}")
+                                    // Network and file operations on IO dispatcher
+                                    val cirisToken = withContext(Dispatchers.IO) {
+                                        println("[$TAG][INFO] Exchanging OAuth ID token for CIRIS access token (provider=$provider)")
+                                        val authResponse = apiClient.nativeAuth(idToken, userId, provider)
+                                        val token = authResponse.access_token
+                                        println("[$TAG][INFO] Got CIRIS access token: ${token.take(8)}...${token.takeLast(4)}")
 
-                                    // Set the token on the API client
+                                        // Store token for future sessions
+                                        secureStorage.saveAccessToken(token)
+                                            .onSuccess { println("[$TAG][INFO] Token saved to secure storage") }
+                                            .onFailure { e -> println("[$TAG][WARN] Failed to save token to secure storage: ${e.message}") }
+
+                                        // Update .env file with fresh OAuth ID token for billing
+                                        println("[$TAG][INFO] Writing OAuth ID token to .env for Python billing...")
+                                        envFileUpdater.updateEnvWithToken(idToken)
+                                            .onSuccess { updated ->
+                                                if (updated) println("[$TAG][INFO] .env updated, .config_reload signal written")
+                                            }
+                                            .onFailure { e -> println("[$TAG][ERROR] Failed to update .env: ${e.message}") }
+
+                                        token
+                                    }
+
+                                    // UI updates on main thread
                                     apiClient.setAccessToken(cirisToken)
                                     onTokenUpdated?.invoke(cirisToken) // Notify MainActivity for BillingManager
                                     currentAccessToken = cirisToken
                                     apiClient.logTokenState() // Debug: confirm token was set
-
-                                    // Store token for future sessions
-                                    secureStorage.saveAccessToken(cirisToken)
-                                        .onSuccess { println("[$TAG][INFO] Token saved to secure storage") }
-                                        .onFailure { e -> println("[$TAG][WARN] Failed to save token to secure storage: ${e.message}") }
-
-                                    // Update .env file with fresh OAuth ID token for billing
-                                    println("[$TAG][INFO] Writing OAuth ID token to .env for Python billing...")
-                                    envFileUpdater.updateEnvWithToken(idToken)
-                                        .onSuccess { updated ->
-                                            if (updated) println("[$TAG][INFO] .env updated, .config_reload signal written")
-                                        }
-                                        .onFailure { e -> println("[$TAG][ERROR] Failed to update .env: ${e.message}") }
 
                                     // Wait for Python to detect .config_reload and reload .env
                                     println("[$TAG][INFO] Waiting 1.5s for Python to reload billing token...")
@@ -683,8 +804,33 @@ fun CIRISApp(
                                     pendingUserId = null
                                 } else {
                                     println("[$TAG][INFO] No pending OAuth token, using local auth")
-                                    // For local login, we'll authenticate with the admin credentials from setup
-                                    // The setup wizard should have created the admin user
+                                    // For local login, authenticate with the admin credentials from setup
+                                    val setupState = setupViewModel.state.value
+                                    val username = setupState.username.ifEmpty { "admin" }
+                                    val password = setupState.userPassword
+
+                                    if (password.isNotEmpty()) {
+                                        println("[$TAG][INFO] Logging in with local credentials: $username")
+                                        val cirisToken = withContext(Dispatchers.IO) {
+                                            val authResponse = apiClient.login(username, password)
+                                            val token = authResponse.access_token
+                                            println("[$TAG][INFO] Got CIRIS access token: ${token.take(8)}...${token.takeLast(4)}")
+
+                                            // Store token for future sessions
+                                            secureStorage.saveAccessToken(token)
+                                                .onSuccess { println("[$TAG][INFO] Token saved to secure storage") }
+                                                .onFailure { e -> println("[$TAG][WARN] Failed to save token to secure storage: ${e.message}") }
+
+                                            token
+                                        }
+
+                                        // UI updates on main thread
+                                        apiClient.setAccessToken(cirisToken)
+                                        currentAccessToken = cirisToken
+                                        apiClient.logTokenState()
+                                    } else {
+                                        println("[$TAG][WARN] No password set for local user, skipping auto-login")
+                                    }
                                 }
                             } catch (e: Exception) {
                                 println("[$TAG][ERROR] Token exchange failed: ${e::class.simpleName}: ${e.message}")
@@ -699,6 +845,11 @@ fun CIRISApp(
                             justCompletedSetup = true  // Skip token re-validation since we just authenticated
                             currentScreen = Screen.Startup
                         }
+                    },
+                    onBackToLogin = {
+                        platformLog(TAG, "[INFO] Back to login from setup wizard")
+                        setupViewModel.resetState()  // Clear any partial setup state
+                        currentScreen = Screen.Login
                     }
                 )
             }
@@ -740,6 +891,14 @@ fun CIRISApp(
                             }
                             currentScreen = Screen.Login
                         },
+                        onOpenTrustPage = {
+                            platformLog(TAG, "[INFO] Opening Trust page")
+                            currentScreen = Screen.Trust
+                        },
+                        onOpenBilling = {
+                            platformLog(TAG, "[INFO] Opening Billing page from credits")
+                            currentScreen = Screen.Billing
+                        },
                         modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
                     )
                 }
@@ -748,6 +907,7 @@ fun CIRISApp(
             Screen.Settings -> {
                 SettingsScreen(
                     viewModel = settingsViewModel,
+                    apiClient = apiClient,
                     onNavigateBack = { currentScreen = Screen.Interact },
                     onLogout = {
                         println("[CIRISApp][INFO][onLogout] User initiated logout")
@@ -1546,6 +1706,17 @@ fun CIRISApp(
                     onNavigateBack = { currentScreen = Screen.Interact }
                 )
             }
+
+            Screen.Trust -> {
+                TrustPage(
+                    apiClient = apiClient,
+                    onNavigateBack = {
+                        println("[CIRISApp][INFO][Screen.Trust] Navigating back to Interact")
+                        currentScreen = Screen.Interact
+                    },
+                    deviceAttestationCallback = deviceAttestationCallback
+                )
+            }
         }
     }
 }
@@ -1830,4 +2001,5 @@ private sealed class Screen {
     object System : Screen()
     object Runtime : Screen()
     object Users : Screen()
+    object Trust : Screen()
 }

@@ -122,17 +122,69 @@ def check_mock_llm(runtime: Any) -> None:
             logger.info("Added mock_llm to modules to load")
 
 
-def load_adapters_from_bootstrap(runtime: Any) -> None:
-    """Load adapters from bootstrap configuration.
+def _load_single_adapter(runtime: Any, adapter_type: str, adapter_id: str) -> bool:
+    """Load a single adapter by type and id.
 
     Args:
         runtime: The CIRISRuntime instance
+        adapter_type: The adapter type string
+        adapter_id: The adapter identifier
+
+    Returns:
+        True if loaded successfully, False otherwise
     """
     from ciris_engine.logic.adapters import load_adapter
     from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
 
+    try:
+        adapter_class = load_adapter(adapter_type)
+
+        context = AdapterStartupContext(
+            essential_config=runtime.essential_config or EssentialConfig(),
+            modules_to_load=runtime.modules_to_load,
+            startup_channel_id=runtime.startup_channel_id or "",
+            debug=runtime.debug,
+            bus_manager=None,  # Will be set after initialization
+            time_service=None,  # Will be set after initialization
+            service_registry=None,  # Will be set after initialization
+        )
+
+        config = AdapterConfig(adapter_type=adapter_type)
+        if adapter_id in runtime.adapter_configs:
+            config = runtime.adapter_configs[adapter_id]
+
+        adapter_instance = adapter_class(runtime, context=context, adapter_config=config.settings)  # type: ignore[call-arg]
+        runtime.adapters.append(adapter_instance)
+        logger.info(f"Successfully loaded adapter: {adapter_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to load adapter '{adapter_id}': {e}", exc_info=True)
+        return False
+
+
+def load_adapters_from_bootstrap(runtime: Any) -> None:
+    """Load adapters from bootstrap configuration.
+
+    CIRISVerify is always loaded first as a required infrastructure adapter
+    for signing and trust verification. It loads before all other adapters.
+
+    Args:
+        runtime: The CIRISRuntime instance
+    """
+    # CIRISVerify is always loaded first — it handles signing/trust
+    # and must be available before any other adapter initializes
+    _load_single_adapter(runtime, "ciris_verify", "ciris_verify")
+
     for load_request in runtime.bootstrap.adapters:
+        # Skip ciris_verify if someone explicitly listed it — already loaded above
+        if load_request.adapter_type == "ciris_verify":
+            continue
+
+        from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
+
         try:
+            from ciris_engine.logic.adapters import load_adapter
+
             adapter_class = load_adapter(load_request.adapter_type)
 
             # Create AdapterStartupContext

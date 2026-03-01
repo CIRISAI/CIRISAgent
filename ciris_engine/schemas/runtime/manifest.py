@@ -122,6 +122,22 @@ class AdapterOAuthConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
+class AdapterDeviceAuthConfig(BaseModel):
+    """Device authorization (RFC 8628) configuration for adapter workflows.
+
+    Used for CIRISNode and similar adapters that use device code flow
+    instead of redirect-based OAuth.
+    """
+
+    provider_name: str = Field(..., description="Device auth provider name (e.g., 'CIRISPortal')")
+    device_authorize_path: str = Field("/api/device/authorize", description="Device authorization endpoint path")
+    device_token_path: str = Field("/api/device/token", description="Device token polling endpoint path")
+    poll_interval: int = Field(5, description="Seconds between poll attempts")
+    expires_in: int = Field(900, description="Device code expiration in seconds")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
 class ConfigurationFieldDefinition(BaseModel):
     """Definition of a field within an input step."""
 
@@ -154,7 +170,7 @@ class ConfigurationStep(BaseModel):
     """A step in an adapter configuration workflow."""
 
     step_id: str = Field(..., description="Unique identifier for this step")
-    step_type: Literal["discovery", "oauth", "select", "input", "confirm"] = Field(
+    step_type: Literal["discovery", "oauth", "device_auth", "select", "input", "confirm"] = Field(
         ..., description="Type of configuration step"
     )
     title: str = Field(..., description="Human-readable step title")
@@ -167,6 +183,11 @@ class ConfigurationStep(BaseModel):
 
     # OAuth step fields
     oauth_config: Optional[AdapterOAuthConfig] = Field(None, description="OAuth configuration for oauth steps")
+
+    # Device auth step fields (RFC 8628)
+    device_auth_config: Optional[AdapterDeviceAuthConfig] = Field(
+        None, description="Device authorization configuration for device_auth steps"
+    )
 
     # Select step fields
     options_method: Optional[str] = Field(

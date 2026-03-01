@@ -59,6 +59,10 @@ class TestA2AService:
     @pytest.fixture
     def service(self):
         """Create A2A service for testing."""
+        import ciris_adapters.a2a.services as a2a_services
+
+        # Reset the global request counter for deterministic test results
+        a2a_services._request_counter = 0
         return A2AService()
 
     @pytest.fixture
@@ -306,7 +310,11 @@ class TestA2AConcurrency:
     @pytest.fixture
     def mock_runtime(self):
         """Create mock runtime with pipeline support that simulates response event."""
+        import ciris_adapters.a2a.services as a2a_services
         from ciris_engine.logic.adapters.api.routes.agent import _message_responses, _response_events
+
+        # Reset the global request counter for deterministic test results
+        a2a_services._request_counter = 0
 
         runtime = MagicMock()
         runtime.adapters = []  # No API adapter, so it will use runtime.on_message

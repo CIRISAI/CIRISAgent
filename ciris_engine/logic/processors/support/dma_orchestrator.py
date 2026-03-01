@@ -66,11 +66,12 @@ class DMAOrchestrator:
         self.retry_limit = getattr(app_config.workflow, "DMA_RETRY_LIMIT", 3) if app_config else 3
         # DMA timeout can be overridden via environment variable for slow LLM providers
         # Should be higher than CIRIS_LLM_TIMEOUT to allow for retries
+        # Default 90s matches dma_executor.py: 20s LLM timeout × 2 retries × 2 providers = 80s + buffer
         dma_timeout_env = os.environ.get("CIRIS_DMA_TIMEOUT")
         if dma_timeout_env:
             self.timeout_seconds = float(dma_timeout_env)
         else:
-            self.timeout_seconds = getattr(app_config.workflow, "DMA_TIMEOUT_SECONDS", 30.0) if app_config else 30.0
+            self.timeout_seconds = getattr(app_config.workflow, "DMA_TIMEOUT_SECONDS", 90.0) if app_config else 90.0
 
         self._circuit_breakers: Dict[str, CircuitBreaker] = {
             "ethical_pdma": CircuitBreaker("ethical_pdma"),
@@ -212,10 +213,18 @@ class DMAOrchestrator:
             csdma=dma_results["csdma"],
             dsdma=dma_results["dsdma"],
             idma=idma_result,
+            # User prompts (for backwards compatibility)
             ethical_pdma_prompt=getattr(self.ethical_pdma_evaluator, "last_user_prompt", None),
             csdma_prompt=getattr(self.csdma_evaluator, "last_user_prompt", None),
             dsdma_prompt=getattr(self.dsdma, "last_user_prompt", None) if self.dsdma else None,
             idma_prompt=idma_prompt,
+            # System prompts (for debugging format instructions)
+            ethical_pdma_system_prompt=getattr(self.ethical_pdma_evaluator, "last_system_prompt", None),
+            csdma_system_prompt=getattr(self.csdma_evaluator, "last_system_prompt", None),
+            dsdma_system_prompt=getattr(self.dsdma, "last_system_prompt", None) if self.dsdma else None,
+            idma_system_prompt=(
+                getattr(self.idma_evaluator, "last_system_prompt", None) if self.idma_evaluator else None
+            ),
         )
 
     async def run_dmas(
@@ -326,7 +335,11 @@ class DMAOrchestrator:
     ) -> ActionSelectionDMAResult:
         """Run ActionSelectionPDMAEvaluator sequentially after DMAs."""
         # Create properly typed EnhancedDMAInputs
-        # Pass images from thought_item (ProcessingQueueItem) for multimodal support
+        # Pass images from thought_item (ProcessingQueueItem from processing_queue.py) for multimodal support
+        # ProcessingQueueItem inherits images from task via from_thought()
+        thought_images = thought_item.images
+        if thought_images:
+            logger.info(f"[VISION] DMA Orchestrator passing {len(thought_images)} images to ActionSelectionPDMA")
         triaged = EnhancedDMAInputs(
             original_thought=actual_thought,
             processing_context=processing_context,
@@ -338,7 +351,7 @@ class DMAOrchestrator:
             max_rounds=5,  # Default max rounds
             faculty_enhanced=False,
             recursive_evaluation=False,
-            images=thought_item.images,  # Pass images for ActionSelectionPDMA vision
+            images=thought_item.images,  # Pass images from ProcessingQueueItem for ActionSelectionPDMA vision
         )
 
         # Check if this is a conscience retry from the context
@@ -383,6 +396,16 @@ class DMAOrchestrator:
 
         # Get permitted actions directly from identity
         permitted_actions = identity_info.permitted_actions
+
+        # Log permitted actions for debugging
+        if permitted_actions:
+            logger.info(
+                f"DMAOrchestrator: Thought {thought_item.thought_id} permitted_actions from identity: {[a.value for a in permitted_actions]}"
+            )
+        else:
+            logger.warning(
+                f"DMAOrchestrator: Thought {thought_item.thought_id} has NO permitted_actions from identity!"
+            )
 
         # Identity MUST have permitted actions - no defaults in a mission critical system
         triaged.permitted_actions = permitted_actions

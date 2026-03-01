@@ -5,8 +5,8 @@ component_name: idma
 description: "Intuition DMA - applies CCA k_eff formula and phase classification"
 version: "1.0"
 
-# Include the CIRIS Covenant as context
-covenant_header: true
+# Include the CIRIS Accord as context
+accord_header: true
 
 system_guidance_header: |
   === INTUITION DECISION MAKING ALGORITHM (IDMA) ===

@@ -118,8 +118,15 @@ ios/pyo3-ios-config.txt
 # Main engine GUI static assets (regenerated from CIRISGUI)
 ciris_engine/gui_static/
 mobile_qa_reports/
+web_ui_qa_reports/
+benchmark_results/
+
+# iOS Resources.zip (rebuilt locally, too large for git)
+mobile/iosApp/Resources.zip
 
 # Gradle cache directories (build config files like build.gradle are OK)
 .gradle/
 */.gradle/
 **/.gradle/
+agent_signing.key
+ciris_engine/desktop_app/*.jar

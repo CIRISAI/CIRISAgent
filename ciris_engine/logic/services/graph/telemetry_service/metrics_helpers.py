@@ -179,8 +179,8 @@ def aggregate_service_metrics(
     error_rates: List[float] = []
 
     for category_name, category_data in telemetry.items():
-        # Skip covenant category as it contains computed metrics, not service data
-        if category_name == "covenant":
+        # Skip accord category as it contains computed metrics, not service data
+        if category_name == "accord":
             continue
 
         for service_data in category_data.values():
@@ -219,20 +219,20 @@ def extract_governance_metrics(
     results: Dict[str, Union[float, int, str]] = {}
     if "governance" in telemetry and service_name in telemetry["governance"]:
         metrics = telemetry["governance"][service_name]
-        for covenant_key, service_key in metric_mappings.items():
-            results[covenant_key] = extract_metric_value(metrics, service_key)
+        for accord_key, service_key in metric_mappings.items():
+            results[accord_key] = extract_metric_value(metrics, service_key)
     return results
 
 
-def compute_covenant_metrics(
+def compute_accord_metrics(
     telemetry: Dict[str, Dict[str, ServiceTelemetryData]]
 ) -> Dict[str, Union[float, int, str]]:
     """
-    Compute covenant/ethics metrics from governance services.
+    Compute accord/ethics metrics from governance services.
 
-    These metrics track ethical decision-making and covenant compliance.
+    These metrics track ethical decision-making and accord compliance.
     """
-    covenant_metrics: Dict[str, Union[float, int, str]] = {
+    accord_metrics: Dict[str, Union[float, int, str]] = {
         "wise_authority_deferrals": 0,
         "filter_matches": 0,
         "thoughts_processed": 0,
@@ -246,20 +246,20 @@ def compute_covenant_metrics(
             "wise_authority",
             {"wise_authority_deferrals": "deferral_count", "thoughts_processed": "guidance_requests"},
         )
-        covenant_metrics.update(wa_metrics)
+        accord_metrics.update(wa_metrics)
 
         filter_metrics = extract_governance_metrics(telemetry, "adaptive_filter", {"filter_matches": "filter_actions"})
-        covenant_metrics.update(filter_metrics)
+        accord_metrics.update(filter_metrics)
 
         so_metrics = extract_governance_metrics(
             telemetry, "self_observation", {"self_observation_insights": "insights_generated"}
         )
-        covenant_metrics.update(so_metrics)
+        accord_metrics.update(so_metrics)
 
     except Exception as e:
-        logger.error(f"Failed to compute covenant metrics: {e}")
+        logger.error(f"Failed to compute accord metrics: {e}")
 
-    return covenant_metrics
+    return accord_metrics
 
 
 def calculate_aggregates(

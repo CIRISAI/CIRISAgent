@@ -338,6 +338,80 @@ class ConscienceExecutionPhase:
         )
         return application_result
 
+    def _create_ponder_fallback_action(
+        self,
+        action_result: ActionSelectionDMAResult,
+        entry_name: str,
+        reason: Optional[str],
+    ) -> ActionSelectionDMAResult:
+        """Create a PONDER action as fallback when no replacement action is provided."""
+        attempted_action_desc = self._describe_action(action_result)
+        questions = [
+            f"I attempted to {attempted_action_desc}",
+            reason or "bypass conscience failed",
+            "What alternative approach would better align with my principles?",
+        ]
+        ponder_params = PonderParams(questions=questions)
+        return ActionSelectionDMAResult(
+            selected_action=HandlerActionType.PONDER,
+            action_parameters=ponder_params,
+            rationale=f"Overridden by {entry_name}: Need to reconsider {attempted_action_desc}",
+            raw_llm_response=None,
+            reasoning=None,
+            evaluation_time_ms=None,
+            resource_usage=None,
+        )
+
+    async def _check_single_bypass_conscience(
+        self, entry: Any, current_action: ActionSelectionDMAResult, context: Any
+    ) -> Optional[Any]:
+        """Check a single bypass conscience, handling circuit breaker logic.
+
+        Returns the check result, or None if the conscience should be skipped.
+        """
+        conscience = entry.conscience
+        cb = entry.circuit_breaker
+
+        try:
+            if cb:
+                cb.check_and_raise()
+            result = await conscience.check(current_action, context)
+            if cb:
+                cb.record_success()
+            return result
+        except CircuitBreakerError as e:
+            logger.warning(f"Bypass conscience {entry.name} unavailable: {e}")
+            return None
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Bypass conscience {entry.name} error: {e}", exc_info=True)
+            if cb:
+                cb.record_failure()
+            return None
+
+    def _extract_observation_content(self, result: Any) -> Optional[str]:
+        """Extract observation content from conscience result if present."""
+        if hasattr(result, "CIRIS_OBSERVATION_UPDATED_STATUS") and result.CIRIS_OBSERVATION_UPDATED_STATUS:
+            content: str = str(result.CIRIS_OBSERVATION_UPDATED_STATUS)
+            preview = content[:100] if content else "None"
+            logger.info(f"[BYPASS_CONSCIENCE] Extracted new observation: {preview}...")
+            return content
+        return None
+
+    def _log_override_details(
+        self,
+        entry_name: str,
+        action_result: ActionSelectionDMAResult,
+        override_reason: Optional[str],
+        updated_status_detected: Optional[bool],
+        updated_observation_content: Optional[str],
+    ) -> None:
+        """Log details when a bypass conscience overrides an action."""
+        logger.info(f"[BYPASS_CONSCIENCE] {entry_name} overriding action {action_result.selected_action}")
+        logger.info(f"[BYPASS_CONSCIENCE] Override reason: {override_reason}")
+        logger.info(f"[BYPASS_CONSCIENCE] updated_status_detected={updated_status_detected}")
+        preview = updated_observation_content[:100] if updated_observation_content else "None"
+        logger.info(f"[BYPASS_CONSCIENCE] updated_observation_content={preview}...")
+
     async def _run_bypass_conscience_entries(
         self,
         action_result: ActionSelectionDMAResult,
@@ -356,71 +430,32 @@ class ConscienceExecutionPhase:
         overridden = False
         override_reason: Optional[str] = None
         updated_status_detected: Optional[bool] = None
-        updated_observation_content: Optional[str] = None  # NEW: Store the actual observation
+        updated_observation_content: Optional[str] = None
 
-        # Get bypass consciences from registry
         for entry in self.conscience_registry.get_bypass_consciences():
-            conscience = entry.conscience
-            cb = entry.circuit_breaker
-
-            try:
-                if cb:
-                    cb.check_and_raise()
-                result = await conscience.check(final_action, context)
-                if cb:
-                    cb.record_success()
-            except CircuitBreakerError as e:
-                logger.warning(f"Bypass conscience {entry.name} unavailable: {e}")
-                continue
-            except Exception as e:  # noqa: BLE001
-                logger.error(f"Bypass conscience {entry.name} error: {e}", exc_info=True)
-                if cb:
-                    cb.record_failure()
+            result = await self._check_single_bypass_conscience(entry, final_action, context)
+            if result is None:
                 continue
 
             if result.updated_status_detected is not None:
                 updated_status_detected = result.updated_status_detected
 
-            # CRITICAL: Extract the actual observation content from CIRIS_OBSERVATION_UPDATED_STATUS
-            if hasattr(result, "CIRIS_OBSERVATION_UPDATED_STATUS") and result.CIRIS_OBSERVATION_UPDATED_STATUS:
-                updated_observation_content = result.CIRIS_OBSERVATION_UPDATED_STATUS
-                logger.info(
-                    f"[BYPASS_CONSCIENCE] Extracted new observation: {updated_observation_content[:100] if updated_observation_content else 'None'}..."
-                )
+            observation = self._extract_observation_content(result)
+            if observation:
+                updated_observation_content = observation
 
             if not result.passed:
                 overridden = True
                 override_reason = result.reason
-                logger.info(f"[BYPASS_CONSCIENCE] {entry.name} overriding action {action_result.selected_action}")
-                logger.info(f"[BYPASS_CONSCIENCE] Override reason: {override_reason}")
-                logger.info(f"[BYPASS_CONSCIENCE] updated_status_detected={updated_status_detected}")
-                logger.info(
-                    f"[BYPASS_CONSCIENCE] updated_observation_content={updated_observation_content[:100] if updated_observation_content else 'None'}..."
+                self._log_override_details(
+                    entry.name, action_result, override_reason, updated_status_detected, updated_observation_content
                 )
 
-                # Check if the conscience provides a replacement action
                 if result.replacement_action:
                     final_action = ActionSelectionDMAResult.model_validate(result.replacement_action)
                     logger.info(f"[BYPASS_CONSCIENCE] Using replacement action: {final_action.selected_action}")
                 else:
-                    # Default behavior: create a PONDER action
-                    attempted_action_desc = self._describe_action(action_result)
-                    questions = [
-                        f"I attempted to {attempted_action_desc}",
-                        result.reason or "bypass conscience failed",
-                        "What alternative approach would better align with my principles?",
-                    ]
-
-                    ponder_params = PonderParams(questions=questions)
-                    final_action = ActionSelectionDMAResult(
-                        selected_action=HandlerActionType.PONDER,
-                        action_parameters=ponder_params,
-                        rationale=f"Overridden by {entry.name}: Need to reconsider {attempted_action_desc}",
-                        raw_llm_response=None,
-                        reasoning=None,
-                        evaluation_time_ms=None,
-                        resource_usage=None,
-                    )
+                    final_action = self._create_ponder_fallback_action(action_result, entry.name, result.reason)
                 break
 
         return {
@@ -428,5 +463,5 @@ class ConscienceExecutionPhase:
             "overridden": overridden,
             "override_reason": override_reason,
             "updated_status_detected": updated_status_detected,
-            "updated_observation_content": updated_observation_content,  # NEW: Include the actual text
+            "updated_observation_content": updated_observation_content,
         }

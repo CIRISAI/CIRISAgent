@@ -25,9 +25,16 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from ciris_engine.logic.persistence.stores import authentication_store
 from ciris_engine.logic.services.base_infrastructure_service import BaseInfrastructureService
 from ciris_engine.logic.services.lifecycle.time import TimeService
+from ciris_engine.logic.utils.mobile_exclusions import (
+    compute_files_missing_list,
+    compute_files_unexpected_list,
+    compute_mobile_excluded_count,
+    compute_mobile_excluded_list,
+)
 from ciris_engine.logic.utils.path_resolution import get_secrets_home
 from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.services.attestation import AttestationCacheStatus, AttestationResult
 from ciris_engine.schemas.services.authority.wise_authority import AuthenticationResult, TokenVerification, WAUpdate
 from ciris_engine.schemas.services.authority_core import (
     AuthorizationContext,
@@ -84,6 +91,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         self._started = False
         self._start_time: Optional[datetime] = None
 
+        # Set to hold references to background tasks, preventing garbage collection
+        self._background_tasks: set[asyncio.Task[None]] = set()
+
         # Authentication metrics tracking
         self._auth_attempts = 0
         self._auth_successes = 0
@@ -95,6 +105,19 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         self._expired_sessions = 0
         self._active_tokens = 0
         self._revoked_tokens = 0
+
+        # Attestation cache (CIRISVerify integration)
+        self._attestation_cache: Optional[AttestationResult] = None
+        self._last_known_attestation: Optional[AttestationResult] = None  # Stale-while-revalidate
+        self._attestation_in_progress = False
+        self._attestation_lock = asyncio.Lock()
+        self._attestation_cache_ttl = 3600  # 1 hour cache TTL
+        self._attestation_stale_ttl = 7200  # 2 hour max stale data (fallback after TTL)
+
+        # CIRISVerify singleton - all code should use get_verifier() instead of creating instances
+        self._verifier: Any = None
+        self._verifier_lock = asyncio.Lock()
+        self._verifier_sync_lock: Any = None  # threading.Lock for sync contexts
 
     def get_service_type(self) -> ServiceType:
         """Get service type - authentication is part of wise authority infrastructure."""
@@ -127,6 +150,13 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             "generate_keypair",
             "sign_data",
             "hash_password",
+            # Attestation operations (CIRISVerify)
+            "run_attestation",
+            "get_cached_attestation",
+            "get_attestation_cache_status",
+            "is_attestation_in_progress",
+            "run_startup_attestation",
+            "verify_play_integrity_token",
         ]
 
     def _check_dependencies(self) -> bool:
@@ -451,9 +481,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                         confidence=1.0,
                         source="oauth",
                     )
-                    logger.info(
-                        f"Created identity mapping: wa_id:{wa_id} -> {provider}_id:{external_id}"
-                    )  # NOSONAR - IDs not secrets
+                    logger.info("Created identity mapping for OAuth link")
                 except Exception as e:
                     logger.warning(f"Failed to create identity mapping for OAuth link: {e}")
                     # Non-fatal - OAuth link still works even if graph mapping fails
@@ -1509,6 +1537,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 "create_channel_token",
                 "verify_token_sync",
                 "update_last_login",
+                # Attestation (CIRISVerify)
+                "run_attestation",
+                "get_cached_attestation",
+                "get_attestation_cache_status",
+                "is_attestation_in_progress",
             ],
             version="1.0.0",
             dependencies=["TimeService"],
@@ -1593,6 +1626,12 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         self._start_time = self._get_current_time()
         logger.info("AuthenticationService started")
 
+        # Kick off startup attestation in background (non-blocking)
+        # Store task reference to prevent garbage collection
+        attestation_task = asyncio.create_task(self.run_startup_attestation())
+        self._background_tasks.add(attestation_task)
+        attestation_task.add_done_callback(self._background_tasks.discard)
+
     async def stop(self) -> None:
         """Stop the service."""
         await super().stop()
@@ -1662,3 +1701,362 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # Check database connection via store
         return authentication_store.check_database_health(self.db_path)
+
+    # =========================================================================
+    # CIRISVerify Singleton Management
+    # =========================================================================
+
+    def get_verifier(self) -> Any:
+        """Get the shared CIRISVerify singleton instance (thread-safe).
+
+        All code that needs CIRISVerify should use this method instead of
+        creating instances directly. This ensures:
+        - Single instance across the application
+        - Portal key is imported once and shared
+        - Hardware keystore access is consistent
+
+        Returns:
+            CIRISVerify instance, or None if not available.
+        """
+        try:
+            from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+                get_verifier as get_global_verifier,
+            )
+
+            return get_global_verifier()
+        except ImportError:
+            logger.debug("[CIRISVerify] Not available (import failed)")
+            return None
+        except Exception as e:
+            logger.warning(f"[CIRISVerify] Failed to get singleton: {e}")
+            return None
+
+    def import_portal_key(self, private_key_bytes: bytes) -> bool:
+        """Import a Portal-issued Ed25519 signing key into the CIRISVerify vault.
+
+        This uses the singleton verifier to import the key. CIRISVerify handles
+        storage in Android Keystore, Secure Enclave, TPM, or SW fallback.
+
+        Args:
+            private_key_bytes: 32-byte Ed25519 private key from Portal
+
+        Returns:
+            True if import succeeded, False otherwise.
+        """
+        verifier = self.get_verifier()
+        if verifier is None:
+            logger.warning("[CIRISVerify] Cannot import key - verifier not available")
+            return False
+
+        try:
+            if not hasattr(verifier, "import_key_sync"):
+                logger.warning("[CIRISVerify] import_key_sync not available")
+                return False
+
+            verifier.import_key_sync(private_key_bytes)
+            logger.info("[CIRISVerify] Portal key imported successfully")
+            return True
+        except Exception as e:
+            logger.warning(f"[CIRISVerify] Failed to import portal key: {e}")
+            return False
+
+    def has_signing_key(self) -> bool:
+        """Check if a signing key exists in the CIRISVerify vault.
+
+        Returns:
+            True if a key exists, False otherwise.
+        """
+        verifier = self.get_verifier()
+        if verifier is None:
+            return False
+
+        try:
+            if not hasattr(verifier, "has_key_sync"):
+                return False
+            return bool(verifier.has_key_sync())
+        except Exception:
+            return False
+
+    # =========================================================================
+    # Attestation Methods (CIRISVerify Integration)
+    # =========================================================================
+
+    async def run_attestation(
+        self,
+        mode: str = "partial",
+        play_integrity_token: Optional[str] = None,
+        play_integrity_nonce: Optional[str] = None,
+        force_refresh: bool = False,
+    ) -> AttestationResult:
+        """Run full attestation check and cache the result.
+
+        This wraps calls to CIRISVerify and caches the result for subsequent
+        calls. The cache is used by both the startup badge and Trust page.
+
+        Args:
+            mode: Attestation mode - 'full' or 'partial' (default)
+            play_integrity_token: Optional Google Play Integrity token
+            play_integrity_nonce: Nonce used for Play Integrity request
+            force_refresh: Force re-run even if cache is valid
+
+        Returns:
+            AttestationResult with all verification details
+        """
+        # Check cache first (unless force_refresh)
+        if not force_refresh:
+            cached = self.get_cached_attestation()
+            if cached is not None:
+                logger.info(f"[attestation] Returning cached result (early check), instance={hex(id(self))}, level={cached.max_level}")
+                return cached
+
+        # Set in_progress flag BEFORE acquiring lock so callers can see it
+        self._attestation_in_progress = True
+        logger.info("[attestation] Setting _attestation_in_progress=True")
+        try:
+            # Acquire lock to prevent concurrent attestation runs
+            async with self._attestation_lock:
+                # Double-check cache after acquiring lock
+                if not force_refresh:
+                    cached = self.get_cached_attestation()
+                    if cached is not None:
+                        logger.info(f"[attestation] Returning cached result (lock-check), instance={hex(id(self))}, level={cached.max_level}")
+                        return cached
+                result = await self._run_attestation_internal(
+                    mode=mode,
+                    play_integrity_token=play_integrity_token,
+                    play_integrity_nonce=play_integrity_nonce,
+                )
+                # Cache the result
+                result.cached_at = self._get_current_time()
+                result.cache_ttl_seconds = self._attestation_cache_ttl
+                self._attestation_cache = result
+                # Also save as last known (for stale-while-revalidate)
+                self._last_known_attestation = result
+                logger.info(f"[attestation] Cached result: level={result.max_level}, instance={hex(id(self))}, binary={'OK' if result.binary_ok else 'FAIL'}")
+                return result
+        finally:
+            self._attestation_in_progress = False
+            logger.info("[attestation] Setting _attestation_in_progress=False")
+
+    async def _run_attestation_internal(
+        self,
+        mode: str,
+        play_integrity_token: Optional[str],
+        play_integrity_nonce: Optional[str],
+    ) -> AttestationResult:
+        """Internal method to run attestation via CIRISVerify.
+
+        This method delegates to the attestation module for modular,
+        testable attestation processing.
+
+        Args:
+            mode: Attestation mode ("full" or "partial")
+            play_integrity_token: Optional Play Integrity token
+            play_integrity_nonce: Optional Play Integrity nonce
+
+        Returns:
+            AttestationResult with verification data
+        """
+        from .attestation import build_attestation_result, run_verification_thread
+
+        attestation_mode = "partial" if mode not in ("full", "partial") else mode
+
+        logger.info("[attestation] Starting CIRISVerify attestation")
+
+        # Run verification in a separate thread (Rust Tokio stack requirement)
+        verify_result = await run_verification_thread(
+            get_verifier=self.get_verifier,
+            attestation_mode=attestation_mode,
+        )
+
+        # Build and return attestation result
+        result = build_attestation_result(verify_result, attestation_mode)
+        return result
+
+    def get_cached_attestation(self, allow_stale: bool = False) -> Optional[AttestationResult]:
+        """Get the cached attestation result if available.
+
+        Args:
+            allow_stale: If True, return last known result even if TTL expired (stale-while-revalidate)
+
+        Returns:
+            Cached AttestationResult or None if cache is empty/expired (unless allow_stale=True)
+        """
+        if self._attestation_cache is None:
+            logger.info(f"[attestation] get_cached_attestation: cache is None, instance={hex(id(self))}")
+            # If allowing stale, return last known
+            if allow_stale and self._last_known_attestation is not None:
+                logger.debug("[attestation] Returning stale last_known_attestation")
+                return self._last_known_attestation
+            return None
+
+        # Check if cache has expired
+        if self._attestation_cache.cached_at:
+            cache_age = (self._get_current_time() - self._attestation_cache.cached_at).total_seconds()
+            if cache_age > self._attestation_cache.cache_ttl_seconds:
+                logger.debug(f"Attestation cache expired (age={cache_age:.1f}s)")
+                # If allowing stale, check if within stale TTL (1 hour)
+                if allow_stale and cache_age <= self._attestation_stale_ttl:
+                    logger.debug(f"[attestation] Returning stale cache (age={cache_age:.1f}s)")
+                    return self._attestation_cache
+                return None
+
+        return self._attestation_cache
+
+    def _get_stale_data_info(
+        self, has_cached: bool, cache_expired: bool, cache_age: Optional[float], max_level: Optional[int]
+    ) -> Tuple[bool, Optional[int]]:
+        """Check for stale attestation data (expired but within stale TTL).
+
+        Args:
+            has_cached: Whether we have cached data
+            cache_expired: Whether the cache has expired
+            cache_age: Age of cache in seconds
+            max_level: Current max attestation level
+
+        Returns:
+            Tuple of (has_stale, stale_level)
+        """
+        # Expired cache within stale TTL
+        if cache_expired and has_cached and cache_age is not None and cache_age <= self._attestation_stale_ttl:
+            return True, max_level
+
+        # No current cache but have last known within stale TTL
+        if not has_cached and self._last_known_attestation is not None and self._last_known_attestation.cached_at:
+            last_age = (self._get_current_time() - self._last_known_attestation.cached_at).total_seconds()
+            if last_age <= self._attestation_stale_ttl:
+                return True, self._last_known_attestation.max_level
+
+        return False, None
+
+    def get_attestation_cache_status(self) -> AttestationCacheStatus:
+        """Get status of the attestation cache.
+
+        Returns:
+            AttestationCacheStatus with cache metadata
+        """
+        has_cached = self._attestation_cache is not None
+        cached_at = self._attestation_cache.cached_at if self._attestation_cache else None
+        cache_age: Optional[float] = None
+        cache_expired = False
+        max_level: Optional[int] = None
+
+        if has_cached and cached_at:
+            cache_age = (self._get_current_time() - cached_at).total_seconds()
+            cache_expired = cache_age > (self._attestation_cache.cache_ttl_seconds if self._attestation_cache else 300)
+            max_level = self._attestation_cache.max_level if self._attestation_cache else None
+
+        has_stale, stale_level = self._get_stale_data_info(has_cached, cache_expired, cache_age, max_level)
+
+        return AttestationCacheStatus(
+            has_cached_result=has_cached and not cache_expired,
+            cached_at=cached_at,
+            cache_age_seconds=cache_age,
+            cache_expired=cache_expired,
+            attestation_in_progress=self._attestation_in_progress,
+            max_level=max_level,
+            has_stale_result=has_stale,
+            stale_level=stale_level,
+        )
+
+    def invalidate_attestation_cache(self) -> None:
+        """Invalidate the attestation cache to force a re-run.
+
+        Called after device attestation (App Attest / Play Integrity) completes
+        so the next run_attestation includes the device attestation data and
+        recalculates the level.
+        """
+        logger.info(f"[attestation] Invalidating cache, instance={hex(id(self))}")
+        self._attestation_cache = None
+
+    def is_attestation_in_progress(self) -> bool:
+        """Check if attestation is currently running.
+
+        Returns:
+            True if attestation is in progress
+        """
+        return self._attestation_in_progress
+
+    async def run_startup_attestation(self) -> None:
+        """Run attestation at startup in the background.
+
+        This is called during service startup to pre-populate the cache.
+        It runs in parallel with other startup tasks and logs progress.
+        """
+        logger.info(f"[attestation] Starting background attestation check on instance={hex(id(self))}...")
+        try:
+            result = await self.run_attestation(mode="full")
+            logger.info(
+                f"[attestation] Startup attestation completed: "
+                f"level={result.max_level}/5, "
+                f"binary={'OK' if result.binary_ok else 'FAIL'}, "
+                f"functions={'OK' if result.function_integrity == 'verified' else 'FAIL'}, "
+                f"instance={hex(id(self))}, cache_set={self._attestation_cache is not None}"
+            )
+        except Exception as e:
+            logger.error(f"[attestation] Startup attestation failed on instance={hex(id(self))}: {e}")
+
+    async def verify_play_integrity_token(
+        self,
+        token: str,
+        nonce: str,
+    ) -> Dict[str, Any]:
+        """Verify a Google Play Integrity token via CIRISVerify FFI.
+
+        This method provides crash protection by running the FFI call in a
+        separate thread with timeout. If the FFI crashes, it returns an error
+        instead of crashing the entire process.
+
+        Args:
+            token: The Play Integrity token from Google
+            nonce: The nonce used when requesting the token
+
+        Returns:
+            Dict with verification result or error
+        """
+        import asyncio
+
+        from .attestation import get_verifier_or_error, run_play_integrity_verification
+
+        logger.info("[play-integrity] Verifying Play Integrity token via auth service")
+
+        # Validate inputs
+        if not token or not nonce:
+            return {"error": "Token and nonce are required", "verified": False}
+
+        # Get verifier
+        verifier, error = get_verifier_or_error()
+        if error:
+            return error
+
+        # Run verification in thread with crash protection
+        loop = asyncio.get_event_loop()
+        verify_result = await loop.run_in_executor(None, run_play_integrity_verification, verifier, token, nonce, 45)
+
+        # Handle post-verification
+        return await self._handle_play_integrity_result(verify_result)
+
+    async def _handle_play_integrity_result(self, verify_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle Play Integrity verification result and update attestation.
+
+        Args:
+            verify_result: Result from Play Integrity verification
+
+        Returns:
+            Updated verify_result with attestation info if successful
+        """
+        if verify_result.get("verified"):
+            logger.info("[play-integrity] Verification successful")
+            # Re-run attestation to pick up the cached device attestation
+            logger.info("[play-integrity] Re-running attestation to update level with device attestation")
+            try:
+                updated_result = await self.run_attestation(mode="full", force_refresh=True)
+                logger.info(f"[play-integrity] Attestation updated: level={updated_result.max_level}/5")
+                verify_result["attestation_level"] = updated_result.max_level
+                verify_result["level_pending"] = updated_result.level_pending
+            except Exception as e:
+                logger.warning(f"[play-integrity] Failed to re-run attestation: {e}")
+        else:
+            logger.warning("[play-integrity] Verification failed")
+
+        return verify_result

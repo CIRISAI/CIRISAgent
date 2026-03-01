@@ -113,6 +113,40 @@ class CommunicationBus(BaseBus[CommunicationService]):
         logger.warning("No communication adapter has a home channel configured")
         return None
 
+    def has_service_for_channel(self, channel_id: str) -> bool:
+        """Check if there's a communication service available for a given channel.
+
+        This is useful for checking if communication is possible before attempting
+        to send messages, preventing errors during startup when adapters may not
+        be fully registered yet.
+
+        Args:
+            channel_id: The channel ID to check
+
+        Returns:
+            True if a service is available for this channel, False otherwise
+        """
+        all_services = self.service_registry.get_services_by_type(ServiceType.COMMUNICATION)
+        if not all_services:
+            return False
+
+        # Check if any service matches the channel prefix
+        if channel_id.startswith("discord_"):
+            return any("Discord" in type(svc).__name__ for svc in all_services)
+        elif channel_id.startswith("api_") or channel_id.startswith("ws:"):
+            return any("API" in type(svc).__name__ for svc in all_services)
+        elif channel_id.startswith("cli_"):
+            return any("CLI" in type(svc).__name__ for svc in all_services)
+        elif channel_id.startswith(REDDIT_CHANNEL_PREFIX):
+            return any("Reddit" in type(svc).__name__ for svc in all_services)
+
+        # Fallback: check if any service has send_message capability
+        for svc in all_services:
+            if hasattr(svc, "send_message"):
+                return True
+
+        return False
+
     async def send_message(
         self, channel_id: Optional[str], content: str, handler_name: str, metadata: Optional[JSONDict] = None
     ) -> bool:

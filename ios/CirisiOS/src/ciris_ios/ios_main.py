@@ -298,6 +298,10 @@ def setup_ios_environment() -> Path:
     os.environ["CIRIS_OFFLINE_MODE"] = "true"
     os.environ["CIRIS_CLOUD_SYNC"] = "false"
 
+    # CIRISVerify: native library is statically linked into the app binary
+    # The Python FFI wrapper uses ctypes.CDLL(None) when this is set
+    os.environ["CIRIS_IOS_STATIC_LINK"] = "1"
+
     # Optimize for low-resource devices
     os.environ.setdefault("CIRIS_MAX_WORKERS", "1")
     os.environ.setdefault("CIRIS_LOG_LEVEL", "INFO")

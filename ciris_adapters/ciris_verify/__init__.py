@@ -1,16 +1,71 @@
-"""CIRISVerify adapter for hardware-rooted license verification.
+"""CIRISVerify adapter package.
 
-This adapter integrates CIRISVerify with the CIRIS agent to provide:
-- License status verification
-- Capability enforcement based on license tier
-- Mandatory disclosure management
-- Hardware attestation for professional licenses
+This adapter integrates CIRISVerify license verification into the CIRIS agent.
+The core ciris_verify bindings are provided by the 'ciris-verify' PyPI package.
 
-The adapter hooks into WiseBus to enforce license-based capability restrictions,
-ensuring community agents cannot access professional capabilities (medical,
-legal, financial) without proper licensing.
+Usage:
+    from ciris_adapters.ciris_verify import CIRISVerifyAdapter
+
+    adapter = CIRISVerifyAdapter(runtime, context)
+    await adapter.start()
 """
 
-from .adapter import CIRISVerifyAdapter
+# Re-export from the ciris-verify PyPI package for convenience
+from ciris_verify import (  # noqa: F401
+    BinaryNotFoundError,
+    BinaryTamperedError,
+    CapabilityCheckResult,
+    CIRISVerify,
+    CIRISVerifyError,
+    CommunicationError,
+    DisclosureSeverity,
+    FileIntegrityResult,
+    HardwareType,
+    LicenseDetails,
+    LicenseStatus,
+    LicenseStatusResponse,
+    LicenseTier,
+    MandatoryDisclosure,
+    MockCIRISVerify,
+    TimeoutError,
+    ValidationStatus,
+    VerificationFailedError,
+    get_library_version,
+)
 
-__all__ = ["CIRISVerifyAdapter"]
+# Export adapter-specific classes
+from .adapter import CIRISVerifyAdapter  # noqa: F401
+from .service import CIRISVerifyService, VerificationConfig  # noqa: F401
+
+# Alias for adapter loading code (looks for 'Adapter' class)
+Adapter = CIRISVerifyAdapter
+
+# Fallback version - actual version should be queried via get_library_version()
+__version__ = "0.9.7"
+__all__ = [
+    # Adapter exports
+    "Adapter",
+    "CIRISVerifyAdapter",
+    "CIRISVerifyService",
+    "VerificationConfig",
+    # Re-exports from ciris-verify package
+    "CIRISVerify",
+    "MockCIRISVerify",
+    "get_library_version",
+    "LicenseStatus",
+    "LicenseTier",
+    "LicenseDetails",
+    "MandatoryDisclosure",
+    "DisclosureSeverity",
+    "LicenseStatusResponse",
+    "CapabilityCheckResult",
+    "FileIntegrityResult",
+    "HardwareType",
+    "ValidationStatus",
+    "CIRISVerifyError",
+    "BinaryNotFoundError",
+    "BinaryTamperedError",
+    "VerificationFailedError",
+    "TimeoutError",
+    "CommunicationError",
+]

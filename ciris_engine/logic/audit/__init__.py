@@ -4,7 +4,7 @@ Provides cryptographic hash chain and digital signature capabilities for audit t
 
 Key components:
 - AuditHashChain: Maintains hash chain integrity
-- AuditSignatureManager: Now uses Ed25519 via unified signing key (shared with covenant metrics)
+- AuditSignatureManager: Now uses Ed25519 via unified signing key (shared with accord metrics)
 - AuditVerifier: Verifies signatures (supports both RSA and Ed25519)
 - UnifiedSigningKey: Ed25519 signing key management (recommended)
 - AuditKeyMigration: Migrate existing RSA audit chains to Ed25519

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from .browser_helper import BrowserConfig, BrowserHelper
+from .licensed_agent_flow import LicensedAgentConfig, run_licensed_agent_flow
 from .server_manager import ServerConfig, ServerManager, ServerStatus
 from .test_cases import (
     TestReport,
@@ -126,6 +127,9 @@ class WebUITestRunner:
         "send_message": test_send_message,
         "receive_response": test_receive_response,
     }
+
+    # Special test flows (not individual tests)
+    FLOWS = {"licensed_agent"}
 
     def __init__(
         self,
@@ -302,6 +306,10 @@ class WebUITestRunner:
         suite = WebUITestSuite()
 
         try:
+            # Check if running a special flow
+            if len(test_names) == 1 and test_names[0] in self.FLOWS:
+                return await self.run_flow(test_names[0])
+
             # Setup
             status = await self.setup()
             suite.server_status = status
@@ -328,6 +336,59 @@ class WebUITestRunner:
                 }.get(report.result, "❓")
 
                 print(f"  {icon} {report.name}: {report.message or report.result.value}")
+
+            suite.success = suite.failed_count == 0 and suite.error_count == 0
+
+        except Exception as e:
+            suite.error = str(e)
+            print(f"\n💥 Test error: {e}")
+
+        finally:
+            suite.end_time = datetime.now()
+            await self.teardown()
+
+        return suite
+
+    async def run_flow(self, flow_name: str) -> WebUITestSuite:
+        """
+        Run a special test flow.
+
+        Args:
+            flow_name: Name of the flow to run (e.g., "licensed_agent")
+
+        Returns:
+            WebUITestSuite with results
+        """
+        suite = WebUITestSuite()
+
+        try:
+            # Configure for first-run mode if needed
+            if flow_name == "licensed_agent":
+                self.server_config.first_run_mode = True
+                print("🔓 Enabling first-run mode for licensed agent flow")
+
+            # Setup
+            status = await self.setup()
+            suite.server_status = status
+
+            if not status.healthy:
+                suite.error = f"Server failed to start: {status.error}"
+                suite.end_time = datetime.now()
+                return suite
+
+            if flow_name == "licensed_agent":
+                # Run licensed agent flow
+                licensed_config = LicensedAgentConfig(
+                    base_url=self.test_config.base_url,
+                    llm_provider=self.test_config.llm_provider,
+                    llm_api_key=self.test_config.llm_api_key,
+                    admin_username=self.test_config.admin_username,
+                    admin_password=self.test_config.admin_password,
+                )
+                reports = await run_licensed_agent_flow(self._browser, licensed_config)
+                suite.reports = reports
+            else:
+                suite.error = f"Unknown flow: {flow_name}"
 
             suite.success = suite.failed_count == 0 and suite.error_count == 0
 

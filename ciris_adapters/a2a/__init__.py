@@ -10,7 +10,7 @@ Usage:
     await runtime.adapter_manager.load_adapter("a2a", config={
         "host": "0.0.0.0",
         "port": 8100,
-        "timeout": 60,
+        "timeout": 120,
     })
 
     # Or via main.py

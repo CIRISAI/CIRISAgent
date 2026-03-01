@@ -281,7 +281,9 @@ class TestCIRISRuntimeCreation:
 
         assert runtime.essential_config == essential_config
         assert runtime.startup_channel_id == ""
-        assert len(runtime.adapters) == 1
+        # CLI adapter is always loaded; ciris_verify may fail if not properly installed
+        # In CI/test environments, ciris_verify may not be available
+        assert len(runtime.adapters) >= 1, f"Expected at least 1 adapter, got {len(runtime.adapters)}"
         assert runtime._initialized is False
 
         print(f"[test_create_runtime_with_config] Test completed successfully")

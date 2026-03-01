@@ -460,8 +460,8 @@ class TestLoadAppConfig:
 
     @pytest.mark.asyncio
     @patch("main.load_config")
-    async def test_no_template_override_for_default(self, mock_load_config):
-        """Should not pass template override for 'default' template."""
+    async def test_template_override_for_default(self, mock_load_config):
+        """Should pass template override even for 'default' template (ensures CLI takes priority over env vars)."""
         from main import _load_app_config
 
         mock_config = MagicMock()
@@ -473,7 +473,9 @@ class TestLoadAppConfig:
         cli_overrides = call_args[1].get("cli_overrides") or call_args[0][1] if len(call_args[0]) > 1 else {}
         if cli_overrides is None:
             cli_overrides = {}
-        assert "default_template" not in cli_overrides
+        # CLI should ALWAYS set the template when --template is provided
+        # This ensures CLI takes priority over environment variables like CIRIS_TEMPLATE
+        assert cli_overrides == {"default_template": "default"}
 
 
 class TestConfigureApiAdapter:

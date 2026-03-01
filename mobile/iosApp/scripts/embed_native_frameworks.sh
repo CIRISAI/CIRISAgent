@@ -238,6 +238,38 @@ PLIST_EOF
         echo "WARNING: PrivacyInfo.xcprivacy not found at $PRIVACY_MANIFEST"
     fi
 
+    # CRITICAL: Copy device-specific Python files into Resources
+    # Resources ships with simulator sysconfigdata; device needs its own.
+    PYTHON_STDLIB_SRC="${PYTHON_XCFRAMEWORK}/lib/python3.10"
+    RESOURCES_DIR="${PROJECT_DIR}/Resources"
+    PYTHON_STDLIB_DST="${RESOURCES_DIR}/python/lib/python3.10"
+
+    SYSCONFIG_SRC="${PYTHON_STDLIB_SRC}/_sysconfigdata__ios_arm64-iphoneos.py"
+    SYSCONFIG_DST="${PYTHON_STDLIB_DST}/_sysconfigdata__ios_arm64-iphoneos.py"
+    if [ -f "$SYSCONFIG_SRC" ] && [ ! -f "$SYSCONFIG_DST" ]; then
+        cp "$SYSCONFIG_SRC" "$SYSCONFIG_DST"
+        echo "Copied device _sysconfigdata to Resources"
+    fi
+
+    # CRITICAL: Ensure device .fwork stubs exist in Resources
+    # Resources ships with simulator .fwork stubs (*-iphonesimulator.fwork).
+    # On physical devices, Python looks for *-iphoneos.fwork instead.
+    # Create device copies so dlopen redirects work after Resources.zip extraction.
+    echo ""
+    echo "Ensuring device .fwork stubs in Resources..."
+    RESOURCES_DIR="${PROJECT_DIR}/Resources"
+    FWORK_COUNT=0
+    if [ -d "$RESOURCES_DIR" ]; then
+        while IFS= read -r sim_fwork; do
+            device_fwork="${sim_fwork/iphonesimulator/iphoneos}"
+            if [ ! -f "$device_fwork" ]; then
+                cp "$sim_fwork" "$device_fwork"
+                FWORK_COUNT=$((FWORK_COUNT + 1))
+            fi
+        done < <(find "$RESOURCES_DIR" -name "*.cpython-310-iphonesimulator.fwork" -type f 2>/dev/null)
+        echo "Created $FWORK_COUNT device .fwork stubs"
+    fi
+
     echo ""
     echo "Device build setup complete"
     exit 0

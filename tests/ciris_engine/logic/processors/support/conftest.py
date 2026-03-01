@@ -55,7 +55,7 @@ def mock_app_config():
     """Mock application configuration."""
     config = MagicMock()
     config.workflow.DMA_RETRY_LIMIT = 3
-    config.workflow.DMA_TIMEOUT_SECONDS = 30.0
+    config.workflow.DMA_TIMEOUT_SECONDS = 90.0
     config.workflow.max_rounds = 5
     return config
 

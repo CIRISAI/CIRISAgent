@@ -390,8 +390,11 @@ class SQLToolService(BaseService, ToolService):
                     correlation_id=correlation_id,
                 )
 
-            # Load privacy schema if path provided
+            # Load privacy schema from path or dict
             privacy_schema = None
+            privacy_schema_dict = parameters.get("privacy_schema")
+
+            # Option 1: Load from file path
             if privacy_schema_path and isinstance(privacy_schema_path, str):
                 try:
                     with open(privacy_schema_path, "r") as f:
@@ -407,6 +410,20 @@ class SQLToolService(BaseService, ToolService):
                         success=False,
                         data={},
                         error=f"Failed to load privacy schema: {str(e)}",
+                        correlation_id=correlation_id,
+                    )
+            # Option 2: Load from dict directly
+            elif privacy_schema_dict and isinstance(privacy_schema_dict, dict):
+                try:
+                    privacy_schema = PrivacySchemaConfig(**privacy_schema_dict)
+                except Exception as e:
+                    self._logger.error(f"Failed to parse privacy schema dict: {e}")
+                    return ToolExecutionResult(
+                        tool_name="initialize_sql_connector",
+                        status=ToolExecutionStatus.FAILED,
+                        success=False,
+                        data={},
+                        error=f"Failed to parse privacy schema: {str(e)}",
                         correlation_id=correlation_id,
                     )
 

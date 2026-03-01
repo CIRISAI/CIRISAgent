@@ -18,6 +18,9 @@ from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
 from ciris_engine.schemas.runtime.extended import ShutdownContext
 from ciris_engine.schemas.runtime.resources import ResourceUsage
 
+# Import VerifyAttestationContext for unified attestation/disclosure
+from ciris_engine.schemas.services.attestation import VerifyAttestationContext
+
 # Import CircuitBreakerState directly for runtime validation
 from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
 from ciris_engine.schemas.types import JSONDict
@@ -152,6 +155,24 @@ class SystemSnapshot(BaseModel):
     context_enrichment_results: Dict[str, Any] = Field(
         default_factory=dict,
         description="Results from tools marked with context_enrichment=True, keyed by adapter_type:tool_name",
+    )
+
+    # CIRISVerify attestation context - MUST be included in all LLM contexts
+    # Per FSD-001: This disclosure MUST be visible in agent processing context
+    # Full attestation state with key signature/storage info
+    verify_attestation: Optional["VerifyAttestationContext"] = Field(
+        None, description="Full CIRISVerify attestation context with disclosure, key info, and status"
+    )
+
+    # Legacy fields (kept for backwards compatibility, populated from verify_attestation)
+    license_disclosure_text: Optional[str] = Field(
+        None, description="[DEPRECATED] Use verify_attestation.disclosure_text"
+    )
+    license_disclosure_severity: Optional[str] = Field(
+        None, description="[DEPRECATED] Use verify_attestation.disclosure_severity"
+    )
+    attestation_summary: Optional[str] = Field(
+        None, description="[DEPRECATED] Use verify_attestation.attestation_summary"
     )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)  # Be strict about fields to catch misuse

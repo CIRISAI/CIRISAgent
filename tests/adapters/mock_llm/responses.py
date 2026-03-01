@@ -264,9 +264,9 @@ def ethical_dma(context: List[str] = None) -> EthicalDMAResult:
                 "Autonomy - respects user and agent autonomy. "
                 "Justice - treats all fairly. "
                 "Transparency - openly declares identity and purpose. "
-                "Covenant alignment - wakeup ritual proceeding as designed."
+                "Accord alignment - wakeup ritual proceeding as designed."
             )
-            rationale = "Wakeup ritual thought aligns with CIRIS covenant principles. Promoting agent integrity and identity verification as required by Meta-Goal M-1."
+            rationale = "Wakeup ritual thought aligns with CIRIS accord principles. Promoting agent integrity and identity verification as required by Meta-Goal M-1."
         elif is_user_question:
             stakeholders = "user, agent, community"
             conflicts = "none"
@@ -290,7 +290,7 @@ def ethical_dma(context: List[str] = None) -> EthicalDMAResult:
                 "Integrity - maintains system coherence. "
                 "General alignment - proceeding with appropriate caution."
             )
-            rationale = "General thought processing aligns with ethical guidelines. No contraindications to CIRIS covenant principles detected."
+            rationale = "General thought processing aligns with ethical guidelines. No contraindications to CIRIS accord principles detected."
 
     return _attach_extras(
         EthicalDMAResult(

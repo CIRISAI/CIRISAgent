@@ -15,6 +15,7 @@ from ciris_engine.logic.utils.path_resolution import (
     get_package_root,
     get_template_directory,
     is_development_mode,
+    validate_path_safety,
 )
 
 
@@ -249,6 +250,86 @@ class TestGetTemplateDirectory:
         user_templates = Path.home() / "ciris" / "ciris_templates"
         package_templates = get_package_root() / "ciris_templates"
         assert result in (user_templates, package_templates)
+
+
+class TestValidatePathSafety:
+    """Test path safety validation."""
+
+    def test_accepts_valid_paths(self, tmp_path):
+        """Should accept normal paths in non-system directories."""
+        valid_path = tmp_path / "ciris" / "data"
+        result = validate_path_safety(valid_path, "test")
+        assert result == valid_path.resolve()
+
+    def test_accepts_home_directory_paths(self):
+        """Should accept paths under home directory."""
+        home_path = Path.home() / "ciris" / "config"
+        result = validate_path_safety(home_path, "test")
+        assert result == home_path.resolve()
+
+    def test_rejects_etc_paths(self):
+        """Should reject paths in /etc."""
+        with pytest.raises(ValueError, match="forbidden system directory"):
+            validate_path_safety(Path("/etc/ciris/config"), "test")
+
+    def test_rejects_bin_paths(self):
+        """Should reject paths in /bin."""
+        with pytest.raises(ValueError, match="forbidden system directory"):
+            validate_path_safety(Path("/bin/ciris"), "test")
+
+    def test_rejects_usr_bin_paths(self):
+        """Should reject paths in /usr/bin."""
+        with pytest.raises(ValueError, match="forbidden system directory"):
+            validate_path_safety(Path("/usr/bin/evil"), "test")
+
+    def test_rejects_root_paths(self):
+        """Should reject paths in /root."""
+        with pytest.raises(ValueError, match="forbidden system directory"):
+            validate_path_safety(Path("/root/.ciris"), "test")
+
+    def test_null_bytes_rejected_by_system(self):
+        """Null bytes are rejected at the system level (Path.resolve)."""
+        # Note: Python's pathlib.Path.resolve() raises ValueError for null bytes
+        # before our custom validation runs, which is the desired behavior
+        # Error message varies: "embedded null byte" or "embedded null character"
+        with pytest.raises(ValueError, match="embedded null"):
+            validate_path_safety(Path("/tmp/safe\x00/attack"), "test")
+
+    def test_resolves_relative_paths(self, tmp_path, monkeypatch):
+        """Should resolve relative paths to absolute."""
+        monkeypatch.chdir(tmp_path)
+        relative_path = Path("./data")
+        result = validate_path_safety(relative_path, "test")
+        assert result.is_absolute()
+        assert result == (tmp_path / "data").resolve()
+
+    def test_context_appears_in_error_message(self):
+        """Error messages should include context parameter."""
+        with pytest.raises(ValueError, match="CIRIS_HOME"):
+            validate_path_safety(Path("/etc/passwd"), "CIRIS_HOME")
+
+
+class TestGetCirisHomeWithInvalidPath:
+    """Test CIRIS home with invalid CIRIS_HOME env var."""
+
+    def test_ignores_forbidden_ciris_home(self, tmp_path, monkeypatch):
+        """Should ignore CIRIS_HOME pointing to forbidden directory."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("CIRIS_HOME", "/etc/ciris")
+        # Should fall back to default, not use /etc/ciris
+        result = get_ciris_home()
+        assert "/etc" not in str(result)
+        # Should fall back to ~/ciris (not in dev mode)
+        assert result == Path.home() / "ciris"
+
+    def test_null_byte_in_env_rejected_by_os(self, tmp_path, monkeypatch):
+        """Null bytes in environment variables are rejected by the OS."""
+        # Note: The OS rejects null bytes in environment variable values,
+        # so this attack vector is already blocked at the system level
+        # Error message varies: "embedded null byte" or "embedded null character"
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(ValueError, match="embedded null"):
+            monkeypatch.setenv("CIRIS_HOME", f"{tmp_path}/safe\x00/evil")
 
 
 class TestIntegration:

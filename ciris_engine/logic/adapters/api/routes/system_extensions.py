@@ -24,6 +24,7 @@ from ciris_engine.schemas.types import JSONDict
 from ..constants import (
     DESC_CURRENT_COGNITIVE_STATE,
     DESC_HUMAN_READABLE_STATUS,
+    DESC_STATUS_MESSAGE,
     ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE,
 )
 from ._common import RESPONSES_500_503, AuthAdminDep, AuthObserverDep
@@ -381,7 +382,7 @@ class ServicePriorityUpdateResponse(BaseModel):
     new_priority_group: Optional[int] = Field(None, description="New priority group")
     old_strategy: Optional[str] = Field(None, description="Previous selection strategy")
     new_strategy: Optional[str] = Field(None, description="New selection strategy")
-    message: str = Field(..., description="Status message")
+    message: str = Field(..., description=DESC_STATUS_MESSAGE)
 
 
 @router.put("/services/{provider_name}/priority", responses=RESPONSES_500_503)
@@ -437,7 +438,7 @@ class CircuitBreakerResetResponse(BaseModel):
     service_type: Optional[str] = Field(None, description="Service type that was reset")
     reset_count: int = Field(..., description="Number of circuit breakers reset")
     services_affected: List[str] = Field(default_factory=list, description="List of affected services")
-    message: str = Field(..., description="Status message")
+    message: str = Field(..., description=DESC_STATUS_MESSAGE)
 
 
 @router.post("/services/circuit-breakers/reset", responses=RESPONSES_500_503)
@@ -1009,3 +1010,85 @@ async def reasoning_stream(request: Request, auth: AuthObserverDep) -> Any:
             "Access-Control-Allow-Headers": "Cache-Control",
         },
     )
+
+
+# ============================================================================
+# Accord Invocation System (CIS) Endpoint
+# ============================================================================
+
+
+class AccordInvocationEvent(BaseModel):
+    """Accord invocation event from CIRISNode."""
+
+    signing_key_id: str = Field(..., description="JWT key ID of the signing WA")
+    signature: str = Field(..., description="Hex-encoded Ed25519 signature over canonical payload")
+    payload: Dict[str, Any] = Field(..., description="Signed accord invocation payload")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AccordInvocationResponse(BaseModel):
+    """Response to accord invocation."""
+
+    accepted: bool = Field(..., description="Whether the invocation was accepted and validated")
+    message: str = Field(..., description=DESC_STATUS_MESSAGE)
+
+
+@router.post("/accord-invocation", responses=RESPONSES_500_503)
+async def receive_accord_invocation(
+    body: AccordInvocationEvent, request: Request, auth: AuthAdminDep
+) -> SuccessResponse[AccordInvocationResponse]:
+    """
+    Receive a Accord Invocation System (CIS) event.
+
+    This endpoint receives signed shutdown directives from CIRISNode.
+    The event's Ed25519 signature is verified against the signing WA's
+    public key. Only ROOT or AUTHORITY WAs can issue accord invocations.
+
+    Requires ADMIN role for the API call, plus valid Ed25519 signature
+    from an authorized WA certificate.
+    """
+    runtime = getattr(request.app.state, "runtime", None)
+    if not runtime:
+        raise HTTPException(status_code=503, detail="Agent runtime not available")
+
+    try:
+        # Get the WiseBus from runtime's service registry
+        wise_bus = None
+        if hasattr(runtime, "service_registry"):
+            from ciris_engine.schemas.runtime.enums import ServiceType
+
+            # Access the wise bus through the processor services
+            if hasattr(runtime, "agent_processor") and hasattr(runtime.agent_processor, "services"):
+                wise_bus = runtime.agent_processor.services.wise_bus
+
+        if not wise_bus:
+            raise HTTPException(status_code=503, detail="WiseBus not available")
+
+        # Delegate to WiseBus for signature verification and shutdown
+        result = await wise_bus.handle_accord_invocation(
+            {
+                "signing_key_id": body.signing_key_id,
+                "signature": body.signature,
+                "payload": body.payload,
+            }
+        )
+
+        if result:
+            return SuccessResponse(
+                data=AccordInvocationResponse(
+                    accepted=True,
+                    message="Accord invocation accepted — shutdown initiated",
+                )
+            )
+        else:
+            raise HTTPException(
+                status_code=403,
+                detail="Accord invocation rejected — signature verification failed",
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing accord invocation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

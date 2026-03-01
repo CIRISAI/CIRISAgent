@@ -373,7 +373,7 @@ class OpenAIConfig(BaseModel):
     base_url: Optional[str] = Field(default=None)
     instructor_mode: str = Field(default="JSON")
     max_retries: int = Field(default=3)
-    timeout_seconds: int = Field(default=5)
+    timeout_seconds: int = Field(default=60)  # Increased from 5s for live LLM APIs
     # Provider selection - defaults to openai for backward compatibility
     provider: LLMProvider = Field(default=LLMProvider.OPENAI)
 

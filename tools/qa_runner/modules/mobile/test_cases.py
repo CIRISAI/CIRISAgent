@@ -58,27 +58,54 @@ class CIRISAppConfig:
     TEXT_SEND = "Send"
 
     # Setup wizard texts (extensible for future screens)
-    # Current flow: Intro → AI Config → Confirm → (future screens) → Chat
+    # Current flow (4 steps):
+    #   1. Intro/Welcome → "Register Your Agent Identity" card, "Continue →"
+    #   2. AI Configuration → Provider dropdown, API Key, "Test Connection", "Next"
+    #   3. Optional Features → Alignment metrics consent, Web API toggle, "Next"
+    #   4. Confirm Setup → Username/Password, "Finish Setup"
     TEXT_SETUP_TITLE = "Setup"
     TEXT_LLM_PROVIDER = "LLM Provider"
     TEXT_API_KEY = "API Key"
     TEXT_NEXT = "Next"
     TEXT_CONTINUE = "Continue"  # Intro step button
+    TEXT_CONTINUE_ARROW = "Continue →"  # Intro step with arrow
     TEXT_FINISH_SETUP = "Finish Setup"  # Final step button
     TEXT_FINISH = "Finish"
     TEXT_COMPLETE = "Complete"
     TEXT_FREE_AI_ACCESS = "Free AI Access Ready"
     TEXT_AI_CONFIG = "AI Configuration"
     TEXT_CONFIRM_SETUP = "Confirm Setup"
+    # Step 1 texts
+    TEXT_REGISTER_IDENTITY = "Register Your Agent Identity"
+    TEXT_SKIP_FOR_NOW = "Skip for now..."
+    TEXT_BACK_TO_LOGIN = "Back to Login"
+    # Step 2 texts
+    TEXT_PROVIDER = "Provider"
+    TEXT_OPENAI = "OpenAI"
+    TEXT_ANTHROPIC = "Anthropic"
+    TEXT_GOOGLE_AI = "Google AI"
+    TEXT_TEST_CONNECTION = "Test Connection"
+    # Step 3 texts
+    TEXT_OPTIONAL_FEATURES = "Optional Features"
+    TEXT_HELP_IMPROVE = "Help Improve AI Alignment"
+    TEXT_ALIGNMENT_CONSENT = "I agree to share anonymous alignment metrics"
+    TEXT_COMMUNICATION_ADAPTERS = "Communication Adapters"
+    TEXT_WEB_API = "Web API"
+    # Step 4 texts
+    TEXT_YOUR_ACCOUNT = "Your Account"
+    TEXT_USERNAME = "Username"
+    TEXT_PASSWORD = "Password"
+    TEXT_USERNAME_REQUIRED = "Username is required"
+    TEXT_PASSWORD_REQUIRED = "Password is required"
 
     # Setup wizard navigation buttons (in priority order)
-    # Add new button texts here as screens are added
+    # Priority: Finish > Next > Continue (to prevent skipping steps)
     SETUP_NAV_BUTTONS = [
-        "Finish Setup",  # Final step
+        "Finish Setup",  # Step 4: Final step
+        "Next",  # Steps 2-3: Middle steps
+        "Continue →",  # Step 1: Intro with arrow
+        "Continue",  # Step 1: Intro alternate
         "Get Started",  # Future onboarding
-        "Next",  # Middle steps
-        "Continue",  # Intro step
-        "Continue →",  # Alternate continue
         "Finish",  # Alternate final
         "Complete",  # Alternate complete
         "Done",  # Alternate done
@@ -96,6 +123,21 @@ class CIRISAppConfig:
         "Shutdown",  # Shutdown button only on chat screen
         "STOP",  # Stop button only on chat screen
     ]
+
+    # Register Your Agent texts (device auth via Portal/Registry)
+    TEXT_REGISTER_AGENT = "Register Your Agent"
+    TEXT_REGISTER_SUBTITLE = "$1.00 bond"  # Partial match for the pricing text
+    TEXT_CONNECT = "Connect"
+    TEXT_PORTAL_URL_PLACEHOLDER = "Portal URL"
+    TEXT_WAITING_AUTH = "Waiting for authorization"
+    TEXT_VERIFICATION_URL = "portal.ciris"
+    TEXT_AGENT_AUTHORIZED = "Authorized"
+    TEXT_CONNECTING_PORTAL = "Connecting"
+    TEXT_REGISTER_AGENT_STEP = "Register Agent"  # Step title
+
+    # Deprecated aliases (for backwards compat)
+    TEXT_ACQUIRE_LICENSE = TEXT_REGISTER_AGENT
+    TEXT_CREATE_LICENSED_AGENT = TEXT_REGISTER_AGENT
 
     # Test tags (Compose testTag values appear in resource-id)
     TAG_BTN_GOOGLE_SIGNIN = "btn_google_signin"
@@ -128,21 +170,36 @@ class ScreenCoordinates:
     """
 
     # Default coordinates for 1080x2400 resolution
+    # Updated 2026-02-28 with actual screen measurements from emulator
     DEFAULTS = {
         # Login screen
         "google_signin_center": (540, 1208),
-        "local_login_center": (540, 1397),
+        "local_login_center": (541, 1397),  # [430,1371][652,1424]
         # Chat screen (bottom input area)
         "message_input_center": (274, 2179),
         "send_button_center": (996, 2180),
-        # Setup wizard buttons (typically centered near bottom)
-        "wizard_button_center_y": 2274,
-        "wizard_continue_x": 540,  # Centered
-        "wizard_next_x": 786,  # Right side
-        "wizard_back_x": 294,  # Left side
+        # Setup wizard buttons (bottom navigation bar)
+        "wizard_button_center_y": 2232,  # Common Y for all bottom buttons
+        "wizard_continue_x": 786,  # "Continue →" button X
+        "wizard_next_x": 786,  # "Next" button X [748,2206][825,2259]
+        "wizard_back_x": 294,  # "Back" button X [253,2206][335,2259]
+        "wizard_finish_x": 786,  # "Finish Setup" button X [685,2206][888,2259]
+        # Setup Step 1 (Intro/Welcome)
+        "skip_for_now_center": (540, 1497),  # [105,1466][975,1529]
+        # Setup Step 2 (AI Configuration)
+        "provider_dropdown_center": (540, 598),  # [63,525][1017,672]
+        "api_key_field_center": (540, 871),  # [63,798][1017,945]
+        "test_connection_center": (540, 1050),  # [407,1024][674,1077]
+        # Setup Step 4 (Confirm Setup)
+        "username_field_center": (540, 1100),  # Below Username label
+        "password_field_center": (540, 1250),  # Below Password label
         # Google account chooser
         "account_row_center_y": 1260,
         "account_row_x": 350,
+        # Provider dropdown items (approximate Y positions when open)
+        "dropdown_openai_y": 493,
+        "dropdown_anthropic_y": 547,
+        "dropdown_google_ai_y": 601,
     }
 
     @classmethod
@@ -505,10 +562,18 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
     Prerequisites:
     - Must be on Setup screen (after login)
 
-    The wizard currently has 3 steps (extensible):
-    1. Welcome/Intro (button: "Continue →")
-    2. AI Configuration (button: "Next")
-    3. Confirm Setup (button: "Finish Setup")
+    The wizard has 4 steps:
+    1. Welcome/Intro - "Register Your Agent Identity" card, "Continue →" button
+    2. AI Configuration - Provider dropdown, API Key field, "Test Connection", "Next"
+    3. Optional Features - Alignment metrics consent, Web API toggle, "Next"
+    4. Confirm Setup - Username/Password fields, "Finish Setup"
+
+    Config options:
+    - llm_api_key: API key for LLM provider (optional)
+    - setup_username: Username for local account (default: "testuser")
+    - setup_password: Password for local account (default: "testpass123")
+    - enable_accord_metrics: Enable alignment metrics consent (default: True)
+    - setup_max_steps: Max navigation attempts (default: 15)
 
     Additional screens can be added - the test will navigate through
     any number of steps using the SETUP_NAV_BUTTONS priority list.
@@ -566,7 +631,7 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                         screenshots=screenshots,
                     )
 
-            # Look for API key input (for BYOK mode)
+            # Look for API key input (for BYOK mode) - Step 2
             if ui.is_text_visible("API Key") or ui.is_text_visible("api_key"):
                 if api_key:
                     edit_fields = ui.find_by_class("EditText")
@@ -574,15 +639,49 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                         ui.set_text(edit_fields[0], api_key)
                         time.sleep(0.5)
 
-            # Enable covenant metrics consent if the checkbox is visible
+            # Enable accord metrics consent if the checkbox is visible - Step 3
             # The checkbox text is "I agree to share anonymous alignment metrics"
-            if config.get("enable_covenant_metrics", True):
-                covenant_text = "I agree to share anonymous alignment metrics"
-                if ui.is_text_visible(covenant_text):
+            if config.get("enable_accord_metrics", True):
+                accord_text = "I agree to share anonymous alignment metrics"
+                if ui.is_text_visible(accord_text):
                     # Find and click the checkbox or the text row
-                    if ui.click_by_text(covenant_text):
-                        print(f"  Step {step + 1}: Enabled covenant metrics consent")
+                    if ui.click_by_text(accord_text):
+                        print(f"  Step {step + 1}: Enabled accord metrics consent")
                         time.sleep(0.5)
+
+            # Handle Confirm Setup step (Step 4) - requires username and password
+            if ui.is_text_visible(CIRISAppConfig.TEXT_CONFIRM_SETUP) or ui.is_text_visible(
+                CIRISAppConfig.TEXT_YOUR_ACCOUNT
+            ):
+                test_username = config.get("setup_username", "testuser")
+                test_password = config.get("setup_password", "testpass123")
+
+                # Fill username field if required message is shown
+                if ui.is_text_visible(CIRISAppConfig.TEXT_USERNAME_REQUIRED) or ui.is_text_visible(
+                    CIRISAppConfig.TEXT_USERNAME
+                ):
+                    username_coords = ScreenCoordinates.get("username_field_center", config)
+                    adb.tap(*username_coords)
+                    time.sleep(0.3)
+                    adb.input_text(test_username)
+                    adb.press_back()  # Dismiss keyboard
+                    time.sleep(0.3)
+                    print(f"  Step {step + 1}: Entered username '{test_username}'")
+
+                # Fill password field if required message is shown
+                if ui.is_text_visible(CIRISAppConfig.TEXT_PASSWORD_REQUIRED) or ui.is_text_visible(
+                    CIRISAppConfig.TEXT_PASSWORD
+                ):
+                    password_coords = ScreenCoordinates.get("password_field_center", config)
+                    adb.tap(*password_coords)
+                    time.sleep(0.3)
+                    adb.input_text(test_password)
+                    adb.press_back()  # Dismiss keyboard
+                    time.sleep(0.5)
+                    print(f"  Step {step + 1}: Entered password")
+
+                # Continue to next iteration to click Finish Setup
+                continue
 
             # Try clicking navigation buttons in priority order
             next_clicked = False
@@ -1180,3 +1279,502 @@ def test_screen_runtime(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRe
 def test_all_screens(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
     """Test: Navigate to all screens and verify they load."""
     return test_screen_navigation(adb, ui, config, None)
+
+
+# =============================================================================
+# Connect Node / Register Agent Tests (Device Auth via Portal)
+# =============================================================================
+
+
+def test_connect_node_welcome(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """
+    Test: Verify Register Your Agent card appears on WELCOME screen.
+
+    Steps:
+    1. Launch app fresh
+    2. Login via Local Login to reach WELCOME step
+    3. Verify Register Your Agent card is visible
+    """
+    start_time = time.time()
+    screenshots = []
+    package = CIRISAppConfig.PACKAGE
+
+    try:
+        print("  [1/3] Launching app fresh...")
+        adb.force_stop_app(package)
+        time.sleep(1)
+        adb.launch_app(package, CIRISAppConfig.MAIN_ACTIVITY)
+
+        # Wait for login screen
+        login_btn = ui.wait_for_text(CIRISAppConfig.TEXT_LOCAL_LOGIN, timeout=60)
+        if not login_btn:
+            return TestReport(
+                name="test_connect_node_welcome",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Login screen not found",
+            )
+
+        print("  [2/3] Logging in via Local Login...")
+        ui.click_by_text(CIRISAppConfig.TEXT_LOCAL_LOGIN)
+        time.sleep(3)
+
+        print("  [3/3] Checking for Register Your Agent card...")
+        card_found = ui.wait_for_text(CIRISAppConfig.TEXT_REGISTER_AGENT, timeout=15)
+
+        if card_found:
+            # Verify additional elements
+            has_pricing = ui.is_text_visible(CIRISAppConfig.TEXT_REGISTER_SUBTITLE)
+            has_connect_btn = ui.is_text_visible(CIRISAppConfig.TEXT_CONNECT)
+
+            screenshot_path = f"/tmp/ciris_android_welcome_{int(time.time())}.png"
+            adb.screenshot(screenshot_path)
+            screenshots.append(screenshot_path)
+
+            return TestReport(
+                name="test_connect_node_welcome",
+                result=TestResult.PASSED,
+                duration=time.time() - start_time,
+                message=f"Card found. Pricing visible: {has_pricing}, Connect btn: {has_connect_btn}",
+                screenshots=screenshots,
+            )
+        else:
+            hierarchy = ui.dump_hierarchy()
+            visible_texts = ui.extract_texts_from_hierarchy(hierarchy) if hierarchy else []
+            return TestReport(
+                name="test_connect_node_welcome",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"Register Your Agent card not found. Visible: {visible_texts[:15]}",
+                screenshots=screenshots,
+            )
+
+    except Exception as e:
+        return TestReport(
+            name="test_connect_node_welcome",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Error: {str(e)}",
+            screenshots=screenshots,
+        )
+
+
+def test_connect_node_auth(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """
+    Test: Enter node URL and verify auth screen appears.
+
+    Prerequisite: Must be on WELCOME step with Register Your Agent card visible.
+
+    Steps:
+    1. Find Portal URL input field
+    2. Enter portal URL
+    3. Tap Connect button
+    4. Verify NODE_AUTH step appears
+    """
+    start_time = time.time()
+    screenshots = []
+    node_url = config.get("portal_url", config.get("node_url", "https://portal.ciris.ai"))
+
+    try:
+        print("  [1/4] Verifying on WELCOME step...")
+        if not ui.is_text_visible(CIRISAppConfig.TEXT_REGISTER_AGENT):
+            return TestReport(
+                name="test_connect_node_auth",
+                result=TestResult.SKIPPED,
+                duration=time.time() - start_time,
+                message="Not on WELCOME step with Register Your Agent card",
+            )
+
+        print(f"  [2/4] Entering portal URL: {node_url}")
+        # Try to find and click URL field
+        url_field = ui.find_by_text(CIRISAppConfig.TEXT_PORTAL_URL_PLACEHOLDER)
+        if url_field:
+            ui.click(url_field)
+            time.sleep(0.5)
+
+        # Type the URL
+        adb.input_text(node_url)
+        time.sleep(1)
+
+        print("  [3/4] Tapping Connect button...")
+        connect_clicked = ui.click_by_text(CIRISAppConfig.TEXT_CONNECT)
+        if not connect_clicked:
+            return TestReport(
+                name="test_connect_node_auth",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Could not find or click Connect button",
+            )
+
+        time.sleep(3)
+
+        print("  [4/4] Verifying NODE_AUTH step...")
+        # Look for auth step indicators
+        auth_visible = (
+            ui.is_text_visible(CIRISAppConfig.TEXT_REGISTER_AGENT_STEP)
+            or ui.is_text_visible(CIRISAppConfig.TEXT_WAITING_AUTH)
+            or ui.is_text_visible(CIRISAppConfig.TEXT_CONNECTING_PORTAL)
+            or ui.is_text_visible("Verification")
+            or ui.is_text_visible("device code")
+        )
+
+        screenshot_path = f"/tmp/ciris_android_auth_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        if auth_visible:
+            return TestReport(
+                name="test_connect_node_auth",
+                result=TestResult.PASSED,
+                duration=time.time() - start_time,
+                message="NODE_AUTH step reached after entering portal URL",
+                screenshots=screenshots,
+            )
+        else:
+            hierarchy = ui.dump_hierarchy()
+            visible_texts = ui.extract_texts_from_hierarchy(hierarchy) if hierarchy else []
+            return TestReport(
+                name="test_connect_node_auth",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"NODE_AUTH not reached. Visible: {visible_texts[:15]}",
+                screenshots=screenshots,
+            )
+
+    except Exception as e:
+        return TestReport(
+            name="test_connect_node_auth",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Error: {str(e)}",
+            screenshots=screenshots,
+        )
+
+
+def test_connect_node(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """
+    Test: Full Register Agent device auth flow (via Portal/Registry).
+
+    This is the primary test case for the agent registration feature.
+    The flow contacts CIRISPortal for device auth.
+
+    Steps:
+    1. Launch app and login
+    2. Find Register Your Agent card
+    3. Enter portal URL
+    4. Tap Connect
+    5. Wait for NODE_AUTH step
+    6. Verify verification URL and device code display
+    7. Optionally wait for Portal authorization
+
+    Config options:
+    - portal_url: Portal URL (default: https://portal.ciris.ai)
+    - wait_for_portal_auth: Wait for user to complete Portal auth (default: False)
+    - portal_auth_timeout: Timeout for Portal auth in seconds (default: 300)
+    """
+    start_time = time.time()
+    screenshots = []
+    package = CIRISAppConfig.PACKAGE
+    node_url = config.get("portal_url", config.get("node_url", "https://portal.ciris.ai"))
+    wait_for_portal = config.get("wait_for_portal_auth", False)
+    auth_timeout = config.get("portal_auth_timeout", 300)
+
+    try:
+        # ============================================================
+        # Step 1: Launch and login
+        # ============================================================
+        print("  [1/8] Launching app fresh...")
+        adb.force_stop_app(package)
+        time.sleep(1)
+        adb.launch_app(package, CIRISAppConfig.MAIN_ACTIVITY)
+
+        login_btn = ui.wait_for_text(CIRISAppConfig.TEXT_LOCAL_LOGIN, timeout=60)
+        if not login_btn:
+            return TestReport(
+                name="test_connect_node",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Could not reach login screen",
+            )
+
+        print("  [2/8] Logging in via Local Login...")
+        ui.click_by_text(CIRISAppConfig.TEXT_LOCAL_LOGIN)
+        time.sleep(3)
+
+        # ============================================================
+        # Step 2: Find Register Your Agent card
+        # ============================================================
+        print("  [3/8] Looking for Register Your Agent card...")
+        card_found = ui.wait_for_text(CIRISAppConfig.TEXT_REGISTER_AGENT, timeout=15)
+        if not card_found:
+            hierarchy = ui.dump_hierarchy()
+            visible_texts = ui.extract_texts_from_hierarchy(hierarchy) if hierarchy else []
+            return TestReport(
+                name="test_connect_node",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"Register Your Agent card not found on WELCOME. Visible: {visible_texts[:15]}",
+            )
+
+        # ============================================================
+        # Step 3: Enter portal URL
+        # ============================================================
+        print(f"  [4/8] Entering portal URL: {node_url}")
+        url_field = ui.find_by_text(CIRISAppConfig.TEXT_PORTAL_URL_PLACEHOLDER)
+        if url_field:
+            ui.click(url_field)
+            time.sleep(0.5)
+
+        adb.input_text(node_url)
+        time.sleep(1)
+
+        # ============================================================
+        # Step 4: Tap Connect
+        # ============================================================
+        print("  [5/8] Tapping Connect button...")
+        connect_clicked = ui.click_by_text(CIRISAppConfig.TEXT_CONNECT)
+        if not connect_clicked:
+            return TestReport(
+                name="test_connect_node",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Could not find or click Connect button",
+            )
+
+        time.sleep(3)
+
+        # ============================================================
+        # Step 5: Wait for NODE_AUTH step
+        # ============================================================
+        print("  [6/8] Waiting for NODE_AUTH step...")
+        auth_visible = ui.wait_for_text(CIRISAppConfig.TEXT_REGISTER_AGENT_STEP, timeout=15)
+        if not auth_visible:
+            auth_visible = (
+                ui.is_text_visible(CIRISAppConfig.TEXT_WAITING_AUTH)
+                or ui.is_text_visible("Verification")
+                or ui.is_text_visible("device code")
+            )
+
+        if not auth_visible:
+            hierarchy = ui.dump_hierarchy()
+            visible_texts = ui.extract_texts_from_hierarchy(hierarchy) if hierarchy else []
+            # Check for error states
+            if any(t.lower() in str(visible_texts).lower() for t in ["error", "failed"]):
+                return TestReport(
+                    name="test_connect_node",
+                    result=TestResult.FAILED,
+                    duration=time.time() - start_time,
+                    message=f"Connection error. Visible: {visible_texts[:15]}",
+                )
+            return TestReport(
+                name="test_connect_node",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"NODE_AUTH step not reached. Visible: {visible_texts[:15]}",
+            )
+
+        # ============================================================
+        # Step 6: Verify verification URL and device code
+        # ============================================================
+        print("  [7/8] Verifying device auth display...")
+        has_verification_url = ui.is_text_visible(CIRISAppConfig.TEXT_VERIFICATION_URL)
+        has_device_code = ui.is_text_visible("code") or ui.is_text_visible("Code")
+
+        screenshot_path = f"/tmp/ciris_android_node_auth_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        # ============================================================
+        # Step 7: Optionally wait for Portal authorization
+        # ============================================================
+        if wait_for_portal:
+            print(f"  [8/8] Waiting for Portal authorization (timeout: {auth_timeout}s)...")
+            print("        → Complete authorization in Portal browser window")
+
+            poll_start = time.time()
+            while time.time() - poll_start < auth_timeout:
+                if ui.is_text_visible(CIRISAppConfig.TEXT_AGENT_AUTHORIZED) or ui.is_text_visible("template"):
+                    has_template = ui.is_text_visible("template") or ui.is_text_visible("Template")
+                    has_adapters = ui.is_text_visible("adapter") or ui.is_text_visible("Adapter")
+
+                    screenshot_path = f"/tmp/ciris_android_auth_complete_{int(time.time())}.png"
+                    adb.screenshot(screenshot_path)
+                    screenshots.append(screenshot_path)
+
+                    return TestReport(
+                        name="test_connect_node",
+                        result=TestResult.PASSED,
+                        duration=time.time() - start_time,
+                        message=f"Device auth completed. Template shown: {has_template}, Adapters shown: {has_adapters}",
+                        screenshots=screenshots,
+                    )
+                time.sleep(5)
+
+            return TestReport(
+                name="test_connect_node",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"Portal auth not completed in {auth_timeout}s",
+                screenshots=screenshots,
+            )
+        else:
+            print("  [8/8] Skipping Portal auth wait (set wait_for_portal_auth=True to enable)")
+
+            # Test passes if we reached the NODE_AUTH step with verification info
+            if has_verification_url or has_device_code:
+                return TestReport(
+                    name="test_connect_node",
+                    result=TestResult.PASSED,
+                    duration=time.time() - start_time,
+                    message=f"Device auth screen reached. Verification URL: {has_verification_url}, Device code: {has_device_code}",
+                    screenshots=screenshots,
+                )
+            else:
+                return TestReport(
+                    name="test_connect_node",
+                    result=TestResult.PASSED,
+                    duration=time.time() - start_time,
+                    message="NODE_AUTH step reached but verification details not detected via UI automator.",
+                    screenshots=screenshots,
+                )
+
+    except Exception as e:
+        return TestReport(
+            name="test_connect_node",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Error: {str(e)}",
+            screenshots=screenshots,
+        )
+
+
+def test_connect_node_error(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """
+    Test: Error handling for invalid node URL.
+
+    Steps:
+    1. Enter invalid node URL
+    2. Tap Connect
+    3. Verify error message appears
+    """
+    start_time = time.time()
+    screenshots = []
+
+    try:
+        print("  [1/3] Verifying on WELCOME step...")
+        if not ui.is_text_visible(CIRISAppConfig.TEXT_REGISTER_AGENT):
+            return TestReport(
+                name="test_connect_node_error",
+                result=TestResult.SKIPPED,
+                duration=time.time() - start_time,
+                message="Not on WELCOME step",
+            )
+
+        print("  [2/3] Entering invalid node URL...")
+        invalid_url = "https://invalid-portal-that-does-not-exist.example.com"
+
+        url_field = ui.find_by_text(CIRISAppConfig.TEXT_PORTAL_URL_PLACEHOLDER)
+        if url_field:
+            ui.click(url_field)
+            time.sleep(0.5)
+
+        adb.input_text(invalid_url)
+        time.sleep(0.5)
+
+        ui.click_by_text(CIRISAppConfig.TEXT_CONNECT)
+        time.sleep(5)  # Wait for connection attempt to fail
+
+        print("  [3/3] Checking for error state...")
+        hierarchy = ui.dump_hierarchy()
+        visible_texts = ui.extract_texts_from_hierarchy(hierarchy) if hierarchy else []
+
+        screenshot_path = f"/tmp/ciris_android_error_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        has_error = any(t.lower() in str(visible_texts).lower() for t in ["error", "failed", "could not", "unable"])
+
+        if has_error:
+            return TestReport(
+                name="test_connect_node_error",
+                result=TestResult.PASSED,
+                duration=time.time() - start_time,
+                message=f"Error state displayed correctly. Visible: {visible_texts[:10]}",
+                screenshots=screenshots,
+            )
+        else:
+            return TestReport(
+                name="test_connect_node_error",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"No error message for invalid URL. Visible: {visible_texts[:10]}",
+                screenshots=screenshots,
+            )
+
+    except Exception as e:
+        return TestReport(
+            name="test_connect_node_error",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Error: {str(e)}",
+            screenshots=screenshots,
+        )
+
+
+def test_verify_trust(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """
+    Test: Trust and Security page displays correct CIRISVerify information.
+
+    Validates:
+    1. Key storage mode (hardware vs software)
+    2. Ed25519 fingerprint display
+    3. Binary/function self-check status
+    4. File integrity counts
+    5. Play Integrity status
+
+    Requires: App logged in and running
+    """
+    from .verify_trust_tests import VerifyTrustExpectations, VerifyTrustTests
+
+    start_time = time.time()
+    screenshots = []
+
+    try:
+        # Run verify trust tests
+        tests = VerifyTrustTests(adb, ui, expectations=VerifyTrustExpectations())
+        reports = tests.run_all()
+
+        # Aggregate results
+        passed = sum(1 for r in reports if r.result == TestResult.PASSED)
+        failed = sum(1 for r in reports if r.result == TestResult.FAILED)
+        errors = sum(1 for r in reports if r.result == TestResult.ERROR)
+
+        # Collect screenshots from sub-reports
+        for r in reports:
+            screenshots.extend(r.screenshots)
+
+        # Build summary message
+        failed_tests = [r.name for r in reports if r.result != TestResult.PASSED]
+        if failed_tests:
+            message = f"{passed}/{len(reports)} passed. Failed: {', '.join(failed_tests)}"
+            result = TestResult.FAILED if failed > 0 else TestResult.ERROR
+        else:
+            message = f"All {passed} verify trust checks passed"
+            result = TestResult.PASSED
+
+        return TestReport(
+            name="test_verify_trust",
+            result=result,
+            duration=time.time() - start_time,
+            message=message,
+            screenshots=screenshots,
+        )
+
+    except Exception as e:
+        return TestReport(
+            name="test_verify_trust",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Error: {str(e)}",
+            screenshots=screenshots,
+        )

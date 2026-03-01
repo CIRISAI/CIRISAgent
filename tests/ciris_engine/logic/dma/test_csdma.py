@@ -27,12 +27,12 @@ class TestCSDMAEvaluator:
         """Mock the prompt loader to return proper PromptCollection."""
         mock_loader = Mock()
         mock_collection = Mock()
-        mock_collection.uses_covenant_header = Mock(return_value=True)
+        mock_collection.uses_accord_header = Mock(return_value=True)
         mock_collection.get_system_message = Mock(return_value="Evaluate this thought for common sense.")
         mock_collection.get_user_message = Mock(return_value="Thought to evaluate: Test thought")
 
         mock_loader.load_prompt_template = Mock(return_value=mock_collection)
-        mock_loader.uses_covenant_header = Mock(return_value=True)
+        mock_loader.uses_accord_header = Mock(return_value=True)
         mock_loader.get_system_message = Mock(return_value="Evaluate this thought for common sense.")
         mock_loader.get_user_message = Mock(return_value="Thought to evaluate: Test thought")
 
@@ -225,7 +225,7 @@ class TestCSDMAEvaluator:
         messages = call_args.kwargs["messages"]
 
         # System message should contain the context
-        system_content = messages[1]["content"]  # Second message after covenant
+        system_content = messages[1]["content"]  # Second message after accord
         assert "Zero gravity" in system_content or "Standard Earth-based" not in system_content
 
     @pytest.mark.asyncio

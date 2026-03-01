@@ -279,7 +279,7 @@ class ServiceInitializer:
                 cache_ttl_seconds=cache_ttl,
                 fail_open=fail_open,
             )
-            logger.info("Using CIRISBillingProvider with API key auth (URL: %s)", base_url)
+            logger.info("Using CIRISBillingProvider with API key auth")
 
         elif is_android and using_ciris_proxy:
             # Android using CIRIS LLM proxy - requires billing
@@ -338,48 +338,25 @@ class ServiceInitializer:
         keys_dir.mkdir(parents=True, exist_ok=True)
 
         # Load or generate master key
+        # Note: Hardware-backed key protection is handled by CIRISVerify's unified signer
         master_key_path = keys_dir / "secrets_master.key"
         master_key = None
-        is_android = "ANDROID_DATA" in os.environ
 
-        if is_android:
-            # Android: Use Keystore-wrapped key for hardware-backed protection
-            try:
-                from android_keystore import load_or_create_wrapped_master_key, migrate_plain_key_to_wrapped
+        if master_key_path.exists():
+            # Load existing master key
+            async with aiofiles.open(master_key_path, "rb") as f:
+                master_key = await f.read()
+            logger.info("Loaded existing secrets master key")
+        else:
+            # Generate new master key and save it
+            import secrets
 
-                # Migrate existing plain key if present
-                migrate_plain_key_to_wrapped(master_key_path)
-
-                # Load or create wrapped key
-                master_key = load_or_create_wrapped_master_key(master_key_path)
-                if master_key:
-                    logger.info("Loaded secrets master key with Android Keystore protection")
-                else:
-                    logger.error("Failed to load/create Keystore-wrapped master key")
-            except ImportError:
-                logger.warning("Android Keystore module not available, falling back to file storage")
-                is_android = False  # Fall through to standard path
-            except Exception as e:
-                logger.error(f"Android Keystore error: {e}, falling back to file storage")
-                is_android = False
-
-        if not is_android:
-            # Standard path: plain file storage (server deployments)
-            if master_key_path.exists():
-                # Load existing master key
-                async with aiofiles.open(master_key_path, "rb") as f:
-                    master_key = await f.read()
-                logger.info("Loaded existing secrets master key")
-            else:
-                # Generate new master key and save it
-                import secrets
-
-                master_key = secrets.token_bytes(32)
-                async with aiofiles.open(master_key_path, "wb") as f:
-                    await f.write(master_key)
-                # Set restrictive permissions (owner read/write only)
-                os.chmod(master_key_path, 0o600)
-                logger.info("Generated and saved new secrets master key")
+            master_key = secrets.token_bytes(32)
+            async with aiofiles.open(master_key_path, "wb") as f:
+                await f.write(master_key)
+            # Set restrictive permissions (owner read/write only)
+            os.chmod(master_key_path, 0o600)
+            logger.info("Generated and saved new secrets master key")
 
         # Create README if it doesn't exist
         readme_path = keys_dir / "README.md"
@@ -1330,6 +1307,20 @@ This directory contains critical cryptographic keys for the CIRIS system.
         if self.service_registry is None:
             return
 
+        # First check if the adapter declares explicit service registrations
+        if hasattr(service, "get_services_to_register"):
+            registrations = service.get_services_to_register()
+            for reg in registrations:
+                self.service_registry.register_service(
+                    service_type=reg.service_type,
+                    provider=reg.provider,
+                    priority=reg.priority if hasattr(reg, "priority") else Priority.NORMAL,
+                    capabilities=reg.capabilities if hasattr(reg, "capabilities") else [],
+                    metadata={"adapter": adapter_name, "auto_loaded": True},
+                )
+                logger.info(f"[SKILL-ADAPTERS] Registered {reg.service_type.value} from adapter: {adapter_name}")
+            return
+
         if hasattr(service, "get_all_tool_info"):
             self.service_registry.register_service(
                 service_type=ServiceType.TOOL,
@@ -1344,7 +1335,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 service_type=ServiceType.WISE_AUTHORITY,
                 provider=service,
                 priority=Priority.NORMAL,
-                capabilities=["send_deferral", "covenant_metrics"],
+                capabilities=["send_deferral", "accord_metrics"],
                 metadata={"adapter": adapter_name, "auto_loaded": True},
             )
             logger.info(f"[SKILL-ADAPTERS] Registered wisdom adapter: {adapter_name}")
@@ -1392,6 +1383,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
             return
 
         for adapter_name, service in eligible.items():
+            # ciris_verify is always loaded at bootstrap — skip to avoid double-load
+            if adapter_name == "ciris_verify":
+                continue
             try:
                 await self._start_and_register_adapter(adapter_name, service)
             except Exception as e:

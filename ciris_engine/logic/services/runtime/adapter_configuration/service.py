@@ -250,16 +250,16 @@ class AdapterConfigurationService:
         """Store OAuth-related data from step_data into session."""
         if "base_url" in step_data and step_data["base_url"]:
             session.collected_config["base_url"] = step_data["base_url"]
-            logger.info(f"[OAUTH STEP] Stored base_url from step_data: {step_data['base_url']}")
+            logger.info("[OAUTH STEP] Stored base_url from step_data")
 
         if step_data.get("callback_base_url"):
             session.collected_config["callback_base_url"] = step_data["callback_base_url"]
-            logger.info(f"[OAUTH STEP] Using local callback base URL: {step_data['callback_base_url']}")
+            logger.info("[OAUTH STEP] Using local callback base URL")
 
         if step_data.get("redirect_uri"):
             session.collected_config["redirect_uri"] = step_data["redirect_uri"]
             session.collected_config["platform"] = step_data.get("platform")
-            logger.info(f"[OAUTH STEP] Using custom redirect URI: {step_data['redirect_uri']}")
+            logger.info("[OAUTH STEP] Using custom redirect URI")
 
     async def _generate_oauth_url(
         self,
@@ -270,7 +270,7 @@ class AdapterConfigurationService:
     ) -> StepResult:
         """Generate OAuth authorization URL."""
         base_url = session.collected_config.get("base_url", "")
-        logger.info(f"[OAUTH STEP] Generating OAuth URL with base_url={base_url}")
+        logger.info("[OAUTH STEP] Generating OAuth URL")
 
         if not base_url:
             logger.error("[OAUTH STEP] ERROR: No base_url in collected_config!")
@@ -291,7 +291,7 @@ class AdapterConfigurationService:
                 redirect_uri=step_data.get("redirect_uri"),
                 platform=step_data.get("platform"),
             )
-            logger.info(f"[OAUTH STEP] Generated OAuth URL: {oauth_url}")
+            logger.info("[OAUTH STEP] Generated OAuth URL successfully")
         except Exception as e:
             logger.error(f"[OAUTH STEP] Failed to generate OAuth URL: {e}")
             return StepResult(step_id=step.step_id, success=False, error=f"Failed to get OAuth URL: {str(e)}")
@@ -313,11 +313,9 @@ class AdapterConfigurationService:
     ) -> StepResult:
         """Execute an OAuth step."""
         logger.info(f"[OAUTH STEP] Executing OAuth step for session {session.session_id}")
-        logger.info(f"[OAUTH STEP] step_data keys: {list(step_data.keys())}")
-        logger.info(f"[OAUTH STEP] collected_config before: {session.collected_config}")
+        logger.debug(f"[OAUTH STEP] step_data keys: {list(step_data.keys())}")
 
         self._store_oauth_step_data(session, step_data)
-        logger.info(f"[OAUTH STEP] collected_config after: {session.collected_config}")
 
         if "code" in step_data:
             return await self._handle_oauth_callback(session, step, adapter, step_data)
@@ -334,16 +332,15 @@ class AdapterConfigurationService:
         logger.info(
             f"[SELECT STEP] Processing step {step.step_id}, step_data keys: {list(step_data.keys()) if step_data else 'None'}"
         )
-        logger.info(f"[SELECT STEP] Raw step_data: {step_data}")
+        logger.debug(f"[SELECT STEP] step_data keys: {list(step_data.keys()) if step_data else 'None'}")
 
         selection = step_data.get("selection") or step_data.get("selected")
-        logger.info(f"[SELECT STEP] Extracted selection: {selection}")
 
         if selection:
             session.collected_config[step.step_id] = selection
             session.current_step_index += 1
             logger.info(
-                f"[SELECT STEP] Stored selection for {step.step_id}: {selection}, advancing to step {session.current_step_index}"
+                f"[SELECT STEP] Stored selection for {step.step_id}, advancing to step {session.current_step_index}"
             )
             return StepResult(step_id=step.step_id, success=True, next_step_index=session.current_step_index)
 
@@ -372,6 +369,111 @@ class AdapterConfigurationService:
             next_step_index=session.current_step_index,
         )
 
+    async def _execute_device_auth_step(
+        self,
+        session: AdapterConfigSession,
+        step: ConfigurationStep,
+        adapter: ConfigurableAdapterProtocol,
+        step_data: Dict[str, Any],
+    ) -> StepResult:
+        """Execute a device authorization (RFC 8628) step.
+
+        Device auth flow:
+        1. First call: Initiate device auth, return user_code and verification_uri
+        2. Subsequent calls with poll=true: Poll for completion
+        3. On completion: Store tokens/keys and advance
+        """
+        logger.info(f"[DEVICE_AUTH STEP] Executing for session {session.session_id}")
+        logger.debug(f"[DEVICE_AUTH STEP] step_data keys: {list(step_data.keys()) if step_data else 'None'}")
+
+        # Store portal URL if provided
+        if "portal_url" in step_data:
+            session.collected_config["portal_url"] = step_data["portal_url"]
+
+        # Check if we're polling for completion
+        if step_data.get("poll") and session.collected_config.get("device_code"):
+            logger.info("[DEVICE_AUTH STEP] Polling for device auth completion")
+            # Call adapter's poll method (uses handle_oauth_callback for compatibility)
+            try:
+                result = await adapter.handle_oauth_callback(
+                    code=session.collected_config["device_code"],
+                    state=session.session_id,
+                    base_url=session.collected_config.get("portal_url", ""),
+                )
+                if result.get("status") == "complete":
+                    session.collected_config["device_auth_result"] = result
+                    session.status = SessionStatus.ACTIVE
+                    session.current_step_index += 1
+                    logger.info("[DEVICE_AUTH STEP] Authorization complete!")
+                    return StepResult(
+                        step_id=step.step_id,
+                        success=True,
+                        data={"status": "complete", "result": result},
+                        next_step_index=session.current_step_index,
+                    )
+                elif result.get("status") == "pending":
+                    return StepResult(
+                        step_id=step.step_id,
+                        success=True,
+                        data={"status": "pending"},
+                        awaiting_callback=True,
+                    )
+                else:
+                    return StepResult(
+                        step_id=step.step_id,
+                        success=False,
+                        error=result.get("error", "Device authorization failed"),
+                    )
+            except Exception as e:
+                logger.error(f"[DEVICE_AUTH STEP] Poll error: {e}")
+                return StepResult(step_id=step.step_id, success=False, error=str(e))
+
+        # Initial request: Initiate device auth
+        portal_url = session.collected_config.get("portal_url", "")
+        if not portal_url:
+            return StepResult(
+                step_id=step.step_id,
+                success=False,
+                error="No portal_url provided. Please select a CIRISNode first.",
+            )
+
+        try:
+            # Use get_oauth_url to initiate device auth (returns verification URL with user code)
+            auth_data = await adapter.get_oauth_url(
+                base_url=portal_url,
+                state=session.session_id,
+            )
+
+            # If adapter returns a dict (device auth data) vs string (OAuth URL)
+            if isinstance(auth_data, dict):
+                session.collected_config["device_code"] = auth_data.get("device_code")
+                session.collected_config["user_code"] = auth_data.get("user_code")
+                session.status = SessionStatus.AWAITING_OAUTH  # Reuse status
+                return StepResult(
+                    step_id=step.step_id,
+                    success=True,
+                    data={
+                        "verification_uri": auth_data.get("verification_uri_complete"),
+                        "user_code": auth_data.get("user_code"),
+                        "expires_in": auth_data.get("expires_in", 900),
+                        "interval": auth_data.get("interval", 5),
+                    },
+                    awaiting_callback=True,
+                )
+            else:
+                # String URL returned - treat as verification URI
+                session.status = SessionStatus.AWAITING_OAUTH
+                return StepResult(
+                    step_id=step.step_id,
+                    success=True,
+                    data={"verification_uri": auth_data},
+                    awaiting_callback=True,
+                )
+
+        except Exception as e:
+            logger.error(f"[DEVICE_AUTH STEP] Initiation error: {e}")
+            return StepResult(step_id=step.step_id, success=False, error=str(e))
+
     async def _execute_step_type(
         self,
         session: AdapterConfigSession,
@@ -384,6 +486,8 @@ class AdapterConfigurationService:
             return await self._execute_discovery_step(session, step, adapter)
         elif step.step_type == "oauth":
             return await self._execute_oauth_step(session, step, adapter, step_data)
+        elif step.step_type == "device_auth":
+            return await self._execute_device_auth_step(session, step, adapter, step_data)
         elif step.step_type == "select":
             return await self._execute_select_step(session, step, adapter, step_data)
         elif step.step_type == "input":
@@ -421,7 +525,11 @@ class AdapterConfigurationService:
         success = await adapter.apply_config(session.collected_config)
         if success:
             session.status = SessionStatus.COMPLETED
-            logger.info(f"Configuration applied for session {session_id}")
+            # Sanitize session_id before logging (user-controlled data)
+            import hashlib
+
+            session_hash = hashlib.sha256(session_id.encode()).hexdigest()[:8]
+            logger.info(f"Configuration applied for session [id_hash:{session_hash}]")
         else:
             session.status = SessionStatus.FAILED
 
@@ -520,7 +628,7 @@ class AdapterConfigurationService:
             all_configs = await config_service.list_configs(prefix=prefix)
 
             if not all_configs:
-                logger.info(f"No persisted configs found for adapter type: {adapter_type}")
+                logger.info("No persisted configs found for requested adapter type")
                 return False
 
             # Remove each config by setting to None (or use delete if available)
@@ -534,9 +642,9 @@ class AdapterConfigurationService:
                 except Exception as e:
                     logger.warning(f"Failed to remove config {key}: {e}")
 
-            logger.info(f"Removed {removed_count} persisted configs for {adapter_type}")
+            logger.info(f"Removed {removed_count} persisted configs for adapter")
             return removed_count > 0
 
         except Exception as e:
-            logger.error(f"Failed to remove persisted config for {adapter_type}: {e}")
+            logger.error(f"Failed to remove persisted config for adapter: {e}")
             return False

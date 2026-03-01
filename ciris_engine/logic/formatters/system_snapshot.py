@@ -75,6 +75,21 @@ def format_system_snapshot(system_snapshot: SystemSnapshot) -> str:
 
     lines = ["=== System Snapshot ==="]
 
+    # LICENSE DISCLOSURE - MUST appear first per FSD-001
+    if hasattr(system_snapshot, "license_disclosure_text") and system_snapshot.license_disclosure_text:
+        severity = (getattr(system_snapshot, "license_disclosure_severity", "INFO") or "INFO").upper()
+        if severity == "CRITICAL":
+            lines.append("🚨🚨🚨 CRITICAL LICENSE DISCLOSURE 🚨🚨🚨")
+        elif severity == "WARNING":
+            lines.append("⚠️ LICENSE DISCLOSURE ⚠️")
+        else:
+            lines.append("📋 LICENSE DISCLOSURE")
+        lines.append(system_snapshot.license_disclosure_text)
+        # Add attestation summary if available
+        if hasattr(system_snapshot, "attestation_summary") and system_snapshot.attestation_summary:
+            lines.append(f"Verification: {system_snapshot.attestation_summary}")
+        lines.append("")  # Empty line for separation
+
     # Time of System Snapshot
     if hasattr(system_snapshot, "current_time_utc") and system_snapshot.current_time_utc:
         lines.append("Time of System Snapshot:")

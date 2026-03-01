@@ -4,12 +4,21 @@ import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.models.Platform
 import ai.ciris.mobile.shared.models.SetupMode
 import ai.ciris.mobile.shared.models.filterAdaptersForPlatform
+import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
+
+import ai.ciris.mobile.shared.viewmodels.DeviceAuthStatus
+import ai.ciris.mobile.shared.viewmodels.LlmValidationResult
+import ai.ciris.mobile.shared.viewmodels.ModelInfo
 import ai.ciris.mobile.shared.viewmodels.SetupStep
 import ai.ciris.mobile.shared.viewmodels.SetupFormState
 import ai.ciris.mobile.shared.viewmodels.SetupViewModel
 import androidx.compose.animation.AnimatedVisibility
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,6 +32,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,9 +40,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.platform.LocalClipboardManager
+import ai.ciris.mobile.shared.platform.openUrlInBrowser
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+private const val TAG = "SetupScreen"
 
 /**
  * Setup Wizard Screen - EXACTLY matches android/app/.../setup/ fragments
@@ -62,6 +78,11 @@ private object SetupColors {
     val InfoDark = Color(0xFF1E40AF)
     val InfoText = Color(0xFF1D4ED8)
 
+    // Error (red) - for validation failures
+    val ErrorLight = Color(0xFFFEE2E2)
+    val ErrorDark = Color(0xFFB91C1C)
+    val ErrorText = Color(0xFFDC2626)
+
     // Gray for cards
     val GrayLight = Color(0xFFF3F4F6)
 
@@ -75,6 +96,7 @@ fun SetupScreen(
     viewModel: SetupViewModel,
     apiClient: CIRISApiClient,
     onSetupComplete: () -> Unit,
+    onBackToLogin: (() -> Unit)? = null,  // Optional callback to return to login screen
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.state.collectAsState()
@@ -113,6 +135,7 @@ fun SetupScreen(
             // Step indicators at top
             StepIndicators(
                 currentStep = state.currentStep,
+                isNodeFlow = state.isNodeFlow,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 16.dp, horizontal = 24.dp)
@@ -126,11 +149,15 @@ fun SetupScreen(
             ) {
                 when (state.currentStep) {
                     SetupStep.WELCOME -> WelcomeStep(
-                        isGoogleAuth = state.isGoogleAuth
+                        viewModel = viewModel,
+                        state = state,
+                        apiClient = apiClient
                     )
-                    SetupStep.LLM_CONFIGURATION -> LlmConfigurationStep(viewModel, state)
+                    SetupStep.NODE_AUTH -> NodeAuthStep(viewModel, state, apiClient)
+                    SetupStep.LLM_CONFIGURATION -> LlmConfigurationStep(viewModel, state, apiClient)
                     SetupStep.OPTIONAL_FEATURES -> OptionalFeaturesStep(viewModel, state)
                     SetupStep.ACCOUNT_AND_CONFIRMATION -> AccountConfirmationStep(viewModel, state)
+                    SetupStep.VERIFY_SETUP -> OptionalFeaturesStep(viewModel, state) // Legacy - redirects to OPTIONAL_FEATURES
                     SetupStep.COMPLETE -> CompleteStep(onSetupComplete)
                 }
             }
@@ -162,7 +189,7 @@ fun SetupScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         Button(
                             onClick = {
-                                println("[SetupScreen] User chose to skip setup (already configured)")
+                                PlatformLogger.i(TAG, " User chose to skip setup (already configured)")
                                 onSetupComplete()
                             },
                             colors = ButtonDefaults.buttonColors(
@@ -181,38 +208,63 @@ fun SetupScreen(
                 canProceed = state.canProceedFromCurrentStep(),
                 validationError = state.getStepValidationError(),
                 isSubmitting = state.isSubmitting,
+                isNodeFlow = state.isNodeFlow,
                 onNext = {
-                    println("[SetupScreen] onNext clicked, currentStep=${state.currentStep}, canProceed=${state.canProceedFromCurrentStep()}")
-                    if (state.currentStep == SetupStep.ACCOUNT_AND_CONFIRMATION) {
+                    PlatformLogger.i(TAG, " onNext clicked, currentStep=${state.currentStep}, canProceed=${state.canProceedFromCurrentStep()}, isNodeFlow=${state.isNodeFlow}")
+                    // Determine if this is the final step before COMPLETE
+                    // - Normal flow: ACCOUNT_AND_CONFIRMATION is the final step
+                    // - Node flow: OPTIONAL_FEATURES is the final step (skips ACCOUNT_AND_CONFIRMATION)
+                    val isFinalStep = state.currentStep == SetupStep.ACCOUNT_AND_CONFIRMATION ||
+                        (state.isNodeFlow && state.currentStep == SetupStep.OPTIONAL_FEATURES)
+
+                    if (isFinalStep) {
                         // On final step, submit setup to API then advance
-                        println("[SetupScreen] Final step - launching coroutine to submit setup")
+                        PlatformLogger.i(TAG, " Final step - launching coroutine to submit setup")
                         coroutineScope.launch {
-                            println("[SetupScreen] Coroutine started - calling viewModel.completeSetup")
+                            PlatformLogger.i(TAG, " Coroutine started - calling viewModel.completeSetup")
                             try {
-                                val result = viewModel.completeSetup { request ->
-                                    // Make API call to /v1/setup/complete
-                                    println("[SetupScreen] Calling apiClient.completeSetup with provider=${request.llm_provider}")
-                                    apiClient.completeSetup(request)
+                                // Run API call on IO dispatcher to avoid blocking main thread
+                                // Setup can take 20+ seconds as Python initializes services
+                                val result = withContext(Dispatchers.IO) {
+                                    viewModel.completeSetup { request ->
+                                        // Make API call to /v1/setup/complete
+                                        PlatformLogger.i(TAG, " Calling apiClient.completeSetup with provider=${request.llm_provider}")
+                                        apiClient.completeSetup(request)
+                                    }
                                 }
-                                println("[SetupScreen] completeSetup returned: success=${result.success}, error=${result.error}")
+                                PlatformLogger.i(TAG, " completeSetup returned: success=${result.success}, error=${result.error}")
                                 if (result.success) {
-                                    println("[SetupScreen] Setup successful - advancing to next step")
+                                    PlatformLogger.i(TAG, " Setup successful - advancing to next step")
                                     viewModel.nextStep()
                                 } else {
-                                    println("[SetupScreen] ERROR: Setup failed: ${result.error}")
+                                    PlatformLogger.i(TAG, " ERROR: Setup failed: ${result.error}")
                                     // Error is now shown in UI via state.submissionError
                                 }
                             } catch (e: Exception) {
-                                println("[SetupScreen] EXCEPTION in completeSetup: ${e.message}")
+                                PlatformLogger.i(TAG, " EXCEPTION in completeSetup: ${e.message}")
                                 e.printStackTrace()
                             }
                         }
                     } else {
-                        println("[SetupScreen] Not final step - calling viewModel.nextStep()")
+                        PlatformLogger.i(TAG, " Not final step - calling viewModel.nextStep()")
                         viewModel.nextStep()
                     }
                 },
-                onBack = { viewModel.previousStep() },
+                onBack = {
+                    // If backing out of NODE_AUTH, also reset server-side device auth state
+                    if (state.isNodeFlow && state.currentStep == SetupStep.NODE_AUTH) {
+                        PlatformLogger.i(TAG, "Backing out of NODE_AUTH - resetting server device auth state")
+                        coroutineScope.launch(Dispatchers.IO) {
+                            try {
+                                apiClient.resetDeviceAuthOnServer()
+                            } catch (e: Exception) {
+                                PlatformLogger.w(TAG, "Failed to reset device auth on server: ${e.message}")
+                            }
+                        }
+                    }
+                    viewModel.previousStep()
+                },
+                onBackToLogin = onBackToLogin,
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
@@ -226,14 +278,24 @@ fun SetupScreen(
 @Composable
 private fun StepIndicators(
     currentStep: SetupStep,
+    isNodeFlow: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val steps = listOf(
-        SetupStep.WELCOME to "1",
-        SetupStep.LLM_CONFIGURATION to "2",
-        SetupStep.OPTIONAL_FEATURES to "3",
-        SetupStep.ACCOUNT_AND_CONFIRMATION to "4"
-    )
+    val steps = if (isNodeFlow) {
+        listOf(
+            SetupStep.WELCOME to "1",
+            SetupStep.NODE_AUTH to "2",
+            SetupStep.LLM_CONFIGURATION to "3",
+            SetupStep.OPTIONAL_FEATURES to "4"
+        )
+    } else {
+        listOf(
+            SetupStep.WELCOME to "1",
+            SetupStep.LLM_CONFIGURATION to "2",
+            SetupStep.OPTIONAL_FEATURES to "3",
+            SetupStep.ACCOUNT_AND_CONFIRMATION to "4"
+        )
+    }
 
     Row(
         modifier = modifier,
@@ -280,18 +342,30 @@ private fun StepIndicators(
 // This screen shows different cards based on whether user already signed in with Google
 @Composable
 private fun WelcomeStep(
-    isGoogleAuth: Boolean,
+    viewModel: SetupViewModel,
+    state: SetupFormState,
+    apiClient: CIRISApiClient,
     modifier: Modifier = Modifier
 ) {
+    val isGoogleAuth = state.isGoogleAuth
     var detailsExpanded by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    // Track if there's more content below
+    val showScrollIndicator by remember {
+        derivedStateOf {
+            scrollState.value < scrollState.maxValue - 50
+        }
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+                .verticalScroll(scrollState),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
         // Badge: "✓ 100% Free & Open Source"
         Surface(
             shape = RoundedCornerShape(8.dp),
@@ -305,6 +379,110 @@ private fun WelcomeStep(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
+        }
+
+        // Register Your Agent card — always visible, above the fold
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = Color(0xFFF0FDF4), // Light green
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+                .border(1.dp, Color(0xFF86EFAC), RoundedCornerShape(12.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Register Your Agent Identity",
+                        color = SetupColors.SuccessDark,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFFD1FAE5)
+                    ) {
+                        Text(
+                            text = "OPTIONAL",
+                            color = SetupColors.SuccessDark,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                Text(
+                    text = "Join the CIRIS community and enable cryptographic attestation against the public infrastructure and your audit log.",
+                    color = SetupColors.SuccessText,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                )
+
+                // Benefits list
+                Column(modifier = Modifier.padding(bottom = 12.dp)) {
+                    BenefitRow("Audit trail — cryptographically-signed traces begin")
+                    BenefitRow("Coherence Ratchet — coordinated deception becomes mathematically harder over time")
+                    BenefitRow("CIRIS Scoring — measures integrity across interactions")
+                    BenefitRow("Community template (Ally) included")
+                }
+
+                Text(
+                    text = "\$1.00 refundable bond + \$0.50 processing fee",
+                    color = SetupColors.SuccessDark,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                Button(
+                    onClick = {
+                        // Set default portal URL and enter node flow
+                        viewModel.updateNodeUrl("https://portal.ciris.ai")
+                        viewModel.enterNodeFlow()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SetupColors.SuccessDark
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Connect to CIRIS Portal", fontWeight = FontWeight.Bold)
+                }
+
+                Text(
+                    text = "Identity keys are bound to your agent — transfers not yet supported",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                )
+
+                Text(
+                    text = "For licensed deployment, contact sales@ciris.ai",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                )
+
+                // Skip option
+                Text(
+                    text = "Skip for now - you can register later in Settings",
+                    color = Color(0xFF9CA3AF),  // Lighter gray for tertiary
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                )
+            }
         }
 
         // Main description
@@ -446,6 +624,345 @@ private fun WelcomeStep(
                 )
             }
         }
+
+            // Bottom padding for scroll indicator
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+
+        // Scroll indicator arrow - shows when there's more content below
+        AnimatedVisibility(
+            visible = showScrollIndicator,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 8.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = SetupColors.Primary.copy(alpha = 0.9f),
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Text(
+                        text = "↓",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ========== License Auth Step (Device Authorization via Portal/Registry) ==========
+@Composable
+private fun NodeAuthStep(
+    viewModel: SetupViewModel,
+    state: SetupFormState,
+    apiClient: CIRISApiClient,
+    modifier: Modifier = Modifier
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val deviceAuth = state.deviceAuth
+    val clipboardManager = LocalClipboardManager.current
+    var showCopiedToast by remember { mutableStateOf(false) }
+
+    // Start connection when entering this step if not yet started
+    LaunchedEffect(Unit) {
+        if (deviceAuth.status == DeviceAuthStatus.IDLE) {
+            // TODO: Wire to actual API call via apiClient.
+            // MVP: The startNodeConnection method accepts a lambda for platform-specific HTTP.
+            viewModel.startNodeConnection { nodeUrl ->
+                apiClient.connectToNode(nodeUrl)
+            }
+        }
+    }
+
+    // Manual polling triggered by "All Done!" button instead of automatic polling
+    // This prevents "unable to resolve localhost" when app returns from browser
+    var isChecking by remember { mutableStateOf(false) }
+    var checkError by remember { mutableStateOf<String?>(null) }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Register Agent",
+            color = SetupColors.TextPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        Text(
+            text = "Registering via ${deviceAuth.nodeUrl}",
+            color = SetupColors.TextSecondary,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 24.dp)
+        )
+
+        when (deviceAuth.status) {
+            DeviceAuthStatus.IDLE, DeviceAuthStatus.CONNECTING -> {
+                CircularProgressIndicator(
+                    color = SetupColors.Primary,
+                    modifier = Modifier.padding(16.dp)
+                )
+                Text(
+                    text = "Connecting to portal...",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 14.sp
+                )
+            }
+
+            DeviceAuthStatus.WAITING -> {
+                // Use verification URL as provided by server (includes device code)
+                val fullVerificationUrl = deviceAuth.verificationUri
+
+                // Verification URL card
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SetupColors.InfoLight,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Click to open in browser, or copy to open in another app:",
+                            color = SetupColors.InfoDark,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+
+                        // Clickable URL
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color.White,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    openUrlInBrowser(fullVerificationUrl)
+                                }
+                        ) {
+                            Text(
+                                text = fullVerificationUrl,
+                                color = SetupColors.Primary,
+                                fontSize = 14.sp,
+                                textAlign = TextAlign.Center,
+                                textDecoration = TextDecoration.Underline,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Action buttons row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Open in browser button
+                            Button(
+                                onClick = { openUrlInBrowser(fullVerificationUrl) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SetupColors.Primary
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Open in Browser", fontSize = 13.sp)
+                            }
+
+                            // Copy to clipboard button
+                            OutlinedButton(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(fullVerificationUrl))
+                                    showCopiedToast = true
+                                    coroutineScope.launch {
+                                        delay(2000)
+                                        showCopiedToast = false
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    if (showCopiedToast) "Copied!" else "Copy URL",
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+
+                        if (deviceAuth.userCode.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Code: ${deviceAuth.userCode}",
+                                color = SetupColors.InfoDark,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // "All Done!" button for manual check after returning from browser
+                if (isChecking) {
+                    CircularProgressIndicator(
+                        color = SetupColors.Primary,
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Checking authorization...",
+                        color = SetupColors.TextSecondary,
+                        fontSize = 14.sp
+                    )
+                } else {
+                    Text(
+                        text = "After completing authorization in your browser, tap the button below:",
+                        color = SetupColors.TextSecondary,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    Button(
+                        onClick = {
+                            isChecking = true
+                            checkError = null
+                            coroutineScope.launch {
+                                try {
+                                    viewModel.pollNodeAuthStatus { deviceCode, portalUrl ->
+                                        apiClient.pollNodeAuthStatus(deviceCode, portalUrl)
+                                    }
+                                } catch (e: Exception) {
+                                    checkError = e.message ?: "Check failed"
+                                } finally {
+                                    isChecking = false
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SetupColors.SuccessDark
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                    ) {
+                        Text(
+                            "All Done!",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    checkError?.let { error ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = error,
+                            color = Color.Red,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+
+            DeviceAuthStatus.COMPLETE -> {
+                // Success card
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SetupColors.SuccessLight,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = "✓ Agent Authorized",
+                            color = SetupColors.SuccessDark,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                        deviceAuth.provisionedTemplate?.let {
+                            Text(
+                                text = "Template: $it",
+                                color = SetupColors.SuccessText,
+                                fontSize = 14.sp
+                            )
+                        }
+                        if (deviceAuth.provisionedAdapters.isNotEmpty()) {
+                            Text(
+                                text = "Adapters: ${deviceAuth.provisionedAdapters.joinToString(", ")}",
+                                color = SetupColors.SuccessText,
+                                fontSize = 14.sp
+                            )
+                        }
+                        deviceAuth.orgId?.let {
+                            Text(
+                                text = "Organization: $it",
+                                color = SetupColors.SuccessText,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Tap Continue to configure your LLM provider.",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            DeviceAuthStatus.ERROR -> {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFFEE2E2),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = "Connection Failed",
+                            color = Color(0xFF991B1B),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        Text(
+                            text = deviceAuth.error ?: "Unknown error",
+                            color = Color(0xFFDC2626),
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            viewModel.startNodeConnection { nodeUrl ->
+                                apiClient.connectToNode(nodeUrl)
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SetupColors.Primary)
+                ) {
+                    Text("Retry")
+                }
+            }
+        }
     }
 }
 
@@ -455,8 +972,15 @@ private fun WelcomeStep(
 private fun LlmConfigurationStep(
     viewModel: SetupViewModel,
     state: SetupFormState,
+    apiClient: CIRISApiClient,
     modifier: Modifier = Modifier
 ) {
+    // State for connection testing
+    var isTesting by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<LlmValidationResult?>(null) }
+    var availableModels by remember { mutableStateOf<List<ModelInfo>>(emptyList()) }
+    val coroutineScope = rememberCoroutineScope()
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -647,15 +1171,267 @@ private fun LlmConfigurationStep(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
+            // Model selection - dropdown if models available, text field otherwise
+            Text(
+                text = if (availableModels.isNotEmpty()) "Model" else "Model (optional)",
+                color = SetupColors.TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            if (availableModels.isNotEmpty()) {
+                // Show dropdown with live models from provider
+                var modelExpanded by remember { mutableStateOf(false) }
+                val selectedModel = availableModels.find { it.id == state.llmModel }
+
+                ExposedDropdownMenuBox(
+                    expanded = modelExpanded,
+                    onExpandedChange = { modelExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = selectedModel?.displayName ?: state.llmModel.ifEmpty { "Select a model" },
+                        onValueChange = {},
+                        readOnly = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        trailingIcon = {
+                            if (selectedModel?.cirisRecommended == true) {
+                                Text("★", color = SetupColors.Primary, fontSize = 16.sp)
+                            }
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = SetupColors.Primary,
+                            unfocusedBorderColor = SetupColors.GrayLight
+                        )
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = modelExpanded,
+                        onDismissRequest = { modelExpanded = false }
+                    ) {
+                        // Show recommended models first
+                        val sortedModels = availableModels.sortedByDescending {
+                            when {
+                                it.cirisRecommended -> 2
+                                it.cirisCompatible -> 1
+                                else -> 0
+                            }
+                        }
+                        sortedModels.forEach { model ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = model.displayName,
+                                                fontWeight = if (model.cirisRecommended) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                            if (model.contextWindow != null) {
+                                                Text(
+                                                    text = "${model.contextWindow / 1000}K context",
+                                                    fontSize = 11.sp,
+                                                    color = SetupColors.TextSecondary
+                                                )
+                                            }
+                                        }
+                                        Row {
+                                            if (model.cirisRecommended) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = SetupColors.SuccessLight
+                                                ) {
+                                                    Text(
+                                                        "★ Best",
+                                                        fontSize = 10.sp,
+                                                        color = SetupColors.SuccessDark,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            } else if (model.cirisCompatible) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = SetupColors.InfoLight
+                                                ) {
+                                                    Text(
+                                                        "Compatible",
+                                                        fontSize = 10.sp,
+                                                        color = SetupColors.InfoDark,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.setLlmModel(model.id)
+                                    modelExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "★ = Recommended for CIRIS",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            } else {
+                // Fallback to text input before validation
+                OutlinedTextField(
+                    value = state.llmModel,
+                    onValueChange = { viewModel.setLlmModel(it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = {
+                        Text(
+                            text = when (state.llmProvider) {
+                                "OpenAI" -> "gpt-4o"
+                                "Anthropic" -> "claude-sonnet-4-5-20250514"
+                                "Google AI" -> "gemini-2.0-flash"
+                                "OpenRouter" -> "anthropic/claude-sonnet-4"
+                                "Groq" -> "llama-3.3-70b-versatile"
+                                "Together AI" -> "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+                                "LocalAI" -> "llama3"
+                                else -> "model-name"
+                            },
+                            color = SetupColors.TextSecondary
+                        )
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = SetupColors.Primary,
+                        unfocusedBorderColor = SetupColors.GrayLight
+                    ),
+                    singleLine = true
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Test Connection button
             OutlinedButton(
-                onClick = { /* TODO: Test connection */ },
+                onClick = {
+                    if (!isTesting) {
+                        isTesting = true
+                        testResult = null
+                        coroutineScope.launch(Dispatchers.IO) {
+                            try {
+                                val providerId = when (state.llmProvider) {
+                                    "OpenAI" -> "openai"
+                                    "Anthropic" -> "anthropic"
+                                    "Google AI" -> "google"
+                                    "OpenRouter" -> "openrouter"
+                                    "Groq" -> "groq"
+                                    "Together AI" -> "together"
+                                    "LocalAI" -> "local"
+                                    else -> "other"
+                                }
+                                val result = apiClient.validateLlmConfiguration(
+                                    provider = providerId,
+                                    apiKey = state.llmApiKey,
+                                    baseUrl = state.llmBaseUrl.takeIf { it.isNotEmpty() },
+                                    model = state.llmModel.takeIf { it.isNotEmpty() }
+                                )
+
+                                // If validation succeeded, fetch available models
+                                val models = if (result.valid) {
+                                    apiClient.listModels(
+                                        provider = providerId,
+                                        apiKey = state.llmApiKey,
+                                        baseUrl = state.llmBaseUrl.takeIf { it.isNotEmpty() }
+                                    )
+                                } else emptyList()
+
+                                withContext(Dispatchers.Main) {
+                                    testResult = result
+                                    availableModels = models
+                                    isTesting = false
+
+                                    // Auto-select the best model if none is currently selected
+                                    if (models.isNotEmpty() && state.llmModel.isEmpty()) {
+                                        // Prefer recommended, then compatible, then first available
+                                        val bestModel = models.firstOrNull { it.cirisRecommended }
+                                            ?: models.firstOrNull { it.cirisCompatible }
+                                            ?: models.first()
+                                        viewModel.setLlmModel(bestModel.id)
+                                        PlatformLogger.i(TAG, "Auto-selected model: ${bestModel.id}")
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    testResult = LlmValidationResult(
+                                        valid = false,
+                                        message = "Connection failed",
+                                        error = e.message ?: "Unknown error"
+                                    )
+                                    isTesting = false
+                                }
+                            }
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
+                enabled = !isTesting && (state.llmProvider == "LocalAI" || state.llmApiKey.isNotEmpty()),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = SetupColors.Primary
                 )
             ) {
-                Text("Test Connection")
+                if (isTesting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = SetupColors.Primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Testing...")
+                } else {
+                    Text("Test Connection")
+                }
+            }
+
+            // Show test result
+            testResult?.let { result ->
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (result.valid) SetupColors.SuccessLight else SetupColors.ErrorLight,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (result.valid) "✓" else "✗",
+                            fontSize = 18.sp,
+                            color = if (result.valid) SetupColors.SuccessDark else SetupColors.ErrorDark,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                        Column {
+                            Text(
+                                text = result.message,
+                                color = if (result.valid) SetupColors.SuccessDark else SetupColors.ErrorDark,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            result.error?.let { error ->
+                                Text(
+                                    text = error,
+                                    color = SetupColors.ErrorText,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -939,6 +1715,23 @@ private fun DataPointRow(text: String, color: Color) {
         Text("•", color = color, fontSize = 14.sp)
         Spacer(modifier = Modifier.width(8.dp))
         Text(text, color = color, fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun BenefitRow(text: String) {
+    Row(
+        modifier = Modifier.padding(vertical = 2.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text("✓", color = SetupColors.SuccessDark, fontSize = 12.sp)
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = text,
+            color = SetupColors.SuccessText,
+            fontSize = 12.sp,
+            lineHeight = 16.sp
+        )
     }
 }
 
@@ -1261,8 +2054,10 @@ private fun NavigationButtons(
     canProceed: Boolean,
     validationError: String?,
     isSubmitting: Boolean,
+    isNodeFlow: Boolean,
     onNext: () -> Unit,
     onBack: () -> Unit,
+    onBackToLogin: (() -> Unit)? = null,  // Optional callback to return to login screen
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -1288,8 +2083,19 @@ private fun NavigationButtons(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Back button
-            if (currentStep != SetupStep.WELCOME && currentStep != SetupStep.COMPLETE) {
+            // Back button - on WELCOME step, go back to Login if callback provided
+            if (currentStep == SetupStep.WELCOME && onBackToLogin != null) {
+                OutlinedButton(
+                    onClick = onBackToLogin,
+                    enabled = !isSubmitting,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = SetupColors.TextSecondary
+                    )
+                ) {
+                    Text("Back to Login")
+                }
+            } else if (currentStep != SetupStep.WELCOME && currentStep != SetupStep.COMPLETE) {
                 OutlinedButton(
                     onClick = onBack,
                     enabled = !isSubmitting,
@@ -1307,7 +2113,10 @@ private fun NavigationButtons(
                 Button(
                     onClick = onNext,
                     enabled = canProceed && !isSubmitting,
-                    modifier = Modifier.weight(if (currentStep == SetupStep.WELCOME) 2f else 1f),
+                    // Use equal weights if back button is visible, otherwise double width on WELCOME
+                    modifier = Modifier.weight(
+                        if (currentStep == SetupStep.WELCOME && onBackToLogin == null) 2f else 1f
+                    ),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SetupColors.Primary,
                         contentColor = Color.White
@@ -1320,10 +2129,13 @@ private fun NavigationButtons(
                             strokeWidth = 2.dp
                         )
                     } else {
+                        // Determine button text based on step and flow type
+                        val isFinalStep = currentStep == SetupStep.ACCOUNT_AND_CONFIRMATION ||
+                            (isNodeFlow && currentStep == SetupStep.OPTIONAL_FEATURES)
                         Text(
-                            when (currentStep) {
-                                SetupStep.WELCOME -> "Continue →"
-                                SetupStep.ACCOUNT_AND_CONFIRMATION -> "Finish Setup"
+                            when {
+                                currentStep == SetupStep.WELCOME -> "Continue →"
+                                isFinalStep -> "Finish Setup"
                                 else -> "Next"
                             }
                         )

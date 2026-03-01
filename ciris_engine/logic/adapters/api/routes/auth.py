@@ -53,6 +53,9 @@ DEFAULT_OAUTH_BASE_URL = "https://agents.ciris.ai"
 # Error messages
 FETCH_USER_INFO_ERROR = "Failed to fetch user info"
 
+# Module-level flag to prevent multiple attestation triggers from the endpoint
+_attestation_triggered_from_endpoint = False
+
 # OAuth Frontend Redirect Configuration
 # These environment variables control where users are redirected after OAuth and what parameters are included
 OAUTH_FRONTEND_URL = os.getenv("OAUTH_FRONTEND_URL")  # e.g., https://scout.ciris.ai
@@ -114,6 +117,39 @@ def _is_private_network_host(host: str) -> bool:
     return False
 
 
+def _validate_redirect_scheme(scheme: str, is_private: bool, redirect_uri: str, netloc: str) -> bool:
+    """Validate URL scheme for redirect URI. Returns True if valid."""
+    if scheme == "http":
+        if not is_private:
+            logger.warning("Rejected HTTP redirect_uri to public host")
+            return False
+        logger.debug(f"Allowing HTTP redirect to private network: {netloc}")
+        return True
+    if scheme == "https":
+        return True
+    logger.warning(f"Rejected redirect_uri with unsupported scheme: {scheme}")
+    return False
+
+
+def _get_allowed_redirect_domains() -> Set[str]:
+    """Build set of allowed redirect domains from config."""
+    import urllib.parse
+
+    allowed_domains: Set[str] = set(OAUTH_ALLOWED_REDIRECT_DOMAINS)
+    if OAUTH_FRONTEND_URL:
+        frontend_parsed = urllib.parse.urlparse(OAUTH_FRONTEND_URL)
+        if frontend_parsed.netloc:
+            allowed_domains.add(frontend_parsed.netloc.lower())
+    return allowed_domains
+
+
+def _is_domain_allowed(redirect_domain: str, allowed_domains: Set[str]) -> bool:
+    """Check if redirect domain is in allowed list or is a subdomain of an allowed domain."""
+    if redirect_domain in allowed_domains:
+        return True
+    return any(redirect_domain.endswith("." + allowed) for allowed in allowed_domains)
+
+
 def validate_redirect_uri(redirect_uri: Optional[str]) -> Optional[str]:
     """
     Validate redirect_uri to prevent open redirect attacks.
@@ -131,61 +167,33 @@ def validate_redirect_uri(redirect_uri: Optional[str]) -> Optional[str]:
     if not redirect_uri:
         return None
 
-    # Relative paths are always safe (same-origin)
+    # Relative paths are always safe (same-origin), but prevent //evil.com tricks
     if redirect_uri.startswith("/"):
-        # Prevent path traversal tricks like //evil.com
         if redirect_uri.startswith("//"):
-            logger.warning(f"Rejected redirect_uri with protocol-relative path: {redirect_uri[:50]}")
+            logger.warning("Rejected redirect_uri with protocol-relative path")
             return None
         return redirect_uri
 
-    # Parse the URL to extract domain
     try:
         parsed = urllib.parse.urlparse(redirect_uri)
         if not parsed.scheme or not parsed.netloc:
-            logger.warning(f"Rejected malformed redirect_uri: {redirect_uri[:50]}")
+            logger.warning("Rejected malformed redirect_uri")
             return None
 
-        scheme = parsed.scheme.lower()
         is_private = _is_private_network_host(parsed.netloc)
-
-        # Allow HTTP only for private/local networks (Home Assistant, local dev)
-        # Require HTTPS for all public URLs
-        if scheme == "http":
-            if not is_private:
-                logger.warning(f"Rejected HTTP redirect_uri to public host: {redirect_uri[:50]}")
-                return None
-            # HTTP to private network is allowed
-            logger.debug(f"Allowing HTTP redirect to private network: {parsed.netloc}")
-        elif scheme != "https":
-            logger.warning(f"Rejected redirect_uri with unsupported scheme: {scheme}")
+        if not _validate_redirect_scheme(parsed.scheme.lower(), is_private, redirect_uri, parsed.netloc):
             return None
-
-        redirect_domain = parsed.netloc.lower()
 
         # Private network hosts are always allowed (Home Assistant, local dev)
-        # This enables OAuth callbacks to local Home Assistant instances
         if is_private:
-            logger.debug(f"Allowing redirect to private network host: {redirect_domain}")
+            logger.debug(f"Allowing redirect to private network host: {parsed.netloc.lower()}")
             return redirect_uri
 
-        # Build list of allowed domains for public URLs
-        allowed_domains: Set[str] = set(OAUTH_ALLOWED_REDIRECT_DOMAINS)
-
-        # Always allow OAUTH_FRONTEND_URL domain if configured
-        if OAUTH_FRONTEND_URL:
-            frontend_parsed = urllib.parse.urlparse(OAUTH_FRONTEND_URL)
-            if frontend_parsed.netloc:
-                allowed_domains.add(frontend_parsed.netloc.lower())
-
-        # Check if redirect domain is allowed
-        if redirect_domain in allowed_domains:
+        # Check against allowed domains for public URLs
+        redirect_domain = parsed.netloc.lower()
+        allowed_domains = _get_allowed_redirect_domains()
+        if _is_domain_allowed(redirect_domain, allowed_domains):
             return redirect_uri
-
-        # Check for subdomain matches (e.g., allow *.ciris.ai if ciris.ai is in allowed)
-        for allowed in allowed_domains:
-            if redirect_domain == allowed or redirect_domain.endswith("." + allowed):
-                return redirect_uri
 
         logger.warning(
             f"Rejected redirect_uri to untrusted domain: {redirect_domain}. "
@@ -467,7 +475,10 @@ async def configure_oauth_provider(
         oauth_config_file.write_text(json.dumps(config, indent=2))
         oauth_config_file.chmod(0o600)
 
-        logger.info(f"OAuth provider '{body.provider}' configured by {auth.user_id}")
+        # Sanitize user-controlled data before logging
+        from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
+
+        logger.info(f"OAuth provider '{sanitize_for_log(body.provider, max_length=50)}' configured successfully")
 
         return ConfigureOAuthProviderResponse(
             provider=body.provider,
@@ -540,7 +551,7 @@ async def oauth_login(provider: str, request: Request, redirect_uri: Optional[st
         state_data = {"csrf": csrf_token}
         if validated_redirect_uri:
             state_data["redirect_uri"] = validated_redirect_uri
-            logger.info(f"OAuth login initiated with validated redirect_uri: {validated_redirect_uri}")
+            logger.info("OAuth login initiated with validated redirect_uri")
 
         # Base64 encode the state JSON
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
@@ -1539,7 +1550,7 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
     """
     import httpx
 
-    logger.info(f"[NativeAuth] Verifying Google ID token (length: {len(id_token)}, prefix: {id_token[:20]}...)")
+    logger.info(f"[NativeAuth] Verifying Google ID token (length: {len(id_token)})")
 
     # Load our expected client ID from OAuth config
     allowed_audiences = _get_allowed_audiences_from_config()
@@ -1605,7 +1616,7 @@ async def native_google_token_exchange(
     Unlike the web OAuth flow (which uses authorization codes), native apps get
     ID tokens directly from Google Sign-In SDK and send them here.
     """
-    logger.info(f"[NativeAuth] Native Google token exchange request - provider: {native_request.provider}")
+    logger.info("[NativeAuth] Native Google token exchange request")
 
     if native_request.provider != "google":
         logger.warning(f"[NativeAuth] Unsupported provider: {native_request.provider}")
@@ -1768,7 +1779,7 @@ async def _verify_apple_id_token(id_token: str) -> Dict[str, Optional[str]]:
     the signature against Apple's public keys at:
     https://appleid.apple.com/auth/keys
     """
-    logger.info(f"[AppleNativeAuth] Verifying Apple ID token (length: {len(id_token)}, prefix: {id_token[:20]}...)")
+    logger.info(f"[AppleNativeAuth] Verifying Apple ID token (length: {len(id_token)})")
 
     # For on-device mode, decode locally
     # The token is trusted because it came from Apple Sign-In SDK
@@ -1832,7 +1843,7 @@ async def native_apple_token_exchange(
     Unlike the web OAuth flow (which uses authorization codes), native apps get
     ID tokens directly from Apple Sign-In SDK and send them here.
     """
-    logger.info(f"[AppleNativeAuth] Native Apple token exchange request - provider: {native_request.provider}")
+    logger.info("[AppleNativeAuth] Native Apple token exchange request")
 
     if native_request.provider != "apple":
         logger.warning(f"[AppleNativeAuth] Unsupported provider: {native_request.provider}")
@@ -2004,3 +2015,244 @@ async def delete_api_key(
     logger.info(f"User {auth.user_id} deleted API key {key_id}")
 
     return None
+
+
+# ========== Attestation Endpoint ==========
+
+
+@router.get("/auth/attestation")
+async def get_attestation(request: Request) -> Dict[str, Any]:
+    """Get cached CIRISVerify attestation from AuthenticationService.
+
+    Returns the cached attestation result from startup attestation.
+    This endpoint does NOT trigger a new attestation - it only returns
+    the cached result from when the agent started.
+
+    This is the preferred endpoint for Trust & Security display as it:
+    1. Returns instantly (no network calls)
+    2. Uses the authoritative cached result from auth service
+    3. Ensures consistency with other auth-dependent features
+
+    Returns:
+        Cached attestation result in the same format as /v1/setup/verify-status
+    """
+    # Get APIAuthService from app state, then access the underlying AuthenticationService
+    api_auth_service = getattr(request.app.state, "auth_service", None)
+
+    if not api_auth_service:
+        logger.warning("[attestation] API Auth service not available")
+        return {
+            "data": {
+                "loaded": False,
+                "error": "Authentication service not available",
+                "attestation_status": "not_attempted",
+            }
+        }
+
+    # Access the underlying infrastructure AuthenticationService
+    # APIAuthService wraps it as _auth_service
+    infra_auth_service = getattr(api_auth_service, "_auth_service", None)
+
+    if not infra_auth_service:
+        logger.warning("[attestation] Infrastructure auth service not available")
+        return {
+            "data": {
+                "loaded": False,
+                "error": "Infrastructure authentication service not available",
+                "attestation_status": "not_attempted",
+            }
+        }
+
+    # Check for cached attestation on the infrastructure service
+    if not hasattr(infra_auth_service, "get_cached_attestation"):
+        logger.warning("[attestation] Auth service does not support attestation caching")
+        return {
+            "data": {
+                "loaded": False,
+                "error": "Attestation caching not supported",
+                "attestation_status": "not_attempted",
+            }
+        }
+
+    cached = infra_auth_service.get_cached_attestation()
+
+    if not cached:
+        # Check if attestation is currently in progress on the infrastructure service
+        has_method = hasattr(infra_auth_service, "is_attestation_in_progress")
+        in_progress = has_method and infra_auth_service.is_attestation_in_progress()
+        logger.info(
+            f"[attestation] Cache empty. has_method={has_method}, in_progress={in_progress}, instance_id={id(infra_auth_service)}"
+        )
+
+        if in_progress:
+            logger.info("[attestation] Returning in_progress status with level_pending=True")
+            return {
+                "data": {
+                    "loaded": True,
+                    "attestation_status": "in_progress",
+                    "level_pending": True,  # Keep polling while attestation runs
+                    "max_level": 0,
+                    "error": None,
+                }
+            }
+
+        # Trigger attestation as a fallback if startup attestation didn't run
+        # Use module-level flag to prevent multiple triggers
+        global _attestation_triggered_from_endpoint
+        if not _attestation_triggered_from_endpoint and hasattr(infra_auth_service, "run_attestation"):
+            import asyncio
+
+            try:
+                _attestation_triggered_from_endpoint = True
+                logger.info("[attestation] No cached attestation - triggering attestation now")
+                # Run attestation in background and return in_progress status
+                # This handles cases where startup attestation was skipped/failed
+                # Store task reference to prevent garbage collection
+                _background_attestation_task = asyncio.create_task(infra_auth_service.run_attestation(mode="full"))
+                _ = _background_attestation_task  # Explicitly reference to satisfy linters
+                logger.info("[attestation] Background attestation triggered, returning in_progress")
+                return {
+                    "data": {
+                        "loaded": True,
+                        "attestation_status": "in_progress",
+                        "level_pending": True,
+                        "max_level": 0,
+                        "error": None,
+                    }
+                }
+            except Exception as e:
+                logger.warning(f"[attestation] Failed to trigger attestation: {e}")
+                _attestation_triggered_from_endpoint = False  # Reset on failure
+        elif _attestation_triggered_from_endpoint:
+            # Already triggered, return in_progress
+            logger.debug("[attestation] Attestation already triggered, returning in_progress")
+            return {
+                "data": {
+                    "loaded": True,
+                    "attestation_status": "in_progress",
+                    "level_pending": True,
+                    "max_level": 0,
+                    "error": None,
+                }
+            }
+
+        logger.info("[attestation] No cached attestation and could not trigger")
+        return {
+            "data": {
+                "loaded": True,
+                "attestation_status": "not_attempted",
+                "level_pending": True,  # Keep polling until attestation runs
+                "max_level": 0,
+                "error": "No cached attestation - startup attestation may not have completed",
+            }
+        }
+
+    # Convert cached AttestationResult to response format
+    # This matches the format returned by /v1/setup/verify-status
+    logger.info("[attestation] === API RESPONSE DEBUG ===")
+    logger.info(
+        f"[attestation] max_level={cached.max_level}, level_pending={cached.level_pending}, file_integrity_ok={cached.file_integrity_ok}, play_integrity_ok={cached.play_integrity_ok}"
+    )
+    logger.info(
+        f"[attestation] files_checked={cached.files_checked}, files_passed={cached.files_passed}, files_failed={cached.files_failed}"
+    )
+    logger.info(
+        f"[attestation] per_file_results count={len(cached.per_file_results) if cached.per_file_results else 0}"
+    )
+    logger.info(
+        f"[attestation] python_modules_checked={cached.python_modules_checked}, python_modules_passed={cached.python_modules_passed}"
+    )
+    logger.info(
+        f"[attestation] FUNCTION INTEGRITY: functions_checked={cached.functions_checked}, functions_passed={cached.functions_passed}"
+    )
+    logger.info(f"[attestation] module_integrity_ok={cached.module_integrity_ok}")
+    logger.info(f"[attestation] module_integrity_summary={cached.module_integrity_summary}")
+    logger.info(
+        f"[attestation] cross_validated_files count={len(cached.cross_validated_files) if cached.cross_validated_files else 0}"
+    )
+    logger.info(
+        f"[attestation] filesystem_verified_files count={len(cached.filesystem_verified_files) if cached.filesystem_verified_files else 0}"
+    )
+    logger.info(
+        f"[attestation] agent_verified_files count={len(cached.agent_verified_files) if cached.agent_verified_files else 0}"
+    )
+    logger.info("[attestation] === END API RESPONSE DEBUG ===")
+
+    return {
+        "data": {
+            "loaded": cached.loaded,
+            "version": cached.version,
+            "hardware_type": cached.hardware_type,
+            "key_status": cached.key_status,
+            "key_id": cached.key_id,
+            "attestation_status": cached.attestation_status,
+            "error": cached.error,
+            "diagnostic_info": cached.diagnostic_info,
+            # Attestation level checks
+            "dns_us_ok": cached.dns_us_ok,
+            "dns_eu_ok": cached.dns_eu_ok,
+            "https_us_ok": cached.https_us_ok,
+            "https_eu_ok": cached.https_eu_ok,
+            "binary_ok": cached.binary_ok,
+            "file_integrity_ok": cached.file_integrity_ok,
+            "registry_ok": cached.registry_ok,
+            "audit_ok": cached.audit_ok,
+            "env_ok": cached.env_ok,
+            "play_integrity_ok": cached.play_integrity_ok,
+            "play_integrity_verdict": cached.play_integrity_verdict,
+            "max_level": cached.max_level,
+            "level_pending": cached.level_pending,  # True when waiting for device attestation
+            # Key attestation
+            "ed25519_fingerprint": cached.ed25519_fingerprint,
+            "key_storage_mode": cached.key_storage_mode,
+            "hardware_backed": cached.hardware_backed,
+            # Registry key status
+            "registry_key_status": cached.registry_key_status,
+            # Sources agreement
+            "sources_agreeing": cached.sources_agreeing,
+            # Attestation mode
+            "attestation_mode": cached.attestation_mode,
+            # File integrity details
+            "total_files": cached.total_files,
+            "files_checked": cached.files_checked,
+            "files_passed": cached.files_passed,
+            "files_failed": cached.files_failed,
+            # Function integrity
+            "function_integrity": cached.function_integrity,
+            "functions_checked": cached.functions_checked,
+            "functions_passed": cached.functions_passed,
+            # Binary self-check details
+            "binary_self_check": cached.binary_self_check,
+            "binary_hash": cached.binary_hash,
+            "function_self_check": cached.function_self_check,
+            "target_triple": cached.target_triple,
+            # Python integrity
+            "python_integrity_ok": cached.python_integrity_ok,
+            "python_modules_checked": cached.python_modules_checked,
+            "python_modules_passed": cached.python_modules_passed,
+            "python_modules_failed": cached.python_modules_failed,
+            "python_total_hash": cached.python_total_hash,
+            "python_hash_valid": cached.python_hash_valid,
+            "python_failed_modules": cached.python_failed_modules,
+            # v0.9.7: Unified module integrity (cross-validation)
+            "module_integrity_ok": cached.module_integrity_ok,
+            "module_integrity_summary": cached.module_integrity_summary,
+            "cross_validated_files": cached.cross_validated_files,
+            "filesystem_verified_files": cached.filesystem_verified_files,
+            "agent_verified_files": cached.agent_verified_files,
+            "disk_agent_mismatch": cached.disk_agent_mismatch,
+            "registry_mismatch_files": cached.registry_mismatch_files,
+            # L4 detail lists (v0.8.4+)
+            "per_file_results": cached.per_file_results,
+            "files_missing_count": cached.files_missing_count,
+            "files_missing_list": cached.files_missing_list,
+            "files_failed_list": cached.files_failed_list,
+            "files_unexpected_list": cached.files_unexpected_list,
+            "functions_failed_list": cached.functions_failed_list,
+            # Mobile exclusions (v0.8.6+)
+            "mobile_excluded_count": cached.mobile_excluded_count,
+            "mobile_excluded_list": cached.mobile_excluded_list,
+            # Cache metadata
+            "cached_at": cached.cached_at.isoformat() if cached.cached_at else None,
+        }
+    }

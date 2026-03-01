@@ -693,7 +693,7 @@ async def test_complete_setup(browser: BrowserHelper, config: WebUITestConfig) -
                 report.details["reached_account_step"] = True
                 break
 
-            # On Optional Features step - check covenant metrics consent checkbox
+            # On Optional Features step - check accord metrics consent checkbox
             if "Help Improve AI Alignment" in content or "anonymous alignment metrics" in content:
                 consent_checkbox = browser.page.locator("input[type='checkbox']").filter(
                     has=browser.page.locator("xpath=..").filter(has_text="agree to share")
@@ -701,18 +701,18 @@ async def test_complete_setup(browser: BrowserHelper, config: WebUITestConfig) -
                 # Try simpler selector - checkbox near the consent text
                 consent_checkbox = browser.page.locator("label:has-text('agree to share') input[type='checkbox']")
                 if await consent_checkbox.count() == 0:
-                    # Fallback: find any checkbox in the covenant metrics section
+                    # Fallback: find any checkbox in the accord metrics section
                     consent_checkbox = browser.page.locator(".bg-blue-50 input[type='checkbox']")
                 if await consent_checkbox.count() > 0:
                     is_checked = await consent_checkbox.first.is_checked()
                     if not is_checked:
                         await consent_checkbox.first.click()
                         await browser.wait(0.5)
-                        report.details["covenant_metrics_consent"] = True
+                        report.details["accord_metrics_consent"] = True
                     else:
-                        report.details["covenant_metrics_consent"] = "already_checked"
+                        report.details["accord_metrics_consent"] = "already_checked"
                 else:
-                    report.details["covenant_metrics_consent"] = "checkbox_not_found"
+                    report.details["accord_metrics_consent"] = "checkbox_not_found"
 
             # Scroll to bottom to ensure Continue button is visible
             await browser.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
@@ -1137,10 +1137,10 @@ async def test_full_e2e_flow(browser: BrowserHelper, config: WebUITestConfig) ->
             report = await test_receive_response(browser, config)
             reports.append(report)
 
-            # Wait for covenant metrics trace to be sent after response
+            # Wait for accord metrics trace to be sent after response
             # The reasoning event is received, but the trace takes time to be sent
             if report.result == TestResult.PASSED:
-                print("⏳ Waiting 15s for covenant metrics trace to be sent...")
+                print("⏳ Waiting 15s for accord metrics trace to be sent...")
                 await browser.wait(15)
 
     return reports

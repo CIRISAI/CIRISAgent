@@ -226,16 +226,16 @@ class TestLoadSavedAdaptersFromGraph:
         mock_config_service = MagicMock()
         mock_config_service.list_configs = AsyncMock(
             return_value={
-                "adapter.covenant_metrics.type": "ciris_covenant_metrics",
-                "adapter.covenant_metrics.config": {},
-                "adapter.covenant_metrics.persist": True,
+                "adapter.accord_metrics.type": "ciris_accord_metrics",
+                "adapter.accord_metrics.config": {},
+                "adapter.accord_metrics.persist": True,
             }
         )
         mock_config_service.get_config = AsyncMock(
             side_effect=lambda key: {
-                "adapter.covenant_metrics.type": MockConfigNode("ciris_covenant_metrics"),
-                "adapter.covenant_metrics.config": MockConfigNode({"enabled": True, "settings": {}}),
-                "adapter.covenant_metrics.persist": MockConfigNode(True),
+                "adapter.accord_metrics.type": MockConfigNode("ciris_accord_metrics"),
+                "adapter.accord_metrics.config": MockConfigNode({"enabled": True, "settings": {}}),
+                "adapter.accord_metrics.persist": MockConfigNode(True),
             }.get(key)
         )
 

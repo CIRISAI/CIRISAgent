@@ -20,6 +20,7 @@ from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.buses.tool_bus import ToolBus
 from ciris_engine.logic.services.governance.consent import ConsentService
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
+from ciris_engine.logic.services.governance.consent.exceptions import ConsentNotFoundError
 from ciris_engine.protocols.services.graph.memory import MemoryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.consent.core import (
@@ -120,7 +121,7 @@ class DSAROrchestrator:
         if not request_id:
             request_id = f"DSAR-ACCESS-{self._now().strftime('%Y%m%d-%H%M%S')}"
 
-        logger.info(f"Starting multi-source access request {request_id} for {user_identifier}")
+        logger.info(f"Starting multi-source access request {request_id}")
 
         # Step 1: Resolve user identity across all systems
         identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
@@ -129,7 +130,7 @@ class DSAROrchestrator:
         try:
             ciris_data = await self._dsar_automation.handle_access_request(user_identifier)
         except Exception as e:
-            logger.exception(f"Failed to get CIRIS data for {user_identifier}: {e}")
+            logger.exception(f"Failed to get CIRIS data: {e}")
             # Create empty package as fallback
             from ciris_engine.schemas.consent.core import ConsentAuditEntry, DSARAccessPackage
 
@@ -255,9 +256,7 @@ class DSAROrchestrator:
         if not request_id:
             request_id = f"DSAR-EXPORT-{self._now().strftime('%Y%m%d-%H%M%S')}"
 
-        logger.info(
-            f"Starting multi-source export request {request_id} for {user_identifier} (format: {export_format})"
-        )
+        logger.info(f"Starting multi-source export request {request_id}")
 
         # Step 1: Resolve user identity
         identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
@@ -266,7 +265,7 @@ class DSAROrchestrator:
         try:
             ciris_export = await self._dsar_automation.handle_export_request(user_identifier, export_format)
         except Exception as e:
-            logger.exception(f"Failed to get CIRIS export for {user_identifier}: {e}")
+            logger.exception(f"Failed to get CIRIS export: {e}")
             # Create empty export as fallback
             from ciris_engine.schemas.consent.core import DSARExportPackage
 
@@ -377,27 +376,27 @@ class DSAROrchestrator:
         if not request_id:
             request_id = f"DSAR-DELETE-{self._now().strftime('%Y%m%d-%H%M%S')}"
 
-        logger.info(f"Starting multi-source deletion request {request_id} for {user_identifier}")
+        logger.info(f"Starting multi-source deletion request {request_id}")
 
         # Step 1: Resolve user identity
         identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
 
         # Step 2: Initiate CIRIS deletion (90-day decay protocol)
+        from ciris_engine.schemas.consent.core import DSARDeletionStatus
+
         try:
             # Revoke consent to initiate decay protocol
             await self._consent_service.revoke_consent(
                 user_id=user_identifier,
                 reason=f"GDPR Article 17 - Multi-source deletion request {request_id}",
             )
-            logger.info(f"Initiated consent revocation and decay protocol for {user_identifier}")
+            logger.info(f"Initiated consent revocation and decay protocol for request {request_id}")
 
             # Get actual deletion status from DSAR automation
             ciris_deletion = await self._dsar_automation.get_deletion_status(user_identifier, request_id)
 
             # If no status found yet, create initial status
             if ciris_deletion is None:
-                from ciris_engine.schemas.consent.core import DSARDeletionStatus
-
                 ciris_deletion = DSARDeletionStatus(
                     ticket_id=request_id,
                     user_id=user_identifier,
@@ -409,8 +408,23 @@ class DSAROrchestrator:
                     next_milestone="interaction_history_purged",
                     safety_patterns_retained=0,
                 )
+        except ConsentNotFoundError:
+            # User has no CIRIS consent - this is valid for external-only users
+            # Create a "no_ciris_data" status and proceed with external deletions
+            logger.info(f"No CIRIS consent found for request {request_id} - proceeding with external deletions only")
+            ciris_deletion = DSARDeletionStatus(
+                ticket_id=request_id,
+                user_id=user_identifier,
+                decay_started=self._now(),
+                current_phase="no_ciris_data",  # User had no CIRIS data to delete
+                completion_percentage=100.0,  # CIRIS portion complete (nothing to do)
+                estimated_completion=self._now(),  # Already complete
+                milestones_completed=["no_ciris_data_found"],
+                next_milestone=None,
+                safety_patterns_retained=0,
+            )
         except Exception as e:
-            logger.exception(f"Failed to initiate consent revocation for {user_identifier}: {e}")
+            logger.exception(f"Failed to initiate consent revocation: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to initiate CIRIS deletion: {str(e)}",
@@ -508,7 +522,7 @@ class DSAROrchestrator:
         if not request_id:
             request_id = f"DSAR-CORRECT-{self._now().strftime('%Y%m%d-%H%M%S')}"
 
-        logger.info(f"Starting multi-source correction request {request_id} for {user_identifier}")
+        logger.info(f"Starting multi-source correction request {request_id}")
 
         # Step 1: Resolve user identity
         identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
@@ -536,9 +550,9 @@ class DSAROrchestrator:
             # Track CIRIS corrections
             corrections_by_source["ciris"] = corrections
             total_corrections_applied += len(corrections)
-            logger.info(f"Applied {len(corrections)} corrections to CIRIS for {user_identifier}")
+            logger.info(f"Applied {len(corrections)} corrections to CIRIS")
         except Exception as e:
-            logger.exception(f"Failed to apply CIRIS corrections for {user_identifier}: {e}")
+            logger.exception(f"Failed to apply CIRIS corrections: {e}")
             corrections_by_source["ciris"] = {}
             total_corrections_rejected += len(corrections)
 

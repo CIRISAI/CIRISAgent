@@ -83,7 +83,7 @@ class TestOpenAIConfig:
         assert config.base_url is None
         assert config.instructor_mode == "JSON"
         assert config.max_retries == 3
-        assert config.timeout_seconds == 5
+        assert config.timeout_seconds == 60
 
     def test_custom_values(self):
         """OpenAIConfig accepts custom values."""

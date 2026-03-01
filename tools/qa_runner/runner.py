@@ -222,21 +222,9 @@ class QARunner:
         else:
             self.console.print("[dim]Skipping authentication for SETUP module (first-run mode)[/dim]")
 
-        # Initialize SSE monitoring helper for HANDLERS and FILTERS tests
-        # Both now use async /agent/message endpoint + SSE streaming
-        if QAModule.FILTERS in modules or QAModule.HANDLERS in modules:
-            self._filter_helper = FilterTestHelper(self.config.base_url, self.token, verbose=self.config.verbose)
-            try:
-                self._filter_helper.start_monitoring()
-                module_names = []
-                if QAModule.FILTERS in modules:
-                    module_names.append("filters")
-                if QAModule.HANDLERS in modules:
-                    module_names.append("handlers")
-                self.console.print(f"[green]✅ SSE monitoring started for {', '.join(module_names)} tests[/green]")
-            except Exception as e:
-                self.console.print(f"[yellow]⚠️  Failed to start SSE monitoring: {e}[/yellow]")
-                self._filter_helper = None
+        # Note: FILTERS and HANDLERS are now SDK-based and don't need SSE monitoring
+        # SSE monitoring only needed for any remaining HTTP-based async message tests
+        self._filter_helper = None
 
         # Separate SDK-based modules from HTTP test modules
         sdk_modules = [
@@ -261,13 +249,17 @@ class QARunner:
             QAModule.CONTEXT_ENRICHMENT,
             QAModule.VISION,
             QAModule.AIR,
-            QAModule.COVENANT_METRICS,
+            QAModule.ACCORD_METRICS,
             QAModule.SYSTEM_MESSAGES,
             QAModule.HOSTED_TOOLS,
             QAModule.UTILITY_ADAPTERS,
+            QAModule.CIRISNODE,
+            QAModule.LICENSED_AGENT,
             QAModule.SOLITUDE_LIVE,
             QAModule.PLAY_LIVE,
             QAModule.DREAM_LIVE,
+            QAModule.FILTERS,
+            QAModule.HANDLERS,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -312,22 +304,22 @@ class QARunner:
             else:
                 self.console.print("[green]✅ Multi-occurrence integration test passed![/green]")
 
-        # Run COVENANT tests if requested (standalone - no server needed)
-        if QAModule.COVENANT in modules:
-            from .modules.covenant_tests import CovenantTestModule
+        # Run ACCORD tests if requested (standalone - no server needed)
+        if QAModule.ACCORD in modules:
+            from .modules.accord_tests import AccordTestModule
 
             self.console.print("\n" + "=" * 80)
-            self.console.print("[bold cyan]🔐 RUNNING COVENANT INVOCATION SYSTEM TESTS[/bold cyan]")
+            self.console.print("[bold cyan]🔐 RUNNING ACCORD INVOCATION SYSTEM TESTS[/bold cyan]")
             self.console.print("=" * 80)
 
-            covenant_module = CovenantTestModule()
-            covenant_results = covenant_module.run_all_tests()
+            accord_module = AccordTestModule()
+            accord_results = accord_module.run_all_tests()
 
             # Store results
-            covenant_passed = 0
-            covenant_failed = 0
-            for result in covenant_results:
-                test_key = f"covenant::{result.name}"
+            accord_passed = 0
+            accord_failed = 0
+            for result in accord_results:
+                test_key = f"accord::{result.name}"
                 self.results[test_key] = {
                     "success": result.passed,
                     "status": "✅ PASS" if result.passed else "❌ FAIL",
@@ -335,12 +327,12 @@ class QARunner:
                     "duration": result.duration,
                 }
                 if result.passed:
-                    covenant_passed += 1
+                    accord_passed += 1
                 else:
-                    covenant_failed += 1
+                    accord_failed += 1
                     success = False
 
-            self.console.print(f"\n[cyan]Covenant tests: {covenant_passed} passed, {covenant_failed} failed[/cyan]")
+            self.console.print(f"\n[cyan]Accord tests: {accord_passed} passed, {accord_failed} failed[/cyan]")
 
         # Run SDK-based tests
         if sdk_test_modules:
@@ -871,19 +863,23 @@ class QARunner:
             MessageIDDebugTests,
             PartnershipTests,
         )
+        from .modules.accord_metrics_tests import AccordMetricsTests
         from .modules.adapter_autoload_tests import AdapterAutoloadTests
         from .modules.adapter_availability_tests import AdapterAvailabilityTests
         from .modules.adapter_config_tests import AdapterConfigTests
         from .modules.adapter_manifest_tests import AdapterManifestTests
         from .modules.billing_integration_tests import BillingIntegrationTests
+        from .modules.cirisnode_tests import CIRISNodeTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
-        from .modules.covenant_metrics_tests import CovenantMetricsTests
         from .modules.dream_live_tests import DreamLiveTests
         from .modules.dsar_multi_source_tests import DSARMultiSourceTests
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
+        from .modules.filter_tests import FilterTestModule
+        from .modules.handler_tests import HandlerTestModule
         from .modules.hosted_tools_tests import HostedToolsTests
         from .modules.identity_update_tests import IdentityUpdateTests
+        from .modules.licensed_agent_tests import LicensedAgentTests
         from .modules.mcp_tests import MCPTests
         from .modules.play_live_tests import PlayLiveTests
         from .modules.reddit_tests import RedditTests
@@ -919,13 +915,17 @@ class QARunner:
             QAModule.CONTEXT_ENRICHMENT: ContextEnrichmentTests,
             QAModule.VISION: VisionTests,
             QAModule.AIR: AIRTests,
-            QAModule.COVENANT_METRICS: CovenantMetricsTests,
+            QAModule.ACCORD_METRICS: AccordMetricsTests,
             QAModule.SYSTEM_MESSAGES: SystemMessagesTests,
             QAModule.HOSTED_TOOLS: HostedToolsTests,
             QAModule.UTILITY_ADAPTERS: UtilityAdaptersTests,
+            QAModule.CIRISNODE: CIRISNodeTests,
+            QAModule.LICENSED_AGENT: LicensedAgentTests,
             QAModule.SOLITUDE_LIVE: SolitudeLiveTests,
             QAModule.PLAY_LIVE: PlayLiveTests,
             QAModule.DREAM_LIVE: DreamLiveTests,
+            QAModule.FILTERS: FilterTestModule,
+            QAModule.HANDLERS: HandlerTestModule,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):
@@ -945,9 +945,25 @@ class QARunner:
                 client._transport.set_api_key(token_to_use, persist=False)
 
                 # Instantiate and run test module
-                # Special handling for CovenantMetricsTests - pass live_lens config
-                if module == QAModule.COVENANT_METRICS:
+                # Special handling for AccordMetricsTests - pass live_lens config
+                if module == QAModule.ACCORD_METRICS:
                     test_instance = test_class(client, self.console, live_lens=self.config.live_lens)
+                # Special handling for CIRISNodeTests - pass live_node config
+                elif module == QAModule.CIRISNODE:
+                    test_instance = test_class(client, self.console, live_node=getattr(self.config, "live_node", False))
+                # Special handling for LicensedAgentTests - pass live_portal config
+                elif module == QAModule.LICENSED_AGENT:
+                    test_instance = test_class(
+                        client, self.console, live_portal=getattr(self.config, "live_portal", False)
+                    )
+                elif module == QAModule.FILTERS:
+                    # FilterTestModule inherits from BaseTestModule and supports fail_fast
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        fail_fast=self.config.fail_fast,
+                        test_timeout=self.config.test_timeout,
+                    )
                 else:
                     test_instance = test_class(client, self.console)
 
@@ -1067,27 +1083,8 @@ class QARunner:
                 if not passed:
                     all_passed = False
 
-                # FILTER & HANDLER TESTS: Wait for task completion between tests
-                # Each test creates a task that must complete before the next test
-                if test.module in (QAModule.FILTERS, QAModule.HANDLERS):
-                    if self._filter_helper:
-                        if self.config.verbose:
-                            self.console.print(f"[dim]⏳ Waiting for TASK_COMPLETE event via SSE...[/dim]")
-
-                        # Wait for task completion via SSE (30s timeout per test)
-                        completed = self._filter_helper.wait_for_task_complete(task_id=None, timeout=30.0)
-
-                        if not completed:
-                            self.console.print(f"[yellow]⚠️  Task did not complete within 30s for {test.name}[/yellow]")
-                            # Give extra buffer time
-                            time.sleep(2.0)
-                        elif self.config.verbose:
-                            self.console.print(f"[green]✅ Task completed for {test.name}[/green]")
-                    else:
-                        # Fallback to simple delay if SSE monitoring not available
-                        if self.config.verbose:
-                            self.console.print(f"[dim]⏳ Waiting for task completion (fallback delay)...[/dim]")
-                        time.sleep(2.0)
+                # Note: HANDLERS and FILTERS are now SDK-based and handled in _run_sdk_modules()
+                # No SSE waiting needed here anymore
 
                 progress.advance(task)
 
@@ -2005,6 +2002,65 @@ class QARunner:
             SELECT task_id, agent_occurrence_id, description, status, created_at
             FROM tasks
             WHERE agent_occurrence_id = '__shared__'
+            ORDER BY created_at DESC
+        """
+        )
+
+        results = []
+        for row in cursor.fetchall():
+            results.append(
+                {
+                    "task_id": row[0],
+                    "occurrence_id": row[1],
+                    "description": row[2],
+                    "status": row[3],
+                    "created_at": row[4],
+                }
+            )
+
+        cursor.close()
+        conn.close()
+        return results
+
+    def query_all_wakeup_tasks_db(self) -> List[Dict]:
+        """Query ALL wakeup tasks from PostgreSQL database (any occurrence).
+
+        Returns:
+            List of wakeup task dictionaries
+        """
+        from urllib.parse import urlparse
+
+        import psycopg2
+
+        # Parse postgres URL
+        parsed = urlparse(self.config.postgres_url)
+
+        conn = psycopg2.connect(
+            host=parsed.hostname,
+            port=parsed.port or 5432,
+            database=parsed.path.lstrip("/"),
+            user=parsed.username,
+            password=parsed.password,
+        )
+
+        cursor = conn.cursor()
+
+        # Debug: Count ALL tasks first
+        cursor.execute("SELECT COUNT(*) FROM tasks")
+        total_tasks = cursor.fetchone()[0]
+        self.console.print(f"[dim]DEBUG: Total tasks in database: {total_tasks}[/dim]")
+
+        # Debug: Show sample task_ids if any exist
+        cursor.execute("SELECT task_id, agent_occurrence_id, status FROM tasks LIMIT 10")
+        sample = cursor.fetchall()
+        if sample:
+            self.console.print(f"[dim]DEBUG: Sample tasks: {sample}[/dim]")
+
+        cursor.execute(
+            """
+            SELECT task_id, agent_occurrence_id, description, status, created_at
+            FROM tasks
+            WHERE task_id LIKE 'WAKEUP%'
             ORDER BY created_at DESC
         """
         )

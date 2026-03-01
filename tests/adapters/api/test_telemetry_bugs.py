@@ -56,7 +56,7 @@ class TestTelemetryProductionBugs:
 
         # Fixed implementation that accepts view parameter
         async def good_get_aggregated_telemetry(view=None, **kwargs):
-            result = {"bus": {}, "type": {}, "instance": {}, "covenant": {}}
+            result = {"bus": {}, "type": {}, "instance": {}, "accord": {}}
             if view and view in result:
                 return {view: result[view]}
             return result
@@ -128,19 +128,19 @@ class TestTelemetryProductionBugs:
         wise_authority = getattr(mock_app.state, "wise_authority", None)
         assert wise_authority is None  # Should be None, not AttributeError
 
-    def test_covenant_metrics_structure(self):
+    def test_accord_metrics_structure(self):
         """
-        Test that covenant metrics have the expected structure.
+        Test that accord metrics have the expected structure.
 
-        Covenant metrics should include:
+        Accord metrics should include:
         - benevolence
         - integrity
         - wisdom
         - prudence
         - mission_alignment
         """
-        # Expected covenant metrics structure
-        covenant_metrics = {
+        # Expected accord metrics structure
+        accord_metrics = {
             "benevolence": 0.95,
             "integrity": 0.98,
             "wisdom": 0.87,
@@ -151,8 +151,8 @@ class TestTelemetryProductionBugs:
         # Validate structure
         required_keys = ["benevolence", "integrity", "wisdom", "prudence", "mission_alignment"]
         for key in required_keys:
-            assert key in covenant_metrics, f"Missing covenant metric: {key}"
-            assert 0 <= covenant_metrics[key] <= 1, f"Covenant metric {key} out of range"
+            assert key in accord_metrics, f"Missing accord metric: {key}"
+            assert 0 <= accord_metrics[key] <= 1, f"Accord metric {key} out of range"
 
     @pytest.mark.asyncio
     async def test_memory_recall_node_fix(self):
@@ -234,14 +234,14 @@ class TestRegressionPrevention:
 
             assert "PYTEST_CURRENT_TEST" in os.environ, "File logging should be enabled outside tests"
 
-    def test_telemetry_aggregation_includes_covenant(self):
-        """Ensure telemetry aggregation includes covenant metrics."""
+    def test_telemetry_aggregation_includes_accord(self):
+        """Ensure telemetry aggregation includes accord metrics."""
         # Expected aggregation structure
         aggregated = {
             "bus": {"communication": {}, "memory": {}, "llm": {}},
             "type": {"service": {}, "adapter": {}},
             "instance": {"api_0": {}, "discord_0": {}},
-            "covenant": {  # This should always be present
+            "accord": {  # This should always be present
                 "benevolence": 0.95,
                 "integrity": 0.98,
                 "wisdom": 0.87,
@@ -250,9 +250,9 @@ class TestRegressionPrevention:
             },
         }
 
-        # Verify covenant is included
-        assert "covenant" in aggregated, "Covenant metrics missing from aggregation"
-        assert len(aggregated["covenant"]) >= 5, "Incomplete covenant metrics"
+        # Verify accord is included
+        assert "accord" in aggregated, "Accord metrics missing from aggregation"
+        assert len(aggregated["accord"]) >= 5, "Incomplete accord metrics"
 
 
 # Test execution verification
@@ -265,7 +265,7 @@ def test_production_bug_coverage():
     2. unexpected 'view' parameter in /telemetry/unified
     3. empty logs in /telemetry/logs
     4. recall_node AttributeError in memory endpoints
-    5. missing covenant metrics in aggregation
+    5. missing accord metrics in aggregation
     """
     import inspect
 
@@ -283,7 +283,7 @@ def test_production_bug_coverage():
         "test_unified_unexpected_view",  # Bug 2
         "test_logs_endpoint_empty",  # Bug 3
         "test_memory_recall_node",  # Bug 4
-        "test_covenant_metrics",  # Bug 5
+        "test_accord_metrics",  # Bug 5
     ]
 
     for required in required_tests:

@@ -177,10 +177,8 @@ def _mount_gui_assets(app: FastAPI) -> None:
         app.mount("/", StaticFiles(directory=str(gui_static_dir), html=True), name="gui")
         print(f"✅ GUI enabled at / (static assets: {gui_static_dir})")
     else:
-        _add_api_root_endpoint(
-            app, "not_available", "Install from PyPI for the full package with GUI: pip install ciris-agent"
-        )
-        print("ℹ️  API-only mode (no GUI assets found)")
+        _add_api_root_endpoint(app, "desktop_app", "Use CIRIS Desktop app to connect to this API server")
+        print("ℹ️  API-only mode - use CIRIS Desktop app to connect")
 
 
 def _add_api_root_endpoint(app: FastAPI, gui_status: str, message: str) -> None:

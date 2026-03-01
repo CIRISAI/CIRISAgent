@@ -17,7 +17,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**BETA RELEASE 1.9.9** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
+**BETA RELEASE 2.0.0-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 
@@ -38,6 +38,8 @@ CIRIS wraps LLM calls with:
 **For AI Assistants**: See [llms.txt](llms.txt) for quick context and [docs/OVERVIEW.md](docs/OVERVIEW.md) for architecture.
 
 **Engine Documentation**: [ciris_engine/README.md](ciris_engine/README.md) - Technical architecture and implementation details
+
+**Ethical Reasoning Benchmarks**: [docs/BENCHMARKING.md](docs/BENCHMARKING.md) - How we measure drift via [EthicsEngine.org](https://ethicsengine.org) (CIRIS + Maverick: 82.1% ±2.4% on HE-300)
 
 ## Quick Start
 
@@ -212,6 +214,7 @@ cd mobile/iosApp && xcodebuild -scheme iosApp
 - **[Quick Start Guide](docs/QUICKSTART.md)** - Get running in 5 minutes
 - **[Architecture Overview](docs/ARCHITECTURE.md)** - System design (22 services)
 - **[API Reference](docs/API_SPEC.md)** - REST API documentation
+- **[Benchmarking](docs/BENCHMARKING.md)** - Ethical reasoning metrics via [EthicsEngine.org](https://ethicsengine.org)
 - **[Developer Guide](docs/FOR_NERDS.md)** - Contributing and extending
 
 ## Contributing

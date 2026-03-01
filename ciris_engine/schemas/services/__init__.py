@@ -1,5 +1,6 @@
 """Service schemas for contract-driven architecture."""
 
+from .attestation import AttestationCacheStatus, AttestationRequest, AttestationResult
 from .metadata import ServiceMetadata
 from .requests import (
     AuditRequest,
@@ -30,4 +31,8 @@ __all__ = [
     "LLMResponse",
     "AuditRequest",
     "AuditResponse",
+    # Attestation
+    "AttestationResult",
+    "AttestationCacheStatus",
+    "AttestationRequest",
 ]

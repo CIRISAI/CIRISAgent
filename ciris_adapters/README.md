@@ -277,6 +277,58 @@ ToolInfo(
 4. **Install Guidance** - Users can see how to install missing dependencies
 5. **Discoverability** - Tags enable filtering/searching tools by category
 
+## Service Metadata for DSAR Discovery
+
+All tool services should implement `get_service_metadata()` to enable DSAR (Data Subject Access Request) orchestration. This allows the `ToolBus.get_tools_by_metadata()` to discover which services access external data sources containing personal data.
+
+### Required Method
+
+```python
+def get_service_metadata(self) -> Dict[str, Any]:
+    """Return service metadata for DSAR and data source discovery."""
+    return {
+        "data_source": True,  # Does this service access external data?
+        "data_source_type": "api",  # "api", "file", "rest", "secrets", "sql"
+        "contains_pii": True,  # Does the data source contain PII?
+        "gdpr_applicable": True,  # Is GDPR compliance required?
+        "connector_id": "service_name",  # Unique identifier for this connector
+    }
+```
+
+### Metadata Categories
+
+| Category | `data_source` | `data_source_type` | `contains_pii` | Example Services |
+|----------|---------------|--------------------| ---------------|------------------|
+| **PII Data Sources** | `True` | `"api"` or `"file"` | `True` | reddit, slack, github, himalaya |
+| **Non-PII APIs** | `True` | `"rest"` | `False` | weather, navigation, gemini |
+| **Sensitive/Secrets** | `True` | `"secrets"` | `True` | 1password, oracle, bird |
+| **SQL Connectors** | `True` | `"sql"` | `True` | external_data_sql |
+| **CLI Tools** | `False` | - | - | tmux, summarize, peekaboo |
+| **Device Control** | `False` | - | - | home_assistant (+ `service_type: "device_control"`) |
+
+### DSAR Discovery Usage
+
+```python
+# Find all data sources for DSAR export
+data_sources = await tool_bus.get_tools_by_metadata({"data_source": True})
+
+# Find only GDPR-applicable sources for deletion
+gdpr_sources = await tool_bus.get_tools_by_metadata({
+    "data_source": True,
+    "gdpr_applicable": True
+})
+
+# Find PII-containing sources
+pii_sources = await tool_bus.get_tools_by_metadata({
+    "data_source": True,
+    "contains_pii": True
+})
+```
+
+### Default Behavior
+
+The `ToolServiceProtocol` provides a default implementation returning `{}`. Services that access external data should override this to enable proper DSAR orchestration.
+
 ## Guidelines
 
 - **Test services**: Set `"test_only": true` in manifest
@@ -285,6 +337,7 @@ ToolInfo(
 - **Configuration**: Use schemas, not dicts
 - **Protocols**: Always implement base protocols
 - **No backwards compatibility**: Version via manifest
+- **DSAR Compliance**: Implement `get_service_metadata()` for data sources
 
 ## Examples
 

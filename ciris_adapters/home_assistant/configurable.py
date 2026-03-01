@@ -30,19 +30,50 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
-# Optional mDNS discovery support
-try:
-    from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
-
-    ZEROCONF_AVAILABLE = True
-except ImportError:
-    ZEROCONF_AVAILABLE = False
-    ServiceListener = object  # type: ignore[misc,assignment]
-    logger.info("Zeroconf not available - mDNS discovery disabled")
+# Zeroconf is lazy-loaded to avoid blocking startup (can take 60s+ to import)
+# See _get_zeroconf_classes() for lazy loading
+ZEROCONF_AVAILABLE: Optional[bool] = None  # None = not checked yet
+_zeroconf_classes: Optional[tuple] = None
 
 
-class HADiscoveryListener(ServiceListener):
-    """Zeroconf listener for Home Assistant instances."""
+def _get_zeroconf_classes() -> Optional[tuple]:
+    """Lazy-load zeroconf classes to avoid blocking module import.
+
+    Returns (ServiceBrowser, ServiceListener, Zeroconf) tuple if available, else None.
+    """
+    global ZEROCONF_AVAILABLE, _zeroconf_classes
+
+    if ZEROCONF_AVAILABLE is not None:
+        return _zeroconf_classes
+
+    try:
+        from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
+
+        ZEROCONF_AVAILABLE = True
+        _zeroconf_classes = (ServiceBrowser, ServiceListener, Zeroconf)
+        logger.info("Zeroconf loaded successfully for mDNS discovery")
+        return _zeroconf_classes
+    except ImportError:
+        ZEROCONF_AVAILABLE = False
+        _zeroconf_classes = None
+        logger.info("Zeroconf not available - mDNS discovery disabled")
+        return None
+
+
+# For type hints, we need a base class for HADiscoveryListener
+class _ServiceListenerBase:
+    """Base class for ServiceListener when zeroconf not available."""
+
+    pass
+
+
+class HADiscoveryListener:
+    """Zeroconf listener for Home Assistant instances.
+
+    Note: Does not inherit from ServiceListener at class definition time
+    to avoid requiring zeroconf import. Zeroconf is lazy-loaded when
+    mDNS discovery is actually used.
+    """
 
     def __init__(self) -> None:
         self.services: List[Dict[str, Any]] = []
@@ -216,9 +247,13 @@ class HAConfigurableAdapter:
 
     async def _discover_mdns(self) -> List[Dict[str, Any]]:
         """Discover HA instances via mDNS/Zeroconf."""
-        if not ZEROCONF_AVAILABLE:
+        # Lazy-load zeroconf to avoid blocking startup
+        zc_classes = _get_zeroconf_classes()
+        if zc_classes is None:
             logger.warning("Zeroconf not available for mDNS discovery")
             return []
+
+        ServiceBrowser, _, Zeroconf = zc_classes
 
         try:
             listener = HADiscoveryListener()

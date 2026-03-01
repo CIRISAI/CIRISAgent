@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import COVENANT_TEXT
+from ciris_engine.logic.utils import ACCORD_TEXT, ACCORD_TEXT_COMPRESSED
 from ciris_engine.protocols.dma.base import IDMAProtocol
 from ciris_engine.schemas.dma.results import IDMAResult
 from ciris_engine.schemas.runtime.models import ImageContent
@@ -63,8 +63,9 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         self.prompt_loader = get_prompt_loader()
         self.prompt_template_data = self.prompt_loader.load_prompt_template("idma")
 
-        # Store last user prompt for debugging/streaming
+        # Store last prompts for debugging/streaming
         self.last_user_prompt: Optional[str] = None
+        self.last_system_prompt: Optional[str] = None
 
         logger.info(f"IDMAEvaluator initialized with model: {self.model_name}")
 
@@ -80,9 +81,12 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         """Assemble prompt messages for IDMA evaluation."""
         messages: List[JSONDict] = []
 
-        # Add covenant if configured
-        if self.prompt_loader.uses_covenant_header(self.prompt_template_data):
-            messages.append({"role": "system", "content": COVENANT_TEXT})
+        # Add accord based on mode - 'full', 'compressed', or 'none'
+        accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
+        if accord_mode == "full":
+            messages.append({"role": "system", "content": ACCORD_TEXT})
+        elif accord_mode == "compressed":
+            messages.append({"role": "system", "content": ACCORD_TEXT_COMPRESSED})
 
         # Get system message from prompt template
         system_message = self.prompt_loader.get_system_message(
@@ -216,7 +220,9 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
             images=thought_images,
         )
 
-        # Store user prompt for streaming/debugging
+        # Store prompts for streaming/debugging
+        system_messages = [m for m in messages if m.get("role") == "system"]
+        self.last_system_prompt = "\n\n".join(str(m.get("content", "")) for m in system_messages)
         user_messages = [m for m in messages if m.get("role") == "user"]
         content = user_messages[-1]["content"] if user_messages else None
         self.last_user_prompt = str(content) if content is not None else None

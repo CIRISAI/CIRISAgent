@@ -27,7 +27,7 @@ def mock_time_service():
 
 @pytest.fixture
 def default_behaviors():
-    """Create default CognitiveStateBehaviors (full Covenant compliance)."""
+    """Create default CognitiveStateBehaviors (full Accord compliance)."""
     return CognitiveStateBehaviors()
 
 

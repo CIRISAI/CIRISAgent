@@ -3,7 +3,11 @@ package ai.ciris.mobile
 import ai.ciris.mobile.billing.BillingManager
 import ai.ciris.mobile.billing.PurchaseResult
 import ai.ciris.mobile.billing.VerifyResult
+import ai.ciris.mobile.integrity.PlayIntegrityManager
+import ai.ciris.mobile.integrity.PlayIntegrityResult
 import ai.ciris.mobile.shared.CIRISApp
+import ai.ciris.mobile.shared.DeviceAttestationCallback
+import ai.ciris.mobile.shared.DeviceAttestationResult
 import ai.ciris.mobile.shared.GoogleSignInCallback
 import ai.ciris.mobile.shared.NativeSignInResult
 import ai.ciris.mobile.shared.PurchaseLauncher
@@ -13,6 +17,10 @@ import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.config.CIRISConfig
 import ai.ciris.mobile.shared.platform.AppRestarter
 import ai.ciris.mobile.shared.platform.PythonRuntime
+import ai.ciris.mobile.shared.platform.initUrlOpener
+import ai.ciris.mobile.shared.diagnostics.NetworkDiagnosticsAndroid
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
@@ -62,6 +70,10 @@ class MainActivity : ComponentActivity() {
     private lateinit var billingManager: BillingManager
     private var purchaseResultCallback: PurchaseResultCallback? = null
 
+    // Google Play Integrity
+    private lateinit var playIntegrityManager: PlayIntegrityManager
+    private val integrityScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     // API client for purchase verification (will be set when server is ready)
     private var apiClient: CIRISApiClient? = null
 
@@ -73,6 +85,9 @@ class MainActivity : ComponentActivity() {
 
         // Initialize AppRestarter for app restart functionality (used by Settings reset)
         AppRestarter.init(this, MainActivity::class.java)
+
+        // Initialize URL opener for browser links
+        initUrlOpener(this)
 
         // Initialize Python runtime (Chaquopy)
         if (!Python.isStarted()) {
@@ -96,6 +111,17 @@ class MainActivity : ComponentActivity() {
                 // Start logcat reader for service status updates
                 launch {
                     startLogcatReader()
+                }
+
+                // Run network diagnostics to debug CIRISVerify connectivity
+                launch(Dispatchers.IO) {
+                    try {
+                        Log.i(TAG, "Running CIRIS network diagnostics...")
+                        NetworkDiagnosticsAndroid.runAllDiagnostics()
+                        Log.i(TAG, "Network diagnostics completed")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Network diagnostics failed", e)
+                    }
                 }
 
                 // Start Python server
@@ -154,6 +180,7 @@ class MainActivity : ComponentActivity() {
                     baseUrl = "http://localhost:8080",
                     googleSignInCallback = googleSignInCallback,
                     purchaseLauncher = purchaseLauncher,
+                    deviceAttestationCallback = deviceAttestationCallback,
                     onTokenUpdated = { token ->
                         // Update the billing API client with the new token
                         Log.i(TAG, "Token updated, setting on billing apiClient")
@@ -235,6 +262,37 @@ class MainActivity : ComponentActivity() {
 
         billingManager.initialize()
         Log.i(TAG, "Google Play Billing initialized")
+
+        // Initialize Play Integrity (uses Python API, not Kotlin JNI)
+        playIntegrityManager = PlayIntegrityManager(this, apiClient!!)
+        Log.i(TAG, "Google Play Integrity initialized (via Python API)")
+    }
+
+    /**
+     * DeviceAttestationCallback implementation for CIRISApp
+     */
+    private val deviceAttestationCallback = object : DeviceAttestationCallback {
+        override fun onDeviceAttestationRequested(onResult: (DeviceAttestationResult) -> Unit) {
+            Log.i(TAG, "Device attestation requested")
+            integrityScope.launch {
+                val result = playIntegrityManager.attestDevice()
+                withContext(Dispatchers.Main) {
+                    val attestationResult = when {
+                        result.verified -> DeviceAttestationResult.Success(
+                            verified = true,
+                            verdict = result.verdict ?: "VERIFIED",
+                            meetsStrongIntegrity = result.meetsStrongIntegrity,
+                            meetsDeviceIntegrity = result.meetsDeviceIntegrity,
+                            meetsBasicIntegrity = result.meetsBasicIntegrity
+                        )
+                        result.error != null -> DeviceAttestationResult.Error(result.error)
+                        else -> DeviceAttestationResult.Error("Unknown error")
+                    }
+                    Log.i(TAG, "Device attestation result: $attestationResult")
+                    onResult(attestationResult)
+                }
+            }
+        }
     }
 
     /**

@@ -58,6 +58,48 @@ class ProcessingQueueItem(BaseModel):
         """Return a best-effort text representation of the content."""
         return self.content.text
 
+    @staticmethod
+    def _resolve_initial_context(
+        initial_ctx: Optional[JSONDict], thought_context: Any
+    ) -> Optional[Union[JSONDict, ProcessingThoughtContext, ThoughtContext]]:
+        """Resolve the initial context from provided context or thought context."""
+        raw_ctx = initial_ctx if initial_ctx is not None else thought_context
+        if hasattr(raw_ctx, "model_dump") or isinstance(raw_ctx, (dict, ProcessingThoughtContext, ThoughtContext)):
+            return raw_ctx
+        return None
+
+    @staticmethod
+    def _resolve_content(
+        queue_item_content: Optional[Union[ThoughtContent, str, JSONDict]], thought_content: Any
+    ) -> ThoughtContent:
+        """Resolve content to ThoughtContent from various input types."""
+        raw_content = queue_item_content if queue_item_content is not None else thought_content
+        if isinstance(raw_content, ThoughtContent):
+            return raw_content
+        if isinstance(raw_content, str):
+            return ThoughtContent(text=raw_content)
+        return ThoughtContent(**raw_content)
+
+    @staticmethod
+    def _load_task_images(
+        task_images: Optional[List[ImageContent]], source_task_id: str, agent_occurrence_id: str, thought_id: str
+    ) -> List[ImageContent]:
+        """Load images from task if not explicitly provided."""
+        if task_images is not None:
+            return task_images
+        try:
+            from ciris_engine.logic.persistence.models.tasks import get_task_by_id
+
+            task = get_task_by_id(source_task_id, agent_occurrence_id)
+            if task and task.images:
+                logger.info(
+                    f"[VISION] ProcessingQueueItem inheriting {len(task.images)} images from task {source_task_id}"
+                )
+                return task.images
+        except Exception as e:
+            logger.warning(f"Failed to load task images for thought {thought_id}: {e}")
+        return []
+
     @classmethod
     def from_thought(
         cls,
@@ -78,55 +120,22 @@ class ProcessingQueueItem(BaseModel):
             task_images: Optional list of images from the source task. If not provided,
                         the method will attempt to look up the task and get its images.
         """
-        raw_initial_ctx = initial_ctx if initial_ctx is not None else thought_instance.context
-        # Accept ProcessingThoughtContext, ThoughtContext, dict, or any Pydantic model
-        if hasattr(raw_initial_ctx, "model_dump") or isinstance(
-            raw_initial_ctx, (dict, ProcessingThoughtContext, ThoughtContext)
-        ):
-            final_initial_ctx = raw_initial_ctx
-        else:
-            final_initial_ctx = None
-
-        raw_content = queue_item_content if queue_item_content is not None else thought_instance.content
-        if isinstance(raw_content, ThoughtContent):
-            resolved_content = raw_content
-        elif isinstance(raw_content, str):
-            resolved_content = ThoughtContent(text=raw_content)
-        else:  # isinstance(raw_content, dict)
-            resolved_content = ThoughtContent(**raw_content)
-
-        # Get images from task if not provided
-        # Images are stored at the TASK level, so all thoughts for a task share the same images
-        images: List[ImageContent] = []
-        if task_images is not None:
-            images = task_images
-        else:
-            # Look up the task to get its images
-            try:
-                from ciris_engine.logic.persistence.models.tasks import get_task_by_id
-
-                task = get_task_by_id(thought_instance.source_task_id, thought_instance.agent_occurrence_id)
-                if task and task.images:
-                    images = task.images
-                    if images:
-                        logger.info(
-                            f"[VISION] ProcessingQueueItem inheriting {len(images)} images "
-                            f"from task {thought_instance.source_task_id}"
-                        )
-            except Exception as e:
-                logger.warning(f"Failed to load task images for thought {thought_instance.thought_id}: {e}")
-
         return cls(
             thought_id=thought_instance.thought_id,
             source_task_id=thought_instance.source_task_id,
             thought_type=thought_instance.thought_type,
-            content=resolved_content,
+            content=cls._resolve_content(queue_item_content, thought_instance.content),
             agent_occurrence_id=thought_instance.agent_occurrence_id,
             thought_depth=thought_instance.thought_depth,
             raw_input_string=raw_input if raw_input is not None else str(thought_instance.content),
-            initial_context=final_initial_ctx,
+            initial_context=cls._resolve_initial_context(initial_ctx, thought_instance.context),
             ponder_notes=thought_instance.ponder_notes,
-            images=images,
+            images=cls._load_task_images(
+                task_images,
+                thought_instance.source_task_id,
+                thought_instance.agent_occurrence_id,
+                thought_instance.thought_id,
+            ),
         )
 
 

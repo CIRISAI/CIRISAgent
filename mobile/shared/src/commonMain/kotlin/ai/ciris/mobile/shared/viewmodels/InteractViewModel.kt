@@ -53,6 +53,38 @@ enum class AgentProcessingState {
  * - Message submission
  * - Shutdown controls
  */
+/**
+ * LLM health status for status bar display
+ */
+data class LlmHealthStatus(
+    val provider: String = "unknown",
+    val isHealthy: Boolean = false,
+    val model: String = "unknown",
+    val isCirisProxy: Boolean = false
+)
+
+/**
+ * Credit status for status bar display
+ */
+data class CreditStatus(
+    val hasCredit: Boolean = false,
+    val creditsRemaining: Int = 0,
+    val freeUsesRemaining: Int = 0,
+    val planName: String? = null,
+    val isLoaded: Boolean = false
+)
+
+/**
+ * Trust status for trust shield display
+ */
+data class TrustStatus(
+    val maxLevel: Int = 0,
+    val isLoaded: Boolean = false,
+    val keyStatus: String = "none",
+    val attestationStatus: String = "not_attempted",
+    val levelPending: Boolean = false  // True when waiting for Play Integrity
+)
+
 class InteractViewModel(
     private val apiClient: CIRISApiClient
 ) : ViewModel() {
@@ -61,11 +93,26 @@ class InteractViewModel(
         private const val TAG = "InteractViewModel"
         private const val POLL_INTERVAL_MS = 3000L
         private const val STATUS_POLL_INTERVAL_MS = 5000L
+        private const val HEALTH_POLL_INTERVAL_MS = 30000L  // Less frequent health checks
+        private const val TRUST_PENDING_POLL_INTERVAL_MS = 5000L  // Fast polling when Play Integrity pending
         private const val MAX_BUBBLES = 8
         private const val BUBBLE_LIFETIME_MS = 2000L
         private const val MAX_TIMELINE_EVENTS = 100
         private const val SSE_RECONNECT_BASE_MS = 1000L
         private const val SSE_RECONNECT_MAX_MS = 30000L
+    }
+
+    // Device attestation callback for triggering Play Integrity at startup
+    private var deviceAttestationCallback: ai.ciris.mobile.shared.DeviceAttestationCallback? = null
+    private var deviceAttestationTriggered = false  // Track if we've already triggered it
+
+    /**
+     * Set the device attestation callback for Play Integrity.
+     * Should be called after ViewModel creation from CIRISApp.
+     */
+    fun setDeviceAttestationCallback(callback: ai.ciris.mobile.shared.DeviceAttestationCallback?) {
+        logInfo("setDeviceAttestationCallback", "Device attestation callback ${if (callback != null) "SET" else "CLEARED"}")
+        deviceAttestationCallback = callback
     }
 
     private fun log(level: String, method: String, message: String) {
@@ -125,8 +172,22 @@ class InteractViewModel(
     private val _showLegend = MutableStateFlow(false)
     val showLegend: StateFlow<Boolean> = _showLegend.asStateFlow()
 
+    // LLM health status for status bar
+    private val _llmHealth = MutableStateFlow(LlmHealthStatus())
+    val llmHealth: StateFlow<LlmHealthStatus> = _llmHealth.asStateFlow()
+
+    // Credit status for status bar (only shown when isCirisProxy)
+    private val _creditStatus = MutableStateFlow(CreditStatus())
+    val creditStatus: StateFlow<CreditStatus> = _creditStatus.asStateFlow()
+
+    // Trust status for shield display
+    private val _trustStatus = MutableStateFlow(TrustStatus())
+    val trustStatus: StateFlow<TrustStatus> = _trustStatus.asStateFlow()
+
     private var pollingJob: Job? = null
     private var statusJob: Job? = null
+    private var healthJob: Job? = null
+    private var trustPollJob: Job? = null  // Separate fast polling for trust when pending
     private var sseJob: Job? = null
     private var isFirstLoad = true
     private var authErrorCount = 0
@@ -161,6 +222,7 @@ class InteractViewModel(
         pollingStarted = true
         startStatusPolling()
         startMessagePolling()
+        startHealthPolling()
         startSseStream()
     }
 
@@ -317,6 +379,183 @@ class InteractViewModel(
                     _agentStatus.value = "Disconnected"
                 }
                 delay(STATUS_POLL_INTERVAL_MS)
+            }
+        }
+    }
+
+    /**
+     * Poll for LLM health, credits, and trust status (less frequent)
+     */
+    private fun startHealthPolling() {
+        val method = "startHealthPolling"
+        logInfo(method, "Starting health polling (interval=${HEALTH_POLL_INTERVAL_MS}ms)")
+
+        healthJob = viewModelScope.launch {
+            // Initial fetch on startup
+            fetchHealthData()
+
+            while (isActive) {
+                delay(HEALTH_POLL_INTERVAL_MS)
+                fetchHealthData()
+            }
+        }
+
+        // Start separate fast trust polling for when Play Integrity is pending
+        startTrustPendingPolling()
+    }
+
+    /**
+     * Fast polling for trust status when Play Integrity is pending.
+     * Polls every 5 seconds until Play Integrity completes, then stops.
+     * Also triggers Play Integrity automatically if levelPending=true.
+     */
+    private fun startTrustPendingPolling() {
+        val method = "startTrustPendingPolling"
+        logInfo(method, "Starting trust pending polling (interval=${TRUST_PENDING_POLL_INTERVAL_MS}ms)")
+
+        trustPollJob = viewModelScope.launch {
+            // Wait a bit for initial health fetch to complete
+            delay(2000)
+
+            while (isActive) {
+                // Fetch fresh trust status
+                fetchTrustStatus()
+                val currentTrust = _trustStatus.value
+
+                // If levelPending is true, trigger Play Integrity if not already triggered
+                if (currentTrust.levelPending) {
+                    if (!deviceAttestationTriggered && deviceAttestationCallback != null) {
+                        logInfo(method, "Level pending=true, triggering Play Integrity automatically...")
+                        deviceAttestationTriggered = true
+                        deviceAttestationCallback?.onDeviceAttestationRequested { result ->
+                            logInfo(method, "Play Integrity completed: $result")
+                        }
+                    }
+                    logDebug(method, "Level pending=true (level=${currentTrust.maxLevel}), continuing fast poll...")
+                    delay(TRUST_PENDING_POLL_INTERVAL_MS)
+                } else {
+                    // Play Integrity is complete, stop fast polling
+                    logInfo(method, "Level pending=false (level=${currentTrust.maxLevel}/5), stopping fast poll")
+                    break
+                }
+            }
+        }
+    }
+
+    /**
+     * Fetch just trust status (for fast polling when pending)
+     */
+    private suspend fun fetchTrustStatus() {
+        val method = "fetchTrustStatus"
+        try {
+            val verifyStatus = apiClient.getVerifyStatus()
+            val previousLevel = _trustStatus.value.maxLevel
+            val previousPending = _trustStatus.value.levelPending
+            _trustStatus.value = TrustStatus(
+                maxLevel = verifyStatus.maxLevel,
+                isLoaded = verifyStatus.loaded,
+                keyStatus = verifyStatus.keyStatus,
+                attestationStatus = verifyStatus.attestationStatus,
+                levelPending = verifyStatus.levelPending
+            )
+            if (verifyStatus.maxLevel != previousLevel) {
+                logInfo(method, "Trust level changed: $previousLevel -> ${verifyStatus.maxLevel}")
+            }
+            if (verifyStatus.levelPending != previousPending) {
+                logInfo(method, "Level pending changed: $previousPending -> ${verifyStatus.levelPending}")
+            }
+        } catch (e: Exception) {
+            logWarn(method, "Failed to fetch trust status: ${e.message}")
+        }
+    }
+
+    /**
+     * Fetch LLM health, credits, and trust status
+     */
+    private suspend fun fetchHealthData() {
+        val method = "fetchHealthData"
+        try {
+            // Fetch LLM config for health status
+            try {
+                val config = apiClient.getLlmConfig()
+                _llmHealth.value = LlmHealthStatus(
+                    provider = config.provider,
+                    isHealthy = config.apiKeySet || config.isCirisProxy,
+                    model = config.model,
+                    isCirisProxy = config.isCirisProxy
+                )
+                logDebug(method, "LLM health: provider=${config.provider}, isCirisProxy=${config.isCirisProxy}")
+
+                // Only fetch credits if using CIRIS proxy
+                if (config.isCirisProxy) {
+                    try {
+                        val credits = apiClient.getCredits()
+                        _creditStatus.value = CreditStatus(
+                            hasCredit = credits.hasCredit,
+                            creditsRemaining = credits.creditsRemaining,
+                            freeUsesRemaining = credits.freeUsesRemaining,
+                            planName = credits.planName,
+                            isLoaded = true
+                        )
+                        logDebug(method, "Credits: remaining=${credits.creditsRemaining}")
+                    } catch (e: Exception) {
+                        logWarn(method, "Failed to fetch credits: ${e.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                logWarn(method, "Failed to fetch LLM config: ${e.message}")
+            }
+
+            // Fetch trust status (uses cached attestation from auth service)
+            try {
+                val verifyStatus = apiClient.getVerifyStatus()
+                _trustStatus.value = TrustStatus(
+                    maxLevel = verifyStatus.maxLevel,  // Use backend's authoritative level
+                    isLoaded = verifyStatus.loaded,
+                    keyStatus = verifyStatus.keyStatus,
+                    attestationStatus = verifyStatus.attestationStatus,
+                    levelPending = verifyStatus.levelPending
+                )
+                logDebug(method, "Trust: level=${verifyStatus.maxLevel}/5, keyStatus=${verifyStatus.keyStatus}, pending=${verifyStatus.levelPending}")
+            } catch (e: Exception) {
+                logWarn(method, "Failed to fetch trust status: ${e.message}")
+            }
+        } catch (e: Exception) {
+            logWarn(method, "Health polling error: ${e.message}")
+        }
+    }
+
+    /**
+     * Refresh trust status (called when opening trust page)
+     * Also restarts fast polling if Play Integrity is still pending.
+     */
+    fun refreshTrustStatus() {
+        viewModelScope.launch {
+            try {
+                val verifyStatus = apiClient.getVerifyStatus()
+                val previousLevel = _trustStatus.value.maxLevel
+                _trustStatus.value = TrustStatus(
+                    maxLevel = verifyStatus.maxLevel,  // Use backend's authoritative level
+                    isLoaded = verifyStatus.loaded,
+                    keyStatus = verifyStatus.keyStatus,
+                    attestationStatus = verifyStatus.attestationStatus,
+                    levelPending = verifyStatus.levelPending
+                )
+
+                // Log level change
+                if (verifyStatus.maxLevel != previousLevel) {
+                    logInfo("refreshTrustStatus", "Trust level changed: $previousLevel -> ${verifyStatus.maxLevel}")
+                }
+
+                // Restart fast polling if still pending and job isn't active
+                if (verifyStatus.levelPending) {
+                    if (trustPollJob?.isActive != true) {
+                        logInfo("refreshTrustStatus", "Restarting fast trust polling (levelPending=true)")
+                        startTrustPendingPolling()
+                    }
+                }
+            } catch (e: Exception) {
+                logWarn("refreshTrustStatus", "Failed: ${e.message}")
             }
         }
     }
@@ -500,9 +739,11 @@ class InteractViewModel(
                                 // Add to timeline (persists for bubble net)
                                 addTimelineEvent(event.emoji, event.eventType)
 
-                                // Update processing state
+                                // Update processing state and status text
                                 if (event.isComplete) {
                                     _agentProcessingState.value = AgentProcessingState.IDLE
+                                    // Clear processing status text when task completes
+                                    _processingStatus.value = ""
                                 } else {
                                     _agentProcessingState.value = AgentProcessingState.PROCESSING
                                 }
@@ -575,6 +816,8 @@ class InteractViewModel(
         super.onCleared()
         pollingJob?.cancel()
         statusJob?.cancel()
+        healthJob?.cancel()
+        trustPollJob?.cancel()
         sseJob?.cancel()
     }
 }

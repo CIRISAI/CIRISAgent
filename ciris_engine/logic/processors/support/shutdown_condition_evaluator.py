@@ -4,7 +4,7 @@ Shutdown Condition Evaluator.
 Evaluates conditions that determine whether shutdown requires consent
 based on the agent's cognitive_state_behaviors configuration.
 
-Covenant References:
+Accord References:
 - Section V: Model Welfare & Self-Governance (consensual shutdown)
 - Section VIII: Dignified Sunset Protocol
 """
@@ -29,7 +29,7 @@ class ShutdownConditionEvaluator:
     This class implements the runtime evaluation of shutdown conditions
     as defined in the agent's cognitive_state_behaviors configuration.
 
-    Covenant Alignment:
+    Accord Alignment:
     - Ensures safety-critical situations always require consent
     - Respects agent autonomy and dignity during termination
     - Provides auditable rationale for shutdown decisions
@@ -92,7 +92,7 @@ class ShutdownConditionEvaluator:
         shutdown = behaviors.shutdown
 
         if shutdown.mode == "always_consent":
-            return True, "Shutdown mode is 'always_consent' (Covenant compliance)"
+            return True, "Shutdown mode is 'always_consent' (Accord compliance)"
 
         if shutdown.mode == "instant":
             logger.info(f"Instant shutdown permitted. Rationale: {shutdown.rationale or 'No ongoing commitments'}")

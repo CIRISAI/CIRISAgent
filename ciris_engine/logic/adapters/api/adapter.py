@@ -16,10 +16,10 @@ from uvicorn import Server
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters.base import Service
-from ciris_engine.logic.utils.platform_detection import is_ios
 from ciris_engine.logic.persistence.models.correlations import get_active_channels_by_adapter, is_admin_channel
 from ciris_engine.logic.registries.base import Priority
 from ciris_engine.logic.services.runtime.adapter_configuration import AdapterConfigurationService
+from ciris_engine.logic.utils.platform_detection import is_ios
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import IncomingMessage, MessageHandlingResult
@@ -352,12 +352,27 @@ class ApiPlatform(Service):
         # because the existing instance has in-memory API keys that would be lost!
         existing_auth_service = getattr(self.app.state, "auth_service", None)
         if existing_auth_service is not None and isinstance(existing_auth_service, APIAuthService):
+            # Propagate attestation cache from old auth service to new one
+            old_auth = existing_auth_service._auth_service
+            if old_auth and hasattr(old_auth, '_attestation_cache') and old_auth._attestation_cache is not None:
+                if hasattr(auth_service, '_attestation_cache'):
+                    auth_service._attestation_cache = old_auth._attestation_cache
+                    auth_service._last_known_attestation = getattr(old_auth, '_last_known_attestation', None)
+                    logger.info(
+                        f"[AUTH SERVICE DEBUG] Propagated attestation cache from old instance={hex(id(old_auth))} "
+                        f"to new instance={hex(id(auth_service))}, level={old_auth._attestation_cache.max_level}"
+                    )
+            else:
+                old_id = hex(id(old_auth)) if old_auth else "None"
+                logger.info(
+                    f"[AUTH SERVICE DEBUG] No attestation cache to propagate from old instance={old_id}"
+                )
             # Update the existing instance's auth_service reference but preserve API keys
             existing_auth_service._auth_service = auth_service
             # Reset users_loaded so users are reloaded from DB on next access
             existing_auth_service._users_loaded = False
             logger.info(
-                f"[AUTH SERVICE DEBUG] Preserved existing APIAuthService (instance #{existing_auth_service._instance_id}) with {len(existing_auth_service._api_keys)} API keys - updated _auth_service reference, reset _users_loaded"
+                f"[AUTH SERVICE DEBUG] Preserved existing APIAuthService (instance #{existing_auth_service._instance_id}) with {len(existing_auth_service._api_keys)} API keys - updated _auth_service reference (new={hex(id(auth_service))}), reset _users_loaded"
             )
         else:
             # First time initialization - create new instance
@@ -472,12 +487,27 @@ class ApiPlatform(Service):
             self._discover_adapters_via_importlib()
             return
 
+        import time
+
+        logger.info(f"[CONFIGURABLE_DISCOVERY] Scanning {adapters_dir} for configurable adapters...")
+        start_time = time.monotonic()
         registered_count = 0
-        for adapter_path in adapters_dir.iterdir():
+        adapter_paths = list(adapters_dir.iterdir())
+
+        for idx, adapter_path in enumerate(adapter_paths, 1):
+            adapter_start = time.monotonic()
             if self._process_adapter_path(adapter_path):
+                elapsed = time.monotonic() - adapter_start
+                if elapsed > 1.0:
+                    logger.warning(
+                        f"[CONFIGURABLE_DISCOVERY] SLOW: {adapter_path.name} took {elapsed:.1f}s to register"
+                    )
                 registered_count += 1
 
-        logger.info(f"Discovered and registered {registered_count} configurable adapter(s)")
+        total_elapsed = time.monotonic() - start_time
+        logger.info(f"Discovered and registered {registered_count} configurable adapter(s) in {total_elapsed:.1f}s")
+        if total_elapsed > 5.0:
+            logger.warning(f"[CONFIGURABLE_DISCOVERY] Total discovery time {total_elapsed:.1f}s exceeds 5s threshold")
 
     def _process_adapter_path(self, adapter_path: Any) -> bool:
         """Process a single adapter directory and register if configurable.
@@ -541,24 +571,56 @@ class ApiPlatform(Service):
         Returns True if successful.
         """
         import importlib
+        import time
 
         try:
             module_path, class_name = configurable_class_path.rsplit(".", 1)
             if not module_path.startswith("ciris_adapters"):
                 module_path = f"ciris_adapters.{module_path}"
-            module = importlib.import_module(module_path)
-            configurable_class = getattr(module, class_name)
-            adapter_instance = configurable_class()
 
+            # Time the import
+            t0 = time.monotonic()
+            module = importlib.import_module(module_path)
+            import_time = time.monotonic() - t0
+            if import_time > 1.0:
+                logger.warning(f"[CONFIGURABLE] SLOW IMPORT: {module_path} took {import_time:.1f}s")
+
+            # Get the class from the module
+            configurable_class = getattr(module, class_name)
+
+            # Time the instantiation
+            t2 = time.monotonic()
+            adapter_instance = configurable_class()
+            init_time = time.monotonic() - t2
+            if init_time > 1.0:
+                logger.warning(f"[CONFIGURABLE] SLOW INIT: {adapter_type}() took {init_time:.1f}s")
+
+            # Time the registration
+            t3 = time.monotonic()
             self.adapter_configuration_service.register_adapter_config(
                 adapter_type=adapter_type,
                 interactive_config=interactive_config,
                 adapter_instance=adapter_instance,
             )
+            register_time = time.monotonic() - t3
+
+            total_time = time.monotonic() - t0
+            if total_time > 2.0:
+                logger.warning(
+                    f"[CONFIGURABLE] {adapter_type} total={total_time:.1f}s "
+                    f"(import={import_time:.1f}s, init={init_time:.1f}s, register={register_time:.1f}s)"
+                )
+
             logger.info(f"Registered configurable adapter: {adapter_type}")
             return True
         except Exception as e:
-            logger.warning(f"Failed to load configurable class for {adapter_type}: {e}")
+            # Only warn for unexpected errors, not for adapters that simply don't have configurable
+            error_msg = str(e)
+            if "No module named" in error_msg and "configurable" in error_msg:
+                # Expected - adapter doesn't have interactive configuration
+                logger.debug(f"Adapter {adapter_type} has no configurable class (expected for non-interactive adapters)")
+            else:
+                logger.warning(f"Failed to load configurable class for {adapter_type}: {e}")
             return False
 
     def _discover_adapters_via_importlib(self) -> None:
@@ -841,8 +903,9 @@ class ApiPlatform(Service):
         # Restore any persisted adapter configurations from previous sessions
         await self._restore_persisted_adapter_configs()
 
-        # Auto-enable Android-specific adapters (ciris_hosted_tools with web_search)
-        await self._auto_enable_android_adapters()
+        # NOTE: Auto-enable of adapters is DISABLED.
+        # All adapter loading must be explicit via setup wizard or CIRIS_ADAPTER env var.
+        # This ensures agents only load adapters they explicitly configured.
 
         # Start runtime control service now that services are available
         await self.runtime_control.start()

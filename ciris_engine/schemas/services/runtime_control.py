@@ -1087,6 +1087,11 @@ class DMAResultsEvent(BaseModel):
     pdma_prompt: Optional[str] = Field(None, description="User prompt passed to PDMA")
     # Note: idma_prompt is in IDMAResultEvent
 
+    # System prompts passed to each DMA (for debugging format instructions)
+    csdma_system_prompt: Optional[str] = Field(None, description="System prompt passed to CSDMA")
+    dsdma_system_prompt: Optional[str] = Field(None, description="System prompt passed to DSDMA")
+    pdma_system_prompt: Optional[str] = Field(None, description="System prompt passed to PDMA")
+
 
 class IDMAResultEvent(BaseModel):
     """Event 3: Identity DMA fragility check (always emitted after DMA_RESULTS).

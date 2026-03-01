@@ -540,6 +540,12 @@ class TestRuntimeAdapterManager:
             return_value={"adapter.test_id.config": {"test": "value"}, "adapter.test_id.type": "cli"}
         )
 
+        # Mock get_config to return occurrence_id="default" for multi-occurrence safety check
+        mock_occurrence_entry = Mock()
+        mock_occurrence_entry.value = Mock()
+        mock_occurrence_entry.value.str_value = "default"  # Must match current occurrence
+        mock_config.get_config = AsyncMock(return_value=mock_occurrence_entry)
+
         mock_initializer = Mock()
         mock_initializer.config_service = mock_config
         mock_runtime.service_initializer = mock_initializer
@@ -550,11 +556,47 @@ class TestRuntimeAdapterManager:
         await adapter_manager._save_adapter_config_to_graph("test_id", "cli", config)
         mock_config.set_config.assert_called()
 
-        # Test remove - now uses list_configs and set_config to None
+        # Test remove - now uses get_config for occurrence check, then list_configs and set_config to None
         await adapter_manager._remove_adapter_config_from_graph("test_id")
+        # Should have called get_config for occurrence check
+        mock_config.get_config.assert_called()
         mock_config.list_configs.assert_called_once_with(prefix="adapter.test_id")
         # Should set each config to None to clear it
         assert mock_config.set_config.call_count >= 2  # At least 2 configs to clear
+
+    @pytest.mark.asyncio
+    async def test_remove_config_blocks_for_different_occurrence(self, adapter_manager, mock_runtime):
+        """Test that removing adapter config is blocked when adapter belongs to different occurrence.
+
+        This tests the multi-occurrence safety mechanism that prevents cross-contamination
+        in shared database deployments where multiple occurrences share the same PostgreSQL database.
+        """
+        # Setup mock config service on service_initializer
+        mock_config = AsyncMock()
+        mock_config.set_config = AsyncMock()
+        mock_config.list_configs = AsyncMock(
+            return_value={"adapter.other_id.config": {"test": "value"}, "adapter.other_id.type": "cli"}
+        )
+
+        # Mock get_config to return occurrence_id="other_occurrence" (different from current "default")
+        mock_occurrence_entry = Mock()
+        mock_occurrence_entry.value = Mock()
+        mock_occurrence_entry.value.str_value = "other_occurrence"  # Different from current occurrence
+        mock_config.get_config = AsyncMock(return_value=mock_occurrence_entry)
+
+        mock_initializer = Mock()
+        mock_initializer.config_service = mock_config
+        mock_runtime.service_initializer = mock_initializer
+
+        # Test remove - should be blocked because adapter belongs to "other_occurrence"
+        await adapter_manager._remove_adapter_config_from_graph("other_id")
+
+        # Should have called get_config for occurrence check
+        mock_config.get_config.assert_called_once()
+        # list_configs should NOT be called because the check fails early
+        mock_config.list_configs.assert_not_called()
+        # set_config should only have the initial calls, not the removal calls
+        # (set_config is not called after save during this test)
 
     @pytest.mark.asyncio
     async def test_config_listener_registration(self, adapter_manager, mock_runtime):

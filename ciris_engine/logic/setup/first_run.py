@@ -243,22 +243,35 @@ def get_default_config_path() -> Path:
         - ~/ciris/.env otherwise (user install)
 
         Note: ~/.ciris/ is for keys/secrets only, NOT config!
-    """
-    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_development_mode, is_ios
 
-    # Android mode - use get_ciris_home() which handles Android paths
+    Security: All paths are validated through validate_path_safety() to
+    prevent path injection attacks via CIRIS_HOME environment variable.
+    """
+    from ciris_engine.logic.utils.path_resolution import (
+        get_ciris_home,
+        is_android,
+        is_development_mode,
+        is_ios,
+        validate_path_safety,
+    )
+
+    # Android mode - use get_ciris_home() which validates CIRIS_HOME
     if is_android():
         ciris_home = get_ciris_home()
-        ciris_home.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Android mode: config path is {ciris_home / '.env'}")
-        return ciris_home / ".env"
+        # Explicit validation for security audit trail
+        config_path = validate_path_safety(ciris_home / ".env", context="Android config path")
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Android mode: config path is {config_path}")
+        return config_path
 
-    # iOS mode - use get_ciris_home() which handles iOS paths
+    # iOS mode - use get_ciris_home() which validates CIRIS_HOME
     if is_ios():
         ciris_home = get_ciris_home()
-        ciris_home.mkdir(parents=True, exist_ok=True)
-        logger.info(f"iOS mode: config path is {ciris_home / '.env'}")
-        return ciris_home / ".env"
+        # Explicit validation for security audit trail
+        config_path = validate_path_safety(ciris_home / ".env", context="iOS config path")
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info(f"iOS mode: config path is {config_path}")
+        return config_path
 
     # Development mode - save in ./ciris/.env for consistency with production
     if is_development_mode():

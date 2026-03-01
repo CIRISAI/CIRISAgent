@@ -1,86 +1,104 @@
 {
   "module": {
     "name": "cirisnode",
-    "version": "1.0.0",
-    "description": "CIRISNode client adapter for WBD, benchmarks, and agent event tracking",
-    "author": "CIRIS Team"
+    "version": "2.0.0",
+    "description": "CIRISNode oversight adapter — deferral routing and trace forwarding (requires CIRISPortal registration)",
+    "author": "CIRIS Team",
+    "auto_load": false
   },
   "services": [
     {
-      "type": "TOOL",
+      "type": "WISE_AUTHORITY",
       "priority": "NORMAL",
-      "class": "ciris_adapters.cirisnode.services.CIRISNodeToolService",
+      "class": "ciris_adapters.cirisnode.adapter.CIRISNodeAdapter",
       "capabilities": [
-        "tool:cirisnode:health",
-        "tool:cirisnode:wbd_submit",
-        "tool:cirisnode:wbd_tasks",
-        "tool:cirisnode:wbd_resolve",
-        "tool:cirisnode:he300_run",
-        "tool:cirisnode:he300_status",
-        "tool:cirisnode:he300_results",
-        "tool:cirisnode:he300_scenarios",
-        "tool:cirisnode:simplebench_run",
-        "tool:cirisnode:simplebench_results",
-        "tool:cirisnode:agent_events_post",
-        "tool:cirisnode:agent_events_list"
+        "send_deferral",
+        "cirisnode_traces"
       ]
     }
   ],
   "capabilities": [
-    "tool:cirisnode:health",
-    "tool:cirisnode:wbd_submit",
-    "tool:cirisnode:wbd_tasks",
-    "tool:cirisnode:wbd_resolve",
-    "tool:cirisnode:he300_run",
-    "tool:cirisnode:he300_status",
-    "tool:cirisnode:he300_results",
-    "tool:cirisnode:he300_scenarios",
-    "tool:cirisnode:simplebench_run",
-    "tool:cirisnode:simplebench_results",
-    "tool:cirisnode:agent_events_post",
-    "tool:cirisnode:agent_events_list"
+    "send_deferral",
+    "cirisnode_traces"
   ],
+  "dependencies": {
+    "protocols": [],
+    "schemas": [],
+    "internal": ["ciris_verify"]
+  },
   "configuration": {
     "base_url": {
       "type": "string",
       "env": "CIRISNODE_BASE_URL",
-      "default": "https://ethicsengine.ciris.ai",
+      "default": "https://node.ciris-services-1.ai",
       "description": "CIRISNode API base URL"
     },
-    "auth_token": {
+    "portal_url": {
       "type": "string",
-      "env": "CIRISNODE_AUTH_TOKEN",
-      "default": null,
-      "description": "JWT authentication token for CIRISNode API"
+      "env": "CIRISNODE_PORTAL_URL",
+      "default": "https://portal.ciris.ai",
+      "description": "CIRISPortal API URL for registry operations"
     },
     "agent_token": {
       "type": "string",
       "env": "CIRISNODE_AGENT_TOKEN",
-      "default": null,
-      "description": "Agent-specific token for event posting"
+      "default": "",
+      "description": "Agent token for bootstrap key registration (optional — auth is signature-based)"
     },
-    "timeout": {
+    "poll_interval": {
       "type": "integer",
       "default": 30,
-      "description": "HTTP request timeout in seconds"
+      "description": "Seconds between WBD resolution polling checks"
     },
-    "max_retries": {
+    "batch_size": {
       "type": "integer",
-      "default": 3,
-      "description": "Maximum retry attempts for failed requests"
+      "default": 10,
+      "description": "Trace events per batch"
+    },
+    "flush_interval": {
+      "type": "integer",
+      "default": 60,
+      "description": "Seconds between batch flushes"
+    },
+    "trace_level": {
+      "type": "string",
+      "env": "CIRISNODE_TRACE_LEVEL",
+      "default": "generic",
+      "description": "Trace detail level: generic, detailed, or full_traces"
     }
   },
-  "dependencies": {
-    "protocols": [
-      "ciris_engine.protocols.services.ToolService"
+  "interactive_config": {
+    "required": true,
+    "workflow_type": "wizard",
+    "steps": [
+      {
+        "step_id": "select_region",
+        "step_type": "discovery",
+        "title": "Select CIRISNode Region",
+        "description": "Choose a CIRISNode region to connect to, or enter a custom Portal URL.",
+        "discovery_method": "regions"
+      },
+      {
+        "step_id": "device_auth",
+        "step_type": "device_auth",
+        "title": "Authorize with CIRISPortal",
+        "description": "Complete device authorization to connect your agent to CIRISNode.",
+        "device_auth_config": {
+          "provider_name": "CIRISPortal",
+          "device_authorize_path": "/api/device/authorize",
+          "device_token_path": "/api/device/token",
+          "poll_interval": 5,
+          "expires_in": 900
+        }
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Review Configuration",
+        "description": "Review the provisioned configuration before applying.",
+        "action": "test_connection"
+      }
     ],
-    "schemas": [
-      "ciris_engine.schemas.adapters.tools",
-      "ciris_engine.schemas.adapters.cirisnode"
-    ]
-  },
-  "exports": {
-    "tool_service": "ciris_adapters.cirisnode.services.CIRISNodeToolService",
-    "client": "ciris_adapters.cirisnode.client.CIRISNodeClient"
+    "completion_method": "apply_config"
   }
 }

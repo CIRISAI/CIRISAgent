@@ -135,9 +135,21 @@ def create_env_file(
         Path where the .env file was saved
     """
     from ciris_engine.logic.setup.first_run import get_default_config_path
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_ios
 
     # Get safe path from environment-aware path resolution (not user input)
     save_path = get_default_config_path()
+
+    # Get the correct data directory for this platform
+    # On Android/iOS, this will be the app's files directory (absolute path)
+    # On desktop, this will be ~/ciris (which gets expanded by the OS)
+    if is_android() or is_ios():
+        # Use absolute path for mobile - tilde doesn't expand
+        # Must match ios_main.py / android_main.py CIRIS_DATA_DIR setting
+        data_dir = str(get_ciris_home())
+    else:
+        # Use ~/ciris for desktop - more portable
+        data_dir = "~/ciris/data"
 
     # Log what we received for debugging
     logger.info(f"[create_env_file] Received llm_provider='{llm_provider}', llm_base_url='{llm_base_url}'")
@@ -241,11 +253,11 @@ CIRIS_AGENT_PORT={agent_port}
 CIRIS_API_PORT={agent_port}
 NEXT_PUBLIC_API_BASE_URL="http://localhost:{agent_port}"
 
-# Database Paths (using ~/ciris as base directory)
-CIRIS_DB_PATH="~/ciris/data/ciris_engine.db"
-CIRIS_DATA_DIR="~/ciris/data"
-SECRETS_DB_PATH="~/ciris/data/secrets.db"
-AUDIT_LOG_PATH="~/ciris/data/audit_logs.jsonl"
+# Database Paths
+CIRIS_DB_PATH="{data_dir}/ciris_engine.db"
+CIRIS_DATA_DIR="{data_dir}"
+SECRETS_DB_PATH="{data_dir}/secrets.db"
+AUDIT_LOG_PATH="{data_dir}/audit_logs.jsonl"
 
 # Mark as configured
 CIRIS_CONFIGURED="true"

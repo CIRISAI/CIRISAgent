@@ -41,9 +41,7 @@ class TestResolveDbPath:
     def test_resolve_db_path_default(self):
         """Test resolving to default path when no override."""
         with patch("ciris_engine.logic.persistence.db.core._test_db_path", None):
-            with patch(
-                "ciris_engine.logic.persistence.db.core.get_sqlite_db_full_path"
-            ) as mock_get_path:
+            with patch("ciris_engine.logic.persistence.db.core.get_sqlite_db_full_path") as mock_get_path:
                 mock_get_path.return_value = "/mock/data/ciris_engine.db"
                 result = _resolve_db_path(None)
                 assert result == "/mock/data/ciris_engine.db"

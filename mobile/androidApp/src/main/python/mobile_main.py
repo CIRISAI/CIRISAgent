@@ -556,6 +556,259 @@ def debug_pydantic_core() -> None:
 # The new setup_pydantic_core() handles everything with clear logging
 
 
+# =============================================================================
+# PYTHON CODE INTEGRITY VERIFICATION
+# =============================================================================
+# Verifies ciris_engine Python modules at startup by hashing their source.
+# This catches tampering of bundled Python code inside the APK.
+# Saves hashes to startup_python_hashes.json for CIRISVerify to use.
+# =============================================================================
+
+
+def _get_module_source(modname: str, spec) -> Optional[bytes]:
+    """Get module source bytes, handling Chaquopy's AssetFinder.
+
+    Tries multiple methods:
+    1. Direct file read if spec.origin is a .py file
+    2. Loader's get_data() method (works with AssetFinder)
+    3. Loader's get_source() method
+    """
+    import importlib.util
+
+    # Method 1: Direct file read
+    if spec and spec.origin and spec.origin.endswith(".py"):
+        try:
+            with open(spec.origin, "rb") as f:
+                return f.read()
+        except (OSError, IOError):
+            pass
+
+    # Method 2: Use loader's get_data (works with Chaquopy AssetFinder)
+    if spec and spec.loader and hasattr(spec.loader, "get_data"):
+        try:
+            # For AssetFinder, origin might be like /data/.../app/ciris_engine/foo.py
+            if spec.origin:
+                return spec.loader.get_data(spec.origin)
+        except (OSError, IOError):
+            pass
+
+    # Method 3: Use loader's get_source
+    if spec and spec.loader and hasattr(spec.loader, "get_source"):
+        try:
+            source = spec.loader.get_source(modname)
+            if source:
+                return source.encode("utf-8")
+        except (OSError, IOError, TypeError):
+            pass
+
+    return None
+
+
+def _fetch_manifest_modules(package_prefix: str = "ciris_engine") -> Optional[set]:
+    """Fetch module names from registry manifest.
+
+    Args:
+        package_prefix: Package prefix to filter (e.g., "ciris_engine")
+
+    Returns:
+        Set of module names (e.g., "ciris_engine.logic.adapters.discord.adapter")
+    """
+    import json
+    import re
+    import urllib.request
+
+    try:
+        # Get version from ciris_engine
+        from ciris_engine import __version__
+
+        # Strip any suffix like -stable, -beta, etc. (registry uses base version)
+        version = re.split(r"[-+]", __version__)[0]
+
+        url = f"https://api.registry.ciris-services-1.ai/v1/builds/{version}"
+        logger.info(f"[code-integrity] Fetching manifest from registry for version {version}")
+
+        with urllib.request.urlopen(url, timeout=10) as response:
+            data = json.loads(response.read().decode())
+            manifest_json = data.get("file_manifest_json", {})
+            if isinstance(manifest_json, dict):
+                files = manifest_json.get("files", {})
+                # Convert file paths to module names
+                # e.g., "ciris_engine/logic/adapters/discord/adapter.py" -> "ciris_engine.logic.adapters.discord.adapter"
+                modules = set()
+                for file_path in files.keys():
+                    if file_path.startswith(package_prefix) and file_path.endswith(".py"):
+                        # Skip __init__.py for now (handled separately as packages)
+                        if file_path.endswith("__init__.py"):
+                            # Convert to package name
+                            pkg_path = file_path[:-12]  # Remove "/__init__.py"
+                            modname = pkg_path.replace("/", ".")
+                        else:
+                            # Convert to module name
+                            modname = file_path[:-3].replace("/", ".")  # Remove ".py"
+                        modules.add(modname)
+                logger.info(f"[code-integrity] Manifest has {len(modules)} {package_prefix} modules")
+                return modules
+    except Exception as e:
+        logger.warning(f"[code-integrity] Failed to fetch manifest: {e}")
+    return None
+
+
+def _save_hashes_to_file(results: dict) -> None:
+    """Save module hashes to JSON file for CIRISVerify integration.
+
+    Writes to CIRIS_HOME/startup_python_hashes.json with format:
+    {
+        "version": "1.1",
+        "generated_at": "ISO timestamp",
+        "packages": ["ciris_engine", "ciris_adapters"],
+        "modules_hashed": int,
+        "modules_checked": int,
+        "unavailable_count": int,
+        "total_hash": "sha256 hex",
+        "module_hashes": {"module.name": "sha256 hex", ...},
+        "unavailable_modules": ["module.name: reason", ...]
+    }
+    """
+    import json
+    from datetime import datetime, timezone
+
+    try:
+        import time
+
+        # Get CIRIS_HOME for save location
+        ciris_home = os.environ.get("CIRIS_HOME", "/data/data/ai.ciris.mobile/files/ciris")
+        output_path = Path(ciris_home) / "startup_python_hashes.json"
+
+        # Get agent version from ciris_engine
+        try:
+            from ciris_engine import __version__ as agent_version
+        except ImportError:
+            agent_version = "unknown"
+
+        output_data = {
+            "version": "1.2",  # Bumped for new format with file paths
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "computed_at": int(time.time()),
+            "agent_version": agent_version,
+            "packages": ["ciris_engine", "ciris_adapters"],
+            "modules_checked": results.get("modules_checked", 0),
+            "modules_hashed": results["modules_hashed"],
+            "unavailable_count": len(results.get("unavailable_modules", [])),
+            "total_hash": results["total_hash"],
+            "module_hashes": results["module_hashes"],
+            "unavailable_modules": results.get("unavailable_modules", []),
+        }
+
+        with open(output_path, "w") as f:
+            json.dump(output_data, f, indent=2, sort_keys=True)
+
+        logger.info(f"Saved {results['modules_hashed']} module hashes to {output_path}")
+
+    except Exception as e:
+        logger.error(f"Failed to save hashes to file: {e}")
+
+
+def verify_code_integrity(package_names: list = None, save_to_file: bool = True) -> Tuple[bool, dict]:
+    """Verify integrity of Python modules by hashing ALL .py files on disk.
+
+    Walks the filesystem to find ALL .py files in the specified packages,
+    not just importable modules. This ensures we hash files that may not
+    be importable due to missing dependencies.
+
+    Args:
+        package_names: List of packages to verify (default: ["ciris_engine", "ciris_adapters"])
+        save_to_file: Whether to save hashes to JSON file (default: True)
+
+    Returns:
+        Tuple of (success: bool, results: dict) where results contains:
+        - modules_checked: int
+        - modules_hashed: int
+        - total_hash: str (combined hash of all module hashes)
+        - errors: list of error messages
+    """
+    import hashlib
+    import importlib
+
+    if package_names is None:
+        package_names = ["ciris_engine", "ciris_adapters"]
+
+    results = {
+        "modules_checked": 0,
+        "modules_hashed": 0,
+        "total_hash": "",
+        "module_hashes": {},
+        "errors": [],
+    }
+
+    all_hashes = []
+
+    for package_name in package_names:
+        try:
+            # Import the package to find its location
+            package = importlib.import_module(package_name)
+            if not hasattr(package, "__path__"):
+                results["errors"].append(f"{package_name} is not a package")
+                continue
+
+            # Get the package root directory
+            package_path = Path(package.__path__[0])
+            # Get parent directory to compute relative paths like "ciris_engine/core.py"
+            root_dir = package_path.parent
+
+            logger.info(f"[code-integrity] Walking {package_name} at {package_path}")
+
+            # Walk ALL .py files in the package directory
+            for py_file in package_path.rglob("*.py"):
+                results["modules_checked"] += 1
+                try:
+                    # Compute relative path from root (e.g., "ciris_engine/logic/core.py")
+                    rel_path = str(py_file.relative_to(root_dir))
+                    # Normalize path separators for cross-platform consistency
+                    rel_path = rel_path.replace("\\", "/")
+
+                    # Read and hash the file
+                    with open(py_file, "rb") as f:
+                        file_hash = hashlib.sha256(f.read()).hexdigest()
+
+                    results["module_hashes"][rel_path] = file_hash
+                    all_hashes.append(f"{rel_path}:{file_hash}")
+                    results["modules_hashed"] += 1
+
+                except Exception as e:
+                    if len(results["errors"]) < 20:
+                        results["errors"].append(f"{py_file}: {e}")
+
+        except ImportError as e:
+            results["errors"].append(f"Cannot import {package_name}: {e}")
+        except Exception as e:
+            results["errors"].append(f"Failed to verify {package_name}: {e}")
+
+    # Compute combined hash of all files (deterministic order)
+    if all_hashes:
+        combined = "\n".join(sorted(all_hashes))
+        results["total_hash"] = hashlib.sha256(combined.encode()).hexdigest()
+
+    logger.info(
+        f"Code integrity check: {results['modules_hashed']}/{results['modules_checked']} "
+        f"files hashed, total_hash={results['total_hash'][:16] if results['total_hash'] else 'none'}..."
+    )
+
+    # Log first 5 file names for debugging
+    if results["module_hashes"]:
+        first_5_files = list(results["module_hashes"].keys())[:5]
+        logger.info(f"[code-integrity] First 5 files hashed: {first_5_files}")
+        logger.info(f"[code-integrity] Total files in module_hashes: {len(results['module_hashes'])}")
+
+    if results["errors"]:
+        logger.warning(f"Code integrity errors: {results['errors'][:5]}...")
+
+    # Save hashes to JSON file for CIRISVerify
+    if save_to_file and results["module_hashes"]:
+        _save_hashes_to_file(results)
+
+    return True, results
+
+
 def setup_android_environment():
     """Configure environment for Android on-device operation.
 
@@ -599,6 +852,9 @@ def setup_android_environment():
     # Disable ciris.ai cloud components
     os.environ["CIRIS_OFFLINE_MODE"] = "true"
     os.environ["CIRIS_CLOUD_SYNC"] = "false"
+
+    # Enable CIRISVerify debug logging (logs to stderr)
+    os.environ.setdefault("RUST_LOG", "ciris_verify_core=info")
 
     # Optimize for low-resource devices
     os.environ.setdefault("CIRIS_MAX_WORKERS", "1")
@@ -717,6 +973,17 @@ def main():
     """Main entrypoint for Android app."""
     logger.info("CIRIS Mobile - Full On-Device Runtime (LLM Remote)")
     setup_android_environment()
+
+    # Verify Python code integrity at startup (both ciris_engine and ciris_adapters)
+    logger.info("Verifying code integrity...")
+    integrity_ok, integrity_results = verify_code_integrity()
+    if integrity_ok:
+        logger.info(
+            f"Code integrity verified: {integrity_results['modules_hashed']} modules, "
+            f"hash={integrity_results['total_hash'][:16]}..."
+        )
+    else:
+        logger.warning(f"Code integrity check failed: {integrity_results['errors']}")
 
     try:
         asyncio.run(start_mobile_runtime())

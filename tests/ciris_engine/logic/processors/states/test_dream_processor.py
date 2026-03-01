@@ -367,22 +367,3 @@ class TestDreamProcessor:
 
         assert dream_processor.current_session.memories_consolidated == 5
         assert dream_processor.current_session.patterns_analyzed == 3
-
-    @pytest.mark.asyncio
-    async def test_benchmarking_mode(self, dream_processor):
-        """Test benchmarking mode setup."""
-        dream_processor.initialize()
-
-        # Enable CIRISNode
-        dream_processor.cirisnode_enabled = True
-
-        # Start dreaming
-        await dream_processor.start_dreaming(duration=60)
-
-        # Phase can be BENCHMARKING
-        dream_processor.current_session.phase = DreamPhase.BENCHMARKING
-
-        # Should be able to process in benchmarking phase
-        result = await dream_processor.process(40)
-
-        assert result.errors == 0

@@ -30,7 +30,7 @@ from ciris_engine.logic.adapters.api.routes.telemetry_otlp import (
     _validate_resource_attributes,
     _validate_resource_metric,
     _validate_scope_metric,
-    add_covenant_metrics,
+    add_accord_metrics,
     add_service_metrics,
     add_system_metrics,
     create_resource_attributes,
@@ -244,73 +244,73 @@ class TestAddServiceMetrics:
         assert attributes[0]["value"]["stringValue"] == "test_service"
 
 
-class TestAddCovenantMetrics:
-    """Test add_covenant_metrics helper function."""
+class TestAddAccordMetrics:
+    """Test add_accord_metrics helper function."""
 
-    def test_all_covenant_metrics(self):
+    def test_all_accord_metrics(self):
         current_time_ns = int(time.time() * 1e9)
-        covenant_data = {
+        accord_data = {
             "wise_authority_deferrals": 5,
             "filter_matches": 2,
             "thoughts_processed": 50,
             "self_observation_insights": 3,
         }
 
-        result = add_covenant_metrics(covenant_data, current_time_ns)
+        result = add_accord_metrics(accord_data, current_time_ns)
         assert len(result) == 4
 
         metric_names = {metric["name"] for metric in result}
         expected_names = {
-            "covenant.wise_authority.deferrals",
-            "covenant.filter.matches",
-            "covenant.thoughts.processed",
-            "covenant.insights.generated",
+            "accord.wise_authority.deferrals",
+            "accord.filter.matches",
+            "accord.thoughts.processed",
+            "accord.insights.generated",
         }
         assert metric_names == expected_names
 
-    def test_partial_covenant_metrics(self):
+    def test_partial_accord_metrics(self):
         current_time_ns = int(time.time() * 1e9)
-        covenant_data = {
+        accord_data = {
             "wise_authority_deferrals": 3,
             "thoughts_processed": 25,
         }
 
-        result = add_covenant_metrics(covenant_data, current_time_ns)
+        result = add_accord_metrics(accord_data, current_time_ns)
         assert len(result) == 2
 
         metric_names = {metric["name"] for metric in result}
-        assert "covenant.wise_authority.deferrals" in metric_names
-        assert "covenant.thoughts.processed" in metric_names
+        assert "accord.wise_authority.deferrals" in metric_names
+        assert "accord.thoughts.processed" in metric_names
 
-    def test_empty_covenant_data(self):
+    def test_empty_accord_data(self):
         current_time_ns = int(time.time() * 1e9)
-        result = add_covenant_metrics({}, current_time_ns)
+        result = add_accord_metrics({}, current_time_ns)
         assert result == []
 
-    def test_non_dict_covenant_data(self):
+    def test_non_dict_accord_data(self):
         current_time_ns = int(time.time() * 1e9)
-        result = add_covenant_metrics("invalid", current_time_ns)
+        result = add_accord_metrics("invalid", current_time_ns)
         assert result == []
 
-        result = add_covenant_metrics(None, current_time_ns)
+        result = add_accord_metrics(None, current_time_ns)
         assert result == []
 
     def test_metric_types(self):
         current_time_ns = int(time.time() * 1e9)
-        covenant_data = {
+        accord_data = {
             "wise_authority_deferrals": 5,
             "filter_matches": 2,
             "thoughts_processed": 50,
             "self_observation_insights": 3,
         }
 
-        result = add_covenant_metrics(covenant_data, current_time_ns)
+        result = add_accord_metrics(accord_data, current_time_ns)
 
-        # Check that all covenant metrics are counter metrics (counts of events)
-        deferrals_metric = next(m for m in result if m["name"] == "covenant.wise_authority.deferrals")
+        # Check that all accord metrics are counter metrics (counts of events)
+        deferrals_metric = next(m for m in result if m["name"] == "accord.wise_authority.deferrals")
         assert "sum" in deferrals_metric  # Counter metric
 
-        filter_metric = next(m for m in result if m["name"] == "covenant.filter.matches")
+        filter_metric = next(m for m in result if m["name"] == "accord.filter.matches")
         assert "sum" in filter_metric  # Counter metric
 
 
@@ -327,7 +327,7 @@ class TestHelperFunctionIntegration:
             "system_healthy": True,
             "services_online": 22,
             "services_total": 22,
-            "covenant_metrics": {
+            "accord_metrics": {
                 "wise_authority_deferrals": 2,
                 "thoughts_processed": 25,
             },
@@ -343,13 +343,13 @@ class TestHelperFunctionIntegration:
         resource_attrs = create_resource_attributes("ciris", "1.1.7", telemetry_data)
         system_metrics = add_system_metrics(telemetry_data, current_time_ns)
         service_metrics = add_service_metrics(services_data, current_time_ns)
-        covenant_metrics = add_covenant_metrics(telemetry_data["covenant_metrics"], current_time_ns)
+        accord_metrics = add_accord_metrics(telemetry_data["accord_metrics"], current_time_ns)
 
         # Verify results
         assert len(resource_attrs) == 7  # Including environment
         assert len(system_metrics) == 3  # Only 3 fields: system_healthy, services_online, services_total
         assert len(service_metrics) >= 1  # At least healthy metric, mock objects may add more
-        assert len(covenant_metrics) == 2  # partial data: deferrals and thoughts_processed
+        assert len(accord_metrics) == 2  # partial data: deferrals and thoughts_processed
 
         # Check environment attribute
         env_attr = next(attr for attr in resource_attrs if attr["key"] == "deployment.environment")
@@ -366,20 +366,20 @@ class TestHelperFunctionIntegration:
             # None of these should raise exceptions
             system_result = add_system_metrics(invalid_input, current_time_ns)
             service_result = add_service_metrics(invalid_input, current_time_ns)
-            covenant_result = add_covenant_metrics(invalid_input, current_time_ns)
+            accord_result = add_accord_metrics(invalid_input, current_time_ns)
 
             # Most should return empty lists for non-dict inputs
             if not isinstance(invalid_input, dict):
                 assert system_result == []
                 assert service_result == []
-                assert covenant_result == []
+                assert accord_result == []
 
     def test_safe_telemetry_get_integration(self):
         """Test safe_telemetry_get with realistic telemetry data."""
         telemetry_data = {
             "system_healthy": True,
             "services": {"service1": {"healthy": True}},
-            "covenant_metrics": {"wise_authority_deferrals": 5},
+            "accord_metrics": {"wise_authority_deferrals": 5},
             "environment": "staging",
         }
 

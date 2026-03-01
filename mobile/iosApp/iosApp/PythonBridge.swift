@@ -33,6 +33,11 @@ import Compression
         let lang = "\(Locale.current.identifier).UTF-8"
         setenv("LANG", lang, 1)
 
+        // Set CIRISVerify framework path for Python ctypes FFI
+        let frameworkPath = "\(Bundle.main.bundlePath)/Frameworks/CIRISVerify.framework/CIRISVerify"
+        setenv("CIRIS_IOS_FRAMEWORK_PATH", frameworkPath, 1)
+        NSLog("[PythonBridge] CIRISVerify framework: \(frameworkPath)")
+
         NSLog("[PythonBridge] Resources path: \(resourcesPath)")
         NSLog("[PythonBridge] LANG: \(lang)")
 
@@ -138,10 +143,11 @@ import Compression
                 NSLog("[PythonBridge] Will re-extract to get .fwork files for code signing")
                 needsReextract = true
             }
-            // On device, check if we have simulator .fwork files (wrong platform)
+            // On device, check if we have simulator .fwork files WITHOUT device .fwork files
+            // If both exist (Resources.zip ships both), that's fine — no re-extract needed
             #if !targetEnvironment(simulator)
-            if !needsReextract && fm.fileExists(atPath: pydanticSimulatorFworkPath) {
-                NSLog("[PythonBridge] Simulator extraction detected on device (iphonesimulator.fwork)")
+            if !needsReextract && fm.fileExists(atPath: pydanticSimulatorFworkPath) && !fm.fileExists(atPath: pydanticFworkPath) {
+                NSLog("[PythonBridge] Simulator-only extraction detected on device (iphonesimulator.fwork but no iphoneos.fwork)")
                 NSLog("[PythonBridge] Will re-extract with device-specific resources")
                 needsReextract = true
             }

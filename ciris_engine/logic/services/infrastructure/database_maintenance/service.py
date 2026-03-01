@@ -42,7 +42,12 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         bus_manager: Optional[Any] = None,
     ) -> None:
         # Initialize BaseScheduledService with hourly maintenance interval
-        super().__init__(time_service=time_service, run_interval_seconds=3600)  # Run every hour
+        # Use 60s first_run_delay to ensure adapters are registered before notifications
+        super().__init__(
+            time_service=time_service,
+            run_interval_seconds=3600,  # Run every hour
+            first_run_delay_seconds=60.0,  # Wait 60s before first run to avoid startup race conditions
+        )
         self.time_service = time_service
         self.archive_dir = Path(archive_dir_path)
         self.archive_older_than_hours = archive_older_than_hours
@@ -445,8 +450,24 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
     async def _delete_duplicate_adapters_in_group(
         self, group_key: tuple[str, str, str], adapter_ids: List[str], adapter_instances: Dict[str, Dict[str, Any]]
     ) -> int:
-        """Delete all but the newest adapter in a duplicate group. Returns count deleted."""
+        """Delete all but the newest adapter in a duplicate group. Returns count deleted.
+
+        IMPORTANT: Multi-occurrence safety - only processes groups belonging to the current occurrence.
+        """
         if len(adapter_ids) <= 1:
+            return 0
+
+        # MULTI-OCCURRENCE SAFETY: Only process groups belonging to the current occurrence
+        from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
+
+        adapter_type, occurrence_id, _ = group_key
+        current_occurrence_id = get_current_occurrence_id()
+
+        if occurrence_id != current_occurrence_id:
+            logger.debug(
+                f"Skipping dedupe for adapter group (type={adapter_type}, occurrence={occurrence_id}) - "
+                f"belongs to different occurrence than current ({current_occurrence_id})"
+            )
             return 0
 
         adapter_ids_sorted = sorted(
@@ -455,10 +476,10 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             reverse=True,
         )
         to_delete = adapter_ids_sorted[1:]
-        adapter_type, occurrence_id, _ = group_key
 
         for adapter_id in to_delete:
-            await self._delete_adapter_config_entries(adapter_id)
+            # skip_occurrence_check=True since we already verified the group belongs to current occurrence
+            await self._delete_adapter_config_entries(adapter_id, skip_occurrence_check=True)
             logger.info(
                 f"Deleted duplicate adapter config: {adapter_id} (type={adapter_type}, occurrence={occurrence_id})"
             )
@@ -597,10 +618,39 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         found, typed_value = self._extract_typed_value(val)
         return typed_value if found else val
 
-    async def _delete_adapter_config_entries(self, adapter_id: str) -> None:
-        """Delete all config entries for an adapter instance."""
+    async def _delete_adapter_config_entries(self, adapter_id: str, skip_occurrence_check: bool = False) -> None:
+        """Delete all config entries for an adapter instance.
+
+        IMPORTANT: Multi-occurrence safety - only deletes configs belonging to the current occurrence
+        unless skip_occurrence_check is True (used when we've already verified ownership).
+        This prevents cross-contamination in shared database deployments.
+
+        Args:
+            adapter_id: The adapter ID to delete configs for
+            skip_occurrence_check: If True, skip occurrence validation (caller already verified)
+        """
         if not self.config_service:
             return
+
+        # MULTI-OCCURRENCE SAFETY: Check occurrence ownership before deletion
+        if not skip_occurrence_check:
+            from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
+
+            current_occurrence_id = get_current_occurrence_id()
+
+            # Get the adapter's occurrence_id from the graph
+            occurrence_key = f"adapter.{adapter_id}.occurrence_id"
+            occurrence_node = await self.config_service.get_config(occurrence_key)
+            saved_occurrence_id = self._extract_config_value(occurrence_node)
+
+            # If there's a saved occurrence_id and it doesn't match current, refuse to delete
+            if saved_occurrence_id is not None and saved_occurrence_id != current_occurrence_id:
+                logger.warning(
+                    f"MULTI-OCCURRENCE SAFETY: Refusing to delete adapter config for {adapter_id} - "
+                    f"adapter belongs to occurrence '{saved_occurrence_id}', current is '{current_occurrence_id}'. "
+                    f"This prevents cross-contamination in shared database deployments."
+                )
+                return
 
         keys_to_delete = [
             f"adapter.{adapter_id}.type",
@@ -724,6 +774,14 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         if channel_id.startswith("__") or channel_id == "system":
             return
 
+        # Check if communication service is available (prevents race condition during startup)
+        if not self.bus_manager.communication.has_service_for_channel(channel_id):
+            logger.debug(
+                f"No communication service available for channel {channel_id} - "
+                "skipping stale task notification (adapter may not be initialized yet)"
+            )
+            return
+
         try:
             msg = (
                 "I was restarted while processing your request. "
@@ -738,6 +796,47 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         except Exception as e:
             logger.warning(f"Failed to send stale task notification to {channel_id}: {e}")
 
+    def _is_wakeup_or_shutdown_task(self, task_id: str) -> bool:
+        """Check if a task ID matches wakeup or shutdown patterns."""
+        prefixes = (
+            "WAKEUP_",
+            "VERIFY_IDENTITY_",
+            "VALIDATE_INTEGRITY_",
+            "EVALUATE_RESILIENCE_",
+            "ACCEPT_INCOMPLETENESS_",
+            "EXPRESS_GRATITUDE_",
+            "shutdown_",
+            "SHUTDOWN_",
+        )
+        return any(task_id.startswith(prefix) for prefix in prefixes)
+
+    def _get_task_age_seconds(self, task: Any, current_time: Any) -> float:
+        """Get task age in seconds, handling string timestamps."""
+        if isinstance(task.created_at, str):
+            from datetime import datetime
+
+            task_created = datetime.fromisoformat(task.created_at.replace("Z", UTC_TIMEZONE_SUFFIX))
+        else:
+            task_created = task.created_at
+        return float((current_time - task_created).total_seconds())
+
+    def _collect_stale_items_from_task(
+        self, task: Any, stale_task_ids: List[str], stale_thought_ids: List[str]
+    ) -> None:
+        """Collect stale thought IDs and task IDs from an old task."""
+        thoughts = get_thoughts_by_task_id(task.task_id, task.agent_occurrence_id, db_path=self.db_path)
+        for thought in thoughts:
+            if thought.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING]:
+                logger.info(
+                    f"Found stale wakeup thought from old task {task.task_id}: "
+                    f"{thought.thought_id} (status: {thought.status})"
+                )
+                stale_thought_ids.append(thought.thought_id)
+
+        if task.status in [TaskStatus.PENDING, TaskStatus.ACTIVE]:
+            logger.info(f"Found stale {task.status} wakeup task from previous run: {task.task_id}")
+            stale_task_ids.append(task.task_id)
+
     async def _cleanup_stale_wakeup_tasks(self) -> None:
         """
         Clean up stale wakeup and shutdown thoughts from previous runs while preserving completed tasks for history.
@@ -747,69 +846,27 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         """
         try:
             logger.info("Checking for stale wakeup and shutdown tasks from previous runs")
-
-            # Get current time for comparison
             current_time = self.time_service.now()
 
             # Get all wakeup and shutdown related tasks from __shared__ occurrence
-            # Wakeup tasks are always in the shared namespace
             all_tasks = get_all_tasks("__shared__", db_path=self.db_path)
-            stale_tasks = []
-            for task in all_tasks:
-                if not hasattr(task, "task_id"):
-                    continue
-                # Check for wakeup and shutdown tasks by ID pattern
-                if (
-                    task.task_id.startswith("WAKEUP_")
-                    or task.task_id.startswith("VERIFY_IDENTITY_")
-                    or task.task_id.startswith("VALIDATE_INTEGRITY_")
-                    or task.task_id.startswith("EVALUATE_RESILIENCE_")
-                    or task.task_id.startswith("ACCEPT_INCOMPLETENESS_")
-                    or task.task_id.startswith("EXPRESS_GRATITUDE_")
-                    or task.task_id.startswith("shutdown_")
-                    or task.task_id.startswith("SHUTDOWN_")  # Also match uppercase SHUTDOWN_ tasks
-                ):
-                    stale_tasks.append(task)
+            stale_tasks = [
+                task
+                for task in all_tasks
+                if hasattr(task, "task_id") and self._is_wakeup_or_shutdown_task(task.task_id)
+            ]
 
-            # Clean up thoughts and interfering tasks from old wakeup runs
-            stale_task_ids = []  # For PENDING/ACTIVE tasks that would interfere
-            stale_thought_ids = []
+            stale_task_ids: List[str] = []
+            stale_thought_ids: List[str] = []
 
             for task in stale_tasks:
-                # Check if this task is from a previous run (more than 5 minutes old)
-                # Convert string timestamp to datetime if needed
-                if isinstance(task.created_at, str):
-                    from datetime import datetime
+                if self._get_task_age_seconds(task, current_time) > 300:  # 5 minutes
+                    self._collect_stale_items_from_task(task, stale_task_ids, stale_thought_ids)
 
-                    task_created = datetime.fromisoformat(task.created_at.replace("Z", UTC_TIMEZONE_SUFFIX))
-                else:
-                    task_created = task.created_at
-
-                task_age = current_time - task_created
-                is_old_task = task_age.total_seconds() > 300  # 5 minutes
-
-                if is_old_task:
-                    # For old tasks, clean up any pending/processing thoughts
-                    # CRITICAL: Pass task's occurrence_id to fetch thoughts in same namespace
-                    thoughts = get_thoughts_by_task_id(task.task_id, task.agent_occurrence_id, db_path=self.db_path)
-                    for thought in thoughts:
-                        if thought.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING]:
-                            logger.info(
-                                f"Found stale wakeup thought from old task {task.task_id}: {thought.thought_id} (status: {thought.status})"
-                            )
-                            stale_thought_ids.append(thought.thought_id)
-
-                    # Delete old PENDING or ACTIVE tasks as they would interfere
-                    if task.status in [TaskStatus.PENDING, TaskStatus.ACTIVE]:
-                        logger.info(f"Found stale {task.status} wakeup task from previous run: {task.task_id}")
-                        stale_task_ids.append(task.task_id)
-
-            # Delete stale thoughts first
             if stale_thought_ids:
                 deleted_thoughts = delete_thoughts_by_ids(stale_thought_ids, db_path=self.db_path)
                 logger.info(f"Deleted {deleted_thoughts} stale wakeup thoughts from previous runs")
 
-            # Then delete stale active tasks (only ACTIVE ones from interrupted startups)
             if stale_task_ids:
                 deleted_tasks = delete_tasks_by_ids(stale_task_ids, db_path=self.db_path)
                 logger.info(f"Deleted {deleted_tasks} stale active wakeup tasks from interrupted startups")

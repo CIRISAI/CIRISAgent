@@ -20,6 +20,15 @@ kotlin {
             }
         }
     }
+
+    jvm("desktop") {
+        compilations.all {
+            kotlinOptions {
+                jvmTarget = "17"
+            }
+        }
+    }
+
     iosX64()
     iosArm64()
     iosSimulatorArm64()
@@ -37,6 +46,7 @@ kotlin {
         }
         val commonTest by getting { dependencies { implementation(kotlin("test")) } }
         val androidMain by getting
+        val desktopMain by getting
         val iosX64Main by getting
         val iosArm64Main by getting
         val iosSimulatorArm64Main by getting

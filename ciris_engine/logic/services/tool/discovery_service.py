@@ -228,7 +228,7 @@ class AdapterDiscoveryService:
 
         Args:
             _adapter_name: The adapter name (unused, kept for API compatibility)
-            class_path: The class path (e.g., 'ciris_covenant_metrics.services.CovenantMetricsService')
+            class_path: The class path (e.g., 'ciris_accord_metrics.services.AccordMetricsService')
 
         Returns:
             The service class or None if not found
@@ -237,7 +237,7 @@ class AdapterDiscoveryService:
 
         try:
             # Parse the class path - it's relative to ciris_adapters
-            # e.g., "ciris_covenant_metrics.services.CovenantMetricsService"
+            # e.g., "ciris_accord_metrics.services.AccordMetricsService"
             parts = class_path.rsplit(".", 1)
             if len(parts) != 2:
                 logger.debug(f"Invalid class path format: {class_path}")
@@ -325,7 +325,9 @@ class AdapterDiscoveryService:
                     logger.info(f"[AUTO-LOAD] Eligible adapter: {adapter_name}")
                 elif ineligible_info:
                     ineligible_adapters.append(ineligible_info)
-                    logger.info(f"[AUTO-LOAD] Adapter '{adapter_name}' not eligible: {ineligible_info.eligibility.reason}")
+                    logger.info(
+                        f"[AUTO-LOAD] Adapter '{adapter_name}' not eligible: {ineligible_info.eligibility.reason}"
+                    )
             except Exception as e:
                 logger.debug(f"[AUTO-LOAD] Failed to check adapter '{adapter_name}': {e}")
 

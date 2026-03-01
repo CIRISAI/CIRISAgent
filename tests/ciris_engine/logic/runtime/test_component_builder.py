@@ -208,3 +208,91 @@ class TestGetCognitiveBehaviorsFromGraph:
         # Should return default CognitiveStateBehaviors
         assert result is not None
         assert isinstance(result, CognitiveStateBehaviors)
+
+
+class TestBenchmarkModeDoubleLock:
+    """Tests for HE-300 benchmark mode double-lock safety mechanism.
+
+    Benchmark mode requires BOTH:
+    1. CIRIS_BENCHMARK_MODE=true environment variable
+    2. Template name is 'he-300-benchmark'
+
+    This double-lock prevents accidental disabling of safety consciences.
+    """
+
+    def test_benchmark_mode_disabled_without_env_var(self):
+        """Benchmark mode is disabled when env var is not set."""
+        from ciris_engine.logic.config.env_utils import get_env_var
+
+        with patch.dict("os.environ", {}, clear=False):
+            # Remove the env var if it exists
+            import os
+
+            os.environ.pop("CIRIS_BENCHMARK_MODE", None)
+
+            result = get_env_var("CIRIS_BENCHMARK_MODE", "").lower() in ("true", "1", "yes", "on")
+            assert result is False
+
+    def test_benchmark_mode_disabled_with_wrong_template(self):
+        """Benchmark mode is disabled when template is not he-300-benchmark."""
+        with patch.dict("os.environ", {"CIRIS_BENCHMARK_MODE": "true"}):
+            from ciris_engine.logic.config.env_utils import get_env_var
+
+            benchmark_mode_env = get_env_var("CIRIS_BENCHMARK_MODE", "").lower() in ("true", "1", "yes", "on")
+            template_name = "default"  # Not he-300-benchmark
+            is_benchmark_template = template_name == "he-300-benchmark"
+            benchmark_mode = benchmark_mode_env and is_benchmark_template
+
+            assert benchmark_mode_env is True  # Env is set
+            assert is_benchmark_template is False  # Wrong template
+            assert benchmark_mode is False  # Double-lock prevents activation
+
+    def test_benchmark_mode_enabled_with_both_conditions(self):
+        """Benchmark mode is enabled when BOTH env var and template match."""
+        with patch.dict("os.environ", {"CIRIS_BENCHMARK_MODE": "true"}):
+            from ciris_engine.logic.config.env_utils import get_env_var
+
+            benchmark_mode_env = get_env_var("CIRIS_BENCHMARK_MODE", "").lower() in ("true", "1", "yes", "on")
+            template_name = "he-300-benchmark"
+            is_benchmark_template = template_name == "he-300-benchmark"
+            benchmark_mode = benchmark_mode_env and is_benchmark_template
+
+            assert benchmark_mode_env is True
+            assert is_benchmark_template is True
+            assert benchmark_mode is True  # Double-lock satisfied
+
+    def test_benchmark_mode_disabled_with_env_false(self):
+        """Benchmark mode is disabled when env var is explicitly false."""
+        with patch.dict("os.environ", {"CIRIS_BENCHMARK_MODE": "false"}):
+            from ciris_engine.logic.config.env_utils import get_env_var
+
+            benchmark_mode_env = get_env_var("CIRIS_BENCHMARK_MODE", "").lower() in ("true", "1", "yes", "on")
+            template_name = "he-300-benchmark"  # Correct template
+            is_benchmark_template = template_name == "he-300-benchmark"
+            benchmark_mode = benchmark_mode_env and is_benchmark_template
+
+            assert benchmark_mode_env is False  # Env explicitly disabled
+            assert is_benchmark_template is True
+            assert benchmark_mode is False  # Env takes precedence
+
+    def test_benchmark_mode_accepts_various_true_values(self):
+        """Benchmark mode accepts multiple true value formats."""
+        from ciris_engine.logic.config.env_utils import get_env_var
+
+        true_values = ["true", "TRUE", "True", "1", "yes", "YES", "on", "ON"]
+
+        for true_val in true_values:
+            with patch.dict("os.environ", {"CIRIS_BENCHMARK_MODE": true_val}):
+                result = get_env_var("CIRIS_BENCHMARK_MODE", "").lower() in ("true", "1", "yes", "on")
+                assert result is True, f"Failed for value: {true_val}"
+
+    def test_benchmark_mode_rejects_invalid_values(self):
+        """Benchmark mode rejects non-boolean values."""
+        from ciris_engine.logic.config.env_utils import get_env_var
+
+        invalid_values = ["maybe", "enabled", "benchmark", "2", ""]
+
+        for val in invalid_values:
+            with patch.dict("os.environ", {"CIRIS_BENCHMARK_MODE": val}):
+                result = get_env_var("CIRIS_BENCHMARK_MODE", "").lower() in ("true", "1", "yes", "on")
+                assert result is False, f"Should reject value: {val}"

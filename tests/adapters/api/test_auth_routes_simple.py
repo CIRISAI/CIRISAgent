@@ -175,3 +175,91 @@ class TestEnvironmentHandling:
             url = get_oauth_callback_url("google")
             # Should use default base URL
             assert "agents.ciris.ai" in url or url.startswith("https://")
+
+
+class TestRedirectValidationHelpers:
+    """Test helper functions for redirect URI validation."""
+
+    def test_validate_redirect_scheme_https_public(self):
+        """Test that HTTPS is valid for public hosts."""
+        from ciris_engine.logic.adapters.api.routes.auth import _validate_redirect_scheme
+
+        result = _validate_redirect_scheme("https", False, "https://example.com", "example.com")
+        assert result is True
+
+    def test_validate_redirect_scheme_http_public_rejected(self):
+        """Test that HTTP is rejected for public hosts."""
+        from ciris_engine.logic.adapters.api.routes.auth import _validate_redirect_scheme
+
+        result = _validate_redirect_scheme("http", False, "http://example.com", "example.com")
+        assert result is False
+
+    def test_validate_redirect_scheme_http_private_allowed(self):
+        """Test that HTTP is allowed for private network hosts."""
+        from ciris_engine.logic.adapters.api.routes.auth import _validate_redirect_scheme
+
+        result = _validate_redirect_scheme("http", True, "http://192.168.1.1", "192.168.1.1")
+        assert result is True
+
+    def test_validate_redirect_scheme_unsupported_rejected(self):
+        """Test that unsupported schemes like ftp are rejected."""
+        from ciris_engine.logic.adapters.api.routes.auth import _validate_redirect_scheme
+
+        result = _validate_redirect_scheme("ftp", False, "ftp://example.com", "example.com")
+        assert result is False
+
+    def test_get_allowed_redirect_domains_empty_by_default(self):
+        """Test that allowed domains returns empty set when nothing configured."""
+        from ciris_engine.logic.adapters.api.routes.auth import _get_allowed_redirect_domains
+
+        with patch("ciris_engine.logic.adapters.api.routes.auth.OAUTH_ALLOWED_REDIRECT_DOMAINS", []):
+            with patch("ciris_engine.logic.adapters.api.routes.auth.OAUTH_FRONTEND_URL", ""):
+                domains = _get_allowed_redirect_domains()
+                assert domains == set()
+
+    def test_get_allowed_redirect_domains_includes_frontend(self):
+        """Test that allowed domains includes OAUTH_FRONTEND_URL."""
+        from ciris_engine.logic.adapters.api.routes.auth import _get_allowed_redirect_domains
+
+        with patch("ciris_engine.logic.adapters.api.routes.auth.OAUTH_ALLOWED_REDIRECT_DOMAINS", []):
+            with patch("ciris_engine.logic.adapters.api.routes.auth.OAUTH_FRONTEND_URL", "https://app.ciris.ai"):
+                domains = _get_allowed_redirect_domains()
+                assert "app.ciris.ai" in domains
+
+    def test_get_allowed_redirect_domains_includes_configured(self):
+        """Test that allowed domains includes configured domains."""
+        from ciris_engine.logic.adapters.api.routes.auth import _get_allowed_redirect_domains
+
+        with patch("ciris_engine.logic.adapters.api.routes.auth.OAUTH_ALLOWED_REDIRECT_DOMAINS", ["example.com"]):
+            with patch("ciris_engine.logic.adapters.api.routes.auth.OAUTH_FRONTEND_URL", ""):
+                domains = _get_allowed_redirect_domains()
+                assert "example.com" in domains
+
+    def test_is_domain_allowed_exact_match(self):
+        """Test that exact domain match is allowed."""
+        from ciris_engine.logic.adapters.api.routes.auth import _is_domain_allowed
+
+        result = _is_domain_allowed("example.com", {"example.com", "other.com"})
+        assert result is True
+
+    def test_is_domain_allowed_subdomain_match(self):
+        """Test that subdomain match is allowed."""
+        from ciris_engine.logic.adapters.api.routes.auth import _is_domain_allowed
+
+        result = _is_domain_allowed("sub.example.com", {"example.com"})
+        assert result is True
+
+    def test_is_domain_allowed_not_in_list(self):
+        """Test that non-matching domain is rejected."""
+        from ciris_engine.logic.adapters.api.routes.auth import _is_domain_allowed
+
+        result = _is_domain_allowed("evil.com", {"example.com", "other.com"})
+        assert result is False
+
+    def test_is_domain_allowed_partial_match_rejected(self):
+        """Test that partial match (not subdomain) is rejected."""
+        from ciris_engine.logic.adapters.api.routes.auth import _is_domain_allowed
+
+        # "notexample.com" should not match "example.com"
+        result = _is_domain_allowed("notexample.com", {"example.com"})
+        assert result is False

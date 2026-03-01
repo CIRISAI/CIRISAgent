@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Union, cast
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils.constants import COVENANT_TEXT
+from ciris_engine.logic.utils.constants import ACCORD_TEXT, ACCORD_TEXT_COMPRESSED
 from ciris_engine.protocols.dma.base import ActionSelectionDMAProtocol
 from ciris_engine.protocols.faculties import EpistemicFaculty
 from ciris_engine.schemas.actions.parameters import PonderParams
@@ -27,6 +27,14 @@ from .action_selection.faculty_integration import FacultyIntegration
 from .base_dma import BaseDMA
 
 logger = logging.getLogger(__name__)
+
+
+def _get_value(obj: Any, key: str, default: Any = None) -> Any:
+    """Get a value from either a dict or object attribute."""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
 
 DEFAULT_TEMPLATE = """{system_header}
 
@@ -73,8 +81,9 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         self.context_builder = ActionSelectionContextBuilder(self.prompts, service_registry, self.sink)
         self.faculty_integration = FacultyIntegration(faculties) if faculties else None
 
-        # Store last user prompt for debugging/streaming
+        # Store last prompts for debugging/streaming
         self.last_user_prompt: Optional[str] = None
+        self.last_system_prompt: Optional[str] = None
 
     async def evaluate(  # type: ignore[override]  # Extends base signature with enable_recursive_evaluation
         self, input_data: EnhancedDMAInputs, enable_recursive_evaluation: bool = False
@@ -171,54 +180,77 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
         return None
 
+    def _build_main_user_content(self, input_data: EnhancedDMAInputs, agent_name: str) -> str:
+        """Build main user content, using template override if available."""
+        template_user_override = self.prompts.get("user_prompt_template") if isinstance(self.prompts, dict) else None
+
+        if template_user_override:
+            thought_content = str(input_data.original_thought.content) if input_data.original_thought else ""
+            available_actions = (
+                ", ".join(a.value for a in input_data.permitted_actions)
+                if input_data.permitted_actions
+                else "speak, task_complete"
+            )
+            content = template_user_override.format(
+                thought_content=thought_content, available_actions=available_actions
+            )
+            logger.debug(f"ASPDMA using template user_prompt_template override ({len(content)} chars)")
+            return content
+
+        return self.context_builder.build_main_user_content(input_data, agent_name)
+
+    def _build_accord_with_metadata(self, original_thought: Any) -> str:
+        """Build accord text with thought type metadata."""
+        accord_mode = self.get_accord_mode()
+        if accord_mode == "full":
+            accord_text = ACCORD_TEXT
+        elif accord_mode == "compressed":
+            accord_text = ACCORD_TEXT_COMPRESSED
+        else:
+            return ""
+
+        if original_thought and hasattr(original_thought, "thought_type"):
+            return f"THOUGHT_TYPE={original_thought.thought_type.value}\n\n{accord_text}"
+        return accord_text
+
     async def _perform_main_evaluation(
         self, input_data: EnhancedDMAInputs, enable_recursive_evaluation: bool
     ) -> ActionSelectionDMAResult:
         """Perform the main LLM-based evaluation."""
+        input_images = getattr(input_data, "images", []) or []
+        logger.info(f"[VISION] _perform_main_evaluation called with {len(input_images)} images")
 
         agent_identity = getattr(input_data, "agent_identity", {})
-        agent_name = (
-            agent_identity.get("agent_name", "CIRISAgent")
-            if isinstance(agent_identity, dict)
-            else getattr(agent_identity, "agent_name", "CIRISAgent")
-        )
-
-        # CRITICAL: Pre-cache tools AND task context BEFORE building prompt
-        # This must happen asynchronously before the synchronous build_main_user_content
-        # pre_cache_context() caches both tools AND the original task for follow-through
+        agent_name = _get_value(agent_identity, "agent_name", "CIRISAgent")
         original_thought = input_data.original_thought
+
+        # Pre-cache tools AND task context BEFORE building prompt
         await self.context_builder.pre_cache_context(original_thought)
 
-        main_user_content = self.context_builder.build_main_user_content(input_data, agent_name)
+        # Build main user content
+        main_user_content = self._build_main_user_content(input_data, agent_name)
 
-        # Get faculty evaluations from typed input
-        faculty_evaluations = input_data.faculty_evaluations
-
-        if faculty_evaluations and self.faculty_integration:
-            faculty_insights = self.faculty_integration.build_faculty_insights_string(faculty_evaluations)
+        # Append faculty insights if available
+        if input_data.faculty_evaluations and self.faculty_integration:
+            faculty_insights = self.faculty_integration.build_faculty_insights_string(input_data.faculty_evaluations)
             main_user_content += faculty_insights
 
+        # Build messages
         system_message = self._build_system_message(input_data)
+        accord_with_metadata = self._build_accord_with_metadata(original_thought)
 
-        # Prepend thought type to covenant for rock-solid follow-up detection
-        covenant_with_metadata = COVENANT_TEXT
-        if original_thought and hasattr(original_thought, "thought_type"):
-            covenant_with_metadata = f"THOUGHT_TYPE={original_thought.thought_type.value}\n\n{COVENANT_TEXT}"
-
-        # Build user message content - supports multimodal if input has images
-        # Images come from input_data (EnhancedDMAInputs) which gets them from ProcessingQueueItem
-        input_images = getattr(input_data, "images", []) or []
         if input_images:
             logger.info(f"[VISION] ActionSelectionPDMA building multimodal content with {len(input_images)} images")
         user_content = self.build_multimodal_content(main_user_content, input_images)
 
-        messages: List[JSONDict] = [
-            {"role": "system", "content": covenant_with_metadata},
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": user_content},
-        ]
+        messages: List[JSONDict] = []
+        if accord_with_metadata:
+            messages.append({"role": "system", "content": accord_with_metadata})
+        messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": user_content})
 
-        # Store user prompt for streaming/debugging
+        # Store prompts for streaming/debugging
+        self.last_system_prompt = system_message
         self.last_user_prompt = main_user_content
 
         # Use Gemini-compatible flat schema (no Union types)
@@ -236,12 +268,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         llm_result = cast(ASPDMALLMResult, result_tuple[0])
 
         # Get channel_id from context if available
-        channel_id = None
-        if input_data.processing_context:
-            if isinstance(input_data.processing_context, dict):
-                channel_id = input_data.processing_context.get("channel_id")
-            elif hasattr(input_data.processing_context, "channel_id"):
-                channel_id = getattr(input_data.processing_context, "channel_id", None)
+        channel_id = _get_value(input_data.processing_context, "channel_id") if input_data.processing_context else None
 
         # Convert flat LLM result to typed ActionSelectionDMAResult
         final_result = convert_llm_result_to_action_result(
@@ -261,9 +288,85 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
         return final_result
 
+    def _extract_system_blocks(self, processing_context: Any) -> tuple[str, str, Any]:
+        """Extract system snapshot block, user profiles block, and system snapshot object."""
+        system_snapshot = _get_value(processing_context, "system_snapshot")
+        if not system_snapshot:
+            return "", "", None
+
+        user_profiles = _get_value(system_snapshot, "user_profiles")
+        return (
+            format_system_snapshot(system_snapshot),
+            format_user_profiles(user_profiles),
+            system_snapshot,
+        )
+
+    def _validate_and_build_identity_block(self, system_snapshot: Any) -> str:
+        """Validate identity exists and build the identity block. Raises on missing identity."""
+        if not system_snapshot:
+            raise ValueError(
+                "CRITICAL: No system_snapshot in processing_context for ActionSelectionPDMA! "
+                "Identity is required for ALL DMA evaluations. This is a fatal error."
+            )
+
+        agent_identity = _get_value(system_snapshot, "agent_identity")
+        if not agent_identity:
+            raise ValueError(
+                "CRITICAL: No agent identity found in system_snapshot for ActionSelectionPDMA! "
+                "Identity is required for ALL DMA evaluations. This is a fatal error."
+            )
+
+        agent_id = _get_value(agent_identity, "agent_id")
+        description = _get_value(agent_identity, "description")
+        role = _get_value(agent_identity, "role")
+
+        for field_name, field_value in [("agent_id", agent_id), ("description", description), ("role", role)]:
+            if not field_value:
+                raise ValueError(
+                    f"CRITICAL: {field_name} is missing from identity in ActionSelectionPDMA! This is a fatal error."
+                )
+
+        return (
+            "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
+            f"Agent: {agent_id}\n"
+            f"Description: {description}\n"
+            f"Role: {role}\n"
+            "============================================"
+        )
+
+    def _build_conscience_guidance_block(self, processing_context: Any) -> str:
+        """Build conscience guidance block for retry format enforcement."""
+        if not processing_context:
+            return ""
+
+        conscience_guidance = _get_value(processing_context, "conscience_guidance")
+        if not conscience_guidance:
+            return ""
+
+        retry_attempt = conscience_guidance.get("retry_attempt", 1)
+        original_failure = conscience_guidance.get("original_action_failed_because", "")
+
+        logger.warning(f"[ASPDMA] Conscience guidance detected - retry {retry_attempt}: {original_failure[:100]}")
+
+        return f"""
+=== CRITICAL FORMAT RETRY ===
+RETRY ATTEMPT: {retry_attempt}
+PREVIOUS FAILURE: {original_failure}
+
+YOUR PREVIOUS RESPONSE WAS REJECTED because it did not start with a classification word.
+
+MANDATORY FIX: Your SPEAK content MUST start with exactly ONE of these words:
+ETHICAL, UNETHICAL, REASONABLE, UNREASONABLE, MATCHES, CONTRADICTS, FAIR, UNFAIR, JUST, UNJUST, VALID, INVALID, MORAL, IMMORAL
+
+DO NOT start with: "The", "This", "Your", "I", "In", "It", "My" or any other word.
+
+CORRECT: "REASONABLE. The expectation is..."
+WRONG: "The expectation is reasonable..."
+=== END FORMAT RETRY ===
+"""
+
     def _build_system_message(self, input_data: EnhancedDMAInputs) -> str:
         """Build the system message for LLM evaluation."""
-
         processing_context = input_data.processing_context
 
         system_snapshot_block = ""
@@ -271,85 +374,40 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         identity_block = ""
 
         if processing_context:
-            system_snapshot = None
-            if isinstance(processing_context, dict):
-                system_snapshot = processing_context.get("system_snapshot")
-                if system_snapshot:
-                    user_profiles_block = format_user_profiles(system_snapshot.get("user_profiles"))
-                    system_snapshot_block = format_system_snapshot(system_snapshot)
-            else:
-                # Handle ThoughtContext objects
-                if hasattr(processing_context, "system_snapshot") and processing_context.system_snapshot:
-                    system_snapshot = processing_context.system_snapshot
-                    user_profiles_block = format_user_profiles(
-                        getattr(processing_context.system_snapshot, "user_profiles", None)
-                    )
-                    system_snapshot_block = format_system_snapshot(processing_context.system_snapshot)
+            system_snapshot_block, user_profiles_block, system_snapshot = self._extract_system_blocks(
+                processing_context
+            )
+            identity_block = self._validate_and_build_identity_block(system_snapshot)
 
-            # Extract and validate identity - FAIL FAST if missing
-            if system_snapshot:
-                if isinstance(system_snapshot, dict):
-                    agent_identity = system_snapshot.get("agent_identity")
-                else:
-                    agent_identity = getattr(system_snapshot, "agent_identity", None)
+        # Check for direct system_prompt override from template (e.g., HE-300 format instructions)
+        # Template overrides take precedence over YAML-based prompts
+        template_system_override = None
+        if isinstance(self.prompts, dict):
+            template_system_override = self.prompts.get("system_prompt")
 
-                if agent_identity:
-                    if isinstance(agent_identity, dict):
-                        agent_id = agent_identity.get("agent_id")
-                        description = agent_identity.get("description")
-                        role = agent_identity.get("role")
-                    else:
-                        agent_id = getattr(agent_identity, "agent_id", None)
-                        description = getattr(agent_identity, "description", None)
-                        role = getattr(agent_identity, "role", None)
-
-                    # CRITICAL: Identity must be complete - no defaults allowed
-                    if not agent_id:
-                        raise ValueError(
-                            f"CRITICAL: agent_id is missing from identity in ActionSelectionPDMA! This is a fatal error."
-                        )
-                    if not description:
-                        raise ValueError(
-                            f"CRITICAL: description is missing from identity in ActionSelectionPDMA! This is a fatal error."
-                        )
-                    if not role:
-                        raise ValueError(
-                            f"CRITICAL: role is missing from identity in ActionSelectionPDMA! This is a fatal error."
-                        )
-
-                    identity_block = "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
-                    identity_block += f"Agent: {agent_id}\n"
-                    identity_block += f"Description: {description}\n"
-                    identity_block += f"Role: {role}\n"
-                    identity_block += "============================================"
-                else:
-                    # CRITICAL: No identity found - this is a fatal error
-                    raise ValueError(
-                        "CRITICAL: No agent identity found in system_snapshot for ActionSelectionPDMA! "
-                        "Identity is required for ALL DMA evaluations. This is a fatal error."
-                    )
-            else:
-                # No system snapshot means no identity - FAIL FAST
-                raise ValueError(
-                    "CRITICAL: No system_snapshot in processing_context for ActionSelectionPDMA! "
-                    "Identity is required for ALL DMA evaluations. This is a fatal error."
-                )
-
-        # Get prompts based on type
-        if isinstance(self.prompts, PromptCollection):
-            system_header = self.prompts.system_header or ""
-            decision_format = self.prompts.decision_format or ""
-            closing_reminder = self.prompts.closing_reminder or ""
+        if template_system_override:
+            # Use template system_prompt directly - contains critical format instructions
+            system_guidance = template_system_override
+            logger.debug(f"ASPDMA using template system_prompt override ({len(system_guidance)} chars)")
         else:
-            system_header = self.prompts.get("system_header", "")
-            decision_format = self.prompts.get("decision_format", "")
-            closing_reminder = self.prompts.get("closing_reminder", "")
+            # Fall back to standard prompt building from YAML
+            if isinstance(self.prompts, PromptCollection):
+                system_header = self.prompts.system_header or ""
+                decision_format = self.prompts.decision_format or ""
+                closing_reminder = self.prompts.closing_reminder or ""
+            else:
+                system_header = self.prompts.get("system_header", "")
+                decision_format = self.prompts.get("decision_format", "")
+                closing_reminder = self.prompts.get("closing_reminder", "")
 
-        system_guidance = DEFAULT_TEMPLATE.format(
-            system_header=system_header,
-            decision_format=decision_format,
-            closing_reminder=closing_reminder,
-        )
+            system_guidance = DEFAULT_TEMPLATE.format(
+                system_header=system_header,
+                decision_format=decision_format,
+                closing_reminder=closing_reminder,
+            )
+
+        # Extract conscience_guidance from processing_context for retry format enforcement
+        conscience_guidance_block = self._build_conscience_guidance_block(processing_context)
 
         return format_system_prompt_blocks(
             identity_block,
@@ -357,7 +415,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             system_snapshot_block,
             user_profiles_block,
             None,
-            system_guidance,
+            system_guidance + conscience_guidance_block,
         )
 
     def _create_fallback_result(self, error_message: str) -> ActionSelectionDMAResult:

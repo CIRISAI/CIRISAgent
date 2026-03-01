@@ -3,9 +3,13 @@ package ai.ciris.mobile.shared.api
 import ai.ciris.mobile.shared.models.*
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.viewmodels.AgentTemplateInfo
+import ai.ciris.mobile.shared.viewmodels.CheckDetail
 import ai.ciris.mobile.shared.viewmodels.ConfigItemData
+import ai.ciris.mobile.shared.viewmodels.LlmValidationResult
+import ai.ciris.mobile.shared.viewmodels.ModelInfo
 import ai.ciris.mobile.shared.viewmodels.SetupCompletionResult
 import ai.ciris.mobile.shared.viewmodels.StateTransitionResult
+import ai.ciris.mobile.shared.viewmodels.VerifyStatusResponse
 import ai.ciris.api.apis.*
 import ai.ciris.api.models.InteractRequest as SdkInteractRequest
 import ai.ciris.api.models.LoginRequest as SdkLoginRequest
@@ -16,6 +20,7 @@ import ai.ciris.api.models.StateTransitionRequest as SdkStateTransitionRequest
 import ai.ciris.api.models.ConfigUpdate as SdkConfigUpdate
 import ai.ciris.api.models.ConsentRequest as SdkConsentRequest
 import ai.ciris.api.models.ConfigValue
+import ai.ciris.api.models.SuccessResponseDictStrStr
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*
@@ -112,6 +117,25 @@ class CIRISApiClient(
 
     private fun logError(method: String, message: String) {
         PlatformLogger.e(TAG, "[$method] $message")
+    }
+
+    /**
+     * Parse the checks map from the verify-status response.
+     */
+    private fun parseChecks(checksObj: JsonObject?): Map<String, CheckDetail>? {
+        if (checksObj == null) return null
+        return checksObj.mapValues { (_, value) ->
+            val obj = value as? JsonObject
+            CheckDetail(
+                ok = (obj?.get("ok") as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                label = (obj?.get("label") as? JsonPrimitive)?.content ?: "",
+                level = (obj?.get("level") as? JsonPrimitive)?.content?.toIntOrNull() ?: 0,
+                filesChecked = (obj?.get("files_checked") as? JsonPrimitive)?.content?.toIntOrNull(),
+                filesPassed = (obj?.get("files_passed") as? JsonPrimitive)?.content?.toIntOrNull(),
+                filesFailed = (obj?.get("files_failed") as? JsonPrimitive)?.content?.toIntOrNull(),
+                failureReason = (obj?.get("failure_reason") as? JsonPrimitive)?.content
+            )
+        }
     }
 
     private fun logException(method: String, e: Exception, context: String = "") {
@@ -360,16 +384,22 @@ class CIRISApiClient(
             val body = response.body()
             val data = body.`data` ?: throw RuntimeException("API returned null data")
 
-            val healthyCount = data.services["healthy"]?.get("count") ?: 0
-            val unhealthyCount = data.services["unhealthy"]?.get("count") ?: 0
+            var healthyCount = 0
+            var totalCount = 0
+            for ((_, info) in data.services) {
+                val svcHealthy = info["healthy"] ?: 0
+                val svcAvailable = info["available"] ?: 0
+                healthyCount += svcHealthy
+                totalCount += svcAvailable
+            }
 
-            logInfo(method, "System status: ${data.status}, services: $healthyCount healthy, $unhealthyCount unhealthy")
+            logInfo(method, "System status: ${data.status}, services: $healthyCount healthy / $totalCount total")
 
             SystemStatus(
                 status = data.status,
                 cognitive_state = data.cognitiveState,
                 services_online = healthyCount,
-                services_total = healthyCount + unhealthyCount,
+                services_total = totalCount,
                 services = emptyMap()
             )
         } catch (e: Exception) {
@@ -743,6 +773,440 @@ class CIRISApiClient(
         }
     }
 
+    /**
+     * Validate LLM configuration by testing the connection.
+     * Calls POST /v1/setup/validate-llm
+     *
+     * @param provider Provider ID (openai, anthropic, local, other)
+     * @param apiKey API key for the provider
+     * @param baseUrl Optional base URL for custom endpoints
+     * @param model Optional model name to test
+     * @return LlmValidationResult with success/failure status and message
+     */
+    suspend fun validateLlmConfiguration(
+        provider: String,
+        apiKey: String,
+        baseUrl: String? = null,
+        model: String? = null
+    ): LlmValidationResult {
+        val method = "validateLlmConfiguration"
+        logInfo(method, "Validating LLM config: provider=$provider, baseUrl=${baseUrl ?: "default"}, model=${model ?: "default"}")
+
+        return try {
+            val request = ai.ciris.api.models.LLMValidationRequest(
+                provider = provider,
+                apiKey = apiKey,
+                baseUrl = baseUrl,
+                model = model
+            )
+
+            val response = setupApi.validateLlmV1SetupValidateLlmPost(request)
+            logDebug(method, "Response: status=${response.status}")
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+
+            logInfo(method, "Validation result: valid=${data.valid}, message=${data.message}")
+
+            LlmValidationResult(
+                valid = data.valid,
+                message = data.message,
+                error = data.error
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            LlmValidationResult(
+                valid = false,
+                message = "Connection failed",
+                error = e.message ?: "Unknown error"
+            )
+        }
+    }
+
+    /**
+     * List available models from a provider's live API.
+     * Calls POST /v1/setup/list-models
+     *
+     * @param provider Provider ID (openai, anthropic, local, other)
+     * @param apiKey API key for the provider
+     * @param baseUrl Optional base URL for custom endpoints
+     * @return List of ModelInfo with id and display name, sorted by CIRIS compatibility
+     */
+    suspend fun listModels(
+        provider: String,
+        apiKey: String,
+        baseUrl: String? = null
+    ): List<ModelInfo> {
+        val method = "listModels"
+        logInfo(method, "Listing models: provider=$provider, baseUrl=${baseUrl ?: "default"}")
+
+        return try {
+            val request = ai.ciris.api.models.LLMValidationRequest(
+                provider = provider,
+                apiKey = apiKey,
+                baseUrl = baseUrl
+            )
+
+            val response = setupApi.listModelsV1SetupListModelsPost(request)
+            logDebug(method, "Response: status=${response.status}")
+
+            val body = response.body()
+            val data = body.`data`
+
+            val models = data.models?.map { model ->
+                ModelInfo(
+                    id = model.id,
+                    displayName = model.displayName,
+                    cirisCompatible = model.cirisCompatible ?: false,
+                    cirisRecommended = model.cirisRecommended ?: false,
+                    contextWindow = model.contextWindow
+                )
+            } ?: emptyList()
+
+            logInfo(method, "Listed ${models.size} models from ${data.source}")
+            models
+        } catch (e: Exception) {
+            logException(method, e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Get CIRISVerify status for Trust and Security display.
+     * V2.0: CIRISVerify is REQUIRED for CIRIS 2.0+ agents.
+     *
+     * Returns the status of CIRISVerify including:
+     * - Whether the library is loaded (REQUIRED for CIRIS 2.0+)
+     * - Hardware security type (TPM, Secure Enclave, Software)
+     * - Key status (none, ephemeral, portal_pending, portal_active)
+     * - Attestation status
+     */
+    suspend fun getVerifyStatus(
+        playIntegrityToken: String? = null,
+        playIntegrityNonce: String? = null
+    ): VerifyStatusResponse {
+        val method = "getVerifyStatus"
+        logDebug(method, "Fetching CIRISVerify status (hasPlayIntegrity=${playIntegrityToken != null})")
+
+        // Uses cached attestation from auth service - should be fast
+        // Full attestation with Play Integrity may take longer
+        val timeoutMs = 30000L
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = timeoutMs
+                connectTimeoutMillis = 10000
+                socketTimeoutMillis = timeoutMs
+            }
+        }
+
+        return try {
+            // Use auth/attestation endpoint for cached attestation (fast, no network calls)
+            // Falls back to setup/verify-status only during first-run setup with Play Integrity
+            val url = if (playIntegrityToken != null && playIntegrityNonce != null) {
+                // Full attestation with Play Integrity - use setup endpoint (first-run only)
+                "$baseUrl/v1/setup/verify-status?mode=full&play_integrity_token=$playIntegrityToken&play_integrity_nonce=$playIntegrityNonce"
+            } else {
+                // Cached attestation from auth service - instant response
+                "$baseUrl/v1/auth/attestation"
+            }
+            val response = client.get(url)
+
+            if (response.status != HttpStatusCode.OK) {
+                val errorDetail = try {
+                    val errBody = response.body<JsonObject>()
+                    (errBody["detail"] as? JsonPrimitive)?.content
+                } catch (_: Exception) { null }
+                throw Exception(errorDetail ?: "Verify status failed: HTTP ${response.status}")
+            }
+
+            val body = response.body<JsonObject>()
+            val data = body["data"] as? JsonObject
+                ?: throw Exception("Invalid response format")
+
+            // DEBUG: Log raw API response fields
+            logInfo(method, "=== RAW API RESPONSE DEBUG ===")
+            logInfo(method, "files_checked=${data["files_checked"]}")
+            logInfo(method, "files_passed=${data["files_passed"]}")
+            logInfo(method, "per_file_results keys=${(data["per_file_results"] as? JsonObject)?.keys?.size ?: 0}")
+            logInfo(method, "python_modules_checked=${data["python_modules_checked"]}")
+            logInfo(method, "python_modules_passed=${data["python_modules_passed"]}")
+            logInfo(method, "module_integrity_ok=${data["module_integrity_ok"]}")
+            logInfo(method, "module_integrity_summary=${data["module_integrity_summary"]}")
+            logInfo(method, "cross_validated_files count=${(data["cross_validated_files"] as? kotlinx.serialization.json.JsonArray)?.size ?: 0}")
+            logInfo(method, "filesystem_verified_files count=${(data["filesystem_verified_files"] as? kotlinx.serialization.json.JsonArray)?.size ?: 0}")
+            logInfo(method, "agent_verified_files count=${(data["agent_verified_files"] as? kotlinx.serialization.json.JsonArray)?.size ?: 0}")
+            logInfo(method, "=== END RAW API RESPONSE DEBUG ===")
+
+            val loaded = (data["loaded"] as? JsonPrimitive)?.content?.toBoolean() ?: false
+            val verifyStatus = VerifyStatusResponse(
+                loaded = loaded,
+                version = (data["version"] as? JsonPrimitive)?.content,
+                hardwareType = (data["hardware_type"] as? JsonPrimitive)?.content,
+                keyStatus = (data["key_status"] as? JsonPrimitive)?.content ?: "none",
+                keyId = (data["key_id"] as? JsonPrimitive)?.content,
+                attestationStatus = (data["attestation_status"] as? JsonPrimitive)?.content ?: "not_attempted",
+                error = (data["error"] as? JsonPrimitive)?.content,
+                diagnosticInfo = (data["diagnostic_info"] as? JsonPrimitive)?.content,
+                disclaimer = (data["disclaimer"] as? JsonPrimitive)?.content
+                    ?: "CIRISVerify provides cryptographic attestation of agent identity.",
+                // Attestation level checks
+                dnsUsOk = (data["dns_us_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                dnsEuOk = (data["dns_eu_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                httpsUsOk = (data["https_us_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                httpsEuOk = (data["https_eu_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                binaryOk = (data["binary_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                fileIntegrityOk = (data["file_integrity_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                registryOk = (data["registry_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                auditOk = (data["audit_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                envOk = (data["env_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                playIntegrityOk = (data["play_integrity_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                playIntegrityVerdict = (data["play_integrity_verdict"] as? JsonPrimitive)?.content,
+                maxLevel = (data["max_level"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0,
+                levelPending = (data["level_pending"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                // New detailed fields
+                attestationMode = (data["attestation_mode"] as? JsonPrimitive)?.content ?: "partial",
+                platformOs = (data["platform_os"] as? JsonPrimitive)?.content,
+                platformArch = (data["platform_arch"] as? JsonPrimitive)?.content,
+                totalFiles = (data["total_files"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                filesChecked = (data["files_checked"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                filesPassed = (data["files_passed"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                filesFailed = (data["files_failed"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                integrityFailureReason = (data["integrity_failure_reason"] as? JsonPrimitive)?.content,
+                // Parse checks map (for detailed view)
+                checks = parseChecks(data["checks"] as? JsonObject),
+                // Keep details as raw JsonElement map for flexibility
+                details = (data["details"] as? JsonObject)?.mapValues { it.value },
+                // === v0.7.0 Fields - Enhanced verification details ===
+                ed25519Fingerprint = (data["ed25519_fingerprint"] as? JsonPrimitive)?.content,
+                keyStorageMode = (data["key_storage_mode"] as? JsonPrimitive)?.content,
+                hardwareBacked = (data["hardware_backed"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                targetTriple = (data["target_triple"] as? JsonPrimitive)?.content,
+                binarySelfCheck = (data["binary_self_check"] as? JsonPrimitive)?.content,
+                binaryHash = (data["binary_hash"] as? JsonPrimitive)?.content,
+                expectedBinaryHash = (data["expected_binary_hash"] as? JsonPrimitive)?.content,
+                functionSelfCheck = (data["function_self_check"] as? JsonPrimitive)?.content,
+                functionsChecked = (data["functions_checked"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                functionsPassed = (data["functions_passed"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                registryKeyStatus = (data["registry_key_status"] as? JsonPrimitive)?.content,
+                // v0.8.1: Python integrity fields
+                pythonIntegrityOk = (data["python_integrity_ok"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                pythonModulesChecked = (data["python_modules_checked"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                pythonModulesPassed = (data["python_modules_passed"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                pythonTotalHash = (data["python_total_hash"] as? JsonPrimitive)?.content,
+                pythonHashValid = (data["python_hash_valid"] as? JsonPrimitive)?.content?.toBoolean() ?: false,
+                // v0.8.4: Detail lists for UI
+                filesMissingCount = (data["files_missing_count"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                filesMissingList = (data["files_missing_list"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                filesFailedList = (data["files_failed_list"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                filesUnexpectedList = (data["files_unexpected_list"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                functionsFailedList = (data["functions_failed_list"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                // v0.8.6: Mobile exclusion tracking (discord, reddit, cli, etc.)
+                mobileExcludedCount = (data["mobile_excluded_count"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                mobileExcludedList = (data["mobile_excluded_list"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                // v0.8.6+: Per-file results for deconflicted integrity display
+                perFileResults = (data["per_file_results"] as? JsonObject)?.let { obj ->
+                    obj.entries.associate { (k, v) -> k to ((v as? JsonPrimitive)?.content ?: "unknown") }
+                },
+                // v0.8.5: Registry sources agreement
+                sourcesAgreeing = (data["sources_agreeing"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                // Attestation proof hardware type (nested in attestation_proof object)
+                attestationProofHardwareType = (data["attestation_proof"] as? JsonObject)?.let {
+                    (it["hardware_type"] as? JsonPrimitive)?.content
+                },
+                // v0.9.7: Cache timestamp
+                cachedAt = (data["cached_at"] as? JsonPrimitive)?.content,
+                // v0.9.7: Unified module integrity (cross-validation)
+                moduleIntegrityOk = (data["module_integrity_ok"] as? JsonPrimitive)?.content?.toBooleanStrictOrNull() ?: false,
+                moduleIntegritySummary = (data["module_integrity_summary"] as? JsonObject)?.let { obj ->
+                    obj.entries.associate { (k, v) -> k to ((v as? JsonPrimitive)?.content?.toIntOrNull() ?: 0) }
+                },
+                crossValidatedFiles = (data["cross_validated_files"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                filesystemVerifiedFiles = (data["filesystem_verified_files"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                agentVerifiedFiles = (data["agent_verified_files"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                diskAgentMismatch = (data["disk_agent_mismatch"] as? JsonObject)?.let { obj ->
+                    obj.entries.associate { (k, v) -> k to v }
+                },
+                registryMismatchFiles = (data["registry_mismatch_files"] as? JsonObject)?.let { obj ->
+                    obj.entries.associate { (k, v) -> k to v }
+                }
+            )
+
+            logInfo(method, "Verify status: loaded=$loaded, keyStatus=${verifyStatus.keyStatus}, maxLevel=${verifyStatus.maxLevel}, levelPending=${verifyStatus.levelPending}, hwType=${verifyStatus.attestationProofHardwareType ?: verifyStatus.hardwareType}, sourcesAgreeing=${verifyStatus.sourcesAgreeing}/3, playOk=${verifyStatus.playIntegrityOk}")
+
+            // DEBUG: Log parsed values
+            logInfo(method, "=== PARSED VALUES DEBUG ===")
+            logInfo(method, "filesChecked=${verifyStatus.filesChecked}, filesPassed=${verifyStatus.filesPassed}")
+            logInfo(method, "perFileResults count=${verifyStatus.perFileResults?.size ?: 0}")
+            logInfo(method, "pythonModulesChecked=${verifyStatus.pythonModulesChecked}, pythonModulesPassed=${verifyStatus.pythonModulesPassed}")
+            logInfo(method, "moduleIntegrityOk=${verifyStatus.moduleIntegrityOk}")
+            logInfo(method, "moduleIntegritySummary=${verifyStatus.moduleIntegritySummary}")
+            logInfo(method, "crossValidatedFiles count=${verifyStatus.crossValidatedFiles?.size ?: 0}")
+            logInfo(method, "filesystemVerifiedFiles count=${verifyStatus.filesystemVerifiedFiles?.size ?: 0}")
+            logInfo(method, "agentVerifiedFiles count=${verifyStatus.agentVerifiedFiles?.size ?: 0}")
+            logInfo(method, "=== END PARSED VALUES DEBUG ===")
+
+            verifyStatus
+        } catch (e: Exception) {
+            logException(method, e)
+            // Return a default "not loaded" response on error
+            VerifyStatusResponse(
+                loaded = false,
+                error = e.message ?: "Failed to fetch verify status"
+            )
+        } finally {
+            client.close()
+        }
+    }
+
+    // ========== Connect to Node (Device Auth Flow) ==========
+
+    /**
+     * Initiate device auth with a CIRISNode.
+     * Calls POST /v1/setup/connect-node on the local agent API.
+     */
+    suspend fun connectToNode(nodeUrl: String): ConnectNodeResult {
+        val method = "connectToNode"
+        logInfo(method, "Initiating device auth for node: $nodeUrl")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30000
+                connectTimeoutMillis = 15000
+            }
+        }
+
+        return try {
+            val response = client.post("$baseUrl/v1/setup/connect-node") {
+                contentType(ContentType.Application.Json)
+                setBody(mapOf("node_url" to nodeUrl))
+            }
+
+            if (response.status != HttpStatusCode.OK) {
+                // Try to extract detail from error response
+                val errorDetail = try {
+                    val errBody = response.body<JsonObject>()
+                    (errBody["detail"] as? JsonPrimitive)?.content
+                } catch (_: Exception) { null }
+                throw Exception(errorDetail ?: "Connect-node failed: HTTP ${response.status}")
+            }
+
+            val body = response.body<JsonObject>()
+            val data = body["data"] as? JsonObject
+                ?: throw Exception("Invalid response format")
+
+            // Portal URL: prefer from response (normalized by backend), fall back to input
+            val responsePortalUrl = (data["portal_url"] as? JsonPrimitive)?.content
+            val normalizedPortalUrl = responsePortalUrl
+                ?: if (nodeUrl.startsWith("http://") || nodeUrl.startsWith("https://"))
+                    nodeUrl.trimEnd('/') else "https://${nodeUrl.trimEnd('/')}"
+
+            ConnectNodeResult(
+                verificationUriComplete = (data["verification_uri_complete"] as? JsonPrimitive)?.content ?: "",
+                deviceCode = (data["device_code"] as? JsonPrimitive)?.content ?: "",
+                userCode = (data["user_code"] as? JsonPrimitive)?.content ?: "",
+                portalUrl = normalizedPortalUrl,
+                expiresIn = (data["expires_in"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 900,
+                interval = (data["interval"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 5
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Poll device auth status.
+     * Calls GET /v1/setup/connect-node/status on the local agent API.
+     */
+    suspend fun pollNodeAuthStatus(deviceCode: String, portalUrl: String): NodeAuthPollResult {
+        val method = "pollNodeAuthStatus"
+        logDebug(method, "Polling device auth status")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.get("$baseUrl/v1/setup/connect-node/status") {
+                parameter("device_code", deviceCode)
+                parameter("portal_url", portalUrl)
+            }
+
+            if (response.status != HttpStatusCode.OK) {
+                throw Exception("Poll failed: HTTP ${response.status}")
+            }
+
+            val body = response.body<JsonObject>()
+            val data = body["data"] as? JsonObject
+                ?: throw Exception("Invalid response format")
+
+            val status = (data["status"] as? JsonPrimitive)?.content ?: "error"
+
+            NodeAuthPollResult(
+                status = status,
+                template = (data["template"] as? JsonPrimitive)?.content,
+                adapters = null, // TODO: Parse adapters list from JSON array. MVP: null.
+                orgId = (data["org_id"] as? JsonPrimitive)?.content,
+                signingKeyB64 = (data["signing_key_b64"] as? JsonPrimitive)?.content,
+                keyId = (data["key_id"] as? JsonPrimitive)?.content,
+                stewardshipTier = (data["stewardship_tier"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                error = (data["error"] as? JsonPrimitive)?.content
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Reset device auth session on server.
+     * Calls POST /v1/setup/reset-device-auth on the local agent API.
+     * Used when user backs out of NODE_AUTH flow to clear stale server state.
+     */
+    suspend fun resetDeviceAuthOnServer(): Boolean {
+        val method = "resetDeviceAuthOnServer"
+        logDebug(method, "Resetting device auth session on server")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 5000
+                connectTimeoutMillis = 3000
+            }
+        }
+
+        return try {
+            val response = client.post("$baseUrl/v1/setup/reset-device-auth") {
+                contentType(ContentType.Application.Json)
+                setBody("{}")
+            }
+
+            val success = response.status == HttpStatusCode.OK
+            if (success) {
+                logInfo(method, "Device auth session reset successfully")
+            } else {
+                logWarn(method, "Device auth reset returned HTTP ${response.status}")
+            }
+            success
+        } catch (e: Exception) {
+            // Non-fatal - log but don't throw since this is cleanup
+            logWarn(method, "Failed to reset device auth on server: ${e.message}")
+            false
+        } finally {
+            client.close()
+        }
+    }
+
     override suspend fun completeSetup(request: CompleteSetupRequest): SetupCompletionResult {
         val method = "completeSetup"
         logInfo(method, "Completing setup: provider=${request.llm_provider}, template=${request.template_id}, username=${request.admin_username}")
@@ -765,27 +1229,101 @@ class CIRISApiClient(
                 adminPassword = request.admin_password,
                 oauthProvider = request.oauth_provider,
                 oauthExternalId = request.oauth_external_id,
-                oauthEmail = request.oauth_email
+                oauthEmail = request.oauth_email,
+                nodeUrl = request.node_url,
+                signingKeyId = request.signing_key_id,
+                signingKeyProvisioned = request.signing_key_provisioned,
+                provisionedSigningKeyB64 = request.provisioned_signing_key_b64
             )
-            logDebug(method, "Created SdkSetupCompleteRequest")
+            logDebug(method, "Created SdkSetupCompleteRequest with signingKeyId=${request.signing_key_id}")
 
-            val response = setupApi.completeSetupV1SetupCompletePost(sdkRequest)
-            logDebug(method, "Response: status=${response.status}")
+            // Use manual HTTP request to handle error responses properly
+            // The generated SDK tries to parse error responses as success, which fails
+            val httpClient = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 60000  // 60s for setup completion
+                    connectTimeoutMillis = 10000
+                    socketTimeoutMillis = 60000
+                }
+                // Don't throw on non-2xx responses - we handle them manually
+                expectSuccess = false
+            }
 
-            val body = response.body()
-            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            try {
+                val httpResponse = httpClient.post("$baseUrl/v1/setup/complete") {
+                    contentType(io.ktor.http.ContentType.Application.Json)
+                    setBody(sdkRequest)
+                }
 
-            val success = data["status"] == "completed"
-            val message = data["message"] ?: "Setup completed"
-            logInfo(method, "Setup complete: success=$success, message=$message")
+                val statusCode = httpResponse.status.value
+                val responseBody = httpResponse.bodyAsText()
+                logDebug(method, "Response: status=$statusCode, body=${responseBody.take(500)}")
 
-            SetupCompletionResult(
-                success = success,
-                message = message,
-                agentId = null,
-                adminUserId = data["username"],
-                error = null
-            )
+                when {
+                    statusCode == 422 -> {
+                        // FastAPI validation error
+                        logError(method, "FastAPI validation failure (422): $responseBody")
+                        val detail = try {
+                            val detailMatch = Regex(""""detail"\s*:\s*"([^"]+)"""").find(responseBody)
+                            detailMatch?.groupValues?.get(1) ?: responseBody
+                        } catch (_: Exception) {
+                            responseBody
+                        }
+                        SetupCompletionResult(
+                            success = false,
+                            message = "Setup failed",
+                            error = "Validation error: $detail"
+                        )
+                    }
+                    statusCode in 400..499 -> {
+                        logError(method, "Client error (HTTP $statusCode): $responseBody")
+                        SetupCompletionResult(
+                            success = false,
+                            message = "Setup failed",
+                            error = "HTTP $statusCode: $responseBody"
+                        )
+                    }
+                    statusCode in 500..599 -> {
+                        logError(method, "Server error (HTTP $statusCode): $responseBody")
+                        SetupCompletionResult(
+                            success = false,
+                            message = "Setup failed",
+                            error = "Server error ($statusCode)"
+                        )
+                    }
+                    statusCode in 200..299 -> {
+                        // Success - parse the response
+                        val successResponse = Json.decodeFromString<SuccessResponseDictStrStr>(responseBody)
+                        val data = successResponse.`data`
+                        val success = data["status"] == "completed"
+                        val message = data["message"] ?: "Setup completed"
+                        logInfo(method, "Setup complete: success=$success, message=$message")
+                        SetupCompletionResult(
+                            success = success,
+                            message = message,
+                            agentId = null,
+                            adminUserId = data["username"],
+                            error = null
+                        )
+                    }
+                    else -> {
+                        logError(method, "Unexpected status code $statusCode: $responseBody")
+                        SetupCompletionResult(
+                            success = false,
+                            message = "Setup failed",
+                            error = "Unexpected response: HTTP $statusCode"
+                        )
+                    }
+                }
+            } finally {
+                httpClient.close()
+            }
         } catch (e: Exception) {
             logException(method, e, "provider=${request.llm_provider}, template=${request.template_id}")
             SetupCompletionResult(
@@ -2540,10 +3078,167 @@ class CIRISApiClient(
         }
     }
 
+    // ===== Play Integrity (Android Device Attestation) =====
+
+    /**
+     * Get a nonce for Play Integrity verification from Python backend.
+     * The backend calls CIRISVerify FFI to get the nonce from the registry.
+     */
+    suspend fun getPlayIntegrityNonce(): PlayIntegrityNonceResult {
+        val method = "getPlayIntegrityNonce"
+        logInfo(method, "Requesting Play Integrity nonce from Python API")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 30000
+                    connectTimeoutMillis = 15000
+                    socketTimeoutMillis = 30000
+                }
+            }
+
+            val response = client.get("$baseUrl/v1/setup/play-integrity/nonce") {
+                headers {
+                    accessToken?.let { append(HttpHeaders.Authorization, "Bearer $it") }
+                }
+            }
+
+            client.close()
+
+            if (response.status.isSuccess()) {
+                val body = response.bodyAsText()
+                logDebug(method, "Response body: $body")
+
+                // Parse response - expect {"data": {"nonce": "..."}}
+                val json = Json { ignoreUnknownKeys = true }
+                val parsed = json.decodeFromString<PlayIntegrityNonceApiResponse>(body)
+                val nonce = parsed.data?.get("nonce")
+
+                if (nonce != null) {
+                    logInfo(method, "Got nonce: ${nonce.take(20)}...")
+                    PlayIntegrityNonceResult(nonce = nonce)
+                } else {
+                    logError(method, "No nonce in response")
+                    PlayIntegrityNonceResult(error = "No nonce in response")
+                }
+            } else {
+                val errorBody = response.bodyAsText()
+                logError(method, "HTTP ${response.status}: $errorBody")
+                PlayIntegrityNonceResult(error = "HTTP ${response.status}: $errorBody")
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            PlayIntegrityNonceResult(error = e.message ?: "Unknown error")
+        }
+    }
+
+    /**
+     * Verify a Play Integrity token via Python backend.
+     * The backend calls CIRISVerify FFI to verify the token with the registry.
+     */
+    suspend fun verifyPlayIntegrity(token: String, nonce: String): PlayIntegrityVerifyResult {
+        val method = "verifyPlayIntegrity"
+        logInfo(method, "Verifying Play Integrity token via Python API")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 45000
+                    connectTimeoutMillis = 15000
+                    socketTimeoutMillis = 45000
+                }
+            }
+
+            val response = client.post("$baseUrl/v1/setup/play-integrity/verify") {
+                headers {
+                    accessToken?.let { append(HttpHeaders.Authorization, "Bearer $it") }
+                }
+                contentType(ContentType.Application.Json)
+                setBody("""{"token": "$token", "nonce": "$nonce"}""")
+            }
+
+            client.close()
+
+            if (response.status.isSuccess()) {
+                val body = response.bodyAsText()
+                logDebug(method, "Response body: $body")
+
+                val json = Json { ignoreUnknownKeys = true }
+                val parsed = json.decodeFromString<PlayIntegrityVerifyApiResponse>(body)
+                val data = parsed.data
+
+                if (data != null) {
+                    logInfo(method, "Verification result: verified=${data.verified}, verdict=${data.verdict}")
+                    PlayIntegrityVerifyResult(
+                        verified = data.verified,
+                        verdict = data.verdict,
+                        meetsStrongIntegrity = data.meetsStrongIntegrity,
+                        meetsDeviceIntegrity = data.meetsDeviceIntegrity,
+                        meetsBasicIntegrity = data.meetsBasicIntegrity
+                    )
+                } else {
+                    logError(method, "No data in response")
+                    PlayIntegrityVerifyResult(error = "No data in response")
+                }
+            } else {
+                val errorBody = response.bodyAsText()
+                logError(method, "HTTP ${response.status}: $errorBody")
+                PlayIntegrityVerifyResult(error = "HTTP ${response.status}: $errorBody")
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            PlayIntegrityVerifyResult(error = e.message ?: "Unknown error")
+        }
+    }
+
     override fun close() {
     logInfo("close", "Closing CIRISApiClient")
     }
 }
+
+// ===== Play Integrity Data Models =====
+
+@Serializable
+data class PlayIntegrityNonceApiResponse(
+    val data: Map<String, String>? = null
+)
+
+@Serializable
+data class PlayIntegrityVerifyApiResponse(
+    val data: PlayIntegrityVerifyData? = null
+)
+
+@Serializable
+data class PlayIntegrityVerifyData(
+    val verified: Boolean = false,
+    val verdict: String? = null,
+    @SerialName("meets_strong_integrity")
+    val meetsStrongIntegrity: Boolean = false,
+    @SerialName("meets_device_integrity")
+    val meetsDeviceIntegrity: Boolean = false,
+    @SerialName("meets_basic_integrity")
+    val meetsBasicIntegrity: Boolean = false
+)
+
+data class PlayIntegrityNonceResult(
+    val nonce: String? = null,
+    val error: String? = null
+)
+
+data class PlayIntegrityVerifyResult(
+    val verified: Boolean = false,
+    val verdict: String? = null,
+    val meetsStrongIntegrity: Boolean = false,
+    val meetsDeviceIntegrity: Boolean = false,
+    val meetsBasicIntegrity: Boolean = false,
+    val error: String? = null
+)
 
 // ===== Config Data Models =====
 

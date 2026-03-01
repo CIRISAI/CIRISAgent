@@ -77,6 +77,40 @@ fun SessionsScreen(
             // Current state banner
             CurrentStateBanner(currentState = currentState)
 
+            // Experimental warning
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFFEF3C7)  // Amber-100
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text(
+                        text = "⚠️",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Column {
+                        Text(
+                            text = "Experimental Feature",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF92400E)  // Amber-800
+                        )
+                        Text(
+                            text = "Cognitive sessions can consume significant thoughts and tasks. Use sparingly during testing.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFB45309)  // Amber-700
+                        )
+                    }
+                }
+            }
+
             // Session cards
             Text(
                 text = "Available Sessions",

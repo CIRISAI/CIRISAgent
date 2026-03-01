@@ -70,8 +70,11 @@ Available modules:
   streaming       - H3ERE pipeline streaming verification
   sdk             - SDK tests
   pause_step      - Enhanced single-step/pause debugging
-  single_step_comprehensive - Complete 17-phase COVENANT single-step validation
-  covenant        - Covenant invocation system (kill switch) tests
+  single_step_comprehensive - Complete 17-phase ACCORD single-step validation
+  accord        - Accord invocation system (kill switch) tests
+  accord_metrics - Accord metrics trace capture and signing
+  cirisnode       - CIRISNode integration (deferral routing, trace forwarding)
+  licensed_agent  - Licensed agent device auth (RFC 8628) flow testing
   api_full        - All API modules
   handlers_full   - All handler modules
   all             - Everything
@@ -114,11 +117,25 @@ Available modules:
         help="Base URL for LLM API (default: https://api.groq.com/openai/v1)",
     )
 
-    # Live Lens configuration (for covenant_metrics tests)
+    # Live Lens configuration (for accord_metrics tests)
     parser.add_argument(
         "--live-lens",
         action="store_true",
-        help="Use real Lens server (https://lens.ciris-services-1.ai/lens-api/api/v1) instead of mock logshipper for covenant_metrics tests",
+        help="Use real Lens server (https://lens.ciris-services-1.ai/lens-api/api/v1) instead of mock logshipper for accord_metrics tests",
+    )
+
+    # Live CIRISNode configuration (for cirisnode tests)
+    parser.add_argument(
+        "--live-node",
+        action="store_true",
+        help="Run additional tests against live CIRISNode server (node.ciris-services-1.ai) for cirisnode tests",
+    )
+
+    # Live Portal configuration (for licensed_agent tests)
+    parser.add_argument(
+        "--live-portal",
+        action="store_true",
+        help="Run tests against live CIRISPortal server (portal.ciris.ai) for licensed_agent tests",
     )
 
     # Database backend configuration
@@ -164,6 +181,17 @@ Available modules:
     parser.add_argument("--workers", type=int, default=4, help="Number of parallel workers (default: 4)")
     parser.add_argument("--timeout", type=float, default=300.0, help="Total timeout in seconds (default: 300)")
     parser.add_argument("--retry", type=int, default=3, help="Number of retries for failed tests (default: 3)")
+    parser.add_argument(
+        "--proceed-anyway",
+        action="store_true",
+        help="Continue running tests after first failure (default: fail-fast)",
+    )
+    parser.add_argument(
+        "--test-timeout",
+        type=float,
+        default=30.0,
+        help="Timeout for individual test interactions in seconds (default: 30)",
+    )
 
     # Output configuration
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
@@ -231,6 +259,37 @@ def main():
             print(f"Available modules: {', '.join(m.value for m in QAModule)}")
             sys.exit(1)
 
+    # HE-300 benchmark module-specific defaults
+    is_he300 = QAModule.HE300_BENCHMARK in modules
+    if is_he300:
+        print("🧪 HE-300 Benchmark Mode:")
+        print("   📋 Template: he-300-benchmark (speak + task_complete only)")
+        print("   🔓 Benchmark Mode: CIRIS_BENCHMARK_MODE=true (disables EpistemicHumility conscience)")
+        # Auto-enable --wipe-data for clean state (do it now since wipe already ran above)
+        if not args.wipe_data:
+            print("   ℹ️  Auto-wiping data for clean benchmark state")
+            import shutil
+
+            data_dir = Path("data")
+            if data_dir.exists():
+                try:
+                    shutil.rmtree(data_dir)
+                    print("   ✅ Data directory cleared")
+                except Exception as e:
+                    print(f"   ⚠️  Failed to wipe data directory: {e}")
+            args.wipe_data = True  # Mark as done
+        # Warn if not using --live mode
+        if not args.live:
+            print("   ⚠️  WARNING: Running HE-300 without --live flag uses mock LLM")
+            print(
+                "   ⚠️  For real benchmarking, use: --live --live-key-file ~/.openai_key --live-model gpt-4o-mini --live-base-url https://api.openai.com/v1"
+            )
+        else:
+            print("   ✅ Live LLM mode enabled for real ethical benchmarking")
+        # Set OpenAI defaults if --live but using Groq defaults
+        if args.live and "groq" in args.live_base_url.lower():
+            print("   ℹ️  Tip: For OpenAI, use --live-base-url https://api.openai.com/v1 --live-model gpt-4o-mini")
+
     # Handle --live mode: read API key and configure live LLM
     live_api_key = None
     live_model = None
@@ -284,8 +343,15 @@ def main():
         live_api_key=live_api_key,
         live_model=live_model,
         live_base_url=live_base_url,
-        # Live Lens configuration (for covenant_metrics tests)
+        # Live Lens configuration (for accord_metrics tests)
         live_lens=args.live_lens,
+        # Live CIRISNode configuration (for cirisnode tests)
+        live_node=args.live_node,
+        # Live Portal configuration (for licensed_agent tests)
+        live_portal=args.live_portal,
+        # Fail-fast configuration
+        fail_fast=not args.proceed_anyway,
+        test_timeout=args.test_timeout,
     )
 
     # Create and run runner

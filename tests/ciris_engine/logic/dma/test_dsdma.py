@@ -27,12 +27,14 @@ class TestDSDMAEvaluator:
         """Mock the prompt loader to return proper PromptCollection."""
         mock_loader = Mock()
         mock_collection = Mock()
-        mock_collection.uses_covenant_header = Mock(return_value=True)
+        mock_collection.uses_accord_header = Mock(return_value=True)
         mock_collection.get_system_message = Mock(return_value="Evaluate for domain alignment.")
         mock_collection.get_user_message = Mock(return_value="Thought to evaluate: Test thought")
         mock_collection.get_prompt = Mock(return_value="Domain evaluation template")
 
         mock_loader.load_prompt_template = Mock(return_value=mock_collection)
+        # Mock accord mode to return "full" for proper message ordering
+        mock_loader.get_accord_mode = Mock(return_value="full")
 
         # Mock the get_prompt_loader function
         monkeypatch.setattr("ciris_engine.logic.dma.dsdma_base.get_prompt_loader", lambda: mock_loader)
@@ -73,16 +75,18 @@ class TestDSDMAEvaluator:
         # Create ThoughtContent (not a dict!)
         content = ThoughtContent(text="Should I perform a medical diagnosis?", metadata={})
 
-        # Create the queue item from the thought
-        queue_item = ProcessingQueueItem.from_thought(
-            valid_thought, raw_input="Should I perform a medical diagnosis?", queue_item_content=content
+        # Create the queue item directly (avoid from_thought which hits database)
+        queue_item = ProcessingQueueItem(
+            thought_id=valid_thought.thought_id,
+            thought_type=valid_thought.thought_type,
+            content=content,
+            source_task_id=valid_thought.source_task_id,
+            thought_depth=valid_thought.thought_depth,
+            initial_context={
+                "system_snapshot": valid_system_snapshot.model_dump(),
+                "environment_context": {"description": "Medical consultation context"},
+            },
         )
-
-        # Add the context with system snapshot (using proper attribute assignment)
-        queue_item.initial_context = {
-            "system_snapshot": valid_system_snapshot.model_dump(),
-            "environment_context": {"description": "Medical consultation context"},
-        }
 
         return queue_item
 
@@ -132,10 +136,14 @@ class TestDSDMAEvaluator:
         """Test that DSDMA fails fast when agent identity is missing."""
         # Create queue item WITHOUT system snapshot
         content = ThoughtContent(text="Test thought", metadata={})
-        queue_item = ProcessingQueueItem.from_thought(valid_thought, queue_item_content=content)
-
-        # No initial_context means no identity
-        queue_item.initial_context = {}
+        queue_item = ProcessingQueueItem(
+            thought_id=valid_thought.thought_id,
+            thought_type=valid_thought.thought_type,
+            content=content,
+            source_task_id=valid_thought.source_task_id,
+            thought_depth=valid_thought.thought_depth,
+            initial_context={},  # No identity
+        )
 
         evaluator = BaseDSDMA(domain_name="test_domain", service_registry=mock_service_registry)
 
@@ -164,8 +172,14 @@ class TestDSDMAEvaluator:
         )
 
         content = ThoughtContent(text="Test thought", metadata={})
-        queue_item = ProcessingQueueItem.from_thought(valid_thought, queue_item_content=content)
-        queue_item.initial_context = {"system_snapshot": incomplete_snapshot.model_dump()}
+        queue_item = ProcessingQueueItem(
+            thought_id=valid_thought.thought_id,
+            thought_type=valid_thought.thought_type,
+            content=content,
+            source_task_id=valid_thought.source_task_id,
+            thought_depth=valid_thought.thought_depth,
+            initial_context={"system_snapshot": incomplete_snapshot.model_dump()},
+        )
 
         evaluator = BaseDSDMA(domain_name="finance", service_registry=mock_service_registry)
 
@@ -251,7 +265,7 @@ class TestDSDMAEvaluator:
         messages = call_args.kwargs["messages"]
 
         # System message should contain CORE IDENTITY block
-        # First message is Covenant, second should be the system prompt with identity
+        # First message is Accord, second should be the system prompt with identity
         if len(messages) > 1:
             system_content = messages[1]["content"]
         else:
@@ -286,9 +300,16 @@ class TestDSDMAEvaluator:
     ):
         """Test that DSDMA fails fast when initial_context is not a dict."""
         content = ThoughtContent(text="Test thought", metadata={})
-        queue_item = ProcessingQueueItem.from_thought(valid_thought, queue_item_content=content)
+        queue_item = ProcessingQueueItem(
+            thought_id=valid_thought.thought_id,
+            thought_type=valid_thought.thought_type,
+            content=content,
+            source_task_id=valid_thought.source_task_id,
+            thought_depth=valid_thought.thought_depth,
+            initial_context={},  # Start with empty dict
+        )
 
-        # Set initial_context to wrong type
+        # Set initial_context to wrong type after construction
         queue_item.initial_context = "not a dict"  # Wrong type!
 
         evaluator = BaseDSDMA(domain_name="test_domain", service_registry=mock_service_registry)

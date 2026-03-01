@@ -8,11 +8,12 @@ Usage:
     python -m tools.qa_runner.modules.web_ui [command] [options]
 
 Commands:
-    e2e         Run full end-to-end test flow (default)
-    setup       Test only setup wizard steps
-    interact    Test only interaction steps
-    models      Test only model listing feature
-    list        List available tests
+    e2e             Run full end-to-end test flow (default)
+    setup           Test only setup wizard steps
+    interact        Test only interaction steps
+    models          Test only model listing feature
+    licensed_agent  First-time licensed agent flow (Portal device auth)
+    list            List available tests
 
 Examples:
     # Full E2E test with data wipe
@@ -23,6 +24,9 @@ Examples:
 
     # Run specific tests
     python -m tools.qa_runner.modules.web_ui --tests load_setup,select_provider,enter_key
+
+    # Licensed agent flow with Portal auth
+    python -m tools.qa_runner.modules.web_ui licensed_agent --provider groq
 
     # Headless mode (no browser window)
     python -m tools.qa_runner.modules.web_ui e2e --headless
@@ -63,7 +67,7 @@ Examples:
         "command",
         nargs="?",
         default="e2e",
-        choices=["e2e", "setup", "interact", "models", "list"],
+        choices=["e2e", "setup", "interact", "models", "licensed_agent", "list"],
         help="Test command to run (default: e2e)",
     )
 
@@ -118,6 +122,19 @@ Examples:
     parser.add_argument(
         "--model",
         help="Specific model to select (default: auto-select recommended)",
+    )
+
+    # Portal options (for licensed_agent flow)
+    parser.add_argument(
+        "--portal-url",
+        default="https://portal.ciris.ai",
+        help="CIRIS Portal URL for device auth (default: https://portal.ciris.ai)",
+    )
+    parser.add_argument(
+        "--poll-timeout",
+        type=int,
+        default=300,
+        help="Timeout for Portal authorization polling in seconds (default: 300)",
     )
 
     # Test options
@@ -175,14 +192,16 @@ def list_tests() -> None:
         print(f"  • {name:20s} - {desc}")
 
     print("\n🔄 Test Groups:\n")
-    print("  • e2e       - All tests in sequence")
-    print("  • setup     - Setup wizard tests only (load_setup through complete_setup)")
-    print("  • interact  - Interaction tests only (send_message, receive_response)")
-    print("  • models    - Model listing tests only (load_setup through load_models)")
+    print("  • e2e            - All tests in sequence")
+    print("  • setup          - Setup wizard tests only (load_setup through complete_setup)")
+    print("  • interact       - Interaction tests only (send_message, receive_response)")
+    print("  • models         - Model listing tests only (load_setup through load_models)")
+    print("  • licensed_agent - First-time licensed agent flow (Portal device auth)")
 
     print("\n💡 Examples:\n")
     print("  python -m tools.qa_runner.modules.web_ui e2e --wipe")
     print("  python -m tools.qa_runner.modules.web_ui --tests load_setup,enter_key,load_models")
+    print("  python -m tools.qa_runner.modules.web_ui licensed_agent --provider groq")
     print()
 
 
@@ -213,6 +232,7 @@ def get_test_list(command: str, specific_tests: Optional[str]) -> Optional[List[
             "enter_key",
             "load_models",
         ],
+        "licensed_agent": ["licensed_agent"],  # Special flow
     }
 
     return test_groups.get(command)

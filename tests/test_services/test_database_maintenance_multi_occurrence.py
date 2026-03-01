@@ -9,6 +9,7 @@ These tests verify that the maintenance service properly handles:
 """
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock
 
 import pytest
 
@@ -895,7 +896,7 @@ class TestConfigPreservationLogic:
     def test_is_runtime_config_matches_adapter_pattern(self, database_maintenance_service):
         """Test that adapter.* patterns are recognized as runtime configs."""
         assert database_maintenance_service._is_runtime_config("adapter.my_adapter.config") is True
-        assert database_maintenance_service._is_runtime_config("adapter.covenant_abc123.type") is True
+        assert database_maintenance_service._is_runtime_config("adapter.accord_abc123.type") is True
 
     def test_is_runtime_config_matches_runtime_pattern(self, database_maintenance_service):
         """Test that runtime.* patterns are recognized as runtime configs."""
@@ -935,7 +936,7 @@ class TestConfigPreservationLogic:
             updated_by = "runtime_adapter_manager"
 
         should_preserve, reason = database_maintenance_service._should_preserve_config(
-            "adapter.covenant_metrics_abc123.config", MockConfigNode()
+            "adapter.accord_metrics_abc123.config", MockConfigNode()
         )
         assert should_preserve is True
         assert "persist check" in reason.lower()
@@ -1168,6 +1169,7 @@ class TestAdapterDeduplication:
     ):
         """Test that only the newest adapter is kept when deduplicating."""
         from datetime import datetime, timezone
+        from unittest.mock import patch
 
         database_maintenance_service.config_service = mock_config_service
 
@@ -1180,9 +1182,14 @@ class TestAdapterDeduplication:
         group_key = ("discord", "node1", "abc123")
         adapter_ids = ["old_adapter", "newer_adapter", "newest_adapter"]
 
-        deleted_count = await database_maintenance_service._delete_duplicate_adapters_in_group(
-            group_key, adapter_ids, adapter_instances
-        )
+        # Mock current occurrence to match the group's occurrence_id for multi-occurrence safety
+        with patch(
+            "ciris_engine.logic.utils.occurrence_utils.get_current_occurrence_id",
+            return_value="node1",
+        ):
+            deleted_count = await database_maintenance_service._delete_duplicate_adapters_in_group(
+                group_key, adapter_ids, adapter_instances
+            )
 
         # Should delete 2 (keep newest_adapter)
         assert deleted_count == 2
@@ -1315,3 +1322,78 @@ class TestAdapterPersistence:
 
         assert deleted == 0
         assert "marked for persistence, keeping" in caplog.text
+
+
+class TestStaleTaskHelpers:
+    """Tests for helper methods used in stale task cleanup."""
+
+    @pytest.fixture
+    def database_maintenance_service(self, tmp_path):
+        """Create a DatabaseMaintenanceService for testing."""
+        from unittest.mock import Mock
+
+        from ciris_engine.logic.services.infrastructure.database_maintenance.service import DatabaseMaintenanceService
+
+        service = DatabaseMaintenanceService.__new__(DatabaseMaintenanceService)
+        service.db_path = str(tmp_path / "test.db")
+        service.time_service = Mock()
+        return service
+
+    def test_is_wakeup_or_shutdown_task_wakeup(self, database_maintenance_service):
+        """Test _is_wakeup_or_shutdown_task returns True for wakeup tasks."""
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("WAKEUP_123") is True
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("VERIFY_IDENTITY_456") is True
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("VALIDATE_INTEGRITY_789") is True
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("EVALUATE_RESILIENCE_abc") is True
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("ACCEPT_INCOMPLETENESS_def") is True
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("EXPRESS_GRATITUDE_ghi") is True
+
+    def test_is_wakeup_or_shutdown_task_shutdown(self, database_maintenance_service):
+        """Test _is_wakeup_or_shutdown_task returns True for shutdown tasks."""
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("shutdown_123") is True
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("SHUTDOWN_456") is True
+
+    def test_is_wakeup_or_shutdown_task_other(self, database_maintenance_service):
+        """Test _is_wakeup_or_shutdown_task returns False for other tasks."""
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("regular_task_123") is False
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("user_request_456") is False
+        assert database_maintenance_service._is_wakeup_or_shutdown_task("task_WAKEUP_789") is False
+
+    def test_get_task_age_seconds_with_datetime(self, database_maintenance_service):
+        """Test _get_task_age_seconds with datetime object."""
+        from datetime import datetime, timedelta, timezone
+
+        current_time = datetime.now(timezone.utc)
+        task = Mock()
+        task.created_at = current_time - timedelta(seconds=300)
+
+        age = database_maintenance_service._get_task_age_seconds(task, current_time)
+
+        assert age == pytest.approx(300, abs=1)
+
+    def test_get_task_age_seconds_with_string(self, database_maintenance_service):
+        """Test _get_task_age_seconds with ISO string timestamp."""
+        from datetime import datetime, timedelta, timezone
+
+        current_time = datetime.now(timezone.utc)
+        created_at = current_time - timedelta(seconds=600)
+        task = Mock()
+        task.created_at = created_at.isoformat()
+
+        age = database_maintenance_service._get_task_age_seconds(task, current_time)
+
+        assert age == pytest.approx(600, abs=1)
+
+    def test_get_task_age_seconds_with_z_suffix(self, database_maintenance_service):
+        """Test _get_task_age_seconds handles Z suffix in ISO string."""
+        from datetime import datetime, timedelta, timezone
+
+        current_time = datetime.now(timezone.utc)
+        created_at = current_time - timedelta(seconds=120)
+        task = Mock()
+        # Some systems use Z suffix
+        task.created_at = created_at.strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+
+        age = database_maintenance_service._get_task_age_seconds(task, current_time)
+
+        assert age == pytest.approx(120, abs=1)

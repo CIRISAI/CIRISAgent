@@ -17,6 +17,80 @@ from ciris_engine.schemas.services.operations import MemoryQuery
 logger = logging.getLogger(__name__)
 
 
+async def _get_attestation_summary() -> Optional[str]:
+    """Get a concise attestation summary from CIRISVerify.
+
+    Returns a string like:
+    "Level 5/5 | ✓Binary ✓Environment ✓Registry ✓FileIntegrity ✓Audit"
+    """
+    try:
+        import secrets
+
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
+
+        cv = get_verifier()
+        if cv is None:
+            return None
+
+        # Get attestation result (uses cached data if available)
+        challenge_nonce = secrets.token_bytes(32)
+        result = cv.export_attestation_sync(challenge_nonce)
+        if not result:
+            return None
+
+        # Extract level
+        max_level = result.get("level", 0)
+
+        # Build check status list
+        checks = []
+        self_verify = result.get("self_verification", {})
+        if self_verify.get("binary_valid", False):
+            checks.append("✓Binary")
+        else:
+            checks.append("✗Binary")
+
+        # Key attestation (environment)
+        key_attest = result.get("key_attestation", {})
+        if key_attest.get("valid", False):
+            checks.append("✓Environment")
+        else:
+            checks.append("✗Environment")
+
+        # Sources (registry cross-validation)
+        sources = result.get("sources", {})
+        sources_valid = sum(1 for s in sources.values() if isinstance(s, dict) and s.get("reachable"))
+        if sources_valid >= 2:
+            checks.append(f"✓Registry({sources_valid}/3)")
+        else:
+            checks.append(f"✗Registry({sources_valid}/3)")
+
+        # File integrity
+        file_integrity = result.get("file_integrity", {})
+        fi_full = file_integrity.get("full", {}) if isinstance(file_integrity, dict) else {}
+        if fi_full.get("valid", False) or fi_full.get("files_failed", 1) == 0:
+            checks.append("✓FileIntegrity")
+        else:
+            checks.append("✗FileIntegrity")
+
+        # Audit trail
+        audit = result.get("audit_trail", {})
+        if audit.get("valid", False):
+            checks.append("✓Audit")
+        else:
+            checks.append("○Audit")
+
+        summary = f"Level {max_level}/5 | {' '.join(checks)}"
+        logger.debug(f"[BATCH] Attestation summary: {summary}")
+        return summary
+
+    except ImportError:
+        logger.debug("[BATCH] CIRISVerify not available for attestation summary")
+        return None
+    except Exception as e:
+        logger.warning(f"[BATCH] Failed to get attestation summary: {e}")
+        return None
+
+
 async def create_minimal_batch_context(
     memory_service: Optional[Any] = None,
     secrets_service: Optional[Any] = None,
@@ -75,6 +149,16 @@ class BatchContextData:
         from ciris_engine.schemas.runtime.extended import ShutdownContext
 
         self.shutdown_context: Optional[ShutdownContext] = None
+
+        # CIRISVerify attestation context (unified schema)
+        from ciris_engine.schemas.services.attestation import VerifyAttestationContext
+
+        self.verify_attestation: Optional[VerifyAttestationContext] = None
+
+        # Legacy fields (populated from verify_attestation for backwards compatibility)
+        self.license_disclosure_text: Optional[str] = None
+        self.license_disclosure_severity: Optional[str] = None
+        self.attestation_summary: Optional[str] = None
 
 
 async def prefetch_batch_context(
@@ -247,6 +331,110 @@ async def prefetch_batch_context(
     # 7. Shutdown Context
     if runtime and hasattr(runtime, "current_shutdown_context"):
         batch_data.shutdown_context = runtime.current_shutdown_context
+
+    # 8. CIRISVerify Attestation Context (unified schema)
+    if runtime and hasattr(runtime, "adapters"):
+        logger.debug("[DEBUG DB TIMING] Batch: fetching CIRISVerify attestation context")
+        try:
+            from ciris_engine.schemas.services.attestation import VerifyAttestationContext
+
+            # Look for ciris_verify adapter in loaded adapters
+            ciris_verify_adapter = None
+            for adapter in runtime.adapters:
+                # Check by adapter type name
+                adapter_type = getattr(adapter, "adapter_type", "")
+                if "ciris_verify" in str(adapter_type).lower():
+                    ciris_verify_adapter = adapter
+                    break
+                # Also check class name as fallback
+                if "CIRISVerify" in type(adapter).__name__:
+                    ciris_verify_adapter = adapter
+                    break
+
+            if ciris_verify_adapter:
+                # Get disclosure
+                disclosure_text = ""
+                disclosure_severity = "info"
+                if hasattr(ciris_verify_adapter, "get_mandatory_disclosure"):
+                    disclosure = await ciris_verify_adapter.get_mandatory_disclosure()
+                    if disclosure:
+                        disclosure_text = disclosure.text
+                        disclosure_severity = (
+                            disclosure.severity.value
+                            if hasattr(disclosure.severity, "value")
+                            else str(disclosure.severity)
+                        )
+
+                # Get attestation result from AuthenticationService cache
+                # CRITICAL: Attestation MUST have run at startup and be cached
+                # If it's not there, something has gone wrong - fail fast
+                attestation_result = None
+                if service_registry:
+                    try:
+                        auth_service = service_registry.get_service("authentication")
+                        if auth_service and hasattr(auth_service, "get_cached_attestation"):
+                            attestation_result = auth_service.get_cached_attestation()
+                            if attestation_result:
+                                logger.debug(
+                                    f"[BATCH] Got cached attestation from auth service: level={attestation_result.max_level}"
+                                )
+                    except Exception as e:
+                        logger.error(f"[BATCH] CRITICAL: Could not get auth service for attestation: {e}")
+
+                # Fallback: try through adapter's service (legacy path)
+                if attestation_result is None and hasattr(ciris_verify_adapter, "_service") and hasattr(
+                    ciris_verify_adapter._service, "get_cached_attestation"
+                ):
+                    attestation_result = ciris_verify_adapter._service.get_cached_attestation()
+
+                # FAIL FAST: Attestation MUST exist by the time we build context
+                if attestation_result is None:
+                    raise RuntimeError(
+                        "CRITICAL: No attestation result available. "
+                        "CIRISVerify startup attestation must complete before batch context. "
+                        "Check that run_startup_attestation() completed successfully."
+                    )
+
+                # Get agent version
+                agent_version = None
+                try:
+                    from ciris_engine.constants import CIRIS_VERSION
+
+                    agent_version = CIRIS_VERSION
+                except ImportError:
+                    pass
+
+                # Build unified context from attestation result
+                batch_data.verify_attestation = VerifyAttestationContext.from_attestation_result(
+                    result=attestation_result,
+                    disclosure_text=disclosure_text,
+                    disclosure_severity=disclosure_severity,
+                    agent_version=agent_version,
+                )
+
+                # Populate legacy fields for backwards compatibility
+                batch_data.license_disclosure_text = batch_data.verify_attestation.disclosure_text
+                batch_data.license_disclosure_severity = batch_data.verify_attestation.disclosure_severity
+                batch_data.attestation_summary = batch_data.verify_attestation.attestation_summary
+
+                logger.info(f"[BATCH] CIRISVerify context loaded: {batch_data.verify_attestation.attestation_summary}")
+
+        except Exception as e:
+            logger.warning(f"Failed to get CIRISVerify attestation context: {e}")
+            # Provide fallback context when verification fails
+            from ciris_engine.schemas.services.attestation import VerifyAttestationContext
+
+            batch_data.verify_attestation = VerifyAttestationContext(
+                attestation_status="failed",
+                disclosure_text=(
+                    "NOTICE: License verification unavailable. Operating in community mode "
+                    "with limited capabilities. Professional features are NOT available."
+                ),
+                disclosure_severity="warning",
+            )
+            batch_data.license_disclosure_text = batch_data.verify_attestation.disclosure_text
+            batch_data.license_disclosure_severity = batch_data.verify_attestation.disclosure_severity
+            batch_data.attestation_summary = batch_data.verify_attestation.attestation_summary
 
     logger.debug("[DEBUG DB TIMING] Batch context prefetch complete")
     return batch_data
@@ -562,6 +750,12 @@ async def build_system_snapshot_with_batch(
         adapter_channels=adapter_channels,  # Available channels by adapter
         available_tools=available_tools,  # Available tools by adapter
         context_enrichment_results=context_enrichment_results,  # Pre-run tool results for context
+        # CIRISVerify attestation context - MUST be in LLM context
+        verify_attestation=batch_data.verify_attestation,
+        # Legacy fields for backwards compatibility
+        license_disclosure_text=batch_data.license_disclosure_text,
+        license_disclosure_severity=batch_data.license_disclosure_severity,
+        attestation_summary=batch_data.attestation_summary,
         # Get localized times - FAILS FAST AND LOUD if time_service is None
         **{
             f"current_time_{key}": value

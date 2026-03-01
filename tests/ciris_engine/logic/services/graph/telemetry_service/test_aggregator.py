@@ -117,7 +117,7 @@ class TestTelemetryAggregatorCategories:
             "tools",
             "adapters",
             "components",
-            "covenant",
+            "accord",
         ]
 
         for category in expected_categories:
@@ -276,8 +276,8 @@ class TestTelemetryAggregatorFallbackMetrics:
         assert result.error_rate == 0.0
 
 
-class TestTelemetryAggregatorCovenantMetrics:
-    """Tests for covenant metrics computation."""
+class TestTelemetryAggregatorAccordMetrics:
+    """Tests for accord metrics computation."""
 
     @pytest.fixture
     def aggregator(self):
@@ -288,19 +288,19 @@ class TestTelemetryAggregatorCovenantMetrics:
             runtime=Mock(),
         )
 
-    def test_compute_covenant_metrics_empty(self, aggregator):
-        """Test computing covenant metrics with empty telemetry."""
+    def test_compute_accord_metrics_empty(self, aggregator):
+        """Test computing accord metrics with empty telemetry."""
         telemetry = {"governance": {}}
 
-        result = aggregator.compute_covenant_metrics(telemetry)
+        result = aggregator.compute_accord_metrics(telemetry)
 
         assert "wise_authority_deferrals" in result
         assert "filter_matches" in result
         assert "thoughts_processed" in result
         assert "self_observation_insights" in result
 
-    def test_compute_covenant_metrics_with_data(self, aggregator):
-        """Test computing covenant metrics with governance data."""
+    def test_compute_accord_metrics_with_data(self, aggregator):
+        """Test computing accord metrics with governance data."""
         telemetry = {
             "governance": {
                 "wise_authority": ServiceTelemetryData(
@@ -322,7 +322,7 @@ class TestTelemetryAggregatorCovenantMetrics:
             }
         }
 
-        result = aggregator.compute_covenant_metrics(telemetry)
+        result = aggregator.compute_accord_metrics(telemetry)
 
         assert result["wise_authority_deferrals"] == 10
         assert result["thoughts_processed"] == 50
@@ -371,7 +371,7 @@ class TestTelemetryAggregatorAggregates:
                     error_rate=0.04,
                 ),
             },
-            "covenant": {},  # Should be skipped
+            "accord": {},  # Should be skipped
         }
 
         result = aggregator.calculate_aggregates(telemetry)

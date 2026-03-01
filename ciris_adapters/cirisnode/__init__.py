@@ -1,15 +1,15 @@
 """
-CIRISNode adapter for WBD, benchmarks, and agent event tracking.
+CIRISNode oversight adapter — deferral routing and trace forwarding.
 
-This adapter provides tools for interacting with CIRISNode services:
-- Wisdom-Based Deferral (WBD) submission and resolution
-- HE-300 and SimpleBench benchmarks
-- Agent event tracking and observability
-
-Production deployment: https://admin.ethicsengine.org
+Registers as WISE_AUTHORITY for:
+- WBD deferral submission and resolution polling
+- Accord trace forwarding in Lens format
 """
 
+from ciris_adapters.cirisnode.adapter import CIRISNodeAdapter
 from ciris_adapters.cirisnode.client import CIRISNodeClient
-from ciris_adapters.cirisnode.services import CIRISNodeToolService
+from ciris_adapters.cirisnode.services import CIRISNodeService
 
-__all__ = ["CIRISNodeClient", "CIRISNodeToolService"]
+Adapter = CIRISNodeAdapter
+
+__all__ = ["CIRISNodeAdapter", "CIRISNodeClient", "CIRISNodeService", "Adapter"]

@@ -22,12 +22,12 @@ from rich.console import Console
 from .config import QAConfig
 
 # ============================================================================
-# Mock Logshipper Server - Receives covenant traces from agents
+# Mock Logshipper Server - Receives accord traces from agents
 # ============================================================================
 
 
 class MockLogshipperHandler(BaseHTTPRequestHandler):
-    """HTTP handler for mock logshipper that receives covenant traces."""
+    """HTTP handler for mock logshipper that receives accord traces."""
 
     # Class-level storage for received traces
     received_traces: List[Dict[str, Any]] = []
@@ -38,8 +38,8 @@ class MockLogshipperHandler(BaseHTTPRequestHandler):
         pass
 
     def do_POST(self) -> None:
-        """Handle POST requests to /v1/covenant/events or /covenant/events."""
-        if self.path in ("/v1/covenant/events", "/covenant/events"):
+        """Handle POST requests to /v1/accord/events or /accord/events."""
+        if self.path in ("/v1/accord/events", "/accord/events"):
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
 
@@ -116,7 +116,7 @@ class MockLogshipperHandler(BaseHTTPRequestHandler):
 
 
 class MockLogshipperServer:
-    """Mock logshipper server that receives and saves covenant traces."""
+    """Mock logshipper server that receives and saves accord traces."""
 
     def __init__(self, port: int = 18080, output_dir: Optional[Path] = None):
         """Initialize mock server.
@@ -493,12 +493,12 @@ class APIServerManager:
                 self.console.print("[red]❌ Failed to start PostgreSQL - cannot proceed[/red]")
                 return False
 
-        # Start mock logshipper to receive covenant traces (unless using live lens)
+        # Start mock logshipper to receive accord traces (unless using live lens)
         if self.config.live_lens:
             self.console.print(
                 "[cyan]📡 Using LIVE Lens server: https://lens.ciris-services-1.ai/lens-api/api/v1[/cyan]"
             )
-            self.console.print("[cyan]📊 Enabling covenant_metrics adapter for live trace capture[/cyan]")
+            self.console.print("[cyan]📊 Enabling accord_metrics adapter for live trace capture[/cyan]")
             self.mock_logshipper = None
         else:
             self.mock_logshipper = MockLogshipperServer(port=18080)
@@ -527,8 +527,11 @@ class APIServerManager:
 
         # Live LLM configuration (--live flag)
         if self.config.live_api_key:
+            # Override any mock LLM settings from .env
+            env["CIRIS_MOCK_LLM"] = "false"
+            env["CIRIS_LLM_PROVIDER"] = "openai"
             env["OPENAI_API_KEY"] = self.config.live_api_key
-            self.console.print(f"[cyan]🔑 Live LLM: OPENAI_API_KEY set[/cyan]")
+            self.console.print(f"[cyan]🔑 Live LLM: OPENAI_API_KEY set (overriding mock)[/cyan]")
         if self.config.live_base_url:
             env["OPENAI_API_BASE"] = self.config.live_base_url
             self.console.print(f"[cyan]🌐 Live LLM: OPENAI_API_BASE={self.config.live_base_url}[/cyan]")
@@ -536,9 +539,9 @@ class APIServerManager:
             env["OPENAI_MODEL_NAME"] = self.config.live_model
             self.console.print(f"[cyan]🤖 Live LLM: OPENAI_MODEL_NAME={self.config.live_model}[/cyan]")
 
-        # Configure covenant_metrics adapter to use mock logshipper
+        # Configure accord_metrics adapter to use mock logshipper
         if self.mock_logshipper:
-            env["CIRIS_COVENANT_METRICS_ENDPOINT"] = self.mock_logshipper.endpoint_url
+            env["CIRIS_ACCORD_METRICS_ENDPOINT"] = self.mock_logshipper.endpoint_url
 
         # Force first-run mode for SETUP module tests
         from .config import QAModule
@@ -592,21 +595,40 @@ class APIServerManager:
             env["CIRIS_SQL_EXTERNAL_DATA_CONFIG"] = str(self._sql_config_path)
             self.console.print(f"[dim]Configured SQL external data service: {self._sql_config_path}[/dim]")
 
-        # Enable covenant_metrics adapter with consent for trace capture tests
+        # HE-300 benchmark: Use the he-300-benchmark template (limits actions, no ponder)
+        if any(m == QAModule.HE300_BENCHMARK for m in self.modules):
+            env["CIRIS_TEMPLATE"] = "he-300-benchmark"
+            # CRITICAL: Enable benchmark mode (double-lock with template check in component_builder.py)
+            # This disables EpistemicHumilityConscience which triggers PONDER (not allowed in HE-300)
+            env["CIRIS_BENCHMARK_MODE"] = "true"
+            # Increase A2A timeout for live LLM (default 60s is too short)
+            a2a_timeout = "180" if self.config.live_api_key else "60"
+            env["CIRIS_A2A_TIMEOUT"] = a2a_timeout
+            self.console.print("[cyan]🧪 HE-300 Benchmark Configuration:[/cyan]")
+            self.console.print("[dim]   Template: he-300-benchmark (limited actions: speak, task_complete)[/dim]")
+            self.console.print("[dim]   Benchmark Mode: ENABLED (EpistemicHumility conscience disabled)[/dim]")
+            self.console.print(f"[dim]   A2A Timeout: {a2a_timeout}s[/dim]")
+            self.console.print(f"[dim]   Mock LLM: {self.config.mock_llm}[/dim]")
+            self.console.print(f"[dim]   Live API Key: {'Set' if self.config.live_api_key else 'Not set'}[/dim]")
+            self.console.print(f"[dim]   Live Model: {self.config.live_model or 'Not set'}[/dim]")
+            self.console.print(f"[dim]   CIRIS_MOCK_LLM env: {env.get('CIRIS_MOCK_LLM', 'Not set')}[/dim]")
+            self.console.print(f"[dim]   CIRIS_LLM_PROVIDER env: {env.get('CIRIS_LLM_PROVIDER', 'Not set')}[/dim]")
+
+        # Enable accord_metrics adapter with consent for trace capture tests
         # Also enable when --live-lens is used to send traces to production Lens
-        if any(m == QAModule.COVENANT_METRICS for m in self.modules) or self.config.live_lens:
-            # Load base covenant_metrics adapter alongside the main adapter
-            if "ciris_covenant_metrics" not in env.get("CIRIS_ADAPTER", ""):
+        if any(m == QAModule.ACCORD_METRICS for m in self.modules) or self.config.live_lens:
+            # Load base accord_metrics adapter alongside the main adapter
+            if "ciris_accord_metrics" not in env.get("CIRIS_ADAPTER", ""):
                 current_adapter = env.get("CIRIS_ADAPTER", "api")
-                env["CIRIS_ADAPTER"] = f"{current_adapter},ciris_covenant_metrics"
+                env["CIRIS_ADAPTER"] = f"{current_adapter},ciris_accord_metrics"
             # Enable consent for trace capture
-            env["CIRIS_COVENANT_METRICS_CONSENT"] = "true"
-            env["CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP"] = "2025-01-01T00:00:00Z"
+            env["CIRIS_ACCORD_METRICS_CONSENT"] = "true"
+            env["CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP"] = "2025-01-01T00:00:00Z"
             # Use short flush interval for QA (5 seconds instead of 60)
-            env["CIRIS_COVENANT_METRICS_FLUSH_INTERVAL"] = "5"
-            # Set detailed trace level (actionable identifiers) - covenant_metrics tests load generic/full
-            env["CIRIS_COVENANT_METRICS_TRACE_LEVEL"] = "detailed"
-            self.console.print("[dim]Enabling covenant_metrics adapter with consent for trace capture (detailed)[/dim]")
+            env["CIRIS_ACCORD_METRICS_FLUSH_INTERVAL"] = "5"
+            # Set detailed trace level (actionable identifiers) - accord_metrics tests load generic/full
+            env["CIRIS_ACCORD_METRICS_TRACE_LEVEL"] = "detailed"
+            self.console.print("[dim]Enabling accord_metrics adapter with consent for trace capture (detailed)[/dim]")
 
         # Load Reddit credentials if Reddit adapter is being used
         if "reddit" in self.config.adapter.lower():
@@ -635,9 +657,13 @@ class APIServerManager:
             # Open log file to capture console output (includes early startup logs)
             # Use backend-specific console log to avoid conflicts in parallel mode
             console_log_path = f"/tmp/qa_runner_console_{self.database_backend}_{self.config.api_port}.txt"
+            self.console.print(f"[dim]📝 Console log: {console_log_path}[/dim]")
+            self.console.print(f"[dim]📝 CIRIS log: logs/{self.database_backend}/latest.log[/dim]")
+            self.console.print(f"[dim]🚀 Command: {' '.join(cmd)}[/dim]")
             console_log = open(console_log_path, "w")
             self.process = subprocess.Popen(cmd, stdout=console_log, stderr=subprocess.STDOUT, env=env, cwd=Path.cwd())
             self.pid = self.process.pid
+            self.console.print(f"[dim]   PID: {self.pid}[/dim]")
             self._console_log_file = console_log  # Store reference to close later
 
             # Wait for server to be ready
@@ -727,13 +753,30 @@ class APIServerManager:
                         error_output = f.read()
                 except Exception:
                     pass
-                self.console.print(f"[red]Server process died (exit code: {exit_code})[/red]")
+                self.console.print(f"[red]❌ Server process died (exit code: {exit_code})[/red]")
+                self.console.print(f"[yellow]🔍 Troubleshooting info:[/yellow]")
+                self.console.print(f"[dim]   Console log: {console_log_path}[/dim]")
+                self.console.print(f"[dim]   CIRIS log: logs/{self.database_backend}/latest.log[/dim]")
+                self.console.print(f"[dim]   Incidents: logs/{self.database_backend}/incidents_latest.log[/dim]")
                 if error_output:
                     # Show last few lines of output
-                    lines = error_output.strip().split("\n")[-10:]
-                    self.console.print(f"[red]Last output:[/red]")
+                    lines = error_output.strip().split("\n")[-15:]
+                    self.console.print(f"[red]Last console output:[/red]")
                     for line in lines:
                         self.console.print(f"[dim]{line}[/dim]")
+                # Also check incidents log
+                incidents_log = Path(f"logs/{self.database_backend}/incidents_latest.log")
+                if incidents_log.exists():
+                    try:
+                        with open(incidents_log, "r") as f:
+                            incidents = f.read()
+                            error_lines = [l for l in incidents.split("\n") if "ERROR" in l or "CRITICAL" in l]
+                            if error_lines:
+                                self.console.print(f"[red]Errors from incidents log:[/red]")
+                                for line in error_lines[-5:]:
+                                    self.console.print(f"[dim]{line[:200]}[/dim]")
+                    except Exception:
+                        pass
                 return False
 
             # Check if server is responding

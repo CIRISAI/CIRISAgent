@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.CreditStatusData
+import ai.ciris.mobile.shared.auth.TokenManager
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.ui.screens.CreditProduct
 import androidx.lifecycle.ViewModel
@@ -37,26 +38,28 @@ class BillingViewModel(
         private const val TAG = "BillingViewModel"
         private const val BALANCE_POLL_INTERVAL_MS = 30000L // Poll every 30 seconds
 
-        // Product catalog - must match server-side configuration
-        // These are the default credit packages available
+        // Product catalog - must match store configuration
+        // Google Play: credits_100, credits_250, credits_600
+        // App Store: credits_100_v1, credits_250_v1, credits_600_v1
+        // Pricing: $0.10/credit
         val DEFAULT_PRODUCTS = listOf(
             CreditProduct(
                 productId = "credits_100",
-                credits = 100,
-                price = "$0.99",
-                description = "Starter pack - great for trying out CIRIS"
+                credits = 99,
+                price = "$9.99",
+                description = "99 credits for CIRIS Agent AI interactions ($0.10/credit)"
             ),
             CreditProduct(
                 productId = "credits_250",
-                credits = 250,
-                price = "$1.99",
-                description = "Standard pack - best value for regular use"
+                credits = 249,
+                price = "$24.99",
+                description = "249 credits for CIRIS Agent AI interactions ($0.10/credit)"
             ),
             CreditProduct(
                 productId = "credits_600",
-                credits = 600,
-                price = "$3.99",
-                description = "Power user pack - maximum savings"
+                credits = 599,
+                price = "$59.99",
+                description = "599 credits for CIRIS Agent AI interactions ($0.10/credit)"
             )
         )
     }
@@ -161,6 +164,18 @@ class BillingViewModel(
 
             } catch (e: Exception) {
                 logException(method, e)
+
+                // Check for auth errors (401/503) and trigger token refresh
+                val errorMessage = e.message ?: ""
+                val isAuthError = errorMessage.contains("401") ||
+                    errorMessage.contains("503") ||
+                    errorMessage.contains("Unauthorized", ignoreCase = true)
+
+                if (isAuthError) {
+                    logWarn(method, "Auth error detected, triggering token refresh")
+                    TokenManager.shared?.on401Error()
+                }
+
                 handleBalanceError("Failed to load balance: ${e.message}")
             } finally {
                 _isLoading.value = false
@@ -244,6 +259,17 @@ class BillingViewModel(
             logDebug(method, "Silent balance update: ${_currentBalance.value}")
         } catch (e: Exception) {
             logWarn(method, "Silent balance load failed: ${e.message}")
+
+            // Check for auth errors (401/503) and trigger token refresh
+            val errorMessage = e.message ?: ""
+            val isAuthError = errorMessage.contains("401") ||
+                errorMessage.contains("503") ||
+                errorMessage.contains("Unauthorized", ignoreCase = true)
+
+            if (isAuthError) {
+                logWarn(method, "Auth error in silent poll, triggering token refresh")
+                TokenManager.shared?.on401Error()
+            }
             // Don't update error state for silent polls
         }
     }

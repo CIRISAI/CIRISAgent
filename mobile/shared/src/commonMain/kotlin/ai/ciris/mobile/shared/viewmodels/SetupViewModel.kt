@@ -1,9 +1,13 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.models.*
+import ai.ciris.mobile.shared.platform.PlatformLogger
+import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+
+private const val TAG = "SetupViewModel"
 
 /**
  * ViewModel for Setup Wizard state management.
@@ -21,8 +25,9 @@ import kotlinx.coroutines.flow.asStateFlow
  * - LLM validation (test call before setup completion)
  * - Auto-generated admin password (users don't set this)
  * - Google OAuth support for CIRIS proxy mode
+ * - Survives configuration changes and app backgrounding (extends ViewModel)
  */
-class SetupViewModel {
+class SetupViewModel : ViewModel() {
 
     private val _state = MutableStateFlow(SetupFormState())
     val state: StateFlow<SetupFormState> = _state.asStateFlow()
@@ -48,11 +53,11 @@ class SetupViewModel {
             googleIdToken = idToken,
             googleEmail = email,
             googleUserId = userId,
-            // Default to CIRIS proxy if Google auth available and no mode selected yet
-            setupMode = if (isAuth && _state.value.setupMode == null) {
-                SetupMode.CIRIS_PROXY
-            } else {
-                _state.value.setupMode
+            // Default mode: CIRIS_PROXY for Google auth, BYOK for local credentials
+            setupMode = when {
+                _state.value.setupMode != null -> _state.value.setupMode
+                isAuth -> SetupMode.CIRIS_PROXY
+                else -> SetupMode.BYOK
             }
         )
     }
@@ -139,12 +144,25 @@ class SetupViewModel {
             return false
         }
 
-        val nextStep = when (currentState.currentStep) {
-            SetupStep.WELCOME -> SetupStep.LLM_CONFIGURATION
-            SetupStep.LLM_CONFIGURATION -> SetupStep.OPTIONAL_FEATURES
-            SetupStep.OPTIONAL_FEATURES -> SetupStep.ACCOUNT_AND_CONFIRMATION
-            SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.COMPLETE
-            SetupStep.COMPLETE -> SetupStep.COMPLETE // Stay at complete
+        val nextStep = if (currentState.isNodeFlow) {
+            // Node flow: WELCOME → NODE_AUTH → LLM → OPTIONAL_FEATURES → COMPLETE
+            // (CIRISVerify is always bundled, no install step needed)
+            when (currentState.currentStep) {
+                SetupStep.WELCOME -> SetupStep.NODE_AUTH
+                SetupStep.NODE_AUTH -> SetupStep.LLM_CONFIGURATION
+                SetupStep.LLM_CONFIGURATION -> SetupStep.OPTIONAL_FEATURES
+                SetupStep.OPTIONAL_FEATURES -> SetupStep.COMPLETE
+                else -> SetupStep.COMPLETE
+            }
+        } else {
+            // Normal flow: WELCOME → LLM → OPTIONAL_FEATURES → ACCOUNT → COMPLETE
+            when (currentState.currentStep) {
+                SetupStep.WELCOME -> SetupStep.LLM_CONFIGURATION
+                SetupStep.LLM_CONFIGURATION -> SetupStep.OPTIONAL_FEATURES
+                SetupStep.OPTIONAL_FEATURES -> SetupStep.ACCOUNT_AND_CONFIRMATION
+                SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.COMPLETE
+                else -> SetupStep.COMPLETE
+            }
         }
 
         _state.value = currentState.copy(currentStep = nextStep)
@@ -153,19 +171,52 @@ class SetupViewModel {
 
     /**
      * Move to the previous setup step.
+     *
+     * IMPORTANT: When going back from NODE_AUTH to WELCOME, we must reset isNodeFlow
+     * so that the user can choose to NOT register this time.
      */
     fun previousStep() {
         val currentState = _state.value
 
-        val prevStep = when (currentState.currentStep) {
-            SetupStep.WELCOME -> SetupStep.WELCOME // Stay at welcome
-            SetupStep.LLM_CONFIGURATION -> SetupStep.WELCOME
-            SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
-            SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.OPTIONAL_FEATURES
-            SetupStep.COMPLETE -> SetupStep.ACCOUNT_AND_CONFIRMATION
+        val prevStep = if (currentState.isNodeFlow) {
+            // Node flow: COMPLETE → OPTIONAL_FEATURES → LLM → NODE_AUTH → WELCOME
+            when (currentState.currentStep) {
+                SetupStep.WELCOME -> SetupStep.WELCOME
+                SetupStep.NODE_AUTH -> SetupStep.WELCOME
+                SetupStep.LLM_CONFIGURATION -> SetupStep.NODE_AUTH
+                SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
+                SetupStep.COMPLETE -> SetupStep.OPTIONAL_FEATURES
+                else -> SetupStep.WELCOME
+            }
+        } else {
+            // Normal flow
+            when (currentState.currentStep) {
+                SetupStep.WELCOME -> SetupStep.WELCOME
+                SetupStep.LLM_CONFIGURATION -> SetupStep.WELCOME
+                SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
+                SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.OPTIONAL_FEATURES
+                SetupStep.COMPLETE -> SetupStep.ACCOUNT_AND_CONFIRMATION
+                else -> SetupStep.WELCOME
+            }
         }
 
-        _state.value = currentState.copy(currentStep = prevStep)
+        // When going back from NODE_AUTH to WELCOME, reset isNodeFlow so user can
+        // choose NOT to register this time (fixes bug where back->continue still went to NODE_AUTH)
+        val shouldResetNodeFlow = currentState.isNodeFlow &&
+            currentState.currentStep == SetupStep.NODE_AUTH &&
+            prevStep == SetupStep.WELCOME
+
+        _state.value = currentState.copy(
+            currentStep = prevStep,
+            isNodeFlow = if (shouldResetNodeFlow) false else currentState.isNodeFlow
+        )
+
+        // Also reset device auth state when backing out of NODE_AUTH to clear any
+        // stale/error/timeout state. This ensures a clean slate for retry.
+        if (shouldResetNodeFlow) {
+            PlatformLogger.i(TAG, "previousStep: Backing out of NODE_AUTH, resetting device auth state")
+            resetDeviceAuth()
+        }
     }
 
     // ========== Covenant Metrics Opt-In ==========
@@ -290,6 +341,183 @@ class SetupViewModel {
         _state.value = _state.value.copy(currentStep = SetupStep.WELCOME)
     }
 
+    // ========== Connect to Node (Device Auth Flow) ==========
+
+    /**
+     * Update the node URL for the Connect to Node flow.
+     */
+    fun updateNodeUrl(url: String) {
+        _state.value = _state.value.copy(
+            deviceAuth = _state.value.deviceAuth.copy(nodeUrl = url)
+        )
+    }
+
+    /**
+     * Enter the node flow from the WELCOME step.
+     * Sets isNodeFlow=true and transitions to NODE_AUTH step.
+     */
+    fun enterNodeFlow() {
+        _state.value = _state.value.copy(
+            isNodeFlow = true,
+            currentStep = SetupStep.NODE_AUTH
+        )
+    }
+
+    /**
+     * Initiate device auth with the target CIRISNode.
+     * Calls POST /v1/setup/connect-node which:
+     * 1. Fetches node manifest
+     * 2. Initiates device auth with Portal
+     * 3. Returns verification URL for user
+     *
+     * @param connectFunc Platform-specific HTTP call to POST /v1/setup/connect-node
+     */
+    suspend fun startNodeConnection(
+        connectFunc: suspend (nodeUrl: String) -> ConnectNodeResult
+    ) {
+        val nodeUrl = _state.value.deviceAuth.nodeUrl
+        if (nodeUrl.isBlank()) return
+
+        _state.value = _state.value.copy(
+            deviceAuth = _state.value.deviceAuth.copy(
+                status = DeviceAuthStatus.CONNECTING,
+                error = null
+            )
+        )
+
+        try {
+            val result = connectFunc(nodeUrl)
+            _state.value = _state.value.copy(
+                deviceAuth = _state.value.deviceAuth.copy(
+                    status = DeviceAuthStatus.WAITING,
+                    verificationUri = result.verificationUriComplete,
+                    deviceCode = result.deviceCode,
+                    userCode = result.userCode,
+                    portalUrl = result.portalUrl,
+                    expiresIn = result.expiresIn,
+                    interval = result.interval
+                )
+            )
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(
+                deviceAuth = _state.value.deviceAuth.copy(
+                    status = DeviceAuthStatus.ERROR,
+                    error = e.message ?: "Connection failed"
+                )
+            )
+        }
+    }
+
+    /**
+     * Poll for device auth completion.
+     * Called periodically while status == WAITING.
+     *
+     * @param pollFunc Platform-specific HTTP call to GET /v1/setup/connect-node/status
+     */
+    suspend fun pollNodeAuthStatus(
+        pollFunc: suspend (deviceCode: String, portalUrl: String) -> NodeAuthPollResult
+    ) {
+        val auth = _state.value.deviceAuth
+        if (auth.status != DeviceAuthStatus.WAITING) return
+
+        try {
+            val result = pollFunc(auth.deviceCode, auth.portalUrl)
+            when (result.status) {
+                "pending" -> { /* Keep polling */ }
+                "complete" -> {
+                    PlatformLogger.i(TAG, "pollNodeAuthStatus: COMPLETE - keyId=${result.keyId}, signingKeyB64=${result.signingKeyB64?.take(20)}...")
+                    PlatformLogger.i(TAG, "pollNodeAuthStatus: template=${result.template}, adapters=${result.adapters}")
+                    _state.value = _state.value.copy(
+                        deviceAuth = auth.copy(
+                            status = DeviceAuthStatus.COMPLETE,
+                            provisionedTemplate = result.template,
+                            provisionedAdapters = result.adapters ?: emptyList(),
+                            signingKeyB64 = result.signingKeyB64,
+                            keyId = result.keyId,
+                            orgId = result.orgId,
+                            stewardshipTier = result.stewardshipTier
+                        ),
+                        // Lock template to provisioned value in node flow
+                        selectedTemplateId = result.template ?: "default",
+                        enabledAdapterIds = (result.adapters ?: emptyList()).toSet() + "api"
+                    )
+                }
+                else -> {
+                    _state.value = _state.value.copy(
+                        deviceAuth = auth.copy(
+                            status = DeviceAuthStatus.ERROR,
+                            error = result.error ?: "Authorization failed"
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(
+                deviceAuth = auth.copy(
+                    status = DeviceAuthStatus.ERROR,
+                    error = e.message ?: "Polling failed"
+                )
+            )
+        }
+    }
+
+    // ========== CIRISVerify Setup ==========
+
+    /**
+     * Toggle CIRISVerify installation.
+     */
+    fun setVerifyEnabled(enabled: Boolean) {
+        _state.value = _state.value.copy(
+            verifySetup = _state.value.verifySetup.copy(enabled = enabled)
+        )
+    }
+
+    /**
+     * Toggle hardware requirement for CIRISVerify.
+     */
+    fun setVerifyRequireHardware(require: Boolean) {
+        _state.value = _state.value.copy(
+            verifySetup = _state.value.verifySetup.copy(requireHardware = require)
+        )
+    }
+
+    /**
+     * Download and configure CIRISVerify binary.
+     * TODO: Implement actual binary download from CIRIS CDN or GitHub releases.
+     * MVP: Stub that sets downloaded=true for UI flow testing.
+     *
+     * @param downloadFunc Platform-specific download function
+     */
+    suspend fun downloadVerifyBinary(
+        downloadFunc: suspend () -> VerifyDownloadResult
+    ) {
+        _state.value = _state.value.copy(
+            verifySetup = _state.value.verifySetup.copy(
+                downloading = true,
+                error = null
+            )
+        )
+
+        try {
+            val result = downloadFunc()
+            _state.value = _state.value.copy(
+                verifySetup = _state.value.verifySetup.copy(
+                    downloading = false,
+                    downloaded = true,
+                    binaryPath = result.binaryPath,
+                    version = result.version
+                )
+            )
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(
+                verifySetup = _state.value.verifySetup.copy(
+                    downloading = false,
+                    error = e.message ?: "Download failed"
+                )
+            )
+        }
+    }
+
     // ========== Validation ==========
     // Source: SetupWizardActivity.kt:209-286
 
@@ -353,17 +581,21 @@ class SetupViewModel {
         val currentState = _state.value
         val useCirisProxy = currentState.useCirisProxy()
 
+        // Debug logging for node flow
+        PlatformLogger.i(TAG, "buildSetupRequest: isNodeFlow=${currentState.isNodeFlow}, deviceAuth.status=${currentState.deviceAuth.status}")
+        PlatformLogger.i(TAG, "buildSetupRequest: deviceAuth.keyId=${currentState.deviceAuth.keyId}, signingKeyB64=${currentState.deviceAuth.signingKeyB64?.take(20)}...")
+
         // Auto-generate admin password (32 chars)
         // Source: SetupViewModel.kt:141-146
         val adminPassword = generateAdminPassword()
 
-        // Build enabled adapters list from user selections + covenant metrics
+        // Build enabled adapters list from user selections + accord metrics
         val enabledAdapters = buildList {
             // Add all user-selected adapters (api is always in the set)
             addAll(currentState.enabledAdapterIds)
-            // Add covenant metrics adapter if consented
+            // Add accord metrics adapter if consented
             if (currentState.covenantMetricsConsent) {
-                add("ciris_covenant_metrics")
+                add("ciris_accord_metrics")
             }
         }
 
@@ -375,6 +607,25 @@ class SetupViewModel {
             )
         } else {
             emptyMap()
+        }
+
+        // Node flow fields (if provisioned via Portal)
+        val nodeFlowData = if (currentState.isNodeFlow && currentState.deviceAuth.status == DeviceAuthStatus.COMPLETE) {
+            val da = currentState.deviceAuth
+            PlatformLogger.i(TAG, "Node flow COMPLETE - extracting NodeFlowData: keyId=${da.keyId}, signingKeyB64=${da.signingKeyB64?.take(20)}...")
+            NodeFlowData(
+                nodeUrl = da.nodeUrl.takeIf { it.isNotEmpty() },
+                identityTemplate = da.provisionedTemplate,
+                stewardshipTier = da.stewardshipTier,
+                approvedAdapters = da.provisionedAdapters.takeIf { it.isNotEmpty() },
+                orgId = da.orgId,
+                signingKeyProvisioned = da.signingKeyB64 != null,
+                provisionedSigningKeyB64 = da.signingKeyB64,
+                keyId = da.keyId
+            )
+        } else {
+            PlatformLogger.w(TAG, "Node flow NOT complete or not in node flow - nodeFlowData will be null (isNodeFlow=${currentState.isNodeFlow}, status=${currentState.deviceAuth.status})")
+            null
         }
 
         return if (useCirisProxy) {
@@ -391,7 +642,7 @@ class SetupViewModel {
                 backup_llm_model = "default",
 
                 // Agent configuration
-                template_id = currentState.selectedTemplateId,
+                template_id = nodeFlowData?.identityTemplate ?: currentState.selectedTemplateId,
                 enabled_adapters = enabledAdapters,
                 adapter_config = adapterConfig,
                 agent_port = 8080,
@@ -404,7 +655,17 @@ class SetupViewModel {
                 admin_password = null,
                 oauth_provider = "google",
                 oauth_external_id = currentState.googleUserId,
-                oauth_email = currentState.googleEmail
+                oauth_email = currentState.googleEmail,
+
+                // Node flow fields
+                node_url = nodeFlowData?.nodeUrl,
+                identity_template = nodeFlowData?.identityTemplate,
+                stewardship_tier = nodeFlowData?.stewardshipTier,
+                approved_adapters = nodeFlowData?.approvedAdapters,
+                org_id = nodeFlowData?.orgId,
+                signing_key_provisioned = nodeFlowData?.signingKeyProvisioned ?: false,  // Must be boolean, not null
+                provisioned_signing_key_b64 = nodeFlowData?.provisionedSigningKeyB64,
+                signing_key_id = nodeFlowData?.keyId
             )
         } else {
             // BYOK mode - use user-provided API key
@@ -428,7 +689,7 @@ class SetupViewModel {
                 llm_model = currentState.llmModel.takeIf { it.isNotEmpty() },
 
                 // Agent configuration
-                template_id = currentState.selectedTemplateId,
+                template_id = nodeFlowData?.identityTemplate ?: currentState.selectedTemplateId,
                 enabled_adapters = enabledAdapters,
                 adapter_config = adapterConfig,
                 agent_port = 8080,
@@ -438,10 +699,34 @@ class SetupViewModel {
 
                 // Local user account
                 admin_username = currentState.username.ifEmpty { "admin" },
-                admin_password = currentState.userPassword
+                admin_password = currentState.userPassword,
+
+                // Node flow fields
+                node_url = nodeFlowData?.nodeUrl,
+                identity_template = nodeFlowData?.identityTemplate,
+                stewardship_tier = nodeFlowData?.stewardshipTier,
+                approved_adapters = nodeFlowData?.approvedAdapters,
+                org_id = nodeFlowData?.orgId,
+                signing_key_provisioned = nodeFlowData?.signingKeyProvisioned ?: false,  // Must be boolean, not null
+                provisioned_signing_key_b64 = nodeFlowData?.provisionedSigningKeyB64,
+                signing_key_id = nodeFlowData?.keyId
             )
         }
     }
+
+    /**
+     * Helper data class for node flow fields.
+     */
+    private data class NodeFlowData(
+        val nodeUrl: String?,
+        val identityTemplate: String?,
+        val stewardshipTier: Int?,
+        val approvedAdapters: List<String>?,
+        val orgId: String?,
+        val signingKeyProvisioned: Boolean?,
+        val provisionedSigningKeyB64: String?,
+        val keyId: String?
+    )
 
     /**
      * Submit setup completion request.
@@ -456,6 +741,8 @@ class SetupViewModel {
         _state.value = _state.value.copy(isSubmitting = true, submissionError = null)
 
         val request = buildSetupRequest()
+        PlatformLogger.i(TAG, "completeSetup: signing_key_id=${request.signing_key_id}, signing_key_provisioned=${request.signing_key_provisioned}")
+        PlatformLogger.i(TAG, "completeSetup: provisioned_signing_key_b64=${request.provisioned_signing_key_b64?.take(20)}...")
         val result = submitFunc(request)
 
         _state.value = _state.value.copy(
@@ -485,5 +772,17 @@ class SetupViewModel {
      */
     fun resetState() {
         _state.value = SetupFormState()
+    }
+
+    /**
+     * Reset device auth state only.
+     * Called when user backs out of NODE_AUTH step to clear any stale/error state.
+     * This allows the user to retry the node flow with a clean slate.
+     */
+    fun resetDeviceAuth() {
+        PlatformLogger.i(TAG, "resetDeviceAuth: Clearing device auth state")
+        _state.value = _state.value.copy(
+            deviceAuth = DeviceAuthState()  // Reset to default empty state
+        )
     }
 }

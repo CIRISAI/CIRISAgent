@@ -664,32 +664,59 @@ def get_active_task_for_channel(
         return None
 
 
+def _is_committed_action(action_type: str) -> bool:
+    """Check if an action type represents a committed (non-PONDER) action."""
+    return action_type != "PONDER" and action_type != HandlerActionType.PONDER.value
+
+
+def _task_has_committed_action(task_id: str, occurrence_id: str, db_path: Optional[str]) -> bool:
+    """Check if task has any completed thoughts with non-PONDER action."""
+    from ciris_engine.logic.persistence.models.thoughts import get_thoughts_by_task_id
+
+    thoughts = get_thoughts_by_task_id(task_id, occurrence_id, db_path)
+    for thought in thoughts:
+        if thought.status != ThoughtStatus.COMPLETED:
+            continue
+        if thought.final_action and _is_committed_action(thought.final_action.action_type):
+            logger.info(
+                f"Task {task_id} already committed to action {thought.final_action.action_type}, "
+                "cannot set updated_info_available flag"
+            )
+            return True
+    return False
+
+
+def _serialize_image(img: Any) -> Any:
+    """Serialize an image to dict format."""
+    if hasattr(img, "model_dump"):
+        return img.model_dump()
+    return img if isinstance(img, dict) else {}
+
+
+def _prepare_images_json(task: Task, images: List[Any]) -> tuple[str, int]:
+    """Prepare combined images JSON from existing and new images.
+
+    Returns:
+        Tuple of (images_json, new_images_count)
+    """
+    existing_images = task.images if task else []
+    new_images_data = [_serialize_image(img) for img in images]
+    combined_images = [_serialize_image(img) for img in existing_images] + new_images_data
+    return json.dumps(combined_images), len(new_images_data)
+
+
 def set_task_updated_info_flag(
     task_id: str,
     updated_content: str,
     occurrence_id: str,
     time_service: TimeServiceProtocol,
     db_path: Optional[str] = None,
+    images: Optional[List[Any]] = None,
 ) -> bool:
     """Set the updated_info_available flag on a task with new observation content.
 
-    This function checks if the task has already passed conscience checks. If the task
-    has passed conscience with any action OTHER than PONDER, it returns False (too late).
-    If the task hasn't passed conscience yet, or passed with PONDER, it sets the flag
-    and returns True.
-
-    Args:
-        task_id: The task to update
-        updated_content: The new observation content
-        occurrence_id: Runtime occurrence ID for safety check
-        time_service: Time service for timestamps
-        db_path: Optional database path
-
-    Returns:
-        True if flag was set successfully, False if task already committed to action or
-        doesn't belong to this occurrence
+    Returns False if task already committed to non-PONDER action or doesn't belong to occurrence.
     """
-    # First, verify the task belongs to this occurrence
     task = get_task_by_id(task_id, occurrence_id, db_path)
     if not task or task.agent_occurrence_id != occurrence_id:
         logger.warning(
@@ -697,34 +724,33 @@ def set_task_updated_info_flag(
         )
         return False
 
-    # Check if task has any completed thoughts with non-PONDER action
-    from ciris_engine.logic.persistence.models.thoughts import get_thoughts_by_task_id
+    if _task_has_committed_action(task_id, occurrence_id, db_path):
+        return False
 
-    thoughts = get_thoughts_by_task_id(task_id, occurrence_id, db_path)
+    # Build SQL and params based on whether we have images
+    now_iso = time_service.now_iso()
+    if images:
+        images_json, new_count = _prepare_images_json(task, images)
+        sql = """
+            UPDATE tasks
+            SET updated_info_available = 1,
+                updated_info_content = ?,
+                images_json = ?,
+                updated_at = ?
+            WHERE task_id = ? AND agent_occurrence_id = ?
+        """
+        params: tuple[Any, ...] = (updated_content, images_json, now_iso, task_id, occurrence_id)
+        logger.info(f"[VISION] Appending {new_count} images to task {task_id}")
+    else:
+        sql = """
+            UPDATE tasks
+            SET updated_info_available = 1,
+                updated_info_content = ?,
+                updated_at = ?
+            WHERE task_id = ? AND agent_occurrence_id = ?
+        """
+        params = (updated_content, now_iso, task_id, occurrence_id)
 
-    # Check if any thought is completed with a non-PONDER action
-    for thought in thoughts:
-        if thought.status == ThoughtStatus.COMPLETED:  # Thoughts use ThoughtStatus enum
-            # Check if final_action exists and is not PONDER
-            if thought.final_action:
-                action_type = thought.final_action.action_type
-                # If action is anything other than PONDER, it's too late
-                if action_type != "PONDER" and action_type != HandlerActionType.PONDER.value:
-                    logger.info(
-                        f"Task {task_id} already committed to action {action_type}, "
-                        f"cannot set updated_info_available flag"
-                    )
-                    return False
-
-    # Safe to update - either no thoughts completed yet, or only PONDER actions
-    sql = """
-        UPDATE tasks
-        SET updated_info_available = 1,
-            updated_info_content = ?,
-            updated_at = ?
-        WHERE task_id = ? AND agent_occurrence_id = ?
-    """
-    params = (updated_content, time_service.now_iso(), task_id, occurrence_id)
     try:
         with get_db_connection(db_path) as conn:
             cursor = conn.execute(sql, params)

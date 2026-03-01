@@ -230,6 +230,7 @@ async def register_sql_connector(
                     "connector_id": connector_id,
                     "connection_string": connection_string,
                     "dialect": db_type,
+                    "privacy_schema": request.config.get("privacy_schema"),
                 },
             )
             if init_result.success:

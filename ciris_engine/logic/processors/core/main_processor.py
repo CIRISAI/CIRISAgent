@@ -165,7 +165,6 @@ class AgentProcessor:
             service_registry=service_registry_typed,
             identity_manager=identity_manager_typed,
             startup_channel_id=startup_channel_id,
-            cirisnode_url="https://localhost:8001",  # Default since cirisnode config not in essential
             agent_occurrence_id=agent_occurrence_id,
         )
 
@@ -1179,7 +1178,7 @@ class AgentProcessor:
         if self._should_stop_after_target_rounds(round_count, num_rounds):
             return round_count, consecutive_errors, True
 
-        # COVENANT COMPLIANCE: Check pause state before processing
+        # ACCORD COMPLIANCE: Check pause state before processing
         if not await self._check_pause_state():
             return round_count, consecutive_errors, False
 

@@ -1,5 +1,8 @@
 package ai.ciris.mobile.shared.platform
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 
@@ -30,4 +33,31 @@ actual fun getDeviceDebugInfo(): String {
         appendLine("CPU: $cpuAbi${if (is32Bit) " (32-bit)" else " (64-bit)"}")
         appendLine("All ABIs: $allAbis")
     }.trim()
+}
+
+/** Stored application context for URL opening. */
+private var urlOpenerContext: Context? = null
+
+/** Call from Application.onCreate() or MainActivity.onCreate(). */
+fun initUrlOpener(context: Context) {
+    urlOpenerContext = context.applicationContext
+}
+
+/**
+ * Android implementation: open URL via Intent.ACTION_VIEW.
+ */
+actual fun openUrlInBrowser(url: String) {
+    val ctx = urlOpenerContext
+    if (ctx == null) {
+        Log.e("Platform", "openUrlInBrowser: context not initialized, call initUrlOpener() first")
+        return
+    }
+    try {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        ctx.startActivity(intent)
+    } catch (e: Exception) {
+        Log.e("Platform", "Failed to open URL: $url", e)
+    }
 }

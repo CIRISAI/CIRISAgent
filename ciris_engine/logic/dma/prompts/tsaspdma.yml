@@ -5,8 +5,8 @@ component_name: tsaspdma
 description: "Tool-Specific ASPDMA - reviews tool selection with full documentation"
 version: "1.0"
 
-# Covenant is always included in DMA prompts
-covenant_header: true
+# Accord is always included in DMA prompts
+accord_header: true
 
 system_guidance_header: |
   === TOOL-SPECIFIC ACTION SELECTION (TSASPDMA) ===

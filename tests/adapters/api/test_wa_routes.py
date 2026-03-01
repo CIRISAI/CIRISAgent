@@ -8,11 +8,7 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.app import create_app
-from ciris_engine.logic.adapters.api.dependencies.auth import (
-    AuthContext,
-    require_authority,
-    require_observer,
-)
+from ciris_engine.logic.adapters.api.dependencies.auth import AuthContext, require_authority, require_observer
 from ciris_engine.logic.adapters.api.routes.wa import (
     create_wa_success_response,
     get_wa_service,
@@ -21,7 +17,6 @@ from ciris_engine.logic.adapters.api.routes.wa import (
 )
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.api.wa import WAStatusResponse
-
 
 # ============================================================================
 # Fixtures

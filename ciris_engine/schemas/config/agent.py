@@ -11,6 +11,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
 from ciris_engine.schemas.config.tickets import TicketsConfig
 
+# Field description constants to avoid duplication
+_DESC_SYSTEM_PROMPT = "Override system prompt"
+_DESC_USER_PROMPT_TEMPLATE = "Override user prompt template"
+_DESC_ACCORD_HEADER = "Accord mode: 'full' (default), 'compressed' (for testing/benchmarking), or 'none'"
+
 
 class StewardshipCalculation(BaseModel):
     """Schema for the Stewardship Tier calculation details."""
@@ -30,7 +35,7 @@ class CreatorLedgerEntry(BaseModel):
 
     creator_id: str = Field(..., description="Identifier for the creator or creating team")
     creation_timestamp: str = Field(..., description="ISO 8601 timestamp of the creation entry")
-    covenant_version: str = Field(..., description="Version of the Covenant applied")
+    accord_version: str = Field(..., description="Version of the Accord applied")
     book_vi_compliance_check: str = Field(..., description="Status of the Book VI compliance check")
     stewardship_tier_calculation: StewardshipCalculation = Field(..., description="Details of the ST calculation")
     public_key_fingerprint: str = Field(..., description="Fingerprint of the public key used for signing")
@@ -72,6 +77,7 @@ class AgentTemplate(BaseModel):
     # DMA overrides
     dsdma_kwargs: Optional["DSDMAConfiguration"] = Field(None, description="Domain-specific DMA configuration")
     csdma_overrides: Optional["CSDMAOverrides"] = Field(None, description="Common sense DMA prompt overrides")
+    pdma_overrides: Optional["PDMAOverrides"] = Field(None, description="Ethical PDMA prompt overrides")
     action_selection_pdma_overrides: Optional["ActionSelectionOverrides"] = Field(
         None, description="Action selection prompt overrides"
     )
@@ -92,7 +98,7 @@ class AgentTemplate(BaseModel):
         description="Ticket system configuration with SOPs (DSAR always present)",
     )
 
-    # Cognitive state transition configuration (Covenant Sections V, VIII)
+    # Cognitive state transition configuration (Accord Sections V, VIII)
     cognitive_state_behaviors: Optional["CognitiveStateBehaviors"] = Field(
         None,
         description="Template-driven cognitive state transition configuration",
@@ -129,6 +135,16 @@ class AgentTemplate(BaseModel):
         if isinstance(v, dict):
             return CSDMAOverrides(**v)
         return v  # type: ignore[no-any-return]  # Already a CSDMAOverrides instance
+
+    @field_validator("pdma_overrides", mode="before")
+    @classmethod
+    def convert_pdma_overrides(cls, v: Any) -> Optional["PDMAOverrides"]:
+        """Convert dict to PDMAOverrides if needed."""
+        if v is None:
+            return None
+        if isinstance(v, dict):
+            return PDMAOverrides(**v)
+        return v  # type: ignore[no-any-return]  # Already a PDMAOverrides instance
 
     @field_validator("action_selection_pdma_overrides", mode="before")
     @classmethod
@@ -213,10 +229,10 @@ class AgentTemplate(BaseModel):
         """Convert dict to CognitiveStateBehaviors if needed.
 
         If not provided, returns default CognitiveStateBehaviors which preserves
-        full Covenant compliance (wakeup enabled, always_consent shutdown).
+        full Accord compliance (wakeup enabled, always_consent shutdown).
         """
         if v is None:
-            # Default: full Covenant compliance
+            # Default: full Accord compliance
             return CognitiveStateBehaviors()
 
         if isinstance(v, dict):
@@ -238,17 +254,28 @@ class DSDMAConfiguration(BaseModel):
 class CSDMAOverrides(BaseModel):
     """Common Sense DMA prompt overrides."""
 
-    system_prompt: Optional[str] = Field(None, description="Override system prompt")
-    user_prompt_template: Optional[str] = Field(None, description="Override user prompt template")
+    system_prompt: Optional[str] = Field(None, description=_DESC_SYSTEM_PROMPT)
+    user_prompt_template: Optional[str] = Field(None, description=_DESC_USER_PROMPT_TEMPLATE)
+    accord_header: Optional[str] = Field(None, description=_DESC_ACCORD_HEADER)
+    model_config = ConfigDict(defer_build=True, extra="forbid")  # Strict validation
+
+
+class PDMAOverrides(BaseModel):
+    """Ethical PDMA prompt overrides."""
+
+    system_prompt: Optional[str] = Field(None, description=_DESC_SYSTEM_PROMPT)
+    user_prompt_template: Optional[str] = Field(None, description=_DESC_USER_PROMPT_TEMPLATE)
+    accord_header: Optional[str] = Field(None, description=_DESC_ACCORD_HEADER)
     model_config = ConfigDict(defer_build=True, extra="forbid")  # Strict validation
 
 
 class ActionSelectionOverrides(BaseModel):
     """Action selection prompt overrides."""
 
-    system_prompt: Optional[str] = Field(None, description="Override system prompt")
-    user_prompt_template: Optional[str] = Field(None, description="Override user prompt template")
+    system_prompt: Optional[str] = Field(None, description=_DESC_SYSTEM_PROMPT)
+    user_prompt_template: Optional[str] = Field(None, description=_DESC_USER_PROMPT_TEMPLATE)
     action_descriptions: Optional[Dict[str, str]] = Field(None, description="Override action descriptions")
+    accord_header: Optional[str] = Field(None, description=_DESC_ACCORD_HEADER)
     model_config = ConfigDict(defer_build=True, extra="allow")  # Allow for additional, template-specific guidance
 
 

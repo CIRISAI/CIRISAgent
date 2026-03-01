@@ -1,7 +1,7 @@
 """
 Tests for batch context builder - ensuring type safety and ethical safeguards.
 
-These tests align with CIRIS covenant principles:
+These tests align with CIRIS accord principles:
 - Type safety (no Dict[str, Any])
 - Resilience (error handling)
 - Resource awareness (critical alerts)
@@ -52,7 +52,7 @@ class TestBatchContextData:
     """Test BatchContextData type safety and initialization."""
 
     def test_init_with_proper_types(self):
-        """Verify all fields initialize with correct types per covenant type safety."""
+        """Verify all fields initialize with correct types per accord type safety."""
         from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
 
         batch_data = BatchContextData()
@@ -78,7 +78,7 @@ class TestBatchContextData:
         assert batch_data.shutdown_context is None or isinstance(batch_data.shutdown_context, ShutdownContext)
 
     def test_type_safety_enforcement(self):
-        """Test that fields enforce type constraints per covenant."""
+        """Test that fields enforce type constraints per accord."""
         batch_data = BatchContextData()
 
         # Test agent_identity only accepts typed values
@@ -110,7 +110,7 @@ class TestBatchContextData:
             assert isinstance(value, str)
 
     def test_resource_alerts_critical_handling(self):
-        """Test resource alerts follow covenant's harm prevention principle."""
+        """Test resource alerts follow accord's harm prevention principle."""
         batch_data = BatchContextData()
 
         # Critical alerts should be clear and actionable
@@ -216,7 +216,7 @@ class TestPrefetchBatchContext:
                 "trust_level": 0.85,
                 "permitted_actions": ["speak", "observe", "memorize", "recall"],
                 "restricted_capabilities": ["tool", "forget"],
-                "covenant_version": "1.0b",
+                "accord_version": "1.0b",
             },
         )
         mock_memory.recall.return_value = [identity_node]
@@ -248,7 +248,7 @@ class TestPrefetchBatchContext:
             assert batch_data.identity_purpose is None
 
     async def test_prefetch_critical_resource_alerts(self):
-        """Test critical resource monitoring per covenant harm prevention."""
+        """Test critical resource monitoring per accord harm prevention."""
         mock_monitor = MagicMock()
         mock_snapshot = MagicMock()
 

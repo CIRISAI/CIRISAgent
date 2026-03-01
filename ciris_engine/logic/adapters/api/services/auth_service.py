@@ -148,6 +148,26 @@ class APIAuthService:
             self._users[admin_user.wa_id] = admin_user
             self._users_loaded = True
 
+    # ==========================================================================
+    # Attestation Methods (delegate to infrastructure AuthenticationService)
+    # ==========================================================================
+
+    def get_cached_attestation(self) -> Optional[Any]:
+        """Get cached CIRISVerify attestation from infrastructure service.
+
+        Returns:
+            AttestationResult if cached and not expired, None otherwise.
+        """
+        if not self._auth_service:
+            logger.debug("[APIAuthService] No auth_service - attestation not available")
+            return None
+
+        if not hasattr(self._auth_service, "get_cached_attestation"):
+            logger.debug("[APIAuthService] Auth service doesn't support get_cached_attestation")
+            return None
+
+        return self._auth_service.get_cached_attestation()
+
     async def _ensure_users_loaded(self) -> None:
         """Ensure users are loaded from database (lazy loading)."""
         if self._users_loaded:

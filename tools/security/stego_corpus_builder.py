@@ -3,7 +3,7 @@
 Steganographic Corpus Builder.
 
 Extracts natural sentences from markdown files to build a codebook
-for steganographic covenant encoding.
+for steganographic accord encoding.
 
 Each sentence slot encodes 6 bits (64 variants per slot).
 616 bits requires ~103 slots = ~103 sentences in the output message.

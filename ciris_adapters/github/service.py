@@ -228,6 +228,16 @@ class GithubToolService:
                 correlation_id=correlation_id,
             )
 
+    def get_service_metadata(self) -> Dict[str, Any]:
+        """Return service metadata for DSAR and data source discovery."""
+        return {
+            "data_source": True,
+            "data_source_type": "api",
+            "contains_pii": True,
+            "gdpr_applicable": True,
+            "connector_id": "github",
+        }
+
     def _check_requirements(self, tool_info: ToolInfo) -> tuple[bool, List[str]]:
         """Check if all requirements are met using ToolInfo.requirements."""
         missing = []

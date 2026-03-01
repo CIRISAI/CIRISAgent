@@ -1110,3 +1110,304 @@ class TestPersistedConfigMethods:
         result = await self.service.remove_persisted_config("homeassistant", mock_config_service)
 
         assert result is False
+
+
+class MockDeviceAuthAdapter:
+    """Mock adapter implementing device auth flow for testing."""
+
+    def __init__(self) -> None:
+        self.device_auth_response: Dict[str, Any] = {
+            "device_code": "test_device_code_123",
+            "user_code": "ABCD-1234",
+            "verification_uri_complete": "https://portal.example.com/device?code=ABCD-1234",
+            "expires_in": 900,
+            "interval": 5,
+        }
+        self.poll_response: Dict[str, Any] = {"status": "pending"}
+        self.discover_results: List[Dict[str, Any]] = []
+        self.validation_result: Tuple[bool, Optional[str]] = (True, None)
+        self.apply_result: bool = True
+
+    async def discover(self, discovery_type: str) -> List[Dict[str, Any]]:
+        """Return mock discovery results."""
+        return self.discover_results
+
+    async def get_oauth_url(
+        self,
+        base_url: str,
+        state: str,
+        code_challenge: Optional[str] = None,
+        callback_base_url: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        platform: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Return device auth initiation data (dict instead of URL string)."""
+        return self.device_auth_response
+
+    async def handle_oauth_callback(
+        self,
+        code: str,
+        state: str,
+        base_url: str,
+        code_verifier: Optional[str] = None,
+        callback_base_url: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        platform: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Return device auth poll response."""
+        return self.poll_response
+
+    async def get_config_options(self, step_id: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Return mock config options."""
+        return []
+
+    async def validate_config(self, config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+        """Return mock validation result."""
+        return self.validation_result
+
+    async def apply_config(self, config: Dict[str, Any]) -> bool:
+        """Return mock apply result."""
+        return self.apply_result
+
+
+class TestDeviceAuthStep:
+    """Tests for device_auth step type (RFC 8628)."""
+
+    def setup_method(self) -> None:
+        """Set up test fixtures."""
+        self.service = AdapterConfigurationService()
+        self.mock_adapter = MockDeviceAuthAdapter()
+
+    def _create_device_auth_config(self) -> InteractiveConfiguration:
+        """Create test config with device_auth step."""
+        return InteractiveConfiguration(
+            required=True,
+            workflow_type="wizard",
+            steps=[
+                ConfigurationStep(
+                    step_id="device_auth",
+                    step_type="device_auth",
+                    title="Authorize Device",
+                    description="Complete device authorization",
+                ),
+            ],
+            completion_method="apply_config",
+        )
+
+    @pytest.mark.asyncio
+    async def test_device_auth_step_initiation(self) -> None:
+        """Test device_auth step initiates authorization and returns user code."""
+        config = self._create_device_auth_config()
+        self.service.register_adapter_config(
+            adapter_type="test_device_auth",
+            interactive_config=config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_device_auth", "user_123")
+        session.collected_config["portal_url"] = "https://portal.example.com"
+
+        result = await self.service.execute_step(session.session_id, {})
+
+        assert result.success is True
+        assert result.awaiting_callback is True
+        assert "user_code" in result.data
+        assert result.data["user_code"] == "ABCD-1234"
+        assert "verification_uri" in result.data
+        assert result.data["verification_uri"] == "https://portal.example.com/device?code=ABCD-1234"
+        assert "expires_in" in result.data
+        assert "interval" in result.data
+
+    @pytest.mark.asyncio
+    async def test_device_auth_step_no_portal_url(self) -> None:
+        """Test device_auth step fails without portal_url."""
+        config = self._create_device_auth_config()
+        self.service.register_adapter_config(
+            adapter_type="test_device_auth",
+            interactive_config=config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_device_auth", "user_123")
+        # Don't set portal_url
+
+        result = await self.service.execute_step(session.session_id, {})
+
+        assert result.success is False
+        assert "portal_url" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_device_auth_step_poll_pending(self) -> None:
+        """Test device_auth polling returns pending status."""
+        config = self._create_device_auth_config()
+        self.service.register_adapter_config(
+            adapter_type="test_device_auth",
+            interactive_config=config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_device_auth", "user_123")
+        session.collected_config["portal_url"] = "https://portal.example.com"
+        session.collected_config["device_code"] = "test_device_code_123"
+
+        # Poll with pending response
+        self.mock_adapter.poll_response = {"status": "pending"}
+        result = await self.service.execute_step(session.session_id, {"poll": True})
+
+        assert result.success is True
+        assert result.awaiting_callback is True
+        assert result.data.get("status") == "pending"
+
+    @pytest.mark.asyncio
+    async def test_device_auth_step_poll_complete(self) -> None:
+        """Test device_auth polling completes and advances step."""
+        config = self._create_device_auth_config()
+        self.service.register_adapter_config(
+            adapter_type="test_device_auth",
+            interactive_config=config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_device_auth", "user_123")
+        session.collected_config["portal_url"] = "https://portal.example.com"
+        session.collected_config["device_code"] = "test_device_code_123"
+
+        # Poll with complete response
+        self.mock_adapter.poll_response = {
+            "status": "complete",
+            "signing_key_b64": "dGVzdF9zaWduaW5nX2tleQ==",
+            "key_id": "agent-abc123",
+            "org_id": "org_456",
+            "provisioned_template": "test_template",
+        }
+        result = await self.service.execute_step(session.session_id, {"poll": True})
+
+        assert result.success is True
+        assert result.data.get("status") == "complete"
+        assert result.next_step_index == 1
+        assert "device_auth_result" in session.collected_config
+        assert session.status == SessionStatus.ACTIVE
+
+    @pytest.mark.asyncio
+    async def test_device_auth_step_poll_error(self) -> None:
+        """Test device_auth polling handles error response."""
+        config = self._create_device_auth_config()
+        self.service.register_adapter_config(
+            adapter_type="test_device_auth",
+            interactive_config=config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_device_auth", "user_123")
+        session.collected_config["portal_url"] = "https://portal.example.com"
+        session.collected_config["device_code"] = "test_device_code_123"
+
+        # Poll with error response
+        self.mock_adapter.poll_response = {
+            "status": "error",
+            "error": "access_denied",
+        }
+        result = await self.service.execute_step(session.session_id, {"poll": True})
+
+        assert result.success is False
+        assert "access_denied" in result.error
+
+    @pytest.mark.asyncio
+    async def test_device_auth_stores_device_code(self) -> None:
+        """Test device_auth step stores device_code in session."""
+        config = self._create_device_auth_config()
+        self.service.register_adapter_config(
+            adapter_type="test_device_auth",
+            interactive_config=config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_device_auth", "user_123")
+        session.collected_config["portal_url"] = "https://portal.example.com"
+
+        await self.service.execute_step(session.session_id, {})
+
+        assert session.collected_config.get("device_code") == "test_device_code_123"
+        assert session.collected_config.get("user_code") == "ABCD-1234"
+
+    @pytest.mark.asyncio
+    async def test_device_auth_stores_portal_url_from_step_data(self) -> None:
+        """Test device_auth step stores portal_url from step_data."""
+        config = self._create_device_auth_config()
+        self.service.register_adapter_config(
+            adapter_type="test_device_auth",
+            interactive_config=config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_device_auth", "user_123")
+
+        await self.service.execute_step(
+            session.session_id,
+            {"portal_url": "https://custom.portal.example.com"},
+        )
+
+        assert session.collected_config.get("portal_url") == "https://custom.portal.example.com"
+
+
+class TestDeviceAuthConfigSchema:
+    """Tests for AdapterDeviceAuthConfig schema."""
+
+    def test_device_auth_config_creation(self) -> None:
+        """Test AdapterDeviceAuthConfig schema creation."""
+        from ciris_engine.schemas.runtime.manifest import AdapterDeviceAuthConfig
+
+        config = AdapterDeviceAuthConfig(
+            provider_name="CIRISPortal",
+            device_authorize_path="/api/device/authorize",
+            device_token_path="/api/device/token",
+            poll_interval=5,
+            expires_in=900,
+        )
+
+        assert config.provider_name == "CIRISPortal"
+        assert config.device_authorize_path == "/api/device/authorize"
+        assert config.device_token_path == "/api/device/token"
+        assert config.poll_interval == 5
+        assert config.expires_in == 900
+
+    def test_device_auth_config_defaults(self) -> None:
+        """Test AdapterDeviceAuthConfig default values."""
+        from ciris_engine.schemas.runtime.manifest import AdapterDeviceAuthConfig
+
+        config = AdapterDeviceAuthConfig(provider_name="TestProvider")
+
+        assert config.device_authorize_path == "/api/device/authorize"
+        assert config.device_token_path == "/api/device/token"
+        assert config.poll_interval == 5
+        assert config.expires_in == 900
+
+    def test_configuration_step_device_auth_type(self) -> None:
+        """Test ConfigurationStep accepts device_auth step type."""
+        step = ConfigurationStep(
+            step_id="device_auth_step",
+            step_type="device_auth",
+            title="Authorize Device",
+            description="Complete device authorization with CIRISPortal",
+        )
+
+        assert step.step_type == "device_auth"
+
+    def test_configuration_step_device_auth_config_field(self) -> None:
+        """Test ConfigurationStep has device_auth_config field."""
+        from ciris_engine.schemas.runtime.manifest import AdapterDeviceAuthConfig
+
+        step = ConfigurationStep(
+            step_id="device_auth_step",
+            step_type="device_auth",
+            title="Authorize Device",
+            description="Complete device authorization",
+            device_auth_config=AdapterDeviceAuthConfig(
+                provider_name="CIRISPortal",
+                poll_interval=10,
+            ),
+        )
+
+        assert step.device_auth_config is not None
+        assert step.device_auth_config.provider_name == "CIRISPortal"
+        assert step.device_auth_config.poll_interval == 10

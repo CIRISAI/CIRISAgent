@@ -204,7 +204,7 @@ private fun ProductCard(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = "${product.credits} Credits",
+                    text = "${product.credits} CIRIS Credits",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )

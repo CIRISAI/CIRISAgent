@@ -106,7 +106,7 @@ jobs:
         include:
           - os: macos-14
             name: macOS ARM64
-          - os: macos-13
+          - os: macos-12
             name: macOS Intel
           - os: ubuntu-latest
             name: Linux x64

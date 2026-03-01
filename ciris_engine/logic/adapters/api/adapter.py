@@ -493,7 +493,6 @@ class ApiPlatform(Service):
         start_time = time.monotonic()
         registered_count = 0
         adapter_paths = list(adapters_dir.iterdir())
-        total_adapters = len(adapter_paths)
 
         for idx, adapter_path in enumerate(adapter_paths, 1):
             adapter_start = time.monotonic()
@@ -586,10 +585,8 @@ class ApiPlatform(Service):
             if import_time > 1.0:
                 logger.warning(f"[CONFIGURABLE] SLOW IMPORT: {module_path} took {import_time:.1f}s")
 
-            # Time the class lookup
-            t1 = time.monotonic()
+            # Get the class from the module
             configurable_class = getattr(module, class_name)
-            getattr_time = time.monotonic() - t1
 
             # Time the instantiation
             t2 = time.monotonic()

@@ -38,10 +38,8 @@ async def _get_attestation_summary() -> Optional[str]:
         if not result:
             return None
 
-        # Extract level and checks
+        # Extract level
         max_level = result.get("level", 0)
-        checks_passed = result.get("checks_passed", 0)
-        checks_total = result.get("checks_total", 5)
 
         # Build check status list
         checks = []
@@ -384,11 +382,10 @@ async def prefetch_batch_context(
                         logger.error(f"[BATCH] CRITICAL: Could not get auth service for attestation: {e}")
 
                 # Fallback: try through adapter's service (legacy path)
-                if attestation_result is None:
-                    if hasattr(ciris_verify_adapter, "_service") and hasattr(
-                        ciris_verify_adapter._service, "get_cached_attestation"
-                    ):
-                        attestation_result = ciris_verify_adapter._service.get_cached_attestation()
+                if attestation_result is None and hasattr(ciris_verify_adapter, "_service") and hasattr(
+                    ciris_verify_adapter._service, "get_cached_attestation"
+                ):
+                    attestation_result = ciris_verify_adapter._service.get_cached_attestation()
 
                 # FAIL FAST: Attestation MUST exist by the time we build context
                 if attestation_result is None:

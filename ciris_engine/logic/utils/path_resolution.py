@@ -354,7 +354,7 @@ def find_template_file(template_name: str) -> Optional[Path]:
     if env_home:
         try:
             validated_path = validate_path_safety(
-                Path(env_home).expanduser(), context="CIRIS_HOME environment variable"
+                Path(env_home).expanduser(), context=CIRIS_HOME_ENV_CONTEXT
             )
             search_paths.append(validated_path / "ciris_templates" / template_name)
         except ValueError:
@@ -410,7 +410,7 @@ def get_template_directory() -> Path:
     if env_home:
         try:
             validated_path = validate_path_safety(
-                Path(env_home).expanduser(), context="CIRIS_HOME environment variable"
+                Path(env_home).expanduser(), context=CIRIS_HOME_ENV_CONTEXT
             )
             env_templates = validated_path / "ciris_templates"
             if env_templates.exists():

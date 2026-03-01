@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 # Error message constants
 SIGNER_NOT_INITIALIZED = "Signer not initialized"
 
+# Key file constant
+AGENT_SIGNING_KEY_FILENAME = "agent_signing.key"
+
 
 class SigningAlgorithm(str, Enum):
     """Supported signing algorithms with migration path to PQC."""
@@ -380,16 +383,16 @@ class CIRISVerifySigner(BaseSigner):
 
         # Standard key locations to check
         key_locations = [
-            Path("data/agent_signing.key"),
-            Path("/app/data/agent_signing.key"),
+            Path("data") / AGENT_SIGNING_KEY_FILENAME,
+            Path("/app/data") / AGENT_SIGNING_KEY_FILENAME,
         ]
 
         # Also check path resolution (CIRIS_HOME and CIRIS_HOME/data/)
         try:
             from ciris_engine.logic.utils.path_resolution import get_ciris_home, get_data_dir
 
-            key_locations.insert(0, get_data_dir() / "agent_signing.key")
-            key_locations.insert(0, get_ciris_home() / "agent_signing.key")
+            key_locations.insert(0, get_data_dir() / AGENT_SIGNING_KEY_FILENAME)
+            key_locations.insert(0, get_ciris_home() / AGENT_SIGNING_KEY_FILENAME)
         except Exception:
             pass
 
@@ -450,8 +453,8 @@ class UnifiedSigningKey:
     """
 
     # Standard key location
-    DEFAULT_KEY_PATH = Path("data/agent_signing.key")
-    DOCKER_KEY_PATH = Path("/app/data/agent_signing.key")
+    DEFAULT_KEY_PATH = Path("data") / AGENT_SIGNING_KEY_FILENAME
+    DOCKER_KEY_PATH = Path("/app/data") / AGENT_SIGNING_KEY_FILENAME
 
     def __init__(self, key_path: Optional[Path] = None) -> None:
         """Initialize unified signing key manager.
@@ -503,7 +506,7 @@ class UnifiedSigningKey:
                 if verify_signer._load_keypair(Path("__ciris_verify__")):
                     self._signer = verify_signer
                     self._initialized = True
-                    logger.info(f"Using CIRISVerify hardware vault for signing " f"(key_id={verify_signer.key_id})")
+                    logger.info(f"Using CIRISVerify hardware vault for signing (key_id={verify_signer.key_id})")
                     return
             except Exception as e:
                 logger.debug(f"CIRISVerify vault not available: {e}")
@@ -519,8 +522,8 @@ class UnifiedSigningKey:
         try:
             from ciris_engine.logic.utils.path_resolution import get_ciris_home, get_data_dir
 
-            key_locations.append(get_ciris_home() / "agent_signing.key")
-            key_locations.append(get_data_dir() / "agent_signing.key")
+            key_locations.append(get_ciris_home() / AGENT_SIGNING_KEY_FILENAME)
+            key_locations.append(get_data_dir() / AGENT_SIGNING_KEY_FILENAME)
         except Exception:
             pass
 
@@ -604,7 +607,7 @@ class UnifiedSigningKey:
         if not save_path:
             from ciris_engine.logic.utils.path_resolution import get_data_dir
 
-            save_path = get_data_dir() / "agent_signing.key"
+            save_path = get_data_dir() / AGENT_SIGNING_KEY_FILENAME
 
         try:
             save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -658,7 +661,7 @@ class UnifiedSigningKey:
                 try:
                     if save_path.exists():
                         save_path.unlink()
-                        logger.debug(f"Deleted disk fallback after successful ciris_verify import")
+                        logger.debug("Deleted disk fallback after successful ciris_verify import")
                 except Exception as e:
                     logger.debug(f"Could not delete disk fallback {save_path}: {e}")
                 return

@@ -2149,7 +2149,7 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
 
     # Convert cached AttestationResult to response format
     # This matches the format returned by /v1/setup/verify-status
-    logger.info(f"[attestation] === API RESPONSE DEBUG ===")
+    logger.info("[attestation] === API RESPONSE DEBUG ===")
     logger.info(
         f"[attestation] max_level={cached.max_level}, level_pending={cached.level_pending}, file_integrity_ok={cached.file_integrity_ok}, play_integrity_ok={cached.play_integrity_ok}"
     )
@@ -2176,7 +2176,7 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
     logger.info(
         f"[attestation] agent_verified_files count={len(cached.agent_verified_files) if cached.agent_verified_files else 0}"
     )
-    logger.info(f"[attestation] === END API RESPONSE DEBUG ===")
+    logger.info("[attestation] === END API RESPONSE DEBUG ===")
 
     return {
         "data": {

@@ -224,7 +224,6 @@ async def _submit_attestation_inline(challenge_nonce: str, device_code: str, por
 
             if attest_resp.status_code == 200:
                 result_data = attest_resp.json()
-                verified = result_data.get("verified", False)
                 hw_type = result_data.get("hardware_type", "unknown")
                 warnings = result_data.get("warnings", [])
                 logger.info("[CIRISVerify] Portal attestation VERIFIED: hw_type=%s, warnings=%s", hw_type, warnings)

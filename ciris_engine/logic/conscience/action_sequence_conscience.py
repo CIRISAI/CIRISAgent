@@ -209,7 +209,7 @@ class ActionSequenceConscience(ConscienceInterface):
         if completed_actions and completed_actions[-1] == HandlerActionType.SPEAK.value:
             # Last completed action was SPEAK, and we're attempting another SPEAK
             logger.info(
-                f"[action_sequence] Blocking repeated SPEAK for task {task_id}. " f"Prior actions: {completed_actions}"
+                f"[action_sequence] Blocking repeated SPEAK for task {task_id}. Prior actions: {completed_actions}"
             )
 
             end_time = self._time_service.now()
@@ -240,7 +240,7 @@ class ActionSequenceConscience(ConscienceInterface):
         reason = (
             "First SPEAK for this task"
             if HandlerActionType.SPEAK.value not in completed_actions
-            else f"SPEAK allowed - intervening action(s) since last SPEAK"
+            else "SPEAK allowed - intervening action(s) since last SPEAK"
         )
 
         end_time = self._time_service.now()

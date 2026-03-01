@@ -212,11 +212,27 @@ struct ContentView: View {
     /// Trigger App Attest at startup so the CIRISVerify FFI handle caches the
     /// device attestation result. Uses persistent cache (UserDefaults, 24h TTL)
     /// to avoid slamming the registry on crash loops or normal restarts.
+    /// Retries up to 3 times with backoff because CIRISVerify FFI may not be
+    /// loaded yet when the health check first passes.
     private func triggerAppAttestAtStartup() async {
         NSLog("[ContentView] Checking App Attest cache...")
         let manager = AppAttestManager.shared
-        let result = await manager.attestDeviceIfNeeded()
-        NSLog("[ContentView] App Attest: verified=\(result.verified), verdict=\(result.verdict), error=\(result.error ?? "none")")
+
+        for attempt in 1...3 {
+            let result = await manager.attestDeviceIfNeeded()
+            NSLog("[ContentView] App Attest attempt \(attempt): verified=\(result.verified), verdict=\(result.verdict), error=\(result.error ?? "none")")
+            if result.verified {
+                return
+            }
+            // Clear in-memory failed result so next attempt retries fully
+            manager.clearCache()
+            if attempt < 3 {
+                let delay = attempt * 5  // 5s, 10s backoff
+                NSLog("[ContentView] App Attest not verified, retrying in \(delay)s...")
+                try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
+            }
+        }
+        NSLog("[ContentView] App Attest failed after 3 attempts")
     }
 
     private func loadStartupStatus() -> StartupStatus? {

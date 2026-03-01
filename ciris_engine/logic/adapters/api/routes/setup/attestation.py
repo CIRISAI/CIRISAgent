@@ -450,6 +450,19 @@ async def verify_app_attest(
             detail=ffi_result["error"],
         )
 
+    # Device attestation succeeded — invalidate attestation cache and re-run
+    # so the level recalculates with the device attestation data included.
+    verified = ffi_result.get("data", {}).get("verified", False)
+    if verified:
+        logger.info("[app-attest] Device attestation verified, invalidating cache and re-running attestation")
+        try:
+            auth_service = _get_auth_service(request)
+            auth_service.invalidate_attestation_cache()
+            # Fire-and-forget background re-attestation
+            asyncio.create_task(auth_service.run_startup_attestation())
+        except Exception as e:
+            logger.warning(f"[app-attest] Failed to trigger re-attestation: {e}")
+
     return SuccessResponse(data=ffi_result["data"])
 
 

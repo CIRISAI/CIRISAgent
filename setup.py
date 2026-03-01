@@ -3,11 +3,65 @@ Setup configuration for CIRIS Agent.
 
 This enables pip-installable distribution with optional GUI bundling.
 The CLI command 'ciris-agent' wraps the existing main.py Click interface.
+
+Platform-specific wheels:
+  When a CIRIS Desktop JAR is present in ciris_engine/desktop_app/,
+  the wheel is tagged with the matching platform (e.g., macosx_11_0_arm64).
+  When no JAR is present, a pure-Python py3-none-any wheel is produced
+  for headless server deployments.
 """
 
 from pathlib import Path
 
 from setuptools import find_packages, setup
+
+try:
+    from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
+except ImportError:
+    _bdist_wheel = None
+
+# Map Compose Desktop JAR platform suffixes to PEP 427 wheel platform tags
+_JAR_PLATFORM_MAP = {
+    "macos-arm64": "macosx_11_0_arm64",
+    "macos-x64": "macosx_10_15_x86_64",
+    "linux-x64": "manylinux2014_x86_64",
+    "windows-x64": "win_amd64",
+}
+
+
+def _detect_jar_platform():
+    """Detect platform from the JAR filename in ciris_engine/desktop_app/."""
+    jar_dir = Path(__file__).parent / "ciris_engine" / "desktop_app"
+    if not jar_dir.exists():
+        return None
+    for jar in jar_dir.glob("CIRIS-*.jar"):
+        # JAR names: CIRIS-macos-arm64-2.0.0.jar, CIRIS-linux-x64-2.0.0.jar, etc.
+        stem = jar.stem  # e.g. "CIRIS-macos-arm64-2.0.0"
+        for jar_suffix, wheel_tag in _JAR_PLATFORM_MAP.items():
+            if jar_suffix in stem:
+                return wheel_tag
+    return None
+
+
+if _bdist_wheel is not None:
+
+    class _PlatformBdistWheel(_bdist_wheel):
+        """Override bdist_wheel to set platform tag based on bundled JAR."""
+
+        def finalize_options(self):
+            super().finalize_options()
+            self._detected_platform = _detect_jar_platform()
+            if self._detected_platform:
+                self.root_is_pure = False
+
+        def get_tag(self):
+            if self._detected_platform:
+                return "py3", "none", self._detected_platform
+            return super().get_tag()
+
+    _cmdclass = {"bdist_wheel": _PlatformBdistWheel}
+else:
+    _cmdclass = {}
 
 # Read the README for long description
 this_directory = Path(__file__).parent
@@ -42,6 +96,7 @@ except FileNotFoundError:
 setup(
     name="ciris-agent",
     version=version,
+    cmdclass=_cmdclass,
     description="CIRIS: Ethical AI Agent with Consensual Evolution Protocol",
     long_description=long_description,
     long_description_content_type="text/markdown",

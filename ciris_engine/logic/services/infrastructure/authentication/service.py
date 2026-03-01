@@ -1959,6 +1959,16 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             stale_level=stale_level,
         )
 
+    def invalidate_attestation_cache(self) -> None:
+        """Invalidate the attestation cache to force a re-run.
+
+        Called after device attestation (App Attest / Play Integrity) completes
+        so the next run_attestation includes the device attestation data and
+        recalculates the level.
+        """
+        logger.info(f"[attestation] Invalidating cache, instance={hex(id(self))}")
+        self._attestation_cache = None
+
     def is_attestation_in_progress(self) -> bool:
         """Check if attestation is currently running.
 

@@ -88,13 +88,26 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
+  # Platform-specific wheels: each runner builds the desktop JAR for its OS,
+  # then setup.py detects the JAR platform and tags the wheel accordingly.
   build-wheel:
-    name: Build Python Wheel
+    name: Build Wheel (${{ matrix.name }})
     needs: test
-    runs-on: ubuntu-latest
     if: success()
     permissions:
       contents: read
+    strategy:
+      matrix:
+        include:
+          - os: macos-14
+            name: macOS ARM64
+          - os: macos-13
+            name: macOS Intel
+          - os: ubuntu-latest
+            name: Linux x64
+          - os: windows-latest
+            name: Windows x64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -113,16 +126,16 @@ jobs:
         run: |
           cd mobile
           ./gradlew :desktopApp:packageUberJarForCurrentOS --no-daemon
-          # Copy JAR to ciris_engine/desktop_app/
           mkdir -p ../ciris_engine/desktop_app
           cp desktopApp/build/compose/jars/CIRIS-*.jar ../ciris_engine/desktop_app/
-          echo "Desktop JAR contents:"
+          echo "Desktop JAR:"
           ls -lh ../ciris_engine/desktop_app/
+        shell: bash
 
       - name: Install build tools
         run: |
           pip install --upgrade pip
-          pip install build twine
+          pip install build wheel
 
       - name: Build wheel
         run: |
@@ -132,21 +145,85 @@ jobs:
       - name: Check wheel contents
         run: |
           WHEEL_FILE=$(ls dist/*.whl)
-          echo "Checking contents of $WHEEL_FILE"
-          unzip -l "$WHEEL_FILE" | grep -E "(accord|main\.py|ciris_templates|desktop_app.*\.jar)" | head -20 || echo "Pattern not found"
-          echo ""
-          echo "Desktop JAR in wheel:"
+          echo "Wheel: $WHEEL_FILE"
           unzip -l "$WHEEL_FILE" | grep "\.jar" || echo "WARNING: No JAR found in wheel!"
-          echo ""
-          echo "Total files in wheel:"
+          echo "Total files:"
           unzip -l "$WHEEL_FILE" | tail -1
+        shell: bash
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: python-wheel
+          name: wheel-${{ matrix.os }}
           path: dist/*.whl
           retention-days: 30
+
+  # Headless wheel (no desktop JAR) for server-only deployments.
+  # Tagged py3-none-any so it's a universal fallback.
+  build-wheel-headless:
+    name: Build Wheel (Headless)
+    needs: test
+    if: success()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build tools
+        run: |
+          pip install --upgrade pip
+          pip install build wheel
+
+      - name: Build headless wheel (no JAR)
+        run: |
+          # Ensure no JAR is present so setup.py produces py3-none-any
+          rm -rf ciris_engine/desktop_app/*.jar
+          python -m build --wheel
+          ls -lh dist/
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-headless
+          path: dist/*.whl
+          retention-days: 30
+
+  # Collect all wheels and publish to PyPI + alias packages + SDK
+  publish-wheels:
+    name: Publish Wheels
+    needs: [build-wheel, build-wheel-headless]
+    if: success()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist/
+          merge-multiple: true
+
+      - name: List all wheels
+        run: ls -lh dist/*.whl
+
+      - name: Install build tools
+        run: |
+          pip install --upgrade pip
+          pip install build twine
 
       - name: Publish to PyPI
         if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
@@ -154,7 +231,7 @@ jobs:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          python -m twine upload dist/*.whl
+          python -m twine upload dist/*.whl --skip-existing
 
       - name: Build and publish alias packages
         if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'

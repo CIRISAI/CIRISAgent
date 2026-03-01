@@ -5,6 +5,8 @@ import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.viewmodels.AgentTemplateInfo
 import ai.ciris.mobile.shared.viewmodels.CheckDetail
 import ai.ciris.mobile.shared.viewmodels.ConfigItemData
+import ai.ciris.mobile.shared.viewmodels.LlmValidationResult
+import ai.ciris.mobile.shared.viewmodels.ModelInfo
 import ai.ciris.mobile.shared.viewmodels.SetupCompletionResult
 import ai.ciris.mobile.shared.viewmodels.StateTransitionResult
 import ai.ciris.mobile.shared.viewmodels.VerifyStatusResponse
@@ -768,6 +770,104 @@ class CIRISApiClient(
         } catch (e: Exception) {
             logException(method, e)
             throw e
+        }
+    }
+
+    /**
+     * Validate LLM configuration by testing the connection.
+     * Calls POST /v1/setup/validate-llm
+     *
+     * @param provider Provider ID (openai, anthropic, local, other)
+     * @param apiKey API key for the provider
+     * @param baseUrl Optional base URL for custom endpoints
+     * @param model Optional model name to test
+     * @return LlmValidationResult with success/failure status and message
+     */
+    suspend fun validateLlmConfiguration(
+        provider: String,
+        apiKey: String,
+        baseUrl: String? = null,
+        model: String? = null
+    ): LlmValidationResult {
+        val method = "validateLlmConfiguration"
+        logInfo(method, "Validating LLM config: provider=$provider, baseUrl=${baseUrl ?: "default"}, model=${model ?: "default"}")
+
+        return try {
+            val request = ai.ciris.api.models.LLMValidationRequest(
+                provider = provider,
+                apiKey = apiKey,
+                baseUrl = baseUrl,
+                model = model
+            )
+
+            val response = setupApi.validateLlmV1SetupValidateLlmPost(request)
+            logDebug(method, "Response: status=${response.status}")
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+
+            logInfo(method, "Validation result: valid=${data.valid}, message=${data.message}")
+
+            LlmValidationResult(
+                valid = data.valid,
+                message = data.message,
+                error = data.error
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            LlmValidationResult(
+                valid = false,
+                message = "Connection failed",
+                error = e.message ?: "Unknown error"
+            )
+        }
+    }
+
+    /**
+     * List available models from a provider's live API.
+     * Calls POST /v1/setup/list-models
+     *
+     * @param provider Provider ID (openai, anthropic, local, other)
+     * @param apiKey API key for the provider
+     * @param baseUrl Optional base URL for custom endpoints
+     * @return List of ModelInfo with id and display name, sorted by CIRIS compatibility
+     */
+    suspend fun listModels(
+        provider: String,
+        apiKey: String,
+        baseUrl: String? = null
+    ): List<ModelInfo> {
+        val method = "listModels"
+        logInfo(method, "Listing models: provider=$provider, baseUrl=${baseUrl ?: "default"}")
+
+        return try {
+            val request = ai.ciris.api.models.LLMValidationRequest(
+                provider = provider,
+                apiKey = apiKey,
+                baseUrl = baseUrl
+            )
+
+            val response = setupApi.listModelsV1SetupListModelsPost(request)
+            logDebug(method, "Response: status=${response.status}")
+
+            val body = response.body()
+            val data = body.`data`
+
+            val models = data.models?.map { model ->
+                ModelInfo(
+                    id = model.id,
+                    displayName = model.displayName,
+                    cirisCompatible = model.cirisCompatible ?: false,
+                    cirisRecommended = model.cirisRecommended ?: false,
+                    contextWindow = model.contextWindow
+                )
+            } ?: emptyList()
+
+            logInfo(method, "Listed ${models.size} models from ${data.source}")
+            models
+        } catch (e: Exception) {
+            logException(method, e)
+            emptyList()
         }
     }
 

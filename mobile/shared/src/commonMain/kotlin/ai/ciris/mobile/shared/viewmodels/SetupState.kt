@@ -311,8 +311,21 @@ data class SetupFormState(
 @Serializable
 data class LlmValidationResult(
     val valid: Boolean,
-    val error: String? = null,
-    val modelUsed: String? = null
+    val message: String,
+    val error: String? = null
+)
+
+/**
+ * Model info from provider's live API.
+ * Source: POST /v1/setup/list-models
+ */
+@Serializable
+data class ModelInfo(
+    val id: String,
+    val displayName: String,
+    val cirisCompatible: Boolean = false,
+    val cirisRecommended: Boolean = false,
+    val contextWindow: Int? = null
 )
 
 /**

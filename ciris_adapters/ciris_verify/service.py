@@ -40,7 +40,7 @@ class VerificationConfig(BaseModel):
     """Configuration for CIRISVerify service."""
 
     binary_path: Optional[str] = None
-    cache_ttl_seconds: int = 300
+    cache_ttl_seconds: int = 600  # 10 minutes
     timeout_seconds: float = 10.0
     require_hardware: bool = False
 

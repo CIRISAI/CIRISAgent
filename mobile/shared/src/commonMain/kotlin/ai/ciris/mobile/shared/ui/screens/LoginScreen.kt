@@ -5,25 +5,34 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.sp
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
+import ai.ciris.mobile.shared.platform.isDesktop
 import ai.ciris.mobile.shared.platform.isIOS
 
 /**
- * Login Screen - Cross-platform login for Android and iOS
+ * Login Screen - Cross-platform login for Android, iOS, and Desktop
  *
- * Shows two login options:
- * - Sign in with Google (Android) / Apple (iOS): Required for CIRIS hosted LLM services
- * - Local Login: Offline mode with user-provided API key (BYOK only)
+ * Shows different options based on platform:
+ * - Mobile: OAuth buttons (Google/Apple) + Local Login button
+ * - Desktop (first run): Shows setup wizard directly
+ * - Desktop (existing user): Shows username/password form
  *
  * Uses dark branded background (#667eea) matching Android exactly.
  */
@@ -34,20 +43,32 @@ private object LoginColors {
     val Primary = Color(0xFF667eea)     // ciris_primary
     val Accent = Color(0xFF00d4aa)      // ciris_accent
     val White = Color.White
+    val Error = Color(0xFFFF6B6B)       // Error red
 }
 
 @Composable
 fun LoginScreen(
     onGoogleSignIn: () -> Unit,
     onLocalLogin: () -> Unit,
+    onLocalLoginSubmit: (username: String, password: String) -> Unit = { _, _ -> },
     onPrivacyPolicy: () -> Unit = {
         println("[LoginScreen][INFO][onPrivacyPolicy] Privacy policy link clicked - opening https://ciris.ai/privacy")
     },
     isLoading: Boolean = false,
     statusMessage: String? = null,
+    errorMessage: String? = null,
+    showLocalLoginForm: Boolean = false,
+    isFirstRun: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     var marketingOptIn by remember { mutableStateOf(false) }
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var showLoginForm by remember { mutableStateOf(showLocalLoginForm) }
+    val focusManager = LocalFocusManager.current
+
+    // For desktop, always show login form (not OAuth buttons)
+    val isDesktopMode = isDesktop()
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -103,8 +124,24 @@ fun LoginScreen(
                             modifier = Modifier.padding(top = 16.dp)
                         )
                     }
+                } else if (isDesktopMode || showLoginForm) {
+                    // Desktop mode or Local Login form - show username/password fields
+                    LocalLoginForm(
+                        username = username,
+                        onUsernameChange = { username = it },
+                        password = password,
+                        onPasswordChange = { password = it },
+                        onSubmit = {
+                            if (username.isNotBlank() && password.isNotBlank()) {
+                                onLocalLoginSubmit(username, password)
+                            }
+                        },
+                        onBack = if (!isDesktopMode) {{ showLoginForm = false }} else null,
+                        errorMessage = errorMessage,
+                        focusManager = focusManager
+                    )
                 } else {
-                    // Sign in with OAuth provider button (Google on Android, Apple on iOS)
+                    // Mobile mode - show OAuth buttons
                     val providerName = getOAuthProviderName()
                     Button(
                         onClick = onGoogleSignIn,
@@ -129,7 +166,15 @@ fun LoginScreen(
 
                     // Local Login button (outlined)
                     OutlinedButton(
-                        onClick = onLocalLogin,
+                        onClick = {
+                            if (isFirstRun) {
+                                // First run - go to setup wizard for BYOK setup
+                                onLocalLogin()
+                            } else {
+                                // Existing user - show login form
+                                showLoginForm = true
+                            }
+                        },
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = LoginColors.White
                         ),
@@ -210,5 +255,145 @@ fun LoginScreen(
                     .padding(bottom = 24.dp)
             )
         }
+    }
+}
+
+/**
+ * Local login form with username and password fields.
+ * Used for desktop mode and when "Local Login" is clicked on mobile.
+ */
+@Composable
+private fun LocalLoginForm(
+    username: String,
+    onUsernameChange: (String) -> Unit,
+    password: String,
+    onPasswordChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onBack: (() -> Unit)?,
+    errorMessage: String?,
+    focusManager: androidx.compose.ui.focus.FocusManager
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.width(280.dp)
+    ) {
+        // Error message
+        if (errorMessage != null) {
+            Text(
+                text = errorMessage,
+                color = LoginColors.Error,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+        }
+
+        // Username field
+        OutlinedTextField(
+            value = username,
+            onValueChange = onUsernameChange,
+            label = { Text("Username", color = LoginColors.White.copy(alpha = 0.7f)) },
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = LoginColors.White,
+                unfocusedTextColor = LoginColors.White,
+                focusedBorderColor = LoginColors.White,
+                unfocusedBorderColor = LoginColors.White.copy(alpha = 0.5f),
+                cursorColor = LoginColors.White,
+                focusedLabelColor = LoginColors.White,
+                unfocusedLabelColor = LoginColors.White.copy(alpha = 0.7f)
+            ),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Text,
+                imeAction = ImeAction.Next
+            ),
+            keyboardActions = KeyboardActions(
+                onNext = { focusManager.moveFocus(FocusDirection.Down) }
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("input_username")
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Password field
+        OutlinedTextField(
+            value = password,
+            onValueChange = onPasswordChange,
+            label = { Text("Password", color = LoginColors.White.copy(alpha = 0.7f)) },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = LoginColors.White,
+                unfocusedTextColor = LoginColors.White,
+                focusedBorderColor = LoginColors.White,
+                unfocusedBorderColor = LoginColors.White.copy(alpha = 0.5f),
+                cursorColor = LoginColors.White,
+                focusedLabelColor = LoginColors.White,
+                unfocusedLabelColor = LoginColors.White.copy(alpha = 0.7f)
+            ),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = { onSubmit() }
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("input_password")
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Login button
+        Button(
+            onClick = onSubmit,
+            enabled = username.isNotBlank() && password.isNotBlank(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = LoginColors.White,
+                contentColor = LoginColors.Primary,
+                disabledContainerColor = LoginColors.White.copy(alpha = 0.5f),
+                disabledContentColor = LoginColors.Primary.copy(alpha = 0.5f)
+            ),
+            shape = RoundedCornerShape(28.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .testTag("btn_login_submit")
+        ) {
+            Text(
+                text = "Login",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
+        // Back button (only on mobile when showing login form)
+        if (onBack != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+
+            TextButton(
+                onClick = onBack,
+                modifier = Modifier.testTag("btn_login_back")
+            ) {
+                Text(
+                    text = "Back to login options",
+                    color = LoginColors.White.copy(alpha = 0.8f),
+                    fontSize = 14.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Info text
+        Text(
+            text = "Enter the credentials you created during setup",
+            color = LoginColors.White.copy(alpha = 0.7f),
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center
+        )
     }
 }

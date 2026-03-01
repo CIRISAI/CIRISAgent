@@ -8,6 +8,8 @@ import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
 
 import ai.ciris.mobile.shared.viewmodels.DeviceAuthStatus
+import ai.ciris.mobile.shared.viewmodels.LlmValidationResult
+import ai.ciris.mobile.shared.viewmodels.ModelInfo
 import ai.ciris.mobile.shared.viewmodels.SetupStep
 import ai.ciris.mobile.shared.viewmodels.SetupFormState
 import ai.ciris.mobile.shared.viewmodels.SetupViewModel
@@ -75,6 +77,11 @@ private object SetupColors {
     val InfoBorder = Color(0xFF93C5FD)
     val InfoDark = Color(0xFF1E40AF)
     val InfoText = Color(0xFF1D4ED8)
+
+    // Error (red) - for validation failures
+    val ErrorLight = Color(0xFFFEE2E2)
+    val ErrorDark = Color(0xFFB91C1C)
+    val ErrorText = Color(0xFFDC2626)
 
     // Gray for cards
     val GrayLight = Color(0xFFF3F4F6)
@@ -147,7 +154,7 @@ fun SetupScreen(
                         apiClient = apiClient
                     )
                     SetupStep.NODE_AUTH -> NodeAuthStep(viewModel, state, apiClient)
-                    SetupStep.LLM_CONFIGURATION -> LlmConfigurationStep(viewModel, state)
+                    SetupStep.LLM_CONFIGURATION -> LlmConfigurationStep(viewModel, state, apiClient)
                     SetupStep.OPTIONAL_FEATURES -> OptionalFeaturesStep(viewModel, state)
                     SetupStep.ACCOUNT_AND_CONFIRMATION -> AccountConfirmationStep(viewModel, state)
                     SetupStep.VERIFY_SETUP -> OptionalFeaturesStep(viewModel, state) // Legacy - redirects to OPTIONAL_FEATURES
@@ -965,8 +972,15 @@ private fun NodeAuthStep(
 private fun LlmConfigurationStep(
     viewModel: SetupViewModel,
     state: SetupFormState,
+    apiClient: CIRISApiClient,
     modifier: Modifier = Modifier
 ) {
+    // State for connection testing
+    var isTesting by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<LlmValidationResult?>(null) }
+    var availableModels by remember { mutableStateOf<List<ModelInfo>>(emptyList()) }
+    val coroutineScope = rememberCoroutineScope()
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -1157,15 +1171,267 @@ private fun LlmConfigurationStep(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
+            // Model selection - dropdown if models available, text field otherwise
+            Text(
+                text = if (availableModels.isNotEmpty()) "Model" else "Model (optional)",
+                color = SetupColors.TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            if (availableModels.isNotEmpty()) {
+                // Show dropdown with live models from provider
+                var modelExpanded by remember { mutableStateOf(false) }
+                val selectedModel = availableModels.find { it.id == state.llmModel }
+
+                ExposedDropdownMenuBox(
+                    expanded = modelExpanded,
+                    onExpandedChange = { modelExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = selectedModel?.displayName ?: state.llmModel.ifEmpty { "Select a model" },
+                        onValueChange = {},
+                        readOnly = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        trailingIcon = {
+                            if (selectedModel?.cirisRecommended == true) {
+                                Text("★", color = SetupColors.Primary, fontSize = 16.sp)
+                            }
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = SetupColors.Primary,
+                            unfocusedBorderColor = SetupColors.GrayLight
+                        )
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = modelExpanded,
+                        onDismissRequest = { modelExpanded = false }
+                    ) {
+                        // Show recommended models first
+                        val sortedModels = availableModels.sortedByDescending {
+                            when {
+                                it.cirisRecommended -> 2
+                                it.cirisCompatible -> 1
+                                else -> 0
+                            }
+                        }
+                        sortedModels.forEach { model ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = model.displayName,
+                                                fontWeight = if (model.cirisRecommended) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                            if (model.contextWindow != null) {
+                                                Text(
+                                                    text = "${model.contextWindow / 1000}K context",
+                                                    fontSize = 11.sp,
+                                                    color = SetupColors.TextSecondary
+                                                )
+                                            }
+                                        }
+                                        Row {
+                                            if (model.cirisRecommended) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = SetupColors.SuccessLight
+                                                ) {
+                                                    Text(
+                                                        "★ Best",
+                                                        fontSize = 10.sp,
+                                                        color = SetupColors.SuccessDark,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            } else if (model.cirisCompatible) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = SetupColors.InfoLight
+                                                ) {
+                                                    Text(
+                                                        "Compatible",
+                                                        fontSize = 10.sp,
+                                                        color = SetupColors.InfoDark,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.setLlmModel(model.id)
+                                    modelExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "★ = Recommended for CIRIS",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            } else {
+                // Fallback to text input before validation
+                OutlinedTextField(
+                    value = state.llmModel,
+                    onValueChange = { viewModel.setLlmModel(it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = {
+                        Text(
+                            text = when (state.llmProvider) {
+                                "OpenAI" -> "gpt-4o"
+                                "Anthropic" -> "claude-sonnet-4-5-20250514"
+                                "Google AI" -> "gemini-2.0-flash"
+                                "OpenRouter" -> "anthropic/claude-sonnet-4"
+                                "Groq" -> "llama-3.3-70b-versatile"
+                                "Together AI" -> "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+                                "LocalAI" -> "llama3"
+                                else -> "model-name"
+                            },
+                            color = SetupColors.TextSecondary
+                        )
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = SetupColors.Primary,
+                        unfocusedBorderColor = SetupColors.GrayLight
+                    ),
+                    singleLine = true
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Test Connection button
             OutlinedButton(
-                onClick = { /* TODO: Test connection */ },
+                onClick = {
+                    if (!isTesting) {
+                        isTesting = true
+                        testResult = null
+                        coroutineScope.launch(Dispatchers.IO) {
+                            try {
+                                val providerId = when (state.llmProvider) {
+                                    "OpenAI" -> "openai"
+                                    "Anthropic" -> "anthropic"
+                                    "Google AI" -> "google"
+                                    "OpenRouter" -> "openrouter"
+                                    "Groq" -> "groq"
+                                    "Together AI" -> "together"
+                                    "LocalAI" -> "local"
+                                    else -> "other"
+                                }
+                                val result = apiClient.validateLlmConfiguration(
+                                    provider = providerId,
+                                    apiKey = state.llmApiKey,
+                                    baseUrl = state.llmBaseUrl.takeIf { it.isNotEmpty() },
+                                    model = state.llmModel.takeIf { it.isNotEmpty() }
+                                )
+
+                                // If validation succeeded, fetch available models
+                                val models = if (result.valid) {
+                                    apiClient.listModels(
+                                        provider = providerId,
+                                        apiKey = state.llmApiKey,
+                                        baseUrl = state.llmBaseUrl.takeIf { it.isNotEmpty() }
+                                    )
+                                } else emptyList()
+
+                                withContext(Dispatchers.Main) {
+                                    testResult = result
+                                    availableModels = models
+                                    isTesting = false
+
+                                    // Auto-select the best model if none is currently selected
+                                    if (models.isNotEmpty() && state.llmModel.isEmpty()) {
+                                        // Prefer recommended, then compatible, then first available
+                                        val bestModel = models.firstOrNull { it.cirisRecommended }
+                                            ?: models.firstOrNull { it.cirisCompatible }
+                                            ?: models.first()
+                                        viewModel.setLlmModel(bestModel.id)
+                                        PlatformLogger.i(TAG, "Auto-selected model: ${bestModel.id}")
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    testResult = LlmValidationResult(
+                                        valid = false,
+                                        message = "Connection failed",
+                                        error = e.message ?: "Unknown error"
+                                    )
+                                    isTesting = false
+                                }
+                            }
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
+                enabled = !isTesting && (state.llmProvider == "LocalAI" || state.llmApiKey.isNotEmpty()),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = SetupColors.Primary
                 )
             ) {
-                Text("Test Connection")
+                if (isTesting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = SetupColors.Primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Testing...")
+                } else {
+                    Text("Test Connection")
+                }
+            }
+
+            // Show test result
+            testResult?.let { result ->
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (result.valid) SetupColors.SuccessLight else SetupColors.ErrorLight,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (result.valid) "✓" else "✗",
+                            fontSize = 18.sp,
+                            color = if (result.valid) SetupColors.SuccessDark else SetupColors.ErrorDark,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                        Column {
+                            Text(
+                                text = result.message,
+                                color = if (result.valid) SetupColors.SuccessDark else SetupColors.ErrorDark,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            result.error?.let { error ->
+                                Text(
+                                    text = error,
+                                    color = SetupColors.ErrorText,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

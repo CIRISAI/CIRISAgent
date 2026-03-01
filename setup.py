@@ -66,13 +66,15 @@ setup(
             "migrations/postgres/*.sql",  # PostgreSQL database migrations
         ],
         "ciris_engine": [
-            "gui_static/**/*",  # GUI assets (if present, bundled by CI)
             "ciris_templates/*.yaml",  # Bundled agent identity templates
+            "desktop_app/*.jar",  # CIRIS Desktop app (Kotlin Compose)
         ],
     },
     entry_points={
         "console_scripts": [
-            "ciris-agent=ciris_engine.cli:main",  # Thin wrapper around main.py
+            "ciris-agent=ciris_engine.cli:main",  # Desktop app (default) or server mode
+            "ciris-server=ciris_engine.cli:server",  # Headless API server
+            "ciris-desktop=ciris_engine.cli:desktop",  # Desktop app launcher
         ],
         # Adapter discovery entry points - eliminates hardcoded KNOWN_MODULAR_SERVICES list
         # Each entry point maps adapter_name -> module path for manifest loading

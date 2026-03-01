@@ -60,6 +60,7 @@ class StartupViewModel(
      * Call this once when app launches
      */
     fun startCIRIS() {
+        println("[StartupViewModel][INFO] startCIRIS() called")
         startTime = Clock.System.now().toEpochMilliseconds()
 
         viewModelScope.launch {

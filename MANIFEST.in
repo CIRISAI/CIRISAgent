@@ -21,9 +21,9 @@ recursive-include ciris_adapters *.json
 recursive-include ciris_adapters *.yaml
 recursive-include ciris_adapters *.txt
 
-# GUI static assets (will be populated by CI)
-# These will be copied to ciris_engine/gui_static/ during the build process
-recursive-include ciris_engine/gui_static *
+# CIRIS Desktop app (Kotlin Compose Multiplatform)
+# Desktop UberJar is built by CI and bundled in the wheel
+recursive-include ciris_engine/desktop_app *.jar
 
 # Exclude test and build artifacts
 global-exclude *.pyc

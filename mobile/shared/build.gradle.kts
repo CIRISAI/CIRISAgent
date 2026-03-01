@@ -14,6 +14,14 @@ kotlin {
         }
     }
 
+    jvm("desktop") {
+        compilations.all {
+            kotlinOptions {
+                jvmTarget = "17"
+            }
+        }
+    }
+
     listOf(
         iosX64(),
         iosArm64(),
@@ -101,6 +109,19 @@ kotlin {
 
                 // Ktor iOS engine
                 implementation("io.ktor:ktor-client-darwin:2.3.7")
+            }
+        }
+
+        val desktopMain by getting {
+            dependencies {
+                // Compose Desktop
+                implementation(compose.desktop.currentOs)
+
+                // Ktor JVM engine (CIO for desktop)
+                implementation("io.ktor:ktor-client-cio:2.3.7")
+
+                // Coroutines Swing for desktop dispatchers
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.0")
             }
         }
 

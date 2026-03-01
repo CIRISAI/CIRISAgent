@@ -6,7 +6,8 @@ package ai.ciris.mobile.shared.platform
  */
 enum class Platform {
     ANDROID,
-    IOS
+    IOS,
+    DESKTOP
 }
 
 /**
@@ -30,11 +31,17 @@ fun isIOS(): Boolean = getPlatform() == Platform.IOS
 fun isAndroid(): Boolean = getPlatform() == Platform.ANDROID
 
 /**
+ * Check if running on Desktop.
+ */
+fun isDesktop(): Boolean = getPlatform() == Platform.DESKTOP
+
+/**
  * Get the platform-appropriate OAuth provider name.
  */
 fun getOAuthProviderName(): String = when (getPlatform()) {
     Platform.IOS -> "Apple"
     Platform.ANDROID -> "Google"
+    Platform.DESKTOP -> "Desktop"
 }
 
 /**
@@ -43,6 +50,7 @@ fun getOAuthProviderName(): String = when (getPlatform()) {
 fun getOAuthProviderId(): String = when (getPlatform()) {
     Platform.IOS -> "apple"
     Platform.ANDROID -> "google"
+    Platform.DESKTOP -> "desktop"
 }
 
 /**

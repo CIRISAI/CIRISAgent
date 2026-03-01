@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# Skip early FFI verification to avoid tokio runtime hang during Python import lock
+# Binary self-verification still runs when get_license_status() is called
+import os
+
+os.environ.setdefault("CIRIS_SKIP_EARLY_VERIFY", "1")
+
 # Load environment variables from .env if present
 # Load from all standard config paths in priority order
 try:
@@ -236,17 +242,18 @@ def _show_api_key_required_message() -> None:
     click.echo("=" * 70, err=True)
     click.echo("LLM API KEY REQUIRED", err=True)
     click.echo("=" * 70, err=True)
-    click.echo("No OPENAI_API_KEY found in environment.", err=True)
+    click.echo("No LLM API key found in environment.", err=True)
+    click.echo("", err=True)
+    click.echo("Supported keys:", err=True)
+    click.echo("  - OPENAI_API_KEY (OpenAI, OpenRouter, local LLMs)", err=True)
+    click.echo("  - ANTHROPIC_API_KEY (Claude)", err=True)
+    click.echo("  - GOOGLE_API_KEY (Gemini)", err=True)
+    click.echo("  - GROQ_API_KEY, TOGETHER_API_KEY", err=True)
     click.echo("", err=True)
     click.echo("Options:", err=True)
-    click.echo("  1. Set OPENAI_API_KEY environment variable", err=True)
+    click.echo("  1. Set one of the above environment variables", err=True)
     click.echo("  2. Add to .env file", err=True)
     click.echo("  3. Use --mock-llm flag for testing only", err=True)
-    click.echo("", err=True)
-    click.echo("For local LLM:", err=True)
-    click.echo("  export OPENAI_API_KEY=local", err=True)
-    click.echo("  export OPENAI_API_BASE=http://localhost:11434", err=True)
-    click.echo("  export OPENAI_MODEL=llama3", err=True)
     click.echo("=" * 70, err=True)
     sys.exit(1)
 
@@ -680,9 +687,18 @@ def main(
         # Handle first-run setup
         _handle_first_run(first_run, adapter_types_list, is_cli_mode)
 
-        # Check for API key
-        api_key = get_env_var("OPENAI_API_KEY")
-        if not mock_llm and not api_key and not first_run:
+        # Check for API key (any supported provider)
+        has_api_key = any(
+            [
+                get_env_var("OPENAI_API_KEY"),
+                get_env_var("ANTHROPIC_API_KEY"),
+                get_env_var("GOOGLE_API_KEY"),
+                get_env_var("OPENROUTER_API_KEY"),
+                get_env_var("GROQ_API_KEY"),
+                get_env_var("TOGETHER_API_KEY"),
+            ]
+        )
+        if not mock_llm and not has_api_key and not first_run:
             _show_api_key_required_message()
 
         # Validate adapter tokens

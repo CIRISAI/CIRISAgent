@@ -88,121 +88,9 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-  build-gui:
-    name: Build GUI Assets
-    needs: test
-    runs-on: ubuntu-latest
-    if: success()
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout CIRISGUI-Standalone
-        uses: actions/checkout@v4
-        with:
-          repository: CIRISAI/CIRISGUI-Standalone
-          path: cirisgui
-
-      - name: Find Next.js app directory
-        id: find_app
-        run: |
-          # Find the directory containing next.config.js or next.config.mjs (the actual Next.js app)
-          GUI_DIR=$(find cirisgui -name "next.config.*" -type f -exec dirname {} \; | head -1)
-          if [ -z "$GUI_DIR" ]; then
-            echo "❌ Could not find next.config.js/mjs in CIRISGUI-Standalone repo"
-            exit 1
-          fi
-          echo "Found Next.js app in: $GUI_DIR"
-          echo "gui_dir=$GUI_DIR" >> $GITHUB_OUTPUT
-
-          # Verify next.config exists (either .js or .mjs)
-          if [ -f "$GUI_DIR/next.config.js" ]; then
-            echo "✅ next.config.js found"
-            echo "next_config=$GUI_DIR/next.config.js" >> $GITHUB_OUTPUT
-          elif [ -f "$GUI_DIR/next.config.mjs" ]; then
-            echo "✅ next.config.mjs found"
-            echo "next_config=$GUI_DIR/next.config.mjs" >> $GITHUB_OUTPUT
-          else
-            echo "⚠️  Warning: no next.config found in $GUI_DIR"
-          fi
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: cirisgui/package-lock.json
-
-      - name: Configure for static export
-        run: |
-          cd ${{ steps.find_app.outputs.gui_dir }}
-          # Find the next.config file (either .js or .mjs)
-          CONFIG_FILE=""
-          if [ -f next.config.js ]; then
-            CONFIG_FILE="next.config.js"
-          elif [ -f next.config.mjs ]; then
-            CONFIG_FILE="next.config.mjs"
-          fi
-
-          if [ -n "$CONFIG_FILE" ]; then
-            if ! grep -q "output.*:.*['\"]export['\"]" "$CONFIG_FILE" 2>/dev/null; then
-              echo "⚠️  Warning: $CONFIG_FILE may need output: 'export' configuration"
-              echo "Attempting to add it..."
-              # Backup original
-              cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
-              # Add output export if not present (simple approach)
-              sed -i "s/const nextConfig = {/const nextConfig = {\n  output: 'export',/" "$CONFIG_FILE" || true
-            fi
-            echo "✅ Static export configuration verified in $CONFIG_FILE"
-          else
-            echo "⚠️  Skipping next.config configuration (file not found)"
-          fi
-
-      - name: Install dependencies
-        run: |
-          # Install from monorepo root (where package-lock.json lives)
-          # Use npm install instead of npm ci to handle minor version drift in lock file
-          cd cirisgui
-          npm install --legacy-peer-deps
-
-      - name: Build static assets
-        id: build_gui
-        run: |
-          cd ${{ steps.find_app.outputs.gui_dir }}
-          npm run build
-          echo "✅ GUI build complete"
-
-          # Check for static export first, fallback to .next/standalone
-          if [ -d "out" ]; then
-            echo "Using static export from out/"
-            ls -la out/ | head -20
-            BUILD_OUTPUT="out"
-          elif [ -d ".next/standalone" ]; then
-            echo "Using standalone build from .next/standalone"
-            ls -la .next/standalone/ | head -20
-            BUILD_OUTPUT=".next/standalone"
-          elif [ -d ".next/static" ]; then
-            echo "Using static build from .next/static"
-            ls -la .next/static/ | head -20
-            BUILD_OUTPUT=".next/static"
-          else
-            echo "❌ No build output found (checked: out/, .next/standalone, .next/static)"
-            ls -la
-            exit 1
-          fi
-
-          echo "build_output=$BUILD_OUTPUT" >> $GITHUB_OUTPUT
-
-      - name: Upload GUI artifacts
-        id: upload_gui
-        uses: actions/upload-artifact@v4
-        with:
-          name: gui-static-assets
-          path: ${{ steps.find_app.outputs.gui_dir }}/${{ steps.build_gui.outputs.build_output }}/
-          retention-days: 7
-
   build-wheel:
     name: Build Python Wheel
-    needs: [test, build-gui]
+    needs: test
     runs-on: ubuntu-latest
     if: success()
     permissions:
@@ -215,23 +103,21 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Download GUI artifacts
-        uses: actions/download-artifact@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
-          name: gui-static-assets
-          path: ciris_engine/gui_static/
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Verify GUI assets
+      - name: Build CIRIS Desktop UberJar
         run: |
-          echo "GUI assets downloaded to ciris_engine/gui_static/"
-          ls -la ciris_engine/gui_static/ | head -20
-          FILE_COUNT=$(find ciris_engine/gui_static -type f | wc -l)
-          echo "Total files: $FILE_COUNT"
-          if [ "$FILE_COUNT" -lt 5 ]; then
-            echo "⚠️  Warning: Very few GUI files found"
-          else
-            echo "✅ GUI assets look good"
-          fi
+          cd mobile
+          ./gradlew :desktopApp:packageUberJarForCurrentOS --no-daemon
+          # Copy JAR to ciris_engine/desktop_app/
+          mkdir -p ../ciris_engine/desktop_app
+          cp desktopApp/build/compose/jars/CIRIS-*.jar ../ciris_engine/desktop_app/
+          echo "Desktop JAR contents:"
+          ls -lh ../ciris_engine/desktop_app/
 
       - name: Install build tools
         run: |
@@ -247,7 +133,10 @@ jobs:
         run: |
           WHEEL_FILE=$(ls dist/*.whl)
           echo "Checking contents of $WHEEL_FILE"
-          unzip -l "$WHEEL_FILE" | grep -E "(gui_static|accord|main\.py)" | head -20 || echo "Pattern not found"
+          unzip -l "$WHEEL_FILE" | grep -E "(accord|main\.py|ciris_templates|desktop_app.*\.jar)" | head -20 || echo "Pattern not found"
+          echo ""
+          echo "Desktop JAR in wheel:"
+          unzip -l "$WHEEL_FILE" | grep "\.jar" || echo "WARNING: No JAR found in wheel!"
           echo ""
           echo "Total files in wheel:"
           unzip -l "$WHEEL_FILE" | tail -1

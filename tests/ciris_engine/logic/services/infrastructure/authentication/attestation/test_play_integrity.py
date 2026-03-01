@@ -22,7 +22,7 @@ class TestVerifyOnLargeStack:
 
         _verify_on_large_stack(verifier, "token", "nonce", result)
 
-        assert result["error"] == "Play Integrity FFI not available (need CIRISVerify >= 0.10.0)"
+        assert result["error"] == "Play Integrity FFI not available (need CIRISVerify >= 1.0.0)"
         assert result["verified"] is False
 
     def test_returns_error_when_ffi_function_missing(self):
@@ -33,7 +33,7 @@ class TestVerifyOnLargeStack:
 
         _verify_on_large_stack(verifier, "token", "nonce", result)
 
-        assert result["error"] == "Play Integrity FFI not available (need CIRISVerify >= 0.10.0)"
+        assert result["error"] == "Play Integrity FFI not available (need CIRISVerify >= 1.0.0)"
         assert result["verified"] is False
 
     def test_returns_error_when_handle_missing(self):

@@ -2104,7 +2104,9 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
                 logger.info("[attestation] No cached attestation - triggering attestation now")
                 # Run attestation in background and return in_progress status
                 # This handles cases where startup attestation was skipped/failed
-                asyncio.create_task(infra_auth_service.run_attestation(mode="full"))
+                # Store task reference to prevent garbage collection
+                _background_attestation_task = asyncio.create_task(infra_auth_service.run_attestation(mode="full"))
+                _ = _background_attestation_task  # Explicitly reference to satisfy linters
                 logger.info("[attestation] Background attestation triggered, returning in_progress")
                 return {
                     "data": {

@@ -38,11 +38,14 @@ else:
         try:
             yield
         except asyncio.CancelledError:
+            # Cleanup: cancel the timeout callback
             handle.cancel()
+            # Convert our own timeout-triggered cancellation to TimeoutError
+            # (matches Python 3.11 asyncio.timeout behavior)
             if timed_out:
                 raise asyncio.TimeoutError() from None
-            else:
-                raise  # Re-raise CancelledError if not from timeout
+            # External cancellation - must re-raise per asyncio contract
+            raise  # NOSONAR - CancelledError IS re-raised here for external cancellations
         else:
             handle.cancel()
 

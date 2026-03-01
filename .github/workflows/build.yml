@@ -8,6 +8,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test
@@ -97,12 +101,12 @@ jobs:
     permissions:
       contents: read
     strategy:
+      fail-fast: false  # Don't cancel other builds if one fails/is cancelled
       matrix:
         include:
           - os: macos-14
             name: macOS ARM64
-          - os: macos-13
-            name: macOS Intel
+          # macOS Intel: built and uploaded manually (GitHub runner capacity issues)
           - os: ubuntu-latest
             name: Linux x64
           - os: windows-latest
@@ -342,9 +346,36 @@ jobs:
           echo "### Images:" >> $GITHUB_STEP_SUMMARY
           echo "- ciris-agent" >> $GITHUB_STEP_SUMMARY
 
+  register-build:
+    name: Register Build with CIRISRegistry
+    needs: [build, publish-wheels]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install grpcurl
+        run: |
+          curl -sSL https://github.com/fullstorydev/grpcurl/releases/download/v1.8.9/grpcurl_1.8.9_linux_x86_64.tar.gz | tar xz
+          sudo mv grpcurl /usr/local/bin/
+
+      - name: Register build manifest with Registry
+        env:
+          REGISTRY_JWT_SECRET: ${{ secrets.REGISTRY_JWT_SECRET }}
+          REGISTRY_GRPC_ADDR: "207.148.13.157:50051"
+        run: |
+          python tools/ops/register_agent_build.py --build . --modules core
+
   deploy:
     name: Notify CIRISManager of Update
-    needs: build
+    needs: [build, register-build]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
     environment: production

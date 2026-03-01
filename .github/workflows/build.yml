@@ -141,6 +141,7 @@ jobs:
         run: |
           python -m build --wheel
           ls -lh dist/
+        shell: bash
 
       - name: Check wheel contents
         run: |

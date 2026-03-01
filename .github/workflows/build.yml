@@ -8,6 +8,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test
@@ -97,6 +101,7 @@ jobs:
     permissions:
       contents: read
     strategy:
+      fail-fast: false  # Don't cancel other builds if one fails/is cancelled
       matrix:
         include:
           - os: macos-14

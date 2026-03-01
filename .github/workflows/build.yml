@@ -106,8 +106,7 @@ jobs:
         include:
           - os: macos-14
             name: macOS ARM64
-          - os: macos-13
-            name: macOS Intel
+          # macOS Intel: built and uploaded manually (GitHub runner capacity issues)
           - os: ubuntu-latest
             name: Linux x64
           - os: windows-latest

@@ -5,6 +5,22 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-03-01
+
+### Added
+
+- **CIRISRegistry CI Integration** - Build manifests now automatically registered with CIRISRegistry
+  - New `register-build` job in GitHub Actions workflow
+  - Hashes all source files in `ciris_engine/` and `ciris_adapters/`
+  - Enables CIRISVerify integrity validation for deployed agents
+
+## [2.0.0] - 2026-02-28
+
+### Changed
+
+- **Major Release** - CIRIS Agent 2.0 "Context Engineering"
+  - See release notes for full details
+
 ## [1.9.9] - 2026-02-08
 
 ### Added

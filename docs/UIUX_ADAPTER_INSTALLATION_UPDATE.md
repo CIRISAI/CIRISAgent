@@ -450,15 +450,15 @@ val setupRequest = SetupCompleteRequest(
     enabled_adapters = buildList {
         add("api")  // Always enabled
         if (state.covenantMetricsConsent) {
-            add("ciris_covenant_metrics")
+            add("ciris_accord_metrics")
         }
     },
     adapter_config = buildMap {
         if (state.covenantMetricsConsent) {
-            put("CIRIS_COVENANT_METRICS_CONSENT", "true")
-            put("CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP",
+            put("CIRIS_ACCORD_METRICS_CONSENT", "true")
+            put("CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP",
                 Instant.now().toString())
-            put("CIRIS_COVENANT_METRICS_TRACE_LEVEL", "detailed")
+            put("CIRIS_ACCORD_METRICS_TRACE_LEVEL", "detailed")
         }
     }
 )
@@ -471,13 +471,13 @@ Add to `setup.py` completion handler:
 ```python
 # In _save_setup_config()
 
-if "ciris_covenant_metrics" in enabled_adapters:
+if "ciris_accord_metrics" in enabled_adapters:
     config_lines.extend([
         "",
         "# Covenant Metrics Configuration",
-        f"CIRIS_COVENANT_METRICS_CONSENT={adapter_config.get('CIRIS_COVENANT_METRICS_CONSENT', 'false')}",
-        f"CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP={adapter_config.get('CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP', '')}",
-        f"CIRIS_COVENANT_METRICS_TRACE_LEVEL={adapter_config.get('CIRIS_COVENANT_METRICS_TRACE_LEVEL', 'generic')}",
+        f"CIRIS_ACCORD_METRICS_CONSENT={adapter_config.get('CIRIS_ACCORD_METRICS_CONSENT', 'false')}",
+        f"CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={adapter_config.get('CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP', '')}",
+        f"CIRIS_ACCORD_METRICS_TRACE_LEVEL={adapter_config.get('CIRIS_ACCORD_METRICS_TRACE_LEVEL', 'generic')}",
     ])
 ```
 
@@ -896,7 +896,7 @@ data class CovenantMetricsConfig(
 - `ciris_engine/logic/services/tool/discovery_service.py` - Discovery service
 - `ciris_engine/logic/services/tool/eligibility_checker.py` - Eligibility checker
 - `ciris_engine/logic/services/tool/installer.py` - Tool installer
-- `ciris_adapters/ciris_covenant_metrics/` - Covenant metrics adapter
+- `ciris_adapters/ciris_accord_metrics/` - Covenant metrics adapter
 
 ### Mobile
 - `mobile/shared/src/commonMain/kotlin/ai/ciris/mobile/shared/viewmodels/SetupViewModel.kt`

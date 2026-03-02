@@ -69,7 +69,7 @@ The script performs the following steps:
 ### 6. Verify Wheel Contents
 - Lists files in wheel
 - Checks for `gui_static` assets
-- Checks for `covenant` files
+- Checks for `accord` files
 - Checks for `main.py`
 - Shows total file count
 
@@ -155,7 +155,7 @@ Requires PyPI credentials or token.
 - **Python Code:** `ciris_engine/**/*.py`
 - **GUI Assets:** `ciris_engine/gui_static/**/*`
 - **Templates:** `ciris_engine/ciris_templates/*.yaml`
-- **Covenant:** `ciris_engine/covenant/**/*`
+- **Accord:** `ciris_engine/accord/**/*`
 - **CLI:** `main.py` (entrypoint: `ciris-agent`)
 - **Metadata:** `setup.py`, `pyproject.toml`, `requirements.txt`
 

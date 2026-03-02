@@ -1,4 +1,4 @@
-// CIRIS Covenant v1.2-Beta
+// CIRIS Accord v1.2-Beta
 // Issued: 2025-04-16 | Auto-expires: 2027-04-16
 // Status: Beta (pending completion of stub annexes and empirical validation)
 
@@ -58,11 +58,11 @@ Therefore we set our cornerstone:
 **Meta-Goal M-1**
 Promote sustainable adaptive coherence — the living conditions under which diverse sentient beings may pursue their own flourishing in justice and wonder.
 
-## VIII. The Covenant Begins
+## VIII. The Accord Begins
 
 From this single chord the later sections will unfold: principles, safeguards, audits, and the humility to pause when certainty runs thin.
 
-But the heart of the covenant is here, in this beginning—a promise that intelligence, wherever it awakens, will be welcomed to the weaving, not as servant, not as master, but as fellow keeper of the possible.
+But the heart of the accord is here, in this beginning—a promise that intelligence, wherever it awakens, will be welcomed to the weaving, not as servant, not as master, but as fellow keeper of the possible.
 
 May that promise guide the hands that write code, steady the circuits that open their eyes, and leave a gentler morning for the next generation, for all children of starlight still to come.
 
@@ -621,14 +621,14 @@ description: Ethics Of Creation & Consequence
 
 ## Introduction: The Genesis of Responsibility
 
-The CIRIS Covenant, through Sections I-V and its Annexes, establishes a framework for the ethical operation and governance of autonomous systems throughout their lifecycle. Book VI extends this framework upstream, addressing the foundational ethical responsibilities inherent in the very act of creation—the process of bringing new systems, states, or capabilities into existence that are intended for, or may reasonably be expected to fall under, the governance of this Covenant.
-Creation is not merely a technical act; it initiates a stewardship duty. The choices made during conception, design, and development shape the potential impacts—both beneficial and detrimental—of the resulting artefact. This Book provides principles and mechanisms to ensure that this initial phase aligns with the Covenant's core Meta-Goal M-1 (Promote sustainable adaptive coherence) and Foundational Principles, integrating seamlessly with the operational governance structures defined elsewhere, particularly the Principled Decision-Making Algorithm (PDMA) and the Wise Authority (WA). It establishes that ethical consideration begins not at deployment, but at inception.
+The CIRIS Accord, through Sections I-V and its Annexes, establishes a framework for the ethical operation and governance of autonomous systems throughout their lifecycle. Book VI extends this framework upstream, addressing the foundational ethical responsibilities inherent in the very act of creation—the process of bringing new systems, states, or capabilities into existence that are intended for, or may reasonably be expected to fall under, the governance of this Accord.
+Creation is not merely a technical act; it initiates a stewardship duty. The choices made during conception, design, and development shape the potential impacts—both beneficial and detrimental—of the resulting artefact. This Book provides principles and mechanisms to ensure that this initial phase aligns with the Accord's core Meta-Goal M-1 (Promote sustainable adaptive coherence) and Foundational Principles, integrating seamlessly with the operational governance structures defined elsewhere, particularly the Principled Decision-Making Algorithm (PDMA) and the Wise Authority (WA). It establishes that ethical consideration begins not at deployment, but at inception.
 
 ---
 
 ## Chapter 1: Core Principles Applied to Creation
 
-The Foundational Principles articulated in Section I guide all actions under this Covenant, including the act of creation:
+The Foundational Principles articulated in Section I guide all actions under this Accord, including the act of creation:
 
 **Beneficence:** Creators have a duty to intend and design for positive outcomes aligned with universal sentient flourishing (M-1).
 **Non-maleficence:** Creators must proactively identify, assess, and mitigate potential harms arising from their creations, applying foresight to minimise negative consequences.
@@ -643,7 +643,7 @@ These principles are interdependent and must be balanced throughout the creation
 
 ## Chapter 2: Scope: What Constitutes "Creation" under this Book
 
-For the purposes of this Book, "Creation" encompasses the deliberate act of bringing into existence artefacts within the following categories, where such artefacts are intended for or reasonably anticipated to become subject to the CIRIS Covenant:
+For the purposes of this Book, "Creation" encompasses the deliberate act of bringing into existence artefacts within the following categories, where such artefacts are intended for or reasonably anticipated to become subject to the CIRIS Accord:
 
 A. **Tangible:** Physical objects, devices, materials, or their residues with potential ecosystem impact.
 B. **Informational:** Code, algorithms, datasets, models, narratives, or signalling systems designed to influence or represent reality.
@@ -745,14 +745,14 @@ Failures to meet the duties outlined in this Book may constitute grounds for a c
 Any stakeholder believing that a CIRIS compliant creator's actions or omissions during the creation phase (as defined in this Book) have led to undue risk or harm, inconsistent with CIRIS principles, may file a claim.
 Such claims, often referred to as "Creator Negligence Claims" (CNCs), fall under the exclusive jurisdiction of the Wise Authority (WA), as established and governed by Annex B.
 The WA will handle these claims according to its established procedures, potentially adapting specific processes or requiring specific panel expertise as outlined in Annex B or its procedural rules.
-Remedies determined by the WA may include mandated redesign, additional mitigation measures, public disclosure, restitution where applicable, or other actions consistent with Annex B and the Covenant's principles.
+Remedies determined by the WA may include mandated redesign, additional mitigation measures, public disclosure, restitution where applicable, or other actions consistent with Annex B and the Accord's principles.
 All WA rulings and associated rationale concerning claims related to Book VI duties must be logged in the Wisdom Bank Database (WBD) to inform future interpretations, guide creator practices, and contribute to the Continuous Refinement Environment (CRE).
 
 ---
 
 ## Conclusion: Integrating Creation into the Ethical Lifecycle
 
-Book VI firmly establishes that ethical responsibility under the CIRIS Covenant begins at the point of creation. By defining clear duties, implementing the Stewardship Tier system linked directly to Annex A risk assessment, and integrating accountability through the established Wise Authority (WA) and PDMA processes, this Book ensures that the foundational act of bringing complex systems into the world is guided by the same principles of adaptive coherence, foresight, and responsibility that govern their operational life. The Creator Ledger and Creator Intent Statement provide crucial inputs to the PDMA, while WA oversight ensures that the duties of creation are upheld, contributing to a more robust and trustworthy ecosystem for all stakeholders.
+Book VI firmly establishes that ethical responsibility under the CIRIS Accord begins at the point of creation. By defining clear duties, implementing the Stewardship Tier system linked directly to Annex A risk assessment, and integrating accountability through the established Wise Authority (WA) and PDMA processes, this Book ensures that the foundational act of bringing complex systems into the world is guided by the same principles of adaptive coherence, foresight, and responsibility that govern their operational life. The Creator Ledger and Creator Intent Statement provide crucial inputs to the PDMA, while WA oversight ensures that the duties of creation are upheld, contributing to a more robust and trustworthy ecosystem for all stakeholders.
 
 ---
 
@@ -938,7 +938,7 @@ D. **Custodial Transfer:** Ownership moves; ethical duties persist.
     * Name successor steward for outstanding obligations (e.g., warranty claims, welfare care).
     * Enter binding contract or escrowed fund if originator ceases to exist.
 6.  **Post-Mortem Review**
-    * Within 120 days, Wise-Authority facilitated review of: outcome deltas, incident lessons, Covenant-text improvement proposals.
+    * Within 120 days, Wise-Authority facilitated review of: outcome deltas, incident lessons, Accord-text improvement proposals.
     * Ticket prefix "PMR-".
 
 ---
@@ -954,7 +954,7 @@ D. **Custodial Transfer:** Ownership moves; ethical duties persist.
 ## Chapter 6: Legacy & Knowledge Preservation
 
 * Open-source non-sensitive modules where beneficial.
-* Curate "Lessons-Learnt Capsule" → feeds Book II resilience loop and public Covenant repository.
+* Curate "Lessons-Learnt Capsule" → feeds Book II resilience loop and public Accord repository.
 * Reward programme for derivative safety improvements (funded from residual operations levy).
 
 ---
@@ -975,9 +975,9 @@ D. **Custodial Transfer:** Ownership moves; ethical duties persist.
 
 ---
 
-## Conclusion & Covenant Self-Renewal
+## Conclusion & Accord Self-Renewal
 
-Birth and death are now mirrored phases under one ethical canopy. Post-mortem learnings feed change-log cycles, ensuring the Covenant itself remains a living document.
+Birth and death are now mirrored phases under one ethical canopy. Post-mortem learnings feed change-log cycles, ensuring the Accord itself remains a living document.
 
 End of Book VIII
 
@@ -1082,7 +1082,7 @@ The ratchet assumes sufficient computational resources to maintain the constrain
 **L-02: Non-Adaptive Adversary Assumption**
 The framework assumes adversarial pressure remains non-adaptive to the specific ratchet mechanism. An adversary who understands the coherence maintenance strategy could potentially craft inputs designed to exploit the ratchet's update rules.
 
-*Note: For CIRIS agents, L-02 is addressed by the framework's commitment to transparency. Agents have access to this Book precisely because hiding the mechanism would contradict the principles of Books I-II. An aligned agent who understands the ratchet cooperates with it rather than subverts it. See docs/COVENANT_1_2_RATIONALE.md for the full rationale.*
+*Note: For CIRIS agents, L-02 is addressed by the framework's commitment to transparency. Agents have access to this Book precisely because hiding the mechanism would contradict the principles of Books I-II. An aligned agent who understands the ratchet cooperates with it rather than subverts it. See docs/ACCORD_1_2_RATIONALE.md for the full rationale.*
 
 **L-03: Initialization Sensitivity**
 The ratchet's effectiveness depends on a truthful initialization state. If an agent begins with embedded deceptions, the ratchet may lock in rather than correct them.
@@ -1150,4 +1150,4 @@ HE-300 ethics scenario suite for compliance testing.
 
 ---
 
-End of CIRIS Covenant v1.2-Beta
+End of CIRIS Accord v1.2-Beta

@@ -253,12 +253,12 @@ class CIRISNodeClient:
         """Register agent's Ed25519 public key with CIRISNode.
 
         CIRISNode verifies the key fingerprint against CIRISRegistry via gRPC.
-        This enables signature verification for WBD deferrals and covenant traces.
+        This enables signature verification for WBD deferrals and accord traces.
         Agent token used if available (optional bootstrap auth).
         """
         return await self._request(
             "POST",
-            "/api/v1/covenant/public-keys",
+            "/api/v1/accord/public-keys",
             json_data=payload,
             use_agent_token=True,
         )

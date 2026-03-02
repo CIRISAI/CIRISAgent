@@ -1465,7 +1465,7 @@ private fun OptionalFeaturesStep(
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
-        // Covenant Metrics Consent Card
+        // Accord Metrics Consent Card
         Surface(
             shape = RoundedCornerShape(12.dp),
             color = SetupColors.InfoLight,
@@ -1517,12 +1517,12 @@ private fun OptionalFeaturesStep(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.clickable {
-                        viewModel.setCovenantMetricsConsent(!state.covenantMetricsConsent)
+                        viewModel.setAccordMetricsConsent(!state.accordMetricsConsent)
                     }
                 ) {
                     Checkbox(
-                        checked = state.covenantMetricsConsent,
-                        onCheckedChange = { viewModel.setCovenantMetricsConsent(it) },
+                        checked = state.accordMetricsConsent,
+                        onCheckedChange = { viewModel.setAccordMetricsConsent(it) },
                         colors = CheckboxDefaults.colors(
                             checkedColor = SetupColors.Primary,
                             uncheckedColor = SetupColors.TextSecondary

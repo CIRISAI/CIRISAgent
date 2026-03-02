@@ -6,7 +6,7 @@ This directory contains modular services that can be dynamically loaded into CIR
 
 | Adapter | Version | Description | QA Tests | Live Tested |
 |---------|---------|-------------|----------|-------------|
-| `ciris_covenant_metrics` | 1.0.0 | CIRIS Covenant compliance metrics - reports WBD and PDMA events to CIRISLens | `covenant_metrics_tests.py` | ✅ 2026-01-21 |
+| `ciris_accord_metrics` | 1.0.0 | CIRIS Covenant compliance metrics - reports WBD and PDMA events to CIRISLens | `covenant_metrics_tests.py` | ✅ 2026-01-21 |
 | `ciris_hosted_tools` | 1.0.0 | CIRIS-hosted tools requiring platform attestation (web search, etc.) | `hosted_tools_tests.py` | ⏳ 2026-01-21 (60% - awaiting billing token) |
 | `external_data_sql` | 1.0.0 | SQL database connector for DSAR automation and external data access | `sql_external_data_tests.py` | ✅ 2026-01-21 (100%) |
 | `home_assistant` | 1.0.0 | Enhanced Home Assistant integration with event detection | - | ❌ |
@@ -22,7 +22,7 @@ This directory contains modular services that can be dynamically loaded into CIR
 ### Testing Priority
 
 1. **High Priority** (production use):
-   - `ciris_covenant_metrics` ✅ - Live tested 2026-01-21
+   - `ciris_accord_metrics` ✅ - Live tested 2026-01-21
    - `mcp_client` / `mcp_server` ✅ - Live tested 2026-01-25 (100%)
    - `external_data_sql` ✅ - Live tested 2026-01-21 (100%)
 

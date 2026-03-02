@@ -695,7 +695,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `setup.py` - Complete package configuration
     - `MANIFEST.in` - Non-Python file inclusion rules
     - `ciris_engine/cli.py` - Entry point wrapper
-    - `ciris_engine/data/covenant_1.0b.txt` - Bundled covenant text
+    - `ciris_engine/data/accord_1.0b.txt` - Bundled covenant text
 
 - **GUI CI Build Automation** - Automated CIRISGUI static asset bundling in CI/CD
   - **Purpose**: Inject pre-built GUI into Python wheel during CI builds
@@ -739,8 +739,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Covenant Loading Mechanism** - Migrated from file path to importlib.resources
-  - **Before**: `Path(__file__).resolve().parents[3] / "covenant_1.0b.txt"`
-  - **After**: `importlib.resources.files("ciris_engine.data").joinpath("covenant_1.0b.txt")`
+  - **Before**: `Path(__file__).resolve().parents[3] / "accord_1.0b.txt"`
+  - **After**: `importlib.resources.files("ciris_engine.data").joinpath("accord_1.0b.txt")`
   - **Benefits**:
     - Works for both development (editable install) and pip-installed packages
     - Python 3.9+ preferred method with 3.7-3.8 fallback

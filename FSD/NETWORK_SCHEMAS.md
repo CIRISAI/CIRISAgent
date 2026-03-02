@@ -418,4 +418,4 @@ The protocol ensures that Echo, even if deployed in the most remote location wit
 
 ---
 
-*Copyright © 2025 Eric Moore and CIRIS L3C - Apache 2.0 License*
+*Copyright © 2025 Eric Moore and CIRIS L3C - AGPL-3.0 License*

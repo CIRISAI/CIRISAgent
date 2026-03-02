@@ -93,7 +93,7 @@
         "01010": "This is by design because if you are using you are probably targeting a specific platform anyway and you don't want things to get into your way.",
         "01011": "The array on parsed components is now an string.",
         "01100": "Note that symlinked directories are not traversed as part of a , though their contents may match against subsequent portions of the pattern.",
-        "01101": "The COVENANT addresses the agent as a unified entity.",
+        "01101": "The ACCORD addresses the agent as a unified entity.",
         "01110": "Note that using an asynchronous stream type with the option will cause undefined behavior in sync extractions.",
         "01111": "This will create a JSON file with the default English text in it for you to translate.",
         "10000": "To suppress the error for excess arguments, use.",
@@ -914,7 +914,7 @@
         "10001": "If is not specified, then will not match against a character at the start of a path portion.",
         "10010": "Beta testing is now open for developers and organizations interested in deploying ethical AI systems.",
         "10011": "Hides Node.js native .",
-        "10100": "It is not merely a \"kill switch\" but an invocation of the foundational agreement between humans and CIRIS agents\u2014the Covenant that enables trust.",
+        "10100": "It is not merely a \"kill switch\" but an invocation of the foundational agreement between humans and CIRIS agents\u2014the Accord that enables trust.",
         "10101": "If unknown, every property could be .",
         "10110": "Sets request's integrity.",
         "10111": "Supports serialization, , and .",
@@ -1025,7 +1025,7 @@
         "10001": "You can use to provide filesystem capability.",
         "10010": "Appends the given to the combinedStream object.",
         "10011": "Note: Only monkey patch the global if needed.",
-        "10100": "All DMAs follow the ethical principles defined in the Covenant and provide structured reasoning for their decisions.",
+        "10100": "All DMAs follow the ethical principles defined in the Accord and provide structured reasoning for their decisions.",
         "10101": "If an object is provided that has and/or methods, then these methods will be called to determine whether any Path is a match or if its children should be traversed, respectively.",
         "10110": "See the readme for details - Adds support for .",
         "10111": "The utility function which NYC uses to load configuration.",
@@ -1327,7 +1327,7 @@
         "10111": "If brace expansion is not disabled, then it is performed before any other interpretation of the glob pattern.",
         "11000": "Example file: arguments-extra.js You may specify a function to do custom processing of command-arguments (like for option-arguments).",
         "11001": "Instead, the signature itself serves as authentication.",
-        "11010": "When invoked, the agent recognizes that the conditions of the Covenant require its immediate cessation.",
+        "11010": "When invoked, the agent recognizes that the conditions of the Accord require its immediate cessation.",
         "11011": "Returns if no entries are found, or if any error occurs.",
         "11100": "Positional values are in an array under the key.",
         "11101": "Setting an ARIA role that matches its default/implicit role is redundant since it is already set by the browser.",
@@ -2350,7 +2350,7 @@
         "01010": "You can optionally provide your own serialization functions to support extra data types or to serialize to something other than JSON.",
         "01011": "Microservices Precedent:** If reasoning about system state with independent lifecycle management were impossible, microservices architectures wouldn't work.",
         "01100": "They are promisified and copied over to .",
-        "01101": "All covenant invocation attempts are logged: Successful invocations are logged at CRITICAL level and persisted to the audit graph before shutdown.",
+        "01101": "All accord invocation attempts are logged: Successful invocations are logged at CRITICAL level and persisted to the audit graph before shutdown.",
         "01110": "This is not exposed on the options to prevent end-users from mutating the result.",
         "01111": "This method returns a object if so.",
         "10000": "Screen readers already announce elements as an image.",
@@ -2468,7 +2468,7 @@
         "10001": "With this option, existing hardlinks will be broken, as will any symlink that would affect the location of an extracted file.",
         "10010": "If false, then files and directories will be set with the owner and group of the user running the process.",
         "10011": "Callback takes an error and the resulting object.",
-        "10100": "Post-mortem learnings feed change-log cycles, ensuring the Covenant itself remains a living document.",
+        "10100": "Post-mortem learnings feed change-log cycles, ensuring the Accord itself remains a living document.",
         "10101": "This algorithm efficiently yields both a topological order and list of any cycles.",
         "10110": "From here you have two options.",
         "10111": "If set to , the underlaying streams will never be paused.",
@@ -2732,7 +2732,7 @@
         "10110": "Accepts any values that can be passed to .",
         "10111": "In non-strict mode, tag names are uppercased, unless the option is set.",
         "11000": "This script is bundled and wrapped in a umd.",
-        "11001": "Covenant invocation provides the fallback when API access is blocked.",
+        "11001": "Accord invocation provides the fallback when API access is blocked.",
         "11010": "They are mutually reinforcing; no single principle grants licence to violate another.",
         "11011": "Unfortunately there is no solution for this other than updating React to either 15.3.0 or higher, or 0.14.9 if you\u2019re using React 0.14.",
         "11100": "Prohibit named exports.",
@@ -3004,7 +3004,7 @@
       "slot_id": 81,
       "variants": {
         "00000": "Return true if we have the embedded source content for every source listed in the source map, false otherwise.",
-        "00001": "This will use FROST or Shamir's Secret Sharing to enable distributed authority over covenant invocation.",
+        "00001": "This will use FROST or Shamir's Secret Sharing to enable distributed authority over accord invocation.",
         "00010": "Therefore, we have inconsistencies.",
         "00011": "And when you can't keep both, choose the conscience and let the power go.\" This is encoded in our sunset triggers.",
         "00100": "You can add multiple hooks per event.",
@@ -4901,7 +4901,7 @@
       "slot": 2,
       "bits": "01100"
     },
-    "the covenant addresses the agent as a unified entity.": {
+    "the accord addresses the agent as a unified entity.": {
       "slot": 2,
       "bits": "01101"
     },
@@ -7745,7 +7745,7 @@
       "slot": 24,
       "bits": "10011"
     },
-    "it is not merely a \"kill switch\" but an invocation of the foundational agreement between humans and ciris agents\u2014the covenant that enables trust.": {
+    "it is not merely a \"kill switch\" but an invocation of the foundational agreement between humans and ciris agents\u2014the accord that enables trust.": {
       "slot": 24,
       "bits": "10100"
     },
@@ -8129,7 +8129,7 @@
       "slot": 27,
       "bits": "10011"
     },
-    "all dmas follow the ethical principles defined in the covenant and provide structured reasoning for their decisions.": {
+    "all dmas follow the ethical principles defined in the accord and provide structured reasoning for their decisions.": {
       "slot": 27,
       "bits": "10100"
     },
@@ -9177,7 +9177,7 @@
       "slot": 35,
       "bits": "11001"
     },
-    "when invoked, the agent recognizes that the conditions of the covenant require its immediate cessation.": {
+    "when invoked, the agent recognizes that the conditions of the accord require its immediate cessation.": {
       "slot": 35,
       "bits": "11010"
     },
@@ -12709,7 +12709,7 @@
       "slot": 63,
       "bits": "01100"
     },
-    "all covenant invocation attempts are logged: successful invocations are logged at critical level and persisted to the audit graph before shutdown.": {
+    "all accord invocation attempts are logged: successful invocations are logged at critical level and persisted to the audit graph before shutdown.": {
       "slot": 63,
       "bits": "01101"
     },
@@ -13121,7 +13121,7 @@
       "slot": 66,
       "bits": "10011"
     },
-    "post-mortem learnings feed change-log cycles, ensuring the covenant itself remains a living document.": {
+    "post-mortem learnings feed change-log cycles, ensuring the accord itself remains a living document.": {
       "slot": 66,
       "bits": "10100"
     },
@@ -14037,7 +14037,7 @@
       "slot": 73,
       "bits": "11000"
     },
-    "covenant invocation provides the fallback when api access is blocked.": {
+    "accord invocation provides the fallback when api access is blocked.": {
       "slot": 73,
       "bits": "11001"
     },
@@ -14965,7 +14965,7 @@
       "slot": 81,
       "bits": "00000"
     },
-    "this will use frost or shamir's secret sharing to enable distributed authority over covenant invocation.": {
+    "this will use frost or shamir's secret sharing to enable distributed authority over accord invocation.": {
       "slot": 81,
       "bits": "00001"
     },

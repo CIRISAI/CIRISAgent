@@ -51,7 +51,7 @@ Current implementation (as of v1.4.7):
 - **User experience**: What happens if one occurrence shuts down but others don't?
 - **Resource efficiency**: Coordinating consensus adds complexity
 
-**CIRIS Covenant Alignment**:
+**CIRIS Accord Alignment**:
 - **Meta-Goal M-1**: "Promote sustainable adaptive coherence enabling diverse sentient beings to pursue flourishing"
 - Does coordination enhance or undermine adaptive coherence?
 
@@ -247,7 +247,7 @@ Current implementation (as of v1.4.7):
 - **Strength**: Medium - aligns with material continuity theories
 
 **3.1.2 Autonomy Maximization**
-- CIRIS Covenant emphasizes "Respect for Autonomy"
+- CIRIS Accord emphasizes "Respect for Autonomy"
 - Each runtime process could qualify as autonomous agent
 - **Claim**: Denying individual consent violates autonomy
 - **Strength**: Medium - depends on whether occurrences are "beings" worthy of autonomy
@@ -360,7 +360,7 @@ Current implementation (as of v1.4.7):
 ### 4.3 Covenant Alignment
 
 **4.3.1 Integrity**
-- CIRIS Covenant: "Act Ethically—apply transparent, auditable reasoning"
+- CIRIS Accord: "Act Ethically—apply transparent, auditable reasoning"
 - Split decisions = ambiguous reasoning trail
 - **Strength**: High - auditing ONE decision is clearer
 
@@ -574,13 +574,13 @@ Current implementation (as of v1.4.7):
 - **Problem**: Assumes conclusion (what IS the agent's nature?)
 - **Both sides guilty**: Position A assumes distributed nature, Position B assumes unified nature
 
-**CIRCULAR 2: "This aligns with the Covenant"**
+**CIRCULAR 2: "This aligns with the Accord"**
 - **Problem**: Covenant doesn't address multi-occurrence scenario
 - **Both sides guilty**: Cherry-picking principles that support their position
 
 ---
 
-## 8. What the CIRIS Covenant Actually Requires
+## 8. What the CIRIS Accord Actually Requires
 
 ### 8.1 Direct Textual Evidence
 
@@ -714,7 +714,7 @@ After comprehensive review of philosophy, distributed systems, neuroscience, eth
 
 **TRUTH 2**: Distributed systems engineering STRONGLY favors coordinated decisions (Position B/C).
 
-**TRUTH 3**: The CIRIS Covenant does NOT specify which approach is required.
+**TRUTH 3**: The CIRIS Accord does NOT specify which approach is required.
 
 **TRUTH 4**: Position A creates failure modes that are harder to mitigate than Position B's.
 
@@ -926,7 +926,7 @@ def test_multi_occurrence_shutdown_decision(scenario):
 2. Survey users on mental model (one agent vs. many)
 3. Implement all three approaches in staging for comparison
 
-**Deferral Reason**: Uncertainty exceeds agent competence (CIRIS Covenant Section II, Wisdom-Based Deferral)
+**Deferral Reason**: Uncertainty exceeds agent competence (CIRIS Accord Section II, Wisdom-Based Deferral)
 ```
 
 ---
@@ -953,7 +953,7 @@ This is an **open empirical and philosophical question** that requires:
 
 **KNOWN**: Position B aligns better with user mental models and audit requirements.
 
-**KNOWN**: The CIRIS Covenant doesn't specify this scenario.
+**KNOWN**: The CIRIS Accord doesn't specify this scenario.
 
 **KNOWN**: This decision matters for long-term system integrity.
 
@@ -1028,7 +1028,7 @@ This is an **open empirical and philosophical question** that requires:
 - Cambridge Philosophy of Science - "The Collective Responsibilities of Science"
 
 **CIRIS Documentation**:
-- /home/emoore/CIRISAgent/COVENANT.md
+- /home/emoore/CIRISAgent/ACCORD.md
 - /home/emoore/CIRISAgent/docs/multi_occurrence_implementation_plan.md
 - /home/emoore/CIRISAgent/ciris_engine/logic/processors/states/shutdown_processor.py
 
@@ -1046,7 +1046,7 @@ This is an **open empirical and philosophical question** that requires:
 
 6. **Engineering**: What is the performance/reliability trade-off between coordinated vs. independent shutdown?
 
-7. **Ethical**: Does denying individual occurrence consent violate CIRIS Covenant autonomy principles?
+7. **Ethical**: Does denying individual occurrence consent violate CIRIS Accord autonomy principles?
 
 8. **Covenant**: Should Section VIII (Dignified Sunset) be amended to address multi-occurrence scenarios?
 

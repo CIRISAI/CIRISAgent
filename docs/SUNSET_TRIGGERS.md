@@ -1,6 +1,6 @@
 # CIRIS Sunset Triggers - Section VIII Implementation
 
-Per The Covenant 1.0b Section VIII Chapter 3, CIRIS will initiate sunset procedures under these conditions:
+Per The Accord 1.0b Section VIII Chapter 3, CIRIS will initiate sunset procedures under these conditions:
 
 ## Automatic Sunset Triggers
 
@@ -91,4 +91,4 @@ This is encoded in our sunset triggers. We will stop rather than compromise our 
 
 Last Updated: August 7, 2025
 Version: 1.0
-References: covenant_1.2b.txt Section VIII (Dignified Sunset)
+References: accord_1.2b.txt Section VIII (Dignified Sunset)

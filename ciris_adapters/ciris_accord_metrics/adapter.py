@@ -26,6 +26,27 @@ from .services import AccordMetricsService
 logger = logging.getLogger(__name__)
 
 
+def _get_metrics_env(name: str, default: str = "") -> str:
+    """Get env var with backward compatibility for old COVENANT naming.
+
+    Checks CIRIS_ACCORD_METRICS_{name} first, falls back to CIRIS_COVENANT_METRICS_{name}.
+    This allows existing .env files to continue working after the rename.
+    """
+    new_key = f"CIRIS_ACCORD_METRICS_{name}"
+    old_key = f"CIRIS_COVENANT_METRICS_{name}"
+
+    value = os.environ.get(new_key)
+    if value is not None:
+        return value
+
+    value = os.environ.get(old_key)
+    if value is not None:
+        logger.info(f"Using legacy env var {old_key} - please migrate to {new_key}")
+        return value
+
+    return default
+
+
 class AccordMetricsAdapter(Service):
     """
     CIRIS Accord Metrics Adapter.
@@ -63,8 +84,9 @@ class AccordMetricsAdapter(Service):
         adapter_config = kwargs.get("adapter_config", {})
 
         # Check consent state from config OR environment variables (for QA testing)
-        env_consent = os.environ.get("CIRIS_ACCORD_METRICS_CONSENT", "").lower() == "true"
-        env_timestamp = os.environ.get("CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP")
+        # Uses backward-compatible helper that checks both ACCORD and legacy COVENANT env vars
+        env_consent = _get_metrics_env("CONSENT", "").lower() == "true"
+        env_timestamp = _get_metrics_env("CONSENT_TIMESTAMP") or None
 
         self._consent_given = adapter_config.get("consent_given", False) or env_consent
         self._consent_timestamp = adapter_config.get("consent_timestamp") or env_timestamp

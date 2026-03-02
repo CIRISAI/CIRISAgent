@@ -134,7 +134,7 @@ CIRISAgent/
 ├── ciris_adapters/        # Platform adapters
 │   ├── discord/           # Discord integration
 │   ├── api/               # REST API
-│   └── ciris_covenant_metrics/  # Trace capture
+│   └── ciris_accord_metrics/  # Trace capture
 ├── docs/                  # Documentation
 ├── FSD/                   # Functional specs
 ├── tools/                 # Development tools
@@ -178,4 +178,4 @@ python main.py --adapter discord
 - [QUICKSTART.md](QUICKSTART.md) - Quick start guide
 - [API_SPEC.md](API_SPEC.md) - API documentation
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Detailed architecture
-- [../COVENANT.md](../COVENANT.md) - Ethical framework
+- [../ACCORD.md](../ACCORD.md) - Ethical framework

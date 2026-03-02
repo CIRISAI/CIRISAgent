@@ -52,6 +52,27 @@ from ciris_engine.schemas.types import JSONDict
 logger = logging.getLogger(__name__)
 
 
+def _get_metrics_env(name: str, default: str = "") -> str:
+    """Get env var with backward compatibility for old COVENANT naming.
+
+    Checks CIRIS_ACCORD_METRICS_{name} first, falls back to CIRIS_COVENANT_METRICS_{name}.
+    This allows existing .env files to continue working after the rename.
+    """
+    new_key = f"CIRIS_ACCORD_METRICS_{name}"
+    old_key = f"CIRIS_COVENANT_METRICS_{name}"
+
+    value = os.environ.get(new_key)
+    if value is not None:
+        return value
+
+    value = os.environ.get(old_key)
+    if value is not None:
+        logger.info(f"Using legacy env var {old_key} - please migrate to {new_key}")
+        return value
+
+    return default
+
+
 class TraceDetailLevel(str, Enum):
     """Trace detail levels for privacy/bandwidth control.
 
@@ -396,8 +417,9 @@ class AccordMetricsService:
         self._initial_agent_id = agent_id
 
         # Consent state - check env var first for QA testing
-        env_consent = os.environ.get("CIRIS_ACCORD_METRICS_CONSENT", "").lower() == "true"
-        env_timestamp = os.environ.get("CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP")
+        # Uses backward-compatible helper that checks both ACCORD and legacy COVENANT env vars
+        env_consent = _get_metrics_env("CONSENT", "").lower() == "true"
+        env_timestamp = _get_metrics_env("CONSENT_TIMESTAMP") or None
 
         config_consent = bool(self._config.get("consent_given", False))
         self._consent_given = config_consent or env_consent
@@ -420,7 +442,7 @@ class AccordMetricsService:
             logger.info("✅ CONSENT enabled via environment variable CIRIS_ACCORD_METRICS_CONSENT")
 
         # Endpoint configuration - check env var first for QA testing
-        env_endpoint = os.environ.get("CIRIS_ACCORD_METRICS_ENDPOINT")
+        env_endpoint = _get_metrics_env("ENDPOINT") or None
         raw_url = self._config.get("endpoint_url")
         if env_endpoint:
             self._endpoint_url: str = env_endpoint
@@ -436,7 +458,7 @@ class AccordMetricsService:
             self._batch_size = 10
 
         # Flush interval - check env var first for QA testing
-        env_interval = os.environ.get("CIRIS_ACCORD_METRICS_FLUSH_INTERVAL")
+        env_interval = _get_metrics_env("FLUSH_INTERVAL") or None
         raw_interval = self._config.get("flush_interval_seconds")
         if env_interval is not None:
             self._flush_interval: float = float(env_interval)
@@ -448,7 +470,7 @@ class AccordMetricsService:
         # Trace detail level - per-adapter config takes precedence over env var
         # This allows loading multiple adapters with different trace levels
         # Default is GENERIC (numeric scores only) for ciris.ai/ciris-scoring
-        env_level = os.environ.get("CIRIS_ACCORD_METRICS_TRACE_LEVEL", "").lower()
+        env_level = _get_metrics_env("TRACE_LEVEL", "").lower()
         config_level = str(self._config.get("trace_level", "")).lower()
         # Config takes precedence (allows per-adapter override), then env, then default
         level_str = config_level or env_level or "generic"

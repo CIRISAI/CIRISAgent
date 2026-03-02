@@ -20,8 +20,23 @@ from fastapi import APIRouter, HTTPException, status
 from ciris_engine.schemas.api.responses import SuccessResponse
 
 
+# Trusted Portal domains for SSRF protection
+# Only these hosts are allowed for device auth and package download
+ALLOWED_PORTAL_HOSTS = frozenset({
+    "portal.ciris.ai",
+    "portal.ciris-services-1.ai",
+    "portal.ciris-services-2.ai",
+    "localhost",
+    "127.0.0.1",
+})
+
+
 def _validate_portal_url(url: str) -> str:
     """Validate portal URL to prevent SSRF attacks.
+
+    Only allows requests to trusted CIRIS Portal domains.
+    This prevents attackers from using the agent as a proxy to access
+    internal services, cloud metadata endpoints, or other untrusted hosts.
 
     Args:
         url: The portal URL to validate
@@ -30,7 +45,7 @@ def _validate_portal_url(url: str) -> str:
         The validated URL
 
     Raises:
-        ValueError: If the URL is invalid or untrusted
+        ValueError: If the URL is invalid or not a trusted Portal domain
     """
     parsed = urllib.parse.urlparse(url)
 
@@ -42,11 +57,19 @@ def _validate_portal_url(url: str) -> str:
     if parsed.scheme not in ("https", "http"):
         raise ValueError("URL must use https")
 
+    # Extract hostname (without port)
+    host = parsed.netloc.split(":")[0].lower()
+
+    # SECURITY: Only allow trusted Portal domains (prevents SSRF)
+    if host not in ALLOWED_PORTAL_HOSTS:
+        raise ValueError(
+            f"Untrusted host '{host}'. Only CIRIS Portal domains are allowed: "
+            f"{', '.join(sorted(ALLOWED_PORTAL_HOSTS))}"
+        )
+
     # For http, only allow localhost/127.0.0.1 (development only)
-    if parsed.scheme == "http":
-        host = parsed.netloc.split(":")[0].lower()
-        if host not in ("localhost", "127.0.0.1"):
-            raise ValueError("HTTP only allowed for localhost")
+    if parsed.scheme == "http" and host not in ("localhost", "127.0.0.1"):
+        raise ValueError("HTTP only allowed for localhost")
 
     return url
 

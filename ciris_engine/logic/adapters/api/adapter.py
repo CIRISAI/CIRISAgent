@@ -919,8 +919,8 @@ class ApiPlatform(Service):
             self.app,
             host=self.config.host,
             port=self.config.port,
-            log_level="info",
-            access_log=True,
+            log_level="warning",  # Reduce spam - errors/warnings only
+            access_log=False,  # Disable access logging (health checks spam)
             timeout_graceful_shutdown=30,  # Force shutdown after 30s to prevent hang
         )
 

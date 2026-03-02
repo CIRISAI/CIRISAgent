@@ -232,5 +232,5 @@ Do NOT optimize for:
 
 **Related Documents**:
 - `MISSION_DRIVEN_DEVELOPMENT.md` - MDD methodology
-- `covenant_1.0b.txt` - CIRIS Covenant
+- `covenant_1.0b.txt` - CIRIS Accord
 - `ciris_engine/logic/services/governance/consent/air.py` - Implementation

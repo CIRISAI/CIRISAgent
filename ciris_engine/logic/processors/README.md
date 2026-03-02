@@ -578,4 +578,4 @@ This creates an AI system you can understand and trust, where every decision has
 
 *For technical implementation details, see the individual module documentation. For creating custom DMAs, see the [DMA Creation Guide](../../docs/DMA_CREATION_GUIDE.md).*
 
-*Copyright © 2025 Eric Moore and CIRIS L3C - Apache 2.0 License*
+*Copyright © 2025 Eric Moore and CIRIS L3C - AGPL-3.0 License*

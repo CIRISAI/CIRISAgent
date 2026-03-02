@@ -924,19 +924,19 @@ class CIRISApiClient(
             val data = body["data"] as? JsonObject
                 ?: throw Exception("Invalid response format")
 
-            // DEBUG: Log raw API response fields
-            logInfo(method, "=== RAW API RESPONSE DEBUG ===")
-            logInfo(method, "files_checked=${data["files_checked"]}")
-            logInfo(method, "files_passed=${data["files_passed"]}")
-            logInfo(method, "per_file_results keys=${(data["per_file_results"] as? JsonObject)?.keys?.size ?: 0}")
-            logInfo(method, "python_modules_checked=${data["python_modules_checked"]}")
-            logInfo(method, "python_modules_passed=${data["python_modules_passed"]}")
-            logInfo(method, "module_integrity_ok=${data["module_integrity_ok"]}")
-            logInfo(method, "module_integrity_summary=${data["module_integrity_summary"]}")
-            logInfo(method, "cross_validated_files count=${(data["cross_validated_files"] as? kotlinx.serialization.json.JsonArray)?.size ?: 0}")
-            logInfo(method, "filesystem_verified_files count=${(data["filesystem_verified_files"] as? kotlinx.serialization.json.JsonArray)?.size ?: 0}")
-            logInfo(method, "agent_verified_files count=${(data["agent_verified_files"] as? kotlinx.serialization.json.JsonArray)?.size ?: 0}")
-            logInfo(method, "=== END RAW API RESPONSE DEBUG ===")
+            // DEBUG: Log raw API response fields (debug level to reduce spam)
+            logDebug(method, "=== RAW API RESPONSE DEBUG ===")
+            logDebug(method, "files_checked=${data["files_checked"]}")
+            logDebug(method, "files_passed=${data["files_passed"]}")
+            logDebug(method, "per_file_results keys=${(data["per_file_results"] as? JsonObject)?.keys?.size ?: 0}")
+            logDebug(method, "python_modules_checked=${data["python_modules_checked"]}")
+            logDebug(method, "python_modules_passed=${data["python_modules_passed"]}")
+            logDebug(method, "module_integrity_ok=${data["module_integrity_ok"]}")
+            logDebug(method, "module_integrity_summary=${data["module_integrity_summary"]}")
+            logDebug(method, "cross_validated_files count=${(data["cross_validated_files"] as? kotlinx.serialization.json.JsonArray)?.size ?: 0}")
+            logDebug(method, "filesystem_verified_files count=${(data["filesystem_verified_files"] as? kotlinx.serialization.json.JsonArray)?.size ?: 0}")
+            logDebug(method, "agent_verified_files count=${(data["agent_verified_files"] as? kotlinx.serialization.json.JsonArray)?.size ?: 0}")
+            logDebug(method, "=== END RAW API RESPONSE DEBUG ===")
 
             val loaded = (data["loaded"] as? JsonPrimitive)?.content?.toBoolean() ?: false
             val verifyStatus = VerifyStatusResponse(
@@ -1034,17 +1034,17 @@ class CIRISApiClient(
 
             logInfo(method, "Verify status: loaded=$loaded, keyStatus=${verifyStatus.keyStatus}, maxLevel=${verifyStatus.maxLevel}, levelPending=${verifyStatus.levelPending}, hwType=${verifyStatus.attestationProofHardwareType ?: verifyStatus.hardwareType}, sourcesAgreeing=${verifyStatus.sourcesAgreeing}/3, playOk=${verifyStatus.playIntegrityOk}")
 
-            // DEBUG: Log parsed values
-            logInfo(method, "=== PARSED VALUES DEBUG ===")
-            logInfo(method, "filesChecked=${verifyStatus.filesChecked}, filesPassed=${verifyStatus.filesPassed}")
-            logInfo(method, "perFileResults count=${verifyStatus.perFileResults?.size ?: 0}")
-            logInfo(method, "pythonModulesChecked=${verifyStatus.pythonModulesChecked}, pythonModulesPassed=${verifyStatus.pythonModulesPassed}")
-            logInfo(method, "moduleIntegrityOk=${verifyStatus.moduleIntegrityOk}")
-            logInfo(method, "moduleIntegritySummary=${verifyStatus.moduleIntegritySummary}")
-            logInfo(method, "crossValidatedFiles count=${verifyStatus.crossValidatedFiles?.size ?: 0}")
-            logInfo(method, "filesystemVerifiedFiles count=${verifyStatus.filesystemVerifiedFiles?.size ?: 0}")
-            logInfo(method, "agentVerifiedFiles count=${verifyStatus.agentVerifiedFiles?.size ?: 0}")
-            logInfo(method, "=== END PARSED VALUES DEBUG ===")
+            // DEBUG: Log parsed values (debug level to reduce spam)
+            logDebug(method, "=== PARSED VALUES DEBUG ===")
+            logDebug(method, "filesChecked=${verifyStatus.filesChecked}, filesPassed=${verifyStatus.filesPassed}")
+            logDebug(method, "perFileResults count=${verifyStatus.perFileResults?.size ?: 0}")
+            logDebug(method, "pythonModulesChecked=${verifyStatus.pythonModulesChecked}, pythonModulesPassed=${verifyStatus.pythonModulesPassed}")
+            logDebug(method, "moduleIntegrityOk=${verifyStatus.moduleIntegrityOk}")
+            logDebug(method, "moduleIntegritySummary=${verifyStatus.moduleIntegritySummary}")
+            logDebug(method, "crossValidatedFiles count=${verifyStatus.crossValidatedFiles?.size ?: 0}")
+            logDebug(method, "filesystemVerifiedFiles count=${verifyStatus.filesystemVerifiedFiles?.size ?: 0}")
+            logDebug(method, "agentVerifiedFiles count=${verifyStatus.agentVerifiedFiles?.size ?: 0}")
+            logDebug(method, "=== END PARSED VALUES DEBUG ===")
 
             verifyStatus
         } catch (e: Exception) {

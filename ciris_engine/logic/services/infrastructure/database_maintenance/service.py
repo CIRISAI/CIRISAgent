@@ -136,6 +136,9 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         # --- Clean up adapter configs without persist=True ---
         await self._cleanup_non_persistent_adapters()
 
+        # --- Check for legacy covenant_metrics config (renamed to accord_metrics in 2.0.2) ---
+        await self._check_legacy_covenant_config()
+
         # --- Clean up stale wakeup tasks from interrupted startups ---
         await self._cleanup_stale_wakeup_tasks()
 
@@ -579,6 +582,29 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         except Exception as e:
             logger.error(f"Error cleaning up non-persistent adapters: {e}", exc_info=True)
+
+    async def _check_legacy_covenant_config(self) -> None:
+        """Check for legacy ciris_covenant_metrics config and log migration warning.
+
+        In CIRIS 2.0.2, ciris_covenant_metrics was renamed to ciris_accord_metrics.
+        This method detects old config entries and warns users to reconfigure.
+        """
+        if not self.config_service:
+            return
+
+        try:
+            # Check for any config with the old adapter name
+            old_configs = await self.config_service.list_configs(prefix="adapter.ciris_covenant_metrics.")
+            if old_configs:
+                logger.warning("=" * 70)
+                logger.warning("⚠️  LEGACY CONFIG DETECTED: ciris_covenant_metrics")
+                logger.warning("   This adapter was renamed to ciris_accord_metrics in CIRIS 2.0.2")
+                logger.warning("   Please reconfigure the adapter through the setup wizard or update")
+                logger.warning("   your .env file to use CIRIS_ACCORD_METRICS_* environment variables.")
+                logger.warning(f"   Found {len(old_configs)} legacy config entries.")
+                logger.warning("=" * 70)
+        except Exception as e:
+            logger.debug(f"Error checking legacy covenant config: {e}")
 
     # Ordered list of ConfigValue typed field names to check
     _CONFIG_VALUE_FIELDS: tuple[str, ...] = (

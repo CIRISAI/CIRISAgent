@@ -22,6 +22,7 @@ from ciris_engine.schemas.api.responses import SuccessResponse
 from .._common import RESPONSES_500
 from .dependencies import SetupOnlyDep
 from .device_auth import (
+    ALLOWED_PORTAL_HOSTS,
     _activate_key_inline,
     _clear_device_auth_session,
     _load_device_auth_session,
@@ -295,13 +296,7 @@ async def download_package(req: DownloadPackageRequest) -> SuccessResponse[Downl
     licensed_modules_dir = data_dir / "licensed_modules"
 
     # Validate URL is from trusted Portal domains and paths only (security: prevent SSRF)
-    ALLOWED_PORTAL_HOSTS = {
-        "portal.ciris.ai",
-        "portal.ciris-services-1.ai",
-        "portal.ciris-services-2.ai",
-        "localhost",
-        "127.0.0.1",
-    }
+    # ALLOWED_PORTAL_HOSTS is imported from device_auth module
     ALLOWED_PATH_PREFIXES = ("/api/", "/v1/")  # Only allow API endpoints
     parsed_url = urlparse(req.package_download_url)
     if parsed_url.hostname not in ALLOWED_PORTAL_HOSTS:
@@ -321,12 +316,28 @@ async def download_package(req: DownloadPackageRequest) -> SuccessResponse[Downl
 
     try:
         # Download the zip from Portal
-        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+        # SECURITY: Disable follow_redirects to prevent redirect-based SSRF bypass
+        # If Portal needs to redirect, it should redirect within allowed domains
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=False) as client:
             headers: Dict[str, str] = {}
             if req.portal_session_cookie:
                 headers["Cookie"] = req.portal_session_cookie
 
             dl_resp = await client.get(req.package_download_url, headers=headers)
+
+            # Handle redirects manually with validation
+            if dl_resp.status_code in (301, 302, 303, 307, 308):
+                redirect_url = dl_resp.headers.get("location", "")
+                redirect_parsed = urlparse(redirect_url)
+                if redirect_parsed.hostname not in ALLOWED_PORTAL_HOSTS:
+                    return SuccessResponse(
+                        data=DownloadPackageResponse(
+                            status="error",
+                            error=f"Redirect to untrusted host '{redirect_parsed.hostname}' blocked",
+                        )
+                    )
+                # Follow the redirect to the validated URL
+                dl_resp = await client.get(redirect_url, headers=headers)
             dl_resp.raise_for_status()
 
         # Get checksum from response header

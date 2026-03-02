@@ -21,6 +21,7 @@ import ai.ciris.api.models.ConfigUpdate as SdkConfigUpdate
 import ai.ciris.api.models.ConsentRequest as SdkConsentRequest
 import ai.ciris.api.models.ConfigValue
 import ai.ciris.api.models.SuccessResponseDictStrStr
+import ai.ciris.api.models.AdapterActionRequest
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*
@@ -36,6 +37,21 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+
+/**
+ * Result of loading an adapter directly.
+ */
+data class AdapterLoadResult(
+    val success: Boolean,
+    val adapterId: String?,
+    val message: String?
+)
 
 /**
  * LLM configuration data for display in settings
@@ -1648,6 +1664,176 @@ class CIRISApiClient(
         } catch (e: Exception) {
             logException(method, e)
             throw e
+        }
+    }
+
+    /**
+     * Get adapters that support interactive configuration (have wizard workflows).
+     * Only returns adapters that are available on the current platform.
+     */
+    suspend fun getConfigurableAdapters(): ConfigurableAdaptersData {
+        val method = "getConfigurableAdapters"
+        logInfo(method, "Fetching configurable adapters")
+
+        return try {
+            val response = systemApi.listConfigurableAdaptersV1SystemAdaptersConfigurableGet(authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Configurable adapters: ${data.totalCount} found")
+
+            ConfigurableAdaptersData(
+                adapters = data.adapters.map { adapter ->
+                    ConfigurableAdapterData(
+                        adapterType = adapter.adapterType,
+                        name = adapter.name,
+                        description = adapter.description,
+                        workflowType = adapter.workflowType,
+                        stepCount = adapter.stepCount,
+                        requiresOauth = adapter.requiresOauth ?: false
+                    )
+                },
+                totalCount = data.totalCount
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Get all loadable adapters (both configurable and direct-load).
+     * Returns adapters that can be loaded via wizard OR directly without configuration.
+     */
+    suspend fun getLoadableAdapters(): LoadableAdaptersData {
+        val method = "getLoadableAdapters"
+        logInfo(method, "Fetching loadable adapters")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(Logging) {
+                    level = LogLevel.INFO
+                }
+            }
+
+            logDebug(method, "GET $baseUrl/v1/system/adapters/loadable")
+            val response: HttpResponse = client.get("$baseUrl/v1/system/adapters/loadable") {
+                authHeader()?.let { headers { append("Authorization", it) } }
+            }
+
+            logDebug(method, "Response status: ${response.status}")
+
+            if (response.status.value !in 200..299) {
+                val errorBody = response.body<String>()
+                logError(method, "Loadable adapters request failed: ${response.status} - $errorBody")
+                client.close()
+                throw Exception("Failed to fetch loadable adapters: ${response.status}")
+            }
+
+            // Parse the response
+            val responseText = response.body<String>()
+            logDebug(method, "Response body: $responseText")
+            client.close()
+
+            val json = Json { ignoreUnknownKeys = true }
+            val parsed = json.parseToJsonElement(responseText).jsonObject
+            val dataObj = parsed["data"]?.jsonObject ?: throw RuntimeException("No data in response")
+
+            val adapters = dataObj["adapters"]?.jsonArray?.map { adapterJson ->
+                val obj = adapterJson.jsonObject
+                LoadableAdapterData(
+                    adapterType = obj["adapter_type"]?.jsonPrimitive?.content ?: "",
+                    name = obj["name"]?.jsonPrimitive?.content ?: "",
+                    description = obj["description"]?.jsonPrimitive?.content ?: "",
+                    requiresConfiguration = obj["requires_configuration"]?.jsonPrimitive?.boolean ?: false,
+                    workflowType = obj["workflow_type"]?.jsonPrimitive?.contentOrNull,
+                    stepCount = obj["step_count"]?.jsonPrimitive?.int ?: 0,
+                    requiresOauth = obj["requires_oauth"]?.jsonPrimitive?.boolean ?: false,
+                    serviceTypes = obj["service_types"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                    platformAvailable = obj["platform_available"]?.jsonPrimitive?.boolean ?: true,
+                    externalDependencies = obj["external_dependencies"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                    dependenciesAvailable = obj["dependencies_available"]?.jsonPrimitive?.boolean ?: true,
+                    missingDependencies = obj["missing_dependencies"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
+                )
+            } ?: emptyList()
+
+            val result = LoadableAdaptersData(
+                adapters = adapters,
+                totalCount = dataObj["total_count"]?.jsonPrimitive?.int ?: adapters.size,
+                configurableCount = dataObj["configurable_count"]?.jsonPrimitive?.int ?: 0,
+                directLoadCount = dataObj["direct_load_count"]?.jsonPrimitive?.int ?: 0
+            )
+
+            logInfo(method, "Loadable adapters: ${result.totalCount} total (${result.configurableCount} configurable, ${result.directLoadCount} direct)")
+            result
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Load an adapter directly (for adapters that don't require configuration).
+     */
+    suspend fun loadAdapter(adapterType: String): AdapterLoadResult {
+        val method = "loadAdapter"
+        logInfo(method, "Loading adapter: $adapterType")
+
+        return try {
+            val request = AdapterActionRequest(
+                config = null,
+                force = false,
+                persist = false
+            )
+            val response = systemApi.loadAdapterV1SystemAdaptersAdapterTypePost(
+                adapterType = adapterType,
+                adapterActionRequest = request,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                return AdapterLoadResult(
+                    success = false,
+                    adapterId = null,
+                    message = "API error: HTTP ${response.status}"
+                )
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: return AdapterLoadResult(
+                success = false,
+                adapterId = null,
+                message = "API returned null data"
+            )
+
+            logInfo(method, "Adapter load result: success=${data.success}, adapterId=${data.adapterId}")
+
+            AdapterLoadResult(
+                success = data.success ?: false,
+                adapterId = data.adapterId,
+                message = data.message
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            AdapterLoadResult(
+                success = false,
+                adapterId = null,
+                message = "Error: ${e.message}"
+            )
         }
     }
 

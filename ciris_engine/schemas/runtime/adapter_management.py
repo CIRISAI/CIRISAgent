@@ -190,6 +190,9 @@ class ModuleTypeInfo(BaseModel):
     external_dependencies: Dict[str, str] = Field(
         default_factory=dict, description="External package dependencies with version constraints"
     )
+    cli_dependencies: List[str] = Field(
+        default_factory=list, description="Required CLI tools/binaries (e.g., 'tmux', 'mcporter')"
+    )
     is_mock: bool = Field(False, description="Whether this is a mock/test module")
     safe_domain: Optional[str] = Field(None, description="Safe domain classification")
     prohibited: List[str] = Field(default_factory=list, description="Prohibited use cases")

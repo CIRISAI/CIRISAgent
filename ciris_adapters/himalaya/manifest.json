@@ -6,6 +6,7 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": "https://github.com/pimalaya/himalaya"
   },
+  "cli_dependencies": ["himalaya"],
   "platform_requirements": [
     "desktop_cli"
   ],

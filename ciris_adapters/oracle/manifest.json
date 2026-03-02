@@ -6,6 +6,7 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": "https://askoracle.dev"
   },
+  "cli_dependencies": ["oracle"],
   "platform_requirements": [
     "desktop_cli"
   ],

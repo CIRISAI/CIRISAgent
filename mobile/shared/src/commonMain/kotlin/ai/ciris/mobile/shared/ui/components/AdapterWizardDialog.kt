@@ -1,6 +1,9 @@
 package ai.ciris.mobile.shared.ui.components
 
-import ai.ciris.mobile.shared.models.*
+import ai.ciris.mobile.shared.models.ConfigFieldData
+import ai.ciris.mobile.shared.models.ConfigSessionData
+import ai.ciris.mobile.shared.models.LoadableAdapterData
+import ai.ciris.mobile.shared.models.LoadableAdaptersData
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.clickable
@@ -35,11 +38,12 @@ import androidx.compose.ui.window.DialogProperties
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdapterWizardDialog(
-    moduleTypes: ModuleTypesData?,
+    loadableAdapters: LoadableAdaptersData?,
     wizardSession: ConfigSessionData?,
     isLoading: Boolean,
     error: String?,
     onSelectType: (String) -> Unit,
+    onLoadDirectly: (String) -> Unit,
     onSubmitStep: (Map<String, String>) -> Unit,
     onBack: () -> Unit,
     onDismiss: () -> Unit
@@ -127,11 +131,12 @@ fun AdapterWizardDialog(
                                 onSubmit = onSubmitStep
                             )
                         }
-                        moduleTypes != null -> {
+                        loadableAdapters != null -> {
                             TypeSelectionContent(
-                                moduleTypes = moduleTypes,
+                                loadableAdapters = loadableAdapters,
                                 error = error,
-                                onSelectType = onSelectType
+                                onSelectType = onSelectType,
+                                onLoadDirectly = onLoadDirectly
                             )
                         }
                         else -> {
@@ -154,9 +159,10 @@ fun AdapterWizardDialog(
 
 @Composable
 private fun TypeSelectionContent(
-    moduleTypes: ModuleTypesData,
+    loadableAdapters: LoadableAdaptersData,
     error: String?,
-    onSelectType: (String) -> Unit
+    onSelectType: (String) -> Unit,
+    onLoadDirectly: (String) -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -182,13 +188,13 @@ private fun TypeSelectionContent(
             }
         }
 
-        if (moduleTypes.adapters.isEmpty()) {
+        if (loadableAdapters.adapters.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No adapter types available",
+                    text = "No loadable adapters available",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -197,10 +203,16 @@ private fun TypeSelectionContent(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(moduleTypes.adapters.filter { it.platformAvailable }) { adapter ->
+                items(loadableAdapters.adapters) { adapter ->
                     AdapterTypeCard(
                         adapter = adapter,
-                        onClick = { onSelectType(adapter.moduleId) }
+                        onClick = {
+                            if (adapter.requiresConfiguration) {
+                                onSelectType(adapter.adapterType)
+                            } else {
+                                onLoadDirectly(adapter.adapterType)
+                            }
+                        }
                     )
                 }
             }
@@ -210,14 +222,14 @@ private fun TypeSelectionContent(
 
 @Composable
 private fun AdapterTypeCard(
-    adapter: ModuleTypeData,
+    adapter: LoadableAdapterData,
     onClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .wrapContentHeight()
-            .testableClickable("item_adapter_type_${adapter.moduleId}") { onClick() },
+            .testableClickable("item_adapter_type_${adapter.adapterType}") { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
@@ -237,45 +249,66 @@ private fun AdapterTypeCard(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
-                    text = "v${adapter.version}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            adapter.description?.let { desc ->
-                Text(
-                    text = desc,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            val validCapabilities = adapter.capabilities.filter { it.isNotBlank() }
-            if (validCapabilities.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .padding(top = 4.dp)
-                        .height(IntrinsicSize.Min),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Limit to 2 chips to avoid layout issues
-                    validCapabilities.take(2).forEach { capability ->
-                        SuggestionChip(
-                            onClick = {},
-                            label = { Text(capability, style = MaterialTheme.typography.labelSmall) }
-                        )
-                    }
-                    if (validCapabilities.size > 2) {
-                        Text(
-                            text = "+${validCapabilities.size - 2}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                if (adapter.requiresConfiguration) {
+                    Text(
+                        text = "${adapter.stepCount} steps",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else if (!adapter.dependenciesAvailable) {
+                    Text(
+                        text = "Missing CLI",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else {
+                    Text(
+                        text = "Ready to load",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
+            }
+
+            Text(
+                text = adapter.description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Show workflow type / service types and OAuth requirement
+            Row(
+                modifier = Modifier.padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (adapter.requiresConfiguration && adapter.workflowType != null) {
+                    SuggestionChip(
+                        onClick = {},
+                        label = { Text(adapter.workflowType, style = MaterialTheme.typography.labelSmall) }
+                    )
+                } else if (adapter.serviceTypes.isNotEmpty()) {
+                    SuggestionChip(
+                        onClick = {},
+                        label = { Text(adapter.serviceTypes.first(), style = MaterialTheme.typography.labelSmall) }
+                    )
+                }
+                if (adapter.requiresOauth) {
+                    SuggestionChip(
+                        onClick = {},
+                        label = { Text("OAuth", style = MaterialTheme.typography.labelSmall) }
+                    )
+                }
+            }
+
+            // Show missing dependencies warning
+            if (adapter.missingDependencies.isNotEmpty()) {
+                Text(
+                    text = "Missing: ${adapter.missingDependencies.joinToString(", ")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
         }
     }

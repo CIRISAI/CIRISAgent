@@ -210,6 +210,36 @@ class ConfigurableAdaptersResponse(BaseModel):
     total_count: int = Field(..., description="Total number of configurable adapters")
 
 
+class LoadableAdapterInfo(BaseModel):
+    """Information about an adapter that can be loaded (with or without configuration)."""
+
+    adapter_type: str = Field(..., description="Type identifier for the adapter")
+    name: str = Field(..., description="Human-readable name")
+    description: str = Field(..., description="Description of the adapter")
+    requires_configuration: bool = Field(..., description="Whether this adapter needs configuration before loading")
+    # For adapters that require configuration
+    workflow_type: Optional[str] = Field(None, description="Type of configuration workflow (if requires_configuration)")
+    step_count: int = Field(0, description="Number of steps in the configuration workflow")
+    requires_oauth: bool = Field(False, description="Whether this adapter requires OAuth authentication")
+    steps: List[ConfigStepInfo] = Field(default_factory=list, description="Configuration steps (if any)")
+    # For all adapters
+    service_types: List[str] = Field(default_factory=list, description="Service types this adapter provides")
+    platform_available: bool = Field(True, description="Whether platform requirements are satisfied")
+    # External dependency checking
+    external_dependencies: List[str] = Field(default_factory=list, description="Required CLI tools or binaries")
+    dependencies_available: bool = Field(True, description="Whether all external dependencies are available")
+    missing_dependencies: List[str] = Field(default_factory=list, description="List of missing dependencies")
+
+
+class LoadableAdaptersResponse(BaseModel):
+    """Response containing all loadable adapters."""
+
+    adapters: List[LoadableAdapterInfo] = Field(..., description="List of loadable adapters")
+    total_count: int = Field(..., description="Total number of loadable adapters")
+    configurable_count: int = Field(0, description="Number that require configuration")
+    direct_load_count: int = Field(0, description="Number that can be loaded directly")
+
+
 class ConfigurationSessionResponse(BaseModel):
     """Response for starting a configuration session."""
 

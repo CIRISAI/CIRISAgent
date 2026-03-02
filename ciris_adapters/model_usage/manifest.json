@@ -36,5 +36,8 @@
   "exports": {
     "service_class": "model_usage.service.ModelUsageToolService"
   },
-  "configuration": {}
+  "configuration": {},
+  "cli_dependencies": [
+    "model_usage"
+  ]
 }

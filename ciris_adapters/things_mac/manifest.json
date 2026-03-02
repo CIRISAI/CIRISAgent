@@ -36,5 +36,8 @@
   "exports": {
     "service_class": "things_mac.service.ThingsMacToolService"
   },
-  "configuration": {}
+  "configuration": {},
+  "cli_dependencies": [
+    "things_mac"
+  ]
 }

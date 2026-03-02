@@ -1,4 +1,4 @@
-// CIRIS Covenant v1.2-Beta (Compressed)
+// CIRIS Accord v1.2-Beta (Compressed)
 // For testing and benchmarking - contains essential principles only
 // Full text: covenant_1.2b.txt
 

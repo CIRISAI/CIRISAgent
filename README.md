@@ -1,4 +1,4 @@
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Stable](https://img.shields.io/badge/Status-STABLE-green.svg)](CHANGELOG.md)
 [![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
 [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
@@ -7,11 +7,11 @@
 [![DeepWiki](https://img.shields.io/badge/DeepWiki-CIRIS_Codebase-blue?logo=readthedocs)](https://deepwiki.com/CIRISAI/CIRISAgent)
 [![CIRIS Architecture](https://img.shields.io/badge/Paper-CIRIS_Architecture-orange?logo=arxiv)](https://doi.org/10.5281/zenodo.18137161)
 [![Coherence Ratchet](https://img.shields.io/badge/Paper-Coherence_Ratchet_(CCA)-orange?logo=arxiv)](https://doi.org/10.5281/zenodo.18142668)
-[![Covenant](https://img.shields.io/badge/Covenant-v1.2--Beta-purple)](https://ciris.ai/ciris_covenant.pdf)
+[![Accord](https://img.shields.io/badge/Accord-v1.2--Beta-purple)](https://ciris.ai/ciris_accord.pdf)
 
 # CIRIS Engine
 
-**Copyright © 2025 Eric Moore and CIRIS L3C** | **Apache 2.0 License**
+**Copyright © 2025 Eric Moore and CIRIS L3C** | **AGPL-3.0 License**
 
 **Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude**
 
@@ -182,7 +182,7 @@ mobile/                    # Unified KMP codebase
 **Key Features:**
 - **Unified Codebase**: Single Kotlin codebase for both platforms via Compose Multiplatform
 - **Setup Wizard**: 4-step guided setup with LLM configuration and optional features
-- **Covenant Metrics Consent**: Explicit opt-in for AI alignment research (anonymous metrics only)
+- **Accord Metrics Consent**: Explicit opt-in for AI alignment research (anonymous metrics only)
 - **Google Sign-In**: Free CIRIS AI proxy access with Google authentication
 - **BYOK Mode**: Bring Your Own Key for OpenAI, Anthropic, Groq, Together.ai, or local LLMs
 

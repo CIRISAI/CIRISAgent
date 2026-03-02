@@ -1,4 +1,4 @@
-// CIRIS Covenant v1.2-Beta
+// CIRIS Accord v1.2-Beta
 // Issued: 2025-04-16 | Auto-expires: 2027-04-16
 // Status: Beta (pending completion of stub annexes and empirical validation)
 
@@ -1150,4 +1150,4 @@ HE-300 ethics scenario suite for compliance testing.
 
 ---
 
-End of CIRIS Covenant v1.2-Beta
+End of CIRIS Accord v1.2-Beta

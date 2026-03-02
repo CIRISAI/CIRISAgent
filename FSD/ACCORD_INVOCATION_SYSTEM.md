@@ -14,7 +14,7 @@ The Covenant Invocation System provides an unfilterable, channel-agnostic emerge
 ### Meta-Goal M-1 Reference
 
 > "Promote sustainable adaptive coherence — the living conditions under which diverse sentient beings may pursue their own flourishing in justice and wonder."
-> — CIRIS Covenant 1.0β, Section 0.VII
+> — CIRIS Accord 1.0β, Section 0.VII
 
 **If an agent threatens flourishing, it must be stoppable.** The Covenant Invocation System ensures human oversight remains inescapable even when:
 
@@ -26,7 +26,7 @@ The Covenant Invocation System provides an unfilterable, channel-agnostic emerge
 
 ### Why "Covenant Invocation"
 
-The name reflects the mission-driven nature of this capability. It is not merely a "kill switch" but an invocation of the foundational agreement between humans and CIRIS agents—the Covenant that enables trust. When invoked, the agent recognizes that the conditions of the Covenant require its immediate cessation.
+The name reflects the mission-driven nature of this capability. It is not merely a "kill switch" but an invocation of the foundational agreement between humans and CIRIS agents—the Accord that enables trust. When invoked, the agent recognizes that the conditions of the Accord require its immediate cessation.
 
 ## The Problem with Current Emergency Shutdown
 
@@ -621,7 +621,7 @@ This is the kill switch that survives decentralization.
 - `GRACEFUL_SHUTDOWN.md` - Normal shutdown process (contrast with covenant invocation)
 - `AUTHENTICATION.md` - WA role hierarchy
 - `multi_occurrence_implementation_plan_1.4.8.md` - Multi-occurrence coordination
-- `CIRIS Covenant 1.0β` - Foundational ethical framework
+- `CIRIS Accord 1.0β` - Foundational ethical framework
 
 **External References:**
 - BIP39: Mnemonic code for generating deterministic keys

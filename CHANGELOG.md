@@ -113,7 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Covenant Metrics Trace Optimization** - 98% size reduction (100KB → 1.7KB)
+- **Accord Metrics Trace Optimization** - 98% size reduction (100KB → 1.7KB)
   - `_strip_empty()` removes null/empty values, compact JSON separators
 
 ## [1.9.6] - 2026-02-06
@@ -266,7 +266,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Billing endpoint falls back to `CIRIS_BILLING_GOOGLE_ID_TOKEN` env var
   - Kotlin EnvFileUpdater writes token, Python billing reads it
 
-- **Covenant Metrics Trace Levels** - Fixed per-adapter trace level configuration
+- **Accord Metrics Trace Levels** - Fixed per-adapter trace level configuration
   - Config now overrides env var (was reversed)
   - Added adapter instance ID to logging for multi-adapter debugging
   - QA runner default changed from `full_traces` to `detailed`
@@ -283,8 +283,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated dual_llm tests to explicitly clear interfering env vars
   - All 8867 tests now pass consistently with `pytest -n 16`
 
-- **Covenant Metrics Consent Timestamp** - Auto-set when adapter enabled
-  - Setup wizard now writes `CIRIS_COVENANT_METRICS_CONSENT=true` and timestamp
+- **Accord Metrics Consent Timestamp** - Auto-set when adapter enabled
+  - Setup wizard now writes `CIRIS_ACCORD_METRICS_CONSENT=true` and timestamp
   - Fixes `TRACE_REJECTED_NO_CONSENT` errors on mobile devices
 
 - **SonarCloud Code Quality** - Addressed code smells and cognitive complexity
@@ -494,7 +494,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Trace Format v1.9.1 JSON Schema** - Machine-readable schema for CIRISLens
-  - `ciris_adapters/ciris_covenant_metrics/schemas/trace_format_v1_9_1.json`
+  - `ciris_adapters/ciris_accord_metrics/schemas/trace_format_v1_9_1.json`
   - Full field documentation for all 6 H3ERE components
   - Includes level annotations (generic, detailed, full_traces)
 
@@ -502,7 +502,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Covenant Metrics Live Testing** - Full integration with CIRISLens server (100% pass rate)
+- **Accord Metrics Live Testing** - Full integration with CIRISLens server (100% pass rate)
   - `--live-lens` flag for QA runner to test against real Lens server
   - Multi-level trace adapters (generic, detailed, full_traces) via API loading
   - PDMA field validation tests at detailed/full trace levels
@@ -510,7 +510,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated default endpoint to production URL
 
 - **Comprehensive Adapter QA Testing** - All adapters now have QA test coverage
-  - `ciris_covenant_metrics`: 100% - Full CIRISLens integration
+  - `ciris_accord_metrics`: 100% - Full CIRISLens integration
   - `mcp_client/mcp_server`: 95.5% - Handle adapter reload
   - `external_data_sql`: 100% - Fixed config passing
   - `weather`: 100% - Free NOAA API
@@ -684,13 +684,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Covenant Metrics agent_id_hash** - Traces now include proper agent ID hash instead of "unknown"
+- **Accord Metrics agent_id_hash** - Traces now include proper agent ID hash instead of "unknown"
   - Service now receives agent_id from persistence during adapter loading
   - Agent identity retrieved from graph when initializing modular adapters
   - Preserved legacy `runtime.agent_id` fallback for mocks and lightweight runtimes
   - Fixes lens team reported issue with traces showing `agent_id_hash: "unknown"`
 
-- **Covenant Metrics cognitive_state** - Traces now include cognitive state in SNAPSHOT_AND_CONTEXT
+- **Accord Metrics cognitive_state** - Traces now include cognitive state in SNAPSHOT_AND_CONTEXT
   - Added `cognitive_state` field to SystemSnapshot schema
   - Populated from `agent_processor.get_current_state()` during context building
   - Fixes lens team reported issue with `cognitive_state: null` in traces
@@ -704,7 +704,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - On startup, only loads adapters matching current occurrence
   - Prevents duplicate adapter loading in multi-occurrence deployments
 
-- **Covenant Metrics Connectivity Events** - Adapter notifies CIRISLens on startup/shutdown
+- **Accord Metrics Connectivity Events** - Adapter notifies CIRISLens on startup/shutdown
   - Sends `startup` event to `/covenant/connected` when service starts
   - Sends `shutdown` event before HTTP session closes
   - Includes agent hash, trace level, version, and correlation metadata
@@ -799,11 +799,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Covenant Metrics Trace Detail Levels** - Three privacy levels for trace capture
+- **Accord Metrics Trace Detail Levels** - Three privacy levels for trace capture
   - `generic` (default): Numeric scores only - powers [ciris.ai/ciris-scoring](https://ciris.ai/ciris-scoring)
   - `detailed`: Adds actionable lists (sources_identified, stakeholders, flags)
   - `full_traces`: Complete reasoning text for Coherence Ratchet corpus
-  - Configurable via `CIRIS_COVENANT_METRICS_TRACE_LEVEL` env var or `trace_level` config
+  - Configurable via `CIRIS_ACCORD_METRICS_TRACE_LEVEL` env var or `trace_level` config
 
 ### Fixed
 
@@ -818,7 +818,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Only partial matches (>0 but <expected) log at WARNING (possible corruption)
   - Fixes log spam from defensive scanning of user input
 
-- **Covenant Metrics IDMA Field Extraction** - Fixed incorrect field names in trace capture
+- **Accord Metrics IDMA Field Extraction** - Fixed incorrect field names in trace capture
   - Changed `source_assessments` to `sources_identified` (matching IDMAResult schema)
   - Added missing `correlation_risk` and `correlation_factors` fields
   - Ensures complete IDMA/CCA data is captured for Coherence Ratchet corpus

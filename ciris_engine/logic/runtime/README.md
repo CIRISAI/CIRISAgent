@@ -379,4 +379,4 @@ The CIRIS runtime system provides a robust, flexible foundation for running the 
 
 ---
 
-*Copyright © 2025 Eric Moore and CIRIS L3C - Apache 2.0 License*
+*Copyright © 2025 Eric Moore and CIRIS L3C - AGPL-3.0 License*

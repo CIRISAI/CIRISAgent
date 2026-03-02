@@ -234,12 +234,12 @@ Based on a real verified trace from production:
 
 ## Related Files
 
-- Schema: `ciris_adapters/ciris_covenant_metrics/schemas/trace_format_v1_9_1.json`
-- Service: `ciris_adapters/ciris_covenant_metrics/services.py`
+- Schema: `ciris_adapters/ciris_accord_metrics/schemas/trace_format_v1_9_1.json`
+- Service: `ciris_adapters/ciris_accord_metrics/services.py`
 - Signing: `ciris_engine/logic/audit/signing_protocol.py`
 
 ## See Also
 
 - [OVERVIEW.md](OVERVIEW.md) - Architecture overview
-- [COVENANT.md](../COVENANT.md) - Ethical framework
+- [ACCORD.md](../ACCORD.md) - Ethical framework
 - [API_SPEC.md](API_SPEC.md) - API documentation

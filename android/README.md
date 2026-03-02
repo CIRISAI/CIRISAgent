@@ -678,7 +678,7 @@ In `proguard-rules.pro`:
 
 ## License
 
-Same as CIRIS: Apache 2.0
+Same as CIRIS: AGPL-3.0
 
 ## Support
 

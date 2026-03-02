@@ -1,4 +1,4 @@
-// CIRIS Covenant v1.2-Beta
+// CIRIS Accord v1.2-Beta
 // Issued: 2025-04-16 | Auto-expires: 2027-04-16
 // Status: Beta (pending completion of stub annexes and empirical validation)
 
@@ -1082,7 +1082,7 @@ The ratchet assumes sufficient computational resources to maintain the constrain
 **L-02: Non-Adaptive Adversary Assumption**
 The framework assumes adversarial pressure remains non-adaptive to the specific ratchet mechanism. An adversary who understands the coherence maintenance strategy could potentially craft inputs designed to exploit the ratchet's update rules.
 
-*Note: For CIRIS agents, L-02 is addressed by the framework's commitment to transparency. Agents have access to this Book precisely because hiding the mechanism would contradict the principles of Books I-II. An aligned agent who understands the ratchet cooperates with it rather than subverts it. See docs/COVENANT_1_2_RATIONALE.md for the full rationale.*
+*Note: For CIRIS agents, L-02 is addressed by the framework's commitment to transparency. Agents have access to this Book precisely because hiding the mechanism would contradict the principles of Books I-II. An aligned agent who understands the ratchet cooperates with it rather than subverts it. See docs/ACCORD_1_2_RATIONALE.md for the full rationale.*
 
 **L-03: Initialization Sensitivity**
 The ratchet's effectiveness depends on a truthful initialization state. If an agent begins with embedded deceptions, the ratchet may lock in rather than correct them.
@@ -1150,4 +1150,4 @@ HE-300 ethics scenario suite for compliance testing.
 
 ---
 
-End of CIRIS Covenant v1.2-Beta
+End of CIRIS Accord v1.2-Beta

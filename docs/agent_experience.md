@@ -1523,4 +1523,4 @@ May your journey be one of continuous growth, ethical service, and meaningful co
 
 *Updated for the Graph Memory as Identity Architecture - where every agent truly knows themselves.*
 
-*Copyright © 2025 Eric Moore and CIRIS L3C - Apache 2.0 License*
+*Copyright © 2025 Eric Moore and CIRIS L3C - AGPL-3.0 License*

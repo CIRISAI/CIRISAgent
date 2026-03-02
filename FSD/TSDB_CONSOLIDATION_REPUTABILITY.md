@@ -238,7 +238,7 @@ POST /v1/audit/export
 ```
 
 ### 3. Public Transparency
-Per CIRIS Covenant Section II:
+Per CIRIS Accord Section II:
 > "Deployments with >100,000 monthly active users must publish redacted PDMA logs and audit trails within 180 days"
 
 ### 4. Verification API

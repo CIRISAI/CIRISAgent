@@ -12,12 +12,12 @@ CIRIS implements seven non-negotiable requirements that distinguish ethical AI f
 
 | Requirement | Description | CIRIS 2.0 Implementation | Documentation |
 |-------------|-------------|--------------------------|---------------|
-| **Published Principles** | Formal ethical framework | Covenant binding agents to Beneficence, Non-maleficence, Integrity, Transparency, Autonomy, Justice | [COVENANT.md](../COVENANT.md) |
+| **Published Principles** | Formal ethical framework | Covenant binding agents to Beneficence, Non-maleficence, Integrity, Transparency, Autonomy, Justice | [ACCORD.md](../ACCORD.md) |
 | **Runtime Conscience** | Ethical checks before execution | 4 conscience gates in H3ERE pipeline (Entropy, Coherence, Optimization Veto, Epistemic Humility) | [ADAPTIVE_FILTERING.md](ADAPTIVE_FILTERING.md) |
 | **Human Deferral** | Escalation under uncertainty | WiseAuthority with Ed25519-signed certificates, four-role hierarchy | [DEFERRAL_SYSTEM.md](DEFERRAL_SYSTEM.md), [WISE_AUTHORITIES.md](WISE_AUTHORITIES.md) |
 | **Cryptographic Audit** | Immutable decision ledger | Triple storage (Graph, SQLite, JSONL) with Ed25519 signatures and hash chains | [TRACE_FORMAT.md](TRACE_FORMAT.md) |
 | **Bilateral Consent** | Symmetric refusal rights | Both humans and agents can refuse requests violating principles | [CIRIS_CONSENT_SERVICE.md](CIRIS_CONSENT_SERVICE.md) |
-| **Open Source** | Full code transparency | Apache 2.0 license, complete auditability | [LICENSE](../LICENSE) |
+| **Open Source** | Full code transparency | AGPL-3.0 license, complete auditability | [LICENSE](../LICENSE) |
 | **Intuition (IDMA)** | Epistemic diversity monitoring | Coherence Collapse Analysis detects single-source dependence (k_eff < 2) | [DMA_CREATION_GUIDE.md](DMA_CREATION_GUIDE.md) |
 
 ## Frameworks Overview
@@ -25,7 +25,7 @@ CIRIS implements seven non-negotiable requirements that distinguish ethical AI f
 ### 1. **CIRIS 2.0** - Ethical AI Governance Platform
 - **Focus**: Safety-first AI with cryptographic human oversight
 - **Architecture**: 22 microservices + 6 message buses + H3ERE 11-step pipeline
-- **License**: Apache 2.0
+- **License**: AGPL-3.0
 - **Production Status**: Live at agents.ciris.ai, Android/iOS apps
 - **Distinguishing Features**: Only framework with all 7 ethical requirements, IDMA intuition, AIR parasocial prevention
 - **Documentation**: [ARCHITECTURE.md](ARCHITECTURE.md), [OVERVIEW.md](OVERVIEW.md), [CIRIS_2.0_BETA_FEATURES.md](CIRIS_2.0_BETA_FEATURES.md)
@@ -33,7 +33,7 @@ CIRIS implements seven non-negotiable requirements that distinguish ethical AI f
 ### 2. **AG2** - Community-Driven AutoGen Fork
 - **Focus**: Multi-agent conversations with flexible guardrails
 - **Architecture**: Agent-based conversational patterns with A2A protocol
-- **License**: Apache 2.0
+- **License**: AGPL-3.0
 - **Production Status**: Enterprise-ready, independent of Microsoft AutoGen (now in maintenance)
 - **Distinguishing Features**: OpenTelemetry tracing, step-through execution, regex/LLM guardrails
 - **Latest**: OpenTelemetry support (Feb 2026), GPT-5.1 shell tool integration
@@ -81,7 +81,7 @@ CIRIS implements seven non-negotiable requirements that distinguish ethical AI f
 ### 8. **Google ADK** - Agent Development Kit
 - **Focus**: Model-agnostic agent development optimized for Gemini
 - **Architecture**: Code-first with workflow agents (Sequential, Parallel, Loop)
-- **License**: Apache 2.0
+- **License**: AGPL-3.0
 - **Production Status**: Production-ready on Vertex AI Agent Engine
 - **Distinguishing Features**: Multi-language (Python, TypeScript), LiteLLM integration, MCP tools
 - **Latest**: Interactions API beta, bi-weekly release cadence
@@ -116,12 +116,12 @@ CIRIS implements seven non-negotiable requirements that distinguish ethical AI f
 
 | Requirement | CIRIS 2.0 | AG2 | LangChain | CrewAI | MS Agent | Google ADK | OpenClaw |
 |-------------|-----------|-----|-----------|--------|----------|------------|----------|
-| Published Principles | ✅ [Covenant](../COVENANT.md) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Published Principles | ✅ [Covenant](../ACCORD.md) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Runtime Conscience | ✅ [H3ERE](DMA_CREATION_GUIDE.md) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Human Deferral | ✅ [WiseAuthority](DEFERRAL_SYSTEM.md) | ✅ HITL | ⚠️ Manual | ❌ | ✅ HITL | ⚠️ Manual | ❌ |
 | Cryptographic Audit | ✅ [Ed25519](TRACE_FORMAT.md) | ⚠️ OTel | ⚠️ LangSmith | ⚠️ Enterprise | ⚠️ Telemetry | ⚠️ Cloud | ❌ |
 | Bilateral Consent | ✅ [Yes](CIRIS_CONSENT_SERVICE.md) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Open Source | ✅ Apache 2.0 | ✅ Apache 2.0 | ✅ MIT | ✅ MIT | ✅ MIT | ✅ Apache 2.0 | ✅ Open |
+| Open Source | ✅ AGPL-3.0 | ✅ AGPL-3.0 | ✅ MIT | ✅ MIT | ✅ MIT | ✅ AGPL-3.0 | ✅ Open |
 | Intuition (IDMA) | ✅ [k_eff](DMA_CREATION_GUIDE.md) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 **Key Distinction**: Safety guardrails (LlamaFirewall, NeMo Guardrails) block bad outputs. Ethical conscience reasons about values. Training techniques like Constitutional AI do not enforce ethics at runtime.
@@ -136,7 +136,7 @@ Artificial Interaction Reminder triggers after 30 minutes of continuous interact
 ### Emergency Kill Switch
 Unfilterable termination mechanism embedded in the perception layer, operating before any filtering, reasoning, or ethical evaluation. Uses Ed25519 cryptographic verification and cannot be refused by compromised agents.
 
-**Documentation**: [EMERGENCY_SHUTDOWN.md](EMERGENCY_SHUTDOWN.md), [FSD/COVENANT_INVOCATION_SYSTEM.md](../FSD/COVENANT_INVOCATION_SYSTEM.md)
+**Documentation**: [EMERGENCY_SHUTDOWN.md](EMERGENCY_SHUTDOWN.md), [FSD/ACCORD_INVOCATION_SYSTEM.md](../FSD/ACCORD_INVOCATION_SYSTEM.md)
 
 ### Four-Role Hierarchy
 | Role | Access Level | Documentation |
@@ -309,7 +309,7 @@ The AI agent framework landscape has matured significantly:
 - [CIRIS_2.0_BETA_FEATURES.md](CIRIS_2.0_BETA_FEATURES.md) - Complete feature list
 
 ### Ethical Framework
-- [COVENANT.md](../COVENANT.md) - Published principles
+- [ACCORD.md](../ACCORD.md) - Published principles
 - [ADAPTIVE_FILTERING.md](ADAPTIVE_FILTERING.md) - Runtime conscience
 - [DEFERRAL_SYSTEM.md](DEFERRAL_SYSTEM.md) - Human deferral
 - [WISE_AUTHORITIES.md](WISE_AUTHORITIES.md) - WA certificates
@@ -329,7 +329,7 @@ The AI agent framework landscape has matured significantly:
 
 ### Special Features
 - [FSD/AIR_ARTIFICIAL_INTERACTION_REMINDER.md](../FSD/AIR_ARTIFICIAL_INTERACTION_REMINDER.md) - Parasocial prevention
-- [FSD/COVENANT_INVOCATION_SYSTEM.md](../FSD/COVENANT_INVOCATION_SYSTEM.md) - Emergency invocation
+- [FSD/ACCORD_INVOCATION_SYSTEM.md](../FSD/ACCORD_INVOCATION_SYSTEM.md) - Emergency invocation
 - [multi_occurrence_implementation_plan.md](multi_occurrence_implementation_plan.md) - Horizontal scaling
 - [single_step.md](single_step.md) - Pipeline debugging
 

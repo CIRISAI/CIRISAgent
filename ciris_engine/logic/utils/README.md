@@ -404,4 +404,4 @@ The utilities module provides the essential infrastructure foundation that enabl
 
 ---
 
-*Copyright © 2025 Eric Moore and CIRIS L3C - Apache 2.0 License*
+*Copyright © 2025 Eric Moore and CIRIS L3C - AGPL-3.0 License*

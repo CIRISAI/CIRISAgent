@@ -23,6 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import kotlinx.coroutines.launch
 
 /**
@@ -65,7 +67,10 @@ fun LogsScreen(
             TopAppBar(
                 title = { Text("System Logs") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.testableClickable("btn_logs_back") { onNavigateBack() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -74,10 +79,17 @@ fun LogsScreen(
                 },
                 actions = {
                     // Filter toggle
-                    TextButton(onClick = { showFilters = !showFilters }) {
+                    TextButton(
+                        onClick = { showFilters = !showFilters },
+                        modifier = Modifier.testableClickable("btn_logs_toggle_filters") { showFilters = !showFilters }
+                    ) {
                         Text(if (showFilters) "Hide" else "Filter")
                     }
-                    IconButton(onClick = onRefresh, enabled = !logsState.isLoading) {
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !logsState.isLoading,
+                        modifier = Modifier.testableClickable("btn_logs_refresh") { onRefresh() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Refresh"
@@ -224,7 +236,7 @@ private fun LogsFiltersSection(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = onSearchChange,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testable("input_logs_search"),
                 placeholder = { Text("Search logs...") },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodySmall
@@ -251,7 +263,10 @@ private fun LogsFiltersSection(
                             onClick = {
                                 onFilterChange(filter.copy(level = if (level == "ALL") null else level))
                             },
-                            label = { Text(level, fontSize = 11.sp) }
+                            label = { Text(level, fontSize = 11.sp) },
+                            modifier = Modifier.testableClickable("chip_logs_level_${level.lowercase()}") {
+                                onFilterChange(filter.copy(level = if (level == "ALL") null else level))
+                            }
                         )
                     }
                 }
@@ -276,13 +291,19 @@ private fun LogsFiltersSection(
                         FilterChip(
                             selected = filter.service == null,
                             onClick = { onFilterChange(filter.copy(service = null)) },
-                            label = { Text("All", fontSize = 11.sp) }
+                            label = { Text("All", fontSize = 11.sp) },
+                            modifier = Modifier.testableClickable("chip_logs_service_all") {
+                                onFilterChange(filter.copy(service = null))
+                            }
                         )
                         services.take(5).forEach { service ->
                             FilterChip(
                                 selected = filter.service == service,
                                 onClick = { onFilterChange(filter.copy(service = service)) },
-                                label = { Text(service.take(12), fontSize = 11.sp) }
+                                label = { Text(service.take(12), fontSize = 11.sp) },
+                                modifier = Modifier.testableClickable("chip_logs_service_${service.lowercase().replace(" ", "_")}") {
+                                    onFilterChange(filter.copy(service = service))
+                                }
                             )
                         }
                     }
@@ -307,7 +328,10 @@ private fun LogsFiltersSection(
                         FilterChip(
                             selected = filter.limit == limit,
                             onClick = { onFilterChange(filter.copy(limit = limit)) },
-                            label = { Text("$limit", fontSize = 11.sp) }
+                            label = { Text("$limit", fontSize = 11.sp) },
+                            modifier = Modifier.testableClickable("chip_logs_limit_$limit") {
+                                onFilterChange(filter.copy(limit = limit))
+                            }
                         )
                     }
                 }
@@ -318,7 +342,8 @@ private fun LogsFiltersSection(
                 ) {
                     Switch(
                         checked = autoScroll,
-                        onCheckedChange = { onToggleAutoScroll() }
+                        onCheckedChange = { onToggleAutoScroll() },
+                        modifier = Modifier.testableClickable("switch_logs_auto_scroll") { onToggleAutoScroll() }
                     )
                     Text(
                         text = "Auto-scroll",
@@ -373,7 +398,10 @@ private fun LogEntryRow(
         modifier = modifier
             .fillMaxWidth()
             .background(Color(0xFF2A2A2A), MaterialTheme.shapes.small)
-            .clickable(enabled = hasMetadata) { onToggleExpand() }
+            .then(
+                if (hasMetadata) Modifier.testableClickable("item_log_entry_${log.id}") { onToggleExpand() }
+                else Modifier
+            )
             .padding(8.dp)
     ) {
         // Log level indicator bar

@@ -1,6 +1,8 @@
 package ai.ciris.desktop
 
+import ai.ciris.desktop.testing.TestAutomationServer
 import ai.ciris.mobile.shared.CIRISApp
+import ai.ciris.mobile.shared.platform.TestAutomation
 import ai.ciris.mobile.shared.platform.createEnvFileUpdater
 import ai.ciris.mobile.shared.platform.createPythonRuntime
 import ai.ciris.mobile.shared.platform.createSecureStorage
@@ -13,16 +15,57 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import java.awt.event.ComponentAdapter
+import java.awt.event.ComponentEvent
 
 fun main() = application {
     val windowState = rememberWindowState(width = 1200.dp, height = 800.dp)
 
+    // Start test automation server if enabled
+    val testServer = if (TestAutomationServer.isTestModeEnabled()) {
+        val port = System.getenv("CIRIS_TEST_PORT")?.toIntOrNull() ?: 8091
+        println("[Desktop] Test mode enabled - starting automation server on port $port")
+        val server = TestAutomationServer.getInstance(port)
+
+        // Configure shared module TestAutomation to delegate to our server
+        TestAutomation.configure(
+            onRegister = { tag, x, y, w, h, text -> server.registerElement(tag, x, y, w, h, text) },
+            onUnregister = { tag -> server.unregisterElement(tag) },
+            onSetScreen = { screen -> server.currentScreen = screen },
+            onClear = { server.clearElements() },
+            isEnabled = { true }
+        )
+
+        server.also { it.start() }
+    } else {
+        null
+    }
+
     Window(
-        onCloseRequest = ::exitApplication,
+        onCloseRequest = {
+            testServer?.stop()
+            exitApplication()
+        },
         title = "CIRIS Agent",
         state = windowState,
     ) {
         var accessToken by remember { mutableStateOf("") }
+
+        // Track window position for test automation (screen-absolute coordinates)
+        LaunchedEffect(Unit) {
+            testServer?.let { server ->
+                // Get initial position
+                val frame = window
+                server.updateWindowPosition(frame.x, frame.y)
+
+                // Track position changes
+                frame.addComponentListener(object : ComponentAdapter() {
+                    override fun componentMoved(e: ComponentEvent) {
+                        server.updateWindowPosition(frame.x, frame.y)
+                    }
+                })
+            }
+        }
 
         MaterialTheme {
             Surface(

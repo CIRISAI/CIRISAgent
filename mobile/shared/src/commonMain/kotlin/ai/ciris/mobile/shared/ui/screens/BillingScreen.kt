@@ -12,6 +12,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 
 /**
  * Billing screen for purchasing CIRIS credits
@@ -54,7 +56,10 @@ fun BillingScreen(
             TopAppBar(
                 title = { Text("Buy Credits") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = {},
+                        modifier = Modifier.testableClickable("btn_billing_back") { onNavigateBack() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -126,7 +131,10 @@ fun BillingScreen(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        TextButton(onClick = onRefresh) {
+                        TextButton(
+                            onClick = {},
+                            modifier = Modifier.testableClickable("btn_billing_refresh") { onRefresh() }
+                        ) {
                             Text("Refresh")
                         }
                     }
@@ -188,8 +196,10 @@ private fun ProductCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
+        onClick = {},
+        modifier = modifier
+            .fillMaxWidth()
+            .testableClickable("item_product_${product.productId}") { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
@@ -226,7 +236,8 @@ private fun ProductCard(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Button(
-                    onClick = onClick,
+                    onClick = {},
+                    modifier = Modifier.testableClickable("btn_buy_${product.productId}") { onClick() },
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("Buy")

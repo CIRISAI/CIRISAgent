@@ -362,7 +362,7 @@ class CIRISApiClient(
                     reasoning = null
                 )
             }
-            logInfo(method, "Fetched ${messages.size} messages")
+            logDebug(method, "Fetched ${messages.size} messages")
             messages
         } catch (e: Exception) {
             val errorMsg = e.message ?: ""
@@ -393,7 +393,7 @@ class CIRISApiClient(
                 totalCount += svcAvailable
             }
 
-            logInfo(method, "System status: ${data.status}, services: $healthyCount healthy / $totalCount total")
+            logDebug(method, "System status: ${data.status}, services: $healthyCount healthy / $totalCount total")
 
             SystemStatus(
                 status = data.status,
@@ -1032,7 +1032,7 @@ class CIRISApiClient(
                 }
             )
 
-            logInfo(method, "Verify status: loaded=$loaded, keyStatus=${verifyStatus.keyStatus}, maxLevel=${verifyStatus.maxLevel}, levelPending=${verifyStatus.levelPending}, hwType=${verifyStatus.attestationProofHardwareType ?: verifyStatus.hardwareType}, sourcesAgreeing=${verifyStatus.sourcesAgreeing}/3, playOk=${verifyStatus.playIntegrityOk}")
+            logDebug(method, "Verify status: loaded=$loaded, keyStatus=${verifyStatus.keyStatus}, maxLevel=${verifyStatus.maxLevel}, levelPending=${verifyStatus.levelPending}, hwType=${verifyStatus.attestationProofHardwareType ?: verifyStatus.hardwareType}, sourcesAgreeing=${verifyStatus.sourcesAgreeing}/3, playOk=${verifyStatus.playIntegrityOk}")
 
             // DEBUG: Log parsed values (debug level to reduce spam)
             logDebug(method, "=== PARSED VALUES DEBUG ===")
@@ -1374,7 +1374,7 @@ class CIRISApiClient(
                     llmBaseUrl.contains("llm.ciris", ignoreCase = true) ||
                     llmBaseUrl.contains("proxy", ignoreCase = true)
 
-            logInfo(method, "LLM Config: provider=${data.llmProvider}, model=${data.llmModel}, " +
+            logDebug(method, "LLM Config: provider=${data.llmProvider}, model=${data.llmModel}, " +
                     "baseUrl=$llmBaseUrl, isCirisProxy=$isCirisProxy, apiKeySet=${data.llmApiKeySet}")
 
             client.close()
@@ -1510,7 +1510,7 @@ class CIRISApiClient(
 
             val body = response.body()
             val data = body.`data` ?: throw RuntimeException("API returned null data")
-            logInfo(method, "Adapters: total=${data.totalCount}, running=${data.runningCount}")
+            logDebug(method, "Adapters: total=${data.totalCount}, running=${data.runningCount}")
 
             AdaptersListData(
                 adapters = data.adapters.map { adapter ->

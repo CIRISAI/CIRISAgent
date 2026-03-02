@@ -1,6 +1,8 @@
 package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.platform.getDeviceDebugInfo
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISSignet
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
 import ai.ciris.mobile.shared.viewmodels.StartupPhase
@@ -236,6 +238,7 @@ fun StartupScreen(
                 // Retry button
                 Button(
                     onClick = { viewModel.retry() },
+                    modifier = Modifier.testableClickable("btn_startup_retry") { viewModel.retry() },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = CIRISColors.SignetTeal
                     )

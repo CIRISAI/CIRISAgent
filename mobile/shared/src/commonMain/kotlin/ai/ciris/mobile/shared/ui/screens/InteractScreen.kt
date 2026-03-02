@@ -32,6 +32,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -318,7 +320,9 @@ private fun EnhancedStatusBar(
                 // Shutdown button
                 OutlinedButton(
                     onClick = onShutdown,
-                    modifier = Modifier.height(26.dp),
+                    modifier = Modifier
+                        .height(26.dp)
+                        .testableClickable("btn_shutdown") { onShutdown() },
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = Color(0xFFEF4444)
                     ),
@@ -332,7 +336,9 @@ private fun EnhancedStatusBar(
                 // Emergency stop button
                 Button(
                     onClick = onEmergencyStop,
-                    modifier = Modifier.height(26.dp),
+                    modifier = Modifier
+                        .height(26.dp)
+                        .testableClickable("btn_emergency_stop") { onEmergencyStop() },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFFEF4444)
                     ),
@@ -396,7 +402,7 @@ private fun CreditsIndicator(
     Surface(
         onClick = onClick,
         color = Color.Transparent,
-        modifier = modifier
+        modifier = modifier.testableClickable("btn_credits") { onClick() }
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -450,7 +456,7 @@ private fun TrustShield(
         onClick = onClick,
         shape = RoundedCornerShape(4.dp),
         color = shieldColor.copy(alpha = 0.1f),
-        modifier = modifier
+        modifier = modifier.testableClickable("btn_trust_shield") { onClick() }
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -516,7 +522,9 @@ private fun ConnectionStatusBar(
             // Shutdown button (from fragment_interact.xml:37-48)
             OutlinedButton(
                 onClick = onShutdown,
-                modifier = Modifier.height(32.dp),
+                modifier = Modifier
+                    .height(32.dp)
+                    .testableClickable("btn_shutdown_legacy") { onShutdown() },
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = Color(0xFFEF4444)
                 ),
@@ -528,7 +536,9 @@ private fun ConnectionStatusBar(
             // Emergency stop button (from fragment_interact.xml:50-61)
             Button(
                 onClick = onEmergencyStop,
-                modifier = Modifier.height(32.dp),
+                modifier = Modifier
+                    .height(32.dp)
+                    .testableClickable("btn_emergency_stop_legacy") { onEmergencyStop() },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFFEF4444)
                 ),
@@ -567,6 +577,7 @@ private fun AuthErrorBanner(
             )
             TextButton(
                 onClick = onDismiss,
+                modifier = Modifier.testableClickable("btn_dismiss_auth_error") { onDismiss() },
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
             ) {
                 Text(
@@ -963,7 +974,7 @@ private fun ChatInputBar(
                 onValueChange = onTextChange,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("input_message")
+                    .testable("input_message")
                     .let { mod ->
                         if (focusRequester != null) {
                             mod.focusRequester(focusRequester)
@@ -1000,7 +1011,7 @@ private fun ChatInputBar(
                         },
                         shape = CircleShape
                     )
-                    .testTag("btn_send")
+                    .testable("btn_send")
             ) {
                 Icon(
                     imageVector = Icons.Default.Send,
@@ -1069,7 +1080,7 @@ private fun ChatInputBarWithBubbles(
                 onValueChange = onTextChange,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("input_message")
+                    .testable("input_message")
                     .let { mod ->
                         if (focusRequester != null) {
                             mod.focusRequester(focusRequester)
@@ -1106,7 +1117,7 @@ private fun ChatInputBarWithBubbles(
                         },
                         shape = CircleShape
                     )
-                    .testTag("btn_send")
+                    .testable("btn_send")
             ) {
                 Icon(
                     imageVector = Icons.Default.Send,
@@ -1150,7 +1161,7 @@ private fun AgentStateIcon(
             state == AgentProcessingState.PROCESSING -> Color(0xFFDBEAFE)
             else -> Color(0xFFD1FAE5)
         },
-        modifier = modifier.size(40.dp)
+        modifier = modifier.size(40.dp).testableClickable("btn_agent_state") { onClick() }
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -1261,7 +1272,7 @@ private fun BubbleNet(
     Surface(
         onClick = onToggle,
         color = Color(0xFFF0FDF4), // Light green background
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth().testableClickable("btn_toggle_timeline") { onToggle() }
     ) {
         Column {
             // Collapsed view - horizontal row of recent emojis
@@ -1321,6 +1332,7 @@ private fun BubbleNet(
                     ) {
                         TextButton(
                             onClick = onClear,
+                            modifier = Modifier.testableClickable("btn_clear_timeline") { onClear() },
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
@@ -1492,7 +1504,10 @@ private fun EmojiLegendDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testableClickable("btn_close_legend") { onDismiss() }
+            ) {
                 Text("Close")
             }
         }

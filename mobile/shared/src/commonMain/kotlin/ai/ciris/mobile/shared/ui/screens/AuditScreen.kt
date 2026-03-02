@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -52,7 +54,10 @@ fun AuditScreen(
             TopAppBar(
                 title = { Text("System Audit Trail") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.testableClickable("btn_audit_back") { onNavigateBack() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -61,10 +66,17 @@ fun AuditScreen(
                 },
                 actions = {
                     // Filter toggle
-                    TextButton(onClick = { showFilters = !showFilters }) {
+                    TextButton(
+                        onClick = { showFilters = !showFilters },
+                        modifier = Modifier.testableClickable("btn_audit_toggle_filters") { showFilters = !showFilters }
+                    ) {
                         Text(if (showFilters) "Hide Filters" else "Filters")
                     }
-                    IconButton(onClick = onRefresh, enabled = !auditState.isLoading) {
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !auditState.isLoading,
+                        modifier = Modifier.testableClickable("btn_audit_refresh") { onRefresh() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Refresh"
@@ -171,7 +183,7 @@ fun AuditScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onLoadMore() }
+                                    .testableClickable("btn_audit_load_more") { onLoadMore() }
                                     .padding(16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -233,22 +245,26 @@ private fun AuditFiltersSection(
                 FilterChip(
                     selected = filter.severity == null,
                     onClick = { onFilterChange(filter.copy(severity = null)) },
-                    label = { Text("All") }
+                    label = { Text("All") },
+                    modifier = Modifier.testableClickable("btn_filter_severity_all") { onFilterChange(filter.copy(severity = null)) }
                 )
                 FilterChip(
                     selected = filter.severity == "info",
                     onClick = { onFilterChange(filter.copy(severity = "info")) },
-                    label = { Text("Info") }
+                    label = { Text("Info") },
+                    modifier = Modifier.testableClickable("btn_filter_severity_info") { onFilterChange(filter.copy(severity = "info")) }
                 )
                 FilterChip(
                     selected = filter.severity == "warning",
                     onClick = { onFilterChange(filter.copy(severity = "warning")) },
-                    label = { Text("Warn") }
+                    label = { Text("Warn") },
+                    modifier = Modifier.testableClickable("btn_filter_severity_warning") { onFilterChange(filter.copy(severity = "warning")) }
                 )
                 FilterChip(
                     selected = filter.severity == "error",
                     onClick = { onFilterChange(filter.copy(severity = "error")) },
-                    label = { Text("Error") }
+                    label = { Text("Error") },
+                    modifier = Modifier.testableClickable("btn_filter_severity_error") { onFilterChange(filter.copy(severity = "error")) }
                 )
             }
 
@@ -266,17 +282,20 @@ private fun AuditFiltersSection(
                 FilterChip(
                     selected = filter.outcome == null,
                     onClick = { onFilterChange(filter.copy(outcome = null)) },
-                    label = { Text("All") }
+                    label = { Text("All") },
+                    modifier = Modifier.testableClickable("btn_filter_outcome_all") { onFilterChange(filter.copy(outcome = null)) }
                 )
                 FilterChip(
                     selected = filter.outcome == "success",
                     onClick = { onFilterChange(filter.copy(outcome = "success")) },
-                    label = { Text("Success") }
+                    label = { Text("Success") },
+                    modifier = Modifier.testableClickable("btn_filter_outcome_success") { onFilterChange(filter.copy(outcome = "success")) }
                 )
                 FilterChip(
                     selected = filter.outcome == "failure",
                     onClick = { onFilterChange(filter.copy(outcome = "failure")) },
-                    label = { Text("Failure") }
+                    label = { Text("Failure") },
+                    modifier = Modifier.testableClickable("btn_filter_outcome_failure") { onFilterChange(filter.copy(outcome = "failure")) }
                 )
             }
 
@@ -295,7 +314,8 @@ private fun AuditFiltersSection(
                     FilterChip(
                         selected = filter.limit == limit,
                         onClick = { onFilterChange(filter.copy(limit = limit)) },
-                        label = { Text("$limit") }
+                        label = { Text("$limit") },
+                        modifier = Modifier.testableClickable("btn_filter_limit_$limit") { onFilterChange(filter.copy(limit = limit)) }
                     )
                 }
             }
@@ -303,7 +323,7 @@ private fun AuditFiltersSection(
             // Clear filters button
             TextButton(
                 onClick = { onFilterChange(AuditFilter()) },
-                modifier = Modifier.align(Alignment.End)
+                modifier = Modifier.align(Alignment.End).testableClickable("btn_filter_clear") { onFilterChange(AuditFilter()) }
             ) {
                 Text("Clear Filters")
             }
@@ -355,7 +375,7 @@ private fun AuditEntryCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onToggleExpand() }
+                .testableClickable("item_audit_entry_${entry.id.take(8)}") { onToggleExpand() }
                 .padding(12.dp)
         ) {
             // Header row: timestamp, action badge, outcome

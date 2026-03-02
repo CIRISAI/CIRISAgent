@@ -27,6 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 
 /**
  * View mode for memory exploration.
@@ -70,7 +72,10 @@ fun MemoryScreen(
             TopAppBar(
                 title = { Text("Memory Graph Explorer") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.testableClickable("btn_memory_back") { onNavigateBack() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -79,19 +84,29 @@ fun MemoryScreen(
                 },
                 actions = {
                     // Graph view toggle
-                    TextButton(onClick = onSwitchToGraph) {
+                    TextButton(
+                        onClick = onSwitchToGraph,
+                        modifier = Modifier.testableClickable("btn_memory_switch_graph") { onSwitchToGraph() }
+                    ) {
                         Text(
                             "Graph",
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                     }
-                    TextButton(onClick = { showFilters = !showFilters }) {
+                    TextButton(
+                        onClick = { showFilters = !showFilters },
+                        modifier = Modifier.testableClickable("btn_memory_toggle_filters") { showFilters = !showFilters }
+                    ) {
                         Text(
                             if (showFilters) "Hide" else "Filter",
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                     }
-                    IconButton(onClick = onRefresh, enabled = !memoryState.isLoading) {
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !memoryState.isLoading,
+                        modifier = Modifier.testableClickable("btn_memory_refresh") { onRefresh() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Refresh"
@@ -116,17 +131,24 @@ fun MemoryScreen(
                 onValueChange = { searchQuery = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .testable("input_memory_search"),
                 placeholder = { Text("Search thoughts, tasks, observations...") },
                 leadingIcon = {
                     Icon(Icons.Filled.Search, contentDescription = "Search")
                 },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = {
-                            searchQuery = ""
-                            onSearch("")
-                        }) {
+                        IconButton(
+                            onClick = {
+                                searchQuery = ""
+                                onSearch("")
+                            },
+                            modifier = Modifier.testableClickable("btn_memory_clear_search") {
+                                searchQuery = ""
+                                onSearch("")
+                            }
+                        ) {
                             Icon(Icons.Filled.Close, contentDescription = "Clear")
                         }
                     }
@@ -300,7 +322,10 @@ private fun MemoryFiltersSection(
                     FilterChip(
                         selected = filter.scope == scope.value,
                         onClick = { onFilterChange(filter.copy(scope = scope.value)) },
-                        label = { Text(scope.label) }
+                        label = { Text(scope.label) },
+                        modifier = Modifier.testableClickable("chip_memory_scope_${scope.value}") {
+                            onFilterChange(filter.copy(scope = scope.value))
+                        }
                     )
                 }
             }
@@ -318,13 +343,19 @@ private fun MemoryFiltersSection(
                 FilterChip(
                     selected = filter.nodeType == null,
                     onClick = { onFilterChange(filter.copy(nodeType = null)) },
-                    label = { Text("All") }
+                    label = { Text("All") },
+                    modifier = Modifier.testableClickable("chip_memory_node_type_all") {
+                        onFilterChange(filter.copy(nodeType = null))
+                    }
                 )
                 NODE_TYPES.forEach { type ->
                     FilterChip(
                         selected = filter.nodeType == type,
                         onClick = { onFilterChange(filter.copy(nodeType = type)) },
-                        label = { Text(type.replace("_", " ").uppercase()) }
+                        label = { Text(type.replace("_", " ").uppercase()) },
+                        modifier = Modifier.testableClickable("chip_memory_node_type_$type") {
+                            onFilterChange(filter.copy(nodeType = type))
+                        }
                     )
                 }
             }
@@ -343,7 +374,10 @@ private fun MemoryFiltersSection(
                     FilterChip(
                         selected = filter.hours == hours,
                         onClick = { onFilterChange(filter.copy(hours = hours)) },
-                        label = { Text(label) }
+                        label = { Text(label) },
+                        modifier = Modifier.testableClickable("chip_memory_time_range_${hours}h") {
+                            onFilterChange(filter.copy(hours = hours))
+                        }
                     )
                 }
             }
@@ -431,7 +465,7 @@ private fun MemoryNodeCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .testableClickable("item_memory_node_${node.id}") { onClick() },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         )
@@ -518,7 +552,10 @@ private fun NodeDetailsCard(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                IconButton(onClick = onClose) {
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier.testableClickable("btn_memory_close_details") { onClose() }
+                ) {
                     Icon(Icons.Filled.Close, contentDescription = "Close")
                 }
             }

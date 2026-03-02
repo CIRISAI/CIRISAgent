@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -48,7 +50,10 @@ fun SystemScreen(
             TopAppBar(
                 title = { Text("System Status") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.testableClickable("btn_system_back") { onNavigateBack() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -56,7 +61,11 @@ fun SystemScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onRefresh, enabled = !isLoading) {
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !isLoading,
+                        modifier = Modifier.testableClickable("btn_system_refresh") { onRefresh() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Refresh"
@@ -210,13 +219,20 @@ fun SystemScreen(
                     onClick = {
                         if (action == "pause") onPauseRuntime() else onResumeRuntime()
                         showConfirmDialog = null
+                    },
+                    modifier = Modifier.testableClickable("btn_runtime_confirm") {
+                        if (action == "pause") onPauseRuntime() else onResumeRuntime()
+                        showConfirmDialog = null
                     }
                 ) {
                     Text("Confirm")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showConfirmDialog = null }) {
+                TextButton(
+                    onClick = { showConfirmDialog = null },
+                    modifier = Modifier.testableClickable("btn_runtime_cancel") { showConfirmDialog = null }
+                ) {
                     Text("Cancel")
                 }
             }
@@ -598,7 +614,11 @@ private fun ProcessorControlCard(
             // Control button
             Button(
                 onClick = if (isPaused) onResume else onPause,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testableClickable(if (isPaused) "btn_resume_runtime" else "btn_pause_runtime") {
+                        if (isPaused) onResume() else onPause()
+                    },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (isPaused) Color(0xFF10B981) else Color(0xFFF59E0B)
                 )

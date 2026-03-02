@@ -1,26 +1,28 @@
 """
-Web UI QA Runner Module
+Desktop App QA Runner Module
 
-End-to-end browser testing for CIRIS web interface.
-Uses Playwright with Firefox for cross-platform testing.
+End-to-end UI testing for CIRIS Desktop application.
+Uses the embedded TestAutomationServer for native Compose Desktop automation.
 
 Usage:
     # As CLI
-    python -m tools.qa_runner.modules.web_ui e2e --wipe
+    python -m tools.qa_runner.modules.web_ui desktop --help
 
     # As library
-    from tools.qa_runner.modules.web_ui import run_web_ui_tests
-    suite = await run_web_ui_tests(wipe_data=True, provider="openrouter")
+    from tools.qa_runner.modules.web_ui import DesktopAppHelper
+    helper = await DesktopAppHelper().start()
+    await helper.click("btn_login_submit")
 """
 
-# Browser automation
-from .browser_helper import (
-    BrowserConfig,
-    BrowserHelper,
-    Screenshot,
-    check_playwright_installed,
-    ensure_playwright_installed,
-)
+# Legacy browser automation (still available for web testing)
+from .browser_helper import BrowserConfig, BrowserHelper
+from .browser_helper import ElementInfo as BrowserElementInfo
+from .browser_helper import check_playwright_installed, ensure_playwright_installed
+
+# Desktop app automation (primary - uses embedded TestAutomationServer)
+from .desktop_app_helper import DesktopAppConfig, DesktopAppHelper
+from .desktop_app_helper import ElementInfo as DesktopElementInfo
+from .desktop_app_helper import Screenshot, check_desktop_app_running, ensure_desktop_app_running
 
 # Server lifecycle management
 from .server_manager import ServerConfig, ServerManager, ServerStatus
@@ -47,9 +49,16 @@ from .test_cases import (
 from .test_runner import WebUITestRunner, WebUITestSuite, run_web_ui_tests
 
 __all__ = [
-    # Browser
+    # Desktop App (primary)
+    "DesktopAppConfig",
+    "DesktopAppHelper",
+    "DesktopElementInfo",
+    "check_desktop_app_running",
+    "ensure_desktop_app_running",
+    # Browser (legacy)
     "BrowserConfig",
     "BrowserHelper",
+    "BrowserElementInfo",
     "Screenshot",
     "check_playwright_installed",
     "ensure_playwright_installed",

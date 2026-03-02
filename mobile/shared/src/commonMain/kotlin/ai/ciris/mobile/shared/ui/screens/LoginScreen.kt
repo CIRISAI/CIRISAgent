@@ -22,6 +22,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.platform.TestAutomation
 import androidx.compose.ui.unit.sp
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
 import ai.ciris.mobile.shared.platform.isDesktop
@@ -154,7 +157,7 @@ fun LoginScreen(
                         modifier = Modifier
                             .width(280.dp)
                             .height(56.dp)
-                            .testTag(if (isIOS()) "btn_apple_signin" else "btn_google_signin")
+                            .testable(if (isIOS()) "btn_apple_signin" else "btn_google_signin")
                     ) {
                         Text(
                             text = "Sign in with $providerName",
@@ -186,7 +189,7 @@ fun LoginScreen(
                         modifier = Modifier
                             .width(280.dp)
                             .height(56.dp)
-                            .testTag("btn_local_login")
+                            .testable("btn_local_login")
                     ) {
                         Text(
                             text = "Local Login",
@@ -274,6 +277,33 @@ private fun LocalLoginForm(
     errorMessage: String?,
     focusManager: androidx.compose.ui.focus.FocusManager
 ) {
+    // Observe text input requests for test automation
+    val textInputRequest by TestAutomation.textInputRequests.collectAsState()
+
+    // Handle incoming text input requests
+    LaunchedEffect(textInputRequest) {
+        textInputRequest?.let { request ->
+            when (request.testTag) {
+                "input_username" -> {
+                    if (request.clearFirst) {
+                        onUsernameChange(request.text)
+                    } else {
+                        onUsernameChange(username + request.text)
+                    }
+                    TestAutomation.clearTextInputRequest()
+                }
+                "input_password" -> {
+                    if (request.clearFirst) {
+                        onPasswordChange(request.text)
+                    } else {
+                        onPasswordChange(password + request.text)
+                    }
+                    TestAutomation.clearTextInputRequest()
+                }
+            }
+        }
+    }
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.width(280.dp)
@@ -313,7 +343,7 @@ private fun LocalLoginForm(
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("input_username")
+                .testable("input_username")
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -343,12 +373,12 @@ private fun LocalLoginForm(
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("input_password")
+                .testable("input_password")
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Login button
+        // Login button - use testableClickable for programmatic click support
         Button(
             onClick = onSubmit,
             enabled = username.isNotBlank() && password.isNotBlank(),
@@ -362,7 +392,7 @@ private fun LocalLoginForm(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
-                .testTag("btn_login_submit")
+                .testableClickable("btn_login_submit") { onSubmit() }
         ) {
             Text(
                 text = "Login",
@@ -377,7 +407,7 @@ private fun LocalLoginForm(
 
             TextButton(
                 onClick = onBack,
-                modifier = Modifier.testTag("btn_login_back")
+                modifier = Modifier.testable("btn_login_back")
             ) {
                 Text(
                     text = "Back to login options",

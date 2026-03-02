@@ -6,6 +6,8 @@ import ai.ciris.mobile.shared.models.SetupMode
 import ai.ciris.mobile.shared.models.filterAdaptersForPlatform
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 
 import ai.ciris.mobile.shared.viewmodels.DeviceAuthStatus
 import ai.ciris.mobile.shared.viewmodels.LlmValidationResult
@@ -189,6 +191,10 @@ fun SetupScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         Button(
                             onClick = {
+                                PlatformLogger.i(TAG, " User chose to skip setup (already configured)")
+                                onSetupComplete()
+                            },
+                            modifier = Modifier.testableClickable("btn_continue_to_app") {
                                 PlatformLogger.i(TAG, " User chose to skip setup (already configured)")
                                 onSetupComplete()
                             },
@@ -447,7 +453,10 @@ private fun WelcomeStep(
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SetupColors.SuccessDark
                     ),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().testableClickable("btn_connect_portal") {
+                        viewModel.updateNodeUrl("https://portal.ciris.ai")
+                        viewModel.enterNodeFlow()
+                    }
                 ) {
                     Text("Connect to CIRIS Portal", fontWeight = FontWeight.Bold)
                 }
@@ -561,7 +570,7 @@ private fun WelcomeStep(
                         fontSize = 13.sp,
                         modifier = Modifier
                             .padding(top = 12.dp)
-                            .clickable { detailsExpanded = !detailsExpanded }
+                            .testableClickable("btn_toggle_details") { detailsExpanded = !detailsExpanded }
                     )
 
                     AnimatedVisibility(visible = detailsExpanded) {
@@ -777,7 +786,9 @@ private fun NodeAuthStep(
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = SetupColors.Primary
                                 ),
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f).testableClickable("btn_open_browser") {
+                                    openUrlInBrowser(fullVerificationUrl)
+                                }
                             ) {
                                 Text("Open in Browser", fontSize = 13.sp)
                             }
@@ -792,7 +803,14 @@ private fun NodeAuthStep(
                                         showCopiedToast = false
                                     }
                                 },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f).testableClickable("btn_copy_url") {
+                                    clipboardManager.setText(AnnotatedString(fullVerificationUrl))
+                                    showCopiedToast = true
+                                    coroutineScope.launch {
+                                        delay(2000)
+                                        showCopiedToast = false
+                                    }
+                                }
                             ) {
                                 Text(
                                     if (showCopiedToast) "Copied!" else "Copy URL",
@@ -859,6 +877,21 @@ private fun NodeAuthStep(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
+                            .testableClickable("btn_all_done") {
+                                isChecking = true
+                                checkError = null
+                                coroutineScope.launch {
+                                    try {
+                                        viewModel.pollNodeAuthStatus { deviceCode, portalUrl ->
+                                            apiClient.pollNodeAuthStatus(deviceCode, portalUrl)
+                                        }
+                                    } catch (e: Exception) {
+                                        checkError = e.message ?: "Check failed"
+                                    } finally {
+                                        isChecking = false
+                                    }
+                                }
+                            }
                     ) {
                         Text(
                             "All Done!",
@@ -957,7 +990,14 @@ private fun NodeAuthStep(
                             }
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SetupColors.Primary)
+                    colors = ButtonDefaults.buttonColors(containerColor = SetupColors.Primary),
+                    modifier = Modifier.testableClickable("btn_retry_connection") {
+                        coroutineScope.launch {
+                            viewModel.startNodeConnection { nodeUrl ->
+                                apiClient.connectToNode(nodeUrl)
+                            }
+                        }
+                    }
                 ) {
                     Text("Retry")
                 }
@@ -1041,7 +1081,9 @@ private fun LlmConfigurationStep(
             // Advanced option link
             TextButton(
                 onClick = { viewModel.setSetupMode(SetupMode.BYOK) },
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier
+                    .padding(bottom = 16.dp)
+                    .testableClickable("btn_switch_to_byok") { viewModel.setSetupMode(SetupMode.BYOK) }
             ) {
                 Text(
                     text = "I have my own AI provider (Advanced)",
@@ -1078,7 +1120,12 @@ private fun LlmConfigurationStep(
                             fontSize = 12.sp
                         )
                     }
-                    TextButton(onClick = { viewModel.setSetupMode(SetupMode.CIRIS_PROXY) }) {
+                    TextButton(
+                        onClick = { viewModel.setSetupMode(SetupMode.CIRIS_PROXY) },
+                        modifier = Modifier.testableClickable("btn_use_free_ai") {
+                            viewModel.setSetupMode(SetupMode.CIRIS_PROXY)
+                        }
+                    ) {
                         Text("Use Free AI", color = SetupColors.InfoDark)
                     }
                 }
@@ -1109,7 +1156,8 @@ private fun LlmConfigurationStep(
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor()
+                        .testable("input_llm_provider"),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = SetupColors.Primary,
                         unfocusedBorderColor = SetupColors.GrayLight
@@ -1124,6 +1172,10 @@ private fun LlmConfigurationStep(
                         DropdownMenuItem(
                             text = { Text(provider) },
                             onClick = {
+                                viewModel.setLlmProvider(provider)
+                                providerExpanded = false
+                            },
+                            modifier = Modifier.testableClickable("menu_provider_${provider.lowercase().replace(" ", "_")}") {
                                 viewModel.setLlmProvider(provider)
                                 providerExpanded = false
                             }
@@ -1149,11 +1201,14 @@ private fun LlmConfigurationStep(
                 OutlinedTextField(
                     value = state.llmApiKey,
                     onValueChange = { viewModel.setLlmApiKey(it) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testable("input_api_key"),
                     placeholder = { Text("sk-...", color = SetupColors.TextSecondary) },
                     visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
-                        TextButton(onClick = { showApiKey = !showApiKey }) {
+                        TextButton(
+                            onClick = { showApiKey = !showApiKey },
+                            modifier = Modifier.testableClickable("btn_toggle_api_key") { showApiKey = !showApiKey }
+                        ) {
                             Text(
                                 text = if (showApiKey) "Hide" else "Show",
                                 color = SetupColors.Primary,
@@ -1195,7 +1250,8 @@ private fun LlmConfigurationStep(
                         readOnly = true,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor(),
+                            .menuAnchor()
+                            .testable("input_llm_model"),
                         trailingIcon = {
                             if (selectedModel?.cirisRecommended == true) {
                                 Text("★", color = SetupColors.Primary, fontSize = 16.sp)
@@ -1272,6 +1328,10 @@ private fun LlmConfigurationStep(
                                 onClick = {
                                     viewModel.setLlmModel(model.id)
                                     modelExpanded = false
+                                },
+                                modifier = Modifier.testableClickable("menu_model_${model.id.replace("/", "_").replace(":", "_")}") {
+                                    viewModel.setLlmModel(model.id)
+                                    modelExpanded = false
                                 }
                             )
                         }
@@ -1289,7 +1349,7 @@ private fun LlmConfigurationStep(
                 OutlinedTextField(
                     value = state.llmModel,
                     onValueChange = { viewModel.setLlmModel(it) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testable("input_llm_model_text"),
                     placeholder = {
                         Text(
                             text = when (state.llmProvider) {
@@ -1377,7 +1437,7 @@ private fun LlmConfigurationStep(
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testable("btn_test_connection"),
                 enabled = !isTesting && (state.llmProvider == "LocalAI" || state.llmApiKey.isNotEmpty()),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = SetupColors.Primary
@@ -1516,7 +1576,7 @@ private fun OptionalFeaturesStep(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable {
+                    modifier = Modifier.testableClickable("item_accord_metrics_consent") {
                         viewModel.setAccordMetricsConsent(!state.accordMetricsConsent)
                     }
                 ) {
@@ -1604,7 +1664,9 @@ private fun OptionalFeaturesStep(
             color = SetupColors.GrayLight,
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { viewModel.setShowAdvancedSettings(!state.showAdvancedSettings) }
+                .testableClickable("item_toggle_advanced_settings") {
+                    viewModel.setShowAdvancedSettings(!state.showAdvancedSettings)
+                }
         ) {
             Row(
                 modifier = Modifier.padding(12.dp),
@@ -1933,7 +1995,7 @@ private fun AccountConfirmationStep(
             OutlinedTextField(
                 value = state.username,
                 onValueChange = { viewModel.setUsername(it) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testable("input_username"),
                 label = { Text("Username") },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = SetupColors.Primary,
@@ -1949,11 +2011,14 @@ private fun AccountConfirmationStep(
             OutlinedTextField(
                 value = state.userPassword,
                 onValueChange = { viewModel.setUserPassword(it) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testable("input_password"),
                 label = { Text("Password") },
                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
-                    TextButton(onClick = { showPassword = !showPassword }) {
+                    TextButton(
+                        onClick = { showPassword = !showPassword },
+                        modifier = Modifier.testableClickable("btn_toggle_password") { showPassword = !showPassword }
+                    ) {
                         Text(if (showPassword) "Hide" else "Show", color = SetupColors.Primary)
                     }
                 },
@@ -2088,7 +2153,7 @@ private fun NavigationButtons(
                 OutlinedButton(
                     onClick = onBackToLogin,
                     enabled = !isSubmitting,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testableClickable("btn_back_to_login") { onBackToLogin() },
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = SetupColors.TextSecondary
                     )
@@ -2099,7 +2164,7 @@ private fun NavigationButtons(
                 OutlinedButton(
                     onClick = onBack,
                     enabled = !isSubmitting,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testableClickable("btn_back") { onBack() },
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = SetupColors.TextSecondary
                     )
@@ -2114,9 +2179,9 @@ private fun NavigationButtons(
                     onClick = onNext,
                     enabled = canProceed && !isSubmitting,
                     // Use equal weights if back button is visible, otherwise double width on WELCOME
-                    modifier = Modifier.weight(
-                        if (currentStep == SetupStep.WELCOME && onBackToLogin == null) 2f else 1f
-                    ),
+                    modifier = Modifier
+                        .weight(if (currentStep == SetupStep.WELCOME && onBackToLogin == null) 2f else 1f)
+                        .testableClickable("btn_next") { onNext() },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SetupColors.Primary,
                         contentColor = Color.White

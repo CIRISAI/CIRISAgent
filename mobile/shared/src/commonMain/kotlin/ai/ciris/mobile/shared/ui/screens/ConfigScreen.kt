@@ -27,6 +27,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 
 /**
  * Configuration management screen
@@ -63,7 +65,10 @@ fun ConfigScreen(
             TopAppBar(
                 title = { Text("Configuration") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.testableClickable("btn_config_back") { onNavigateBack() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -71,7 +76,11 @@ fun ConfigScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onRefresh, enabled = !isLoading) {
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !isLoading,
+                        modifier = Modifier.testableClickable("btn_config_refresh") { onRefresh() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Refresh"
@@ -108,7 +117,8 @@ fun ConfigScreen(
                     onValueChange = onSearchQueryChange,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(16.dp)
+                        .testable("input_config_search"),
                     placeholder = { Text("Search configurations...") },
                     leadingIcon = {
                         Icon(
@@ -206,13 +216,20 @@ fun ConfigScreen(
                     },
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.error
-                    )
+                    ),
+                    modifier = Modifier.testableClickable("btn_config_confirm_delete") {
+                        onDeleteConfig(key)
+                        showDeleteDialog = null
+                    }
                 ) {
                     Text("Delete")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = null }) {
+                TextButton(
+                    onClick = { showDeleteDialog = null },
+                    modifier = Modifier.testableClickable("btn_config_cancel_delete") { showDeleteDialog = null }
+                ) {
                     Text("Cancel")
                 }
             }
@@ -236,13 +253,19 @@ private fun CategoryChips(
         FilterChip(
             selected = selectedCategory == null,
             onClick = { onCategorySelect(null) },
-            label = { Text("All") }
+            label = { Text("All") },
+            modifier = Modifier.testableClickable("chip_config_category_all") {
+                onCategorySelect(null)
+            }
         )
         categories.take(3).forEach { category ->
             FilterChip(
                 selected = selectedCategory == category.id,
                 onClick = { onCategorySelect(category.id) },
-                label = { Text(category.label) }
+                label = { Text(category.label) },
+                modifier = Modifier.testableClickable("chip_config_category_${category.id}") {
+                    onCategorySelect(category.id)
+                }
             )
         }
     }
@@ -267,7 +290,7 @@ private fun ConfigSectionCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onToggle() }
+                .testableClickable("item_config_section_${section.name.lowercase().replace(" ", "_")}") { onToggle() }
                 .padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -379,14 +402,18 @@ private fun ConfigItemRow(
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = onEdit) {
+                    TextButton(
+                        onClick = onEdit,
+                        modifier = Modifier.testableClickable("btn_config_edit_${item.key.lowercase().replace(" ", "_")}") { onEdit() }
+                    ) {
                         Text("Edit", style = MaterialTheme.typography.labelMedium)
                     }
                     TextButton(
                         onClick = onDelete,
                         colors = ButtonDefaults.textButtonColors(
                             contentColor = MaterialTheme.colorScheme.error
-                        )
+                        ),
+                        modifier = Modifier.testableClickable("btn_config_delete_${item.key.lowercase().replace(" ", "_")}") { onDelete() }
                     ) {
                         Text("Delete", style = MaterialTheme.typography.labelMedium)
                     }
@@ -440,7 +467,7 @@ private fun EditConfigDialog(
                 OutlinedTextField(
                     value = editedValue,
                     onValueChange = { editedValue = it },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testable("input_config_edit_value"),
                     label = { Text("Value") },
                     minLines = 2,
                     maxLines = 5
@@ -450,13 +477,17 @@ private fun EditConfigDialog(
         confirmButton = {
             TextButton(
                 onClick = { onConfirm(editedValue) },
-                enabled = editedValue != currentValue
+                enabled = editedValue != currentValue,
+                modifier = Modifier.testableClickable("btn_config_dialog_save") { onConfirm(editedValue) }
             ) {
                 Text("Save")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testableClickable("btn_config_dialog_cancel") { onDismiss() }
+            ) {
                 Text("Cancel")
             }
         }

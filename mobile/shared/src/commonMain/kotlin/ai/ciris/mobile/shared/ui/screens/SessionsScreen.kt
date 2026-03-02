@@ -16,6 +16,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 
 /**
  * Sessions screen for cognitive session management
@@ -44,7 +46,10 @@ fun SessionsScreen(
             TopAppBar(
                 title = { Text("Cognitive Sessions") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = {},
+                        modifier = Modifier.testableClickable("btn_sessions_back") { onNavigateBack() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -52,7 +57,11 @@ fun SessionsScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onRefresh, enabled = !isLoading) {
+                    IconButton(
+                        onClick = {},
+                        enabled = !isLoading,
+                        modifier = Modifier.testableClickable("btn_sessions_refresh") { onRefresh() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Refresh"
@@ -145,8 +154,10 @@ fun SessionsScreen(
             // Return to work button
             if (currentState !in listOf("WORK", "WAKEUP", "SHUTDOWN")) {
                 Button(
-                    onClick = { showConfirmDialog = "WORK" },
-                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {},
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testableClickable("btn_return_to_work") { showConfirmDialog = "WORK" },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.secondary
                     )
@@ -292,8 +303,9 @@ private fun SessionCard(
             }
 
             Button(
-                onClick = onInitiate,
-                enabled = isEnabled && !isActive
+                onClick = {},
+                enabled = isEnabled && !isActive,
+                modifier = Modifier.testableClickable("btn_initiate_${title.lowercase()}") { onInitiate() }
             ) {
                 Text("Initiate")
             }
@@ -320,12 +332,18 @@ private fun ConfirmSessionDialog(
         title = { Text(title) },
         text = { Text(message) },
         confirmButton = {
-            Button(onClick = onConfirm) {
+            Button(
+                onClick = {},
+                modifier = Modifier.testableClickable("btn_confirm_session") { onConfirm() }
+            ) {
                 Text("Confirm")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = {},
+                modifier = Modifier.testableClickable("btn_cancel_session") { onDismiss() }
+            ) {
                 Text("Cancel")
             }
         }

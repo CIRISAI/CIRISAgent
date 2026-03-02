@@ -18,6 +18,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 
 /**
  * Telemetry screen for system metrics and service health
@@ -44,7 +46,10 @@ fun TelemetryScreen(
             TopAppBar(
                 title = { Text("System Telemetry") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = {},
+                        modifier = Modifier.testableClickable("btn_telemetry_back") { onNavigateBack() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -52,7 +57,11 @@ fun TelemetryScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onRefresh, enabled = !isLoading) {
+                    IconButton(
+                        onClick = {},
+                        enabled = !isLoading,
+                        modifier = Modifier.testableClickable("btn_telemetry_refresh") { onRefresh() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Refresh"

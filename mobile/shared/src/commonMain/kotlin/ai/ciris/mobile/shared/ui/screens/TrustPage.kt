@@ -1,4 +1,5 @@
 package ai.ciris.mobile.shared.ui.screens
+import ai.ciris.mobile.shared.platform.PlatformLogger
 
 import ai.ciris.mobile.shared.DeviceAttestationCallback
 import ai.ciris.mobile.shared.DeviceAttestationResult
@@ -76,14 +77,14 @@ fun TrustPage(
     LaunchedEffect(verifyStatus?.levelPending, deviceAttestationCallback) {
         val needsAttestation = verifyStatus?.levelPending == true
         if (needsAttestation && deviceAttestationCallback != null && deviceAttestationResult == null) {
-            println("[TrustPage] level_pending=true, triggering device attestation...")
+            PlatformLogger.d("TrustPage", " level_pending=true, triggering device attestation...")
             deviceAttestationLoading = true
             deviceAttestationCallback.onDeviceAttestationRequested { result ->
                 deviceAttestationResult = result
                 deviceAttestationLoading = false
             }
         } else if (verifyStatus != null && !needsAttestation) {
-            println("[TrustPage] level_pending=false, using cached attestation (level=${verifyStatus?.maxLevel})")
+            PlatformLogger.d("TrustPage", " level_pending=false, using cached attestation (level=${verifyStatus?.maxLevel})")
         }
     }
 

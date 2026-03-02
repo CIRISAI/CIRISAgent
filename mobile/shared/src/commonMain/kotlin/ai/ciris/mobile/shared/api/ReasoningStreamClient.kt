@@ -1,4 +1,5 @@
 package ai.ciris.mobile.shared.api
+import ai.ciris.mobile.shared.platform.PlatformLogger
 
 import io.ktor.client.*
 import io.ktor.client.plugins.*
@@ -75,7 +76,7 @@ class ReasoningStreamClient(
                 header(HttpHeaders.Authorization, "Bearer $token")
             }.execute { response ->
                 if (!response.status.isSuccess()) {
-                    println("[SSE] HTTP error: ${response.status}")
+                    PlatformLogger.d("SSE"," HTTP error: ${response.status}")
                     emit(ReasoningEvent.Disconnected)
                     return@execute
                 }
@@ -93,13 +94,13 @@ class ReasoningStreamClient(
                             val events = parseEvents(jsonStr)
                             events.forEach { emit(it) }
                         } catch (e: Exception) {
-                            println("[SSE] Parse error: ${e.message}")
+                            PlatformLogger.d("SSE"," Parse error: ${e.message}")
                         }
                     }
                 }
             }
         } catch (e: Exception) {
-            println("[SSE] Connection error: ${e.message}")
+            PlatformLogger.d("SSE"," Connection error: ${e.message}")
             emit(ReasoningEvent.Disconnected)
         } finally {
             client.close()
@@ -148,7 +149,7 @@ class ReasoningStreamClient(
                 result.add(ReasoningEvent.Emoji(emoji, eventType, isComplete))
             }
         } catch (e: Exception) {
-            println("[SSE] JSON parse error: ${e.message}")
+            PlatformLogger.d("SSE"," JSON parse error: ${e.message}")
         }
 
         return result

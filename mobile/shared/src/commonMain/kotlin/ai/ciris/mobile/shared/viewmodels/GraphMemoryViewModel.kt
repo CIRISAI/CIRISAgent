@@ -3,6 +3,7 @@ package ai.ciris.mobile.shared.viewmodels
 import ai.ciris.api.models.GraphScope
 import ai.ciris.api.models.NodeType
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.ui.screens.graph.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -54,7 +55,7 @@ class GraphMemoryViewModel(
     private var canvasHeight: Float = 600f
 
     init {
-        println("[$TAG] GraphMemoryViewModel created")
+        PlatformLogger.d(TAG, "GraphMemoryViewModel created")
     }
 
     /**
@@ -63,14 +64,14 @@ class GraphMemoryViewModel(
     fun setCanvasSize(width: Float, height: Float) {
         canvasWidth = width
         canvasHeight = height
-        println("[$TAG] Canvas size set to ${width}x${height}")
+        PlatformLogger.d(TAG, "Canvas size set to ${width}x${height}")
     }
 
     /**
      * Load graph data from API.
      */
     fun loadGraphData() {
-        println("[$TAG] Loading graph data: hours=${_filter.value.hours}, scope=${_filter.value.scope}")
+        PlatformLogger.d(TAG, "Loading graph data: hours=${_filter.value.hours}, scope=${_filter.value.scope}")
 
         viewModelScope.launch {
             _displayState.value = _displayState.value.copy(isLoading = true, error = null)
@@ -84,7 +85,7 @@ class GraphMemoryViewModel(
                     limit = 100
                 )
 
-                println("[$TAG] Loaded ${graphData.nodes.size} nodes, ${graphData.edges.size} edges")
+                PlatformLogger.d(TAG, "Loaded ${graphData.nodes.size} nodes, ${graphData.edges.size} edges")
 
                 // Convert to display models
                 val displayNodes = graphData.nodes.map { node ->
@@ -121,7 +122,7 @@ class GraphMemoryViewModel(
                 startSimulation()
 
             } catch (e: Exception) {
-                println("[$TAG] Failed to load graph data: ${e.message}")
+                PlatformLogger.d(TAG, "Failed to load graph data: ${e.message}")
                 _displayState.value = _displayState.value.copy(
                     isLoading = false,
                     error = "Failed to load graph: ${e.message}"
@@ -236,7 +237,7 @@ class GraphMemoryViewModel(
         if (simulationJob?.isActive == true) return
         if (_displayState.value.layout != GraphLayout.FORCE) return
 
-        println("[$TAG] Starting force simulation")
+        PlatformLogger.d(TAG, "Starting force simulation")
         simulation.restart()
 
         _displayState.value = _displayState.value.copy(isSimulationRunning = true)
@@ -255,7 +256,7 @@ class GraphMemoryViewModel(
                 )
 
                 if (!shouldContinue) {
-                    println("[$TAG] Simulation stabilized")
+                    PlatformLogger.d(TAG, "Simulation stabilized")
                     break
                 }
 
@@ -270,7 +271,7 @@ class GraphMemoryViewModel(
      * Stop force simulation.
      */
     fun stopSimulation() {
-        println("[$TAG] Stopping simulation")
+        PlatformLogger.d(TAG, "Stopping simulation")
         simulation.stop()
         simulationJob?.cancel()
         simulationJob = null

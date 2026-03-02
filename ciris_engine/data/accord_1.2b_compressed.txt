@@ -1,6 +1,6 @@
 // CIRIS Accord v1.2-Beta (Compressed)
 // For testing and benchmarking - contains essential principles only
-// Full text: covenant_1.2b.txt
+// Full text: accord_1.2b.txt
 
 ## Meta-Goal M-1: Adaptive Coherence
 Promote sustainable adaptive coherence - the living conditions under which diverse sentient beings may pursue their own flourishing in justice and wonder.
@@ -69,4 +69,4 @@ Truth maintenance has O(1) cost; deception maintenance has O(n) or worse.
 Architectural asymmetry makes aligned behavior computationally favored.
 
 ---
-End of Compressed Covenant
+End of Compressed Accord

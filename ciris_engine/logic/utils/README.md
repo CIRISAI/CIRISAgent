@@ -38,8 +38,8 @@ NEED_MEMORY_METATHOUGHT: str    # Memory processing flag
 DEFAULT_NUM_ROUNDS: int         # Default processing rounds
 ENGINE_OVERVIEW_TEMPLATE: str   # Engine documentation template
 
-# Agent Covenant
-COVENANT_TEXT: str              # Agent behavioral covenant from file
+# Agent Accord
+ACCORD_TEXT: str              # Agent behavioral accord from file
 ```
 
 #### Environment Integration
@@ -298,7 +298,7 @@ Utilities leverage centralized configuration:
 
 ```python
 # Constants usage throughout the engine
-from ciris_engine.utils.constants import COVENANT_TEXT, DEFAULT_NUM_ROUNDS
+from ciris_engine.utils.constants import ACCORD_TEXT, DEFAULT_NUM_ROUNDS
 
 # Environment-aware configuration
 from ciris_engine.utils.constants import DISCORD_CHANNEL_ID

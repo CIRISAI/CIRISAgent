@@ -154,8 +154,8 @@ print_info "Checking for gui_static assets in wheel..."
 unzip -l "$WHEEL_FILE" | grep "gui_static" | head -10 || print_warning "No gui_static files found in wheel"
 
 echo ""
-print_info "Checking for covenant files..."
-unzip -l "$WHEEL_FILE" | grep "covenant" | head -5 || print_warning "No covenant files found in wheel"
+print_info "Checking for accord files..."
+unzip -l "$WHEEL_FILE" | grep "accord" | head -5 || print_warning "No accord files found in wheel"
 
 echo ""
 print_info "Checking for main.py..."

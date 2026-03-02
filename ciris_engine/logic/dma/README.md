@@ -2,7 +2,7 @@
 
 ## Overview
 
-The DMA (Decision Making Algorithm) system provides structured, ethical decision-making capabilities for CIRIS. All DMAs follow the ethical principles defined in the Covenant and provide structured reasoning for their decisions.
+The DMA (Decision Making Algorithm) system provides structured, ethical decision-making capabilities for CIRIS. All DMAs follow the ethical principles defined in the Accord and provide structured reasoning for their decisions.
 
 ## Architecture
 
@@ -86,7 +86,7 @@ dma = EthicalPDMAEvaluator(
 
 ## Ethical Framework
 
-All DMAs in CIRIS are bound by the **Covenant** ethical framework:
+All DMAs in CIRIS are bound by the **Accord** ethical framework:
 
 1. **Beneficence**: Decisions must benefit users and society
 2. **Non-maleficence**: Avoid harm in all decisions

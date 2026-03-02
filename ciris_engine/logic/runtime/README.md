@@ -103,11 +103,11 @@ Adapters with `persist=True` in config are automatically restored on agent resta
 ```python
 # Load adapter with persistence
 await runtime_control.load_adapter(
-    adapter_type="covenant_metrics",
-    adapter_id="covenant_metrics_prod",
+    adapter_type="accord_metrics",
+    adapter_id="accord_metrics_prod",
     config={"persist": True, "endpoint": "https://metrics.example.com"}
 )
-# Config saved to graph as adapter.covenant_metrics_prod.* nodes
+# Config saved to graph as adapter.accord_metrics_prod.* nodes
 # On restart, "Load Saved Adapters" step restores it
 ```
 

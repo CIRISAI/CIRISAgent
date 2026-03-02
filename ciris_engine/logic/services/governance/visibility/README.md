@@ -14,9 +14,9 @@ The CIRIS Visibility Service is one of the four core **Governance Services** in 
 
 ## Mission: Trust Through Transparency
 
-### How Visibility Serves Meta-Goal M-1 (Covenant Integrity)
+### How Visibility Serves Meta-Goal M-1 (Accord Integrity)
 
-The Visibility Service directly supports **Meta-Goal M-1: Covenant Integrity** by providing:
+The Visibility Service directly supports **Meta-Goal M-1: Accord Integrity** by providing:
 
 - **Transparent Reasoning**: Complete visibility into agent decision-making processes
 - **Accountable AI**: Every action can be traced back to its reasoning chain

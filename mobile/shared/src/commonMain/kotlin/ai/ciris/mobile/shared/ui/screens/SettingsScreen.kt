@@ -3,6 +3,8 @@ package ai.ciris.mobile.shared.ui.screens
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.viewmodels.SettingsViewModel
 import ai.ciris.mobile.shared.viewmodels.VerifyStatusResponse
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -138,13 +140,20 @@ fun SettingsScreen(
                     onClick = {
                         showResetConfirmDialog = false
                         viewModel.resetSetup { onResetSetup() }
+                    },
+                    modifier = Modifier.testableClickable("btn_reset_confirm") {
+                        showResetConfirmDialog = false
+                        viewModel.resetSetup { onResetSetup() }
                     }
                 ) {
                     Text("Reset & Restart")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showResetConfirmDialog = false }) {
+                TextButton(
+                    onClick = { showResetConfirmDialog = false },
+                    modifier = Modifier.testableClickable("btn_reset_cancel") { showResetConfirmDialog = false }
+                ) {
                     Text("Cancel")
                 }
             }
@@ -156,7 +165,10 @@ fun SettingsScreen(
             TopAppBar(
                 title = { Text("Settings") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.testableClickable("btn_back") { onNavigateBack() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -164,7 +176,10 @@ fun SettingsScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.refresh() }) {
+                    IconButton(
+                        onClick = { viewModel.refresh() },
+                        modifier = Modifier.testableClickable("btn_refresh") { viewModel.refresh() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Refresh"
@@ -248,7 +263,9 @@ fun SettingsScreen(
                             onLogout()
                         }
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().testableClickable("btn_logout") {
+                        viewModel.logout { onLogout() }
+                    }
                 ) {
                     Text("Logout")
                 }
@@ -350,7 +367,7 @@ private fun CirisProxyInfoCard(
     OutlinedButton(
         onClick = onResetClick,
         enabled = !isResetting,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().testableClickable("btn_switch_to_byok") { onResetClick() }
     ) {
         if (isResetting) {
             CircularProgressIndicator(
@@ -442,6 +459,7 @@ private fun ByokConfigSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .menuAnchor()
+                .testable("input_llm_provider")
         )
 
         ExposedDropdownMenu(
@@ -452,6 +470,11 @@ private fun ByokConfigSection(
                 DropdownMenuItem(
                     text = { Text(label) },
                     onClick = {
+                        viewModel.onProviderChanged(key)
+                        providerExpanded = false
+                        onEditingChange(true)
+                    },
+                    modifier = Modifier.testableClickable("menu_provider_$key") {
                         viewModel.onProviderChanged(key)
                         providerExpanded = false
                         onEditingChange(true)
@@ -477,6 +500,7 @@ private fun ByokConfigSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .menuAnchor()
+                .testable("input_llm_model")
         )
 
         ExposedDropdownMenu(
@@ -487,6 +511,11 @@ private fun ByokConfigSection(
                 DropdownMenuItem(
                     text = { Text(model) },
                     onClick = {
+                        viewModel.onModelChanged(model)
+                        modelExpanded = false
+                        onEditingChange(true)
+                    },
+                    modifier = Modifier.testableClickable("menu_model_$model") {
                         viewModel.onModelChanged(model)
                         modelExpanded = false
                         onEditingChange(true)
@@ -511,7 +540,7 @@ private fun ByokConfigSection(
                     else "https://api.example.com/v1"
                 )
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testable("input_base_url"),
             singleLine = true
         )
     }
@@ -528,11 +557,14 @@ private fun ByokConfigSection(
             visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             trailingIcon = {
-                TextButton(onClick = { onShowApiKeyChange(!showApiKey) }) {
+                TextButton(
+                    onClick = { onShowApiKeyChange(!showApiKey) },
+                    modifier = Modifier.testableClickable("btn_toggle_api_key") { onShowApiKeyChange(!showApiKey) }
+                ) {
                     Text(if (showApiKey) "Hide" else "Show")
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().testable("input_api_key")
         )
     }
 
@@ -540,7 +572,7 @@ private fun ByokConfigSection(
     Button(
         onClick = { viewModel.saveSettings() },
         enabled = !isSaving && isEditing,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().testableClickable("btn_save_settings") { viewModel.saveSettings() }
     ) {
         if (isSaving) {
             CircularProgressIndicator(
@@ -685,7 +717,7 @@ private fun TrustSecurityCard(
                         Surface(
                             shape = RoundedCornerShape(4.dp),
                             color = Color(0xFF374151),
-                            modifier = Modifier.clickable {
+                            modifier = Modifier.testableClickable("btn_copy_attestation_logs") {
                                 val logText = logMessages.joinToString("\n")
                                 clipboardManager.setText(AnnotatedString(logText))
                             }
@@ -702,7 +734,7 @@ private fun TrustSecurityCard(
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
                                 color = Color(0xFF374151),
-                                modifier = Modifier.clickable {
+                                modifier = Modifier.testableClickable("btn_retry_attestation") {
                                     loading = true
                                     error = null
                                     logMessages = listOf("[verify] Retrying attestation check...")
@@ -959,7 +991,7 @@ private fun TrustSecurityCard(
                         Surface(
                             shape = RoundedCornerShape(4.dp),
                             color = TrustColors.EmeraldDark,
-                            modifier = Modifier.clickable {
+                            modifier = Modifier.testableClickable("btn_refresh_attestation") {
                                 loading = true
                                 error = null
                                 showLogView = true
@@ -1364,7 +1396,7 @@ private fun TrustSecurityCard(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { showRawDetails = !showRawDetails }
+                            .testableClickable("btn_toggle_raw_details") { showRawDetails = !showRawDetails }
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -1485,7 +1517,7 @@ private fun TrustSecurityCard(
                     fontSize = 11.sp,
                     color = TrustColors.EmeraldText,
                     textDecoration = TextDecoration.Underline,
-                    modifier = Modifier.clickable {
+                    modifier = Modifier.testableClickable("btn_learn_more") {
                         uriHandler.openUri("https://ciris.ai/trust")
                     }
                 )

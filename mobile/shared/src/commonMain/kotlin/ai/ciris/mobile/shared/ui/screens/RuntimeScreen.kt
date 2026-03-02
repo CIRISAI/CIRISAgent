@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -49,7 +51,10 @@ fun RuntimeScreen(
             TopAppBar(
                 title = { Text("Runtime Control") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.testableClickable("btn_runtime_back") { onNavigateBack() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -57,7 +62,11 @@ fun RuntimeScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onRefresh, enabled = !isLoading) {
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !isLoading,
+                        modifier = Modifier.testableClickable("btn_runtime_refresh") { onRefresh() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Refresh"
@@ -226,7 +235,9 @@ private fun PipelineControlCard(
                 Button(
                     onClick = onPause,
                     enabled = isAdmin && !isPaused && !isLoading,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testableClickable("btn_pipeline_pause") { onPause() },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFFF59E0B)
                     )
@@ -237,7 +248,9 @@ private fun PipelineControlCard(
                 Button(
                     onClick = onResume,
                     enabled = isAdmin && isPaused && !isLoading,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testableClickable("btn_pipeline_resume") { onResume() },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF10B981)
                     )
@@ -248,7 +261,9 @@ private fun PipelineControlCard(
                 Button(
                     onClick = onSingleStep,
                     enabled = isAdmin && isPaused && !isLoading,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testableClickable("btn_pipeline_step") { onSingleStep() },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF3B82F6)
                     )

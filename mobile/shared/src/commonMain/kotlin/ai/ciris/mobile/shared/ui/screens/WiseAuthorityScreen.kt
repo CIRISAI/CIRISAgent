@@ -2,6 +2,8 @@ package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.api.DeferralData
 import ai.ciris.mobile.shared.api.WAStatusData
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -53,7 +55,10 @@ fun WiseAuthorityScreen(
             TopAppBar(
                 title = { Text("Wise Authority") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.testableClickable("btn_wa_back") { onNavigateBack() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -61,7 +66,11 @@ fun WiseAuthorityScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onRefresh, enabled = !isLoading) {
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !isLoading,
+                        modifier = Modifier.testableClickable("btn_wa_refresh") { onRefresh() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Refresh"
@@ -295,7 +304,7 @@ private fun DeferralCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .testableClickable("item_deferral_${deferral.deferralId.take(8)}") { onClick() },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         )
@@ -448,7 +457,8 @@ private fun ResolveDeferralDialog(
                         label = { Text("Approve") },
                         leadingIcon = if (selectedResolution == "approve") {
                             { Icon(Icons.Filled.Check, contentDescription = null, Modifier.size(16.dp)) }
-                        } else null
+                        } else null,
+                        modifier = Modifier.testableClickable("btn_resolution_approve") { selectedResolution = "approve" }
                     )
                     FilterChip(
                         selected = selectedResolution == "reject",
@@ -456,12 +466,14 @@ private fun ResolveDeferralDialog(
                         label = { Text("Reject") },
                         leadingIcon = if (selectedResolution == "reject") {
                             { Icon(Icons.Filled.Close, contentDescription = null, Modifier.size(16.dp)) }
-                        } else null
+                        } else null,
+                        modifier = Modifier.testableClickable("btn_resolution_reject") { selectedResolution = "reject" }
                     )
                     FilterChip(
                         selected = selectedResolution == "modify",
                         onClick = { selectedResolution = "modify" },
-                        label = { Text("Modify") }
+                        label = { Text("Modify") },
+                        modifier = Modifier.testableClickable("btn_resolution_modify") { selectedResolution = "modify" }
                     )
                 }
 
@@ -471,7 +483,7 @@ private fun ResolveDeferralDialog(
                     onValueChange = { guidance = it },
                     label = { Text("Wisdom Guidance") },
                     placeholder = { Text("Provide guidance for this decision...") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testable("input_wisdom_guidance"),
                     minLines = 3,
                     enabled = !isResolving
                 )
@@ -484,7 +496,12 @@ private fun ResolveDeferralDialog(
                         onResolve(resolution, guidance)
                     }
                 },
-                enabled = selectedResolution != null && guidance.isNotBlank() && !isResolving
+                enabled = selectedResolution != null && guidance.isNotBlank() && !isResolving,
+                modifier = Modifier.testableClickable("btn_resolve_confirm") {
+                    selectedResolution?.let { resolution ->
+                        onResolve(resolution, guidance)
+                    }
+                }
             ) {
                 if (isResolving) {
                     CircularProgressIndicator(
@@ -500,7 +517,8 @@ private fun ResolveDeferralDialog(
         dismissButton = {
             TextButton(
                 onClick = onDismiss,
-                enabled = !isResolving
+                enabled = !isResolving,
+                modifier = Modifier.testableClickable("btn_resolve_cancel") { onDismiss() }
             ) {
                 Text("Cancel")
             }

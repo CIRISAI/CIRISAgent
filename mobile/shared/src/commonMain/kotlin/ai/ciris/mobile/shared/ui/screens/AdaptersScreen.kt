@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -49,7 +51,10 @@ fun AdaptersScreen(
             TopAppBar(
                 title = { Text("Adapters") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.testableClickable("btn_adapters_back") { onNavigateBack() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -57,7 +62,11 @@ fun AdaptersScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onRefresh, enabled = !isLoading) {
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !isLoading,
+                        modifier = Modifier.testableClickable("btn_adapters_refresh") { onRefresh() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.RefreshIcon,
                             contentDescription = "Refresh"
@@ -73,7 +82,8 @@ fun AdaptersScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onAddAdapter,
-                containerColor = MaterialTheme.colorScheme.primary
+                containerColor = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.testableClickable("btn_add_adapter") { onAddAdapter() }
             ) {
                 Icon(
                     imageVector = Icons.Filled.Add,

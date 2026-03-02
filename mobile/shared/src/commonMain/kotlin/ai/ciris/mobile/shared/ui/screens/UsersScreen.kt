@@ -4,6 +4,8 @@ import ai.ciris.api.models.APIRole
 import ai.ciris.api.models.UserDetail
 import ai.ciris.api.models.UserSummary
 import ai.ciris.api.models.WARole
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.viewmodels.UsersFilter
 import ai.ciris.mobile.shared.viewmodels.UsersPagination
 import ai.ciris.mobile.shared.viewmodels.UsersScreenState
@@ -65,12 +67,18 @@ fun UsersScreen(
             TopAppBar(
                 title = { Text("Users") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.testableClickable("btn_users_back") { onNavigateBack() }
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showFilters = !showFilters }) {
+                    IconButton(
+                        onClick = { showFilters = !showFilters },
+                        modifier = Modifier.testableClickable("btn_users_filters") { showFilters = !showFilters }
+                    ) {
                         Icon(
                             Icons.Filled.Search,
                             contentDescription = "Filters",
@@ -80,7 +88,11 @@ fun UsersScreen(
                                 MaterialTheme.colorScheme.onSurface
                         )
                     }
-                    IconButton(onClick = onRefresh, enabled = !state.isLoading) {
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !state.isLoading,
+                        modifier = Modifier.testableClickable("btn_users_refresh") { onRefresh() }
+                    ) {
                         Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
                     }
                 },
@@ -252,13 +264,16 @@ private fun SearchBar(
         },
         trailingIcon = {
             if (query.isNotEmpty()) {
-                IconButton(onClick = { onQueryChange(""); onSearch() }) {
+                IconButton(
+                    onClick = { onQueryChange(""); onSearch() },
+                    modifier = Modifier.testableClickable("btn_users_search_clear") { onQueryChange(""); onSearch() }
+                ) {
                     Icon(Icons.Filled.Clear, contentDescription = "Clear")
                 }
             }
         },
         singleLine = true,
-        modifier = modifier,
+        modifier = modifier.testable("input_users_search"),
         keyboardActions = androidx.compose.foundation.text.KeyboardActions(
             onSearch = { onSearch() }
         )
@@ -286,13 +301,15 @@ private fun FilterChipsRow(
             FilterChip(
                 selected = filter.apiRole == null,
                 onClick = { onFilterChange(filter.copy(apiRole = null)) },
-                label = { Text("All") }
+                label = { Text("All") },
+                modifier = Modifier.testableClickable("chip_api_role_all") { onFilterChange(filter.copy(apiRole = null)) }
             )
             APIRole.entries.forEach { role ->
                 FilterChip(
                     selected = filter.apiRole == role,
                     onClick = { onFilterChange(filter.copy(apiRole = role)) },
-                    label = { Text(role.value) }
+                    label = { Text(role.value) },
+                    modifier = Modifier.testableClickable("chip_api_role_${role.value.lowercase()}") { onFilterChange(filter.copy(apiRole = role)) }
                 )
             }
         }
@@ -313,13 +330,15 @@ private fun FilterChipsRow(
             FilterChip(
                 selected = filter.authType == null,
                 onClick = { onFilterChange(filter.copy(authType = null)) },
-                label = { Text("All") }
+                label = { Text("All") },
+                modifier = Modifier.testableClickable("chip_auth_type_all") { onFilterChange(filter.copy(authType = null)) }
             )
             listOf("password", "oauth", "api_key").forEach { authType ->
                 FilterChip(
                     selected = filter.authType == authType,
                     onClick = { onFilterChange(filter.copy(authType = authType)) },
-                    label = { Text(authType.replace("_", " ").replaceFirstChar { it.uppercase() }) }
+                    label = { Text(authType.replace("_", " ").replaceFirstChar { it.uppercase() }) },
+                    modifier = Modifier.testableClickable("chip_auth_type_$authType") { onFilterChange(filter.copy(authType = authType)) }
                 )
             }
         }
@@ -340,17 +359,20 @@ private fun FilterChipsRow(
             FilterChip(
                 selected = filter.isActive == null,
                 onClick = { onFilterChange(filter.copy(isActive = null)) },
-                label = { Text("All") }
+                label = { Text("All") },
+                modifier = Modifier.testableClickable("chip_status_all") { onFilterChange(filter.copy(isActive = null)) }
             )
             FilterChip(
                 selected = filter.isActive == true,
                 onClick = { onFilterChange(filter.copy(isActive = true)) },
-                label = { Text("Active") }
+                label = { Text("Active") },
+                modifier = Modifier.testableClickable("chip_status_active") { onFilterChange(filter.copy(isActive = true)) }
             )
             FilterChip(
                 selected = filter.isActive == false,
                 onClick = { onFilterChange(filter.copy(isActive = false)) },
-                label = { Text("Inactive") }
+                label = { Text("Inactive") },
+                modifier = Modifier.testableClickable("chip_status_inactive") { onFilterChange(filter.copy(isActive = false)) }
             )
         }
     }
@@ -366,7 +388,8 @@ private fun UserListItem(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .testableClickable("item_user_${user.userId}") { onClick() },
+        onClick = onClick,
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected)
                 MaterialTheme.colorScheme.primaryContainer
@@ -516,7 +539,10 @@ private fun UserDetailsPanel(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
-            IconButton(onClick = onClose) {
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier.testableClickable("btn_user_details_close") { onClose() }
+            ) {
                 Icon(Icons.Filled.Close, contentDescription = "Close")
             }
         }
@@ -722,7 +748,8 @@ private fun PaginationControls(
     ) {
         IconButton(
             onClick = onPrevious,
-            enabled = pagination.page > 1
+            enabled = pagination.page > 1,
+            modifier = Modifier.testableClickable("btn_users_previous_page") { onPrevious() }
         ) {
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous")
         }
@@ -735,7 +762,8 @@ private fun PaginationControls(
 
         IconButton(
             onClick = onNext,
-            enabled = pagination.page < pagination.totalPages
+            enabled = pagination.page < pagination.totalPages,
+            modifier = Modifier.testableClickable("btn_users_next_page") { onNext() }
         ) {
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next")
         }

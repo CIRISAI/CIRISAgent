@@ -1,6 +1,8 @@
 package ai.ciris.mobile.shared.ui.components
 
 import ai.ciris.mobile.shared.models.*
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -73,7 +75,12 @@ fun AdapterWizardDialog(
                     navigationIcon = {
                         // On type selection (no session): X closes dialog
                         // On wizard step (has session): Back arrow goes to previous step
-                        IconButton(onClick = if (wizardSession != null) onBack else onDismiss) {
+                        IconButton(
+                            onClick = if (wizardSession != null) onBack else onDismiss,
+                            modifier = Modifier.testableClickable(
+                                if (wizardSession != null) "btn_wizard_back" else "btn_wizard_close"
+                            ) { if (wizardSession != null) onBack() else onDismiss() }
+                        ) {
                             Icon(
                                 imageVector = if (wizardSession != null) Icons.Default.ArrowBack else Icons.Default.Close,
                                 contentDescription = if (wizardSession != null) "Back" else "Close"
@@ -82,7 +89,10 @@ fun AdapterWizardDialog(
                     },
                     actions = {
                         if (wizardSession != null) {
-                            IconButton(onClick = onDismiss) {
+                            IconButton(
+                                onClick = onDismiss,
+                                modifier = Modifier.testableClickable("btn_wizard_dismiss") { onDismiss() }
+                            ) {
                                 Icon(Icons.Default.Close, contentDescription = "Close")
                             }
                         }
@@ -207,7 +217,7 @@ private fun AdapterTypeCard(
         modifier = Modifier
             .fillMaxWidth()
             .wrapContentHeight()
-            .clickable(onClick = onClick),
+            .testableClickable("item_adapter_type_${adapter.moduleId}") { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
@@ -348,7 +358,11 @@ private fun WizardStepContent(
             // Submit button
             Button(
                 onClick = { onSubmit(fieldValues.toMap()) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testableClickable(
+                        if (session.currentStepIndex == session.totalSteps - 1) "btn_wizard_complete" else "btn_wizard_next"
+                    ) { onSubmit(fieldValues.toMap()) },
                 enabled = step.fields.filter { it.required }.all {
                     (fieldValues[it.name] ?: it.defaultValue)?.isNotBlank() == true
                 }
@@ -394,7 +408,9 @@ private fun ConfigField(
                     }
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testable("input_config_${field.name}"),
             singleLine = field.fieldType != "textarea",
             visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = when (field.fieldType) {

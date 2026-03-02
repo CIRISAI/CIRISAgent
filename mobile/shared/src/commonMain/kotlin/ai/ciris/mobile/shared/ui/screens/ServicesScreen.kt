@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -49,7 +51,10 @@ fun ServicesScreen(
             TopAppBar(
                 title = { Text("Service Management") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.testableClickable("btn_services_back") { onNavigateBack() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -57,13 +62,21 @@ fun ServicesScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onDiagnose, enabled = !isLoading) {
+                    IconButton(
+                        onClick = onDiagnose,
+                        enabled = !isLoading,
+                        modifier = Modifier.testableClickable("btn_services_diagnose") { onDiagnose() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Warning,
                             contentDescription = "Diagnose Issues"
                         )
                     }
-                    IconButton(onClick = onRefresh, enabled = !isLoading) {
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !isLoading,
+                        modifier = Modifier.testableClickable("btn_services_refresh") { onRefresh() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Refresh"
@@ -210,13 +223,20 @@ fun ServicesScreen(
                     onClick = {
                         onResetCircuitBreakers(selectedResetType)
                         showResetDialog = false
+                    },
+                    modifier = Modifier.testableClickable("btn_reset_confirm") {
+                        onResetCircuitBreakers(selectedResetType)
+                        showResetDialog = false
                     }
                 ) {
                     Text("Reset")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showResetDialog = false }) {
+                TextButton(
+                    onClick = { showResetDialog = false },
+                    modifier = Modifier.testableClickable("btn_reset_cancel") { showResetDialog = false }
+                ) {
                     Text("Cancel")
                 }
             }
@@ -349,7 +369,7 @@ private fun CircuitBreakerCard(
             ) {
                 Button(
                     onClick = onResetAll,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).testableClickable("btn_reset_all") { onResetAll() }
                 ) {
                     Text("Reset All")
                 }
@@ -357,7 +377,7 @@ private fun CircuitBreakerCard(
                 Box(modifier = Modifier.weight(1f)) {
                     OutlinedButton(
                         onClick = { expanded = true },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().testableClickable("btn_reset_by_type") { expanded = true }
                     ) {
                         Text("Reset by Type")
                     }
@@ -371,6 +391,10 @@ private fun CircuitBreakerCard(
                             DropdownMenuItem(
                                 text = { Text(type.uppercase()) },
                                 onClick = {
+                                    expanded = false
+                                    onResetByType(type)
+                                },
+                                modifier = Modifier.testableClickable("menu_reset_${type}") {
                                     expanded = false
                                     onResetByType(type)
                                 }

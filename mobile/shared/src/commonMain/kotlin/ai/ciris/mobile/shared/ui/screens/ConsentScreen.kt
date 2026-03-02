@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -50,7 +52,10 @@ fun ConsentScreen(
             TopAppBar(
                 title = { Text("Consent Management") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.testableClickable("btn_consent_back") { onNavigateBack() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -58,7 +63,11 @@ fun ConsentScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onRefresh, enabled = !isLoading) {
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !isLoading,
+                        modifier = Modifier.testableClickable("btn_consent_refresh") { onRefresh() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Refresh"
@@ -199,13 +208,20 @@ fun ConsentScreen(
                     onClick = {
                         onStreamSelect(streamId)
                         showStreamConfirmDialog = null
+                    },
+                    modifier = Modifier.testableClickable("btn_stream_confirm") {
+                        onStreamSelect(streamId)
+                        showStreamConfirmDialog = null
                     }
                 ) {
                     Text("Confirm")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showStreamConfirmDialog = null }) {
+                TextButton(
+                    onClick = { showStreamConfirmDialog = null },
+                    modifier = Modifier.testableClickable("btn_stream_cancel") { showStreamConfirmDialog = null }
+                ) {
                     Text("Cancel")
                 }
             }
@@ -446,7 +462,9 @@ private fun StreamCard(
             Button(
                 onClick = onSelect,
                 enabled = !isActive,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testableClickable("btn_stream_${stream.id}") { onSelect() },
                 colors = if (isActive) {
                     ButtonDefaults.buttonColors(
                         containerColor = Color.Gray,

@@ -1,5 +1,8 @@
 package ai.ciris.mobile.shared
 import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.platform.TestAutomation
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.auth.SilentSignInResult
@@ -260,6 +263,11 @@ fun CIRISApp(
 
     // Navigation state
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Startup) }
+
+    // Track screen changes for test automation
+    LaunchedEffect(currentScreen) {
+        TestAutomation.setCurrentScreen(currentScreen::class.simpleName ?: "unknown")
+    }
 
     // First-run detection state
     var isFirstRun by remember { mutableStateOf<Boolean?>(null) }
@@ -1767,7 +1775,10 @@ private fun CIRISTopBar(
             Text("CIRIS")
         },
         actions = {
-            IconButton(onClick = onSettingsClick) {
+            IconButton(
+                onClick = onSettingsClick,
+                modifier = Modifier.testable("btn_settings")
+            ) {
                 Icon(
                     imageVector = Icons.Default.Settings,
                     contentDescription = "Settings"
@@ -1775,7 +1786,10 @@ private fun CIRISTopBar(
             }
 
             Box {
-                IconButton(onClick = { showMenu = true }) {
+                IconButton(
+                    onClick = { showMenu = true },
+                    modifier = Modifier.testableClickable("btn_menu") { showMenu = true }
+                ) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = "More"
@@ -1836,6 +1850,10 @@ private fun CIRISTopBar(
                                 imageVector = Icons.Default.Build,
                                 contentDescription = null
                             )
+                        },
+                        modifier = Modifier.testableClickable("menu_adapters") {
+                            showMenu = false
+                            onAdaptersClick()
                         }
                     )
                     DropdownMenuItem(

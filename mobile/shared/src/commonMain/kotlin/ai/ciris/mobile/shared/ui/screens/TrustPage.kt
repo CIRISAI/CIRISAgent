@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 
 import ai.ciris.mobile.shared.DeviceAttestationCallback
 import ai.ciris.mobile.shared.DeviceAttestationResult
@@ -93,13 +95,26 @@ fun TrustPage(
             TopAppBar(
                 title = { Text("Trust & Security") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.testableClickable("btn_trust_back") { onNavigateBack() }
+                    ) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
                     IconButton(
                         onClick = {
+                            loading = true
+                            coroutineScope.launch {
+                                fetchVerifyStatus(
+                                    apiClient = apiClient,
+                                    onSuccess = { verifyStatus = it; loading = false; error = null },
+                                    onError = { error = it; loading = false }
+                                )
+                            }
+                        },
+                        modifier = Modifier.testableClickable("btn_trust_refresh") {
                             loading = true
                             coroutineScope.launch {
                                 fetchVerifyStatus(
@@ -168,7 +183,7 @@ fun TrustPage(
                         color = Color(0xFF2563EB),
                         textDecoration = TextDecoration.Underline,
                         modifier = Modifier
-                            .clickable { uriHandler.openUri("https://ciris.ai/trust") }
+                            .testableClickable("btn_learn_more") { uriHandler.openUri("https://ciris.ai/trust") }
                             .padding(8.dp)
                     )
                 }
@@ -234,6 +249,7 @@ private fun ErrorCard(error: String, onRetry: () -> Unit) {
             )
             Button(
                 onClick = onRetry,
+                modifier = Modifier.testableClickable("btn_trust_retry") { onRetry() },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
             ) {
                 Text("Retry")
@@ -939,7 +955,7 @@ private fun ExpandableTierCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onToggle() }
+                    .testableClickable("item_tier_$level") { onToggle() }
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -1655,7 +1671,7 @@ private fun L4ContentUnified(status: VerifyStatusResponse, summary: Map<String, 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { diskAgentMismatchExpanded = !diskAgentMismatchExpanded }
+                    .testableClickable("item_disk_agent_mismatch") { diskAgentMismatchExpanded = !diskAgentMismatchExpanded }
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1693,7 +1709,7 @@ private fun L4ContentUnified(status: VerifyStatusResponse, summary: Map<String, 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { registryMismatchExpanded = !registryMismatchExpanded }
+                    .testableClickable("item_registry_mismatch") { registryMismatchExpanded = !registryMismatchExpanded }
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1775,12 +1791,15 @@ private fun CollapsibleFileSection(
     expanded: Boolean,
     onToggle: () -> Unit,
     titleColor: Color,
-    fileColor: Color
+    fileColor: Color,
+    testTag: String? = null
 ) {
+    // Generate a test tag from title if not provided
+    val tag = testTag ?: "item_file_section_${title.lowercase().replace(Regex("[^a-z0-9]+"), "_").take(30)}"
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onToggle() }
+            .testableClickable(tag) { onToggle() }
             .padding(start = 8.dp, top = 6.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1861,7 +1880,7 @@ private fun L5Content(status: VerifyStatusResponse, onCopyDiagnostics: () -> Uni
             fontSize = 11.sp,
             color = Color(0xFF2563EB),
             modifier = Modifier
-                .clickable { onCopyDiagnostics() }
+                .testableClickable("btn_l5_copy_diagnostics") { onCopyDiagnostics() }
                 .padding(4.dp)
         )
     }
@@ -1930,6 +1949,8 @@ private fun ExplanationDropdown(
     howItWorks: String
 ) {
     var expanded by remember { mutableStateOf(false) }
+    // Generate a test tag from title
+    val tag = "item_explanation_${title.lowercase().replace(Regex("[^a-z0-9]+"), "_").take(30)}"
 
     Column(
         modifier = Modifier
@@ -1940,7 +1961,7 @@ private fun ExplanationDropdown(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { expanded = !expanded }
+                .testableClickable(tag) { expanded = !expanded }
                 .background(Color(0xFFF0F9FF), RoundedCornerShape(6.dp))
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -2272,7 +2293,7 @@ private fun DiagnosticsLogCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { expanded = !expanded },
+                    .testableClickable("item_diagnostics_log") { expanded = !expanded },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -2286,7 +2307,11 @@ private fun DiagnosticsLogCard(
                         fontWeight = FontWeight.Medium
                     )
                 }
-                TextButton(onClick = onCopy, enabled = !diagnostics.isNullOrEmpty()) {
+                TextButton(
+                    onClick = onCopy,
+                    modifier = Modifier.testableClickable("btn_copy_diagnostics") { onCopy() },
+                    enabled = !diagnostics.isNullOrEmpty()
+                ) {
                     Text("Copy")
                 }
             }

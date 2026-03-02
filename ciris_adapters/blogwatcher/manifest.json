@@ -6,6 +6,7 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": "https://github.com/Hyaxia/blogwatcher"
   },
+  "cli_dependencies": ["blogwatcher"],
   "platform_requirements": [
     "desktop_cli"
   ],

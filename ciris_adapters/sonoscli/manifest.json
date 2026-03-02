@@ -6,6 +6,7 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": "https://sonoscli.sh"
   },
+  "cli_dependencies": ["sonos"],
   "platform_requirements": [
     "desktop_cli"
   ],

@@ -117,7 +117,11 @@ data class LoadableAdapterData(
     val stepCount: Int,
     val requiresOauth: Boolean,
     val serviceTypes: List<String>,
-    val platformAvailable: Boolean
+    val platformAvailable: Boolean,
+    // CLI dependency info
+    val externalDependencies: List<String> = emptyList(),
+    val dependenciesAvailable: Boolean = true,
+    val missingDependencies: List<String> = emptyList()
 )
 
 /**

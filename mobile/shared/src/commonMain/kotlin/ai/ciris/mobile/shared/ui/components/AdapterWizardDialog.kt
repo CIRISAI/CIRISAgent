@@ -255,6 +255,12 @@ private fun AdapterTypeCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                } else if (!adapter.dependenciesAvailable) {
+                    Text(
+                        text = "Missing CLI",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 } else {
                     Text(
                         text = "Ready to load",
@@ -293,6 +299,16 @@ private fun AdapterTypeCard(
                         label = { Text("OAuth", style = MaterialTheme.typography.labelSmall) }
                     )
                 }
+            }
+
+            // Show missing dependencies warning
+            if (adapter.missingDependencies.isNotEmpty()) {
+                Text(
+                    text = "Missing: ${adapter.missingDependencies.joinToString(", ")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
         }
     }

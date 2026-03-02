@@ -6,6 +6,7 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": "https://peekaboo.boo"
   },
+  "cli_dependencies": ["peekaboo"],
   "platform_requirements": [
     "desktop_cli"
   ],

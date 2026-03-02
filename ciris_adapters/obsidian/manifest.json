@@ -6,6 +6,7 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": "https://help.obsidian.md"
   },
+  "cli_dependencies": ["obsidian-cli"],
   "platform_requirements": [
     "desktop_cli"
   ],

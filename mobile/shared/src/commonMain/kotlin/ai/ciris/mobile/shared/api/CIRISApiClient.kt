@@ -1762,7 +1762,10 @@ class CIRISApiClient(
                     stepCount = obj["step_count"]?.jsonPrimitive?.int ?: 0,
                     requiresOauth = obj["requires_oauth"]?.jsonPrimitive?.boolean ?: false,
                     serviceTypes = obj["service_types"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
-                    platformAvailable = obj["platform_available"]?.jsonPrimitive?.boolean ?: true
+                    platformAvailable = obj["platform_available"]?.jsonPrimitive?.boolean ?: true,
+                    externalDependencies = obj["external_dependencies"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                    dependenciesAvailable = obj["dependencies_available"]?.jsonPrimitive?.boolean ?: true,
+                    missingDependencies = obj["missing_dependencies"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
                 )
             } ?: emptyList()
 

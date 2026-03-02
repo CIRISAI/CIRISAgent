@@ -6,6 +6,7 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": "https://github.com/steipete/remindctl"
   },
+  "cli_dependencies": ["remindctl"],
   "platform_requirements": [
     "desktop_cli"
   ],

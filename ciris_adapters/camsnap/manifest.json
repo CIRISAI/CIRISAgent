@@ -6,6 +6,7 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": "https://camsnap.ai"
   },
+  "cli_dependencies": ["camsnap", "ffmpeg"],
   "platform_requirements": [
     "desktop_cli"
   ],

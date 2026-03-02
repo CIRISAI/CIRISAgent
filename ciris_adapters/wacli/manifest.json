@@ -6,6 +6,7 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": "https://wacli.sh"
   },
+  "cli_dependencies": ["wacli"],
   "platform_requirements": [
     "desktop_cli"
   ],

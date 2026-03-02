@@ -6,9 +6,10 @@ Provides functionality for listing, loading, unloading, and managing adapters.
 
 import json
 import logging
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import ValidationError
@@ -218,6 +219,42 @@ def _should_filter_adapter(manifest_data: Dict[str, Any], filter_by_platform: bo
     return False
 
 
+def _check_external_dependencies(manifest_data: Dict[str, Any]) -> Tuple[List[str], List[str], bool]:
+    """
+    Check if external CLI dependencies are available.
+
+    Args:
+        manifest_data: The adapter manifest
+
+    Returns:
+        Tuple of (all_dependencies, missing_dependencies, all_available)
+    """
+    external_deps: List[str] = []
+    missing_deps: List[str] = []
+
+    # Check external_dependencies field in manifest
+    deps = manifest_data.get("external_dependencies", [])
+    if isinstance(deps, list):
+        external_deps.extend(deps)
+
+    # Check for requires:binaries capability (indicates CLI tool needed)
+    capabilities = manifest_data.get("capabilities", [])
+    if "requires:binaries" in capabilities:
+        # The CLI binary name is typically the module name
+        module_info = manifest_data.get("module", {})
+        module_name = module_info.get("name", "")
+        if module_name and module_name not in external_deps:
+            external_deps.append(module_name)
+
+    # Check each dependency
+    for dep in external_deps:
+        if not shutil.which(dep):
+            missing_deps.append(dep)
+
+    all_available = len(missing_deps) == 0
+    return external_deps, missing_deps, all_available
+
+
 def _extract_service_types(manifest_data: Dict[str, Any]) -> List[str]:
     """Extract unique service types from manifest services list."""
     service_types = []
@@ -255,10 +292,23 @@ def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str
     service_types = _extract_service_types(manifest_data)
     config_params = _parse_config_parameters(manifest_data)
 
-    # Extract external dependencies
+    # Extract external dependencies (Python packages)
     deps = manifest_data.get("dependencies", {})
     external_deps = deps.get("external", {}) if isinstance(deps, dict) else {}
     external_deps = external_deps or {}
+
+    # Extract CLI dependencies (binary tools)
+    cli_deps: List[str] = []
+    manifest_cli_deps = manifest_data.get("cli_dependencies", [])
+    if isinstance(manifest_cli_deps, list):
+        cli_deps.extend(manifest_cli_deps)
+
+    # Also check for requires:binaries capability - use module name as CLI name
+    capabilities = manifest_data.get("capabilities", [])
+    if "requires:binaries" in capabilities:
+        module_name = module_info.get("name", module_id)
+        if module_name and module_name not in cli_deps:
+            cli_deps.append(module_name)
 
     # Extract metadata
     metadata = manifest_data.get("metadata", {})
@@ -284,6 +334,7 @@ def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str
         configuration_schema=config_params,
         requires_external_deps=bool(external_deps),
         external_dependencies=external_deps,
+        cli_dependencies=cli_deps,
         is_mock=module_info.get("MOCK", False) or module_info.get("is_mock", False),
         safe_domain=safe_domain if isinstance(safe_domain, str) else None,
         prohibited=prohibited if isinstance(prohibited, list) else [],
@@ -934,6 +985,11 @@ async def list_loadable_adapters(
 
             is_configurable = adapter.module_id in configurable_types
 
+            # Check CLI dependencies availability
+            cli_deps = adapter.cli_dependencies or []
+            missing_cli_deps = [dep for dep in cli_deps if not shutil.which(dep)]
+            deps_available = len(missing_cli_deps) == 0
+
             if is_configurable:
                 # Get wizard details from config service
                 manifest = config_service._adapter_manifests.get(adapter.module_id)
@@ -961,14 +1017,15 @@ async def list_loadable_adapters(
                             steps=steps,
                             service_types=adapter.service_types,
                             platform_available=True,
+                            external_dependencies=cli_deps,
+                            dependencies_available=deps_available,
+                            missing_dependencies=missing_cli_deps,
                         )
                     )
                     configurable_count += 1
             else:
                 # Check if adapter has no required configuration parameters
-                has_required_params = any(
-                    param.required for param in (adapter.configuration_schema or [])
-                )
+                has_required_params = any(param.required for param in (adapter.configuration_schema or []))
 
                 if not has_required_params:
                     # Can be loaded directly
@@ -984,6 +1041,9 @@ async def list_loadable_adapters(
                             steps=[],
                             service_types=adapter.service_types,
                             platform_available=True,
+                            external_dependencies=cli_deps,
+                            dependencies_available=deps_available,
+                            missing_dependencies=missing_cli_deps,
                         )
                     )
                     direct_count += 1

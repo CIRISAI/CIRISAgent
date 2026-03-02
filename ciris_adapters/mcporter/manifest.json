@@ -6,6 +6,7 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": "http://mcporter.dev"
   },
+  "cli_dependencies": ["mcporter"],
   "platform_requirements": [
     "desktop_cli"
   ],

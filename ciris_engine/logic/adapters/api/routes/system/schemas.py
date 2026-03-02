@@ -225,6 +225,10 @@ class LoadableAdapterInfo(BaseModel):
     # For all adapters
     service_types: List[str] = Field(default_factory=list, description="Service types this adapter provides")
     platform_available: bool = Field(True, description="Whether platform requirements are satisfied")
+    # External dependency checking
+    external_dependencies: List[str] = Field(default_factory=list, description="Required CLI tools or binaries")
+    dependencies_available: bool = Field(True, description="Whether all external dependencies are available")
+    missing_dependencies: List[str] = Field(default_factory=list, description="List of missing dependencies")
 
 
 class LoadableAdaptersResponse(BaseModel):

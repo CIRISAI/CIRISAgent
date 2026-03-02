@@ -36,5 +36,8 @@
   "exports": {
     "service_class": "github.service.GithubToolService"
   },
-  "configuration": {}
+  "configuration": {},
+  "cli_dependencies": [
+    "github"
+  ]
 }

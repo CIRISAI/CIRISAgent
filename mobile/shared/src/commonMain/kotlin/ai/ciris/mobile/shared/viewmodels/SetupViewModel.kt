@@ -219,16 +219,16 @@ class SetupViewModel : ViewModel() {
         }
     }
 
-    // ========== Covenant Metrics Opt-In ==========
+    // ========== Accord Metrics Opt-In ==========
 
     /**
-     * Set covenant metrics consent for AI alignment research.
+     * Set accord metrics consent for AI alignment research.
      * When enabled, anonymous metrics (reasoning scores, decision patterns,
      * LLM provider/API base URL) are shared with CIRIS L3C.
      * No message content or PII is ever sent.
      */
-    fun setCovenantMetricsConsent(consent: Boolean) {
-        _state.value = _state.value.copy(covenantMetricsConsent = consent)
+    fun setAccordMetricsConsent(consent: Boolean) {
+        _state.value = _state.value.copy(accordMetricsConsent = consent)
     }
 
     // ========== Template Selection (V1.9.7) ==========
@@ -594,16 +594,16 @@ class SetupViewModel : ViewModel() {
             // Add all user-selected adapters (api is always in the set)
             addAll(currentState.enabledAdapterIds)
             // Add accord metrics adapter if consented
-            if (currentState.covenantMetricsConsent) {
+            if (currentState.accordMetricsConsent) {
                 add("ciris_accord_metrics")
             }
         }
 
-        // Build adapter config with covenant metrics settings if consented
-        val adapterConfig = if (currentState.covenantMetricsConsent) {
+        // Build adapter config with accord metrics settings if consented
+        val adapterConfig = if (currentState.accordMetricsConsent) {
             mapOf(
-                "CIRIS_COVENANT_METRICS_CONSENT" to "true",
-                "CIRIS_COVENANT_METRICS_TRACE_LEVEL" to "detailed"
+                "CIRIS_ACCORD_METRICS_CONSENT" to "true",
+                "CIRIS_ACCORD_METRICS_TRACE_LEVEL" to "detailed"
             )
         } else {
             emptyMap()

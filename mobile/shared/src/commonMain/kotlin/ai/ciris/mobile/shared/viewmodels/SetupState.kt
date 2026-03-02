@@ -41,7 +41,7 @@ enum class SetupStep {
     LLM_CONFIGURATION,
 
     /**
-     * Step 3: Optional features - Covenant Metrics opt-in for AI alignment research.
+     * Step 3: Optional features - Accord Metrics opt-in for AI alignment research.
      */
     OPTIONAL_FEATURES,
 
@@ -154,10 +154,10 @@ data class SetupFormState(
     val email: String = "",
     val userPassword: String = "",
 
-    // Covenant Metrics opt-in (for AI alignment research)
+    // Accord Metrics opt-in (for AI alignment research)
     // Data shared: reasoning scores, decision patterns, LLM provider/API base URL
     // No message content or PII is ever sent
-    val covenantMetricsConsent: Boolean = false,
+    val accordMetricsConsent: Boolean = false,
 
     // V1.9.7: Template selection (Advanced Settings)
     val availableTemplates: List<AgentTemplateInfo> = emptyList(),

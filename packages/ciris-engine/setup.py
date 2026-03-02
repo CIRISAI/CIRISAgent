@@ -32,7 +32,7 @@ setup(
     python_requires=">=3.10",
     classifiers=[
         "Development Status :: 4 - Beta",
-        "License :: OSI Approved :: Apache Software License",
+        "License :: OSI Approved :: GNU Affero General Public License v3",
         "Programming Language :: Python :: 3",
     ],
 )

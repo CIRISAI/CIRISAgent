@@ -1,6 +1,9 @@
 package ai.ciris.mobile.shared.ui.components
 
-import ai.ciris.mobile.shared.models.*
+import ai.ciris.mobile.shared.models.ConfigFieldData
+import ai.ciris.mobile.shared.models.ConfigSessionData
+import ai.ciris.mobile.shared.models.LoadableAdapterData
+import ai.ciris.mobile.shared.models.LoadableAdaptersData
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.clickable
@@ -35,11 +38,12 @@ import androidx.compose.ui.window.DialogProperties
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdapterWizardDialog(
-    configurableAdapters: ConfigurableAdaptersData?,
+    loadableAdapters: LoadableAdaptersData?,
     wizardSession: ConfigSessionData?,
     isLoading: Boolean,
     error: String?,
     onSelectType: (String) -> Unit,
+    onLoadDirectly: (String) -> Unit,
     onSubmitStep: (Map<String, String>) -> Unit,
     onBack: () -> Unit,
     onDismiss: () -> Unit
@@ -127,11 +131,12 @@ fun AdapterWizardDialog(
                                 onSubmit = onSubmitStep
                             )
                         }
-                        configurableAdapters != null -> {
+                        loadableAdapters != null -> {
                             TypeSelectionContent(
-                                configurableAdapters = configurableAdapters,
+                                loadableAdapters = loadableAdapters,
                                 error = error,
-                                onSelectType = onSelectType
+                                onSelectType = onSelectType,
+                                onLoadDirectly = onLoadDirectly
                             )
                         }
                         else -> {
@@ -154,9 +159,10 @@ fun AdapterWizardDialog(
 
 @Composable
 private fun TypeSelectionContent(
-    configurableAdapters: ConfigurableAdaptersData,
+    loadableAdapters: LoadableAdaptersData,
     error: String?,
-    onSelectType: (String) -> Unit
+    onSelectType: (String) -> Unit,
+    onLoadDirectly: (String) -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -182,13 +188,13 @@ private fun TypeSelectionContent(
             }
         }
 
-        if (configurableAdapters.adapters.isEmpty()) {
+        if (loadableAdapters.adapters.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No configurable adapters available",
+                    text = "No loadable adapters available",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -197,10 +203,16 @@ private fun TypeSelectionContent(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(configurableAdapters.adapters) { adapter ->
+                items(loadableAdapters.adapters) { adapter ->
                     AdapterTypeCard(
                         adapter = adapter,
-                        onClick = { onSelectType(adapter.adapterType) }
+                        onClick = {
+                            if (adapter.requiresConfiguration) {
+                                onSelectType(adapter.adapterType)
+                            } else {
+                                onLoadDirectly(adapter.adapterType)
+                            }
+                        }
                     )
                 }
             }
@@ -210,7 +222,7 @@ private fun TypeSelectionContent(
 
 @Composable
 private fun AdapterTypeCard(
-    adapter: ConfigurableAdapterData,
+    adapter: LoadableAdapterData,
     onClick: () -> Unit
 ) {
     Card(
@@ -237,11 +249,19 @@ private fun AdapterTypeCard(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
-                    text = "${adapter.stepCount} steps",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (adapter.requiresConfiguration) {
+                    Text(
+                        text = "${adapter.stepCount} steps",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        text = "Ready to load",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
 
             Text(
@@ -250,16 +270,23 @@ private fun AdapterTypeCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // Show workflow type and OAuth requirement
+            // Show workflow type / service types and OAuth requirement
             Row(
                 modifier = Modifier.padding(top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SuggestionChip(
-                    onClick = {},
-                    label = { Text(adapter.workflowType, style = MaterialTheme.typography.labelSmall) }
-                )
+                if (adapter.requiresConfiguration && adapter.workflowType != null) {
+                    SuggestionChip(
+                        onClick = {},
+                        label = { Text(adapter.workflowType, style = MaterialTheme.typography.labelSmall) }
+                    )
+                } else if (adapter.serviceTypes.isNotEmpty()) {
+                    SuggestionChip(
+                        onClick = {},
+                        label = { Text(adapter.serviceTypes.first(), style = MaterialTheme.typography.labelSmall) }
+                    )
+                }
                 if (adapter.requiresOauth) {
                     SuggestionChip(
                         onClick = {},

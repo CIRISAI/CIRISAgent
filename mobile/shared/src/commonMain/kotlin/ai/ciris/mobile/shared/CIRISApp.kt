@@ -1087,7 +1087,7 @@ fun CIRISApp(
                 val adaptersOperationInProgress by adaptersViewModel.operationInProgress.collectAsState()
                 // Wizard state
                 val showWizardDialog by adaptersViewModel.showWizardDialog.collectAsState()
-                val configurableAdapters by adaptersViewModel.configurableAdapters.collectAsState()
+                val loadableAdapters by adaptersViewModel.loadableAdapters.collectAsState()
                 val wizardSession by adaptersViewModel.wizardSession.collectAsState()
                 val wizardError by adaptersViewModel.wizardError.collectAsState()
                 val wizardLoading by adaptersViewModel.wizardLoading.collectAsState()
@@ -1142,13 +1142,17 @@ fun CIRISApp(
                 // Adapter wizard dialog - show when dialog is open OR when there's an error to display
                 if (showWizardDialog || wizardError != null) {
                     AdapterWizardDialog(
-                        configurableAdapters = configurableAdapters,
+                        loadableAdapters = loadableAdapters,
                         wizardSession = wizardSession,
                         isLoading = wizardLoading,
                         error = wizardError,
                         onSelectType = { adapterType ->
                             PlatformLogger.i("CIRISApp", "[AdapterWizard] Selected type: $adapterType")
                             adaptersViewModel.startWizard(adapterType)
+                        },
+                        onLoadDirectly = { adapterType ->
+                            PlatformLogger.i("CIRISApp", "[AdapterWizard] Loading directly: $adapterType")
+                            adaptersViewModel.loadAdapterDirectly(adapterType)
                         },
                         onSubmitStep = { stepData ->
                             PlatformLogger.i("CIRISApp", "[AdapterWizard] Submitting step with ${stepData.size} fields")

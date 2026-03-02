@@ -35,6 +35,8 @@ from .schemas import (
     ConfigStepInfo,
     ConfigurableAdapterInfo,
     ConfigurableAdaptersResponse,
+    LoadableAdapterInfo,
+    LoadableAdaptersResponse,
     PersistedConfigsResponse,
     RemovePersistedResponse,
 )
@@ -893,6 +895,111 @@ async def list_configurable_adapters(
         raise
     except Exception as e:
         logger.error(f"Error listing configurable adapters: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/adapters/loadable",
+    responses={500: {"description": "Failed to list loadable adapters"}},
+)
+async def list_loadable_adapters(
+    request: Request,
+    auth: Annotated[AuthContext, Depends(require_admin)],
+) -> SuccessResponse[LoadableAdaptersResponse]:
+    """
+    List all adapters that can be loaded from the UI.
+
+    Returns adapters that either:
+    1. Support interactive configuration (wizard workflow)
+    2. Can be loaded directly without configuration (platform available, no required config)
+
+    Requires ADMIN role.
+    """
+    try:
+        config_service = get_adapter_config_service(request)
+        configurable_types = set(config_service.get_configurable_adapters())
+
+        # Get all discovered adapters
+        all_adapters = await _discover_adapters()
+
+        # Build the combined list
+        loadable_adapters: List[LoadableAdapterInfo] = []
+        configurable_count = 0
+        direct_count = 0
+
+        for adapter in all_adapters:
+            # Skip adapters not available on this platform
+            if not adapter.platform_available:
+                continue
+
+            is_configurable = adapter.module_id in configurable_types
+
+            if is_configurable:
+                # Get wizard details from config service
+                manifest = config_service._adapter_manifests.get(adapter.module_id)
+                if manifest:
+                    requires_oauth = any(step.step_type == "oauth" for step in manifest.steps)
+                    steps = [
+                        ConfigStepInfo(
+                            step_id=step.step_id,
+                            step_type=step.step_type,
+                            title=step.title,
+                            description=step.description,
+                            optional=getattr(step, "optional", False),
+                        )
+                        for step in manifest.steps
+                    ]
+                    loadable_adapters.append(
+                        LoadableAdapterInfo(
+                            adapter_type=adapter.module_id,
+                            name=adapter.name,
+                            description=adapter.description or f"Configure {adapter.name}",
+                            requires_configuration=True,
+                            workflow_type=manifest.workflow_type,
+                            step_count=len(manifest.steps),
+                            requires_oauth=requires_oauth,
+                            steps=steps,
+                            service_types=adapter.service_types,
+                            platform_available=True,
+                        )
+                    )
+                    configurable_count += 1
+            else:
+                # Check if adapter has no required configuration parameters
+                has_required_params = any(
+                    param.required for param in (adapter.configuration_schema or [])
+                )
+
+                if not has_required_params:
+                    # Can be loaded directly
+                    loadable_adapters.append(
+                        LoadableAdapterInfo(
+                            adapter_type=adapter.module_id,
+                            name=adapter.name,
+                            description=adapter.description or f"Load {adapter.name}",
+                            requires_configuration=False,
+                            workflow_type=None,
+                            step_count=0,
+                            requires_oauth=False,
+                            steps=[],
+                            service_types=adapter.service_types,
+                            platform_available=True,
+                        )
+                    )
+                    direct_count += 1
+
+        response = LoadableAdaptersResponse(
+            adapters=loadable_adapters,
+            total_count=len(loadable_adapters),
+            configurable_count=configurable_count,
+            direct_load_count=direct_count,
+        )
+        return SuccessResponse(data=response)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing loadable adapters: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

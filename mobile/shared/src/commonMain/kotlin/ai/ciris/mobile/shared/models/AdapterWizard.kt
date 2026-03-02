@@ -104,3 +104,28 @@ data class ConfigurableAdaptersData(
     val adapters: List<ConfigurableAdapterData>,
     val totalCount: Int
 )
+
+/**
+ * Information about an adapter that can be loaded (with or without configuration).
+ */
+data class LoadableAdapterData(
+    val adapterType: String,
+    val name: String,
+    val description: String,
+    val requiresConfiguration: Boolean,
+    val workflowType: String?,
+    val stepCount: Int,
+    val requiresOauth: Boolean,
+    val serviceTypes: List<String>,
+    val platformAvailable: Boolean
+)
+
+/**
+ * Response containing all loadable adapters.
+ */
+data class LoadableAdaptersData(
+    val adapters: List<LoadableAdapterData>,
+    val totalCount: Int,
+    val configurableCount: Int,
+    val directLoadCount: Int
+)

@@ -1087,7 +1087,7 @@ fun CIRISApp(
                 val adaptersOperationInProgress by adaptersViewModel.operationInProgress.collectAsState()
                 // Wizard state
                 val showWizardDialog by adaptersViewModel.showWizardDialog.collectAsState()
-                val moduleTypes by adaptersViewModel.moduleTypes.collectAsState()
+                val configurableAdapters by adaptersViewModel.configurableAdapters.collectAsState()
                 val wizardSession by adaptersViewModel.wizardSession.collectAsState()
                 val wizardError by adaptersViewModel.wizardError.collectAsState()
                 val wizardLoading by adaptersViewModel.wizardLoading.collectAsState()
@@ -1142,7 +1142,7 @@ fun CIRISApp(
                 // Adapter wizard dialog - show when dialog is open OR when there's an error to display
                 if (showWizardDialog || wizardError != null) {
                     AdapterWizardDialog(
-                        moduleTypes = moduleTypes,
+                        configurableAdapters = configurableAdapters,
                         wizardSession = wizardSession,
                         isLoading = wizardLoading,
                         error = wizardError,

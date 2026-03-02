@@ -1652,6 +1652,46 @@ class CIRISApiClient(
     }
 
     /**
+     * Get adapters that support interactive configuration (have wizard workflows).
+     * Only returns adapters that are available on the current platform.
+     */
+    suspend fun getConfigurableAdapters(): ConfigurableAdaptersData {
+        val method = "getConfigurableAdapters"
+        logInfo(method, "Fetching configurable adapters")
+
+        return try {
+            val response = systemApi.listConfigurableAdaptersV1SystemAdaptersConfigurableGet(authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Configurable adapters: ${data.totalCount} found")
+
+            ConfigurableAdaptersData(
+                adapters = data.adapters.map { adapter ->
+                    ConfigurableAdapterData(
+                        adapterType = adapter.adapterType,
+                        name = adapter.name,
+                        description = adapter.description,
+                        workflowType = adapter.workflowType,
+                        stepCount = adapter.stepCount,
+                        requiresOauth = adapter.requiresOauth ?: false
+                    )
+                },
+                totalCount = data.totalCount
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
      * Start an adapter configuration wizard session.
      */
     suspend fun startAdapterConfiguration(adapterType: String): ConfigSessionData {

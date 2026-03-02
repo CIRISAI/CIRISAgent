@@ -35,7 +35,7 @@ import androidx.compose.ui.window.DialogProperties
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdapterWizardDialog(
-    moduleTypes: ModuleTypesData?,
+    configurableAdapters: ConfigurableAdaptersData?,
     wizardSession: ConfigSessionData?,
     isLoading: Boolean,
     error: String?,
@@ -127,9 +127,9 @@ fun AdapterWizardDialog(
                                 onSubmit = onSubmitStep
                             )
                         }
-                        moduleTypes != null -> {
+                        configurableAdapters != null -> {
                             TypeSelectionContent(
-                                moduleTypes = moduleTypes,
+                                configurableAdapters = configurableAdapters,
                                 error = error,
                                 onSelectType = onSelectType
                             )
@@ -154,7 +154,7 @@ fun AdapterWizardDialog(
 
 @Composable
 private fun TypeSelectionContent(
-    moduleTypes: ModuleTypesData,
+    configurableAdapters: ConfigurableAdaptersData,
     error: String?,
     onSelectType: (String) -> Unit
 ) {
@@ -182,13 +182,13 @@ private fun TypeSelectionContent(
             }
         }
 
-        if (moduleTypes.adapters.isEmpty()) {
+        if (configurableAdapters.adapters.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No adapter types available",
+                    text = "No configurable adapters available",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -197,10 +197,10 @@ private fun TypeSelectionContent(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(moduleTypes.adapters.filter { it.platformAvailable }) { adapter ->
+                items(configurableAdapters.adapters) { adapter ->
                     AdapterTypeCard(
                         adapter = adapter,
-                        onClick = { onSelectType(adapter.moduleId) }
+                        onClick = { onSelectType(adapter.adapterType) }
                     )
                 }
             }
@@ -210,14 +210,14 @@ private fun TypeSelectionContent(
 
 @Composable
 private fun AdapterTypeCard(
-    adapter: ModuleTypeData,
+    adapter: ConfigurableAdapterData,
     onClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .wrapContentHeight()
-            .testableClickable("item_adapter_type_${adapter.moduleId}") { onClick() },
+            .testableClickable("item_adapter_type_${adapter.adapterType}") { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
@@ -238,43 +238,33 @@ private fun AdapterTypeCard(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "v${adapter.version}",
+                    text = "${adapter.stepCount} steps",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            adapter.description?.let { desc ->
-                Text(
-                    text = desc,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                text = adapter.description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-            val validCapabilities = adapter.capabilities.filter { it.isNotBlank() }
-            if (validCapabilities.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .padding(top = 4.dp)
-                        .height(IntrinsicSize.Min),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Limit to 2 chips to avoid layout issues
-                    validCapabilities.take(2).forEach { capability ->
-                        SuggestionChip(
-                            onClick = {},
-                            label = { Text(capability, style = MaterialTheme.typography.labelSmall) }
-                        )
-                    }
-                    if (validCapabilities.size > 2) {
-                        Text(
-                            text = "+${validCapabilities.size - 2}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+            // Show workflow type and OAuth requirement
+            Row(
+                modifier = Modifier.padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SuggestionChip(
+                    onClick = {},
+                    label = { Text(adapter.workflowType, style = MaterialTheme.typography.labelSmall) }
+                )
+                if (adapter.requiresOauth) {
+                    SuggestionChip(
+                        onClick = {},
+                        label = { Text("OAuth", style = MaterialTheme.typography.labelSmall) }
+                    )
                 }
             }
         }

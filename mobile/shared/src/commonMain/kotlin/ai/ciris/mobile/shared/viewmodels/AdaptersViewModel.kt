@@ -3,7 +3,7 @@ package ai.ciris.mobile.shared.viewmodels
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.models.ConfigSessionData
-import ai.ciris.mobile.shared.models.ModuleTypesData
+import ai.ciris.mobile.shared.models.ConfigurableAdaptersData
 import ai.ciris.mobile.shared.ui.screens.AdapterItem
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -78,8 +78,8 @@ class AdaptersViewModel(
     private val _showWizardDialog = MutableStateFlow(false)
     val showWizardDialog: StateFlow<Boolean> = _showWizardDialog.asStateFlow()
 
-    private val _moduleTypes = MutableStateFlow<ModuleTypesData?>(null)
-    val moduleTypes: StateFlow<ModuleTypesData?> = _moduleTypes.asStateFlow()
+    private val _configurableAdapters = MutableStateFlow<ConfigurableAdaptersData?>(null)
+    val configurableAdapters: StateFlow<ConfigurableAdaptersData?> = _configurableAdapters.asStateFlow()
 
     private val _wizardSession = MutableStateFlow<ConfigSessionData?>(null)
     val wizardSession: StateFlow<ConfigSessionData?> = _wizardSession.asStateFlow()
@@ -294,7 +294,7 @@ class AdaptersViewModel(
 
     /**
      * Add a new adapter (triggers add adapter flow)
-     * Opens the wizard dialog and fetches available module types.
+     * Opens the wizard dialog and fetches adapters that support interactive configuration.
      */
     fun addAdapter() {
         val method = "addAdapter"
@@ -303,12 +303,12 @@ class AdaptersViewModel(
             _wizardLoading.value = true
             _wizardError.value = null
             try {
-                val types = apiClient.getModuleTypes()
-                _moduleTypes.value = types
+                val adapters = apiClient.getConfigurableAdapters()
+                _configurableAdapters.value = adapters
                 _showWizardDialog.value = true
             } catch (e: Exception) {
                 logException(method, e)
-                _wizardError.value = "Failed to load adapter types: ${e.message}"
+                _wizardError.value = "Failed to load configurable adapters: ${e.message}"
             } finally {
                 _wizardLoading.value = false
             }
@@ -386,7 +386,7 @@ class AdaptersViewModel(
         logInfo(method, "Closing wizard dialog")
         _showWizardDialog.value = false
         _wizardSession.value = null
-        _moduleTypes.value = null
+        _configurableAdapters.value = null
         _wizardError.value = null
     }
 

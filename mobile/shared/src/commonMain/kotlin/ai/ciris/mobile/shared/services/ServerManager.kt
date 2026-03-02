@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.services
 
+import ai.ciris.mobile.shared.platform.PlatformLogger
 import kotlinx.coroutines.delay
 
 /**
@@ -71,13 +72,13 @@ class ServerManager(
         var waitedSeconds = 0
         while (waitedSeconds < maxWaitSeconds) {
             if (!isExistingServerRunning()) {
-                println("[$TAG] Existing server has shut down after ${waitedSeconds}s")
+                PlatformLogger.d(TAG, " Existing server has shut down after ${waitedSeconds}s")
                 return true
             }
             delay(1000)
             waitedSeconds++
         }
-        println("[$TAG] WARNING: Existing server did not shut down within ${maxWaitSeconds}s")
+        PlatformLogger.w(TAG, " Existing server did not shut down within ${maxWaitSeconds}s")
         return false
     }
 
@@ -102,16 +103,16 @@ class ServerManager(
         var retryCount = 0
         var totalWaitMs = 0L
 
-        println("[$TAG] [SmartStartup] Starting shutdown negotiation (max retries: $maxRetries)")
+        PlatformLogger.d(TAG, " [SmartStartup] Starting shutdown negotiation (max retries: $maxRetries)")
         onStatus?.invoke("Shutting down existing server...")
 
         while (retryCount < maxRetries) {
             try {
-                println("[$TAG] [SmartStartup] Trying local-shutdown (attempt ${retryCount + 1}/$maxRetries)...")
+                PlatformLogger.d(TAG, " [SmartStartup] Trying local-shutdown (attempt ${retryCount + 1}/$maxRetries)...")
 
                 val response = performLocalShutdown(serverUrl)
 
-                println("[$TAG] [SmartStartup] Response: code=${response.first}, status=${response.second.status}, " +
+                PlatformLogger.d(TAG, " [SmartStartup] Response: code=${response.first}, status=${response.second.status}, " +
                         "state=${response.second.serverState}, uptime=${response.second.uptimeSeconds}s, " +
                         "resumeElapsed=${response.second.resumeElapsedSeconds}s")
 
@@ -120,12 +121,12 @@ class ServerManager(
 
                 when (responseCode) {
                     200 -> {
-                        println("[$TAG] [SmartStartup] ✓ Shutdown initiated: ${shutdownResponse.reason}")
+                        PlatformLogger.d(TAG, " [SmartStartup] ✓ Shutdown initiated: ${shutdownResponse.reason}")
                         onStatus?.invoke("Shutdown initiated")
                         return true
                     }
                     202 -> {
-                        println("[$TAG] [SmartStartup] ✓ Server already shutting down: ${shutdownResponse.reason}")
+                        PlatformLogger.d(TAG, " [SmartStartup] ✓ Server already shutting down: ${shutdownResponse.reason}")
                         onStatus?.invoke("Server already shutting down")
                         return true
                     }
@@ -135,7 +136,7 @@ class ServerManager(
                         val resumeTimeout = shutdownResponse.resumeTimeoutSeconds ?: 30.0
                         val resumeElapsed = shutdownResponse.resumeElapsedSeconds ?: 0.0
 
-                        println("[$TAG] [SmartStartup] Server busy (resume ${resumeElapsed}s / ${resumeTimeout}s), " +
+                        PlatformLogger.d(TAG, " [SmartStartup] Server busy (resume ${resumeElapsed}s / ${resumeTimeout}s), " +
                                 "retry in ${retryDelay}ms...")
                         onStatus?.invoke("Server initializing... waiting (${resumeElapsed.toInt()}s)")
 
@@ -145,7 +146,7 @@ class ServerManager(
 
                         // Safety limit - don't wait forever
                         if (totalWaitMs > 60000) {
-                            println("[$TAG] [SmartStartup] Exceeded 60s total wait time, giving up on retries")
+                            PlatformLogger.d(TAG, " [SmartStartup] Exceeded 60s total wait time, giving up on retries")
                             break
                         }
                         continue  // Retry
@@ -153,29 +154,29 @@ class ServerManager(
                     503 -> {
                         // Server not ready - brief retry
                         val retryDelay = shutdownResponse.retryAfterMs ?: 1000L
-                        println("[$TAG] [SmartStartup] Server not ready (503), retry in ${retryDelay}ms...")
+                        PlatformLogger.d(TAG, " [SmartStartup] Server not ready (503), retry in ${retryDelay}ms...")
                         delay(retryDelay)
                         totalWaitMs += retryDelay
                         retryCount++
                         continue
                     }
                     403 -> {
-                        println("[$TAG] [SmartStartup] Local-shutdown rejected (403) - not localhost?!")
+                        PlatformLogger.d(TAG, " [SmartStartup] Local-shutdown rejected (403) - not localhost?!")
                         break  // Fall through to auth
                     }
                     else -> {
-                        println("[$TAG] [SmartStartup] Unexpected response $responseCode, falling back to auth")
+                        PlatformLogger.d(TAG, " [SmartStartup] Unexpected response $responseCode, falling back to auth")
                         break  // Fall through to auth
                     }
                 }
             } catch (e: Exception) {
-                println("[$TAG] [SmartStartup] Local-shutdown failed: ${e.message}")
+                PlatformLogger.d(TAG, " [SmartStartup] Local-shutdown failed: ${e.message}")
                 break  // Fall through to auth
             }
         }
 
         if (retryCount >= maxRetries) {
-            println("[$TAG] [SmartStartup] Exhausted $maxRetries retries (${totalWaitMs}ms total), trying auth shutdown")
+            PlatformLogger.d(TAG, " [SmartStartup] Exhausted $maxRetries retries (${totalWaitMs}ms total), trying auth shutdown")
         }
 
         // Fall back to authenticated shutdown
@@ -216,7 +217,7 @@ class ServerManager(
         onStatus: ((String) -> Unit)?
     ): Boolean {
         return try {
-            println("[$TAG] [SmartStartup] Trying authenticated shutdown...")
+            PlatformLogger.d(TAG, " [SmartStartup] Trying authenticated shutdown...")
             onStatus?.invoke("Trying authenticated shutdown...")
 
             // Get saved token from platform-specific storage
@@ -228,32 +229,32 @@ class ServerManager(
                 savedToken
             )
 
-            println("[$TAG] [SmartStartup] Auth shutdown response: $responseCode")
+            PlatformLogger.d(TAG, " [SmartStartup] Auth shutdown response: $responseCode")
 
             when (responseCode) {
                 in 200..299 -> {
-                    println("[$TAG] [SmartStartup] ✓ Auth shutdown successful")
+                    PlatformLogger.d(TAG, " [SmartStartup] ✓ Auth shutdown successful")
                     onStatus?.invoke("Shutdown successful")
                     true
                 }
                 401 -> {
-                    println("[$TAG] [SmartStartup] ✗ Auth failed (401) - token invalid or cleared")
+                    PlatformLogger.d(TAG, " [SmartStartup] ✗ Auth failed (401) - token invalid or cleared")
                     onStatus?.invoke("Auth failed - no valid token")
                     false
                 }
                 403 -> {
-                    println("[$TAG] [SmartStartup] ✗ Forbidden (403) - insufficient permissions")
+                    PlatformLogger.d(TAG, " [SmartStartup] ✗ Forbidden (403) - insufficient permissions")
                     onStatus?.invoke("Shutdown forbidden")
                     false
                 }
                 else -> {
-                    println("[$TAG] [SmartStartup] ✗ Auth shutdown failed with $responseCode")
+                    PlatformLogger.d(TAG, " [SmartStartup] ✗ Auth shutdown failed with $responseCode")
                     onStatus?.invoke("Shutdown failed")
                     false
                 }
             }
         } catch (e: Exception) {
-            println("[$TAG] [SmartStartup] ✗ Auth shutdown exception: ${e.message}")
+            PlatformLogger.d(TAG, " [SmartStartup] ✗ Auth shutdown exception: ${e.message}")
             onStatus?.invoke("Shutdown error: ${e.message}")
             false
         }

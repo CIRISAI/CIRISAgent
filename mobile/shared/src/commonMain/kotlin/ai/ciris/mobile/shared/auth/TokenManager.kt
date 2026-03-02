@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.auth
 
+import ai.ciris.mobile.shared.platform.PlatformLogger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,12 +53,19 @@ class TokenManager(
          */
         fun setShared(instance: TokenManager) {
             _shared = instance
-            println("[$TAG][INFO][setShared] Shared TokenManager instance set")
+            PlatformLogger.i(TAG, "[setShared] Shared TokenManager instance set")
         }
     }
 
     private fun log(level: String, method: String, message: String) {
-        println("[$TAG][$level][$method] $message")
+        val fullMessage = "[$method] $message"
+        when (level) {
+            "DEBUG" -> PlatformLogger.d(TAG, fullMessage)
+            "INFO" -> PlatformLogger.i(TAG, fullMessage)
+            "WARN" -> PlatformLogger.w(TAG, fullMessage)
+            "ERROR" -> PlatformLogger.e(TAG, fullMessage)
+            else -> PlatformLogger.i(TAG, fullMessage)
+        }
     }
 
     private fun logDebug(method: String, message: String) = log("DEBUG", method, message)

@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.ui.screens.SystemChannelInfo
 import ai.ciris.mobile.shared.ui.screens.SystemScreenData
 import ai.ciris.mobile.shared.ui.screens.SystemServiceInfo
@@ -34,7 +35,14 @@ class SystemViewModel(
     }
 
     private fun log(level: String, method: String, message: String) {
-        println("[$TAG][$level][$method] $message")
+        val fullMessage = "[$method] $message"
+        when (level) {
+            "DEBUG" -> PlatformLogger.d(TAG, fullMessage)
+            "INFO" -> PlatformLogger.i(TAG, fullMessage)
+            "WARN" -> PlatformLogger.w(TAG, fullMessage)
+            "ERROR" -> PlatformLogger.e(TAG, fullMessage)
+            else -> PlatformLogger.i(TAG, fullMessage)
+        }
     }
 
     private fun logDebug(method: String, message: String) = log("DEBUG", method, message)

@@ -1,4 +1,5 @@
 package ai.ciris.mobile.shared
+import ai.ciris.mobile.shared.platform.PlatformLogger
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.auth.SilentSignInResult
@@ -318,14 +319,14 @@ fun CIRISApp(
             // IMPORTANT: The refreshed token is an OAuth ID token (Google or Apple), NOT a CIRIS access token
             // We need to exchange it with the CIRIS API to get an access token
             tokenManager.setOnTokenRefreshed { idToken, provider ->
-                println("[$TAG][INFO] OAuth ID token refreshed by TokenManager (provider=$provider), exchanging for CIRIS token")
+                PlatformLogger.i(TAG, " OAuth ID token refreshed by TokenManager (provider=$provider), exchanging for CIRIS token")
                 tokenExchangeComplete = false
                 coroutineScope.launch {
                     try {
                         // Exchange OAuth ID token for CIRIS access token using correct provider
                         val authResponse = apiClient.nativeAuth(idToken, null, provider)
                         val cirisToken = authResponse.access_token
-                        println("[$TAG][INFO] Got CIRIS access token: ${cirisToken.take(8)}...${cirisToken.takeLast(4)}")
+                        PlatformLogger.i(TAG, " Got CIRIS access token: ${cirisToken.take(8)}...${cirisToken.takeLast(4)}")
 
                         // Set the CIRIS token on the API client
                         apiClient.setAccessToken(cirisToken)
@@ -335,26 +336,26 @@ fun CIRISApp(
 
                         // Save CIRIS token to secure storage (not the Google ID token!)
                         secureStorage.saveAccessToken(cirisToken)
-                            .onSuccess { println("[$TAG][INFO] Refreshed CIRIS token saved to secure storage") }
-                            .onFailure { e -> println("[$TAG][WARN] Failed to save refreshed CIRIS token: ${e.message}") }
+                            .onSuccess { PlatformLogger.i(TAG, " Refreshed CIRIS token saved to secure storage") }
+                            .onFailure { e -> PlatformLogger.w(TAG, " Failed to save refreshed CIRIS token: ${e.message}") }
 
                         // Update .env file with fresh OAuth ID token for billing
-                        println("[$TAG][INFO] Writing OAuth ID token to .env for Python billing...")
+                        PlatformLogger.i(TAG, " Writing OAuth ID token to .env for Python billing...")
                         envFileUpdater.updateEnvWithToken(idToken)
                             .onSuccess { updated ->
-                                if (updated) println("[$TAG][INFO] .env updated, .config_reload signal written")
+                                if (updated) PlatformLogger.i(TAG, " .env updated, .config_reload signal written")
                             }
-                            .onFailure { e -> println("[$TAG][ERROR] Failed to update .env: ${e.message}") }
+                            .onFailure { e -> PlatformLogger.e(TAG, " Failed to update .env: ${e.message}") }
 
                         // Wait for Python to detect .config_reload and reload .env
                         // ResourceMonitor checks every 1 second, so 1.5s should be sufficient
-                        println("[$TAG][INFO] Waiting 1.5s for Python to reload billing token...")
+                        PlatformLogger.i(TAG, " Waiting 1.5s for Python to reload billing token...")
                         kotlinx.coroutines.delay(1500)
-                        println("[$TAG][INFO] Python reload wait complete")
+                        PlatformLogger.i(TAG, " Python reload wait complete")
 
                         tokenExchangeComplete = true
                     } catch (e: Exception) {
-                        println("[$TAG][ERROR] Failed to exchange refreshed OAuth token: ${e::class.simpleName}: ${e.message}")
+                        PlatformLogger.e(TAG, " Failed to exchange refreshed OAuth token: ${e::class.simpleName}: ${e.message}")
                         tokenExchangeComplete = true // Mark complete even on failure to unblock waiting code
                         // On failure, the user may need to re-authenticate
                     }
@@ -430,15 +431,15 @@ fun CIRISApp(
         purchaseLauncher?.setOnPurchaseResult { result ->
             when (result) {
                 is PurchaseResultType.Success -> {
-                    println("[$TAG][INFO] Purchase success: creditsAdded=${result.creditsAdded}, newBalance=${result.newBalance}")
+                    PlatformLogger.i(TAG, " Purchase success: creditsAdded=${result.creditsAdded}, newBalance=${result.newBalance}")
                     billingViewModel.onPurchaseSuccess(result.creditsAdded, result.newBalance)
                 }
                 is PurchaseResultType.Error -> {
-                    println("[$TAG][ERROR] Purchase error: ${result.message}")
+                    PlatformLogger.e(TAG, " Purchase error: ${result.message}")
                     billingViewModel.onPurchaseError(result.message)
                 }
                 PurchaseResultType.Cancelled -> {
-                    println("[$TAG][INFO] Purchase cancelled")
+                    PlatformLogger.i(TAG, " Purchase cancelled")
                     billingViewModel.onPurchaseCancelled()
                 }
             }
@@ -491,20 +492,20 @@ fun CIRISApp(
                                 // Check if exchange was triggered (callback sets this to false)
                                 if (!tokenExchangeComplete) {
                                     // Token was refreshed - wait for Google->CIRIS exchange to complete
-                                    println("[$TAG][INFO] Token was refreshed, waiting for CIRIS token exchange...")
+                                    PlatformLogger.i(TAG, " Token was refreshed, waiting for CIRIS token exchange...")
                                     var waitCount = 0
                                     while (!tokenExchangeComplete && waitCount < 50) {
                                         kotlinx.coroutines.delay(100)
                                         waitCount++
                                     }
                                     if (tokenExchangeComplete) {
-                                        println("[$TAG][INFO] Token exchange completed")
+                                        PlatformLogger.i(TAG, " Token exchange completed")
                                     } else {
-                                        println("[$TAG][WARN] Token exchange timed out")
+                                        PlatformLogger.w(TAG, " Token exchange timed out")
                                     }
                                 } else {
                                     // Token was valid without refresh - use the stored CIRIS token directly
-                                    println("[$TAG][INFO] Stored token is valid, setting on API client")
+                                    PlatformLogger.i(TAG, " Stored token is valid, setting on API client")
                                     apiClient.setAccessToken(storedToken)
                                     onTokenUpdated?.invoke(storedToken) // Notify MainActivity for BillingManager
                                     currentAccessToken = storedToken
@@ -512,7 +513,7 @@ fun CIRISApp(
                                 }
 
                                 // Trigger data loading now that we have auth
-                                println("[$TAG][INFO] Triggering data load for ViewModels after token set")
+                                PlatformLogger.i(TAG, " Triggering data load for ViewModels after token set")
                                 billingViewModel.loadBalance()
                                 adaptersViewModel.fetchAdapters()
                                 interactViewModel.startPolling() // Start polling now that token is set
@@ -520,19 +521,19 @@ fun CIRISApp(
                                 // Run CIRISVerify attestation at boot (not first run)
                                 launch(kotlinx.coroutines.Dispatchers.IO) {
                                     try {
-                                        println("[$TAG][INFO] Running boot-time attestation check...")
+                                        PlatformLogger.i(TAG, " Running boot-time attestation check...")
                                         val verifyResult = apiClient.getVerifyStatus()
-                                        println("[$TAG][INFO] Boot attestation: loaded=${verifyResult.loaded}, maxLevel=${verifyResult.maxLevel}, " +
+                                        PlatformLogger.i(TAG, " Boot attestation: loaded=${verifyResult.loaded}, maxLevel=${verifyResult.maxLevel}, " +
                                             "dns_us=${verifyResult.dnsUsOk}, dns_eu=${verifyResult.dnsEuOk}, https=${verifyResult.httpsUsOk}")
                                     } catch (e: Exception) {
-                                        println("[$TAG][WARN] Boot attestation failed: ${e.message}")
+                                        PlatformLogger.w(TAG, " Boot attestation failed: ${e.message}")
                                     }
                                 }
 
                                 currentScreen = Screen.Interact
                             } else {
                                 // Token invalid and couldn't refresh - need interactive login
-                                println("[$TAG][INFO] Token invalid/expired and silent refresh failed - redirecting to login")
+                                PlatformLogger.i(TAG, " Token invalid/expired and silent refresh failed - redirecting to login")
                                 currentScreen = Screen.Login
                             }
                         } else {
@@ -618,27 +619,27 @@ fun CIRISApp(
 
                                                     // Save to secure storage
                                                     secureStorage.saveAccessToken(cirisToken)
-                                                        .onSuccess { println("[$TAG][INFO] CIRIS token saved to secure storage") }
-                                                        .onFailure { e -> println("[$TAG][WARN] Failed to save token: ${e.message}") }
+                                                        .onSuccess { PlatformLogger.i(TAG, " CIRIS token saved to secure storage") }
+                                                        .onFailure { e -> PlatformLogger.w(TAG, " Failed to save token: ${e.message}") }
 
                                                     // Update .env file with fresh OAuth ID token for billing
-                                                    println("[$TAG][INFO] Writing OAuth ID token to .env for Python billing...")
+                                                    PlatformLogger.i(TAG, " Writing OAuth ID token to .env for Python billing...")
                                                     envFileUpdater.updateEnvWithToken(result.idToken)
                                                         .onSuccess { updated ->
-                                                            if (updated) println("[$TAG][INFO] .env updated, .config_reload signal written")
+                                                            if (updated) PlatformLogger.i(TAG, " .env updated, .config_reload signal written")
                                                         }
-                                                        .onFailure { e -> println("[$TAG][ERROR] Failed to update .env: ${e.message}") }
+                                                        .onFailure { e -> PlatformLogger.e(TAG, " Failed to update .env: ${e.message}") }
 
                                                     // Wait for Python to detect .config_reload and reload .env
-                                                    println("[$TAG][INFO] Waiting 1.5s for Python to reload billing token...")
+                                                    PlatformLogger.i(TAG, " Waiting 1.5s for Python to reload billing token...")
                                                     kotlinx.coroutines.delay(1500)
-                                                    println("[$TAG][INFO] Python reload wait complete")
+                                                    PlatformLogger.i(TAG, " Python reload wait complete")
 
                                                     // Handle new token with TokenManager for periodic refresh
                                                     tokenManager.handleNewToken(result.idToken, result.provider)
 
                                                     // Trigger data loading
-                                                    println("[$TAG][INFO] Triggering billingViewModel.loadBalance()...")
+                                                    PlatformLogger.i(TAG, " Triggering billingViewModel.loadBalance()...")
                                                     billingViewModel.loadBalance()
                                                     adaptersViewModel.fetchAdapters()
                                                     interactViewModel.startPolling() // Start polling now that token is set
@@ -716,11 +717,11 @@ fun CIRISApp(
 
                                 // Save to secure storage
                                 secureStorage.saveAccessToken(cirisToken)
-                                    .onSuccess { println("[$TAG][INFO] CIRIS token saved to secure storage") }
-                                    .onFailure { e -> println("[$TAG][WARN] Failed to save token: ${e.message}") }
+                                    .onSuccess { PlatformLogger.i(TAG, " CIRIS token saved to secure storage") }
+                                    .onFailure { e -> PlatformLogger.w(TAG, " Failed to save token: ${e.message}") }
 
                                 // Trigger data loading
-                                println("[$TAG][INFO] Local login successful, triggering data load...")
+                                PlatformLogger.i(TAG, " Local login successful, triggering data load...")
                                 billingViewModel.loadBalance()
                                 adaptersViewModel.fetchAdapters()
                                 interactViewModel.startPolling()
@@ -762,23 +763,23 @@ fun CIRISApp(
                                 if (idToken != null) {
                                     // Network and file operations on IO dispatcher
                                     val cirisToken = withContext(Dispatchers.IO) {
-                                        println("[$TAG][INFO] Exchanging OAuth ID token for CIRIS access token (provider=$provider)")
+                                        PlatformLogger.i(TAG, " Exchanging OAuth ID token for CIRIS access token (provider=$provider)")
                                         val authResponse = apiClient.nativeAuth(idToken, userId, provider)
                                         val token = authResponse.access_token
-                                        println("[$TAG][INFO] Got CIRIS access token: ${token.take(8)}...${token.takeLast(4)}")
+                                        PlatformLogger.i(TAG, " Got CIRIS access token: ${token.take(8)}...${token.takeLast(4)}")
 
                                         // Store token for future sessions
                                         secureStorage.saveAccessToken(token)
-                                            .onSuccess { println("[$TAG][INFO] Token saved to secure storage") }
-                                            .onFailure { e -> println("[$TAG][WARN] Failed to save token to secure storage: ${e.message}") }
+                                            .onSuccess { PlatformLogger.i(TAG, " Token saved to secure storage") }
+                                            .onFailure { e -> PlatformLogger.w(TAG, " Failed to save token to secure storage: ${e.message}") }
 
                                         // Update .env file with fresh OAuth ID token for billing
-                                        println("[$TAG][INFO] Writing OAuth ID token to .env for Python billing...")
+                                        PlatformLogger.i(TAG, " Writing OAuth ID token to .env for Python billing...")
                                         envFileUpdater.updateEnvWithToken(idToken)
                                             .onSuccess { updated ->
-                                                if (updated) println("[$TAG][INFO] .env updated, .config_reload signal written")
+                                                if (updated) PlatformLogger.i(TAG, " .env updated, .config_reload signal written")
                                             }
-                                            .onFailure { e -> println("[$TAG][ERROR] Failed to update .env: ${e.message}") }
+                                            .onFailure { e -> PlatformLogger.e(TAG, " Failed to update .env: ${e.message}") }
 
                                         token
                                     }
@@ -790,12 +791,12 @@ fun CIRISApp(
                                     apiClient.logTokenState() // Debug: confirm token was set
 
                                     // Wait for Python to detect .config_reload and reload .env
-                                    println("[$TAG][INFO] Waiting 1.5s for Python to reload billing token...")
+                                    PlatformLogger.i(TAG, " Waiting 1.5s for Python to reload billing token...")
                                     kotlinx.coroutines.delay(1500)
-                                    println("[$TAG][INFO] Python reload wait complete")
+                                    PlatformLogger.i(TAG, " Python reload wait complete")
 
                                     // Trigger data loading now that we have auth AND Python has reloaded
-                                    println("[$TAG][INFO] Triggering billingViewModel.loadBalance()...")
+                                    PlatformLogger.i(TAG, " Triggering billingViewModel.loadBalance()...")
                                     billingViewModel.loadBalance()
                                     adaptersViewModel.fetchAdapters()
 
@@ -803,23 +804,23 @@ fun CIRISApp(
                                     pendingIdToken = null
                                     pendingUserId = null
                                 } else {
-                                    println("[$TAG][INFO] No pending OAuth token, using local auth")
+                                    PlatformLogger.i(TAG, " No pending OAuth token, using local auth")
                                     // For local login, authenticate with the admin credentials from setup
                                     val setupState = setupViewModel.state.value
                                     val username = setupState.username.ifEmpty { "admin" }
                                     val password = setupState.userPassword
 
                                     if (password.isNotEmpty()) {
-                                        println("[$TAG][INFO] Logging in with local credentials: $username")
+                                        PlatformLogger.i(TAG, " Logging in with local credentials: $username")
                                         val cirisToken = withContext(Dispatchers.IO) {
                                             val authResponse = apiClient.login(username, password)
                                             val token = authResponse.access_token
-                                            println("[$TAG][INFO] Got CIRIS access token: ${token.take(8)}...${token.takeLast(4)}")
+                                            PlatformLogger.i(TAG, " Got CIRIS access token: ${token.take(8)}...${token.takeLast(4)}")
 
                                             // Store token for future sessions
                                             secureStorage.saveAccessToken(token)
-                                                .onSuccess { println("[$TAG][INFO] Token saved to secure storage") }
-                                                .onFailure { e -> println("[$TAG][WARN] Failed to save token to secure storage: ${e.message}") }
+                                                .onSuccess { PlatformLogger.i(TAG, " Token saved to secure storage") }
+                                                .onFailure { e -> PlatformLogger.w(TAG, " Failed to save token to secure storage: ${e.message}") }
 
                                             token
                                         }
@@ -829,12 +830,12 @@ fun CIRISApp(
                                         currentAccessToken = cirisToken
                                         apiClient.logTokenState()
                                     } else {
-                                        println("[$TAG][WARN] No password set for local user, skipping auto-login")
+                                        PlatformLogger.w(TAG, " No password set for local user, skipping auto-login")
                                     }
                                 }
                             } catch (e: Exception) {
-                                println("[$TAG][ERROR] Token exchange failed: ${e::class.simpleName}: ${e.message}")
-                                println("[$TAG][ERROR] Stack trace: ${e.stackTraceToString().take(500)}")
+                                PlatformLogger.e(TAG, " Token exchange failed: ${e::class.simpleName}: ${e.message}")
+                                PlatformLogger.e(TAG, " Stack trace: ${e.stackTraceToString().take(500)}")
                             }
 
                             // After setup completes, Python resumes and starts remaining 12 services
@@ -910,14 +911,14 @@ fun CIRISApp(
                     apiClient = apiClient,
                     onNavigateBack = { currentScreen = Screen.Interact },
                     onLogout = {
-                        println("[CIRISApp][INFO][onLogout] User initiated logout")
+                        PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout")
                         settingsViewModel.logout {
-                            println("[CIRISApp][INFO][onLogout] Logout complete, navigating to Startup")
+                            PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Startup")
                             currentScreen = Screen.Startup
                         }
                     },
                     onResetSetup = {
-                        println("[CIRISApp][INFO][onResetSetup] Setup reset requested, restarting app...")
+                        PlatformLogger.i("CIRISApp", "[onResetSetup] Setup reset requested, restarting app...")
                         // Navigate to Startup which will detect first-run and show setup wizard
                         // The .env file has been deleted, so first-run detection will trigger
                         currentScreen = Screen.Startup
@@ -935,23 +936,23 @@ fun CIRISApp(
 
                 // Load balance when entering billing screen
                 LaunchedEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Billing] Loading balance on screen entry")
+                    PlatformLogger.i(TAG, "[Screen.Billing] Loading balance on screen entry")
                     billingViewModel.loadBalance()
                 }
 
-                println("[CIRISApp][DEBUG][Screen.Billing] Rendering billing screen: " +
+                PlatformLogger.d("CIRISApp", "[Screen.Billing] Rendering billing screen: " +
                         "balance=$currentBalance, products=${products.size}, " +
                         "isByok=$isByokMode, isLoading=$isBillingLoading")
 
                 // Display snackbar for error/success messages
                 LaunchedEffect(billingError) {
                     if (billingError != null) {
-                        println("[CIRISApp][WARN][Screen.Billing] Error: $billingError")
+                        PlatformLogger.w("CIRISApp", "[Screen.Billing] Error: $billingError")
                     }
                 }
                 LaunchedEffect(billingSuccess) {
                     if (billingSuccess != null) {
-                        println("[CIRISApp][INFO][Screen.Billing] Success: $billingSuccess")
+                        PlatformLogger.i("CIRISApp", "[Screen.Billing] Success: $billingSuccess")
                     }
                 }
 
@@ -961,24 +962,24 @@ fun CIRISApp(
                     isLoading = isBillingLoading,
                     errorMessage = billingError,
                     onProductClick = { product ->
-                        println("[CIRISApp][INFO][Screen.Billing] Product clicked: ${product.productId}")
+                        PlatformLogger.i("CIRISApp", "[Screen.Billing] Product clicked: ${product.productId}")
                         billingViewModel.onProductSelected(product) { selectedProduct ->
-                            println("[CIRISApp][INFO][Screen.Billing] Launching purchase for: ${selectedProduct.productId}")
+                            PlatformLogger.i("CIRISApp", "[Screen.Billing] Launching purchase for: ${selectedProduct.productId}")
                             if (purchaseLauncher != null) {
                                 billingViewModel.onPurchaseStarted(selectedProduct.productId)
                                 purchaseLauncher.launchPurchase(selectedProduct.productId)
                             } else {
-                                println("[CIRISApp][WARN][Screen.Billing] No purchase launcher available")
+                                PlatformLogger.w("CIRISApp", "[Screen.Billing] No purchase launcher available")
                                 billingViewModel.onPurchaseError("In-app purchases not available on this platform")
                             }
                         }
                     },
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Billing] User triggered refresh")
+                        PlatformLogger.i("CIRISApp", "[Screen.Billing] User triggered refresh")
                         billingViewModel.refresh()
                     },
                     onNavigateBack = {
-                        println("[CIRISApp][INFO][Screen.Billing] Navigating back to Interact")
+                        PlatformLogger.i("CIRISApp", "[Screen.Billing] Navigating back to Interact")
                         currentScreen = Screen.Interact
                     },
                     onDismissError = {
@@ -993,15 +994,15 @@ fun CIRISApp(
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Telemetry] Starting telemetry polling")
+                    PlatformLogger.i(TAG, "[Screen.Telemetry] Starting telemetry polling")
                     telemetryViewModel.startPolling()
                     onDispose {
-                        println("[$TAG][INFO][Screen.Telemetry] Stopping telemetry polling")
+                        PlatformLogger.i(TAG, "[Screen.Telemetry] Stopping telemetry polling")
                         telemetryViewModel.stopPolling()
                     }
                 }
 
-                println("[CIRISApp][DEBUG][Screen.Telemetry] Rendering telemetry screen: " +
+                PlatformLogger.d("CIRISApp", "[Screen.Telemetry] Rendering telemetry screen: " +
                         "services=${telemetryData.healthyServices}/${telemetryData.totalServices}, " +
                         "state=${telemetryData.cognitiveState}, isLoading=$isTelemetryLoading")
 
@@ -1009,11 +1010,11 @@ fun CIRISApp(
                     telemetryData = telemetryData,
                     isLoading = isTelemetryLoading,
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Telemetry] User triggered refresh")
+                        PlatformLogger.i("CIRISApp", "[Screen.Telemetry] User triggered refresh")
                         telemetryViewModel.refresh()
                     },
                     onNavigateBack = {
-                        println("[CIRISApp][INFO][Screen.Telemetry] Navigating back to Interact")
+                        PlatformLogger.i("CIRISApp", "[Screen.Telemetry] Navigating back to Interact")
                         currentScreen = Screen.Interact
                     }
                 )
@@ -1028,27 +1029,27 @@ fun CIRISApp(
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Sessions] Starting sessions polling")
+                    PlatformLogger.i(TAG, "[Screen.Sessions] Starting sessions polling")
                     sessionsViewModel.startPolling()
                     onDispose {
-                        println("[$TAG][INFO][Screen.Sessions] Stopping sessions polling")
+                        PlatformLogger.i(TAG, "[Screen.Sessions] Stopping sessions polling")
                         sessionsViewModel.stopPolling()
                     }
                 }
 
-                println("[CIRISApp][DEBUG][Screen.Sessions] Rendering sessions screen: " +
+                PlatformLogger.d("CIRISApp", "[Screen.Sessions] Rendering sessions screen: " +
                         "state=$currentCognitiveState, isLoading=$isSessionsLoading, " +
                         "isTransitioning=$isTransitioning")
 
                 // Log status/error messages
                 LaunchedEffect(sessionStatusMessage) {
                     if (sessionStatusMessage != null) {
-                        println("[CIRISApp][INFO][Screen.Sessions] Status: $sessionStatusMessage")
+                        PlatformLogger.i("CIRISApp", "[Screen.Sessions] Status: $sessionStatusMessage")
                     }
                 }
                 LaunchedEffect(sessionErrorMessage) {
                     if (sessionErrorMessage != null) {
-                        println("[CIRISApp][WARN][Screen.Sessions] Error: $sessionErrorMessage")
+                        PlatformLogger.w("CIRISApp", "[Screen.Sessions] Error: $sessionErrorMessage")
                     }
                 }
 
@@ -1056,15 +1057,15 @@ fun CIRISApp(
                     currentState = currentCognitiveState,
                     isLoading = isSessionsLoading || isTransitioning,
                     onInitiateSession = { targetState ->
-                        println("[CIRISApp][INFO][Screen.Sessions] Initiating session transition: $currentCognitiveState -> $targetState")
+                        PlatformLogger.i("CIRISApp", "[Screen.Sessions] Initiating session transition: $currentCognitiveState -> $targetState")
                         sessionsViewModel.initiateSession(targetState)
                     },
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Sessions] User triggered refresh")
+                        PlatformLogger.i("CIRISApp", "[Screen.Sessions] User triggered refresh")
                         sessionsViewModel.refresh()
                     },
                     onNavigateBack = {
-                        println("[CIRISApp][INFO][Screen.Sessions] Navigating back to Interact")
+                        PlatformLogger.i("CIRISApp", "[Screen.Sessions] Navigating back to Interact")
                         currentScreen = Screen.Interact
                     }
                 )
@@ -1083,16 +1084,16 @@ fun CIRISApp(
                 val wizardError by adaptersViewModel.wizardError.collectAsState()
                 val wizardLoading by adaptersViewModel.wizardLoading.collectAsState()
 
-                println("[CIRISApp][DEBUG][Screen.Adapters] Rendering adapters screen: " +
+                PlatformLogger.d("CIRISApp", "[Screen.Adapters] Rendering adapters screen: " +
                         "adapters=${adaptersList.size}, connected=$isAdaptersConnected, " +
                         "isLoading=$isAdaptersLoading, operationInProgress=$adaptersOperationInProgress")
 
                 // Start polling when screen is visible
                 DisposableEffect(Unit) {
-                    println("[CIRISApp][INFO][Screen.Adapters] Starting adapter polling")
+                    PlatformLogger.i("CIRISApp", "[Screen.Adapters] Starting adapter polling")
                     adaptersViewModel.startPolling()
                     onDispose {
-                        println("[CIRISApp][INFO][Screen.Adapters] Stopping adapter polling")
+                        PlatformLogger.i("CIRISApp", "[Screen.Adapters] Stopping adapter polling")
                         adaptersViewModel.stopPolling()
                     }
                 }
@@ -1100,7 +1101,7 @@ fun CIRISApp(
                 // Log status messages
                 LaunchedEffect(adaptersStatusMessage) {
                     if (adaptersStatusMessage != null) {
-                        println("[CIRISApp][INFO][Screen.Adapters] Status: $adaptersStatusMessage")
+                        PlatformLogger.i("CIRISApp", "[Screen.Adapters] Status: $adaptersStatusMessage")
                     }
                 }
 
@@ -1109,23 +1110,23 @@ fun CIRISApp(
                     isConnected = isAdaptersConnected,
                     isLoading = isAdaptersLoading || adaptersOperationInProgress,
                     onReloadAdapter = { adapterId ->
-                        println("[CIRISApp][INFO][Screen.Adapters] Reloading adapter: $adapterId")
+                        PlatformLogger.i("CIRISApp", "[Screen.Adapters] Reloading adapter: $adapterId")
                         adaptersViewModel.reloadAdapter(adapterId)
                     },
                     onRemoveAdapter = { adapterId ->
-                        println("[CIRISApp][INFO][Screen.Adapters] Removing adapter: $adapterId")
+                        PlatformLogger.i("CIRISApp", "[Screen.Adapters] Removing adapter: $adapterId")
                         adaptersViewModel.removeAdapter(adapterId)
                     },
                     onAddAdapter = {
-                        println("[CIRISApp][INFO][Screen.Adapters] Add adapter requested")
+                        PlatformLogger.i("CIRISApp", "[Screen.Adapters] Add adapter requested")
                         adaptersViewModel.addAdapter()
                     },
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Adapters] User triggered refresh")
+                        PlatformLogger.i("CIRISApp", "[Screen.Adapters] User triggered refresh")
                         adaptersViewModel.refresh()
                     },
                     onNavigateBack = {
-                        println("[CIRISApp][INFO][Screen.Adapters] Navigating back to Interact")
+                        PlatformLogger.i("CIRISApp", "[Screen.Adapters] Navigating back to Interact")
                         currentScreen = Screen.Interact
                     }
                 )
@@ -1138,19 +1139,19 @@ fun CIRISApp(
                         isLoading = wizardLoading,
                         error = wizardError,
                         onSelectType = { adapterType ->
-                            println("[CIRISApp][INFO][AdapterWizard] Selected type: $adapterType")
+                            PlatformLogger.i("CIRISApp", "[AdapterWizard] Selected type: $adapterType")
                             adaptersViewModel.startWizard(adapterType)
                         },
                         onSubmitStep = { stepData ->
-                            println("[CIRISApp][INFO][AdapterWizard] Submitting step with ${stepData.size} fields")
+                            PlatformLogger.i("CIRISApp", "[AdapterWizard] Submitting step with ${stepData.size} fields")
                             adaptersViewModel.submitWizardStep(stepData)
                         },
                         onBack = {
-                            println("[CIRISApp][INFO][AdapterWizard] Back pressed")
+                            PlatformLogger.i("CIRISApp", "[AdapterWizard] Back pressed")
                             adaptersViewModel.wizardBack()
                         },
                         onDismiss = {
-                            println("[CIRISApp][INFO][AdapterWizard] Dialog dismissed")
+                            PlatformLogger.i("CIRISApp", "[AdapterWizard] Dialog dismissed")
                             adaptersViewModel.closeWizard()
                         }
                     )
@@ -1167,27 +1168,27 @@ fun CIRISApp(
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
-                    println("[$TAG][INFO][Screen.WiseAuthority] Starting WA polling")
+                    PlatformLogger.i(TAG, "[Screen.WiseAuthority] Starting WA polling")
                     wiseAuthorityViewModel.startPolling()
                     onDispose {
-                        println("[$TAG][INFO][Screen.WiseAuthority] Stopping WA polling")
+                        PlatformLogger.i(TAG, "[Screen.WiseAuthority] Stopping WA polling")
                         wiseAuthorityViewModel.stopPolling()
                     }
                 }
 
-                println("[CIRISApp][DEBUG][Screen.WiseAuthority] Rendering WA screen: " +
+                PlatformLogger.d("CIRISApp", "[Screen.WiseAuthority] Rendering WA screen: " +
                         "status=${waStatus?.serviceHealthy}, deferrals=${deferrals.size}, " +
                         "isLoading=$isWALoading, isResolving=$isResolving")
 
                 // Log status/error messages
                 LaunchedEffect(waError) {
                     if (waError != null) {
-                        println("[CIRISApp][WARN][Screen.WiseAuthority] Error: $waError")
+                        PlatformLogger.w("CIRISApp", "[Screen.WiseAuthority] Error: $waError")
                     }
                 }
                 LaunchedEffect(waSuccess) {
                     if (waSuccess != null) {
-                        println("[CIRISApp][INFO][Screen.WiseAuthority] Success: $waSuccess")
+                        PlatformLogger.i("CIRISApp", "[Screen.WiseAuthority] Success: $waSuccess")
                         wiseAuthorityViewModel.clearSuccess()
                     }
                 }
@@ -1198,15 +1199,15 @@ fun CIRISApp(
                     isLoading = isWALoading,
                     isResolving = isResolving,
                     onResolveDeferral = { deferralId, resolution, guidance ->
-                        println("[CIRISApp][INFO][Screen.WiseAuthority] Resolving deferral: $deferralId -> $resolution")
+                        PlatformLogger.i("CIRISApp", "[Screen.WiseAuthority] Resolving deferral: $deferralId -> $resolution")
                         wiseAuthorityViewModel.resolveDeferral(deferralId, resolution, guidance)
                     },
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.WiseAuthority] User triggered refresh")
+                        PlatformLogger.i("CIRISApp", "[Screen.WiseAuthority] User triggered refresh")
                         wiseAuthorityViewModel.refresh()
                     },
                     onNavigateBack = {
-                        println("[CIRISApp][INFO][Screen.WiseAuthority] Navigating back to Interact")
+                        PlatformLogger.i("CIRISApp", "[Screen.WiseAuthority] Navigating back to Interact")
                         currentScreen = Screen.Interact
                     }
                 )
@@ -1219,21 +1220,21 @@ fun CIRISApp(
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Services] Starting services polling")
+                    PlatformLogger.i(TAG, "[Screen.Services] Starting services polling")
                     servicesViewModel.startPolling()
                     onDispose {
-                        println("[$TAG][INFO][Screen.Services] Stopping services polling")
+                        PlatformLogger.i(TAG, "[Screen.Services] Stopping services polling")
                         servicesViewModel.stopPolling()
                     }
                 }
 
                 LaunchedEffect(servicesError) {
                     servicesError?.let { error ->
-                        println("[$TAG][ERROR][Screen.Services] Services error: $error")
+                        PlatformLogger.e(TAG, "[Screen.Services] Services error: $error")
                     }
                 }
 
-                println("[CIRISApp][DEBUG][Screen.Services] Rendering services screen: " +
+                PlatformLogger.d("CIRISApp", "[Screen.Services] Rendering services screen: " +
                         "total=${servicesData.totalServices}, healthy=${servicesData.healthyServices}, " +
                         "isLoading=$isServicesLoading")
 
@@ -1241,19 +1242,19 @@ fun CIRISApp(
                     servicesData = servicesData,
                     isLoading = isServicesLoading,
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Services] User triggered refresh")
+                        PlatformLogger.i("CIRISApp", "[Screen.Services] User triggered refresh")
                         servicesViewModel.refresh()
                     },
                     onDiagnose = {
-                        println("[CIRISApp][INFO][Screen.Services] User triggered diagnose")
+                        PlatformLogger.i("CIRISApp", "[Screen.Services] User triggered diagnose")
                         servicesViewModel.runDiagnostics()
                     },
                     onResetCircuitBreakers = { serviceType ->
-                        println("[CIRISApp][INFO][Screen.Services] Reset circuit breakers: $serviceType")
+                        PlatformLogger.i("CIRISApp", "[Screen.Services] Reset circuit breakers: $serviceType")
                         servicesViewModel.resetCircuitBreakers(serviceType)
                     },
                     onNavigateBack = {
-                        println("[CIRISApp][INFO][Screen.Services] Navigating back to Interact")
+                        PlatformLogger.i("CIRISApp", "[Screen.Services] Navigating back to Interact")
                         currentScreen = Screen.Interact
                     }
                 )
@@ -1264,36 +1265,36 @@ fun CIRISApp(
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Audit] Starting audit polling")
+                    PlatformLogger.i(TAG, "[Screen.Audit] Starting audit polling")
                     auditViewModel.startPolling()
                     onDispose {
-                        println("[$TAG][INFO][Screen.Audit] Stopping audit polling")
+                        PlatformLogger.i(TAG, "[Screen.Audit] Stopping audit polling")
                         auditViewModel.stopPolling()
                     }
                 }
 
                 LaunchedEffect(auditState.error) {
                     auditState.error?.let { error ->
-                        println("[$TAG][ERROR][Screen.Audit] Audit error: $error")
+                        PlatformLogger.e(TAG, "[Screen.Audit] Audit error: $error")
                     }
                 }
 
-                println("[CIRISApp][DEBUG][Screen.Audit] Rendering audit screen: " +
+                PlatformLogger.d("CIRISApp", "[Screen.Audit] Rendering audit screen: " +
                         "entries=${auditState.entries.size}, total=${auditState.totalEntries}, " +
                         "isLoading=${auditState.isLoading}, error=${auditState.error}")
 
                 AuditScreen(
                     auditState = auditState,
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Audit] User triggered refresh")
+                        PlatformLogger.i("CIRISApp", "[Screen.Audit] User triggered refresh")
                         auditViewModel.refresh()
                     },
                     onLoadMore = {
-                        println("[CIRISApp][INFO][Screen.Audit] Load more requested")
+                        PlatformLogger.i("CIRISApp", "[Screen.Audit] Load more requested")
                         auditViewModel.loadMore()
                     },
                     onFilterChange = { filter ->
-                        println("[CIRISApp][INFO][Screen.Audit] Filter changed: $filter")
+                        PlatformLogger.i("CIRISApp", "[Screen.Audit] Filter changed: $filter")
                         auditViewModel.updateFilter(filter)
                     },
                     onNavigateBack = { currentScreen = Screen.Interact }
@@ -1305,39 +1306,39 @@ fun CIRISApp(
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Logs] Starting logs polling")
+                    PlatformLogger.i(TAG, "[Screen.Logs] Starting logs polling")
                     logsViewModel.startPolling()
                     onDispose {
-                        println("[$TAG][INFO][Screen.Logs] Stopping logs polling")
+                        PlatformLogger.i(TAG, "[Screen.Logs] Stopping logs polling")
                         logsViewModel.stopPolling()
                     }
                 }
 
                 LaunchedEffect(logsState.error) {
                     logsState.error?.let { error ->
-                        println("[$TAG][ERROR][Screen.Logs] Logs error: $error")
+                        PlatformLogger.e(TAG, "[Screen.Logs] Logs error: $error")
                     }
                 }
 
-                println("[CIRISApp][DEBUG][Screen.Logs] Rendering logs screen: " +
+                PlatformLogger.d("CIRISApp", "[Screen.Logs] Rendering logs screen: " +
                         "logs=${logsState.logs.size}, isLoading=${logsState.isLoading}, error=${logsState.error}")
 
                 LogsScreen(
                     logsState = logsState,
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Logs] User triggered refresh")
+                        PlatformLogger.i("CIRISApp", "[Screen.Logs] User triggered refresh")
                         logsViewModel.refresh()
                     },
                     onFilterChange = { filter ->
-                        println("[CIRISApp][INFO][Screen.Logs] Filter changed: $filter")
+                        PlatformLogger.i("CIRISApp", "[Screen.Logs] Filter changed: $filter")
                         logsViewModel.updateFilter(filter)
                     },
                     onSearchChange = { query ->
-                        println("[CIRISApp][INFO][Screen.Logs] Search changed: $query")
+                        PlatformLogger.i("CIRISApp", "[Screen.Logs] Search changed: $query")
                         logsViewModel.updateSearch(query)
                     },
                     onToggleAutoScroll = {
-                        println("[CIRISApp][INFO][Screen.Logs] Toggle auto-scroll")
+                        PlatformLogger.i("CIRISApp", "[Screen.Logs] Toggle auto-scroll")
                         logsViewModel.toggleAutoScroll()
                     },
                     onNavigateBack = { currentScreen = Screen.Interact }
@@ -1349,49 +1350,49 @@ fun CIRISApp(
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Memory] Starting memory polling")
+                    PlatformLogger.i(TAG, "[Screen.Memory] Starting memory polling")
                     memoryViewModel.startPolling()
                     onDispose {
-                        println("[$TAG][INFO][Screen.Memory] Stopping memory polling")
+                        PlatformLogger.i(TAG, "[Screen.Memory] Stopping memory polling")
                         memoryViewModel.stopPolling()
                     }
                 }
 
                 LaunchedEffect(memoryState.error) {
                     memoryState.error?.let { error ->
-                        println("[$TAG][ERROR][Screen.Memory] Memory error: $error")
+                        PlatformLogger.e(TAG, "[Screen.Memory] Memory error: $error")
                     }
                 }
 
-                println("[CIRISApp][DEBUG][Screen.Memory] Rendering memory screen: " +
+                PlatformLogger.d("CIRISApp", "[Screen.Memory] Rendering memory screen: " +
                         "searchResults=${memoryState.searchResults.size}, timeline=${memoryState.timelineNodes.size}, " +
                         "isLoading=${memoryState.isLoading}, error=${memoryState.error}")
 
                 MemoryScreen(
                     memoryState = memoryState,
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Memory] User triggered refresh")
+                        PlatformLogger.i("CIRISApp", "[Screen.Memory] User triggered refresh")
                         memoryViewModel.refresh()
                     },
                     onSearch = { query ->
-                        println("[CIRISApp][INFO][Screen.Memory] Search: $query")
+                        PlatformLogger.i("CIRISApp", "[Screen.Memory] Search: $query")
                         memoryViewModel.search(query)
                     },
                     onFilterChange = { filter ->
-                        println("[CIRISApp][INFO][Screen.Memory] Filter changed: $filter")
+                        PlatformLogger.i("CIRISApp", "[Screen.Memory] Filter changed: $filter")
                         memoryViewModel.updateFilter(filter)
                     },
                     onNodeSelect = { nodeId ->
-                        println("[CIRISApp][INFO][Screen.Memory] Node selected: $nodeId")
+                        PlatformLogger.i("CIRISApp", "[Screen.Memory] Node selected: $nodeId")
                         memoryViewModel.selectNode(nodeId)
                     },
                     onClearSelection = {
-                        println("[CIRISApp][INFO][Screen.Memory] Clear selection")
+                        PlatformLogger.i("CIRISApp", "[Screen.Memory] Clear selection")
                         memoryViewModel.clearSelection()
                     },
                     onNavigateBack = { currentScreen = Screen.Interact },
                     onSwitchToGraph = {
-                        println("[CIRISApp][INFO][Screen.Memory] Switching to graph view")
+                        PlatformLogger.i("CIRISApp", "[Screen.Memory] Switching to graph view")
                         currentScreen = Screen.GraphMemory
                     }
                 )
@@ -1403,12 +1404,12 @@ fun CIRISApp(
                 val graphStats by graphMemoryViewModel.stats.collectAsState()
 
                 LaunchedEffect(Unit) {
-                    println("[$TAG][INFO][Screen.GraphMemory] Loading graph data on screen entry")
+                    PlatformLogger.i(TAG, "[Screen.GraphMemory] Loading graph data on screen entry")
                     graphMemoryViewModel.setCanvasSize(800f, 600f) // Default size, will be updated
                     graphMemoryViewModel.loadGraphData()
                 }
 
-                println("[CIRISApp][DEBUG][Screen.GraphMemory] Rendering graph screen: " +
+                PlatformLogger.d("CIRISApp", "[Screen.GraphMemory] Rendering graph screen: " +
                         "nodes=${graphState.nodes.size}, edges=${graphState.edges.size}, " +
                         "isLoading=${graphState.isLoading}")
 
@@ -1417,19 +1418,19 @@ fun CIRISApp(
                     filter = graphFilter,
                     stats = graphStats,
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.GraphMemory] User triggered refresh")
+                        PlatformLogger.i("CIRISApp", "[Screen.GraphMemory] User triggered refresh")
                         graphMemoryViewModel.refresh()
                     },
                     onFilterChange = { filter ->
-                        println("[CIRISApp][INFO][Screen.GraphMemory] Filter changed")
+                        PlatformLogger.i("CIRISApp", "[Screen.GraphMemory] Filter changed")
                         graphMemoryViewModel.updateFilter(filter)
                     },
                     onLayoutChange = { layout ->
-                        println("[CIRISApp][INFO][Screen.GraphMemory] Layout changed: $layout")
+                        PlatformLogger.i("CIRISApp", "[Screen.GraphMemory] Layout changed: $layout")
                         graphMemoryViewModel.changeLayout(layout)
                     },
                     onNodeSelected = { nodeId ->
-                        println("[CIRISApp][INFO][Screen.GraphMemory] Node selected: $nodeId")
+                        PlatformLogger.i("CIRISApp", "[Screen.GraphMemory] Node selected: $nodeId")
                         graphMemoryViewModel.selectNode(nodeId)
                     },
                     onViewportChange = { viewport ->
@@ -1445,15 +1446,15 @@ fun CIRISApp(
                         graphMemoryViewModel.endNodeDrag(nodeId)
                     },
                     onStartSimulation = {
-                        println("[CIRISApp][INFO][Screen.GraphMemory] Starting simulation")
+                        PlatformLogger.i("CIRISApp", "[Screen.GraphMemory] Starting simulation")
                         graphMemoryViewModel.startSimulation()
                     },
                     onStopSimulation = {
-                        println("[CIRISApp][INFO][Screen.GraphMemory] Stopping simulation")
+                        PlatformLogger.i("CIRISApp", "[Screen.GraphMemory] Stopping simulation")
                         graphMemoryViewModel.stopSimulation()
                     },
                     onNavigateBack = {
-                        println("[CIRISApp][INFO][Screen.GraphMemory] Navigating back to Memory list")
+                        PlatformLogger.i("CIRISApp", "[Screen.GraphMemory] Navigating back to Memory list")
                         currentScreen = Screen.Memory
                     }
                 )
@@ -1469,21 +1470,21 @@ fun CIRISApp(
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Config] Starting config polling")
+                    PlatformLogger.i(TAG, "[Screen.Config] Starting config polling")
                     configViewModel.startPolling()
                     onDispose {
-                        println("[$TAG][INFO][Screen.Config] Stopping config polling")
+                        PlatformLogger.i(TAG, "[Screen.Config] Stopping config polling")
                         configViewModel.stopPolling()
                     }
                 }
 
                 LaunchedEffect(configError) {
                     configError?.let { error ->
-                        println("[$TAG][ERROR][Screen.Config] Config error: $error")
+                        PlatformLogger.e(TAG, "[Screen.Config] Config error: $error")
                     }
                 }
 
-                println("[CIRISApp][DEBUG][Screen.Config] Rendering config screen: " +
+                PlatformLogger.d("CIRISApp", "[Screen.Config] Rendering config screen: " +
                         "sections=${configData.sections.size}, isLoading=$isConfigLoading")
 
                 ConfigScreen(
@@ -1493,27 +1494,27 @@ fun CIRISApp(
                     selectedCategory = configSelectedCategory,
                     expandedSections = configExpandedSections,
                     onSearchQueryChange = { query ->
-                        println("[CIRISApp][INFO][Screen.Config] Search changed: $query")
+                        PlatformLogger.i("CIRISApp", "[Screen.Config] Search changed: $query")
                         configViewModel.updateSearchQuery(query)
                     },
                     onCategorySelect = { category ->
-                        println("[CIRISApp][INFO][Screen.Config] Category selected: $category")
+                        PlatformLogger.i("CIRISApp", "[Screen.Config] Category selected: $category")
                         configViewModel.selectCategory(category)
                     },
                     onToggleSection = { section ->
-                        println("[CIRISApp][INFO][Screen.Config] Toggle section: $section")
+                        PlatformLogger.i("CIRISApp", "[Screen.Config] Toggle section: $section")
                         configViewModel.toggleSection(section)
                     },
                     onUpdateConfig = { key, value ->
-                        println("[CIRISApp][INFO][Screen.Config] Update config: $key=$value")
+                        PlatformLogger.i("CIRISApp", "[Screen.Config] Update config: $key=$value")
                         configViewModel.updateConfig(key, value)
                     },
                     onDeleteConfig = { key ->
-                        println("[CIRISApp][INFO][Screen.Config] Delete config: $key")
+                        PlatformLogger.i("CIRISApp", "[Screen.Config] Delete config: $key")
                         configViewModel.deleteConfig(key)
                     },
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Config] User triggered refresh")
+                        PlatformLogger.i("CIRISApp", "[Screen.Config] User triggered refresh")
                         configViewModel.refresh()
                     },
                     onNavigateBack = { currentScreen = Screen.Interact }
@@ -1527,36 +1528,36 @@ fun CIRISApp(
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Consent] Starting consent polling")
+                    PlatformLogger.i(TAG, "[Screen.Consent] Starting consent polling")
                     consentViewModel.startPolling()
                     onDispose {
-                        println("[$TAG][INFO][Screen.Consent] Stopping consent polling")
+                        PlatformLogger.i(TAG, "[Screen.Consent] Stopping consent polling")
                         consentViewModel.stopPolling()
                     }
                 }
 
                 LaunchedEffect(consentError) {
                     consentError?.let { error ->
-                        println("[$TAG][ERROR][Screen.Consent] Consent error: $error")
+                        PlatformLogger.e(TAG, "[Screen.Consent] Consent error: $error")
                     }
                 }
 
-                println("[CIRISApp][DEBUG][Screen.Consent] Rendering consent screen: " +
+                PlatformLogger.d("CIRISApp", "[Screen.Consent] Rendering consent screen: " +
                         "streams=${consentData.availableStreams.size}, isLoading=$isConsentLoading")
 
                 ConsentScreen(
                     consentData = consentData,
                     isLoading = isConsentLoading,
                     onStreamSelect = { streamId ->
-                        println("[CIRISApp][INFO][Screen.Consent] Stream selected: $streamId")
+                        PlatformLogger.i("CIRISApp", "[Screen.Consent] Stream selected: $streamId")
                         consentViewModel.changeStream(streamId)
                     },
                     onRequestPartnership = {
-                        println("[CIRISApp][INFO][Screen.Consent] Request partnership")
+                        PlatformLogger.i("CIRISApp", "[Screen.Consent] Request partnership")
                         consentViewModel.requestPartnership()
                     },
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Consent] User triggered refresh")
+                        PlatformLogger.i("CIRISApp", "[Screen.Consent] User triggered refresh")
                         consentViewModel.refresh()
                     },
                     onNavigateBack = { currentScreen = Screen.Interact }
@@ -1570,36 +1571,36 @@ fun CIRISApp(
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
-                    println("[$TAG][INFO][Screen.System] Starting system polling")
+                    PlatformLogger.i(TAG, "[Screen.System] Starting system polling")
                     systemViewModel.startPolling()
                     onDispose {
-                        println("[$TAG][INFO][Screen.System] Stopping system polling")
+                        PlatformLogger.i(TAG, "[Screen.System] Stopping system polling")
                         systemViewModel.stopPolling()
                     }
                 }
 
                 LaunchedEffect(systemError) {
                     systemError?.let { error ->
-                        println("[$TAG][ERROR][Screen.System] System error: $error")
+                        PlatformLogger.e(TAG, "[Screen.System] System error: $error")
                     }
                 }
 
-                println("[CIRISApp][DEBUG][Screen.System] Rendering system screen: " +
+                PlatformLogger.d("CIRISApp", "[Screen.System] Rendering system screen: " +
                         "health=${systemData.health}, isPaused=${systemData.isPaused}, isLoading=$isSystemLoading")
 
                 SystemScreen(
                     systemData = systemData,
                     isLoading = isSystemLoading,
                     onPauseRuntime = {
-                        println("[CIRISApp][INFO][Screen.System] Pause runtime")
+                        PlatformLogger.i("CIRISApp", "[Screen.System] Pause runtime")
                         systemViewModel.pauseRuntime()
                     },
                     onResumeRuntime = {
-                        println("[CIRISApp][INFO][Screen.System] Resume runtime")
+                        PlatformLogger.i("CIRISApp", "[Screen.System] Resume runtime")
                         systemViewModel.resumeRuntime()
                     },
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.System] User triggered refresh")
+                        PlatformLogger.i("CIRISApp", "[Screen.System] User triggered refresh")
                         systemViewModel.refresh()
                     },
                     onNavigateBack = { currentScreen = Screen.Interact }
@@ -1614,21 +1615,21 @@ fun CIRISApp(
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Runtime] Starting runtime polling")
+                    PlatformLogger.i(TAG, "[Screen.Runtime] Starting runtime polling")
                     runtimeViewModel.startPolling()
                     onDispose {
-                        println("[$TAG][INFO][Screen.Runtime] Stopping runtime polling")
+                        PlatformLogger.i(TAG, "[Screen.Runtime] Stopping runtime polling")
                         runtimeViewModel.stopPolling()
                     }
                 }
 
                 LaunchedEffect(runtimeError) {
                     runtimeError?.let { error ->
-                        println("[$TAG][ERROR][Screen.Runtime] Runtime error: $error")
+                        PlatformLogger.e(TAG, "[Screen.Runtime] Runtime error: $error")
                     }
                 }
 
-                println("[CIRISApp][DEBUG][Screen.Runtime] Rendering runtime screen: " +
+                PlatformLogger.d("CIRISApp", "[Screen.Runtime] Rendering runtime screen: " +
                         "processorState=${runtimeData.processorState}, cognitiveState=${runtimeData.cognitiveState}, isLoading=$isRuntimeLoading")
 
                 RuntimeScreen(
@@ -1636,19 +1637,19 @@ fun CIRISApp(
                     isLoading = isRuntimeLoading,
                     isAdmin = isRuntimeAdmin,
                     onPause = {
-                        println("[CIRISApp][INFO][Screen.Runtime] Pause runtime")
+                        PlatformLogger.i("CIRISApp", "[Screen.Runtime] Pause runtime")
                         runtimeViewModel.pauseRuntime()
                     },
                     onResume = {
-                        println("[CIRISApp][INFO][Screen.Runtime] Resume runtime")
+                        PlatformLogger.i("CIRISApp", "[Screen.Runtime] Resume runtime")
                         runtimeViewModel.resumeRuntime()
                     },
                     onSingleStep = {
-                        println("[CIRISApp][INFO][Screen.Runtime] Single step")
+                        PlatformLogger.i("CIRISApp", "[Screen.Runtime] Single step")
                         runtimeViewModel.singleStep()
                     },
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Runtime] User triggered refresh")
+                        PlatformLogger.i("CIRISApp", "[Screen.Runtime] User triggered refresh")
                         runtimeViewModel.refresh()
                     },
                     onNavigateBack = { currentScreen = Screen.Interact }
@@ -1659,48 +1660,48 @@ fun CIRISApp(
                 val usersState by usersViewModel.state.collectAsState()
 
                 LaunchedEffect(Unit) {
-                    println("[$TAG][INFO][Screen.Users] Loading users on screen entry")
+                    PlatformLogger.i(TAG, "[Screen.Users] Loading users on screen entry")
                     usersViewModel.refresh()
                 }
 
                 LaunchedEffect(usersState.error) {
                     usersState.error?.let { error ->
-                        println("[$TAG][ERROR][Screen.Users] Users error: $error")
+                        PlatformLogger.e(TAG, "[Screen.Users] Users error: $error")
                     }
                 }
 
-                println("[CIRISApp][DEBUG][Screen.Users] Rendering users screen: " +
+                PlatformLogger.d("CIRISApp", "[Screen.Users] Rendering users screen: " +
                         "users=${usersState.users.size}, total=${usersState.pagination.totalItems}, " +
                         "isLoading=${usersState.isLoading}")
 
                 UsersScreen(
                     state = usersState,
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Users] User triggered refresh")
+                        PlatformLogger.i("CIRISApp", "[Screen.Users] User triggered refresh")
                         usersViewModel.refresh()
                     },
                     onSearch = { query ->
-                        println("[CIRISApp][INFO][Screen.Users] Search: $query")
+                        PlatformLogger.i("CIRISApp", "[Screen.Users] Search: $query")
                         usersViewModel.updateSearch(query)
                     },
                     onFilterChange = { filter ->
-                        println("[CIRISApp][INFO][Screen.Users] Filter changed")
+                        PlatformLogger.i("CIRISApp", "[Screen.Users] Filter changed")
                         usersViewModel.updateFilter(filter)
                     },
                     onSelectUser = { userId ->
-                        println("[CIRISApp][INFO][Screen.Users] User selected: $userId")
+                        PlatformLogger.i("CIRISApp", "[Screen.Users] User selected: $userId")
                         usersViewModel.selectUser(userId)
                     },
                     onClearSelection = {
-                        println("[CIRISApp][INFO][Screen.Users] Clear selection")
+                        PlatformLogger.i("CIRISApp", "[Screen.Users] Clear selection")
                         usersViewModel.clearSelection()
                     },
                     onNextPage = {
-                        println("[CIRISApp][INFO][Screen.Users] Next page")
+                        PlatformLogger.i("CIRISApp", "[Screen.Users] Next page")
                         usersViewModel.nextPage()
                     },
                     onPreviousPage = {
-                        println("[CIRISApp][INFO][Screen.Users] Previous page")
+                        PlatformLogger.i("CIRISApp", "[Screen.Users] Previous page")
                         usersViewModel.previousPage()
                     },
                     onNavigateBack = { currentScreen = Screen.Interact }
@@ -1711,7 +1712,7 @@ fun CIRISApp(
                 TrustPage(
                     apiClient = apiClient,
                     onNavigateBack = {
-                        println("[CIRISApp][INFO][Screen.Trust] Navigating back to Interact")
+                        PlatformLogger.i("CIRISApp", "[Screen.Trust] Navigating back to Interact")
                         currentScreen = Screen.Interact
                     },
                     deviceAttestationCallback = deviceAttestationCallback

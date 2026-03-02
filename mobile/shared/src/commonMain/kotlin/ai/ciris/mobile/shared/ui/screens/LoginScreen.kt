@@ -1,4 +1,5 @@
 package ai.ciris.mobile.shared.ui.screens
+import ai.ciris.mobile.shared.platform.PlatformLogger
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -52,7 +53,7 @@ fun LoginScreen(
     onLocalLogin: () -> Unit,
     onLocalLoginSubmit: (username: String, password: String) -> Unit = { _, _ -> },
     onPrivacyPolicy: () -> Unit = {
-        println("[LoginScreen][INFO][onPrivacyPolicy] Privacy policy link clicked - opening https://ciris.ai/privacy")
+        PlatformLogger.i("LoginScreen", "[onPrivacyPolicy] Privacy policy link clicked - opening https://ciris.ai/privacy")
     },
     isLoading: Boolean = false,
     statusMessage: String? = null,
@@ -238,7 +239,7 @@ fun LoginScreen(
                         color = LoginColors.Accent,
                         fontSize = 12.sp,
                         modifier = Modifier.clickable {
-                            println("[LoginScreen][INFO][PrivacyPolicy] Privacy policy link clicked")
+                            PlatformLogger.i("LoginScreen", "[PrivacyPolicy] Privacy policy link clicked")
                             onPrivacyPolicy()
                         }
                     )

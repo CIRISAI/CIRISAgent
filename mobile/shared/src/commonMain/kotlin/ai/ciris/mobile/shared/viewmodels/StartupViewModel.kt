@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClientProtocol
+import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.PythonRuntimeProtocol
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -52,6 +53,7 @@ class StartupViewModel(
     private var startTime: Long = 0
 
     companion object {
+        private const val TAG = "StartupViewModel"
         const val TOTAL_PREP_STEPS = 6  // pydantic/native lib setup steps
     }
 
@@ -60,7 +62,7 @@ class StartupViewModel(
      * Call this once when app launches
      */
     fun startCIRIS() {
-        println("[StartupViewModel][INFO] startCIRIS() called")
+        PlatformLogger.i(TAG, "startCIRIS() called")
         startTime = Clock.System.now().toEpochMilliseconds()
 
         viewModelScope.launch {

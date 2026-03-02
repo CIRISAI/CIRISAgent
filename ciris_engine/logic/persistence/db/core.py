@@ -672,14 +672,14 @@ def _get_pragma_statements(is_ios: bool, busy_timeout: Optional[int]) -> list[st
 
 def _execute_pragmas(conn: Any, adapter: Any, pragma_statements: list[str]) -> None:
     """Execute PRAGMA statements on the connection."""
-    logger.info(f"[DB_CONNECT] Executing {len(pragma_statements)} PRAGMA statements...")
+    logger.debug(f"[DB_CONNECT] Executing {len(pragma_statements)} PRAGMA statements...")
     for pragma in pragma_statements:
         result = adapter.pragma(pragma)
         if result:
-            logger.info(f"[DB_CONNECT] Executing: {result}")
+            logger.debug(f"[DB_CONNECT] Executing: {result}")
             try:
                 conn.execute(result)
-                logger.info(f"[DB_CONNECT] PRAGMA succeeded: {result}")
+                logger.debug(f"[DB_CONNECT] PRAGMA succeeded: {result}")
             except Exception as e:
                 logger.error(f"[DB_CONNECT] PRAGMA FAILED: {result} - {e}")
                 raise
@@ -730,24 +730,24 @@ def get_db_connection(
     else:
         conn = sqlite3.connect(db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
 
-    logger.info("[DB_CONNECT] Setting row_factory...")
+    logger.debug("[DB_CONNECT] Setting row_factory...")
     conn.row_factory = sqlite3.Row
 
     # Wrap iOS connection before executing PRAGMAs
     if is_ios:
-        logger.info("[DB_CONNECT] Wrapping connection with IOSSerializedConnection BEFORE PRAGMAs...")
+        logger.debug("[DB_CONNECT] Wrapping connection with IOSSerializedConnection BEFORE PRAGMAs...")
         conn = IOSSerializedConnection(conn)  # type: ignore[assignment]
-        logger.info("[DB_CONNECT] iOS wrapper created, now executing PRAGMAs through wrapper")
+        logger.debug("[DB_CONNECT] iOS wrapper created, now executing PRAGMAs through wrapper")
 
     pragma_statements = _get_pragma_statements(is_ios, busy_timeout)
     _execute_pragmas(conn, adapter, pragma_statements)
 
     # Return wrapped connection with retry logic by default
     if enable_retry and not is_ios:
-        logger.info("[DB_CONNECT] Returning RetryConnection wrapper")
+        logger.debug("[DB_CONNECT] Returning RetryConnection wrapper")
         return RetryConnection(conn)
 
-    logger.info(f"[DB_CONNECT] Returning connection: {type(conn).__name__}")
+    logger.debug(f"[DB_CONNECT] Returning connection: {type(conn).__name__}")
     return conn
 
 

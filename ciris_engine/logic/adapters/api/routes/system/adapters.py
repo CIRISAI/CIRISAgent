@@ -303,11 +303,12 @@ def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str
     if isinstance(manifest_cli_deps, list):
         cli_deps.extend(manifest_cli_deps)
 
-    # Also check for requires:binaries capability - use module name as CLI name
+    # Only use module name as fallback when requires:binaries is present
+    # but no explicit cli_dependencies are declared
     capabilities = manifest_data.get("capabilities", [])
-    if "requires:binaries" in capabilities:
+    if "requires:binaries" in capabilities and not cli_deps:
         module_name = module_info.get("name", module_id)
-        if module_name and module_name not in cli_deps:
+        if module_name:
             cli_deps.append(module_name)
 
     # Extract metadata

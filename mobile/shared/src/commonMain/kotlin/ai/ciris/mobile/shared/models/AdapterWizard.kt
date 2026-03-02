@@ -84,3 +84,23 @@ data class ConfigCompleteData(
     val message: String?,
     val persisted: Boolean
 )
+
+/**
+ * Information about an adapter that supports interactive configuration.
+ */
+data class ConfigurableAdapterData(
+    val adapterType: String,
+    val name: String,
+    val description: String,
+    val workflowType: String,
+    val stepCount: Int,
+    val requiresOauth: Boolean
+)
+
+/**
+ * Response containing list of configurable adapters.
+ */
+data class ConfigurableAdaptersData(
+    val adapters: List<ConfigurableAdapterData>,
+    val totalCount: Int
+)

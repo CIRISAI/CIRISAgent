@@ -9,7 +9,7 @@ import java.io.File
 actual class EnvFileUpdater {
     private val cirisHome: File by lazy {
         val home = System.getenv("CIRIS_HOME")
-            ?: "${System.getProperty("user.home")}/.ciris"
+            ?: "${System.getProperty("user.home")}/ciris"  // ~/ciris not ~/.ciris
         File(home).also { it.mkdirs() }
     }
 
@@ -52,17 +52,30 @@ actual class EnvFileUpdater {
             }
         }
 
-        val baseUrl = envVars["OPENAI_API_BASE"]
-        val apiKey = envVars["OPENAI_API_KEY"]
+        // Read provider directly or detect from variables
+        val explicitProvider = envVars["LLM_PROVIDER"]
+
+        // Check for API keys (prefer provider-specific, fall back to OPENAI_API_KEY for compatibility)
+        val anthropicKey = envVars["ANTHROPIC_API_KEY"]
+        val openaiKey = envVars["OPENAI_API_KEY"]
+        val apiKey = anthropicKey ?: openaiKey
+
+        // Base URL (check provider-specific first)
+        val baseUrl = envVars["ANTHROPIC_BASE_URL"]
+            ?: envVars["OPENAI_API_BASE"]
+            ?: envVars["OPENAI_BASE_URL"]
+
+        // Model (OPENAI_MODEL is used for all providers in CIRIS)
         val model = envVars["OPENAI_MODEL"]
 
-        // Detect provider from base URL
-        val provider = when {
+        // Determine provider: explicit > detected from key > detected from URL
+        val provider = explicitProvider ?: when {
+            !anthropicKey.isNullOrEmpty() -> "anthropic"
             baseUrl?.contains("anthropic") == true -> "anthropic"
             baseUrl?.contains("openai") == true -> "openai"
             baseUrl?.contains("localhost") == true -> "local"
             baseUrl?.contains("ciris") == true -> "ciris"
-            else -> "other"
+            else -> "openai" // default
         }
 
         val isCirisProxy = baseUrl?.contains("ciris") == true ||

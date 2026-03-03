@@ -201,7 +201,10 @@ private fun TypeSelectionContent(
             }
         }
 
-        if (loadableAdapters.adapters.isEmpty()) {
+        // Filter out adapters with missing dependencies - only show available ones
+        val availableAdapters = loadableAdapters.adapters.filter { it.missingDependencies.isEmpty() }
+
+        if (availableAdapters.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center
@@ -216,7 +219,7 @@ private fun TypeSelectionContent(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(loadableAdapters.adapters) { adapter ->
+                items(availableAdapters) { adapter ->
                     AdapterTypeCard(
                         adapter = adapter,
                         onClick = {

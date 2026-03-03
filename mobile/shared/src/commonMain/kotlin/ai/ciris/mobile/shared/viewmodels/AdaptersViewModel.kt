@@ -449,33 +449,36 @@ class AdaptersViewModel(
      */
     private suspend fun handleStepResult(session: ConfigSessionData, result: ConfigStepResultData) {
         val method = "handleStepResult"
-        if (result.isComplete) {
-            logInfo(method, "Wizard completed!")
-            closeWizard()
-            fetchAdaptersInternal()
-        } else {
-            // Fetch updated session status to get next step details
-            try {
-                val updatedSession = apiClient.getConfigurationSessionStatus(session.sessionId)
-                logInfo(method, "Fetched updated session: step=${updatedSession.currentStepIndex}, stepType=${updatedSession.currentStep?.stepType}")
-                _wizardSession.value = updatedSession
-                _discoveredItems.value = emptyList()
-                _discoveryExecuted.value = false
+        // Fetch updated session status to get next step details and check completion
+        try {
+            val updatedSession = apiClient.getConfigurationSessionStatus(session.sessionId)
+            logInfo(method, "Fetched updated session: step=${updatedSession.currentStepIndex}/${updatedSession.totalSteps}, stepType=${updatedSession.currentStep?.stepType}")
 
-                // Auto-execute if next step is also discovery
-                if (updatedSession.currentStep?.stepType == "discovery") {
-                    logInfo(method, "Next step is discovery, auto-executing...")
-                    executeDiscoveryStepInternal(updatedSession)
-                }
-            } catch (e: Exception) {
-                logError(method, "Failed to fetch session status: ${e.message}")
-                // Fall back to updating step index only if explicitly provided
-                // Don't auto-increment - null nextStepIndex means stay on current step (e.g., awaiting callback)
-                if (result.nextStepIndex != null) {
-                    _wizardSession.value = session.copy(
-                        currentStepIndex = result.nextStepIndex
-                    )
-                }
+            // Check if wizard is complete (advanced past all steps)
+            if (updatedSession.currentStepIndex >= updatedSession.totalSteps) {
+                logInfo(method, "Wizard completed! (step ${updatedSession.currentStepIndex} >= totalSteps ${updatedSession.totalSteps})")
+                closeWizard()
+                fetchAdaptersInternal()
+                return
+            }
+
+            _wizardSession.value = updatedSession
+            _discoveredItems.value = emptyList()
+            _discoveryExecuted.value = false
+
+            // Auto-execute if next step is also discovery
+            if (updatedSession.currentStep?.stepType == "discovery") {
+                logInfo(method, "Next step is discovery, auto-executing...")
+                executeDiscoveryStepInternal(updatedSession)
+            }
+        } catch (e: Exception) {
+            logError(method, "Failed to fetch session status: ${e.message}")
+            // Fall back to updating step index only if explicitly provided
+            // Don't auto-increment - null nextStepIndex means stay on current step (e.g., awaiting callback)
+            if (result.nextStepIndex != null) {
+                _wizardSession.value = session.copy(
+                    currentStepIndex = result.nextStepIndex
+                )
             }
         }
     }

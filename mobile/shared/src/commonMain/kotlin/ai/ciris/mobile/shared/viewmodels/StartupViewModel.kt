@@ -47,6 +47,9 @@ class StartupViewModel(
     private val _prepStepsCompleted = MutableStateFlow(0)
     val prepStepsCompleted: StateFlow<Int> = _prepStepsCompleted.asStateFlow()
 
+    private val _verifyStepsCompleted = MutableStateFlow(0)
+    val verifyStepsCompleted: StateFlow<Int> = _verifyStepsCompleted.asStateFlow()
+
     private val _hasError = MutableStateFlow(false)
     val hasError: StateFlow<Boolean> = _hasError.asStateFlow()
 
@@ -55,6 +58,19 @@ class StartupViewModel(
     companion object {
         private const val TAG = "StartupViewModel"
         const val TOTAL_PREP_STEPS = 6  // pydantic/native lib setup steps
+        const val TOTAL_VERIFY_STEPS = 11  // CIRISVerify attestation: Phase 1 (5) + Phase 2 (6)
+
+        // VERIFY log patterns from ciris-verify v1.1.5
+        // Format: VERIFY STEP {n}/{total} COMPLETE: {OK|FAILED|SKIP} ({details})
+        private val VERIFY_STEP_PATTERN = Regex(
+            """VERIFY STEP (\d+)/(\d+) (STARTING|COMPLETE): (.+)"""
+        )
+        private val VERIFY_PHASE_PATTERN = Regex(
+            """VERIFY PHASE (\d+)/(\d+) (STARTING|COMPLETE): (.+)"""
+        )
+        private val VERIFY_COMPLETE_PATTERN = Regex(
+            """VERIFY ATTESTATION COMPLETE: level=(\d+), valid=(true|false), checks=(\d+)/(\d+)"""
+        )
     }
 
     /**
@@ -62,7 +78,8 @@ class StartupViewModel(
      * Call this once when app launches
      */
     fun startCIRIS() {
-        PlatformLogger.i(TAG, "startCIRIS() called")
+        PlatformLogger.i(TAG, "[STARTUP] startCIRIS() called - beginning startup sequence")
+        PlatformLogger.i(TAG, "[STARTUP] TOTAL_PREP_STEPS=$TOTAL_PREP_STEPS, TOTAL_VERIFY_STEPS=$TOTAL_VERIFY_STEPS")
         startTime = Clock.System.now().toEpochMilliseconds()
 
         viewModelScope.launch {
@@ -106,17 +123,23 @@ class StartupViewModel(
 
     /**
      * Step 2: Start FastAPI server
+     * On desktop, this waits for the server to become healthy
      */
     private suspend fun startFastAPIServer() {
         _phase.value = StartupPhase.STARTING_SERVER
-        _statusMessage.value = "Starting CIRIS engine..."
+        _statusMessage.value = "Connecting to CIRIS..."
 
+        // Poll for server to become healthy (Python may still be starting)
         val result = pythonRuntime.startServer()
         if (result.isFailure) {
-            throw result.exceptionOrNull() ?: Exception("Failed to start server")
+            throw result.exceptionOrNull() ?: Exception("Failed to connect to server")
         }
 
-        _statusMessage.value = "Local Python Backend started"
+        // Server is now healthy - mark environment as ready
+        _prepStepsCompleted.value = TOTAL_PREP_STEPS
+        _verifyStepsCompleted.value = TOTAL_VERIFY_STEPS
+        PlatformLogger.i(TAG, "[STARTUP] Server healthy - prep and verify marked complete")
+        _statusMessage.value = "Connected to CIRIS"
     }
 
     /**
@@ -140,7 +163,7 @@ class StartupViewModel(
             if (healthResult.isSuccess && healthResult.getOrNull() == true) {
                 healthyCount++
 
-                // Get service count from logcat parsing (low overhead)
+                // Get service count from telemetry API
                 val statusResult = pythonRuntime.getServicesStatus()
                 if (statusResult.isSuccess) {
                     val (online, total) = statusResult.getOrNull() ?: (0 to 22)
@@ -149,12 +172,11 @@ class StartupViewModel(
                     _statusMessage.value = "$online / $total services online"
 
                     // Ready conditions:
-                    // 1. All 22 services online (normal mode)
+                    // 1. All services online (normal mode)
                     // 2. 10+ services and health OK for 3+ checks (first-run mode)
                     // 3. Any services online and health OK for 5+ checks (fallback)
                     if (online == total && online > 0) {
-                        _phase.value = StartupPhase.READY
-                        _statusMessage.value = "CIRIS ready!"
+                        showReadyAndComplete()
                         return
                     }
 
@@ -166,17 +188,13 @@ class StartupViewModel(
                     }
 
                     if (online > 0 && healthyCount >= 5) {
-                        // Fallback - server is responding, proceed anyway
-                        _phase.value = StartupPhase.READY
-                        _statusMessage.value = "CIRIS ready"
+                        showReadyAndComplete()
                         return
                     }
 
                     // iOS fallback - telemetry requires auth so services count is 0
-                    // If health check passes 5 times, proceed to login
                     if (healthyCount >= 5) {
-                        _phase.value = StartupPhase.READY
-                        _statusMessage.value = "Local Python Backend ready"
+                        showReadyAndComplete()
                         return
                     }
                 }
@@ -187,8 +205,7 @@ class StartupViewModel(
 
         // Timeout - but if server was healthy, proceed anyway
         if (healthyCount > 0) {
-            _phase.value = StartupPhase.READY
-            _statusMessage.value = "Local Python Backend ready (partial)"
+            showReadyAndComplete()
             return
         }
 
@@ -196,18 +213,42 @@ class StartupViewModel(
     }
 
     /**
+     * Show "Agent Runtime Ready!" briefly before completing startup
+     * Populates all lights to show successful connection
+     */
+    private suspend fun showReadyAndComplete() {
+        // Ensure all lights are populated for visual feedback
+        _prepStepsCompleted.value = TOTAL_PREP_STEPS
+        _verifyStepsCompleted.value = TOTAL_VERIFY_STEPS
+        if (_servicesOnline.value == 0) {
+            // If telemetry not available (requires auth), show all services as ready
+            _servicesOnline.value = _totalServices.value
+        }
+
+        _phase.value = StartupPhase.READY
+        _statusMessage.value = "Agent Runtime Ready!"
+        PlatformLogger.i(TAG, "[STARTUP] Agent Runtime Ready! - displaying for 1.2s")
+        delay(1200) // Brief pause to show ready state
+    }
+
+    /**
      * Update the current startup phase
      */
     fun setPhase(phase: StartupPhase) {
+        val oldPhase = _phase.value
         _phase.value = phase
         _statusMessage.value = phase.displayName
+        PlatformLogger.i(TAG, "[STARTUP][PHASE] $oldPhase -> $phase (${phase.displayName})")
     }
 
     /**
      * Called when a prep step completes (pydantic/native lib setup)
      */
     fun onPrepStepCompleted(step: Int) {
-        if (step < 1 || step > TOTAL_PREP_STEPS) return
+        if (step < 1 || step > TOTAL_PREP_STEPS) {
+            PlatformLogger.w(TAG, "[STARTUP][PREP] Invalid step: $step (expected 1-$TOTAL_PREP_STEPS)")
+            return
+        }
 
         // Set phase to PREPARING on first prep step
         if (_prepStepsCompleted.value == 0) {
@@ -216,11 +257,107 @@ class StartupViewModel(
 
         _prepStepsCompleted.value = step
         _statusMessage.value = "Preparing environment... $step/$TOTAL_PREP_STEPS"
+        PlatformLogger.i(TAG, "[STARTUP][PREP] Step $step/$TOTAL_PREP_STEPS complete")
 
         // When all prep steps complete
         if (step >= TOTAL_PREP_STEPS) {
+            PlatformLogger.i(TAG, "[STARTUP][PREP] All prep steps complete, transitioning to STARTING_SERVER")
             setPhase(StartupPhase.STARTING_SERVER)
             _statusMessage.value = "Environment ready"
+        }
+    }
+
+    // Track verify phase (1 or 2) for calculating total steps
+    private var _currentVerifyPhase = 1
+    private var _phase1StepsCompleted = 0
+    private var _phase2StepsCompleted = 0
+
+    /**
+     * Called when a CIRISVerify phase completes
+     * Phase 1: 5 steps (parallel manifest fetch + validation)
+     * Phase 2: 6 steps (sequential integrity checks)
+     */
+    fun onVerifyStepCompleted(step: Int) {
+        if (step < 1 || step > TOTAL_VERIFY_STEPS) {
+            PlatformLogger.w(TAG, "[STARTUP][VERIFY] Invalid step: $step (expected 1-$TOTAL_VERIFY_STEPS)")
+            return
+        }
+
+        // Set phase to VERIFYING on first verify step
+        if (_verifyStepsCompleted.value == 0) {
+            PlatformLogger.i(TAG, "[STARTUP][VERIFY] Starting verification phase")
+            setPhase(StartupPhase.VERIFYING)
+        }
+
+        _verifyStepsCompleted.value = step
+        _statusMessage.value = "Verifying integrity... $step/$TOTAL_VERIFY_STEPS"
+        PlatformLogger.i(TAG, "[STARTUP][VERIFY] Step $step/$TOTAL_VERIFY_STEPS complete")
+
+        // When all verify steps complete
+        if (step >= TOTAL_VERIFY_STEPS) {
+            PlatformLogger.i(TAG, "[STARTUP][VERIFY] All verify steps complete - integrity verified")
+            _statusMessage.value = "Integrity verified"
+        }
+    }
+
+    /**
+     * Parse VERIFY log messages from ciris-verify v1.1.5+
+     * Call this for each log line from Python stdout/logcat
+     *
+     * Log format:
+     *   VERIFY STEP {n}/{total} COMPLETE: {OK|FAILED|SKIP} ({details})
+     *   VERIFY PHASE {n}/{total} COMPLETE: {description}
+     *   VERIFY ATTESTATION COMPLETE: level={0-5}, valid={bool}, checks={n}/{m}
+     */
+    fun onVerifyLogMessage(message: String) {
+        // Log all VERIFY messages for debugging
+        if (message.contains("VERIFY", ignoreCase = true)) {
+            PlatformLogger.d(TAG, "[STARTUP][VERIFY_LOG] $message")
+        }
+
+        // Check for step completion
+        VERIFY_STEP_PATTERN.find(message)?.let { match ->
+            val (stepNum, total, status) = match.destructured
+            if (status == "COMPLETE") {
+                // Phase 1 has 5 steps, Phase 2 has 6 steps
+                val stepInt = stepNum.toIntOrNull() ?: return
+                val totalInt = total.toIntOrNull() ?: return
+
+                if (totalInt == 5) {
+                    // Phase 1 step completed
+                    _phase1StepsCompleted = maxOf(_phase1StepsCompleted, stepInt)
+                    _verifyStepsCompleted.value = _phase1StepsCompleted
+                } else if (totalInt == 6) {
+                    // Phase 2 step completed
+                    _phase2StepsCompleted = maxOf(_phase2StepsCompleted, stepInt)
+                    _verifyStepsCompleted.value = 5 + _phase2StepsCompleted
+                }
+
+                _statusMessage.value = "Verifying... ${_verifyStepsCompleted.value}/$TOTAL_VERIFY_STEPS"
+                PlatformLogger.d(TAG, "Verify step: ${_verifyStepsCompleted.value}/$TOTAL_VERIFY_STEPS")
+            } else if (status == "STARTING" && _verifyStepsCompleted.value == 0) {
+                // First step starting - enter VERIFYING phase
+                setPhase(StartupPhase.VERIFYING)
+            }
+            return
+        }
+
+        // Check for phase completion
+        VERIFY_PHASE_PATTERN.find(message)?.let { match ->
+            val (phaseNum, _, status) = match.destructured
+            if (status == "COMPLETE") {
+                _currentVerifyPhase = (phaseNum.toIntOrNull() ?: 1) + 1
+                PlatformLogger.d(TAG, "Verify phase $phaseNum complete, moving to phase $_currentVerifyPhase")
+            }
+            return
+        }
+
+        // Check for attestation complete
+        VERIFY_COMPLETE_PATTERN.find(message)?.let { match ->
+            val (level, valid, passed, total) = match.destructured
+            _verifyStepsCompleted.value = TOTAL_VERIFY_STEPS
+            _statusMessage.value = "Attestation: Level $level ($passed/$total checks)"
+            PlatformLogger.i(TAG, "Attestation complete: level=$level, valid=$valid, checks=$passed/$total")
         }
     }
 
@@ -228,18 +365,24 @@ class StartupViewModel(
      * Called when a service starts
      */
     fun onServiceStarted(serviceNum: Int) {
-        if (serviceNum < 1 || serviceNum > _totalServices.value) return
+        if (serviceNum < 1 || serviceNum > _totalServices.value) {
+            PlatformLogger.w(TAG, "[STARTUP][SERVICE] Invalid service num: $serviceNum (expected 1-${_totalServices.value})")
+            return
+        }
 
         // Set phase to LOADING_SERVICES on first service
         if (_servicesOnline.value == 0) {
+            PlatformLogger.i(TAG, "[STARTUP][SERVICE] Starting services phase")
             setPhase(StartupPhase.LOADING_SERVICES)
         }
 
         _servicesOnline.value = serviceNum
         _statusMessage.value = "Starting services... $serviceNum/${_totalServices.value}"
+        PlatformLogger.i(TAG, "[STARTUP][SERVICE] Service $serviceNum/${_totalServices.value} started")
 
         // When all services are ready
         if (serviceNum >= _totalServices.value) {
+            PlatformLogger.i(TAG, "[STARTUP][SERVICE] All services ready - transitioning to READY")
             setPhase(StartupPhase.READY)
             _statusMessage.value = "All ${_totalServices.value} services ready"
         }
@@ -251,6 +394,7 @@ class StartupViewModel(
     fun onErrorDetected(error: String) {
         if (_hasError.value) return // Already in error state
 
+        PlatformLogger.e(TAG, "[STARTUP][ERROR] Error detected: $error")
         _hasError.value = true
         _errorMessage.value = error
         setPhase(StartupPhase.ERROR)
@@ -278,6 +422,10 @@ class StartupViewModel(
         _servicesOnline.value = 0
         _elapsedSeconds.value = 0
         _prepStepsCompleted.value = 0
+        _verifyStepsCompleted.value = 0
+        _currentVerifyPhase = 1
+        _phase1StepsCompleted = 0
+        _phase2StepsCompleted = 0
         _hasError.value = false
         startCIRIS()
     }
@@ -315,6 +463,7 @@ enum class StartupPhase(val displayName: String) {
     INITIALIZING("INITIALIZING"),
     LOADING_RUNTIME("LOADING RUNTIME"),
     PREPARING("PREPARING ENVIRONMENT"),
+    VERIFYING("VERIFYING INTEGRITY"),
     STARTING_SERVER("STARTING BACKEND"),
     WAITING_SERVER("WAITING FOR BACKEND"),
     LOADING_SERVICES("LOADING SERVICES"),

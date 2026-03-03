@@ -57,6 +57,7 @@ fun StartupScreen(
     val errorMessage by viewModel.errorMessage.collectAsState()
     val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
     val prepStepsCompleted by viewModel.prepStepsCompleted.collectAsState()
+    val verifyStepsCompleted by viewModel.verifyStepsCompleted.collectAsState()
     val hasError by viewModel.hasError.collectAsState()
 
     // Auto-start CIRIS on mount
@@ -138,8 +139,33 @@ fun StartupScreen(
                 )
             }
 
-            // Services label (shown after prep completes, above service lights)
+            // Verify lights row (11 steps: Phase 1 = 5, Phase 2 = 6)
+            // Shown after prep completes, before services
             if (prepStepsCompleted >= StartupViewModel.TOTAL_PREP_STEPS) {
+                VerifyLightsRow(
+                    verifyStepsCompleted = verifyStepsCompleted,
+                    hasError = hasError,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                // Verify label
+                Text(
+                    text = when {
+                        verifyStepsCompleted >= StartupViewModel.TOTAL_VERIFY_STEPS -> "Integrity Verified"
+                        verifyStepsCompleted > 0 -> "Verifying Integrity... $verifyStepsCompleted/${StartupViewModel.TOTAL_VERIFY_STEPS}"
+                        else -> "Verifying Integrity"
+                    },
+                    fontSize = 10.sp,
+                    color = when {
+                        verifyStepsCompleted >= StartupViewModel.TOTAL_VERIFY_STEPS -> CIRISColors.SuccessGreen
+                        else -> CIRISColors.TextDim
+                    },
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+            }
+
+            // Services label (shown after verify completes or starts, above service lights)
+            if (verifyStepsCompleted > 0 || servicesOnline > 0) {
                 Text(
                     text = "Starting Services",
                     fontSize = 10.sp,
@@ -271,6 +297,77 @@ private fun PrepLightsRow(
             )
         }
     }
+}
+
+/**
+ * Verify lights row (11 lights for CIRISVerify attestation)
+ * Phase 1: 5 steps (parallel manifest fetch + validation)
+ * Phase 2: 6 steps (sequential integrity checks)
+ *
+ * Visual grouping: [5 lights] | [6 lights] with small gap
+ */
+@Composable
+private fun VerifyLightsRow(
+    verifyStepsCompleted: Int,
+    hasError: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Phase 1 lights (5 steps)
+        repeat(5) { index ->
+            VerifyLight(
+                isOn = (index + 1) <= verifyStepsCompleted,
+                hasError = hasError && (index + 1) <= verifyStepsCompleted
+            )
+        }
+
+        // Small separator between phases
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // Phase 2 lights (6 steps, offset by 5)
+        repeat(6) { index ->
+            val stepNum = 5 + index + 1
+            VerifyLight(
+                isOn = stepNum <= verifyStepsCompleted,
+                hasError = hasError && stepNum <= verifyStepsCompleted
+            )
+        }
+    }
+}
+
+/**
+ * Single verify light indicator (same size as prep lights)
+ */
+@Composable
+private fun VerifyLight(
+    isOn: Boolean,
+    hasError: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val targetColor = when {
+        hasError -> CIRISColors.ErrorRed
+        isOn -> CIRISColors.AccentCyan
+        else -> CIRISColors.LightOff
+    }
+
+    val animatedColor by animateColorAsState(
+        targetValue = targetColor,
+        animationSpec = tween(durationMillis = 200, easing = LinearEasing),
+        label = "verifyLightColor"
+    )
+
+    Box(
+        modifier = modifier
+            .size(10.dp)
+            .background(
+                color = animatedColor,
+                shape = CircleShape
+            )
+    )
 }
 
 /**

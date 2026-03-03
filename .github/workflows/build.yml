@@ -103,12 +103,15 @@ jobs:
           # --store-durations: Save durations for better future splits
           # --reruns=2: Rerun failed/crashed tests up to 2 times
           # -n 4: 4 parallel workers within each shard
+          # --json-report: Capture test durations for slowest-test analysis
+          pip install pytest-json-report
           pytest tests/ -n 4 \
             --splits 8 --group ${{ matrix.shard }} \
             --splitting-algorithm=least_duration \
             --store-durations \
             --reruns=2 --reruns-delay=1 --max-worker-restart=4 \
-            --cov=./ --cov-report=xml:coverage-shard-${{ matrix.shard }}.xml
+            --cov=./ --cov-report=xml:coverage-shard-${{ matrix.shard }}.xml \
+            --json-report --json-report-file=durations-shard-${{ matrix.shard }}.json
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -116,6 +119,14 @@ jobs:
           name: coverage-shard-${{ matrix.shard }}
           path: coverage-shard-${{ matrix.shard }}.xml
           retention-days: 1
+
+      - name: Upload durations artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: durations-shard-${{ matrix.shard }}
+          path: durations-shard-${{ matrix.shard }}.json
+          retention-days: 7
 
   # Combine coverage and run SonarQube after all shards complete
   test-summary:
@@ -169,6 +180,69 @@ jobs:
           print(f'Combined {len(files)} coverage reports')
           "
           ls -la coverage*.xml || true
+
+      - name: Download all duration artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: durations-shard-*
+          path: durations/
+          merge-multiple: true
+
+      - name: Analyze slowest tests (top 1%)
+        run: |
+          python -c "
+          import json
+          import glob
+
+          # Collect all test durations from all shards
+          all_tests = []
+          for f in glob.glob('durations/durations-shard-*.json'):
+              try:
+                  with open(f) as fp:
+                      data = json.load(fp)
+                      for test in data.get('tests', []):
+                          if test.get('duration') is not None:
+                              all_tests.append({
+                                  'name': test.get('nodeid', 'unknown'),
+                                  'duration': test['duration'],
+                                  'outcome': test.get('outcome', 'unknown')
+                              })
+              except Exception as e:
+                  print(f'Warning: Could not parse {f}: {e}')
+
+          if not all_tests:
+              print('No test duration data found')
+              exit(0)
+
+          # Sort by duration descending
+          all_tests.sort(key=lambda x: x['duration'], reverse=True)
+
+          total = len(all_tests)
+          top_1_pct = max(1, total // 100)  # At least 1 test
+
+          print(f'## Slowest Tests (Top 1% of {total} tests)')
+          print()
+          print(f'| Rank | Duration | Test |')
+          print(f'|------|----------|------|')
+
+          total_slow_time = 0
+          for i, test in enumerate(all_tests[:top_1_pct], 1):
+              duration = test['duration']
+              total_slow_time += duration
+              name = test['name']
+              # Truncate long names
+              if len(name) > 80:
+                  name = '...' + name[-77:]
+              print(f'| {i} | {duration:.2f}s | \`{name}\` |')
+
+          print()
+          total_time = sum(t['duration'] for t in all_tests)
+          print(f'**Top 1% ({top_1_pct} tests) account for {total_slow_time:.1f}s of {total_time:.1f}s total ({100*total_slow_time/total_time:.1f}%)**')
+          " | tee slowest-tests.md
+
+          # Add to GitHub Actions summary
+          echo "## 🐢 Slowest Tests" >> $GITHUB_STEP_SUMMARY
+          cat slowest-tests.md >> $GITHUB_STEP_SUMMARY
 
       - name: Display and write version
         env:

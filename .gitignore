@@ -130,3 +130,7 @@ mobile/iosApp/Resources.zip
 **/.gradle/
 agent_signing.key
 ciris_engine/desktop_app/*.jar
+
+# Test artifacts
+test_data/
+~/

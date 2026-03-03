@@ -200,9 +200,30 @@ class AdapterConfigurationService:
             return StepResult(step_id=step.step_id, success=False, error=str(e))
 
     async def _execute_discovery_step(
-        self, session: AdapterConfigSession, step: ConfigurationStep, adapter: ConfigurableAdapterProtocol
+        self,
+        session: AdapterConfigSession,
+        step: ConfigurationStep,
+        adapter: ConfigurableAdapterProtocol,
+        step_data: Optional[Dict[str, Any]] = None,
     ) -> StepResult:
-        """Execute a discovery step."""
+        """Execute a discovery step.
+
+        If step_data contains 'selected_url' or 'manual_url', stores the URL
+        and advances to the next step. Otherwise, runs discovery and returns
+        discovered items for user selection.
+        """
+        step_data = step_data or {}
+
+        # Check if user has selected an item or entered a manual URL
+        selected_url = step_data.get("selected_url") or step_data.get("manual_url")
+        if selected_url:
+            logger.info(f"[DISCOVERY STEP] User selected URL: {selected_url}")
+            session.collected_config["base_url"] = selected_url
+            session.current_step_index += 1
+            logger.info(f"[DISCOVERY STEP] Stored base_url, advancing to step {session.current_step_index}")
+            return StepResult(step_id=step.step_id, success=True, next_step_index=session.current_step_index)
+
+        # Run discovery
         items = await adapter.discover(step.discovery_method or "default")
         session.step_results[step.step_id] = items
         logger.info(f"[DISCOVERY STEP] Returning {len(items)} discovered items to client")
@@ -211,17 +232,8 @@ class AdapterConfigurationService:
                 f"[DISCOVERY STEP]   → {item.get('label', 'unknown')} - {item.get('metadata', {}).get('url', 'no url')}"
             )
 
-        if items:
-            session.current_step_index += 1
-            logger.info(f"[DISCOVERY STEP] Advanced to step index {session.current_step_index}")
-
-        next_idx = session.current_step_index if items else None
-        logger.info(
-            f"[DISCOVERY STEP] next_step_index={next_idx} (advancing={'yes' if items else 'no - no items found'})"
-        )
-        return StepResult(
-            step_id=step.step_id, success=True, data={"discovered_items": items}, next_step_index=next_idx
-        )
+        # Don't auto-advance - wait for user to select an item
+        return StepResult(step_id=step.step_id, success=True, data={"discovered_items": items}, next_step_index=None)
 
     async def _handle_oauth_callback(
         self,
@@ -483,7 +495,7 @@ class AdapterConfigurationService:
     ) -> StepResult:
         """Execute step based on its type."""
         if step.step_type == "discovery":
-            return await self._execute_discovery_step(session, step, adapter)
+            return await self._execute_discovery_step(session, step, adapter, step_data)
         elif step.step_type == "oauth":
             return await self._execute_oauth_step(session, step, adapter, step_data)
         elif step.step_type == "device_auth":

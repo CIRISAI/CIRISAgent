@@ -312,7 +312,8 @@ class TestAdapterConfigurationService:
         assert result.step_id == "discover"
         assert "discovered_items" in result.data
         assert len(result.data["discovered_items"]) == 1
-        assert result.next_step_index == 1
+        # Discovery stays on current step - user must select an item to advance
+        assert result.next_step_index is None
 
     @pytest.mark.asyncio
     async def test_execute_step_discovery_empty(self) -> None:
@@ -872,8 +873,8 @@ class TestConfigurationSessionStatusEndpoint:
         assert config.steps[1].step_type == "oauth"
 
     @pytest.mark.asyncio
-    async def test_session_status_after_oauth_step(self) -> None:
-        """Test session tracks step progression correctly after OAuth."""
+    async def test_session_status_after_discovery_step(self) -> None:
+        """Test session stays on discovery step until user selects an item."""
         self.service.register_adapter_config(
             adapter_type="homeassistant",
             interactive_config=self.test_config,
@@ -884,12 +885,22 @@ class TestConfigurationSessionStatusEndpoint:
         session = await self.service.start_session("homeassistant", "user_123")
         assert session.current_step_index == 0
 
-        # Execute discovery step
+        # Execute discovery step - returns items but doesn't advance
         self.mock_adapter.discover_results = [{"id": "ha_1", "label": "Home Assistant", "description": "192.168.1.50"}]
         result = await self.service.execute_step(session.session_id, {})
         assert result.success is True
+        assert "discovered_items" in result.data
 
-        # Session should advance
+        # Session should stay on step 0 - user must select an item to advance
+        updated_session = self.service.get_session(session.session_id)
+        assert updated_session is not None
+        assert updated_session.current_step_index == 0
+
+        # Now simulate user selecting a discovered item
+        result = await self.service.execute_step(session.session_id, {"selected_url": "http://192.168.1.50:8123"})
+        assert result.success is True
+
+        # Now session should advance to step 1
         updated_session = self.service.get_session(session.session_id)
         assert updated_session is not None
         assert updated_session.current_step_index == 1

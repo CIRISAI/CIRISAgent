@@ -3,6 +3,8 @@ package ai.ciris.mobile.shared.viewmodels
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.models.ConfigSessionData
+import ai.ciris.mobile.shared.models.ConfigStepResultData
+import ai.ciris.mobile.shared.models.DiscoveredItemData
 import ai.ciris.mobile.shared.models.LoadableAdaptersData
 import ai.ciris.mobile.shared.ui.screens.AdapterItem
 import androidx.lifecycle.ViewModel
@@ -89,6 +91,12 @@ class AdaptersViewModel(
 
     private val _wizardLoading = MutableStateFlow(false)
     val wizardLoading: StateFlow<Boolean> = _wizardLoading.asStateFlow()
+
+    private val _discoveredItems = MutableStateFlow<List<DiscoveredItemData>>(emptyList())
+    val discoveredItems: StateFlow<List<DiscoveredItemData>> = _discoveredItems.asStateFlow()
+
+    private val _discoveryExecuted = MutableStateFlow(false)
+    val discoveryExecuted: StateFlow<Boolean> = _discoveryExecuted.asStateFlow()
 
     // Polling job
     private var pollingJob: Job? = null
@@ -324,14 +332,150 @@ class AdaptersViewModel(
         viewModelScope.launch {
             _wizardLoading.value = true
             _wizardError.value = null
+            _discoveredItems.value = emptyList()
+            _discoveryExecuted.value = false
             try {
                 val session = apiClient.startAdapterConfiguration(adapterType)
                 _wizardSession.value = session
+                // Auto-execute discovery step if first step is discovery type
+                if (session.currentStep?.stepType == "discovery") {
+                    logInfo(method, "First step is discovery, auto-executing...")
+                    executeDiscoveryStepInternal(session)
+                }
             } catch (e: Exception) {
                 logException(method, e)
                 _wizardError.value = "Failed to start wizard: ${e.message}"
             } finally {
                 _wizardLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Execute a discovery step (mDNS scan, etc.)
+     */
+    fun executeDiscoveryStep() {
+        val method = "executeDiscoveryStep"
+        val session = _wizardSession.value ?: return
+        logInfo(method, "Executing discovery step for session: ${session.sessionId}")
+        viewModelScope.launch {
+            _wizardLoading.value = true
+            _wizardError.value = null
+            try {
+                executeDiscoveryStepInternal(session)
+            } catch (e: Exception) {
+                logException(method, e)
+                _wizardError.value = "Discovery failed: ${e.message}"
+            } finally {
+                _wizardLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Internal method to execute discovery step.
+     */
+    private suspend fun executeDiscoveryStepInternal(session: ConfigSessionData) {
+        val method = "executeDiscoveryStepInternal"
+        val result = apiClient.executeConfigurationStep(session.sessionId, emptyMap())
+        _discoveryExecuted.value = true
+
+        if (result.discoveredItems.isNotEmpty()) {
+            logInfo(method, "Discovery found ${result.discoveredItems.size} items")
+            _discoveredItems.value = result.discoveredItems
+        } else {
+            logInfo(method, "No items discovered")
+            _discoveredItems.value = emptyList()
+        }
+
+        // Update step index if discovery advanced us
+        if (result.nextStepIndex != null) {
+            _wizardSession.value = session.copy(
+                currentStepIndex = result.nextStepIndex
+            )
+        }
+    }
+
+    /**
+     * Select a discovered item and proceed to next step.
+     */
+    fun selectDiscoveredItem(item: DiscoveredItemData) {
+        val method = "selectDiscoveredItem"
+        val session = _wizardSession.value ?: return
+        logInfo(method, "Selected discovered item: ${item.label}")
+        // Submit selection with the item's value (typically the URL)
+        viewModelScope.launch {
+            _wizardLoading.value = true
+            try {
+                val stepData = mapOf(
+                    "selected_url" to item.value,
+                    "selected_id" to item.id
+                )
+                val result = apiClient.executeConfigurationStep(session.sessionId, stepData)
+                handleStepResult(session, result)
+            } catch (e: Exception) {
+                logException(method, e)
+                _wizardError.value = "Failed to select item: ${e.message}"
+            } finally {
+                _wizardLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Submit a manual URL entry for discovery step.
+     */
+    fun submitManualUrl(url: String) {
+        val method = "submitManualUrl"
+        val session = _wizardSession.value ?: return
+        logInfo(method, "Submitting manual URL: $url")
+        viewModelScope.launch {
+            _wizardLoading.value = true
+            try {
+                val stepData = mapOf("manual_url" to url)
+                val result = apiClient.executeConfigurationStep(session.sessionId, stepData)
+                handleStepResult(session, result)
+            } catch (e: Exception) {
+                logException(method, e)
+                _wizardError.value = "Failed to submit URL: ${e.message}"
+            } finally {
+                _wizardLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Handle step result and update session state.
+     */
+    private suspend fun handleStepResult(session: ConfigSessionData, result: ConfigStepResultData) {
+        val method = "handleStepResult"
+        if (result.isComplete) {
+            logInfo(method, "Wizard completed!")
+            closeWizard()
+            fetchAdaptersInternal()
+        } else {
+            // Fetch updated session status to get next step details
+            try {
+                val updatedSession = apiClient.getConfigurationSessionStatus(session.sessionId)
+                logInfo(method, "Fetched updated session: step=${updatedSession.currentStepIndex}, stepType=${updatedSession.currentStep?.stepType}")
+                _wizardSession.value = updatedSession
+                _discoveredItems.value = emptyList()
+                _discoveryExecuted.value = false
+
+                // Auto-execute if next step is also discovery
+                if (updatedSession.currentStep?.stepType == "discovery") {
+                    logInfo(method, "Next step is discovery, auto-executing...")
+                    executeDiscoveryStepInternal(updatedSession)
+                }
+            } catch (e: Exception) {
+                logError(method, "Failed to fetch session status: ${e.message}")
+                // Fall back to updating step index only if explicitly provided
+                // Don't auto-increment - null nextStepIndex means stay on current step (e.g., awaiting callback)
+                if (result.nextStepIndex != null) {
+                    _wizardSession.value = session.copy(
+                        currentStepIndex = result.nextStepIndex
+                    )
+                }
             }
         }
     }
@@ -378,16 +522,7 @@ class AdaptersViewModel(
             _wizardError.value = null
             try {
                 val result = apiClient.executeConfigurationStep(session.sessionId, stepData)
-                if (result.isComplete) {
-                    logInfo(method, "Wizard completed!")
-                    closeWizard()
-                    fetchAdaptersInternal() // Refresh adapters list
-                } else if (result.nextStep != null) {
-                    _wizardSession.value = session.copy(
-                        currentStepIndex = result.nextStepIndex ?: (session.currentStepIndex + 1),
-                        currentStep = result.nextStep
-                    )
-                }
+                handleStepResult(session, result)
             } catch (e: Exception) {
                 logException(method, e)
                 _wizardError.value = "Failed to submit step: ${e.message}"
@@ -418,6 +553,8 @@ class AdaptersViewModel(
         _wizardSession.value = null
         _loadableAdapters.value = null
         _wizardError.value = null
+        _discoveredItems.value = emptyList()
+        _discoveryExecuted.value = false
     }
 
     /**

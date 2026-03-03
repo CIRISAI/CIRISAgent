@@ -1927,12 +1927,101 @@ class CIRISApiClient(
             val isComplete = data.nextStepIndex == null && data.awaitingCallback != true
             logInfo(method, "Step result: success=${data.success}, nextStep=${data.nextStepIndex}, isComplete=$isComplete")
 
+            // Parse discovered_items from data field if present (for discovery steps)
+            val discoveredItems = data.`data`?.get("discovered_items")?.let { itemsJson ->
+                try {
+                    val itemsList = mutableListOf<DiscoveredItemData>()
+                    if (itemsJson is kotlinx.serialization.json.JsonArray) {
+                        for (item in itemsJson) {
+                            if (item is kotlinx.serialization.json.JsonObject) {
+                                val id = item["id"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } ?: ""
+                                val label = item["label"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } ?: ""
+                                val metadataObj = item["metadata"] as? kotlinx.serialization.json.JsonObject
+                                val metadata = metadataObj?.entries?.associate { (k, v) ->
+                                    k to ((v as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "")
+                                } ?: emptyMap()
+                                // Get value from item["value"], or fall back to metadata URL keys
+                                val value = item["value"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+                                    ?.takeIf { it.isNotEmpty() }
+                                    ?: metadata["url"]  // Home Assistant uses metadata.url
+                                    ?: metadata["portal_url"]  // CIRISNode uses metadata.portal_url
+                                    ?: metadata["base_url"]  // Generic fallback
+                                    ?: ""
+                                itemsList.add(DiscoveredItemData(id, label, value, metadata))
+                            }
+                        }
+                    }
+                    logInfo(method, "Parsed ${itemsList.size} discovered items")
+                    itemsList
+                } catch (e: Exception) {
+                    logError(method, "Failed to parse discovered_items: ${e.message}")
+                    emptyList()
+                }
+            } ?: emptyList()
+
             ConfigStepResultData(
                 success = data.success,
                 message = data.error, // error message is the only message from this endpoint
                 nextStepIndex = data.nextStepIndex,
                 isComplete = isComplete,
-                nextStep = null // Next step needs to be fetched from session status
+                nextStep = null, // Next step needs to be fetched from session status
+                discoveredItems = discoveredItems
+            )
+        } catch (e: Exception) {
+            logException(method, e, "sessionId=$sessionId")
+            throw e
+        }
+    }
+
+    /**
+     * Get the current status of a configuration session.
+     * Used to fetch next step details after step execution.
+     */
+    suspend fun getConfigurationSessionStatus(sessionId: String): ConfigSessionData {
+        val method = "getConfigurationSessionStatus"
+        logInfo(method, "Getting session status for: $sessionId")
+
+        return try {
+            val response = systemApi.getConfigurationStatusV1SystemAdaptersConfigureSessionIdGet(
+                sessionId = sessionId,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Session status: step=${data.currentStepIndex}/${data.totalSteps}")
+
+            ConfigSessionData(
+                sessionId = data.sessionId ?: sessionId,
+                adapterType = data.adapterType ?: "",
+                status = data.status ?: "",
+                currentStepIndex = data.currentStepIndex ?: 0,
+                totalSteps = data.totalSteps ?: 0,
+                currentStep = data.currentStep?.let { step ->
+                    ConfigStepData(
+                        stepId = step.stepId ?: "",
+                        stepType = step.stepType ?: "",
+                        title = step.title ?: "",
+                        description = step.description,
+                        required = step.required ?: false,
+                        fields = step.fields?.map { field ->
+                            ConfigFieldData(
+                                name = field.name ?: "",
+                                label = field.label ?: "",
+                                fieldType = field.fieldType ?: "",
+                                required = field.required ?: false,
+                                defaultValue = field.defaultValue,
+                                helpText = field.helpText
+                            )
+                        } ?: emptyList()
+                    )
+                }
             )
         } catch (e: Exception) {
             logException(method, e, "sessionId=$sessionId")

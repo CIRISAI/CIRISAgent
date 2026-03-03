@@ -374,13 +374,23 @@ private fun LlmHealthIndicator(
                 )
         )
 
-        // Provider name
+        // Provider name - comprehensive provider display
         val displayName = when {
             health.isCirisProxy -> "CIRIS"
             health.provider == "openai" -> "OpenAI"
             health.provider == "anthropic" -> "Anthropic"
-            health.provider == "local" -> "Local"
-            else -> health.provider.take(8)
+            health.provider == "google" || health.provider == "google_ai" -> "Google AI"
+            health.provider == "openrouter" -> "OpenRouter"
+            health.provider == "groq" -> "Groq"
+            health.provider == "together" || health.provider == "together_ai" -> "Together"
+            health.provider == "local" || health.provider == "ollama" -> "Local"
+            health.provider == "azure" || health.provider == "azure_openai" -> "Azure"
+            health.provider == "mistral" -> "Mistral"
+            health.provider == "cohere" -> "Cohere"
+            health.provider == "deepseek" -> "DeepSeek"
+            health.provider == "xai" || health.provider == "x_ai" -> "xAI"
+            health.provider == "other" -> "Custom"
+            else -> health.provider.replaceFirstChar { it.uppercase() }.take(10)
         }
         Text(
             text = displayName,

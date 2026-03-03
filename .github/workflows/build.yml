@@ -46,9 +46,9 @@ jobs:
         run: |
           mypy ciris_engine --config-file mypy.ini
 
-  # Sharded test execution - 4 parallel jobs for ~4x speedup
+  # Sharded test execution - 8 parallel jobs for ~8x speedup
   test:
-    name: Test (shard ${{ matrix.shard }}/4)
+    name: Test (shard ${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -56,7 +56,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -93,18 +93,18 @@ jobs:
           pip install -r requirements-dev.txt
           pip install pytest-split  # For test sharding
 
-      - name: Run tests (shard ${{ matrix.shard }}/4)
+      - name: Run tests (shard ${{ matrix.shard }}/8)
         env:
           CI: true
         run: |
           # Sharded test execution with stability flags:
-          # --splits 4 --group N: Split tests into 4 groups, run group N
+          # --splits 8 --group N: Split tests into 8 groups, run group N
           # --splitting-algorithm=least_duration: Balance by test duration
           # --store-durations: Save durations for better future splits
           # --reruns=2: Rerun failed/crashed tests up to 2 times
           # -n 4: 4 parallel workers within each shard
           pytest tests/ -n 4 \
-            --splits 4 --group ${{ matrix.shard }} \
+            --splits 8 --group ${{ matrix.shard }} \
             --splitting-algorithm=least_duration \
             --store-durations \
             --reruns=2 --reruns-delay=1 --max-worker-restart=4 \

@@ -116,7 +116,7 @@ class StartupViewModel(
             throw result.exceptionOrNull() ?: Exception("Failed to start server")
         }
 
-        _statusMessage.value = "Server started at ${result.getOrNull()}"
+        _statusMessage.value = "Local Python Backend started"
     }
 
     /**
@@ -176,7 +176,7 @@ class StartupViewModel(
                     // If health check passes 5 times, proceed to login
                     if (healthyCount >= 5) {
                         _phase.value = StartupPhase.READY
-                        _statusMessage.value = "Server ready"
+                        _statusMessage.value = "Local Python Backend ready"
                         return
                     }
                 }
@@ -188,7 +188,7 @@ class StartupViewModel(
         // Timeout - but if server was healthy, proceed anyway
         if (healthyCount > 0) {
             _phase.value = StartupPhase.READY
-            _statusMessage.value = "Server ready (partial)"
+            _statusMessage.value = "Local Python Backend ready (partial)"
             return
         }
 
@@ -315,8 +315,8 @@ enum class StartupPhase(val displayName: String) {
     INITIALIZING("INITIALIZING"),
     LOADING_RUNTIME("LOADING RUNTIME"),
     PREPARING("PREPARING ENVIRONMENT"),
-    STARTING_SERVER("STARTING SERVER"),
-    WAITING_SERVER("WAITING FOR SERVER"),
+    STARTING_SERVER("STARTING BACKEND"),
+    WAITING_SERVER("WAITING FOR BACKEND"),
     LOADING_SERVICES("LOADING SERVICES"),
     CHECKING_CONFIG("CHECKING CONFIG"),
     FIRST_RUN_SETUP("FIRST-TIME SETUP"),

@@ -872,11 +872,19 @@ private fun TierCardsSection(
         }
 
         // L2: Environment & Device Attestation
+        // TPM platforms: attestation is implicit when hardware-backed with TPM
+        // Mobile platforms: require Play Integrity (Android) or App Attest (iOS)
+        val isTpm = status.hardwareType?.contains("TPM", ignoreCase = true) == true ||
+            status.attestationProofHardwareType?.contains("TPM", ignoreCase = true) == true
         val deviceOk = (deviceAttestationResult as? DeviceAttestationResult.Success)?.verified == true
+        val attestOk = when {
+            isTpm -> status.hardwareBacked  // TPM attestation is implicit when hardware-backed
+            else -> deviceOk || status.playIntegrityOk
+        }
         ExpandableTierCard(
             level = 2,
             title = "Environment",
-            passed = status.hardwareBacked && status.hardwareType?.contains("Software", ignoreCase = true) != true && (deviceOk || status.playIntegrityOk),
+            passed = status.hardwareBacked && status.hardwareType?.contains("Software", ignoreCase = true) != true && attestOk,
             checksInfo = buildL2ChecksInfo(status, deviceAttestationResult),
             expanded = expandedTier == 2,
             onToggle = { expandedTier = if (expandedTier == 2) null else 2 }
@@ -1023,12 +1031,25 @@ private fun buildL1ChecksInfo(status: VerifyStatusResponse): String {
 private fun buildL2ChecksInfo(status: VerifyStatusResponse, deviceResult: DeviceAttestationResult?): String {
     val isIos = status.platformOs?.lowercase() in listOf("ios", "ipados") ||
         status.hardwareType?.contains("IOS", ignoreCase = true) == true
+    // Check for TPM platform (Linux/Windows desktop with TPM 2.0)
+    val isTpm = status.hardwareType?.contains("TPM", ignoreCase = true) == true ||
+        status.attestationProofHardwareType?.contains("TPM", ignoreCase = true) == true
     val isSoftwareOnly = status.hardwareType?.contains("Software", ignoreCase = true) == true
     val hwOk = status.hardwareBacked && !isSoftwareOnly
-    val playOk = (deviceResult as? DeviceAttestationResult.Success)?.verified == true || status.playIntegrityOk
-    val passed = listOf(hwOk, playOk).count { it }
-    val attestLabel = if (isIos) "Attest" else "Play"
-    return "$passed/2 checks • HW: ${if (hwOk) "✓" else "○"} $attestLabel: ${if (playOk) "✓" else "○"}"
+
+    // Device attestation: TPM (desktop), App Attest (iOS), or Play Integrity (Android)
+    val attestOk = when {
+        isTpm -> hwOk  // TPM attestation is implicit when hardware-backed with TPM
+        else -> (deviceResult as? DeviceAttestationResult.Success)?.verified == true || status.playIntegrityOk
+    }
+
+    val passed = listOf(hwOk, attestOk).count { it }
+    val attestLabel = when {
+        isTpm -> "TPM"
+        isIos -> "Attest"
+        else -> "Play"
+    }
+    return "$passed/2 checks • HW: ${if (hwOk) "✓" else "○"} $attestLabel: ${if (attestOk) "✓" else "○"}"
 }
 
 private fun buildL3ChecksInfo(status: VerifyStatusResponse): String {
@@ -1203,33 +1224,57 @@ private fun L2Content(
     loading: Boolean
 ) {
     val isIos = status.platformOs?.lowercase() in listOf("ios", "ipados")
+    // Check for TPM platform (Linux/Windows desktop)
+    val isTpm = status.hardwareType?.contains("TPM", ignoreCase = true) == true ||
+        status.attestationProofHardwareType?.contains("TPM", ignoreCase = true) == true
 
-    // Explanation dropdown
+    // Explanation dropdown - platform-specific content
+    val (whatItDoes, whyItMatters, howItWorks) = when {
+        isTpm -> Triple(
+            "Verifies TPM 2.0 hardware security module presence and generates PCR quotes for platform state attestation.",
+            "TPM provides hardware-rooted trust. PCR quotes cryptographically prove the system boot state hasn't been tampered with.",
+            "The TPM generates signed quotes of Platform Configuration Registers (PCRs) using its Attestation Key. The Endorsement Key certificate chains to the manufacturer."
+        )
+        isIos -> Triple(
+            "Checks for iOS Secure Enclave and uses Apple App Attest to assess device and app integrity.",
+            "Secure Enclave makes key extraction harder. App Attest helps detect modified apps, jailbroken devices, or unofficial installs.",
+            "App Attest uses the Secure Enclave to generate attestations verified by Apple. Signing keys are stored in hardware-backed storage."
+        )
+        else -> Triple(
+            "Checks for Android StrongBox/TEE and uses Google Play Integrity to assess device and app integrity.",
+            "Hardware security modules make key extraction harder. Play Integrity helps detect modified apps, rooted devices, or unofficial installs.",
+            "Play Integrity contacts Google's servers to check device integrity and app authenticity. Signing keys are stored in hardware-backed storage when available."
+        )
+    }
     ExplanationDropdown(
         title = "What is Environment Verification?",
-        whatItDoes = "Checks for secure hardware (Android StrongBox or iOS Secure Enclave) and uses ${if (isIos) "Apple App Attest" else "Google Play Integrity"} to assess device and app integrity.",
-        whyItMatters = "Hardware security modules make key extraction harder. ${if (isIos) "App Attest" else "Play Integrity"} helps detect modified apps, rooted/jailbroken devices, or unofficial installs.",
-        howItWorks = "${if (isIos) "App Attest uses the Secure Enclave to generate attestations verified by Apple." else "Play Integrity contacts Google's servers to check device integrity and app authenticity."} Signing keys are stored in hardware-backed storage when available."
+        whatItDoes = whatItDoes,
+        whyItMatters = whyItMatters,
+        howItWorks = howItWorks
     )
 
     Spacer(modifier = Modifier.height(8.dp))
 
     // Platform
     DetailRow(
-        icon = "📱",
+        icon = if (isTpm) "🖥️" else "📱",
         label = "Platform",
         value = "${status.platformOs ?: "?"} • ${status.platformArch ?: "?"}",
         ok = true
     )
 
-    // Hardware Keystore - check if signing key is encrypted by hardware key
-    // HW-AES-256-GCM means Ed25519 key is encrypted by hardware-backed AES key
+    // Hardware Security Module - TPM, Secure Enclave, or Android Keystore
     val isIosPlatform = status.platformOs?.lowercase() in listOf("ios", "ipados") ||
         status.hardwareType?.contains("IOS", ignoreCase = true) == true
     val hasHwEncryption = status.hardwareBacked &&
         status.keyStorageMode?.contains("HW", ignoreCase = true) == true
-    val keystoreLabel = if (isIosPlatform) "Secure Enclave" else "Hardware Keystore"
+    val keystoreLabel = when {
+        isTpm -> "TPM 2.0"
+        isIosPlatform -> "Secure Enclave"
+        else -> "Hardware Keystore"
+    }
     val keystoreValue = when {
+        isTpm && status.hardwareBacked -> status.hardwareType?.replace("_", " ") ?: "TPM Hardware"
         hasHwEncryption -> status.keyStorageMode ?: "Hardware-backed"
         isIosPlatform && status.hardwareBacked -> "iOS Secure Enclave (Software Key)"
         status.hardwareBacked -> "Android Keystore (Software)"
@@ -1238,40 +1283,57 @@ private fun L2Content(
     DetailRow(
         label = keystoreLabel,
         value = keystoreValue,
-        ok = hasHwEncryption,
-        pending = status.hardwareBacked && !hasHwEncryption  // Yellow if Keystore but no HW encryption
+        ok = if (isTpm) status.hardwareBacked else hasHwEncryption,
+        pending = !isTpm && status.hardwareBacked && !hasHwEncryption  // Yellow if Keystore but no HW encryption
     )
 
-    // Device Attestation: App Attest (iOS) / Play Integrity (Android)
-    val attestLabel = if (isIosPlatform) "App Attest" else "Play Integrity"
-    if (loading) {
-        DetailRow(label = attestLabel, value = "Checking...", ok = false, pending = true)
+    // Device/Platform Attestation: TPM Quote (desktop), App Attest (iOS), or Play Integrity (Android)
+    if (isTpm) {
+        // TPM attestation - PCR quote generated, but NOT verified against manufacturer revocations
+        // Full remote attestation would require checking EK cert against TPM manufacturer CRLs
+        DetailRow(
+            label = "TPM Attestation",
+            value = if (status.hardwareBacked) "PCR Quote Available" else "Not available",
+            ok = status.hardwareBacked,
+            pending = status.hardwareBacked  // Yellow: quote exists but not remotely verified
+        )
+        if (status.hardwareBacked) {
+            DetailSubtext("• AK-signed PCR quote generated")
+            DetailSubtext("• EK certificate retrieved")
+            DetailSubtext("• Remote verification: not implemented")
+        }
     } else {
-        when (deviceResult) {
-            is DeviceAttestationResult.Success -> {
-                DetailRow(
-                    label = attestLabel,
-                    value = if (deviceResult.verified) deviceResult.verdict else "Failed",
-                    ok = deviceResult.verified
-                )
-                if (deviceResult.meetsStrongIntegrity) DetailSubtext("• Strong integrity")
-                if (deviceResult.meetsDeviceIntegrity) DetailSubtext("• Device integrity")
-                if (deviceResult.meetsBasicIntegrity) DetailSubtext("• Basic integrity")
-            }
-            is DeviceAttestationResult.Error -> {
-                DetailRow(label = attestLabel, value = "Error", ok = false)
-                DetailSubtext(deviceResult.message.take(80))
-            }
-            is DeviceAttestationResult.NotSupported -> {
-                DetailRow(label = attestLabel, value = "Not supported", ok = false, pending = true)
-            }
-            null -> {
-                DetailRow(
-                    label = attestLabel,
-                    value = if (status.playIntegrityOk) "Valid" else "Not available",
-                    ok = status.playIntegrityOk,
-                    pending = !status.playIntegrityOk
-                )
+        // Mobile attestation: App Attest (iOS) / Play Integrity (Android)
+        val attestLabel = if (isIosPlatform) "App Attest" else "Play Integrity"
+        if (loading) {
+            DetailRow(label = attestLabel, value = "Checking...", ok = false, pending = true)
+        } else {
+            when (deviceResult) {
+                is DeviceAttestationResult.Success -> {
+                    DetailRow(
+                        label = attestLabel,
+                        value = if (deviceResult.verified) deviceResult.verdict else "Failed",
+                        ok = deviceResult.verified
+                    )
+                    if (deviceResult.meetsStrongIntegrity) DetailSubtext("• Strong integrity")
+                    if (deviceResult.meetsDeviceIntegrity) DetailSubtext("• Device integrity")
+                    if (deviceResult.meetsBasicIntegrity) DetailSubtext("• Basic integrity")
+                }
+                is DeviceAttestationResult.Error -> {
+                    DetailRow(label = attestLabel, value = "Error", ok = false)
+                    DetailSubtext(deviceResult.message.take(80))
+                }
+                is DeviceAttestationResult.NotSupported -> {
+                    DetailRow(label = attestLabel, value = "Not supported", ok = false, pending = true)
+                }
+                null -> {
+                    DetailRow(
+                        label = attestLabel,
+                        value = if (status.playIntegrityOk) "Valid" else "Not available",
+                        ok = status.playIntegrityOk,
+                        pending = !status.playIntegrityOk
+                    )
+                }
             }
         }
     }

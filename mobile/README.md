@@ -1,6 +1,8 @@
-# CIRIS Mobile - Kotlin Multiplatform
+# CIRIS Cross-Platform Client - Kotlin Multiplatform
 
-Unified mobile app for Android and iOS using Kotlin Multiplatform + Compose Multiplatform.
+**Cross-platform CIRIS client for Android, iOS, Windows, macOS, and Linux** using Kotlin Multiplatform + Compose Multiplatform.
+
+> **Note:** The directory is named "mobile" for historical reasons, but this is a **cross-platform** codebase targeting all major platforms.
 
 ## Quick Start
 

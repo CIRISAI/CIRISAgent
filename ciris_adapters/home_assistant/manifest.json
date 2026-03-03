@@ -68,7 +68,7 @@
         "step_type": "discovery",
         "title": "Discover Home Assistant",
         "description": "Find Home Assistant instances on your network via mDNS or enter URL manually",
-        "discovery_method": "mdns"
+        "discovery_method": "default"
       },
       {
         "step_id": "oauth",

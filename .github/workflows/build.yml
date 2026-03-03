@@ -13,12 +13,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Run mypy in parallel with tests for faster feedback
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install typing_extensions>=4.0.0
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run mypy strict type checking
+        run: |
+          mypy ciris_engine --config-file mypy.ini
+
+  # Sharded test execution - 4 parallel jobs for ~4x speedup
   test:
-    name: Test
+    name: Test (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,6 +66,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Clean Python Cache and Test Artifacts
         run: |
@@ -45,21 +91,84 @@ jobs:
           pip install typing_extensions>=4.0.0
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
+          pip install pytest-split  # For test sharding
 
-      - name: Run mypy strict type checking
-        run: |
-          mypy ciris_engine --config-file mypy.ini
-
-      - name: Run tests and coverage
+      - name: Run tests (shard ${{ matrix.shard }}/4)
         env:
           CI: true
         run: |
-          # Large test suite stability flags:
-          # --reruns=2: Rerun failed/crashed tests up to 2 times (handles flaky tests)
-          # --reruns-delay=1: 1 second delay between reruns (avoid race conditions)
-          # --max-worker-restart=4: Limit worker restart loops (prevent infinite crashes)
-          # -n 4: 4 parallel workers (balanced for CI runner memory)
-          pytest tests/ -n 4 --reruns=2 --reruns-delay=1 --max-worker-restart=4 --cov=./ --cov-report=xml:coverage.xml
+          # Sharded test execution with stability flags:
+          # --splits 4 --group N: Split tests into 4 groups, run group N
+          # --splitting-algorithm=least_duration: Balance by test duration
+          # --store-durations: Save durations for better future splits
+          # --reruns=2: Rerun failed/crashed tests up to 2 times
+          # -n 4: 4 parallel workers within each shard
+          pytest tests/ -n 4 \
+            --splits 4 --group ${{ matrix.shard }} \
+            --splitting-algorithm=least_duration \
+            --store-durations \
+            --reruns=2 --reruns-delay=1 --max-worker-restart=4 \
+            --cov=./ --cov-report=xml:coverage-shard-${{ matrix.shard }}.xml
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: coverage-shard-${{ matrix.shard }}.xml
+          retention-days: 1
+
+  # Combine coverage and run SonarQube after all shards complete
+  test-summary:
+    name: Test Summary
+    needs: [typecheck, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download all coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-shard-*
+          path: coverage/
+          merge-multiple: true
+
+      - name: Combine coverage reports
+        run: |
+          pip install coverage
+          # Combine XML reports into single coverage.xml
+          python -c "
+          import xml.etree.ElementTree as ET
+          import glob
+
+          files = glob.glob('coverage/coverage-shard-*.xml')
+          if not files:
+              print('No coverage files found')
+              exit(0)
+
+          # Use first file as base
+          base = ET.parse(files[0])
+          base_root = base.getroot()
+
+          # Merge others
+          for f in files[1:]:
+              tree = ET.parse(f)
+              for pkg in tree.findall('.//package'):
+                  base_root.find('.//packages').append(pkg)
+
+          base.write('coverage.xml')
+          print(f'Combined {len(files)} coverage reports')
+          "
+          ls -la coverage*.xml || true
 
       - name: Display and write version
         env:
@@ -96,7 +205,7 @@ jobs:
   # then setup.py detects the JAR platform and tags the wheel accordingly.
   build-wheel:
     name: Build Wheel (${{ matrix.name }})
-    needs: test
+    needs: test-summary
     if: success()
     permissions:
       contents: read
@@ -167,7 +276,7 @@ jobs:
   # Tagged py3-none-any so it's a universal fallback.
   build-wheel-headless:
     name: Build Wheel (Headless)
-    needs: test
+    needs: test-summary
     if: success()
     runs-on: ubuntu-latest
     permissions:
@@ -267,7 +376,7 @@ jobs:
 
   build:
     name: Build Docker Images
-    needs: test
+    needs: test-summary
     runs-on: ubuntu-latest
     if: success()
     permissions:

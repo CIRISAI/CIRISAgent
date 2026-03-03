@@ -1936,11 +1936,17 @@ class CIRISApiClient(
                             if (item is kotlinx.serialization.json.JsonObject) {
                                 val id = item["id"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } ?: ""
                                 val label = item["label"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } ?: ""
-                                val value = item["value"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } ?: ""
                                 val metadataObj = item["metadata"] as? kotlinx.serialization.json.JsonObject
                                 val metadata = metadataObj?.entries?.associate { (k, v) ->
                                     k to ((v as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "")
                                 } ?: emptyMap()
+                                // Get value from item["value"], or fall back to metadata URL keys
+                                val value = item["value"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+                                    ?.takeIf { it.isNotEmpty() }
+                                    ?: metadata["url"]  // Home Assistant uses metadata.url
+                                    ?: metadata["portal_url"]  // CIRISNode uses metadata.portal_url
+                                    ?: metadata["base_url"]  // Generic fallback
+                                    ?: ""
                                 itemsList.add(DiscoveredItemData(id, label, value, metadata))
                             }
                         }

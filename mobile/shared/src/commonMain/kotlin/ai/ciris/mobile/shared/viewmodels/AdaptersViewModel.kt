@@ -469,10 +469,13 @@ class AdaptersViewModel(
                 }
             } catch (e: Exception) {
                 logError(method, "Failed to fetch session status: ${e.message}")
-                // Fall back to just incrementing step index
-                _wizardSession.value = session.copy(
-                    currentStepIndex = result.nextStepIndex ?: (session.currentStepIndex + 1)
-                )
+                // Fall back to updating step index only if explicitly provided
+                // Don't auto-increment - null nextStepIndex means stay on current step (e.g., awaiting callback)
+                if (result.nextStepIndex != null) {
+                    _wizardSession.value = session.copy(
+                        currentStepIndex = result.nextStepIndex
+                    )
+                }
             }
         }
     }

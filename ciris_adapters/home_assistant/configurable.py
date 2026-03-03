@@ -239,8 +239,12 @@ class HAConfigurableAdapter:
         elif discovery_type == "manual":
             return []
 
-        # Default: try mDNS first, then env
+        # Default: try mDNS first, then hostname probe, then env
         instances = await self._discover_mdns()
+        if not instances:
+            # mDNS service discovery failed - try probing common hostnames
+            # This handles cases where HA isn't advertising via mDNS but hostname resolves
+            instances = await self._discover_via_hostname_probe()
         if not instances:
             instances = self._discover_from_env()
         return instances
@@ -277,6 +281,57 @@ class HAConfigurableAdapter:
         except Exception as e:
             logger.error(f"mDNS discovery error: {e}")
             return []
+
+    async def _discover_via_hostname_probe(self) -> List[Dict[str, Any]]:
+        """Probe common Home Assistant hostnames directly.
+
+        This is a fallback when mDNS service discovery fails but the hostname
+        might still resolve (e.g., when HA isn't advertising _home-assistant._tcp).
+        """
+        common_hosts = [
+            ("homeassistant.local", 8123),
+            ("homeassistant", 8123),
+            ("hass.local", 8123),
+            ("hass", 8123),
+        ]
+
+        discovered = []
+        for host, port in common_hosts:
+            url = f"http://{host}:{port}"
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        f"{url}/api/",
+                        timeout=aiohttp.ClientTimeout(total=2),
+                        allow_redirects=False,
+                    ) as response:
+                        # HA API returns 401 without auth, which confirms it's HA
+                        if response.status in (200, 401):
+                            logger.info(f"[HOSTNAME PROBE] Found Home Assistant at {url}")
+                            discovered.append(
+                                {
+                                    "id": f"ha_{host}_{port}",
+                                    "label": f"Home Assistant ({host}:{port})",
+                                    "description": f"Discovered via hostname probe",
+                                    "metadata": {
+                                        "host": host,
+                                        "port": port,
+                                        "url": url,
+                                        "source": "hostname_probe",
+                                    },
+                                }
+                            )
+                            # Found one, return immediately (usually only one HA instance)
+                            return discovered
+            except Exception:
+                # Host doesn't resolve or isn't reachable - try next
+                pass
+
+        if discovered:
+            logger.info(f"[HOSTNAME PROBE] Found {len(discovered)} HA instances")
+        else:
+            logger.info("[HOSTNAME PROBE] No HA instances found via hostname probe")
+        return discovered
 
     def _discover_from_env(self) -> List[Dict[str, Any]]:
         """Check environment variables for HA configuration."""

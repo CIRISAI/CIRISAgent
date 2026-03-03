@@ -93,8 +93,17 @@ class SettingsViewModel(
     val availableProviders = listOf(
         "openai" to "OpenAI",
         "anthropic" to "Anthropic",
-        "other" to "Other (OpenAI-compatible)",
-        "local" to "Local (Ollama)"
+        "google" to "Google AI",
+        "openrouter" to "OpenRouter",
+        "groq" to "Groq",
+        "together" to "Together AI",
+        "mistral" to "Mistral",
+        "cohere" to "Cohere",
+        "deepseek" to "DeepSeek",
+        "xai" to "xAI (Grok)",
+        "azure" to "Azure OpenAI",
+        "local" to "Local (Ollama)",
+        "other" to "Other (OpenAI-compatible)"
     )
 
     // Available models per provider

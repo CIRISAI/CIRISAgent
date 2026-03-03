@@ -268,6 +268,9 @@ class ServiceManifest(BaseModel):
     platform_requirements_rationale: Optional[str] = Field(
         None, description="Explanation of why platform requirements are needed"
     )
+    cli_dependencies: List[str] = Field(
+        default_factory=list, description="Required CLI tools/binaries (e.g., 'tmux', 'mcporter')"
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 

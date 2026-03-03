@@ -100,18 +100,15 @@ jobs:
           # Sharded test execution with stability flags:
           # --splits 8 --group N: Split tests into 8 groups, run group N
           # --splitting-algorithm=least_duration: Balance by test duration
-          # --store-durations: Save durations for better future splits
+          # --store-durations: Save durations to .test_durations (JSON dict)
           # --reruns=2: Rerun failed/crashed tests up to 2 times
           # -n 4: 4 parallel workers within each shard
-          # --json-report: Capture test durations for slowest-test analysis
-          pip install pytest-json-report
           pytest tests/ -n 4 \
             --splits 8 --group ${{ matrix.shard }} \
             --splitting-algorithm=least_duration \
-            --store-durations \
+            --store-durations --durations-path=.test_durations_shard_${{ matrix.shard }} \
             --reruns=2 --reruns-delay=1 --max-worker-restart=4 \
-            --cov=./ --cov-report=xml:coverage-shard-${{ matrix.shard }}.xml \
-            --json-report --json-report-file=durations-shard-${{ matrix.shard }}.json
+            --cov=./ --cov-report=xml:coverage-shard-${{ matrix.shard }}.xml
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -125,7 +122,7 @@ jobs:
         if: always()
         with:
           name: durations-shard-${{ matrix.shard }}
-          path: durations-shard-${{ matrix.shard }}.json
+          path: .test_durations_shard_${{ matrix.shard }}
           retention-days: 7
 
   # Combine coverage and run SonarQube after all shards complete
@@ -195,18 +192,17 @@ jobs:
           import glob
 
           # Collect all test durations from all shards
+          # pytest-split format: {test_nodeid: duration_seconds, ...}
           all_tests = []
-          for f in glob.glob('durations/durations-shard-*.json'):
+          for f in glob.glob('durations/.test_durations_shard_*'):
               try:
                   with open(f) as fp:
                       data = json.load(fp)
-                      for test in data.get('tests', []):
-                          if test.get('duration') is not None:
-                              all_tests.append({
-                                  'name': test.get('nodeid', 'unknown'),
-                                  'duration': test['duration'],
-                                  'outcome': test.get('outcome', 'unknown')
-                              })
+                      for test_name, duration in data.items():
+                          all_tests.append({
+                              'name': test_name,
+                              'duration': duration
+                          })
               except Exception as e:
                   print(f'Warning: Could not parse {f}: {e}')
 

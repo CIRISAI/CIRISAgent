@@ -1928,12 +1928,10 @@ class CIRISApiClient(
             val isDiscoveryStep = data.`data`?.containsKey("discovered_items") == true
 
             // Determine if workflow is complete:
-            // - NOT complete if nextStepIndex is null (means "stay on current step for input/selection")
-            // - NOT complete if awaiting external callback (OAuth, device auth, etc.)
-            // - NOT complete if this is a discovery step (user needs to select or enter manual URL)
-            // - Complete only if we have explicit advancement via nextStepIndex
-            // Note: The ViewModel should check if nextStepIndex >= totalSteps to finalize the config
-            val isComplete = data.nextStepIndex != null && data.awaitingCallback != true && !isDiscoveryStep
+            // - We cannot determine completion here as we don't know totalSteps
+            // - The ViewModel must check if nextStepIndex >= totalSteps after fetching session status
+            // - Set isComplete=false here; ViewModel will determine actual completion
+            val isComplete = false
             logInfo(method, "Step result: success=${data.success}, nextStep=${data.nextStepIndex}, isDiscovery=$isDiscoveryStep, isComplete=$isComplete")
 
             // Parse discovered_items from data field if present (for discovery steps)

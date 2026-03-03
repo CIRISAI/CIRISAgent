@@ -222,8 +222,15 @@ def register_build(
         ]
 
         result = subprocess.run(cmd, input=payload_json, capture_output=True, text=True)
+        output = result.stdout or result.stderr
         print("\nResponse:")
-        print(result.stdout or result.stderr)
+        print(output)
+
+        # Handle duplicate key as success (build already registered)
+        if result.returncode != 0 and "duplicate key" in output:
+            print(f"\n✓ Build {version} already registered (skipping)")
+            return True
+
         return result.returncode == 0
     except FileNotFoundError:
         print("Error: grpcurl not found. Install with: go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest")

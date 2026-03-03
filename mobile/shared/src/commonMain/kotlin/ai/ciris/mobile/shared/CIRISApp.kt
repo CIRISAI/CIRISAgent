@@ -1091,6 +1091,8 @@ fun CIRISApp(
                 val wizardSession by adaptersViewModel.wizardSession.collectAsState()
                 val wizardError by adaptersViewModel.wizardError.collectAsState()
                 val wizardLoading by adaptersViewModel.wizardLoading.collectAsState()
+                val discoveredItems by adaptersViewModel.discoveredItems.collectAsState()
+                val discoveryExecuted by adaptersViewModel.discoveryExecuted.collectAsState()
 
                 PlatformLogger.d("CIRISApp", "[Screen.Adapters] Rendering adapters screen: " +
                         "adapters=${adaptersList.size}, connected=$isAdaptersConnected, " +
@@ -1146,6 +1148,8 @@ fun CIRISApp(
                         wizardSession = wizardSession,
                         isLoading = wizardLoading,
                         error = wizardError,
+                        discoveredItems = discoveredItems,
+                        discoveryExecuted = discoveryExecuted,
                         onSelectType = { adapterType ->
                             PlatformLogger.i("CIRISApp", "[AdapterWizard] Selected type: $adapterType")
                             adaptersViewModel.startWizard(adapterType)
@@ -1157,6 +1161,18 @@ fun CIRISApp(
                         onSubmitStep = { stepData ->
                             PlatformLogger.i("CIRISApp", "[AdapterWizard] Submitting step with ${stepData.size} fields")
                             adaptersViewModel.submitWizardStep(stepData)
+                        },
+                        onSelectDiscoveredItem = { item ->
+                            PlatformLogger.i("CIRISApp", "[AdapterWizard] Selected discovered item: ${item.label}")
+                            adaptersViewModel.selectDiscoveredItem(item)
+                        },
+                        onSubmitManualUrl = { url ->
+                            PlatformLogger.i("CIRISApp", "[AdapterWizard] Submitting manual URL: $url")
+                            adaptersViewModel.submitManualUrl(url)
+                        },
+                        onRetryDiscovery = {
+                            PlatformLogger.i("CIRISApp", "[AdapterWizard] Retrying discovery")
+                            adaptersViewModel.executeDiscoveryStep()
                         },
                         onBack = {
                             PlatformLogger.i("CIRISApp", "[AdapterWizard] Back pressed")

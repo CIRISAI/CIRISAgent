@@ -65,6 +65,16 @@ data class ConfigFieldData(
 )
 
 /**
+ * A discovered item from a discovery step (e.g., Home Assistant instance).
+ */
+data class DiscoveredItemData(
+    val id: String,
+    val label: String,
+    val value: String,
+    val metadata: Map<String, String> = emptyMap()
+)
+
+/**
  * Result of executing a configuration step.
  */
 data class ConfigStepResultData(
@@ -72,7 +82,8 @@ data class ConfigStepResultData(
     val message: String?,
     val nextStepIndex: Int?,
     val isComplete: Boolean,
-    val nextStep: ConfigStepData?
+    val nextStep: ConfigStepData?,
+    val discoveredItems: List<DiscoveredItemData> = emptyList()
 )
 
 /**

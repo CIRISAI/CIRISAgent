@@ -46,6 +46,8 @@ def main() -> None:
 
 def _run_desktop_mode() -> None:
     """Start API server and launch desktop application."""
+    import time
+
     port = 8080
     server_url = f"http://localhost:{port}"
 
@@ -66,6 +68,27 @@ def _run_desktop_mode() -> None:
         [sys.executable, str(main_py), "--adapter", "api", "--port", str(port)],
         cwd=str(parent_dir),
     )
+
+    # Wait briefly and check if server crashed during startup
+    time.sleep(2.0)
+    exit_code = server_proc.poll()
+    if exit_code is not None:
+        # Server process exited - it crashed during startup
+        print(f"\n{'=' * 60}", file=sys.stderr)
+        print("ERROR: CIRIS server failed to start!", file=sys.stderr)
+        print(f"{'=' * 60}", file=sys.stderr)
+        if exit_code != 0:
+            print(f"Server exited with code: {exit_code}", file=sys.stderr)
+        print("\nCommon causes:", file=sys.stderr)
+        print(f"  - Port {port} is already in use by another process", file=sys.stderr)
+        print("  - Missing configuration or dependencies", file=sys.stderr)
+        print("\nTo check if port is in use:", file=sys.stderr)
+        print(f"  lsof -i :{port}  (Linux/macOS)", file=sys.stderr)
+        print(f"  netstat -ano | findstr :{port}  (Windows)", file=sys.stderr)
+        print("\nTo kill processes using the port:", file=sys.stderr)
+        print(f"  fuser -k {port}/tcp  (Linux)", file=sys.stderr)
+        print(f"{'=' * 60}\n", file=sys.stderr)
+        sys.exit(exit_code if exit_code != 0 else 1)
 
     try:
         # Launch bundled desktop app (it has its own server detection logic)

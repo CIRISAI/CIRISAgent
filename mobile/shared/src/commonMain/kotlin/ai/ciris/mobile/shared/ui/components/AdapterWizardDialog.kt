@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.ui.components
 
 import ai.ciris.mobile.shared.models.ConfigFieldData
 import ai.ciris.mobile.shared.models.ConfigSessionData
+import ai.ciris.mobile.shared.models.DiscoveredItemData
 import ai.ciris.mobile.shared.models.LoadableAdapterData
 import ai.ciris.mobile.shared.models.LoadableAdaptersData
 import ai.ciris.mobile.shared.platform.testable
@@ -16,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,9 +44,14 @@ fun AdapterWizardDialog(
     wizardSession: ConfigSessionData?,
     isLoading: Boolean,
     error: String?,
+    discoveredItems: List<DiscoveredItemData> = emptyList(),
+    discoveryExecuted: Boolean = false,
     onSelectType: (String) -> Unit,
     onLoadDirectly: (String) -> Unit,
     onSubmitStep: (Map<String, String>) -> Unit,
+    onSelectDiscoveredItem: (DiscoveredItemData) -> Unit = {},
+    onSubmitManualUrl: (String) -> Unit = {},
+    onRetryDiscovery: () -> Unit = {},
     onBack: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -128,7 +135,13 @@ fun AdapterWizardDialog(
                             WizardStepContent(
                                 session = wizardSession,
                                 error = error,
-                                onSubmit = onSubmitStep
+                                discoveredItems = discoveredItems,
+                                discoveryExecuted = discoveryExecuted,
+                                isLoading = isLoading,
+                                onSubmit = onSubmitStep,
+                                onSelectDiscoveredItem = onSelectDiscoveredItem,
+                                onSubmitManualUrl = onSubmitManualUrl,
+                                onRetryDiscovery = onRetryDiscovery
                             )
                         }
                         loadableAdapters != null -> {
@@ -318,10 +331,17 @@ private fun AdapterTypeCard(
 private fun WizardStepContent(
     session: ConfigSessionData,
     error: String?,
-    onSubmit: (Map<String, String>) -> Unit
+    discoveredItems: List<DiscoveredItemData>,
+    discoveryExecuted: Boolean,
+    isLoading: Boolean,
+    onSubmit: (Map<String, String>) -> Unit,
+    onSelectDiscoveredItem: (DiscoveredItemData) -> Unit,
+    onSubmitManualUrl: (String) -> Unit,
+    onRetryDiscovery: () -> Unit
 ) {
     val step = session.currentStep
     val fieldValues = remember(session.currentStepIndex) { mutableStateMapOf<String, String>() }
+    var manualUrl by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -374,35 +394,53 @@ private fun WizardStepContent(
                 }
             }
 
-            // Fields
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(step.fields) { field ->
-                    ConfigField(
-                        field = field,
-                        value = fieldValues[field.name] ?: field.defaultValue ?: "",
-                        onValueChange = { fieldValues[field.name] = it }
+            // Handle different step types
+            when (step.stepType) {
+                "discovery" -> {
+                    // Discovery step - show discovered items and manual entry
+                    DiscoveryStepContent(
+                        discoveredItems = discoveredItems,
+                        discoveryExecuted = discoveryExecuted,
+                        isLoading = isLoading,
+                        manualUrl = manualUrl,
+                        onManualUrlChange = { manualUrl = it },
+                        onSelectItem = onSelectDiscoveredItem,
+                        onSubmitManualUrl = { onSubmitManualUrl(manualUrl) },
+                        onRetryDiscovery = onRetryDiscovery
                     )
                 }
-            }
+                else -> {
+                    // Standard input step - show fields
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(step.fields) { field ->
+                            ConfigField(
+                                field = field,
+                                value = fieldValues[field.name] ?: field.defaultValue ?: "",
+                                onValueChange = { fieldValues[field.name] = it }
+                            )
+                        }
+                    }
 
-            // Submit button
-            Button(
-                onClick = { onSubmit(fieldValues.toMap()) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testableClickable(
-                        if (session.currentStepIndex == session.totalSteps - 1) "btn_wizard_complete" else "btn_wizard_next"
-                    ) { onSubmit(fieldValues.toMap()) },
-                enabled = step.fields.filter { it.required }.all {
-                    (fieldValues[it.name] ?: it.defaultValue)?.isNotBlank() == true
+                    // Submit button
+                    Button(
+                        onClick = { onSubmit(fieldValues.toMap()) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testableClickable(
+                                if (session.currentStepIndex == session.totalSteps - 1) "btn_wizard_complete" else "btn_wizard_next"
+                            ) { onSubmit(fieldValues.toMap()) },
+                        enabled = step.fields.filter { it.required }.all {
+                            (fieldValues[it.name] ?: it.defaultValue)?.isNotBlank() == true
+                        }
+                    ) {
+                        Text(
+                            if (session.currentStepIndex == session.totalSteps - 1) "Complete" else "Next"
+                        )
+                    }
                 }
-            ) {
-                Text(
-                    if (session.currentStepIndex == session.totalSteps - 1) "Complete" else "Next"
-                )
             }
         } else {
             // No current step (shouldn't happen normally)
@@ -413,6 +451,168 @@ private fun WizardStepContent(
                 Text(
                     text = "No step data available",
                     color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiscoveryStepContent(
+    discoveredItems: List<DiscoveredItemData>,
+    discoveryExecuted: Boolean,
+    isLoading: Boolean,
+    manualUrl: String,
+    onManualUrlChange: (String) -> Unit,
+    onSelectItem: (DiscoveredItemData) -> Unit,
+    onSubmitManualUrl: () -> Unit,
+    onRetryDiscovery: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Show loading state during discovery
+        if (isLoading && !discoveryExecuted) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CircularProgressIndicator()
+                    Text(
+                        text = "Scanning network...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        } else {
+            // Discovered items section
+            if (discoveredItems.isNotEmpty()) {
+                Text(
+                    text = "Found on your network:",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(discoveredItems) { item ->
+                        DiscoveredItemCard(
+                            item = item,
+                            onClick = { onSelectItem(item) }
+                        )
+                    }
+                }
+            } else if (discoveryExecuted) {
+                // No items found
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "No devices found on network",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        TextButton(
+                            onClick = onRetryDiscovery,
+                            enabled = !isLoading
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Retry scan")
+                        }
+                    }
+                }
+            }
+
+            // Manual URL entry section
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Or enter URL manually:",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold
+            )
+
+            OutlinedTextField(
+                value = manualUrl,
+                onValueChange = onManualUrlChange,
+                label = { Text("URL") },
+                placeholder = { Text("http://homeassistant.local:8123") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testable("input_manual_url"),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+            )
+
+            Button(
+                onClick = onSubmitManualUrl,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testableClickable("btn_submit_manual_url") { onSubmitManualUrl() },
+                enabled = manualUrl.isNotBlank() && !isLoading
+            ) {
+                Text("Connect")
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiscoveredItemCard(
+    item: DiscoveredItemData,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testableClickable("item_discovered_${item.id}") { onClick() },
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = item.label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = item.value,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            // Show metadata if available (e.g., IP address, version)
+            item.metadata.entries.take(2).forEach { (key, value) ->
+                Text(
+                    text = "$key: $value",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

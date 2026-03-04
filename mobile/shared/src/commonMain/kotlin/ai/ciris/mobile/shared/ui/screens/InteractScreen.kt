@@ -1021,7 +1021,7 @@ private fun ChatInputBar(
                         },
                         shape = CircleShape
                     )
-                    .testable("btn_send")
+                    .testableClickable("btn_send") { onSend() }
             ) {
                 Icon(
                     imageVector = Icons.Default.Send,
@@ -1127,7 +1127,7 @@ private fun ChatInputBarWithBubbles(
                         },
                         shape = CircleShape
                     )
-                    .testable("btn_send")
+                    .testableClickable("btn_send") { onSend() }
             ) {
                 Icon(
                     imageVector = Icons.Default.Send,

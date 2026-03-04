@@ -1797,7 +1797,7 @@ private fun CIRISTopBar(
         actions = {
             IconButton(
                 onClick = onSettingsClick,
-                modifier = Modifier.testable("btn_settings")
+                modifier = Modifier.testableClickable("btn_settings") { onSettingsClick() }
             ) {
                 Icon(
                     imageVector = Icons.Default.Settings,

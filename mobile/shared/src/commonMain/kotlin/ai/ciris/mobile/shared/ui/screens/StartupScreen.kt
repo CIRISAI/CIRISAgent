@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.getDeviceDebugInfo
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
@@ -65,6 +66,20 @@ fun StartupScreen(
         if (phase == StartupPhase.INITIALIZING) {
             viewModel.startCIRIS()
         }
+    }
+
+    // Log light animation state changes
+    LaunchedEffect(prepStepsCompleted) {
+        PlatformLogger.i("StartupScreen", "[LIGHTS] Prep: $prepStepsCompleted/${StartupViewModel.TOTAL_PREP_STEPS}")
+    }
+    LaunchedEffect(verifyStepsCompleted) {
+        PlatformLogger.i("StartupScreen", "[LIGHTS] Verify: $verifyStepsCompleted/${StartupViewModel.TOTAL_VERIFY_STEPS}")
+    }
+    LaunchedEffect(servicesOnline) {
+        PlatformLogger.i("StartupScreen", "[LIGHTS] Services: $servicesOnline/$totalServices")
+    }
+    LaunchedEffect(phase) {
+        PlatformLogger.i("StartupScreen", "[PHASE] $phase (${phase.displayName})")
     }
 
     Surface(

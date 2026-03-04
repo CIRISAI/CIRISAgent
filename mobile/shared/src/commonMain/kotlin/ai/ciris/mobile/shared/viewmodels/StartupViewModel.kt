@@ -123,22 +123,48 @@ class StartupViewModel(
 
     /**
      * Step 2: Start FastAPI server
-     * On desktop, this waits for the server to become healthy
+     * On desktop, this waits for the server to become healthy.
+     * While waiting, polls startup-status to drive service light animations.
      */
     private suspend fun startFastAPIServer() {
         _phase.value = StartupPhase.STARTING_SERVER
         _statusMessage.value = "Connecting to CIRIS..."
 
+        // Wire output callback to parse service startup lines
+        val servicePattern = Regex("""\[SERVICE (\d+)/(\d+)\] (\S+) STARTED""")
+        pythonRuntime.setOutputLineCallback { line ->
+            // Check for service startup
+            servicePattern.find(line)?.let { match ->
+                val num = match.groupValues[1].toIntOrNull() ?: return@let
+                val total = match.groupValues[2].toIntOrNull() ?: return@let
+                _totalServices.value = total
+                onServiceStarted(num)
+            }
+            // Forward verify messages
+            if (line.contains("VERIFY")) {
+                onVerifyLogMessage(line)
+            }
+        }
+
         // Poll for server to become healthy (Python may still be starting)
         val result = pythonRuntime.startServer()
+
+        // Clean up callback
+        pythonRuntime.setOutputLineCallback(null)
+
         if (result.isFailure) {
             throw result.exceptionOrNull() ?: Exception("Failed to connect to server")
         }
 
-        // Server is now healthy - mark environment as ready
-        _prepStepsCompleted.value = TOTAL_PREP_STEPS
-        _verifyStepsCompleted.value = TOTAL_VERIFY_STEPS
-        PlatformLogger.i(TAG, "[STARTUP] Server healthy - prep and verify marked complete")
+        // Server is healthy — verify/prep completed before server was available
+        // Mark them done only if they weren't already driven by console output
+        if (_verifyStepsCompleted.value == 0) {
+            _verifyStepsCompleted.value = TOTAL_VERIFY_STEPS
+        }
+        if (_prepStepsCompleted.value == 0) {
+            _prepStepsCompleted.value = TOTAL_PREP_STEPS
+        }
+        PlatformLogger.i(TAG, "[STARTUP] Server healthy - verify=${_verifyStepsCompleted.value}, prep=${_prepStepsCompleted.value}, services=${_servicesOnline.value}")
         _statusMessage.value = "Connected to CIRIS"
     }
 
@@ -148,6 +174,13 @@ class StartupViewModel(
      * In normal mode, all 22 services start
      */
     private suspend fun waitForServices() {
+        // If services were already fully loaded during startFastAPIServer() polling, skip waiting
+        if (_servicesOnline.value >= _totalServices.value && _servicesOnline.value > 0) {
+            PlatformLogger.i(TAG, "[STARTUP] All ${_servicesOnline.value} services already loaded, skipping wait")
+            showReadyAndComplete()
+            return
+        }
+
         _phase.value = StartupPhase.WAITING_SERVER
         _statusMessage.value = "Waiting for services..."
 
@@ -225,10 +258,10 @@ class StartupViewModel(
             _servicesOnline.value = _totalServices.value
         }
 
-        _phase.value = StartupPhase.READY
         _statusMessage.value = "Agent Runtime Ready!"
         PlatformLogger.i(TAG, "[STARTUP] Agent Runtime Ready! - displaying for 1.2s")
-        delay(1200) // Brief pause to show ready state
+        delay(1200) // Brief pause to show ready state BEFORE transitioning
+        _phase.value = StartupPhase.READY
     }
 
     /**
@@ -380,10 +413,10 @@ class StartupViewModel(
         _statusMessage.value = "Starting services... $serviceNum/${_totalServices.value}"
         PlatformLogger.i(TAG, "[STARTUP][SERVICE] Service $serviceNum/${_totalServices.value} started")
 
-        // When all services are ready
+        // When all services are ready, update status but don't set READY phase directly.
+        // waitForServices() handles the READY transition with proper delay.
         if (serviceNum >= _totalServices.value) {
-            PlatformLogger.i(TAG, "[STARTUP][SERVICE] All services ready - transitioning to READY")
-            setPhase(StartupPhase.READY)
+            PlatformLogger.i(TAG, "[STARTUP][SERVICE] All ${_totalServices.value} services started")
             _statusMessage.value = "All ${_totalServices.value} services ready"
         }
     }

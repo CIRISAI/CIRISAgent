@@ -84,4 +84,13 @@ interface PythonRuntimeProtocol {
      * Default: http://localhost:8080
      */
     val serverUrl: String
+
+    /**
+     * Set a callback for console output lines from the Python backend.
+     * Used to drive startup light animations from structured console output.
+     * Default implementation is a no-op.
+     */
+    fun setOutputLineCallback(callback: ((String) -> Unit)?) {
+        // Default no-op — platforms override as needed
+    }
 }

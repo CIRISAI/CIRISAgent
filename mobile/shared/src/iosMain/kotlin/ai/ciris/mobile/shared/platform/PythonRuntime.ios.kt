@@ -24,6 +24,8 @@ actual class PythonRuntime : PythonRuntimeProtocol {
 
     private var _initialized = false
     private var _serverStarted = false
+    private var _outputLineCallback: ((String) -> Unit)? = null
+    private var _lastReportedServiceCount = 0
 
     actual override val serverUrl: String = "http://localhost:8080"
 
@@ -44,8 +46,12 @@ actual class PythonRuntime : PythonRuntimeProtocol {
     actual override suspend fun startServer(): Result<String> {
         println("[PythonRuntime.iOS] startServer called - checking if server is running...")
 
+        // Poll startup-status to drive UI lights
+        pollStartupStatus()
+
         val healthResult = checkHealth()
         return if (healthResult.getOrNull() == true) {
+            pollStartupStatus() // Final poll
             _serverStarted = true
             println("[PythonRuntime.iOS] Server is running at $serverUrl")
             Result.success(serverUrl)
@@ -212,6 +218,28 @@ actual class PythonRuntime : PythonRuntimeProtocol {
         } catch (e: Exception) {
             println("[PythonRuntime.iOS] Error reading service status file: ${e.message}")
             return null
+        }
+    }
+
+    override fun setOutputLineCallback(callback: ((String) -> Unit)?) {
+        _outputLineCallback = callback
+    }
+
+    /**
+     * Poll /v1/system/startup-status and emit synthetic console output lines
+     * for any newly started services since the last poll.
+     */
+    private fun pollStartupStatus() {
+        val callback = _outputLineCallback ?: return
+        // Read from the service_status.json file (already used by iOS)
+        val fileResult = readServiceStatusFile() ?: return
+        val (online, total) = fileResult
+
+        if (online > _lastReportedServiceCount) {
+            for (i in (_lastReportedServiceCount + 1)..online) {
+                callback("[SERVICE $i/$total] Service$i STARTED")
+            }
+            _lastReportedServiceCount = online
         }
     }
 

@@ -1,89 +1,99 @@
 # QA Runner - CLAUDE.md
 
-## Overview
+Comprehensive test framework for validating CIRIS API functionality. Manages server lifecycle, authentication, SSE-based task monitoring, and 40+ modular test suites.
 
-The QA Runner is a comprehensive test framework for validating CIRIS API functionality. It manages server lifecycle, authentication, and provides SSE-based task completion monitoring.
+## Quick Start
 
-## Key Architecture
+```bash
+# Run everything (server auto-managed)
+python3 -m tools.qa_runner
 
-### SSE-Based Task Completion Monitoring
+# Specific modules
+python3 -m tools.qa_runner auth agent handlers
 
-**Critical**: Tests must wait for `TASK_COMPLETE` action via SSE before proceeding to the next test. This prevents the `updated_info_available` flag from being set, which triggers bypass conscience retries.
+# Status dashboard
+python3 -m tools.qa_runner --status
+python3 -m tools.qa_runner --failing
+python3 -m tools.qa_runner --not-run
 
-```
-Flow:
-1. submit_message() → returns immediately with task_id
-2. Monitor SSE stream for action_result events
-3. Wait specifically for action_executed="task_complete"
-4. Get response from history (filter by submission time)
-5. Proceed to next test
-```
+# Multi-backend (SQLite + PostgreSQL)
+python3 -m tools.qa_runner auth --database-backends sqlite postgres --parallel-backends
 
-### FilterTestHelper (`modules/filter_test_helper.py`)
-
-Monitors SSE stream at `/v1/system/runtime/reasoning-stream` for task completion:
-
-```python
-class FilterTestHelper:
-    def __init__(self, base_url: str, token: str, verbose: bool = False):
-        self.task_complete_seen = False  # Set when TASK_COMPLETE action seen
-
-    def start_monitoring(self) -> None:
-        # Connects to SSE stream, watches for action_result events
-
-    def wait_for_task_complete(self, task_id=None, timeout=30.0) -> bool:
-        # Waits for task_complete_seen flag
+# Verbose debugging
+python3 -m tools.qa_runner handlers --verbose
 ```
 
-Key SSE event structure:
-```json
-{
-  "events": [{
-    "event_type": "action_result",
-    "action_executed": "task_complete",  // or speak, memorize, etc.
-    "execution_success": true,
-    "task_id": "...",
-    "thought_id": "..."
-  }]
-}
+## Server Lifecycle (Automatic)
+
+The QA runner **automatically starts and stops** the CIRIS API server. Do NOT manually start a server before running tests.
+
+### How It Works (`server.py` → `APIServerManager`)
+
+1. **Kill existing**: Finds and kills any process on the configured port
+2. **Data wipe**: Optionally cleans databases for a fresh slate
+3. **Start server**: Spawns `python3 main.py --adapter api --mock-llm --port <port>`
+4. **Health poll**: Waits for `/v1/system/health` to return 200
+5. **Authenticate**: Logs in with admin credentials, stores token
+6. **Run tests**: Executes selected modules
+7. **Teardown**: Kills server process
+
+### Mock Logshipper
+
+`server.py` also starts a mock logshipper (`MockLogshipperHandler`) that receives Accord traces from the agent during testing. Traces are stored and can be validated by `accord_metrics_tests.py`.
+
+### If Server Won't Start
+
+```bash
+# Kill orphaned servers
+pkill -f "python3 main.py --adapter api"
+# or
+lsof -ti:8080 | xargs kill -9
+
+# Manual start for debugging
+python3 main.py --adapter api --mock-llm --port 8080
 ```
 
-### Handler Tests (`modules/handler_tests.py`)
+## Architecture
 
-Tests all 10 handler verbs:
-1. SPEAK - Communicate to user
-2. MEMORIZE - Store to memory graph
-3. RECALL - Query memory graph
-4. FORGET - Remove from memory graph
-5. TOOL - Execute external tool
-6. OBSERVE - Fetch channel messages
-7. DEFER - Defer to Wise Authority
-8. REJECT - Reject request
-9. PONDER - Think deeper
-10. TASK_COMPLETE - Mark task done
-
-**Test Flow**:
-```python
-async def _interact(self, message: str, timeout: float = 30.0) -> str:
-    # 1. Reset task_complete_seen flag
-    self.sse_helper.task_complete_seen = False
-
-    # 2. Submit message (returns immediately)
-    submission = await self.client.agent.submit_message(message)
-
-    # 3. Wait for TASK_COMPLETE via SSE
-    completed = self._wait_for_task_complete_action(timeout=timeout)
-
-    # 4. Get response from history (after submission time)
-    history = await self.client.agent.get_history(limit=10)
-    for msg in history.messages:
-        if msg.is_agent and msg.timestamp > submission_time:
-            return msg.content
+```
+__main__.py          CLI entry point — parses args, selects modules
+    ↓
+runner.py            QARunner — orchestrates server + modules + reporting
+    ↓
+server.py            APIServerManager — process lifecycle, auth, health
+    ↓
+modules/             40+ test modules (each inherits BaseTestModule)
+    ├── *_tests.py   Individual test suites
+    ├── mobile/      Android/iOS device testing
+    └── web_ui/      Desktop app + browser testing
 ```
 
-## Why SSE Monitoring Matters
+### Key Files
 
-Without proper SSE monitoring:
+| File | Purpose |
+|------|---------|
+| `__main__.py` | CLI argument parsing, module selection, status dashboard |
+| `runner.py` | `QARunner` class — runs modules, auto-configures adapters per module needs |
+| `server.py` | `APIServerManager` — start/stop server, auth, mock logshipper |
+| `config.py` | `QAConfig` (urls, ports, timeouts), `QAModule` enum (all module names) |
+| `status_tracker.py` | Tracks pass/fail per module across runs |
+| `qa_api_test.py` | Legacy API test client |
+| `qa_test_sdk.py` | SDK-based test client |
+| `mcp_test_server.py` | Mock MCP server for MCP adapter tests |
+
+### Auto-Adapter Configuration
+
+The runner automatically configures adapters based on which modules are selected:
+- `reddit` module → adapter set to `api,reddit`
+- `sql_external_data` / `dsar_multi_source` → adapter set to `api,external_data_sql`
+
+## SSE-Based Task Completion Monitoring
+
+**Critical**: Tests must wait for `TASK_COMPLETE` action via SSE before proceeding to the next test.
+
+### Why This Matters
+
+Without SSE monitoring:
 1. Test N+1 starts before Test N's task completes
 2. New observation arrives in same channel as active task
 3. `updated_info_available` flag gets set on the task
@@ -91,44 +101,65 @@ Without proper SSE monitoring:
 5. Task cycles through retries until DEFER at depth limit
 6. Test fails with "Still processing" or wrong response
 
-With SSE monitoring:
-1. Each test waits for TASK_COMPLETE before proceeding
-2. No overlapping tasks in the same channel
-3. `updated_info_available` flag never set
-4. Clean task completion every time
+### FilterTestHelper (`modules/filter_test_helper.py`)
 
-## Token Retrieval
+Monitors SSE stream at `/v1/system/runtime/reasoning-stream`:
 
-The SSE helper needs the auth token from the client:
+```python
+helper = FilterTestHelper(base_url, token, verbose=True)
+helper.start_monitoring()
+
+# Submit message...
+submission = await client.agent.submit_message(message)
+
+# Wait for completion
+completed = helper.wait_for_task_complete(timeout=30.0)
+
+# Get response from history
+history = await client.agent.get_history(limit=10)
+```
+
+SSE event structure:
+```json
+{
+  "events": [{
+    "event_type": "action_result",
+    "action_executed": "task_complete",
+    "execution_success": true,
+    "task_id": "...",
+    "thought_id": "..."
+  }]
+}
+```
+
+### Token Retrieval for SSE
 
 ```python
 transport = getattr(self.client, "_transport", None)
 token = getattr(transport, "api_key", None) if transport else None
 ```
 
-## Running Handler Tests
+## Module Groups
 
 ```bash
-# Run all handler tests
-python3 -m tools.qa_runner handlers
-
-# With verbose output
-python3 -m tools.qa_runner handlers --verbose
+python3 -m tools.qa_runner api_full         # All API modules
+python3 -m tools.qa_runner handlers_full    # All handler modules
+python3 -m tools.qa_runner all              # Everything
 ```
+
+See `modules/CLAUDE.md` for the full module inventory.
 
 ## Common Issues
 
-### "TASK_COMPLETE not seen in 30.0s"
-- SSE connection issue or mock LLM not returning TASK_COMPLETE
-- Check that token is being passed correctly
-- Check mock LLM follow-up handling
+| Problem | Fix |
+|---------|-----|
+| "TASK_COMPLETE not seen in 30.0s" | SSE connection issue — check token, check mock LLM follow-up handling |
+| "Still processing" response | Previous test didn't complete — SSE monitoring not working |
+| Tests getting "defer" responses | Follow-up thoughts not reaching TASK_COMPLETE — check `responses.py` |
+| Server won't start | Kill orphaned process: `pkill -f "python3 main.py"` |
+| "Address already in use" | `lsof -ti:8080 \| xargs kill -9` |
+| Auth token expired | Runner auto-re-authenticates after logout/refresh tests |
 
-### "Still processing" response
-- Test ran before previous task completed
-- SSE monitoring not working
-- Check FilterTestHelper connection
+## Reporting
 
-### Tests getting "defer" responses
-- Follow-up thoughts not completing to TASK_COMPLETE
-- Mock LLM follow-up detection needs adjustment
-- Check `responses.py` handler_completion_patterns
+Test results are saved to `qa_reports/` with timestamps. Use `--json` for machine-readable output. The status tracker persists results across runs for the `--status` dashboard.

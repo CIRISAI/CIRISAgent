@@ -11,7 +11,8 @@ import kotlinx.coroutines.delay
  * Desktop PythonRuntime implementation.
  *
  * On desktop, the Python server is started by the CLI before launching this app.
- * This runtime simply connects to the already-running server.
+ * This runtime connects to the already-running server and polls startup-status
+ * to drive the startup light animations.
  *
  * The server URL can be configured via CIRIS_API_URL environment variable.
  */
@@ -23,6 +24,10 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
     }
     private var _initialized = false
     private var _serverStarted = false
+    private var _outputLineCallback: ((String) -> Unit)? = null
+
+    // Track last reported service count to emit only new service lines
+    private var _lastReportedServiceCount = 0
 
     private val httpClient = HttpClient(CIO) {
         engine {
@@ -37,13 +42,18 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
     }
 
     actual override suspend fun startServer(): Result<String> = runCatching {
-        // On desktop, server should already be running (started by CLI)
-        // Just wait for it to be ready
+        // On desktop, server is started by CLI before launching the JAR.
+        // Wait for it to become healthy, polling startup-status to drive UI lights.
         println("[PythonRuntime.desktop] startServer() called, waiting for server at $_serverUrl")
         repeat(60) { attempt ->
+            // Try startup-status first (available before full health)
+            pollStartupStatus()
+
             val health = checkHealth()
             println("[PythonRuntime.desktop] Health check attempt $attempt: ${health.getOrNull()}")
             if (health.getOrNull() == true) {
+                // Final poll to capture any remaining services
+                pollStartupStatus()
                 println("[PythonRuntime.desktop] Server is healthy!")
                 _serverStarted = true
                 return@runCatching _serverUrl
@@ -100,6 +110,50 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
     actual override fun isInitialized(): Boolean = _initialized
 
     actual override fun isServerStarted(): Boolean = _serverStarted
+
+    override fun setOutputLineCallback(callback: ((String) -> Unit)?) {
+        _outputLineCallback = callback
+    }
+
+    /**
+     * Poll /v1/system/startup-status and emit synthetic console output lines
+     * for any newly started services since the last poll.
+     */
+    private suspend fun pollStartupStatus() {
+        val callback = _outputLineCallback ?: return
+
+        try {
+            val response = httpClient.get("$_serverUrl/v1/system/startup-status")
+            if (response.status != HttpStatusCode.OK) return
+
+            val body = response.bodyAsText()
+
+            // Parse services_online count
+            val onlineMatch = Regex(""""services_online"\s*:\s*(\d+)""").find(body)
+            val totalMatch = Regex(""""services_total"\s*:\s*(\d+)""").find(body)
+            val online = onlineMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
+            val total = totalMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
+
+            // Parse service_names array
+            val namesMatch = Regex(""""service_names"\s*:\s*\[([^\]]*)\]""").find(body)
+            val serviceNames = namesMatch?.groupValues?.get(1)
+                ?.split(",")
+                ?.map { it.trim().trim('"') }
+                ?.filter { it.isNotEmpty() }
+                ?: emptyList()
+
+            // Emit [SERVICE n/total] lines for newly started services
+            if (online > _lastReportedServiceCount) {
+                for (i in (_lastReportedServiceCount + 1)..online) {
+                    val name = serviceNames.getOrElse(i - 1) { "Service$i" }
+                    callback("[SERVICE $i/$total] $name STARTED")
+                }
+                _lastReportedServiceCount = online
+            }
+        } catch (_: Exception) {
+            // Server not ready yet — ignore
+        }
+    }
 }
 
 actual fun createPythonRuntime(): PythonRuntime = PythonRuntime()

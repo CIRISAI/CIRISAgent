@@ -17,6 +17,71 @@ from .models import SetupCompleteRequest, SetupConfigResponse
 
 logger = logging.getLogger(__name__)
 
+
+def _detect_llm_provider(request: Request) -> str:
+    """Detect the active LLM provider for display in the UI.
+
+    Checks mock LLM first, then explicit env vars, then auto-detects
+    from API keys. Mirrors _detect_provider_from_env() in llm_service.
+    """
+    # Mock LLM check (runtime flag or env var)
+    runtime = getattr(request.app.state, "runtime", None)
+    if runtime and hasattr(runtime, "modules_to_load") and "mock_llm" in runtime.modules_to_load:
+        return "mockllm"
+    if os.getenv("CIRIS_MOCK_LLM", "").lower() in ("true", "1", "yes", "on"):
+        return "mockllm"
+
+    # Explicit provider setting (CIRIS_LLM_PROVIDER or LLM_PROVIDER)
+    provider_env = (os.getenv("CIRIS_LLM_PROVIDER") or os.getenv("LLM_PROVIDER") or "").lower()
+    if provider_env:
+        if provider_env in ("anthropic", "claude"):
+            return "anthropic"
+        elif provider_env in ("google", "gemini"):
+            return "google"
+        elif provider_env == "openai":
+            return "openai"
+        elif provider_env == "openrouter":
+            return "openrouter"
+        elif provider_env == "groq":
+            return "groq"
+        elif provider_env == "together":
+            return "together"
+        elif provider_env in ("openai_compatible",):
+            return "other"
+        return provider_env  # Pass through unknown providers
+
+    # Auto-detect from API keys
+    if os.getenv("ANTHROPIC_API_KEY"):
+        return "anthropic"
+    if os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"):
+        return "google"
+
+    # Check base URL for known providers
+    base_url = os.getenv("OPENAI_API_BASE", "")
+    if base_url:
+        if "openrouter.ai" in base_url:
+            return "openrouter"
+        elif "groq.com" in base_url:
+            return "groq"
+        elif "together.xyz" in base_url or "together.ai" in base_url:
+            return "together"
+        elif "mistral.ai" in base_url:
+            return "mistral"
+        elif "deepseek.com" in base_url:
+            return "deepseek"
+        elif "cohere" in base_url:
+            return "cohere"
+        elif "localhost" in base_url or "127.0.0.1" in base_url:
+            return "local"
+        return "other"
+
+    # CIRIS Proxy detection
+    if os.getenv("CIRIS_PROXY_URL") or os.getenv("CIRIS_PROXY_ENABLED", "").lower() in ("true", "1"):
+        return "ciris_proxy"
+
+    return "openai"
+
+
 router = APIRouter()
 
 
@@ -55,9 +120,11 @@ async def get_current_config(request: Request) -> SuccessResponse[SetupConfigRes
     if not template_id:
         template_id = "default"
 
-    # Read current config from environment
+    # Detect LLM provider using same logic as LLM service
+    llm_provider = _detect_llm_provider(request)
+
     config = SetupConfigResponse(
-        llm_provider="openai" if os.getenv("OPENAI_API_BASE") is None else "other",
+        llm_provider=llm_provider,
         llm_base_url=os.getenv("OPENAI_API_BASE"),
         llm_model=os.getenv("OPENAI_MODEL"),
         llm_api_key_set=bool(os.getenv("OPENAI_API_KEY")),

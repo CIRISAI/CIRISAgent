@@ -1,24 +1,32 @@
 """
-Tests for startup-status endpoint, _detect_llm_provider(), and MockLLM logging.
+Tests for startup-status endpoint, LLM provider detection, and MockLLM logging.
 
 Covers new code from v2.0.11:
 - GET /system/startup-status endpoint (health.py)
 - StartupStatusResponse schema (schemas.py)
-- _detect_llm_provider() function (config.py)
+- _detect_llm_provider() and extracted helpers (config.py)
+- _detect_api_key_set() for provider-aware key detection (config.py)
 - MockLLM _log_service_started calls in adapter_loader.py and module_loader.py
 """
 
 import os
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
-from ciris_engine.logic.adapters.api.routes.setup.config import _detect_llm_provider
+from ciris_engine.logic.adapters.api.routes.setup.config import (
+    _detect_api_key_set,
+    _detect_from_api_keys,
+    _detect_from_base_url,
+    _detect_from_explicit_env,
+    _detect_llm_provider,
+    _is_mock_llm,
+)
 from ciris_engine.logic.adapters.api.routes.system.schemas import StartupStatusResponse
 
 
 # ---------------------------------------------------------------------------
-# _detect_llm_provider tests
+# Helpers
 # ---------------------------------------------------------------------------
 
 def _make_request(mock_llm: bool = False) -> Mock:
@@ -35,134 +43,135 @@ def _make_request(mock_llm: bool = False) -> Mock:
     return request
 
 
-class TestDetectLlmProvider:
-    """Test _detect_llm_provider() covers all detection branches."""
+# ---------------------------------------------------------------------------
+# _is_mock_llm tests
+# ---------------------------------------------------------------------------
 
+class TestIsMockLlm:
+    def test_from_runtime(self):
+        assert _is_mock_llm(_make_request(mock_llm=True)) is True
+
+    def test_no_runtime(self):
+        with patch.dict(os.environ, {}, clear=True):
+            assert _is_mock_llm(_make_request()) is False
+
+    @pytest.mark.parametrize("val", ["true", "1", "yes", "on", "TRUE", "Yes"])
+    def test_from_env_truthy(self, val):
+        with patch.dict(os.environ, {"CIRIS_MOCK_LLM": val}, clear=True):
+            assert _is_mock_llm(_make_request()) is True
+
+    def test_from_env_false(self):
+        with patch.dict(os.environ, {"CIRIS_MOCK_LLM": "false"}, clear=True):
+            assert _is_mock_llm(_make_request()) is False
+
+
+# ---------------------------------------------------------------------------
+# _detect_from_explicit_env tests
+# ---------------------------------------------------------------------------
+
+class TestDetectFromExplicitEnv:
+    def test_returns_none_when_unset(self):
+        with patch.dict(os.environ, {}, clear=True):
+            assert _detect_from_explicit_env() is None
+
+    @pytest.mark.parametrize("raw,expected", [
+        ("anthropic", "anthropic"),
+        ("claude", "anthropic"),
+        ("google", "google"),
+        ("gemini", "google"),
+        ("openai", "openai"),
+        ("openrouter", "openrouter"),
+        ("groq", "groq"),
+        ("together", "together"),
+        ("openai_compatible", "other"),
+    ])
+    def test_alias_mapping(self, raw, expected):
+        with patch.dict(os.environ, {"CIRIS_LLM_PROVIDER": raw}, clear=True):
+            assert _detect_from_explicit_env() == expected
+
+    def test_unknown_passthrough(self):
+        with patch.dict(os.environ, {"CIRIS_LLM_PROVIDER": "custom_provider"}, clear=True):
+            assert _detect_from_explicit_env() == "custom_provider"
+
+    def test_llm_provider_fallback(self):
+        with patch.dict(os.environ, {"LLM_PROVIDER": "anthropic"}, clear=True):
+            assert _detect_from_explicit_env() == "anthropic"
+
+    def test_ciris_takes_precedence(self):
+        with patch.dict(os.environ, {"CIRIS_LLM_PROVIDER": "google", "LLM_PROVIDER": "openai"}, clear=True):
+            assert _detect_from_explicit_env() == "google"
+
+
+# ---------------------------------------------------------------------------
+# _detect_from_api_keys tests
+# ---------------------------------------------------------------------------
+
+class TestDetectFromApiKeys:
+    def test_no_keys(self):
+        with patch.dict(os.environ, {}, clear=True):
+            assert _detect_from_api_keys() is None
+
+    def test_anthropic_key(self):
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-123"}, clear=True):
+            assert _detect_from_api_keys() == "anthropic"
+
+    def test_google_key(self):
+        with patch.dict(os.environ, {"GOOGLE_API_KEY": "AIza"}, clear=True):
+            assert _detect_from_api_keys() == "google"
+
+    def test_gemini_key(self):
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "AIza"}, clear=True):
+            assert _detect_from_api_keys() == "google"
+
+    def test_anthropic_takes_precedence_over_google(self):
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "x", "GOOGLE_API_KEY": "y"}, clear=True):
+            assert _detect_from_api_keys() == "anthropic"
+
+
+# ---------------------------------------------------------------------------
+# _detect_from_base_url tests
+# ---------------------------------------------------------------------------
+
+class TestDetectFromBaseUrl:
+    def test_no_url(self):
+        with patch.dict(os.environ, {}, clear=True):
+            assert _detect_from_base_url() is None
+
+    @pytest.mark.parametrize("url,expected", [
+        ("https://openrouter.ai/v1", "openrouter"),
+        ("https://api.groq.com/v1", "groq"),
+        ("https://api.together.xyz/v1", "together"),
+        ("https://api.together.ai/v1", "together"),
+        ("https://api.mistral.ai/v1", "mistral"),
+        ("https://api.deepseek.com/v1", "deepseek"),
+        ("https://api.cohere.com/v1", "cohere"),
+        ("http://localhost:11434", "local"),
+        ("http://127.0.0.1:11434", "local"),
+    ])
+    def test_known_patterns(self, url, expected):
+        with patch.dict(os.environ, {"OPENAI_API_BASE": url}, clear=True):
+            assert _detect_from_base_url() == expected
+
+    def test_unknown_url(self):
+        with patch.dict(os.environ, {"OPENAI_API_BASE": "https://custom.example.com"}, clear=True):
+            assert _detect_from_base_url() == "other"
+
+
+# ---------------------------------------------------------------------------
+# _detect_llm_provider (integration of all detectors)
+# ---------------------------------------------------------------------------
+
+class TestDetectLlmProvider:
     def _call(self, request=None, env=None):
         env = env or {}
         request = request or _make_request()
         with patch.dict(os.environ, env, clear=True):
             return _detect_llm_provider(request)
 
-    # -- Mock LLM detection --
-
-    def test_mock_llm_from_runtime(self):
-        request = _make_request(mock_llm=True)
-        assert self._call(request) == "mockllm"
-
-    def test_mock_llm_from_env_true(self):
-        assert self._call(env={"CIRIS_MOCK_LLM": "true"}) == "mockllm"
-
-    def test_mock_llm_from_env_1(self):
-        assert self._call(env={"CIRIS_MOCK_LLM": "1"}) == "mockllm"
-
-    def test_mock_llm_from_env_yes(self):
-        assert self._call(env={"CIRIS_MOCK_LLM": "yes"}) == "mockllm"
-
-    def test_mock_llm_from_env_on(self):
-        assert self._call(env={"CIRIS_MOCK_LLM": "on"}) == "mockllm"
-
-    # -- Explicit provider env vars --
-
-    def test_explicit_anthropic(self):
-        assert self._call(env={"CIRIS_LLM_PROVIDER": "anthropic"}) == "anthropic"
-
-    def test_explicit_claude(self):
-        assert self._call(env={"CIRIS_LLM_PROVIDER": "claude"}) == "anthropic"
-
-    def test_explicit_google(self):
-        assert self._call(env={"CIRIS_LLM_PROVIDER": "google"}) == "google"
-
-    def test_explicit_gemini(self):
-        assert self._call(env={"CIRIS_LLM_PROVIDER": "gemini"}) == "google"
-
-    def test_explicit_openai(self):
-        assert self._call(env={"CIRIS_LLM_PROVIDER": "openai"}) == "openai"
-
-    def test_explicit_openrouter(self):
-        assert self._call(env={"CIRIS_LLM_PROVIDER": "openrouter"}) == "openrouter"
-
-    def test_explicit_groq(self):
-        assert self._call(env={"CIRIS_LLM_PROVIDER": "groq"}) == "groq"
-
-    def test_explicit_together(self):
-        assert self._call(env={"CIRIS_LLM_PROVIDER": "together"}) == "together"
-
-    def test_explicit_openai_compatible(self):
-        assert self._call(env={"CIRIS_LLM_PROVIDER": "openai_compatible"}) == "other"
-
-    def test_explicit_unknown_passthrough(self):
-        assert self._call(env={"CIRIS_LLM_PROVIDER": "custom_provider"}) == "custom_provider"
-
-    def test_llm_provider_fallback_env(self):
-        """LLM_PROVIDER used when CIRIS_LLM_PROVIDER absent."""
-        assert self._call(env={"LLM_PROVIDER": "anthropic"}) == "anthropic"
-
-    # -- Auto-detect from API keys --
-
-    def test_anthropic_api_key(self):
-        assert self._call(env={"ANTHROPIC_API_KEY": "sk-ant-123"}) == "anthropic"
-
-    def test_google_api_key(self):
-        assert self._call(env={"GOOGLE_API_KEY": "AIza123"}) == "google"
-
-    def test_gemini_api_key(self):
-        assert self._call(env={"GEMINI_API_KEY": "AIza456"}) == "google"
-
-    # -- Base URL detection --
-
-    def test_base_url_openrouter(self):
-        assert self._call(env={"OPENAI_API_BASE": "https://openrouter.ai/v1"}) == "openrouter"
-
-    def test_base_url_groq(self):
-        assert self._call(env={"OPENAI_API_BASE": "https://api.groq.com/v1"}) == "groq"
-
-    def test_base_url_together_xyz(self):
-        assert self._call(env={"OPENAI_API_BASE": "https://api.together.xyz/v1"}) == "together"
-
-    def test_base_url_together_ai(self):
-        assert self._call(env={"OPENAI_API_BASE": "https://api.together.ai/v1"}) == "together"
-
-    def test_base_url_mistral(self):
-        assert self._call(env={"OPENAI_API_BASE": "https://api.mistral.ai/v1"}) == "mistral"
-
-    def test_base_url_deepseek(self):
-        assert self._call(env={"OPENAI_API_BASE": "https://api.deepseek.com/v1"}) == "deepseek"
-
-    def test_base_url_cohere(self):
-        assert self._call(env={"OPENAI_API_BASE": "https://api.cohere.com/v1"}) == "cohere"
-
-    def test_base_url_localhost(self):
-        assert self._call(env={"OPENAI_API_BASE": "http://localhost:11434"}) == "local"
-
-    def test_base_url_127(self):
-        assert self._call(env={"OPENAI_API_BASE": "http://127.0.0.1:11434"}) == "local"
-
-    def test_base_url_unknown(self):
-        assert self._call(env={"OPENAI_API_BASE": "https://custom.example.com"}) == "other"
-
-    # -- CIRIS Proxy --
-
-    def test_ciris_proxy_url(self):
-        assert self._call(env={"CIRIS_PROXY_URL": "https://proxy.ciris.ai"}) == "ciris_proxy"
-
-    def test_ciris_proxy_enabled(self):
-        assert self._call(env={"CIRIS_PROXY_ENABLED": "true"}) == "ciris_proxy"
-
-    def test_ciris_proxy_enabled_1(self):
-        assert self._call(env={"CIRIS_PROXY_ENABLED": "1"}) == "ciris_proxy"
-
-    # -- Default --
-
-    def test_default_openai(self):
-        assert self._call(env={}) == "openai"
-
-    # -- Priority: mock > explicit > key > url > proxy > default --
-
-    def test_mock_overrides_explicit(self):
+    def test_mock_overrides_all(self):
         assert self._call(
             request=_make_request(mock_llm=True),
-            env={"CIRIS_LLM_PROVIDER": "anthropic"},
+            env={"CIRIS_LLM_PROVIDER": "anthropic", "ANTHROPIC_API_KEY": "x"},
         ) == "mockllm"
 
     def test_explicit_overrides_key(self):
@@ -176,6 +185,75 @@ class TestDetectLlmProvider:
             "ANTHROPIC_API_KEY": "sk-ant-123",
             "OPENAI_API_BASE": "https://openrouter.ai/v1",
         }) == "anthropic"
+
+    def test_url_overrides_proxy(self):
+        assert self._call(env={
+            "OPENAI_API_BASE": "https://api.groq.com/v1",
+            "CIRIS_PROXY_URL": "https://proxy.ciris.ai",
+        }) == "groq"
+
+    def test_ciris_proxy_url(self):
+        assert self._call(env={"CIRIS_PROXY_URL": "https://proxy.ciris.ai"}) == "ciris_proxy"
+
+    def test_ciris_proxy_enabled(self):
+        assert self._call(env={"CIRIS_PROXY_ENABLED": "true"}) == "ciris_proxy"
+
+    def test_ciris_proxy_enabled_1(self):
+        assert self._call(env={"CIRIS_PROXY_ENABLED": "1"}) == "ciris_proxy"
+
+    def test_default_openai(self):
+        assert self._call(env={}) == "openai"
+
+
+# ---------------------------------------------------------------------------
+# _detect_api_key_set tests
+# ---------------------------------------------------------------------------
+
+class TestDetectApiKeySet:
+    def test_openai_key(self):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-123"}, clear=True):
+            assert _detect_api_key_set("openai") is True
+
+    def test_openai_missing(self):
+        with patch.dict(os.environ, {}, clear=True):
+            assert _detect_api_key_set("openai") is False
+
+    def test_anthropic_key(self):
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant"}, clear=True):
+            assert _detect_api_key_set("anthropic") is True
+
+    def test_anthropic_missing(self):
+        with patch.dict(os.environ, {}, clear=True):
+            assert _detect_api_key_set("anthropic") is False
+
+    def test_google_key(self):
+        with patch.dict(os.environ, {"GOOGLE_API_KEY": "AIza"}, clear=True):
+            assert _detect_api_key_set("google") is True
+
+    def test_gemini_key_counts_for_google(self):
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "AIza"}, clear=True):
+            assert _detect_api_key_set("google") is True
+
+    def test_mockllm_always_false(self):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-123"}, clear=True):
+            assert _detect_api_key_set("mockllm") is False
+
+    def test_ciris_proxy_always_false(self):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-123"}, clear=True):
+            assert _detect_api_key_set("ciris_proxy") is False
+
+    def test_local_always_false(self):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-123"}, clear=True):
+            assert _detect_api_key_set("local") is False
+
+    def test_unknown_falls_back_to_openai_key(self):
+        """Unknown providers fall back to OPENAI_API_KEY (OpenAI-compatible)."""
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-123"}, clear=True):
+            assert _detect_api_key_set("openrouter") is True
+
+    def test_unknown_no_fallback_key(self):
+        with patch.dict(os.environ, {}, clear=True):
+            assert _detect_api_key_set("openrouter") is False
 
 
 # ---------------------------------------------------------------------------
@@ -209,10 +287,6 @@ class TestStartupStatusEndpoint:
     async def test_returns_startup_status(self):
         from ciris_engine.logic.adapters.api.routes.system.health import get_startup_status
 
-        with patch("ciris_engine.logic.adapters.api.routes.system.health.get_startup_status.__module__"):
-            pass  # just ensure importable
-
-        # Patch the module-level globals that get_startup_status imports
         with patch(
             "ciris_engine.logic.runtime.service_initializer._services_started",
             new={1, 2, 3},

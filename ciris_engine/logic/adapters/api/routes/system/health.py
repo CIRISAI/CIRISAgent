@@ -26,7 +26,7 @@ from .helpers import (
     get_current_time,
     get_system_uptime,
 )
-from .schemas import SystemHealthResponse, SystemTimeResponse
+from .schemas import StartupStatusResponse, SystemHealthResponse, SystemTimeResponse
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +68,33 @@ async def get_system_health(request: Request) -> SuccessResponse[SystemHealthRes
     )
 
     return SuccessResponse(data=response)
+
+
+@router.get("/startup-status")
+async def get_startup_status() -> SuccessResponse[StartupStatusResponse]:
+    """
+    Startup progress for desktop client polling.
+
+    Returns service initialization count and phase.
+    Unauthenticated - available during boot before auth is ready.
+    """
+    from ciris_engine.logic.runtime.service_initializer import (
+        SERVICE_NAMES,
+        TOTAL_CORE_SERVICES,
+        _current_phase,
+        _services_started,
+    )
+
+    started_names = [SERVICE_NAMES[i - 1] for i in sorted(_services_started) if 1 <= i <= len(SERVICE_NAMES)]
+
+    return SuccessResponse(
+        data=StartupStatusResponse(
+            phase=_current_phase,
+            services_online=len(_services_started),
+            services_total=TOTAL_CORE_SERVICES,
+            service_names=started_names,
+        )
+    )
 
 
 @router.get(

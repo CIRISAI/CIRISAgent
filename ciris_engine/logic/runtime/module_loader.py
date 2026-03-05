@@ -187,9 +187,8 @@ class ModuleLoader:
                     result.warnings.append(f"MOCK service registered: {service_class.__name__}")
                     # Log SERVICE X/22 for mock LLM services (replaces real LLM service #14)
                     if service_decl.type == ServiceType.LLM:
-                        msg = "[SERVICE 14/22] MockLLMService STARTED"
-                        logger.warning(msg)
-                        print(msg)  # Also print to console for Android logcat
+                        from ciris_engine.logic.runtime.service_initializer import _log_service_started
+                        _log_service_started(14, "MockLLMService")
                 else:
                     logger.info(f"Service registered: {service_class.__name__}")
 

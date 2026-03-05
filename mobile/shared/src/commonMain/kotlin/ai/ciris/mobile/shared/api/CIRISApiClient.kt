@@ -1384,9 +1384,10 @@ class CIRISApiClient(
             val body = response.body<SetupConfigApiResponse>()
             val data = body.data ?: throw RuntimeException("API returned null data")
 
-            // Detect if using CIRIS proxy by checking base URL
+            // Detect if using CIRIS proxy by checking provider or base URL
             val llmBaseUrl = data.llmBaseUrl ?: ""
-            val isCirisProxy = llmBaseUrl.contains("ciris", ignoreCase = true) ||
+            val isCirisProxy = data.llmProvider == "ciris_proxy" ||
+                    llmBaseUrl.contains("ciris", ignoreCase = true) ||
                     llmBaseUrl.contains("llm.ciris", ignoreCase = true) ||
                     llmBaseUrl.contains("proxy", ignoreCase = true)
 

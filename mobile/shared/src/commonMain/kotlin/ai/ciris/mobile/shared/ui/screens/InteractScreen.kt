@@ -364,18 +364,25 @@ private fun LlmHealthIndicator(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp)
     ) {
-        // Health dot
+        val isMockLlm = health.provider == "mockllm" || health.provider == "mock"
+
+        // Health dot - bright red for mock LLM
         Box(
             modifier = Modifier
                 .size(6.dp)
                 .background(
-                    color = if (health.isHealthy) Color(0xFF10B981) else Color(0xFFD97706),
+                    color = when {
+                        isMockLlm -> Color(0xFFDC2626)
+                        health.isHealthy -> Color(0xFF10B981)
+                        else -> Color(0xFFD97706)
+                    },
                     shape = CircleShape
                 )
         )
 
         // Provider name - comprehensive provider display
         val displayName = when {
+            isMockLlm -> "\u26A0\uFE0F MOCKLLM \u26A0\uFE0F"
             health.isCirisProxy -> "CIRIS"
             health.provider == "openai" -> "OpenAI"
             health.provider == "anthropic" -> "Anthropic"
@@ -394,8 +401,9 @@ private fun LlmHealthIndicator(
         }
         Text(
             text = displayName,
-            fontSize = 10.sp,
-            color = if (health.isHealthy) Color(0xFF059669) else Color(0xFFD97706)
+            fontSize = if (isMockLlm) 11.sp else 10.sp,
+            fontWeight = if (isMockLlm) FontWeight.Bold else FontWeight.Normal,
+            color = if (isMockLlm) Color(0xFFDC2626) else if (health.isHealthy) Color(0xFF059669) else Color(0xFFD97706)
         )
     }
 }
@@ -1021,7 +1029,7 @@ private fun ChatInputBar(
                         },
                         shape = CircleShape
                     )
-                    .testable("btn_send")
+                    .testableClickable("btn_send") { onSend() }
             ) {
                 Icon(
                     imageVector = Icons.Default.Send,
@@ -1127,7 +1135,7 @@ private fun ChatInputBarWithBubbles(
                         },
                         shape = CircleShape
                     )
-                    .testable("btn_send")
+                    .testableClickable("btn_send") { onSend() }
             ) {
                 Icon(
                     imageVector = Icons.Default.Send,

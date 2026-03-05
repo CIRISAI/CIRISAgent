@@ -328,6 +328,18 @@ class RemovePersistedResponse(BaseModel):
     message: str = Field(..., description="Status message")
 
 
+# Startup Status Models
+
+
+class StartupStatusResponse(BaseModel):
+    """Startup progress for desktop/client polling during boot."""
+
+    phase: str = Field(..., description="Current startup phase (STARTUP, FIRST_RUN, RESUME)")
+    services_online: int = Field(..., description="Number of services started")
+    services_total: int = Field(..., description="Total services expected")
+    service_names: List[str] = Field(default_factory=list, description="Names of started services in order")
+
+
 # Tool Models
 
 

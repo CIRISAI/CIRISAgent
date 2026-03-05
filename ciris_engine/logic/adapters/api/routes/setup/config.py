@@ -17,6 +17,112 @@ from .models import SetupCompleteRequest, SetupConfigResponse
 
 logger = logging.getLogger(__name__)
 
+
+# Mapping from explicit env var values to canonical provider names.
+_PROVIDER_ALIASES: dict[str, str] = {
+    "anthropic": "anthropic",
+    "claude": "anthropic",
+    "google": "google",
+    "gemini": "google",
+    "openai": "openai",
+    "openrouter": "openrouter",
+    "groq": "groq",
+    "together": "together",
+    "openai_compatible": "other",
+}
+
+# Substrings in OPENAI_API_BASE that identify a provider.
+# Order matters: first match wins.
+_BASE_URL_PATTERNS: list[tuple[str, str]] = [
+    ("openrouter.ai", "openrouter"),
+    ("groq.com", "groq"),
+    ("together.xyz", "together"),
+    ("together.ai", "together"),
+    ("mistral.ai", "mistral"),
+    ("deepseek.com", "deepseek"),
+    ("cohere", "cohere"),
+    ("localhost", "local"),
+    ("127.0.0.1", "local"),
+]
+
+# Env vars that indicate an API key is set, keyed by provider.
+_PROVIDER_KEY_VARS: dict[str, list[str]] = {
+    "anthropic": ["ANTHROPIC_API_KEY"],
+    "google": ["GOOGLE_API_KEY", "GEMINI_API_KEY"],
+    "openai": ["OPENAI_API_KEY"],
+    "mockllm": [],
+    "ciris_proxy": [],
+    "local": [],
+}
+
+_TRUTHY = {"true", "1", "yes", "on"}
+
+
+def _is_mock_llm(request: Request) -> bool:
+    """Check if mock LLM is active via runtime flag or env var."""
+    runtime = getattr(request.app.state, "runtime", None)
+    if runtime and "mock_llm" in getattr(runtime, "modules_to_load", []):
+        return True
+    return os.getenv("CIRIS_MOCK_LLM", "").lower() in _TRUTHY
+
+
+def _detect_from_explicit_env() -> str | None:
+    """Resolve an explicitly-set CIRIS_LLM_PROVIDER / LLM_PROVIDER value."""
+    raw = (os.getenv("CIRIS_LLM_PROVIDER") or os.getenv("LLM_PROVIDER") or "").lower()
+    if not raw:
+        return None
+    return _PROVIDER_ALIASES.get(raw, raw)  # pass through unknown values
+
+
+def _detect_from_api_keys() -> str | None:
+    """Auto-detect provider from well-known API key env vars."""
+    if os.getenv("ANTHROPIC_API_KEY"):
+        return "anthropic"
+    if os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"):
+        return "google"
+    return None
+
+
+def _detect_from_base_url() -> str | None:
+    """Identify provider from OPENAI_API_BASE substring patterns."""
+    base_url = os.getenv("OPENAI_API_BASE", "")
+    if not base_url:
+        return None
+    for pattern, provider in _BASE_URL_PATTERNS:
+        if pattern in base_url:
+            return provider
+    return "other"
+
+
+def _detect_llm_provider(request: Request) -> str:
+    """Detect the active LLM provider for display in the UI.
+
+    Priority: mock > explicit env > API key > base URL > CIRIS proxy > default.
+    """
+    if _is_mock_llm(request):
+        return "mockllm"
+
+    for detector in (_detect_from_explicit_env, _detect_from_api_keys, _detect_from_base_url):
+        result = detector()
+        if result is not None:
+            return result
+
+    if os.getenv("CIRIS_PROXY_URL") or os.getenv("CIRIS_PROXY_ENABLED", "").lower() in _TRUTHY:
+        return "ciris_proxy"
+
+    return "openai"
+
+
+def _detect_api_key_set(provider: str) -> bool:
+    """Check whether *any* relevant API key env var is set for the given provider.
+
+    Falls back to OPENAI_API_KEY for providers not in the lookup table
+    (most OpenAI-compatible services reuse that key).
+    """
+    key_vars = _PROVIDER_KEY_VARS.get(provider, ["OPENAI_API_KEY"])
+    return any(os.getenv(v) for v in key_vars)
+
+
 router = APIRouter()
 
 
@@ -55,12 +161,14 @@ async def get_current_config(request: Request) -> SuccessResponse[SetupConfigRes
     if not template_id:
         template_id = "default"
 
-    # Read current config from environment
+    # Detect LLM provider using same logic as LLM service
+    llm_provider = _detect_llm_provider(request)
+
     config = SetupConfigResponse(
-        llm_provider="openai" if os.getenv("OPENAI_API_BASE") is None else "other",
+        llm_provider=llm_provider,
         llm_base_url=os.getenv("OPENAI_API_BASE"),
         llm_model=os.getenv("OPENAI_MODEL"),
-        llm_api_key_set=bool(os.getenv("OPENAI_API_KEY")),
+        llm_api_key_set=_detect_api_key_set(llm_provider),
         backup_llm_base_url=os.getenv("CIRIS_OPENAI_API_BASE_2"),
         backup_llm_model=os.getenv("CIRIS_OPENAI_MODEL_NAME_2"),
         backup_llm_api_key_set=bool(os.getenv("CIRIS_OPENAI_API_KEY_2")),

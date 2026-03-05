@@ -2074,14 +2074,16 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
             }
         }
 
-    cached = infra_auth_service.get_cached_attestation()
+    # Use allow_stale=True so expired-but-recent data is returned while
+    # the periodic refresh loop re-populates the cache in the background.
+    cached = infra_auth_service.get_cached_attestation(allow_stale=True)
 
     if not cached:
         # Check if attestation is currently in progress on the infrastructure service
         has_method = hasattr(infra_auth_service, "is_attestation_in_progress")
         in_progress = has_method and infra_auth_service.is_attestation_in_progress()
         logger.info(
-            f"[attestation] Cache empty. has_method={has_method}, in_progress={in_progress}, instance_id={id(infra_auth_service)}"
+            f"[attestation] Cache empty (even stale). has_method={has_method}, in_progress={in_progress}, instance_id={id(infra_auth_service)}"
         )
 
         if in_progress:
@@ -2105,11 +2107,12 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
             try:
                 _attestation_triggered_from_endpoint = True
                 logger.info("[attestation] No cached attestation - triggering attestation now")
-                # Run attestation in background and return in_progress status
-                # This handles cases where startup attestation was skipped/failed
-                # Store task reference to prevent garbage collection
-                _background_attestation_task = asyncio.create_task(infra_auth_service.run_attestation(mode="full"))
-                _ = _background_attestation_task  # Explicitly reference to satisfy linters
+                # Run attestation in background — store task on the service to
+                # prevent garbage collection and let the periodic loop track it.
+                task = asyncio.create_task(infra_auth_service.run_attestation(mode="full"))
+                if hasattr(infra_auth_service, "_background_tasks"):
+                    infra_auth_service._background_tasks.add(task)
+                    task.add_done_callback(infra_auth_service._background_tasks.discard)
                 logger.info("[attestation] Background attestation triggered, returning in_progress")
                 return {
                     "data": {

@@ -74,6 +74,8 @@ actual class PythonRuntime : PythonRuntimeProtocol {
 
     private var pythonInitialized = false
     private var serverStarted = false
+    private var _outputLineCallback: ((String) -> Unit)? = null
+    private var _lastReportedServiceCount = 0
 
     // Server URL - must use localhost (not 127.0.0.1) for Same-Origin Policy
     actual override val serverUrl: String = "http://localhost:8080"
@@ -98,6 +100,8 @@ actual class PythonRuntime : PythonRuntimeProtocol {
     }
 
     actual override suspend fun startServer(): Result<String> = withContext(Dispatchers.IO) {
+        // Poll startup-status to drive UI lights while waiting
+        pollStartupStatus()
         serverStarted = true
         Result.success("http://localhost:8080")
     }
@@ -137,6 +141,55 @@ actual class PythonRuntime : PythonRuntimeProtocol {
 
     actual override fun isServerStarted(): Boolean {
         return serverStarted
+    }
+
+    override fun setOutputLineCallback(callback: ((String) -> Unit)?) {
+        _outputLineCallback = callback
+    }
+
+    /**
+     * Poll /v1/system/startup-status and emit synthetic console output lines
+     * for any newly started services since the last poll.
+     */
+    private fun pollStartupStatus() {
+        val callback = _outputLineCallback ?: return
+        try {
+            val url = URL("$serverUrl/v1/system/startup-status")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.apply {
+                requestMethod = "GET"
+                connectTimeout = 2000
+                readTimeout = 2000
+            }
+            if (connection.responseCode != 200) {
+                connection.disconnect()
+                return
+            }
+            val body = connection.inputStream.bufferedReader().readText()
+            connection.disconnect()
+
+            val onlineMatch = Regex(""""services_online"\s*:\s*(\d+)""").find(body)
+            val totalMatch = Regex(""""services_total"\s*:\s*(\d+)""").find(body)
+            val online = onlineMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
+            val total = totalMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
+
+            val namesMatch = Regex(""""service_names"\s*:\s*\[([^\]]*)\]""").find(body)
+            val serviceNames = namesMatch?.groupValues?.get(1)
+                ?.split(",")
+                ?.map { it.trim().trim('"') }
+                ?.filter { it.isNotEmpty() }
+                ?: emptyList()
+
+            if (online > _lastReportedServiceCount) {
+                for (i in (_lastReportedServiceCount + 1)..online) {
+                    val name = serviceNames.getOrElse(i - 1) { "Service$i" }
+                    callback("[SERVICE $i/$total] $name STARTED")
+                }
+                _lastReportedServiceCount = online
+            }
+        } catch (_: Exception) {
+            // Server not ready yet
+        }
     }
 
     /**

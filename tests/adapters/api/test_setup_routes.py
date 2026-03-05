@@ -451,6 +451,7 @@ class TestGetConfigEndpoint:
                 "OPENAI_API_KEY": "sk-test",
                 "OPENAI_MODEL": "gpt-4",
                 "CIRIS_API_PORT": "8080",
+                "CIRIS_MOCK_LLM": "",  # Override conftest global mock_llm=true
             },
         ):
             response = client.get("/v1/setup/config")

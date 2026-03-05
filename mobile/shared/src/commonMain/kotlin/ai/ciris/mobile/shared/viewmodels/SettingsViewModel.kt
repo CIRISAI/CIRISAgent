@@ -127,71 +127,81 @@ class SettingsViewModel(
     }
 
     /**
-     * Load LLM configuration by reading .env file directly.
-     * This determines whether we're in CIRIS Proxy or BYOK mode.
+     * Load LLM configuration from the API (same endpoint as InteractScreen badge).
+     * Falls back to .env file if the API call fails.
      *
-     * We read .env directly instead of using API because:
-     * 1. No authentication required
-     * 2. More reliable for mobile (doesn't depend on Python server state)
-     * 3. Faster (no network call)
+     * Uses apiClient.getLlmConfig() to ensure the badge and settings page
+     * always show the same provider, model, and proxy status.
      */
     private fun loadLlmConfig() {
         val method = "loadLlmConfig"
-        logInfo(method, "Loading LLM configuration from .env file")
+        logInfo(method, "Loading LLM configuration")
 
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
 
             try {
-                val envConfig = envFileUpdater.readLlmConfig()
+                // Primary: use the same API endpoint as the InteractScreen badge
+                val config = apiClient.getLlmConfig()
+                applyConfig(config, method, "API")
+            } catch (e: Exception) {
+                logWarn(method, "API config fetch failed: ${e.message}, falling back to .env")
 
-                if (envConfig != null) {
-                    // Convert EnvLlmConfig to LlmConfigData
-                    val config = LlmConfigData(
-                        provider = envConfig.provider,
-                        baseUrl = envConfig.baseUrl,
-                        model = envConfig.model ?: "default",
-                        apiKeySet = envConfig.apiKeySet,
-                        isCirisProxy = envConfig.isCirisProxy,
-                        backupBaseUrl = null,
-                        backupModel = null,
-                        backupApiKeySet = false
-                    )
-
-                    _llmConfig.value = config
-                    _isCirisProxy.value = config.isCirisProxy
-                    hasLoadedConfig = true
-
-                    logInfo(method, "LLM config loaded from .env: provider=${config.provider}, " +
-                            "isCirisProxy=${config.isCirisProxy}, model=${config.model}")
-
-                    if (!config.isCirisProxy) {
-                        // BYOK mode - populate form fields
-                        _llmProvider.value = config.provider
-                        _llmModel.value = config.model
-                        _llmBaseUrl.value = config.baseUrl ?: ""
-                        _availableModels.value = modelsByProvider[config.provider] ?: listOf(config.model)
-
-                        // Load API key from secure storage (we don't get it from .env for security)
-                        loadApiKeyFromStorage(config.provider)
+                // Fallback: read .env file directly
+                try {
+                    val envConfig = envFileUpdater.readLlmConfig()
+                    if (envConfig != null) {
+                        val config = LlmConfigData(
+                            provider = envConfig.provider,
+                            baseUrl = envConfig.baseUrl,
+                            model = envConfig.model ?: "default",
+                            apiKeySet = envConfig.apiKeySet,
+                            isCirisProxy = envConfig.isCirisProxy,
+                            backupBaseUrl = null,
+                            backupModel = null,
+                            backupApiKeySet = false
+                        )
+                        applyConfig(config, method, ".env")
+                    } else {
+                        logWarn(method, ".env file not found, using secure storage fallback")
+                        loadFallbackConfig()
                     }
-
-                    logInfo(method, "Configuration loaded successfully from .env")
-                } else {
-                    logWarn(method, ".env file not found or unreadable, using fallback")
+                } catch (envErr: Exception) {
+                    logError(method, "All config sources failed: ${envErr.message}")
+                    _errorMessage.value = "Failed to load configuration: ${e.message}"
                     loadFallbackConfig()
                 }
-            } catch (e: Exception) {
-                logError(method, "Failed to load LLM config: ${e::class.simpleName}: ${e.message}")
-                _errorMessage.value = "Failed to load configuration: ${e.message}"
-
-                // Fall back to checking secure storage for any previously saved BYOK config
-                loadFallbackConfig()
             } finally {
                 _isLoading.value = false
             }
         }
+    }
+
+    /**
+     * Apply a loaded LlmConfigData to the view model state.
+     * Shared by both API and .env loading paths.
+     */
+    private suspend fun applyConfig(config: LlmConfigData, method: String, source: String) {
+        _llmConfig.value = config
+        _isCirisProxy.value = config.isCirisProxy
+        hasLoadedConfig = true
+
+        logInfo(method, "LLM config loaded from $source: provider=${config.provider}, " +
+                "isCirisProxy=${config.isCirisProxy}, model=${config.model}")
+
+        if (!config.isCirisProxy) {
+            // BYOK mode - populate form fields
+            _llmProvider.value = config.provider
+            _llmModel.value = config.model
+            _llmBaseUrl.value = config.baseUrl ?: ""
+            _availableModels.value = modelsByProvider[config.provider] ?: listOf(config.model)
+
+            // Load API key from secure storage (not from API for security)
+            loadApiKeyFromStorage(config.provider)
+        }
+
+        logInfo(method, "Configuration loaded successfully from $source")
     }
 
     /**

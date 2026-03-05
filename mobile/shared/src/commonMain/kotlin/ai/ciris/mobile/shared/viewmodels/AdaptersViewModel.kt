@@ -476,9 +476,20 @@ class AdaptersViewModel(
             // Fall back to updating step index only if explicitly provided
             // Don't auto-increment - null nextStepIndex means stay on current step (e.g., awaiting callback)
             if (result.nextStepIndex != null) {
-                _wizardSession.value = session.copy(
-                    currentStepIndex = result.nextStepIndex
-                )
+                // Check if we've advanced past all steps (wizard complete)
+                if (result.nextStepIndex >= (session.totalSteps)) {
+                    logInfo(method, "Wizard completed (fallback path): nextStepIndex ${result.nextStepIndex} >= totalSteps ${session.totalSteps}")
+                    closeWizard()
+                    try {
+                        fetchAdaptersInternal()
+                    } catch (refreshErr: Exception) {
+                        logError(method, "Failed to refresh adapters after wizard completion: ${refreshErr.message}")
+                    }
+                } else {
+                    _wizardSession.value = session.copy(
+                        currentStepIndex = result.nextStepIndex
+                    )
+                }
             }
         }
     }

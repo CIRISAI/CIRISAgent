@@ -52,8 +52,15 @@ actual class EnvFileUpdater {
             }
         }
 
-        // Read provider directly or detect from variables
-        val explicitProvider = envVars["LLM_PROVIDER"]
+        // Read provider from .env or runtime environment variables
+        val explicitProvider = envVars["CIRIS_LLM_PROVIDER"]
+            ?: envVars["LLM_PROVIDER"]
+            ?: System.getenv("CIRIS_LLM_PROVIDER")
+            ?: System.getenv("LLM_PROVIDER")
+
+        // Check for mock LLM (env var or .env)
+        val isMockLlm = envVars["CIRIS_MOCK_LLM"]?.lowercase() in listOf("true", "1", "yes", "on")
+            || System.getenv("CIRIS_MOCK_LLM")?.lowercase() in listOf("true", "1", "yes", "on")
 
         // Check for API keys (prefer provider-specific, fall back to OPENAI_API_KEY for compatibility)
         val anthropicKey = envVars["ANTHROPIC_API_KEY"]
@@ -68,8 +75,10 @@ actual class EnvFileUpdater {
         // Model (OPENAI_MODEL is used for all providers in CIRIS)
         val model = envVars["OPENAI_MODEL"]
 
-        // Determine provider: explicit > detected from key > detected from URL
-        val provider = explicitProvider ?: when {
+        // Determine provider: mock > explicit > detected from key > detected from URL
+        val provider = when {
+            isMockLlm -> "mockllm"
+            explicitProvider != null -> explicitProvider
             !anthropicKey.isNullOrEmpty() -> "anthropic"
             baseUrl?.contains("anthropic") == true -> "anthropic"
             baseUrl?.contains("openai") == true -> "openai"

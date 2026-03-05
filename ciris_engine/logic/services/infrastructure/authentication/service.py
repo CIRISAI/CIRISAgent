@@ -25,6 +25,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from ciris_engine.logic.persistence.stores import authentication_store
 from ciris_engine.logic.services.base_infrastructure_service import BaseInfrastructureService
 from ciris_engine.logic.services.lifecycle.time import TimeService
+from ciris_engine.logic.utils.shutdown_manager import request_global_shutdown
 from ciris_engine.logic.utils.mobile_exclusions import (
     compute_files_missing_list,
     compute_files_unexpected_list,
@@ -113,6 +114,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         self._attestation_lock = asyncio.Lock()
         self._attestation_cache_ttl = 3600  # 1 hour cache TTL
         self._attestation_stale_ttl = 7200  # 2 hour max stale data (fallback after TTL)
+        self._attestation_refresh_interval = 2700  # 45 min refresh (before 1h TTL)
+        self._attestation_refresh_task: Optional[asyncio.Task[None]] = None
+        self._baseline_attestation: Optional[AttestationResult] = None  # First successful result for degradation detection
 
         # CIRISVerify singleton - all code should use get_verifier() instead of creating instances
         self._verifier: Any = None
@@ -1632,14 +1636,34 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         self._background_tasks.add(attestation_task)
         attestation_task.add_done_callback(self._background_tasks.discard)
 
+        # Start periodic attestation refresh loop
+        self._attestation_refresh_task = asyncio.create_task(self._attestation_refresh_loop())
+        self._background_tasks.add(self._attestation_refresh_task)
+        self._attestation_refresh_task.add_done_callback(self._background_tasks.discard)
+
     async def stop(self) -> None:
         """Stop the service."""
-        await super().stop()
-        self._started = False
-        # Clear caches
-        self._token_cache.clear()
-        self._channel_token_cache.clear()
-        logger.info("AuthenticationService stopped")
+        try:
+            # Cancel the periodic refresh task and await its completion.
+            if self._attestation_refresh_task and not self._attestation_refresh_task.done():
+                self._attestation_refresh_task.cancel()
+                try:
+                    await self._attestation_refresh_task
+                except asyncio.CancelledError:
+                    pass  # Expected from the child task we just cancelled
+            await super().stop()
+            self._started = False
+            # Clear caches
+            self._token_cache.clear()
+            self._channel_token_cache.clear()
+            logger.info("AuthenticationService stopped")
+        except asyncio.CancelledError:
+            # Ensure cleanup completes even if stop() itself is cancelled
+            self._started = False
+            self._token_cache.clear()
+            self._channel_token_cache.clear()
+            logger.info("AuthenticationService stopped (cancelled)")
+            raise
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect authentication-specific metrics."""
@@ -1986,6 +2010,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         logger.info(f"[attestation] Starting background attestation check on instance={hex(id(self))}...")
         try:
             result = await self.run_attestation(mode="full")
+            # Store as baseline for degradation detection
+            self._baseline_attestation = result
             logger.info(
                 f"[attestation] Startup attestation completed: "
                 f"level={result.max_level}/5, "
@@ -1995,6 +2021,100 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             )
         except Exception as e:
             logger.error(f"[attestation] Startup attestation failed on instance={hex(id(self))}: {e}")
+
+    async def _attestation_refresh_loop(self) -> None:
+        """Periodically refresh attestation before cache TTL expires.
+
+        Runs every _attestation_refresh_interval seconds (default 45 min).
+        Compares L1 (binary), L2 (environment/key), and L4 (file integrity)
+        against the startup baseline. If any degrade (ignoring network-only
+        failures), triggers an emergency shutdown.
+        """
+        # Wait for the initial startup attestation to complete
+        while self._attestation_in_progress:
+            await asyncio.sleep(1)
+
+        logger.info(
+            f"[attestation-refresh] Periodic refresh loop started "
+            f"(interval={self._attestation_refresh_interval}s)"
+        )
+
+        while self._started:
+            try:
+                await asyncio.sleep(self._attestation_refresh_interval)
+                if not self._started:
+                    break
+
+                logger.info("[attestation-refresh] Running scheduled attestation refresh")
+                result = await self.run_attestation(mode="full", force_refresh=True)
+
+                logger.info(
+                    f"[attestation-refresh] Refresh completed: level={result.max_level}/5, "
+                    f"binary={'OK' if result.binary_ok else 'FAIL'}, "
+                    f"file_integrity={'OK' if result.file_integrity_ok else 'FAIL'}"
+                )
+
+                # Check for integrity degradation against baseline
+                self._check_integrity_degradation(result)
+
+            except asyncio.CancelledError:
+                logger.info("[attestation-refresh] Refresh loop cancelled (shutdown)")
+                raise
+            except Exception as e:
+                logger.error(f"[attestation-refresh] Refresh failed: {e}")
+                # Don't crash the loop on transient errors; retry next interval
+                continue
+
+    def _check_integrity_degradation(self, current: AttestationResult) -> None:
+        """Compare current attestation against baseline for L1/L2/L4 degradation.
+
+        Network-only failures (DNS, HTTPS connectivity) are ignored since they
+        don't indicate local integrity compromise. Only local integrity checks
+        matter: binary (L1), environment/key (L2), and file integrity (L4).
+
+        If degradation is detected, initiates emergency shutdown.
+        """
+        baseline = self._baseline_attestation
+        if baseline is None:
+            # No baseline yet — store current as baseline
+            self._baseline_attestation = current
+            logger.info("[attestation-refresh] No baseline yet, storing current as baseline")
+            return
+
+        degradations: list[str] = []
+
+        # L1: Binary integrity — was OK at startup, now failing
+        if baseline.binary_ok and not current.binary_ok:
+            degradations.append(
+                f"L1 binary_ok degraded: {baseline.binary_ok} -> {current.binary_ok}"
+            )
+
+        # L2: Environment/key integrity
+        if baseline.env_ok and not current.env_ok:
+            degradations.append(
+                f"L2 env_ok degraded: {baseline.env_ok} -> {current.env_ok}"
+            )
+
+        # L4: File integrity
+        if baseline.file_integrity_ok and not current.file_integrity_ok:
+            degradations.append(
+                f"L4 file_integrity_ok degraded: {baseline.file_integrity_ok} -> {current.file_integrity_ok}"
+            )
+
+        if not degradations:
+            logger.info("[attestation-refresh] Integrity check passed — no degradation detected")
+            return
+
+        # Integrity degradation detected — emergency shutdown
+        detail = "; ".join(degradations)
+        shutdown_msg = (
+            "CIRIS ENGINE OR VERIFY INTEGRITY DEGRADATION DETECTED - SHUTTING DOWN"
+        )
+        logger.critical(
+            f"[attestation-refresh] {shutdown_msg} | Details: {detail}"
+        )
+
+        request_global_shutdown(f"{shutdown_msg} | {detail}")
 
     async def verify_play_integrity_token(
         self,

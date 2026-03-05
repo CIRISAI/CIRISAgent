@@ -1643,19 +1643,27 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     async def stop(self) -> None:
         """Stop the service."""
-        # Cancel the periodic refresh task
-        if self._attestation_refresh_task and not self._attestation_refresh_task.done():
-            self._attestation_refresh_task.cancel()
-            try:
-                await self._attestation_refresh_task
-            except asyncio.CancelledError:
-                pass
-        await super().stop()
-        self._started = False
-        # Clear caches
-        self._token_cache.clear()
-        self._channel_token_cache.clear()
-        logger.info("AuthenticationService stopped")
+        try:
+            # Cancel the periodic refresh task and await its completion.
+            if self._attestation_refresh_task and not self._attestation_refresh_task.done():
+                self._attestation_refresh_task.cancel()
+                try:
+                    await self._attestation_refresh_task
+                except asyncio.CancelledError:
+                    pass  # Expected from the child task we just cancelled
+            await super().stop()
+            self._started = False
+            # Clear caches
+            self._token_cache.clear()
+            self._channel_token_cache.clear()
+            logger.info("AuthenticationService stopped")
+        except asyncio.CancelledError:
+            # Ensure cleanup completes even if stop() itself is cancelled
+            self._started = False
+            self._token_cache.clear()
+            self._channel_token_cache.clear()
+            logger.info("AuthenticationService stopped (cancelled)")
+            raise
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect authentication-specific metrics."""

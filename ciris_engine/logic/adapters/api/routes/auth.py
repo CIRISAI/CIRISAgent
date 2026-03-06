@@ -2021,20 +2021,15 @@ async def delete_api_key(
 
 
 @router.get("/auth/attestation")
-async def get_attestation(request: Request) -> Dict[str, Any]:
-    """Get cached CIRISVerify attestation from AuthenticationService.
+async def get_attestation(request: Request, refresh: bool = False) -> Dict[str, Any]:
+    """Get CIRISVerify attestation from AuthenticationService.
 
-    Returns the cached attestation result from startup attestation.
-    This endpoint does NOT trigger a new attestation - it only returns
-    the cached result from when the agent started.
-
-    This is the preferred endpoint for Trust & Security display as it:
-    1. Returns instantly (no network calls)
-    2. Uses the authoritative cached result from auth service
-    3. Ensures consistency with other auth-dependent features
+    By default returns the cached attestation result from startup.
+    Pass ?refresh=true to invalidate the cache and trigger a fresh
+    attestation run (used by the Trust page refresh button).
 
     Returns:
-        Cached attestation result in the same format as /v1/setup/verify-status
+        Attestation result in the same format as /v1/setup/verify-status
     """
     # Get APIAuthService from app state, then access the underlying AuthenticationService
     api_auth_service = getattr(request.app.state, "auth_service", None)
@@ -2071,6 +2066,29 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
                 "loaded": False,
                 "error": "Attestation caching not supported",
                 "attestation_status": "not_attempted",
+            }
+        }
+
+    # If refresh requested, invalidate cache and trigger a new attestation
+    if refresh and hasattr(infra_auth_service, "run_attestation"):
+        import asyncio
+
+        logger.info("[attestation] Refresh requested — invalidating cache and re-running attestation")
+        infra_auth_service.invalidate_attestation_cache()
+        try:
+            task = asyncio.create_task(infra_auth_service.run_attestation(mode="full", force_refresh=True))
+            if hasattr(infra_auth_service, "_background_tasks"):
+                infra_auth_service._background_tasks.add(task)
+                task.add_done_callback(infra_auth_service._background_tasks.discard)
+        except Exception as e:
+            logger.warning(f"[attestation] Failed to trigger refresh attestation: {e}")
+        return {
+            "data": {
+                "loaded": True,
+                "attestation_status": "in_progress",
+                "level_pending": True,
+                "max_level": 0,
+                "error": None,
             }
         }
 

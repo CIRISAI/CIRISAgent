@@ -910,7 +910,8 @@ class CIRISApiClient(
      */
     suspend fun getVerifyStatus(
         playIntegrityToken: String? = null,
-        playIntegrityNonce: String? = null
+        playIntegrityNonce: String? = null,
+        refresh: Boolean = false
     ): VerifyStatusResponse {
         val method = "getVerifyStatus"
         logDebug(method, "Fetching CIRISVerify status (hasPlayIntegrity=${playIntegrityToken != null})")
@@ -933,6 +934,9 @@ class CIRISApiClient(
             val url = if (playIntegrityToken != null && playIntegrityNonce != null) {
                 // Full attestation with Play Integrity - use setup endpoint (first-run only)
                 "$baseUrl/v1/setup/verify-status?mode=full&play_integrity_token=$playIntegrityToken&play_integrity_nonce=$playIntegrityNonce"
+            } else if (refresh) {
+                // Force re-attestation via FFI
+                "$baseUrl/v1/auth/attestation?refresh=true"
             } else {
                 // Cached attestation from auth service - instant response
                 "$baseUrl/v1/auth/attestation"

@@ -193,9 +193,13 @@ struct ContentView: View {
             if PythonBridge.checkHealth() {
                 NSLog("[ContentView] Server is healthy after \(attempts) seconds")
 
-                // Trigger App Attest at startup (before login) so the result
-                // gets cached in CIRISVerify's FFI handle for run_attestation L2
-                await triggerAppAttestAtStartup()
+                // App Attest is handled by CIRISVerify's Rust FFI during
+                // run_attestation_sync. The Swift-side triggerAppAttestAtStartup
+                // was racing with it (both fetch a nonce from the registry, one
+                // consumes it before the other can verify → 409 nonce_expired).
+                // Disabled to let the Rust side own the full attestation flow.
+                // On-demand attestation via onDeviceAttestationRequested is still
+                // available for manual Trust page refresh.
 
                 await MainActor.run {
                     pythonReady = true

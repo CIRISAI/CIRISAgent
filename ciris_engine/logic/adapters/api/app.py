@@ -222,6 +222,23 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         root_path=root_path or "",
     )
 
+    # Strip trailing slashes in-place so clients that append "/" don't get 404s.
+    # FastAPI's redirect_slashes sends a 307 redirect, but some HTTP clients
+    # (e.g. Ktor/Darwin on iOS) drop the Authorization header on redirect.
+    @app.middleware("http")
+    async def _strip_trailing_slash(request: Request, call_next: Callable[..., Any]) -> Response:
+        if request.url.path != "/" and request.url.path.endswith("/"):
+            request.scope["path"] = request.url.path.rstrip("/")
+        response = await call_next(request)
+        if response.status_code == 404:
+            import logging
+            logging.getLogger("ciris.api").warning(
+                "[404_DEBUG] path=%s method=%s auth=%s",
+                request.url.path, request.method,
+                "present" if request.headers.get("authorization") else "missing",
+            )
+        return response
+
     # Configure middleware
     _configure_cors(app, adapter_config)
     _configure_rate_limiting(app, adapter_config)

@@ -232,18 +232,17 @@ class HAConfigurableAdapter:
         """
         logger.info(f"Running HA discovery: {discovery_type}")
 
-        if discovery_type in ("mdns", "zeroconf"):
-            return await self._discover_mdns()
+        if discovery_type == "manual":
+            return []
         elif discovery_type == "env":
             return self._discover_from_env()
-        elif discovery_type == "manual":
-            return []
 
-        # Default: try mDNS first, then hostname probe, then env
+        # All discovery paths (explicit "mdns"/"zeroconf" or default) try the
+        # full chain: mDNS → hostname probe → env.  This ensures that when
+        # zeroconf is unavailable (e.g. iOS sandbox) we still find HA via
+        # direct hostname resolution of homeassistant.local.
         instances = await self._discover_mdns()
         if not instances:
-            # mDNS service discovery failed - try probing common hostnames
-            # This handles cases where HA isn't advertising via mDNS but hostname resolves
             instances = await self._discover_via_hostname_probe()
         if not instances:
             instances = self._discover_from_env()

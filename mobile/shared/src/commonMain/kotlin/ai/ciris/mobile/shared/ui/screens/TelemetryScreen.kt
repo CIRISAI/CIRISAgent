@@ -47,7 +47,7 @@ fun TelemetryScreen(
                 title = { Text("System Telemetry") },
                 navigationIcon = {
                     IconButton(
-                        onClick = {},
+                        onClick = onNavigateBack,
                         modifier = Modifier.testableClickable("btn_telemetry_back") { onNavigateBack() }
                     ) {
                         Icon(
@@ -58,7 +58,7 @@ fun TelemetryScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = {},
+                        onClick = onRefresh,
                         enabled = !isLoading,
                         modifier = Modifier.testableClickable("btn_telemetry_refresh") { onRefresh() }
                     ) {

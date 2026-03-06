@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var reconnectAttempts = 0
     @StateObject private var storeKitManager = StoreKitManager.shared
     @Environment(\.scenePhase) var scenePhase
+    @State private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
 
     var body: some View {
         ZStack {
@@ -53,8 +54,14 @@ struct ContentView: View {
             }
         }
         .onChange(of: scenePhase) { newPhase in
+            if newPhase == .background && pythonReady {
+                // Keep the server alive for up to 60s so OAuth callbacks can arrive
+                NSLog("[ContentView] App entering background — requesting background time for server")
+                beginBackgroundKeepAlive()
+            }
             if newPhase == .active && pythonReady {
-                // App came to foreground - check if server is still alive
+                // App came to foreground - end background task and check server
+                endBackgroundKeepAlive()
                 NSLog("[ContentView] App became active, checking server health...")
                 Task {
                     await checkAndRestartServerIfNeeded()
@@ -126,6 +133,26 @@ struct ContentView: View {
                 NSLog("[ContentView] UI refreshed")
             }
         }
+    }
+
+    /// Request background execution time to keep the Python server alive (e.g., for OAuth callbacks).
+    /// iOS grants up to ~30s (sometimes more). This prevents the server from being suspended
+    /// when the user switches to Safari for OAuth.
+    private func beginBackgroundKeepAlive() {
+        guard backgroundTaskID == .invalid else { return }
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "CIRISServerKeepAlive") {
+            // Expiration handler — iOS is about to suspend us
+            NSLog("[ContentView] Background time expired, ending keep-alive task")
+            self.endBackgroundKeepAlive()
+        }
+        NSLog("[ContentView] Background keep-alive started (taskID=\(backgroundTaskID.rawValue))")
+    }
+
+    private func endBackgroundKeepAlive() {
+        guard backgroundTaskID != .invalid else { return }
+        NSLog("[ContentView] Ending background keep-alive task")
+        UIApplication.shared.endBackgroundTask(backgroundTaskID)
+        backgroundTaskID = .invalid
     }
 
     private func initializePython() async {

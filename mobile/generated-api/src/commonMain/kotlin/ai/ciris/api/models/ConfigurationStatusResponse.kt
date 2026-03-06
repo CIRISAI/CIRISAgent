@@ -1,6 +1,7 @@
 package ai.ciris.api.models
 
 import kotlinx.serialization.*
+import kotlinx.serialization.json.JsonElement
 
 /**
  * Response for configuration session status.
@@ -13,5 +14,6 @@ data class ConfigurationStatusResponse(
     val status: String? = null,
     @SerialName("current_step_index") val currentStepIndex: Int? = null,
     @SerialName("total_steps") val totalSteps: Int? = null,
-    @SerialName("current_step") val currentStep: ConfigurationStep? = null
+    @SerialName("current_step") val currentStep: ConfigurationStep? = null,
+    @SerialName("collected_config") val collectedConfig: Map<String, JsonElement>? = null
 )

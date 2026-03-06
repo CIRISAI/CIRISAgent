@@ -37,7 +37,8 @@ data class ConfigSessionData(
     val status: String,
     val currentStepIndex: Int,
     val totalSteps: Int,
-    val currentStep: ConfigStepData?
+    val currentStep: ConfigStepData?,
+    val collectedConfig: Map<String, String> = emptyMap()
 )
 
 /**
@@ -75,6 +76,16 @@ data class DiscoveredItemData(
 )
 
 /**
+ * An option returned by a select step (e.g., feature toggles).
+ */
+data class SelectOptionData(
+    val id: String,
+    val label: String,
+    val description: String?,
+    val defaultEnabled: Boolean = false
+)
+
+/**
  * Result of executing a configuration step.
  */
 data class ConfigStepResultData(
@@ -83,7 +94,10 @@ data class ConfigStepResultData(
     val nextStepIndex: Int?,
     val isComplete: Boolean,
     val nextStep: ConfigStepData?,
-    val discoveredItems: List<DiscoveredItemData> = emptyList()
+    val discoveredItems: List<DiscoveredItemData> = emptyList(),
+    val oauthUrl: String? = null,
+    val awaitingCallback: Boolean = false,
+    val selectOptions: List<SelectOptionData> = emptyList()
 )
 
 /**

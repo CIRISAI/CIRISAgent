@@ -1892,6 +1892,10 @@ async def native_apple_token_exchange(
         logger.info(f"[AppleNativeAuth] Generating API key for user {oauth_user.user_id}")
         api_key = _generate_api_key_and_store(auth_service, oauth_user, "apple")
 
+        # Update billing provider with the Apple ID token for credit checks
+        # The billing backend accepts Apple tokens (same as Google flow)
+        _update_billing_provider_token(native_request.id_token)
+
         # Trigger billing credit check to create billing user
         logger.info(f"[AppleNativeAuth] Triggering billing credit check for user {oauth_user.user_id}")
         await _trigger_billing_credit_check_if_enabled(

@@ -1142,6 +1142,10 @@ fun CIRISApp(
                 )
 
                 // Adapter wizard dialog - show when dialog is open OR when there's an error to display
+                val currentOauthUrl by adaptersViewModel.oauthUrl.collectAsState()
+                val awaitingOAuthCallback by adaptersViewModel.awaitingOAuthCallback.collectAsState()
+                val selectOptions by adaptersViewModel.selectOptions.collectAsState()
+
                 if (showWizardDialog || wizardError != null) {
                     AdapterWizardDialog(
                         loadableAdapters = loadableAdapters,
@@ -1150,6 +1154,9 @@ fun CIRISApp(
                         error = wizardError,
                         discoveredItems = discoveredItems,
                         discoveryExecuted = discoveryExecuted,
+                        oauthUrl = currentOauthUrl,
+                        awaitingOAuthCallback = awaitingOAuthCallback,
+                        selectOptions = selectOptions,
                         onSelectType = { adapterType ->
                             PlatformLogger.i("CIRISApp", "[AdapterWizard] Selected type: $adapterType")
                             adaptersViewModel.startWizard(adapterType)
@@ -1173,6 +1180,13 @@ fun CIRISApp(
                         onRetryDiscovery = {
                             PlatformLogger.i("CIRISApp", "[AdapterWizard] Retrying discovery")
                             adaptersViewModel.executeDiscoveryStep()
+                        },
+                        onInitiateOAuth = {
+                            PlatformLogger.i("CIRISApp", "[AdapterWizard] Initiating OAuth")
+                            adaptersViewModel.initiateOAuthStep()
+                        },
+                        onCheckOAuthStatus = {
+                            adaptersViewModel.checkOAuthOnResume()
                         },
                         onBack = {
                             PlatformLogger.i("CIRISApp", "[AdapterWizard] Back pressed")

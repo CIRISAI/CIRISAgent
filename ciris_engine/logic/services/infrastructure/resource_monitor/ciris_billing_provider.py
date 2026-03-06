@@ -365,16 +365,19 @@ class CIRISBillingProvider(CreditGateProtocol):
         has_credit = response_data.get("has_credit", False)
         free_remaining = response_data.get("free_uses_remaining", 0)
         credits_remaining = response_data.get("credits_remaining", 0)
+        daily_free_remaining = response_data.get("daily_free_uses_remaining", 0)
 
         if has_credit:
             logger.info(
-                "[CREDIT_CHECK] ✓ HAS_CREDIT for %s: free=%s, paid=%s", cache_key, free_remaining, credits_remaining
+                "[CREDIT_CHECK] ✓ HAS_CREDIT for %s: free=%s, daily_free=%s, paid=%s",
+                cache_key, free_remaining, daily_free_remaining, credits_remaining,
             )
         else:
             logger.warning(
-                "[CREDIT_CHECK] ✗ NO_CREDITS for %s: free=%s, paid=%s (exhausted)",
+                "[CREDIT_CHECK] ✗ NO_CREDITS for %s: free=%s, daily_free=%s, paid=%s (exhausted)",
                 cache_key,
                 free_remaining,
+                daily_free_remaining,
                 credits_remaining,
             )
 

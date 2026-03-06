@@ -609,6 +609,7 @@ class IDeviceHelper(DeviceHelper):
         log_files = [
             "Documents/ciris/logs/kmp_runtime.log",
             "Documents/ciris/logs/kmp_errors.log",
+            "Documents/ciris/logs/kmp_app.log",
         ]
         for source in log_files:
             filename = source.rsplit("/", 1)[-1]

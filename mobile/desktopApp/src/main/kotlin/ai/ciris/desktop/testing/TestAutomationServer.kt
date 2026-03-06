@@ -254,6 +254,49 @@ class TestAutomationServer(
                     )
                 }
 
+                // Inject a file attachment (bypasses native file picker for test automation)
+                post("/inject-file") {
+                    val request = call.receive<InjectFileRequest>()
+
+                    // Validate size
+                    if (request.sizeBytes > 10L * 1024 * 1024) {
+                        call.respond(
+                            HttpStatusCode.BadRequest,
+                            ActionResponse(success = false, error = "File too large: ${request.sizeBytes} bytes (max 10MB)")
+                        )
+                        return@post
+                    }
+
+                    // Inject via TestAutomation flow (ViewModel will pick it up)
+                    TestAutomation.injectFile(
+                        name = request.filename,
+                        mediaType = request.mediaType,
+                        dataBase64 = request.dataBase64,
+                        sizeBytes = request.sizeBytes
+                    )
+
+                    // Give UI time to process
+                    delay(200)
+
+                    call.respond(ActionResponse(
+                        success = true,
+                        action = "inject-file",
+                        text = "${request.filename} (${request.mediaType}, ${request.sizeBytes} bytes)"
+                    ))
+                }
+
+                // Clear all injected file attachments
+                post("/clear-attachments") {
+                    // Trigger clear by injecting a sentinel (ViewModel checks for this)
+                    // Actually, we just clear the injection request
+                    TestAutomation.clearFileInjectionRequest()
+
+                    call.respond(ActionResponse(
+                        success = true,
+                        action = "clear-attachments"
+                    ))
+                }
+
                 // Get element info
                 get("/element/{testTag}") {
                     val testTag = call.parameters["testTag"] ?: ""
@@ -356,6 +399,14 @@ data class NavigateRequest(
 data class WaitRequest(
     val testTag: String,
     val timeoutMs: Int? = 5000
+)
+
+@Serializable
+data class InjectFileRequest(
+    val filename: String,
+    val mediaType: String,
+    val dataBase64: String,
+    val sizeBytes: Long
 )
 
 @Serializable

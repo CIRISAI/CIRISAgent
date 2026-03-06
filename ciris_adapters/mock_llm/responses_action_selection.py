@@ -1,5 +1,28 @@
+import logging
 import re
 from typing import Any, Dict, List, Optional, Union
+
+_logger = logging.getLogger(__name__)
+
+
+def _extract_text_content(content: Any) -> str:
+    """Extract text from message content, handling multimodal list format.
+
+    When images are attached, LLM message content is a list of content blocks
+    (e.g. [{"type": "text", "text": "..."}, {"type": "image_url", ...}]).
+    This helper extracts the text portions into a single string.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        text_parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text_parts.append(block.get("text", ""))
+            elif hasattr(block, "type") and getattr(block, "type", None) == "text":
+                text_parts.append(getattr(block, "text", ""))
+        return " ".join(text_parts)
+    return str(content) if content else ""
 
 from ciris_engine.logic.dma.tsaspdma import TSASPDMALLMResult
 from ciris_engine.schemas.actions import (
@@ -99,7 +122,7 @@ def action_selection(
         if not tsaspdma_tool_name:
             for msg in messages:
                 if isinstance(msg, dict) and msg.get("role") == "user":
-                    content = msg.get("content", "")
+                    content = _extract_text_content(msg.get("content", ""))
                     for pattern in [
                         r"\*\*Tool:\*\*\s*(\S+)",
                         r"Tool:\s*(\S+)",
@@ -145,7 +168,7 @@ def action_selection(
             tool_params: Dict[str, Any] = {}
             for msg in messages:
                 if isinstance(msg, dict) and msg.get("role") == "user":
-                    content = msg.get("content", "")
+                    content = _extract_text_content(msg.get("content", ""))
                     if "Tool Parameters:" in content or "parameters:" in content:
                         # (re is imported at top of file)
 
@@ -457,7 +480,7 @@ def action_selection(
                         context_display += "\n**Original Messages:**\n"
                         for i, msg in enumerate(messages or []):
                             role = msg.get("role", "unknown")
-                            content = msg.get("content", "")
+                            content = _extract_text_content(msg.get("content", ""))
                             context_display += f"\n[{i}] {role}:\n{content}\n"
 
                         params = SpeakParams(content=context_display)
@@ -964,7 +987,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
             if not thought_content:
                 for msg in messages or []:
                     if isinstance(msg, dict) and msg.get("role") == "user":
-                        user_content = msg.get("content", "")
+                        user_content = _extract_text_content(msg.get("content", ""))
                         # Try "Original Thought:" pattern
                         if "Original Thought:" in user_content:
                             thought_match = re.search(r'Original Thought:\s*"(.*?)"(?:\n|$)', user_content, re.DOTALL)
@@ -1109,7 +1132,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
             # Look for the user message in the messages list
             for msg in messages or []:
                 if isinstance(msg, dict) and msg.get("role") == "user":
-                    user_content = msg.get("content", "")
+                    user_content = _extract_text_content(msg.get("content", ""))
 
                     # Debug logging
                     logger.debug(f"[MOCK_LLM] Processing user message: {user_content[:200]}...")
@@ -1325,7 +1348,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                 # This handles cases where commands come through API in conversation history
                 for msg in messages or []:
                     if isinstance(msg, dict) and msg.get("role") == "user":
-                        user_content = msg.get("content", "")
+                        user_content = _extract_text_content(msg.get("content", ""))
 
                         # Look for conversation history pattern
                         if "=== CONVERSATION HISTORY" in user_content:
@@ -1602,7 +1625,7 @@ def tsaspdma_llm_result(
     for msg in messages:
         if not isinstance(msg, dict):
             continue
-        content = msg.get("content", "")
+        content = _extract_text_content(msg.get("content", ""))
 
         # Extract tool name from patterns like "**Tool:** curl" or "Tool: curl"
         for pattern in [

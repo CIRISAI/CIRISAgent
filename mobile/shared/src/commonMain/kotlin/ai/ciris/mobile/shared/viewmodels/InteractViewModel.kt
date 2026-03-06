@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.viewmodels
 
+import ai.ciris.api.models.DocumentPayload
+import ai.ciris.api.models.ImagePayload
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.ReasoningEvent
 import ai.ciris.mobile.shared.api.ReasoningStreamClient
@@ -7,6 +9,8 @@ import ai.ciris.mobile.shared.auth.TokenManager
 import ai.ciris.mobile.shared.models.ChatMessage
 import ai.ciris.mobile.shared.models.MessageType
 import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.platform.PickedFile
+import ai.ciris.mobile.shared.platform.TestAutomation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -192,6 +196,10 @@ class InteractViewModel(
     private val _trustStatus = MutableStateFlow(TrustStatus())
     val trustStatus: StateFlow<TrustStatus> = _trustStatus.asStateFlow()
 
+    // File attachments for current message
+    private val _attachedFiles = MutableStateFlow<List<PickedFile>>(emptyList())
+    val attachedFiles: StateFlow<List<PickedFile>> = _attachedFiles.asStateFlow()
+
     private var pollingJob: Job? = null
     private var statusJob: Job? = null
     private var healthJob: Job? = null
@@ -232,10 +240,62 @@ class InteractViewModel(
         startMessagePolling()
         startHealthPolling()
         startSseStream()
+        startFileInjectionObserver()
     }
 
     fun onInputTextChanged(text: String) {
         _inputText.value = text
+    }
+
+    /**
+     * Add a file attachment to the current message.
+     * Validates size and count limits before adding.
+     */
+    fun addAttachment(file: PickedFile) {
+        val method = "addAttachment"
+        val current = _attachedFiles.value
+        if (current.size >= PickedFile.MAX_ATTACHMENTS) {
+            logWarn(method, "Max attachments (${PickedFile.MAX_ATTACHMENTS}) reached, ignoring ${file.name}")
+            return
+        }
+        if (file.sizeBytes > PickedFile.MAX_FILE_SIZE_BYTES) {
+            logWarn(method, "File ${file.name} exceeds max size (${file.sizeBytes} > ${PickedFile.MAX_FILE_SIZE_BYTES})")
+            return
+        }
+        logInfo(method, "Adding attachment: ${file.name} (${file.mediaType}, ${file.sizeBytes} bytes)")
+        _attachedFiles.value = current + file
+    }
+
+    fun removeAttachment(index: Int) {
+        val current = _attachedFiles.value
+        if (index in current.indices) {
+            logInfo("removeAttachment", "Removing attachment at index $index: ${current[index].name}")
+            _attachedFiles.value = current.filterIndexed { i, _ -> i != index }
+        }
+    }
+
+    fun clearAttachments() {
+        _attachedFiles.value = emptyList()
+    }
+
+    /**
+     * Observe test automation file injection requests.
+     * When the test server injects a file, add it as an attachment.
+     */
+    private fun startFileInjectionObserver() {
+        if (!TestAutomation.isEnabled()) return
+        val method = "startFileInjectionObserver"
+        logInfo(method, "Starting file injection observer for test automation")
+
+        viewModelScope.launch {
+            TestAutomation.fileInjectionRequests.collect { file ->
+                if (file != null) {
+                    logInfo(method, "Test automation injected file: ${file.name} (${file.mediaType})")
+                    addAttachment(file)
+                    TestAutomation.clearFileInjectionRequest()
+                }
+            }
+        }
     }
 
     /**
@@ -244,9 +304,10 @@ class InteractViewModel(
     fun sendMessage() {
         val method = "sendMessage"
         val text = _inputText.value.trim()
+        val files = _attachedFiles.value
 
-        if (text.isEmpty()) {
-            logDebug(method, "Ignoring empty message")
+        if (text.isEmpty() && files.isEmpty()) {
+            logDebug(method, "Ignoring empty message with no attachments")
             return
         }
         if (_isSending.value) {
@@ -254,25 +315,52 @@ class InteractViewModel(
             return
         }
 
-        logInfo(method, "Sending message: '${text.take(50)}...'")
+        logInfo(method, "Sending message: '${text.take(50)}...' with ${files.size} attachments")
 
         viewModelScope.launch {
             try {
                 _isSending.value = true
                 _processingStatus.value = "Sending message..."
                 _inputText.value = ""
+                _attachedFiles.value = emptyList()
+
+                // Build attachment payloads
+                val imagePayloads = files.filter { it.isImage }.map { file ->
+                    ImagePayload(
+                        data = file.dataBase64,
+                        mediaType = file.mediaType,
+                        filename = file.name
+                    )
+                }.ifEmpty { null }
+
+                val documentPayloads = files.filter { it.isDocument }.map { file ->
+                    DocumentPayload(
+                        data = file.dataBase64,
+                        mediaType = file.mediaType,
+                        filename = file.name
+                    )
+                }.ifEmpty { null }
 
                 // Add user message to chat immediately
+                val displayText = if (text.isNotEmpty()) text else "Sent ${files.size} file${if (files.size > 1) "s" else ""}"
                 val userMessage = ChatMessage(
                     id = generateMessageId(),
-                    text = text,
+                    text = displayText,
                     type = MessageType.USER,
-                    timestamp = Clock.System.now()
+                    timestamp = Clock.System.now(),
+                    attachmentCount = files.size,
+                    attachmentNames = files.map { it.name },
+                    hasImageAttachments = files.any { it.isImage },
+                    hasDocumentAttachments = files.any { it.isDocument }
                 )
                 _messages.value = (_messages.value + userMessage).takeLast(50)
 
-                logDebug(method, "Calling apiClient.sendMessage")
-                val response = apiClient.sendMessage(text)
+                logDebug(method, "Calling apiClient.sendMessage with ${imagePayloads?.size ?: 0} images, ${documentPayloads?.size ?: 0} documents")
+                val response = apiClient.sendMessage(
+                    message = if (text.isNotEmpty()) text else "Please review the attached file(s).",
+                    images = imagePayloads,
+                    documents = documentPayloads
+                )
                 logInfo(method, "Message sent successfully: messageId=${response.message_id}")
 
                 // Add agent response to chat

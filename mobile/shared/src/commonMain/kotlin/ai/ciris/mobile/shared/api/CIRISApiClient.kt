@@ -11,6 +11,8 @@ import ai.ciris.mobile.shared.viewmodels.SetupCompletionResult
 import ai.ciris.mobile.shared.viewmodels.StateTransitionResult
 import ai.ciris.mobile.shared.viewmodels.VerifyStatusResponse
 import ai.ciris.api.apis.*
+import ai.ciris.api.models.DocumentPayload
+import ai.ciris.api.models.ImagePayload
 import ai.ciris.api.models.InteractRequest as SdkInteractRequest
 import ai.ciris.api.models.LoginRequest as SdkLoginRequest
 import ai.ciris.api.models.SetupCompleteRequest as SdkSetupCompleteRequest
@@ -314,14 +316,23 @@ class CIRISApiClient(
     }
 
     // Chat / Interact
-    override suspend fun sendMessage(message: String, channelId: String): InteractResponse {
+    override suspend fun sendMessage(
+        message: String,
+        channelId: String,
+        images: List<ImagePayload>?,
+        documents: List<DocumentPayload>?
+    ): InteractResponse {
         val method = "sendMessage"
-        logInfo(method, "Sending message: '${message.take(50)}...' to channel=$channelId")
+        logInfo(method, "Sending message: '${message.take(50)}...' to channel=$channelId, images=${images?.size ?: 0}, docs=${documents?.size ?: 0}")
         logDebug(method, "Auth token present: ${accessToken != null}, token: ${maskToken(accessToken)}")
 
         return try {
-            val request = SdkInteractRequest(message = message)
-            logDebug(method, "Created SdkInteractRequest")
+            val request = SdkInteractRequest(
+                message = message,
+                images = images,
+                documents = documents
+            )
+            logDebug(method, "Created SdkInteractRequest with ${images?.size ?: 0} images, ${documents?.size ?: 0} documents")
 
             val authHeaderValue = authHeader()
             logDebug(method, "Calling agentApi.interactV1AgentInteractPost with auth=${authHeaderValue != null}")

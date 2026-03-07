@@ -458,7 +458,7 @@ class CIRISBillingProvider(CreditGateProtocol):
         if self._transport is None and (
             os.environ.get("CIRIS_IMPORT_MODE") == "true" or os.environ.get("CIRIS_MOCK_LLM") == "true"
         ):
-            return CreditSpendResult(success=True, amount_charged=request.amount_minor, balance_remaining=999)
+            return CreditSpendResult(succeeded=True, balance_remaining=999)
 
         await self._ensure_started()
 

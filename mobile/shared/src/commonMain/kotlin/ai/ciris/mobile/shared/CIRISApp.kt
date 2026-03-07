@@ -495,10 +495,29 @@ fun CIRISApp(
             } else {
                 // Not first run - try to load stored token and check if valid/refresh if needed
                 platformLog(TAG, "[INFO] Not first run, attempting to load and validate stored token")
-                secureStorage.getAccessToken()
-                    .onSuccess { storedToken ->
+                // NOTE: Don't change phase here - it would restart the LaunchedEffect and cancel this coroutine!
+                // Just update the status message which is shown on the startup screen
+                startupViewModel.setStatus("Authenticating...")
+
+                // Add timeout for token loading (shouldn't take more than 5 seconds)
+                val tokenResult = try {
+                    kotlinx.coroutines.withTimeout(5000) {
+                        secureStorage.getAccessToken()
+                    }
+                } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                    startupViewModel.setStatus("Token load timeout!")
+                    platformLog(TAG, "[ERROR] Token loading timed out after 5 seconds")
+                    Result.failure<String?>(Exception("Token loading timed out"))
+                } catch (e: Exception) {
+                    startupViewModel.setStatus("Token load error: ${e.message?.take(30)}")
+                    platformLog(TAG, "[ERROR] Token loading failed: ${e.message}")
+                    Result.failure<String?>(e)
+                }
+
+                tokenResult.onSuccess { storedToken ->
                         if (storedToken != null) {
                             platformLog(TAG, "[INFO] Loaded stored token: ${storedToken.take(8)}...${storedToken.takeLast(4)}")
+                            startupViewModel.setStatus("Token loaded, checking validity...")
 
                             // Check token validity and refresh if needed
                             // NOTE: storedToken is a CIRIS access token, not a Google ID token
@@ -506,6 +525,7 @@ fun CIRISApp(
                             // which gets a Google ID token, then onTokenRefreshed callback
                             // exchanges it for a new CIRIS token
                             tokenExchangeComplete = true // Assume no exchange needed initially
+                            startupViewModel.setStatus("Checking token expiry...")
                             val tokenValid = tokenManager.checkAndRefreshToken(storedToken)
 
                             if (tokenValid) {
@@ -513,20 +533,61 @@ fun CIRISApp(
                                 if (!tokenExchangeComplete) {
                                     // Token was refreshed - wait for Google->CIRIS exchange to complete
                                     PlatformLogger.i(TAG, " Token was refreshed, waiting for CIRIS token exchange...")
+                                    startupViewModel.setStatus("Refreshing token...")
                                     var waitCount = 0
                                     while (!tokenExchangeComplete && waitCount < 50) {
                                         kotlinx.coroutines.delay(100)
                                         waitCount++
+                                        if (waitCount % 10 == 0) {
+                                            startupViewModel.setStatus("Token exchange... ${waitCount/10}s")
+                                        }
                                     }
                                     if (tokenExchangeComplete) {
                                         PlatformLogger.i(TAG, " Token exchange completed")
+                                        startupViewModel.setStatus("Token exchange complete")
                                     } else {
                                         PlatformLogger.w(TAG, " Token exchange timed out")
+                                        startupViewModel.setStatus("Token exchange timeout")
                                     }
                                 } else {
-                                    // Token was valid without refresh - use the stored CIRIS token directly
-                                    PlatformLogger.i(TAG, " Stored token is valid, setting on API client")
+                                    // Token was valid without refresh - but we need to verify it works with the backend
+                                    // (backend may have restarted, invalidating old tokens)
+                                    PlatformLogger.i(TAG, " Stored token not expired, verifying with backend...")
+                                    startupViewModel.setStatus("Verifying token with backend...")
                                     apiClient.setAccessToken(storedToken)
+
+                                    // Test API call to verify token is actually accepted
+                                    try {
+                                        val status = apiClient.getSystemStatus()
+                                        PlatformLogger.i(TAG, " Token verified OK - backend status: ${status.status}")
+                                        startupViewModel.setStatus("Token verified OK")
+                                    } catch (e: Exception) {
+                                        val errorMsg = e.message ?: ""
+                                        if (errorMsg.contains("401") || errorMsg.contains("Unauthorized", ignoreCase = true)) {
+                                            PlatformLogger.w(TAG, " Token rejected by backend (401) - triggering refresh")
+                                            startupViewModel.setStatus("Token rejected (401), refreshing...")
+                                            tokenManager.on401Error()
+                                            // Wait for refresh to complete
+                                            var refreshWait = 0
+                                            while (refreshWait < 50) {
+                                                kotlinx.coroutines.delay(100)
+                                                refreshWait++
+                                                if (refreshWait % 10 == 0) {
+                                                    startupViewModel.setStatus("Refreshing... ${refreshWait/10}s")
+                                                }
+                                                // Check if we got a new token
+                                                val newToken = tokenManager.currentToken.value
+                                                if (newToken != null && newToken != storedToken) {
+                                                    PlatformLogger.i(TAG, " Got new token after refresh")
+                                                    startupViewModel.setStatus("Got new token!")
+                                                    break
+                                                }
+                                            }
+                                        } else {
+                                            PlatformLogger.w(TAG, " Backend check failed (non-auth): ${e.message}")
+                                            startupViewModel.setStatus("Backend error: ${e.message?.take(30)}")
+                                        }
+                                    }
                                     onTokenUpdated?.invoke(storedToken) // Notify MainActivity for BillingManager
                                     currentAccessToken = storedToken
                                     apiClient.logTokenState() // Debug: confirm token was set
@@ -558,11 +619,15 @@ fun CIRISApp(
                             }
                         } else {
                             platformLog(TAG, "[WARN] No stored token found, redirecting to login")
+                            startupViewModel.setStatus("No stored token, login required")
+                            kotlinx.coroutines.delay(500)
                             currentScreen = Screen.Login
                         }
                     }
                     .onFailure { e ->
                         platformLog(TAG, "[ERROR] Failed to load stored token: ${e::class.simpleName}: ${e.message}")
+                        startupViewModel.setStatus("Token error: ${e.message?.take(30)}")
+                        kotlinx.coroutines.delay(1000) // Show error briefly
                         currentScreen = Screen.Login
                     }
             }

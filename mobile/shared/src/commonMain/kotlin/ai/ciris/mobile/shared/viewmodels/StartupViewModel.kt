@@ -281,6 +281,15 @@ class StartupViewModel(
     }
 
     /**
+     * Update status message for debugging (visible on startup screen).
+     * Use this to show token validation/exchange progress.
+     */
+    fun setStatus(message: String) {
+        PlatformLogger.i(TAG, "[STARTUP][STATUS] $message")
+        _statusMessage.value = message
+    }
+
+    /**
      * Called when a prep step completes (pydantic/native lib setup)
      */
     fun onPrepStepCompleted(step: Int) {

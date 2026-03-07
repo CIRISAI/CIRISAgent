@@ -5,7 +5,7 @@ This module creates and configures the FastAPI application with all routes.
 """
 
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Callable
+from typing import Any, AsyncIterator, Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -220,21 +220,24 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         version="1.0.0",
         lifespan=lifespan,
         root_path=root_path or "",
+        redirect_slashes=False,  # We strip trailing slashes in middleware
     )
 
     # Strip trailing slashes in-place so clients that append "/" don't get 404s.
     # FastAPI's redirect_slashes sends a 307 redirect, but some HTTP clients
     # (e.g. Ktor/Darwin on iOS) drop the Authorization header on redirect.
     @app.middleware("http")
-    async def _strip_trailing_slash(request: Request, call_next: Callable[..., Any]) -> Response:
+    async def _strip_trailing_slash(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         if request.url.path != "/" and request.url.path.endswith("/"):
             request.scope["path"] = request.url.path.rstrip("/")
         response = await call_next(request)
         if response.status_code == 404:
             import logging
+
             logging.getLogger("ciris.api").warning(
                 "[404_DEBUG] path=%s method=%s auth=%s",
-                request.url.path, request.method,
+                request.url.path,
+                request.method,
                 "present" if request.headers.get("authorization") else "missing",
             )
         return response

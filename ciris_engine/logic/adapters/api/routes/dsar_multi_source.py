@@ -159,7 +159,7 @@ def _initialize_orchestrator(req: Request) -> DSAROrchestrator:
     },
 )
 @router.post(
-    "/",
+    "",
     responses={
         400: {"description": "Bad request - corrections field required for correction requests"},
         500: {"description": "Multi-source DSAR orchestration or persistence failed"},

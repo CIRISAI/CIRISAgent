@@ -569,6 +569,7 @@ class TestOAuthRedirectURI:
 
             # Mock auth service
             mock_auth_service = Mock()
+            mock_auth_service._ensure_users_loaded = AsyncMock()  # Required for role determination
             mock_oauth_user = Mock()
             mock_oauth_user.user_id = "oauth-user-123"
             mock_oauth_user.role = UserRole.OBSERVER
@@ -620,6 +621,7 @@ class TestOAuthRedirectURI:
             }
 
             mock_auth_service = Mock()
+            mock_auth_service._ensure_users_loaded = AsyncMock()  # Required for role determination
             mock_oauth_user = Mock()
             mock_oauth_user.user_id = "oauth-user-123"
             mock_oauth_user.role = UserRole.OBSERVER
@@ -663,6 +665,7 @@ class TestOAuthRedirectURI:
             }
 
             mock_auth_service = Mock()
+            mock_auth_service._ensure_users_loaded = AsyncMock()  # Required for role determination
             mock_oauth_user = Mock()
             mock_oauth_user.user_id = "oauth-user-123"
             mock_oauth_user.role = UserRole.OBSERVER
@@ -714,6 +717,7 @@ class TestOAuthRedirectURI:
             }
 
             mock_auth_service = Mock()
+            mock_auth_service._ensure_users_loaded = AsyncMock()  # Required for role determination
             mock_oauth_user = Mock()
             mock_oauth_user.user_id = "oauth-user-123"
             mock_oauth_user.role = UserRole.OBSERVER
@@ -1024,6 +1028,7 @@ class TestBillingIntegration:
 
             # Mock auth service
             mock_auth_service = Mock()
+            mock_auth_service._ensure_users_loaded = AsyncMock()  # Required for role determination
             mock_oauth_user = Mock()
             mock_oauth_user.user_id = "google:12345"
             mock_oauth_user.provider = "google"
@@ -1633,6 +1638,7 @@ class TestMarketingOptInParsing:
             }
 
             mock_auth_service = Mock()
+            mock_auth_service._ensure_users_loaded = AsyncMock()  # Required for role determination
             mock_oauth_user = Mock()
             mock_oauth_user.user_id = "user-123"
             mock_oauth_user.role = UserRole.OBSERVER
@@ -1679,6 +1685,7 @@ class TestMarketingOptInParsing:
             }
 
             mock_auth_service = Mock()
+            mock_auth_service._ensure_users_loaded = AsyncMock()  # Required for role determination
             mock_oauth_user = Mock()
             mock_oauth_user.user_id = "user-123"
             mock_oauth_user.role = UserRole.OBSERVER
@@ -1724,6 +1731,7 @@ class TestOAuthCallbackProviders:
             }
 
             mock_auth_service = Mock()
+            mock_auth_service._ensure_users_loaded = AsyncMock()  # Required for role determination
             mock_oauth_user = Mock()
             mock_oauth_user.user_id = "github:456"
             mock_oauth_user.role = UserRole.OBSERVER
@@ -1765,6 +1773,7 @@ class TestOAuthCallbackProviders:
             }
 
             mock_auth_service = Mock()
+            mock_auth_service._ensure_users_loaded = AsyncMock()  # Required for role determination
             mock_oauth_user = Mock()
             mock_oauth_user.user_id = "discord:789"
             mock_oauth_user.role = UserRole.OBSERVER
@@ -2112,6 +2121,7 @@ class TestNativeGoogleTokenExchange:
                 }
 
                 mock_auth_service = Mock()
+                mock_auth_service._ensure_users_loaded = AsyncMock()  # Required for role determination
                 mock_oauth_user = Mock()
                 mock_oauth_user.user_id = "google:google-123"
                 mock_oauth_user.role = UserRole.OBSERVER

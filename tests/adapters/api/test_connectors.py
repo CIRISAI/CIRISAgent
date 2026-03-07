@@ -146,7 +146,7 @@ class TestListConnectors:
 
     def test_list_empty_connectors(self, client_with_auth):
         """Test listing when no connectors are registered."""
-        response = client_with_auth.get("/v1/connectors/", headers=client_with_auth.auth_headers)
+        response = client_with_auth.get("/v1/connectors", headers=client_with_auth.auth_headers)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -173,7 +173,7 @@ class TestListConnectors:
             client_with_auth.post("/v1/connectors/sql", json=request_data, headers=client_with_auth.auth_headers)
 
         # List all
-        response = client_with_auth.get("/v1/connectors/", headers=client_with_auth.auth_headers)
+        response = client_with_auth.get("/v1/connectors", headers=client_with_auth.auth_headers)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -198,7 +198,7 @@ class TestListConnectors:
         client_with_auth.post("/v1/connectors/sql", json=sql_data, headers=client_with_auth.auth_headers)
 
         # List filtered by SQL
-        response = client_with_auth.get("/v1/connectors/?connector_type=sql", headers=client_with_auth.auth_headers)
+        response = client_with_auth.get("/v1/connectors?connector_type=sql", headers=client_with_auth.auth_headers)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -208,7 +208,7 @@ class TestListConnectors:
     def test_list_connectors_requires_admin(self, client_with_auth):
         """Test that listing requires admin privileges."""
         # Try without auth
-        response = client_with_auth.get("/v1/connectors/")
+        response = client_with_auth.get("/v1/connectors")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
@@ -364,7 +364,7 @@ class TestDeleteConnector:
         assert data["data"]["connector_id"] == connector_id
 
         # Verify deleted
-        list_response = client_with_auth.get("/v1/connectors/", headers=client_with_auth.auth_headers)
+        list_response = client_with_auth.get("/v1/connectors", headers=client_with_auth.auth_headers)
         assert list_response.json()["data"]["total"] == 0
 
     def test_delete_nonexistent_connector_fails(self, client_with_auth):
@@ -405,7 +405,7 @@ class TestConnectorIntegration:
         connector_id = register_response.json()["data"]["connector_id"]
 
         # 2. List
-        list_response = client_with_auth.get("/v1/connectors/", headers=client_with_auth.auth_headers)
+        list_response = client_with_auth.get("/v1/connectors", headers=client_with_auth.auth_headers)
         assert list_response.status_code == status.HTTP_200_OK
         assert list_response.json()["data"]["total"] == 1
 
@@ -430,7 +430,7 @@ class TestConnectorIntegration:
         assert delete_response.status_code == status.HTTP_200_OK
 
         # 6. Verify deleted
-        list_response = client_with_auth.get("/v1/connectors/", headers=client_with_auth.auth_headers)
+        list_response = client_with_auth.get("/v1/connectors", headers=client_with_auth.auth_headers)
         assert list_response.json()["data"]["total"] == 0
 
 
@@ -635,7 +635,7 @@ class TestTestConnectorTypes:
         assert data["latency_ms"] >= 0
 
         # Verify status was updated in registry
-        list_resp = client_with_auth.get("/v1/connectors/", headers=client_with_auth.auth_headers)
+        list_resp = client_with_auth.get("/v1/connectors", headers=client_with_auth.auth_headers)
         connector = list_resp.json()["data"]["connectors"][0]
         assert connector["last_tested"] is not None
         assert connector["last_test_result"] == "success"

@@ -298,6 +298,7 @@ class HAConfigurableAdapter:
         for host, port in common_hosts:
             url = f"http://{host}:{port}"
             try:
+                logger.info(f"[HOSTNAME PROBE] Trying {url}...")
                 async with aiohttp.ClientSession() as session:
                     async with session.get(
                         f"{url}/api/",
@@ -322,9 +323,11 @@ class HAConfigurableAdapter:
                             )
                             # Found one, return immediately (usually only one HA instance)
                             return discovered
-            except Exception:
+                        else:
+                            logger.info(f"[HOSTNAME PROBE] {url} returned status {response.status}")
+            except Exception as e:
                 # Host doesn't resolve or isn't reachable - try next
-                pass
+                logger.info(f"[HOSTNAME PROBE] {url} failed: {type(e).__name__}: {e}")
 
         if discovered:
             logger.info(f"[HOSTNAME PROBE] Found {len(discovered)} HA instances")

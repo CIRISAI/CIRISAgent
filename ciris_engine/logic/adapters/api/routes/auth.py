@@ -982,7 +982,9 @@ def _update_billing_provider_token(google_id_token: str) -> None:
     # regardless of which env var it checks (Google on Android, Apple on iOS)
     os.environ["CIRIS_BILLING_GOOGLE_ID_TOKEN"] = google_id_token
     os.environ["CIRIS_BILLING_APPLE_ID_TOKEN"] = google_id_token
-    logger.info("[NativeAuth] Updated CIRIS_BILLING_GOOGLE_ID_TOKEN and CIRIS_BILLING_APPLE_ID_TOKEN in environment for billing provider")
+    logger.info(
+        "[NativeAuth] Updated CIRIS_BILLING_GOOGLE_ID_TOKEN and CIRIS_BILLING_APPLE_ID_TOKEN in environment for billing provider"
+    )
 
     # Try to reinitialize the billing provider if resource_monitor is available
     # This is done via a background task to not block the login response
@@ -1248,6 +1250,8 @@ async def oauth_callback(
         if not external_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth provider did not return user ID")
 
+        # Ensure users are loaded from DB before role determination (fixes role demotion bug)
+        await auth_service._ensure_users_loaded()
         # Determine user role (preserves existing role if user already exists)
         user_email = user_data["email"]
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider=provider)
@@ -1641,6 +1645,8 @@ async def native_google_token_exchange(
             )
 
         user_email = user_data.get("email")
+        # Ensure users are loaded from DB before role determination (fixes role demotion bug)
+        await auth_service._ensure_users_loaded()
         # Pass external_id to preserve existing user's role (don't demote on re-auth!)
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider="google")
         logger.info(f"[NativeAuth] Determined role for {user_email}: {user_role}")
@@ -1868,6 +1874,8 @@ async def native_apple_token_exchange(
             )
 
         user_email = user_data.get("email")
+        # Ensure users are loaded from DB before role determination (fixes role demotion bug)
+        await auth_service._ensure_users_loaded()
         # Pass external_id to preserve existing user's role (don't demote on re-auth!)
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider="apple")
         logger.info(f"[AppleNativeAuth] Determined role for {user_email}: {user_role}")

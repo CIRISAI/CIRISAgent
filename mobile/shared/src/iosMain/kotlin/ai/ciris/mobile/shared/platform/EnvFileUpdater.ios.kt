@@ -90,6 +90,14 @@ actual class EnvFileUpdater {
                 println("[$TAG] Added CIRIS_BILLING_APPLE_ID_TOKEN")
             }
 
+            // Also update CIRIS_BILLING_GOOGLE_ID_TOKEN with the same token
+            // Python checks this env var first, so it must stay in sync on iOS
+            val googleBillingPattern = Regex("""CIRIS_BILLING_GOOGLE_ID_TOKEN=["']?[^"'\n]*["']?""")
+            if (googleBillingPattern.containsMatchIn(newContent)) {
+                newContent = googleBillingPattern.replace(newContent, """CIRIS_BILLING_GOOGLE_ID_TOKEN="$oauthIdToken"""")
+                println("[$TAG] Updated CIRIS_BILLING_GOOGLE_ID_TOKEN (sync with Apple token)")
+            }
+
             if (openaiUpdated || billingUpdated) {
                 // Write updated content
                 val nsContent = newContent as NSString

@@ -139,12 +139,13 @@ fun InteractScreen(
             .fillMaxSize()
             .background(Color(0xFFFAFAFA))
     ) {
-        // Main content column - imePadding at Column level so weight(1f) chat area
-        // properly reclaims space when keyboard dismisses on iOS
+        // Main content column
+        // NOTE: Do NOT use imePadding() anywhere in this layout on iOS.
+        // WindowInsets.ime does not properly reset to 0 when keyboard dismisses,
+        // leaving a permanent white gap. iOS native keyboard avoidance handles
+        // the input field visibility automatically via the hosting UIViewController.
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .imePadding()
+            modifier = Modifier.fillMaxSize()
         ) {
             // Enhanced status bar with LLM health, credits, and trust shield
             EnhancedStatusBar(

@@ -242,29 +242,10 @@ struct ContentView: View {
 
     /// Trigger App Attest at startup so the CIRISVerify FFI handle caches the
     /// device attestation result. Uses persistent cache (UserDefaults, 24h TTL)
-    /// to avoid slamming the registry on crash loops or normal restarts.
-    /// Retries up to 3 times with backoff because CIRISVerify FFI may not be
-    /// loaded yet when the health check first passes.
-    private func triggerAppAttestAtStartup() async {
-        NSLog("[ContentView] Checking App Attest cache...")
-        let manager = AppAttestManager.shared
-
-        for attempt in 1...3 {
-            let result = await manager.attestDeviceIfNeeded()
-            NSLog("[ContentView] App Attest attempt \(attempt): verified=\(result.verified), verdict=\(result.verdict), error=\(result.error ?? "none")")
-            if result.verified {
-                return
-            }
-            // Clear in-memory failed result so next attempt retries fully
-            manager.clearCache()
-            if attempt < 3 {
-                let delay = attempt * 5  // 5s, 10s backoff
-                NSLog("[ContentView] App Attest not verified, retrying in \(delay)s...")
-                try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
-            }
-        }
-        NSLog("[ContentView] App Attest failed after 3 attempts")
-    }
+    // NOTE: Startup attestation via triggerAppAttestAtStartup() is disabled.
+    // The Python-side CIRISVerify FFI runs run_attestation_sync at startup which
+    // would race with Swift (both fetch nonces from the registry). On-demand
+    // attestation via onDeviceAttestationRequested (Trust page) is still active.
 
     private func loadStartupStatus() -> StartupStatus? {
         let fileManager = FileManager.default
@@ -1268,7 +1249,9 @@ struct ComposeViewWithAuthAndStore: UIViewControllerRepresentable {
                 return self.storeKitManager.errorMessage
             },
 
-            // App Attest device attestation callback
+            // App Attest device attestation callback — uses Apple DCAppAttestService
+            // via AppAttestManager. The Rust CIRISVerify FFI binary integrity check
+            // fails on debug builds, so Swift handles App Attest independently.
             onDeviceAttestationRequested: { callback in
                 NSLog("[ComposeViewWithAuthAndStore] onDeviceAttestationRequested LAMBDA INVOKED")
 
@@ -1285,7 +1268,6 @@ struct ComposeViewWithAuthAndStore: UIViewControllerRepresentable {
 
                     if result.verified {
                         NSLog("[ComposeViewWithAuthAndStore] App Attest success: \(result.verdict)")
-                        // Map App Attest results to Play Integrity-style fields
                         let isStrong = result.isGenuineDevice && result.isUnmodifiedApp
                         callback(DeviceAttestationResultBridge.companion.success(
                             verified: true,

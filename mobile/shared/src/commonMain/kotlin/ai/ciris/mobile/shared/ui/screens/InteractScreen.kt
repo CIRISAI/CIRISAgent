@@ -426,7 +426,9 @@ private fun LlmHealthIndicator(
         )
 
         // Provider name - comprehensive provider display
+        // Show "..." while loading (provider defaults to "unknown")
         val displayName = when {
+            health.provider == "unknown" -> "..."  // Still loading
             isMockLlm -> "\u26A0\uFE0F MOCKLLM \u26A0\uFE0F"
             health.isCirisProxy -> "CIRIS"
             health.provider == "openai" -> "OpenAI"

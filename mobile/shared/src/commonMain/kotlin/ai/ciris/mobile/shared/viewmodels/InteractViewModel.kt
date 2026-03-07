@@ -11,6 +11,7 @@ import ai.ciris.mobile.shared.models.MessageType
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.PickedFile
 import ai.ciris.mobile.shared.platform.TestAutomation
+import ai.ciris.mobile.shared.platform.createEnvFileUpdater
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -498,18 +499,28 @@ class InteractViewModel(
 
     /**
      * Poll for LLM health, credits, and trust status (less frequent)
+     * Fast polls (2s) until LLM health is loaded, then switches to normal interval.
+     * Note: Using 2s to avoid rate limiting (429) from the /setup/config endpoint.
      */
     private fun startHealthPolling() {
         val method = "startHealthPolling"
-        logInfo(method, "Starting health polling (interval=${HEALTH_POLL_INTERVAL_MS}ms)")
+        logInfo(method, "Starting health polling (fast until LLM ready)")
 
         healthJob = viewModelScope.launch {
-            // Initial fetch on startup
-            fetchHealthData()
+            var llmReady = false  // True once LLM health is loaded successfully
+            val FAST_HEALTH_POLL_MS = 2000L  // 2 seconds - avoid rate limiting
 
             while (isActive) {
-                delay(HEALTH_POLL_INTERVAL_MS)
                 fetchHealthData()
+
+                // Check if LLM health was loaded (provider is not "unknown" anymore)
+                if (!llmReady && _llmHealth.value.provider != "unknown") {
+                    llmReady = true
+                    logInfo(method, "LLM health ready: provider=${_llmHealth.value.provider}")
+                }
+
+                // Fast poll until LLM ready, then normal interval
+                delay(if (llmReady) HEALTH_POLL_INTERVAL_MS else FAST_HEALTH_POLL_MS)
             }
         }
 
@@ -589,6 +600,8 @@ class InteractViewModel(
         val method = "fetchHealthData"
         try {
             // Fetch LLM config for health status
+            // First try API, fall back to local .env file if API fails (e.g., 401)
+            var configLoaded = false
             try {
                 val config = apiClient.getLlmConfig()
                 _llmHealth.value = LlmHealthStatus(
@@ -597,7 +610,8 @@ class InteractViewModel(
                     model = config.model,
                     isCirisProxy = config.isCirisProxy
                 )
-                logDebug(method, "LLM health: provider=${config.provider}, isCirisProxy=${config.isCirisProxy}")
+                logDebug(method, "LLM health from API: provider=${config.provider}, isCirisProxy=${config.isCirisProxy}")
+                configLoaded = true
 
                 // Only fetch credits if using CIRIS proxy
                 if (config.isCirisProxy) {
@@ -616,7 +630,25 @@ class InteractViewModel(
                     }
                 }
             } catch (e: Exception) {
-                logWarn(method, "Failed to fetch LLM config: ${e.message}")
+                logWarn(method, "Failed to fetch LLM config from API: ${e.message}")
+            }
+
+            // Fallback: Read from local .env file if API failed
+            if (!configLoaded && _llmHealth.value.provider == "unknown") {
+                try {
+                    val envConfig = createEnvFileUpdater().readLlmConfig()
+                    if (envConfig != null) {
+                        _llmHealth.value = LlmHealthStatus(
+                            provider = envConfig.provider,
+                            isHealthy = envConfig.apiKeySet || envConfig.isCirisProxy,
+                            model = envConfig.model ?: "unknown",
+                            isCirisProxy = envConfig.isCirisProxy
+                        )
+                        logInfo(method, "LLM health from .env fallback: provider=${envConfig.provider}, isCirisProxy=${envConfig.isCirisProxy}")
+                    }
+                } catch (e: Exception) {
+                    logWarn(method, "Failed to read LLM config from .env: ${e.message}")
+                }
             }
 
             // Fetch trust status (uses cached attestation from auth service)

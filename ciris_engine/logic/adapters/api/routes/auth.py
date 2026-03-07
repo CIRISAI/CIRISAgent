@@ -2031,6 +2031,108 @@ async def delete_api_key(
     return None
 
 
+# ========== Attestation Helpers ==========
+
+
+def _build_attestation_response(
+    status: str,
+    *,
+    loaded: bool = True,
+    error: Optional[str] = None,
+    max_level: int = 0,
+    level_pending: bool = True,
+) -> Dict[str, Any]:
+    """Build a standardized attestation response."""
+    return {
+        "data": {
+            "loaded": loaded,
+            "attestation_status": status,
+            "level_pending": level_pending,
+            "max_level": max_level,
+            "error": error,
+        }
+    }
+
+
+def _get_infra_auth_service(request: Request) -> tuple[Any, Optional[Dict[str, Any]]]:
+    """Get infrastructure auth service from request, returning (service, error_response)."""
+    api_auth_service = getattr(request.app.state, "auth_service", None)
+    if not api_auth_service:
+        logger.warning("[attestation] API Auth service not available")
+        return None, _build_attestation_response(
+            "not_attempted", loaded=False, error="Authentication service not available"
+        )
+
+    infra_auth_service = getattr(api_auth_service, "_auth_service", None)
+    if not infra_auth_service:
+        logger.warning("[attestation] Infrastructure auth service not available")
+        return None, _build_attestation_response(
+            "not_attempted", loaded=False, error="Infrastructure authentication service not available"
+        )
+
+    if not hasattr(infra_auth_service, "get_cached_attestation"):
+        logger.warning("[attestation] Auth service does not support attestation caching")
+        return None, _build_attestation_response(
+            "not_attempted", loaded=False, error="Attestation caching not supported"
+        )
+
+    return infra_auth_service, None
+
+
+def _trigger_background_attestation(infra_auth_service: Any, force_refresh: bool = False) -> bool:
+    """Trigger attestation in background. Returns True if triggered successfully."""
+    import asyncio
+
+    if not hasattr(infra_auth_service, "run_attestation"):
+        return False
+
+    try:
+        if force_refresh:
+            infra_auth_service.invalidate_attestation_cache()
+        task = asyncio.create_task(infra_auth_service.run_attestation(mode="full", force_refresh=force_refresh))
+        if hasattr(infra_auth_service, "_background_tasks"):
+            infra_auth_service._background_tasks.add(task)
+            task.add_done_callback(infra_auth_service._background_tasks.discard)
+        return True
+    except Exception as e:
+        logger.warning(f"[attestation] Failed to trigger attestation: {e}")
+        return False
+
+
+def _handle_no_cached_attestation(infra_auth_service: Any) -> Dict[str, Any]:
+    """Handle case when no cached attestation is available."""
+    global _attestation_triggered_from_endpoint
+
+    # Check if attestation is currently in progress
+    in_progress = (
+        hasattr(infra_auth_service, "is_attestation_in_progress") and infra_auth_service.is_attestation_in_progress()
+    )
+    logger.info(f"[attestation] Cache empty. in_progress={in_progress}")
+
+    if in_progress:
+        logger.info("[attestation] Returning in_progress status")
+        return _build_attestation_response("in_progress")
+
+    # Try to trigger attestation if not already triggered
+    if not _attestation_triggered_from_endpoint:
+        logger.info("[attestation] No cached attestation - triggering now")
+        if _trigger_background_attestation(infra_auth_service):
+            _attestation_triggered_from_endpoint = True
+            return _build_attestation_response("in_progress")
+        # Trigger failed, reset flag handled in helper
+
+    # Already triggered or trigger not possible
+    if _attestation_triggered_from_endpoint:
+        logger.debug("[attestation] Attestation already triggered")
+        return _build_attestation_response("in_progress")
+
+    logger.info("[attestation] No cached attestation and could not trigger")
+    return _build_attestation_response(
+        "not_attempted",
+        error="No cached attestation - startup attestation may not have completed",
+    )
+
+
 # ========== Attestation Endpoint ==========
 
 
@@ -2045,142 +2147,24 @@ async def get_attestation(request: Request, refresh: bool = False) -> Dict[str, 
     Returns:
         Attestation result in the same format as /v1/setup/verify-status
     """
-    # Get APIAuthService from app state, then access the underlying AuthenticationService
-    api_auth_service = getattr(request.app.state, "auth_service", None)
+    global _attestation_triggered_from_endpoint
 
-    if not api_auth_service:
-        logger.warning("[attestation] API Auth service not available")
-        return {
-            "data": {
-                "loaded": False,
-                "error": "Authentication service not available",
-                "attestation_status": "not_attempted",
-            }
-        }
+    # Get infrastructure auth service (handles service chain validation)
+    infra_auth_service, error_response = _get_infra_auth_service(request)
+    if error_response:
+        return error_response
 
-    # Access the underlying infrastructure AuthenticationService
-    # APIAuthService wraps it as _auth_service
-    infra_auth_service = getattr(api_auth_service, "_auth_service", None)
-
-    if not infra_auth_service:
-        logger.warning("[attestation] Infrastructure auth service not available")
-        return {
-            "data": {
-                "loaded": False,
-                "error": "Infrastructure authentication service not available",
-                "attestation_status": "not_attempted",
-            }
-        }
-
-    # Check for cached attestation on the infrastructure service
-    if not hasattr(infra_auth_service, "get_cached_attestation"):
-        logger.warning("[attestation] Auth service does not support attestation caching")
-        return {
-            "data": {
-                "loaded": False,
-                "error": "Attestation caching not supported",
-                "attestation_status": "not_attempted",
-            }
-        }
-
-    # If refresh requested, invalidate cache and trigger a new attestation
-    if refresh and hasattr(infra_auth_service, "run_attestation"):
-        import asyncio
-
+    # Handle refresh request
+    if refresh:
         logger.info("[attestation] Refresh requested — invalidating cache and re-running attestation")
-        infra_auth_service.invalidate_attestation_cache()
-        try:
-            task = asyncio.create_task(infra_auth_service.run_attestation(mode="full", force_refresh=True))
-            if hasattr(infra_auth_service, "_background_tasks"):
-                infra_auth_service._background_tasks.add(task)
-                task.add_done_callback(infra_auth_service._background_tasks.discard)
-        except Exception as e:
-            logger.warning(f"[attestation] Failed to trigger refresh attestation: {e}")
-        return {
-            "data": {
-                "loaded": True,
-                "attestation_status": "in_progress",
-                "level_pending": True,
-                "max_level": 0,
-                "error": None,
-            }
-        }
+        _trigger_background_attestation(infra_auth_service, force_refresh=True)
+        return _build_attestation_response("in_progress")
 
-    # Use allow_stale=True so expired-but-recent data is returned while
-    # the periodic refresh loop re-populates the cache in the background.
+    # Check for cached attestation (allow stale data while refresh runs in background)
     cached = infra_auth_service.get_cached_attestation(allow_stale=True)
 
     if not cached:
-        # Check if attestation is currently in progress on the infrastructure service
-        has_method = hasattr(infra_auth_service, "is_attestation_in_progress")
-        in_progress = has_method and infra_auth_service.is_attestation_in_progress()
-        logger.info(
-            f"[attestation] Cache empty (even stale). has_method={has_method}, in_progress={in_progress}, instance_id={id(infra_auth_service)}"
-        )
-
-        if in_progress:
-            logger.info("[attestation] Returning in_progress status with level_pending=True")
-            return {
-                "data": {
-                    "loaded": True,
-                    "attestation_status": "in_progress",
-                    "level_pending": True,  # Keep polling while attestation runs
-                    "max_level": 0,
-                    "error": None,
-                }
-            }
-
-        # Trigger attestation as a fallback if startup attestation didn't run
-        # Use module-level flag to prevent multiple triggers
-        global _attestation_triggered_from_endpoint
-        if not _attestation_triggered_from_endpoint and hasattr(infra_auth_service, "run_attestation"):
-            import asyncio
-
-            try:
-                _attestation_triggered_from_endpoint = True
-                logger.info("[attestation] No cached attestation - triggering attestation now")
-                # Run attestation in background — store task on the service to
-                # prevent garbage collection and let the periodic loop track it.
-                task = asyncio.create_task(infra_auth_service.run_attestation(mode="full"))
-                if hasattr(infra_auth_service, "_background_tasks"):
-                    infra_auth_service._background_tasks.add(task)
-                    task.add_done_callback(infra_auth_service._background_tasks.discard)
-                logger.info("[attestation] Background attestation triggered, returning in_progress")
-                return {
-                    "data": {
-                        "loaded": True,
-                        "attestation_status": "in_progress",
-                        "level_pending": True,
-                        "max_level": 0,
-                        "error": None,
-                    }
-                }
-            except Exception as e:
-                logger.warning(f"[attestation] Failed to trigger attestation: {e}")
-                _attestation_triggered_from_endpoint = False  # Reset on failure
-        elif _attestation_triggered_from_endpoint:
-            # Already triggered, return in_progress
-            logger.debug("[attestation] Attestation already triggered, returning in_progress")
-            return {
-                "data": {
-                    "loaded": True,
-                    "attestation_status": "in_progress",
-                    "level_pending": True,
-                    "max_level": 0,
-                    "error": None,
-                }
-            }
-
-        logger.info("[attestation] No cached attestation and could not trigger")
-        return {
-            "data": {
-                "loaded": True,
-                "attestation_status": "not_attempted",
-                "level_pending": True,  # Keep polling until attestation runs
-                "max_level": 0,
-                "error": "No cached attestation - startup attestation may not have completed",
-            }
-        }
+        return _handle_no_cached_attestation(infra_auth_service)
 
     # Convert cached AttestationResult to response format
     # This matches the format returned by /v1/setup/verify-status

@@ -2048,7 +2048,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             await asyncio.sleep(1)
 
         logger.info(
-            f"[attestation-refresh] Periodic refresh loop started " f"(interval={self._attestation_refresh_interval}s)"
+            f"[attestation-refresh] Periodic refresh loop started (interval={self._attestation_refresh_interval}s)"
         )
 
         while self._started:

@@ -1657,7 +1657,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 try:
                     await self._attestation_refresh_task
                 except asyncio.CancelledError:
-                    pass  # Expected from the child task we just cancelled
+                    # Expected: we just cancelled this child task, no need to propagate
+                    pass  # noqa: S110 - intentional: child task we cancelled
             await super().stop()
             self._started = False
             # Clear caches
@@ -1665,12 +1666,12 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             self._channel_token_cache.clear()
             logger.info("AuthenticationService stopped")
         except asyncio.CancelledError:
-            # Ensure cleanup completes even if stop() itself is cancelled
+            # External cancellation of stop() - cleanup then re-raise per asyncio contract
             self._started = False
             self._token_cache.clear()
             self._channel_token_cache.clear()
             logger.info("AuthenticationService stopped (cancelled)")
-            raise
+            raise  # NOSONAR - CancelledError is re-raised after cleanup
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect authentication-specific metrics."""

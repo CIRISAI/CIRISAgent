@@ -1058,13 +1058,14 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Check if secondary LLM is CIRIS proxy (requires JWT auth, not API key)
         is_ciris_proxy_secondary = "ciris.ai" in second_base_url
 
-        if second_api_key:
-            # Standard API key auth
-            await self._initialize_secondary_llm(config, second_api_key)
-        elif is_ciris_proxy_secondary and google_id_token:
-            # CIRIS proxy with JWT auth - use Google ID token as auth
+        if is_ciris_proxy_secondary and google_id_token:
+            # CIRIS proxy with JWT auth - always use fresh billing token
+            # (CIRIS_OPENAI_API_KEY_2 may contain a stale JWT from initial setup)
             logger.info("Secondary LLM using CIRIS proxy with JWT auth")
             await self._initialize_secondary_llm(config, google_id_token)
+        elif second_api_key:
+            # Standard API key auth (non-proxy)
+            await self._initialize_secondary_llm(config, second_api_key)
 
     async def _initialize_secondary_llm(self, config: Any, api_key: str) -> None:
         """Initialize optional secondary LLM service."""

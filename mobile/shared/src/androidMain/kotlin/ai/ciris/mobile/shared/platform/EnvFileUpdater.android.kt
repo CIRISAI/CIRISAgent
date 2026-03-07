@@ -94,6 +94,25 @@ actual class EnvFileUpdater {
                         break
                     }
                 }
+
+                // Also update secondary CIRIS_OPENAI_API_KEY_2 if it points to a CIRIS proxy
+                val secondaryBasePattern = Regex("""CIRIS_OPENAI_API_BASE_2=["']?([^"'\n]*)["']?""")
+                val secondaryBaseMatch = secondaryBasePattern.find(content)
+                val secondaryBase = secondaryBaseMatch?.groupValues?.getOrNull(1) ?: ""
+                if (secondaryBase.contains("ciris.ai")) {
+                    val secondaryKeyPatterns = listOf(
+                        Regex("""CIRIS_OPENAI_API_KEY_2="[^"]*""""),
+                        Regex("""CIRIS_OPENAI_API_KEY_2='[^']*'"""),
+                        Regex("""CIRIS_OPENAI_API_KEY_2=[^\n]*""")
+                    )
+                    for (pattern in secondaryKeyPatterns) {
+                        if (pattern.containsMatchIn(content)) {
+                            content = pattern.replace(content, """CIRIS_OPENAI_API_KEY_2="$googleIdToken"""")
+                            Log.i(TAG, "Updated CIRIS_OPENAI_API_KEY_2 (secondary CIRIS proxy)")
+                            break
+                        }
+                    }
+                }
             } else {
                 Log.i(TAG, "BYOK mode detected - preserving user's OPENAI_API_KEY")
             }

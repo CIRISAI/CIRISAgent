@@ -138,12 +138,13 @@ fun InteractScreen(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFFFAFAFA))
-            // Don't apply imePadding to entire screen - apply to input bar only
-            // This avoids iOS issues where keyboard insets don't reset properly
     ) {
-        // Main content column
+        // Main content column - imePadding at Column level so weight(1f) chat area
+        // properly reclaims space when keyboard dismisses on iOS
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
         ) {
             // Enhanced status bar with LLM health, credits, and trust shield
             EnhancedStatusBar(
@@ -220,8 +221,8 @@ fun InteractScreen(
         }
 
             // Input bar with agent state icon
-            // Apply imePadding and navigationBarsPadding here at the input bar level
-            // This ensures keyboard pushes the input up without leaving ghost gaps
+            // Input bar with agent state icon
+            // navigationBarsPadding here so input sits above the system nav bar
             ChatInputBarWithBubbles(
                 text = inputText,
                 onTextChange = { viewModel.onInputTextChanged(it) },
@@ -238,7 +239,6 @@ fun InteractScreen(
                 onRemoveAttachment = { viewModel.removeAttachment(it) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .imePadding()
                     .navigationBarsPadding()
             )
 

@@ -128,6 +128,11 @@ class MainActivity : ComponentActivity() {
                 launch {
                     statusMessage = "Loading CIRIS..."
 
+                    // Show CIRISApp immediately - StartupScreen will handle animation
+                    // The logcat reader is already running and tracking service count
+                    Log.i(TAG, "Showing CIRISApp immediately for startup animation")
+                    pythonReady = true
+
                     // Start Python mobile_main in background thread
                     Thread {
                         try {
@@ -150,26 +155,6 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }.start()
-
-                    // Wait for server to respond (or error)
-                    statusMessage = "Waiting for server..."
-                    var attempts = 0
-                    while (attempts < 60 && pythonError == null) {
-                        delay(1000)
-                        attempts++
-                        val ready = checkServerOnce()
-                        if (ready) {
-                            Log.i(TAG, "Server ready - showing CIRISApp")
-                            pythonReady = true
-                            return@launch
-                        }
-                    }
-
-                    if (pythonError != null) {
-                        statusMessage = pythonError!!
-                    } else {
-                        statusMessage = "Server failed to start after 60s"
-                    }
                 }
             }
 

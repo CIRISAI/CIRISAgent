@@ -150,7 +150,7 @@ data class SetupCompleteSuccessResponse(
  * Completes first-run setup with full configuration.
  *
  * Example payload from SetupWizardActivity.kt:
- * - CIRIS Proxy mode: provider="other", api_key=googleIdToken, base_url=llm.ciris.ai
+ * - CIRIS Proxy mode: provider="other", api_key=googleIdToken, base_url=llm01.ciris-services-1.ai
  * - BYOK mode: provider="openai", api_key=user_key, base_url=null
  */
 @Serializable

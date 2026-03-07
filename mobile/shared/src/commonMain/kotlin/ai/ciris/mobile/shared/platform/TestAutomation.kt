@@ -79,6 +79,22 @@ expect object TestAutomation {
      * Clear a text input request (called after handling).
      */
     fun clearTextInputRequest()
+
+    /**
+     * Flow of pending file injection requests (for test automation).
+     * InteractViewModel observes this to add injected files as attachments.
+     */
+    val fileInjectionRequests: StateFlow<PickedFile?>
+
+    /**
+     * Inject a file as an attachment (called by test server).
+     */
+    fun injectFile(name: String, mediaType: String, dataBase64: String, sizeBytes: Long)
+
+    /**
+     * Clear a file injection request (called after handling).
+     */
+    fun clearFileInjectionRequest()
 }
 
 /**

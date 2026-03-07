@@ -15,10 +15,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import androidx.compose.ui.res.painterResource
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 
-fun main() = application {
+fun main() {
+    // Set macOS application name (menu bar + dock)
+    System.setProperty("apple.awt.application.name", "CIRIS Agent")
+
+    application {
     val windowState = rememberWindowState(width = 1200.dp, height = 800.dp)
 
     // Start test automation server if enabled
@@ -48,6 +53,7 @@ fun main() = application {
         },
         title = "CIRIS Agent",
         state = windowState,
+        icon = painterResource("icon.png"),
     ) {
         var accessToken by remember { mutableStateOf("") }
 
@@ -88,4 +94,5 @@ fun main() = application {
             }
         }
     }
+}
 }

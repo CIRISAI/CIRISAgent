@@ -731,10 +731,10 @@ class ApiPlatform(Service):
         return os.environ.get("ANDROID_DATA") is not None or os.path.exists("/data/data")
 
     def _has_google_auth(self) -> bool:
-        """Check if Google authentication token is available."""
+        """Check if OAuth authentication token is available (Google or Apple)."""
         import os
 
-        return bool(os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN"))
+        return bool(os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN") or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN"))
 
     def _is_hosted_tools_loaded(self) -> bool:
         """Check if ciris_hosted_tools adapter is already loaded."""

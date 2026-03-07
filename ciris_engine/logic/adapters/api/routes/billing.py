@@ -437,10 +437,10 @@ def _try_lazy_init_billing_provider(request: Request, resource_monitor: Any) -> 
             load_dotenv(env_path, override=True)
             logger.debug("[BILLING_LAZY_INIT] Reloaded .env from %s", env_path)
 
-    # Check for Google ID token (written by Kotlin when user logs in)
-    google_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+    # Check for OAuth ID token (written by Kotlin when user logs in - Google on Android, Apple on iOS)
+    google_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN", "")
     if not google_token:
-        logger.debug("[BILLING_LAZY_INIT] No CIRIS_BILLING_GOOGLE_ID_TOKEN in environment")
+        logger.debug("[BILLING_LAZY_INIT] No CIRIS_BILLING_GOOGLE_ID_TOKEN or CIRIS_BILLING_APPLE_ID_TOKEN in environment")
         return None
 
     # Get billing URL from central config (checks env var first)
@@ -931,9 +931,9 @@ async def verify_google_play_purchase(
     if not google_id_token:
         import os
 
-        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN")
+        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN") or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN")
         if google_id_token:
-            logger.info(f"[GOOGLE_PLAY_VERIFY] Using Google ID token from environment ({len(google_id_token)} chars)")
+            logger.info(f"[GOOGLE_PLAY_VERIFY] Using OAuth ID token from environment ({len(google_id_token)} chars)")
     else:
         logger.info(f"[GOOGLE_PLAY_VERIFY] Using JWT pass-through with Google ID token ({len(google_id_token)} chars)")
     billing_client = _get_billing_client(request, google_id_token=google_id_token)

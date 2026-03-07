@@ -268,7 +268,7 @@ async def register_sql_connector(
     )
 
 
-@router.get("/")
+@router.get("")
 async def list_connectors(
     current_user: Annotated[TokenData, Depends(get_current_user)],
     connector_type: Optional[str] = None,

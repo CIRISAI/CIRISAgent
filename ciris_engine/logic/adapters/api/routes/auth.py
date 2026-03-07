@@ -970,17 +970,21 @@ def _store_oauth_profile(auth_service: APIAuthService, user_id: str, name: str, 
 
 
 def _update_billing_provider_token(google_id_token: str) -> None:
-    """Update the billing provider with a fresh Google ID token.
+    """Update the billing provider with a fresh OAuth ID token.
 
-    This is called after native Google token exchange to ensure billing
+    This is called after native Google/Apple token exchange to ensure billing
     is available immediately. The token is stored in the environment
     so the billing provider can use it for credit checks.
     """
     import os
 
-    # Update environment variable so billing provider can use it
+    # Update both environment variables so billing provider picks it up
+    # regardless of which env var it checks (Google on Android, Apple on iOS)
     os.environ["CIRIS_BILLING_GOOGLE_ID_TOKEN"] = google_id_token
-    logger.info("[NativeAuth] Updated CIRIS_BILLING_GOOGLE_ID_TOKEN in environment for billing provider")
+    os.environ["CIRIS_BILLING_APPLE_ID_TOKEN"] = google_id_token
+    logger.info(
+        "[NativeAuth] Updated CIRIS_BILLING_GOOGLE_ID_TOKEN and CIRIS_BILLING_APPLE_ID_TOKEN in environment for billing provider"
+    )
 
     # Try to reinitialize the billing provider if resource_monitor is available
     # This is done via a background task to not block the login response
@@ -1246,6 +1250,8 @@ async def oauth_callback(
         if not external_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth provider did not return user ID")
 
+        # Ensure users are loaded from DB before role determination (fixes role demotion bug)
+        await auth_service._ensure_users_loaded()
         # Determine user role (preserves existing role if user already exists)
         user_email = user_data["email"]
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider=provider)
@@ -1639,6 +1645,8 @@ async def native_google_token_exchange(
             )
 
         user_email = user_data.get("email")
+        # Ensure users are loaded from DB before role determination (fixes role demotion bug)
+        await auth_service._ensure_users_loaded()
         # Pass external_id to preserve existing user's role (don't demote on re-auth!)
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider="google")
         logger.info(f"[NativeAuth] Determined role for {user_email}: {user_role}")
@@ -1866,6 +1874,8 @@ async def native_apple_token_exchange(
             )
 
         user_email = user_data.get("email")
+        # Ensure users are loaded from DB before role determination (fixes role demotion bug)
+        await auth_service._ensure_users_loaded()
         # Pass external_id to preserve existing user's role (don't demote on re-auth!)
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider="apple")
         logger.info(f"[AppleNativeAuth] Determined role for {user_email}: {user_role}")
@@ -1891,6 +1901,10 @@ async def native_apple_token_exchange(
         # Generate API key
         logger.info(f"[AppleNativeAuth] Generating API key for user {oauth_user.user_id}")
         api_key = _generate_api_key_and_store(auth_service, oauth_user, "apple")
+
+        # Update billing provider with the Apple ID token for credit checks
+        # The billing backend accepts Apple tokens (same as Google flow)
+        _update_billing_provider_token(native_request.id_token)
 
         # Trigger billing credit check to create billing user
         logger.info(f"[AppleNativeAuth] Triggering billing credit check for user {oauth_user.user_id}")
@@ -2021,20 +2035,15 @@ async def delete_api_key(
 
 
 @router.get("/auth/attestation")
-async def get_attestation(request: Request) -> Dict[str, Any]:
-    """Get cached CIRISVerify attestation from AuthenticationService.
+async def get_attestation(request: Request, refresh: bool = False) -> Dict[str, Any]:
+    """Get CIRISVerify attestation from AuthenticationService.
 
-    Returns the cached attestation result from startup attestation.
-    This endpoint does NOT trigger a new attestation - it only returns
-    the cached result from when the agent started.
-
-    This is the preferred endpoint for Trust & Security display as it:
-    1. Returns instantly (no network calls)
-    2. Uses the authoritative cached result from auth service
-    3. Ensures consistency with other auth-dependent features
+    By default returns the cached attestation result from startup.
+    Pass ?refresh=true to invalidate the cache and trigger a fresh
+    attestation run (used by the Trust page refresh button).
 
     Returns:
-        Cached attestation result in the same format as /v1/setup/verify-status
+        Attestation result in the same format as /v1/setup/verify-status
     """
     # Get APIAuthService from app state, then access the underlying AuthenticationService
     api_auth_service = getattr(request.app.state, "auth_service", None)
@@ -2071,6 +2080,29 @@ async def get_attestation(request: Request) -> Dict[str, Any]:
                 "loaded": False,
                 "error": "Attestation caching not supported",
                 "attestation_status": "not_attempted",
+            }
+        }
+
+    # If refresh requested, invalidate cache and trigger a new attestation
+    if refresh and hasattr(infra_auth_service, "run_attestation"):
+        import asyncio
+
+        logger.info("[attestation] Refresh requested — invalidating cache and re-running attestation")
+        infra_auth_service.invalidate_attestation_cache()
+        try:
+            task = asyncio.create_task(infra_auth_service.run_attestation(mode="full", force_refresh=True))
+            if hasattr(infra_auth_service, "_background_tasks"):
+                infra_auth_service._background_tasks.add(task)
+                task.add_done_callback(infra_auth_service._background_tasks.discard)
+        except Exception as e:
+            logger.warning(f"[attestation] Failed to trigger refresh attestation: {e}")
+        return {
+            "data": {
+                "loaded": True,
+                "attestation_status": "in_progress",
+                "level_pending": True,
+                "max_level": 0,
+                "error": None,
             }
         }
 

@@ -241,7 +241,7 @@ class TokenRefreshManager(
      * Update the .env file with a new API key (ID token).
      * Also updates CIRIS_BILLING_GOOGLE_ID_TOKEN if present (for CIRIS proxy billing).
      *
-     * IMPORTANT: Only updates OPENAI_API_KEY if using CIRIS proxy mode (llm.ciris.ai).
+     * IMPORTANT: Only updates OPENAI_API_KEY if using CIRIS proxy mode (llm01.ciris-services-*).
      * In BYOK mode, the user's API key is preserved and only CIRIS_BILLING_GOOGLE_ID_TOKEN is updated.
      */
     private fun updateEnvFile(newIdToken: String) {

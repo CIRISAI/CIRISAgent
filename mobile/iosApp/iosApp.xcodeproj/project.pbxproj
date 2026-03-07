@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -14,7 +14,6 @@
 		4A23539E03B1795BF31CBF28 /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */; };
 		56B0305B5D3847FC6B326502 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE8509E5A49E4A5CAAEB3ADB /* ContentView.swift */; };
 		66A2AEEC40DC3948EEC2CEBA /* Python.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7F57CDEE4615E80E9C189DA6 /* Python.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		9A2182A82F5382A000A5FE7D /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9A2182A72F5382A000A5FE7D /* StoreKit.framework */; };
 		AA5FBF09EA586006E8064F7E /* DeviceCheck.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E8B29C709AD6D0538972B327 /* DeviceCheck.framework */; };
 		B60CB4CB11974283B79D66D0 /* AppAttestManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FD4253E3B2F5576887094CC /* AppAttestManager.swift */; };
 		CBE772C185B3AE8489CCE92F /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 428EEA85690BE39004316694 /* Security.framework */; };
@@ -47,10 +46,9 @@
 		586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
 		5FD4253E3B2F5576887094CC /* AppAttestManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAttestManager.swift; sourceTree = "<group>"; };
 		7F57CDEE4615E80E9C189DA6 /* Python.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Python.xcframework; path = Frameworks/Python.xcframework; sourceTree = "<group>"; };
-		86038AE1032E284E79B32AD6 /* iosApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		86038AE1032E284E79B32AD6 /* iosApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		93BB47C3CC3B5531EA4EB340 /* Resources.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = Resources.zip; sourceTree = "<group>"; };
 		960264F5759B4678704E09D5 /* CIRISVerify.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = CIRISVerify.xcframework; path = Frameworks/CIRISVerify.xcframework; sourceTree = "<group>"; };
-		9A2182A72F5382A000A5FE7D /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		A3BBFBA91E6B290B4005C668 /* AppleSignInHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInHelper.swift; sourceTree = "<group>"; };
 		C117AD187833E2513BD2F553 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		C49B0B02429FBBC9F867DDE1 /* iosApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iosApp.entitlements; sourceTree = "<group>"; };
@@ -72,7 +70,6 @@
 				E0491F1A134023B2903DF517 /* Python.xcframework in Frameworks */,
 				F358EA2E70E0056A40821CA6 /* CIRISVerify.xcframework in Frameworks */,
 				4A23539E03B1795BF31CBF28 /* AuthenticationServices.framework in Frameworks */,
-				9A2182A82F5382A000A5FE7D /* StoreKit.framework in Frameworks */,
 				CBE772C185B3AE8489CCE92F /* Security.framework in Frameworks */,
 				AA5FBF09EA586006E8064F7E /* DeviceCheck.framework in Frameworks */,
 			);
@@ -103,7 +100,6 @@
 		3666012298E772D226418813 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				9A2182A72F5382A000A5FE7D /* StoreKit.framework */,
 				586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */,
 				960264F5759B4678704E09D5 /* CIRISVerify.xcframework */,
 				E8B29C709AD6D0538972B327 /* DeviceCheck.framework */,
@@ -166,6 +162,7 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					78B53CC79860CBFC2F5543C6 = {
+						DevelopmentTeam = MHX9MGJ62V;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -180,6 +177,7 @@
 			);
 			mainGroup = 38B69C3F79CD97858CF7B609;
 			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -295,7 +293,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = "${DEVELOPMENT_TEAM}";
+				DEVELOPMENT_TEAM = MHX9MGJ62V;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -353,7 +351,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = "${DEVELOPMENT_TEAM}";
+				DEVELOPMENT_TEAM = MHX9MGJ62V;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -389,7 +387,6 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = MHX9MGJ62V;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -416,13 +413,10 @@
 					"$(PROJECT_DIR)/Frameworks/CIRISVerify.xcframework/ios-arm64-simulator/CIRISVerify.framework/Headers",
 				);
 				INFOPLIST_FILE = iosApp/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "CIRIS Agent";
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ai.ciris.mobile;
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = "iosApp/iosApp-Bridging-Header.h";
@@ -437,7 +431,6 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = MHX9MGJ62V;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -464,13 +457,10 @@
 					"$(PROJECT_DIR)/Frameworks/CIRISVerify.xcframework/ios-arm64-simulator/CIRISVerify.framework/Headers",
 				);
 				INFOPLIST_FILE = iosApp/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "CIRIS Agent";
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ai.ciris.mobile;
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = "iosApp/iosApp-Bridging-Header.h";

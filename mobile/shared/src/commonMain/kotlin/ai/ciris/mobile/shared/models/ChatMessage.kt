@@ -9,7 +9,11 @@ data class ChatMessage(
     val text: String,
     val type: MessageType,
     val timestamp: Instant,
-    val reasoning: String? = null
+    val reasoning: String? = null,
+    val attachmentCount: Int = 0,
+    val attachmentNames: List<String> = emptyList(),
+    val hasImageAttachments: Boolean = false,
+    val hasDocumentAttachments: Boolean = false
 )
 
 @Serializable

@@ -277,7 +277,7 @@ def _build_response_message(
 
 
 @router.post(
-    "/",
+    "",
     responses={
         500: {"description": "Failed to persist DSAR request"},
     },
@@ -451,7 +451,7 @@ async def check_dsar_status(ticket_id: str) -> StandardResponse:
 
 
 @router.get(
-    "/",
+    "",
     responses={
         403: {"description": "Only administrators can list DSAR requests"},
     },

@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.viewmodels
 
+import ai.ciris.mobile.shared.config.CIRISConfig
 import ai.ciris.mobile.shared.models.*
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import androidx.lifecycle.ViewModel
@@ -633,12 +634,12 @@ class SetupViewModel : ViewModel() {
             CompleteSetupRequest(
                 llm_provider = "other", // Use "other" so backend writes OPENAI_API_BASE to .env
                 llm_api_key = currentState.googleIdToken ?: "",
-                llm_base_url = "https://llm.ciris.ai",  // CIRIS_LLM_PROXY_URL
+                llm_base_url = CIRISConfig.CIRIS_LLM_PROXY_URL,  // US: llm01.ciris-services-1.ai
                 llm_model = "default",
 
                 // European backup
                 backup_llm_api_key = currentState.googleIdToken,
-                backup_llm_base_url = "https://llm-eu.ciris.ai",  // CIRIS_LLM_PROXY_URL_EU
+                backup_llm_base_url = CIRISConfig.CIRIS_LLM_PROXY_URL_EU,  // EU: llm01.ciris-services-eu-1.com
                 backup_llm_model = "default",
 
                 // Agent configuration

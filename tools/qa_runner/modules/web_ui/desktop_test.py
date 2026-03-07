@@ -14,6 +14,7 @@ Usage:
 
 import asyncio
 import sys
+import traceback
 
 from .desktop_app_helper import DesktopAppConfig, DesktopAppHelper
 
@@ -29,6 +30,8 @@ async def main():
         print("  input <tag> <text>  - Input text to an element")
         print("  wait-screen <name>  - Wait for a screen")
         print("  wait-element <tag>  - Wait for an element")
+        print("  attach <file_path>  - Attach a file (image/PDF/DOCX)")
+        print("  clear-attachments   - Clear all file attachments")
         return
 
     command = sys.argv[1]
@@ -39,8 +42,8 @@ async def main():
     try:
         await helper.start()
     except RuntimeError as e:
-        print(f"Error: {e}")
-        return
+        print(f"FATAL: {e}", file=sys.stderr)
+        sys.exit(1)
 
     try:
         if command == "status":
@@ -55,19 +58,19 @@ async def main():
             password = args[1] if len(args) > 1 else "ciris_admin_password"
             print(f"Logging in as {username}...")
             success = await helper.login(username, password)
-            print(f"Login: {'success' if success else 'failed'}")
+            print(f"Login: {'success' if success else 'FAILED'}")
             if success:
                 status = await helper.status()
                 print(f"Now on: {status['screen']}")
 
         elif command == "navigate":
             if not args:
-                print("Usage: navigate <screen>")
-                return
+                print("Usage: navigate <screen>", file=sys.stderr)
+                sys.exit(1)
             screen = args[0]
             print(f"Navigating to {screen}...")
             success = await helper.navigate_to(screen)
-            print(f"Navigate: {'success' if success else 'failed'}")
+            print(f"Navigate: {'success' if success else 'FAILED'}")
             if success:
                 status = await helper.status()
                 print(f"Now on: {status['screen']}")
@@ -75,48 +78,72 @@ async def main():
 
         elif command == "click":
             if not args:
-                print("Usage: click <tag>")
-                return
+                print("Usage: click <tag>", file=sys.stderr)
+                sys.exit(1)
             tag = args[0]
             print(f"Clicking {tag}...")
-            success = await helper.click(tag)
-            print(f"Click: {'success' if success else 'failed'}")
-            # Poll for status update
+            await helper.click(tag)
+            print(f"Click: success")
             await asyncio.sleep(0.2)
             status = await helper.status()
             print(f"Screen: {status['screen']}, Elements: {status['elements']}")
 
         elif command == "input":
             if len(args) < 2:
-                print("Usage: input <tag> <text>")
-                return
+                print("Usage: input <tag> <text>", file=sys.stderr)
+                sys.exit(1)
             tag = args[0]
             text = " ".join(args[1:])
             print(f"Inputting '{text}' to {tag}...")
-            success = await helper.input_text(tag, text)
-            print(f"Input: {'success' if success else 'failed'}")
+            await helper.input_text(tag, text)
+            print(f"Input: success")
 
         elif command == "wait-screen":
             if not args:
-                print("Usage: wait-screen <name>")
-                return
+                print("Usage: wait-screen <name>", file=sys.stderr)
+                sys.exit(1)
             screen = args[0]
             print(f"Waiting for screen {screen}...")
             success = await helper.wait_for_screen(screen, timeout=10000)
-            print(f"Wait: {'found' if success else 'timeout'}")
+            if not success:
+                print(f"TIMEOUT: Screen '{screen}' not found after 10s", file=sys.stderr)
+                sys.exit(1)
+            print(f"Wait: found")
 
         elif command == "wait-element":
             if not args:
-                print("Usage: wait-element <tag>")
-                return
+                print("Usage: wait-element <tag>", file=sys.stderr)
+                sys.exit(1)
             tag = args[0]
             print(f"Waiting for element {tag}...")
-            success = await helper.wait_for_element(tag, timeout=10000)
-            print(f"Wait: {'found' if success else 'timeout'}")
+            await helper.wait_for_element(tag, timeout=10000)
+            print(f"Wait: found")
+
+        elif command == "attach":
+            if not args:
+                print("Usage: attach <file_path>", file=sys.stderr)
+                sys.exit(1)
+            file_path = args[0]
+            print(f"Attaching file: {file_path}")
+            await helper.attach_file_from_path(file_path)
+            print(f"Attach: success")
+
+        elif command == "clear-attachments":
+            print("Clearing attachments...")
+            await helper.clear_attachments()
+            print(f"Clear: success")
 
         else:
-            print(f"Unknown command: {command}")
+            print(f"Unknown command: {command}", file=sys.stderr)
+            sys.exit(1)
 
+    except RuntimeError as e:
+        print(f"\nERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"\nFATAL: {type(e).__name__}: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)
     finally:
         await helper.stop()
 

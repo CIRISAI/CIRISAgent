@@ -14,6 +14,9 @@ actual object TestAutomation {
     private val _textInputRequests = MutableStateFlow<TextInputRequest?>(null)
     actual val textInputRequests: StateFlow<TextInputRequest?> = _textInputRequests
 
+    private val _fileInjectionRequests = MutableStateFlow<PickedFile?>(null)
+    actual val fileInjectionRequests: StateFlow<PickedFile?> = _fileInjectionRequests
+
     actual fun isEnabled(): Boolean = false
 
     actual fun registerElement(testTag: String, x: Int, y: Int, width: Int, height: Int, text: String?) {
@@ -50,6 +53,14 @@ actual object TestAutomation {
     }
 
     actual fun clearTextInputRequest() {
+        // No-op on Android
+    }
+
+    actual fun injectFile(name: String, mediaType: String, dataBase64: String, sizeBytes: Long) {
+        // No-op on Android
+    }
+
+    actual fun clearFileInjectionRequest() {
         // No-op on Android
     }
 }

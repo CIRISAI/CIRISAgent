@@ -11,6 +11,8 @@ import ai.ciris.mobile.shared.viewmodels.SetupCompletionResult
 import ai.ciris.mobile.shared.viewmodels.StateTransitionResult
 import ai.ciris.mobile.shared.viewmodels.VerifyStatusResponse
 import ai.ciris.api.apis.*
+import ai.ciris.api.models.DocumentPayload
+import ai.ciris.api.models.ImagePayload
 import ai.ciris.api.models.InteractRequest as SdkInteractRequest
 import ai.ciris.api.models.LoginRequest as SdkLoginRequest
 import ai.ciris.api.models.SetupCompleteRequest as SdkSetupCompleteRequest
@@ -171,7 +173,7 @@ class CIRISApiClient(
         }
         it.install(Logging) {
             logger = Logger.DEFAULT
-            level = LogLevel.ALL // Full logging for debugging
+            level = LogLevel.NONE // Use PlatformLogger for targeted logging instead
         }
         it.install(HttpTimeout) {
             requestTimeoutMillis = 30000
@@ -314,14 +316,23 @@ class CIRISApiClient(
     }
 
     // Chat / Interact
-    override suspend fun sendMessage(message: String, channelId: String): InteractResponse {
+    override suspend fun sendMessage(
+        message: String,
+        channelId: String,
+        images: List<ImagePayload>?,
+        documents: List<DocumentPayload>?
+    ): InteractResponse {
         val method = "sendMessage"
-        logInfo(method, "Sending message: '${message.take(50)}...' to channel=$channelId")
+        logInfo(method, "Sending message: '${message.take(50)}...' to channel=$channelId, images=${images?.size ?: 0}, docs=${documents?.size ?: 0}")
         logDebug(method, "Auth token present: ${accessToken != null}, token: ${maskToken(accessToken)}")
 
         return try {
-            val request = SdkInteractRequest(message = message)
-            logDebug(method, "Created SdkInteractRequest")
+            val request = SdkInteractRequest(
+                message = message,
+                images = images,
+                documents = documents
+            )
+            logDebug(method, "Created SdkInteractRequest with ${images?.size ?: 0} images, ${documents?.size ?: 0} documents")
 
             val authHeaderValue = authHeader()
             logDebug(method, "Calling agentApi.interactV1AgentInteractPost with auth=${authHeaderValue != null}")
@@ -899,7 +910,8 @@ class CIRISApiClient(
      */
     suspend fun getVerifyStatus(
         playIntegrityToken: String? = null,
-        playIntegrityNonce: String? = null
+        playIntegrityNonce: String? = null,
+        refresh: Boolean = false
     ): VerifyStatusResponse {
         val method = "getVerifyStatus"
         logDebug(method, "Fetching CIRISVerify status (hasPlayIntegrity=${playIntegrityToken != null})")
@@ -922,6 +934,9 @@ class CIRISApiClient(
             val url = if (playIntegrityToken != null && playIntegrityNonce != null) {
                 // Full attestation with Play Integrity - use setup endpoint (first-run only)
                 "$baseUrl/v1/setup/verify-status?mode=full&play_integrity_token=$playIntegrityToken&play_integrity_nonce=$playIntegrityNonce"
+            } else if (refresh) {
+                // Force re-attestation via FFI
+                "$baseUrl/v1/auth/attestation?refresh=true"
             } else {
                 // Cached attestation from auth service - instant response
                 "$baseUrl/v1/auth/attestation"
@@ -1714,7 +1729,9 @@ class CIRISApiClient(
      */
     suspend fun getLoadableAdapters(): LoadableAdaptersData {
         val method = "getLoadableAdapters"
-        logInfo(method, "Fetching loadable adapters")
+        val url = "$baseUrl/v1/system/adapters/loadable"
+        val auth = authHeader()
+        logInfo(method, "GET $url | auth=${auth != null} token=${maskToken(accessToken)}")
 
         return try {
             val client = HttpClient {
@@ -1729,16 +1746,15 @@ class CIRISApiClient(
                 }
             }
 
-            logDebug(method, "GET $baseUrl/v1/system/adapters/loadable")
-            val response: HttpResponse = client.get("$baseUrl/v1/system/adapters/loadable") {
-                authHeader()?.let { headers { append("Authorization", it) } }
+            val response: HttpResponse = client.get(url) {
+                auth?.let { headers { append("Authorization", it) } }
             }
 
-            logDebug(method, "Response status: ${response.status}")
+            logInfo(method, "Response: ${response.status.value} ${response.status.description}")
 
             if (response.status.value !in 200..299) {
                 val errorBody = response.body<String>()
-                logError(method, "Loadable adapters request failed: ${response.status} - $errorBody")
+                logError(method, "FAILED ${response.status} | url=$url | auth=${auth != null} | body=$errorBody")
                 client.close()
                 throw Exception("Failed to fetch loadable adapters: ${response.status}")
             }
@@ -1902,7 +1918,10 @@ class CIRISApiClient(
         stepData: Map<String, String>
     ): ConfigStepResultData {
         val method = "executeConfigurationStep"
-        logInfo(method, "Executing config step for session: $sessionId")
+        logInfo(method, "=== EXECUTE CONFIG STEP ===")
+        logInfo(method, "Session: $sessionId")
+        logInfo(method, "Step data keys: ${stepData.keys}")
+        logInfo(method, "Step data values: $stepData")
 
         return try {
             val request = ai.ciris.api.models.StepExecutionRequest(
@@ -1915,15 +1934,18 @@ class CIRISApiClient(
                 stepExecutionRequest = request,
                 authorization = authHeader()
             )
-            logDebug(method, "Response: status=${response.status}")
+            logInfo(method, "Response HTTP status: ${response.status}")
 
             if (!response.success) {
-                logError(method, "API returned non-success status: ${response.status}")
+                logError(method, "API returned non-success: ${response.status}")
                 throw RuntimeException("API error: HTTP ${response.status}")
             }
 
             val body = response.body()
             val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Response data: success=${data.success}, error=${data.error}, nextStepIndex=${data.nextStepIndex}")
+            logInfo(method, "Response data keys: ${data.`data`?.keys}")
+            logInfo(method, "Response data.data: ${data.`data`?.entries?.joinToString { "${it.key}=${it.value.toString().take(100)}" }}")
 
             // Check if this is a discovery step (has discovered_items in data, even if empty)
             val isDiscoveryStep = data.`data`?.containsKey("discovered_items") == true
@@ -1967,13 +1989,60 @@ class CIRISApiClient(
                 }
             } ?: emptyList()
 
+            // Extract OAuth URL from data field if present (for OAuth steps)
+            val oauthUrl = data.`data`?.get("oauth_url")?.let {
+                (it as? kotlinx.serialization.json.JsonPrimitive)?.content
+            }
+            val awaitingCallback = data.`data`?.get("awaiting_callback")?.let {
+                (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull()
+            } ?: false
+
+            logInfo(method, "=== OAUTH URL EXTRACTION ===")
+            logInfo(method, "oauth_url present in data: ${data.`data`?.containsKey("oauth_url")}")
+            logInfo(method, "awaiting_callback present in data: ${data.`data`?.containsKey("awaiting_callback")}")
+            if (oauthUrl != null) {
+                logInfo(method, "Extracted OAuth URL (full): $oauthUrl")
+            } else {
+                logInfo(method, "No oauth_url extracted from response")
+            }
+            logInfo(method, "awaitingCallback: $awaitingCallback")
+
+            // Parse select options from data field if present (for select steps)
+            val selectOptions = data.`data`?.get("options")?.let { optionsJson ->
+                try {
+                    val optionsList = mutableListOf<SelectOptionData>()
+                    if (optionsJson is kotlinx.serialization.json.JsonArray) {
+                        for (opt in optionsJson) {
+                            if (opt is kotlinx.serialization.json.JsonObject) {
+                                val id = opt["id"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } ?: ""
+                                val label = opt["label"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } ?: id
+                                val description = opt["description"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+                                val metadataObj = opt["metadata"] as? kotlinx.serialization.json.JsonObject
+                                val defaultEnabled = metadataObj?.get("default")?.let {
+                                    (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull()
+                                } ?: false
+                                optionsList.add(SelectOptionData(id, label, description, defaultEnabled))
+                            }
+                        }
+                    }
+                    logInfo(method, "Parsed ${optionsList.size} select options")
+                    optionsList
+                } catch (e: Exception) {
+                    logError(method, "Failed to parse options: ${e.message}")
+                    emptyList()
+                }
+            } ?: emptyList()
+
             ConfigStepResultData(
                 success = data.success,
                 message = data.error, // error message is the only message from this endpoint
                 nextStepIndex = data.nextStepIndex,
                 isComplete = isComplete,
                 nextStep = null, // Next step needs to be fetched from session status
-                discoveredItems = discoveredItems
+                discoveredItems = discoveredItems,
+                oauthUrl = oauthUrl,
+                awaitingCallback = awaitingCallback,
+                selectOptions = selectOptions
             )
         } catch (e: Exception) {
             logException(method, e, "sessionId=$sessionId")
@@ -2003,7 +2072,16 @@ class CIRISApiClient(
 
             val body = response.body()
             val data = body.`data` ?: throw RuntimeException("API returned null data")
-            logInfo(method, "Session status: step=${data.currentStepIndex}/${data.totalSteps}")
+            logInfo(method, "Session status: step=${data.currentStepIndex}/${data.totalSteps}, status=${data.status}, stepType=${data.currentStep?.stepType}")
+            logInfo(method, "Collected config keys: ${data.collectedConfig?.keys}")
+
+            // Flatten collected config to displayable strings
+            val collectedConfig = data.collectedConfig?.mapValues { (_, v) ->
+                when (v) {
+                    is kotlinx.serialization.json.JsonPrimitive -> v.content
+                    else -> v.toString()
+                }
+            } ?: emptyMap()
 
             ConfigSessionData(
                 sessionId = data.sessionId ?: sessionId,
@@ -2029,7 +2107,8 @@ class CIRISApiClient(
                             )
                         } ?: emptyList()
                     )
-                }
+                },
+                collectedConfig = collectedConfig
             )
         } catch (e: Exception) {
             logException(method, e, "sessionId=$sessionId")

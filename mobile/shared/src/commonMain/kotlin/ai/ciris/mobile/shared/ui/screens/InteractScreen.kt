@@ -18,8 +18,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,6 +38,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
+import ai.ciris.mobile.shared.platform.FilePickerDialog
+import ai.ciris.mobile.shared.platform.PickedFile
+import ai.ciris.mobile.shared.platform.platformImePadding
+import ai.ciris.mobile.shared.platform.TestAutomation
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.ui.unit.sp
@@ -48,6 +58,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.zIndex
 import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 /**
  * Chat interface screen
@@ -97,6 +109,25 @@ fun InteractScreen(
     val llmHealth by viewModel.llmHealth.collectAsState()
     val creditStatus by viewModel.creditStatus.collectAsState()
     val trustStatus by viewModel.trustStatus.collectAsState()
+    val attachedFiles by viewModel.attachedFiles.collectAsState()
+
+    // Observe text input requests for test automation
+    val textInputRequest by TestAutomation.textInputRequests.collectAsState()
+    LaunchedEffect(textInputRequest) {
+        textInputRequest?.let { request ->
+            if (request.testTag == "input_message") {
+                if (request.clearFirst) {
+                    viewModel.onInputTextChanged(request.text)
+                } else {
+                    viewModel.onInputTextChanged(inputText + request.text)
+                }
+                TestAutomation.clearTextInputRequest()
+            }
+        }
+    }
+
+    // File picker state
+    var showFilePicker by remember { mutableStateOf(false) }
 
     // Focus requester for the text input
     val focusRequester = remember { FocusRequester() }
@@ -108,12 +139,14 @@ fun InteractScreen(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFFFAFAFA))
-            // Don't apply imePadding to entire screen - apply to input bar only
-            // This avoids iOS issues where keyboard insets don't reset properly
     ) {
-        // Main content column
+        // Main content column with platform-specific keyboard padding
+        // Android: Uses imePadding() for proper keyboard avoidance
+        // iOS: No-op - native keyboard avoidance handles this automatically
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .platformImePadding()
         ) {
             // Enhanced status bar with LLM health, credits, and trust shield
             EnhancedStatusBar(
@@ -190,8 +223,8 @@ fun InteractScreen(
         }
 
             // Input bar with agent state icon
-            // Apply imePadding and navigationBarsPadding here at the input bar level
-            // This ensures keyboard pushes the input up without leaving ghost gaps
+            // Input bar with agent state icon
+            // navigationBarsPadding here so input sits above the system nav bar
             ChatInputBarWithBubbles(
                 text = inputText,
                 onTextChange = { viewModel.onInputTextChanged(it) },
@@ -203,10 +236,22 @@ fun InteractScreen(
                 bubbleEmojis = bubbleEmojis,
                 sseConnected = sseConnected,
                 onLegendToggle = { viewModel.toggleLegend() },
+                attachedFiles = attachedFiles,
+                onAttach = { showFilePicker = true },
+                onRemoveAttachment = { viewModel.removeAttachment(it) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .imePadding()
                     .navigationBarsPadding()
+            )
+
+            // File picker dialog (platform-specific)
+            FilePickerDialog(
+                show = showFilePicker,
+                onFilePicked = { file ->
+                    viewModel.addAttachment(file)
+                    showFilePicker = false
+                },
+                onDismiss = { showFilePicker = false }
             )
         } // End of Column
 
@@ -381,7 +426,9 @@ private fun LlmHealthIndicator(
         )
 
         // Provider name - comprehensive provider display
+        // Show "..." while loading (provider defaults to "unknown")
         val displayName = when {
+            health.provider == "unknown" -> "..."  // Still loading
             isMockLlm -> "\u26A0\uFE0F MOCKLLM \u26A0\uFE0F"
             health.isCirisProxy -> "CIRIS"
             health.provider == "openai" -> "OpenAI"
@@ -804,12 +851,24 @@ private fun UserChatBubble(message: ChatMessage, modifier: Modifier = Modifier) 
             )
 
             // Content (from item_chat_user.xml:25-32)
-            Text(
-                text = message.text,
-                modifier = Modifier.padding(top = 2.dp),
-                fontSize = 14.sp,
-                color = Color.White
-            )
+            SelectionContainer {
+                Text(
+                    text = message.text,
+                    modifier = Modifier.padding(top = 2.dp),
+                    fontSize = 14.sp,
+                    color = Color.White
+                )
+            }
+
+            // Attachment indicator
+            if (message.attachmentCount > 0) {
+                MessageAttachmentRow(
+                    attachmentCount = message.attachmentCount,
+                    hasImages = message.hasImageAttachments,
+                    hasDocs = message.hasDocumentAttachments,
+                    tintColor = Color(0xFFDBEAFE)
+                )
+            }
 
             // Timestamp (from item_chat_user.xml:34-42)
             Text(
@@ -868,12 +927,14 @@ private fun AgentChatBubble(message: ChatMessage, modifier: Modifier = Modifier)
             )
 
             // Content (from item_chat_agent.xml:25-32)
-            Text(
-                text = message.text,
-                modifier = Modifier.padding(top = 2.dp),
-                fontSize = 14.sp,
-                color = Color(0xFF1F2937)
-            )
+            SelectionContainer {
+                Text(
+                    text = message.text,
+                    modifier = Modifier.padding(top = 2.dp),
+                    fontSize = 14.sp,
+                    color = Color(0xFF1F2937)
+                )
+            }
 
             // Timestamp (from item_chat_agent.xml:34-42)
             Text(
@@ -914,11 +975,13 @@ private fun SystemMessage(message: ChatMessage, modifier: Modifier = Modifier) {
                     text = "\u2139\uFE0F", // ℹ️ info icon
                     fontSize = 14.sp
                 )
-                Text(
-                    text = message.text,
-                    fontSize = 12.sp,
-                    color = Color(0xFF0369A1) // Dark blue text
-                )
+                SelectionContainer {
+                    Text(
+                        text = message.text,
+                        fontSize = 12.sp,
+                        color = Color(0xFF0369A1) // Dark blue text
+                    )
+                }
             }
         }
     }
@@ -950,11 +1013,13 @@ private fun ErrorMessage(message: ChatMessage, modifier: Modifier = Modifier) {
                     text = "\u26A0\uFE0F", // ⚠️ warning icon
                     fontSize = 14.sp
                 )
-                Text(
-                    text = message.text,
-                    fontSize = 12.sp,
-                    color = Color(0xFFDC2626) // Red text
-                )
+                SelectionContainer {
+                    Text(
+                        text = message.text,
+                        fontSize = 12.sp,
+                        color = Color(0xFFDC2626) // Red text
+                    )
+                }
             }
         }
     }
@@ -964,99 +1029,20 @@ private fun ErrorMessage(message: ChatMessage, modifier: Modifier = Modifier) {
  * Chat input bar with send button
  * From fragment_interact.xml:243-291
  */
-@Composable
-private fun ChatInputBar(
-    text: String,
-    onTextChange: (String) -> Unit,
-    onSend: () -> Unit,
-    enabled: Boolean,
-    focusRequester: FocusRequester? = null,
-    onFocused: () -> Unit = {},
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        color = Color.White,
-        shadowElevation = 4.dp,
-        modifier = modifier
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Message input (from fragment_interact.xml:264-277)
-            OutlinedTextField(
-                value = text,
-                onValueChange = onTextChange,
-                modifier = Modifier
-                    .weight(1f)
-                    .testable("input_message")
-                    .let { mod ->
-                        if (focusRequester != null) {
-                            mod.focusRequester(focusRequester)
-                        } else {
-                            mod
-                        }
-                    }
-                    .onFocusChanged { focusState ->
-                        if (focusState.isFocused) {
-                            onFocused()
-                        }
-                    },
-                placeholder = { Text("Type your message...") },
-                enabled = enabled,
-                singleLine = false,
-                maxLines = 3,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFF419CA0),
-                    unfocusedBorderColor = Color(0xFFE5E7EB)
-                )
-            )
-
-            // Send button (from fragment_interact.xml:279-289)
-            IconButton(
-                onClick = onSend,
-                enabled = enabled && text.isNotBlank(),
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(
-                        color = if (enabled && text.isNotBlank()) {
-                            Color(0xFF419CA0)
-                        } else {
-                            Color(0xFFE5E7EB)
-                        },
-                        shape = CircleShape
-                    )
-                    .testableClickable("btn_send") { onSend() }
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Send,
-                    contentDescription = "Send",
-                    tint = Color.White
-                )
-            }
-        }
-    }
-}
-
 /**
- * Format timestamp to "h:mm a" format
- * From InteractFragment.kt:732-742
+ * Format timestamp to "h:mm a" format in local timezone
  */
 private fun formatTimestamp(timestamp: Instant): String {
-    // Simple format: hours:minutes
-    val epochMillis = timestamp.toEpochMilliseconds()
-    val hours = ((epochMillis / 3600000) % 24).toInt()
-    val minutes = ((epochMillis / 60000) % 60).toInt()
+    val localDateTime = timestamp.toLocalDateTime(TimeZone.currentSystemDefault())
+    val hours = localDateTime.hour
+    val minutes = localDateTime.minute
     val amPm = if (hours < 12) "AM" else "PM"
     val displayHours = if (hours == 0) 12 else if (hours > 12) hours - 12 else hours
     return "$displayHours:${minutes.toString().padStart(2, '0')} $amPm"
 }
 
 /**
- * Chat input bar with agent state icon (no gap - bubbles overlay separately)
+ * Chat input bar with agent state icon, attachment button, and file preview strip
  */
 @Composable
 @Suppress("UNUSED_PARAMETER") // bubbleEmojis handled by BubbleOverlay
@@ -1071,78 +1057,268 @@ private fun ChatInputBarWithBubbles(
     bubbleEmojis: List<BubbleEmoji>, // Kept for API compatibility, bubbles rendered in overlay
     sseConnected: Boolean,
     onLegendToggle: () -> Unit = {},
+    attachedFiles: List<PickedFile> = emptyList(),
+    onAttach: () -> Unit = {},
+    onRemoveAttachment: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val hasContent = text.isNotBlank() || attachedFiles.isNotEmpty()
+
     Surface(
         color = Color.White,
         shadowElevation = 4.dp,
         modifier = modifier
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Agent state icon (compact, no extra height) - clickable for legend
-            AgentStateIcon(
-                state = agentState,
-                sseConnected = sseConnected,
-                onClick = onLegendToggle
-            )
-
-            // Message input
-            OutlinedTextField(
-                value = text,
-                onValueChange = onTextChange,
-                modifier = Modifier
-                    .weight(1f)
-                    .testable("input_message")
-                    .let { mod ->
-                        if (focusRequester != null) {
-                            mod.focusRequester(focusRequester)
-                        } else {
-                            mod
-                        }
-                    }
-                    .onFocusChanged { focusState ->
-                        if (focusState.isFocused) {
-                            onFocused()
-                        }
-                    },
-                placeholder = { Text("Type your message...") },
-                enabled = enabled,
-                singleLine = false,
-                maxLines = 3,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFF419CA0),
-                    unfocusedBorderColor = Color(0xFFE5E7EB)
-                )
-            )
-
-            // Send button
-            IconButton(
-                onClick = onSend,
-                enabled = enabled && text.isNotBlank(),
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(
-                        color = if (enabled && text.isNotBlank()) {
-                            Color(0xFF419CA0)
-                        } else {
-                            Color(0xFFE5E7EB)
-                        },
-                        shape = CircleShape
-                    )
-                    .testableClickable("btn_send") { onSend() }
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Send,
-                    contentDescription = "Send",
-                    tint = Color.White
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Attachment preview strip (shown when files are attached)
+            if (attachedFiles.isNotEmpty()) {
+                AttachmentPreviewStrip(
+                    files = attachedFiles,
+                    onRemove = onRemoveAttachment,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Agent state icon (compact, no extra height) - clickable for legend
+                AgentStateIcon(
+                    state = agentState,
+                    sseConnected = sseConnected,
+                    onClick = onLegendToggle
+                )
+
+                // Attach file button
+                IconButton(
+                    onClick = onAttach,
+                    enabled = enabled && attachedFiles.size < PickedFile.MAX_ATTACHMENTS,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .testableClickable("btn_attach") { onAttach() }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Attach file",
+                        tint = if (enabled) Color(0xFF6B7280) else Color(0xFFD1D5DB),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Message input
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = onTextChange,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testable("input_message")
+                        .let { mod ->
+                            if (focusRequester != null) {
+                                mod.focusRequester(focusRequester)
+                            } else {
+                                mod
+                            }
+                        }
+                        .onFocusChanged { focusState ->
+                            if (focusState.isFocused) {
+                                onFocused()
+                            }
+                        },
+                    placeholder = { Text("Type your message...") },
+                    enabled = enabled,
+                    singleLine = false,
+                    maxLines = 3,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF419CA0),
+                        unfocusedBorderColor = Color(0xFFE5E7EB)
+                    )
+                )
+
+                // Send button
+                IconButton(
+                    onClick = onSend,
+                    enabled = enabled && hasContent,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            color = if (enabled && hasContent) {
+                                Color(0xFF419CA0)
+                            } else {
+                                Color(0xFFE5E7EB)
+                            },
+                            shape = CircleShape
+                        )
+                        .testableClickable("btn_send") { onSend() }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Send,
+                        contentDescription = "Send",
+                        tint = Color.White
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Horizontal strip showing attached file previews with remove buttons
+ */
+@Composable
+private fun AttachmentPreviewStrip(
+    files: List<PickedFile>,
+    onRemove: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .horizontalScroll(rememberScrollState())
+            .testable("attachment_strip"),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        files.forEachIndexed { index, file ->
+            AttachmentChip(
+                file = file,
+                onRemove = { onRemove(index) },
+                modifier = Modifier.testable("attachment_chip_$index")
+            )
+        }
+    }
+}
+
+/**
+ * Individual attachment chip showing file icon, name, and remove button
+ */
+@Composable
+private fun AttachmentChip(
+    file: PickedFile,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = Color(0xFFF3F4F6),
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // File type indicator
+            FileTypeIcon(file = file)
+
+            Column {
+                Text(
+                    text = file.name.take(20) + if (file.name.length > 20) "..." else "",
+                    fontSize = 12.sp,
+                    color = Color(0xFF374151),
+                    maxLines = 1
+                )
+                Text(
+                    text = formatFileSize(file.sizeBytes),
+                    fontSize = 10.sp,
+                    color = Color(0xFF9CA3AF)
+                )
+            }
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier.size(20.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Remove",
+                    tint = Color(0xFF9CA3AF),
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * File type visual indicator - colored badge with type label
+ */
+@Composable
+private fun FileTypeIcon(file: PickedFile, modifier: Modifier = Modifier) {
+    val bgColor = if (file.isImage) Color(0xFF419CA0) else Color(0xFFEF4444)
+    val label = when {
+        file.mediaType.contains("jpeg") || file.mediaType.contains("jpg") -> "JPG"
+        file.mediaType.contains("png") -> "PNG"
+        file.mediaType.contains("gif") -> "GIF"
+        file.mediaType.contains("webp") -> "WEBP"
+        file.mediaType.contains("pdf") -> "PDF"
+        file.mediaType.contains("wordprocessingml") || file.mediaType.contains("docx") -> "DOC"
+        else -> "FILE"
+    }
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = bgColor,
+        modifier = modifier.size(32.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = label,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+    }
+}
+
+/**
+ * Attachment indicator shown inside message bubbles for sent messages with files
+ */
+@Composable
+private fun MessageAttachmentRow(
+    attachmentCount: Int,
+    hasImages: Boolean,
+    hasDocs: Boolean,
+    tintColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // Attachment icon
+        Icon(
+            imageVector = Icons.Default.Add,
+            contentDescription = "Attachments",
+            tint = tintColor,
+            modifier = Modifier.size(12.dp)
+        )
+        val typeLabel = when {
+            hasImages && hasDocs -> "$attachmentCount file${if (attachmentCount > 1) "s" else ""}"
+            hasImages -> "$attachmentCount image${if (attachmentCount > 1) "s" else ""}"
+            hasDocs -> "$attachmentCount document${if (attachmentCount > 1) "s" else ""}"
+            else -> "$attachmentCount file${if (attachmentCount > 1) "s" else ""}"
+        }
+        Text(
+            text = typeLabel,
+            fontSize = 10.sp,
+            color = tintColor,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+private fun formatFileSize(bytes: Long): String {
+    return when {
+        bytes < 1024 -> "${bytes}B"
+        bytes < 1024 * 1024 -> "${bytes / 1024}KB"
+        else -> {
+            val mb = bytes / (1024.0 * 1024.0)
+            val rounded = (mb * 10).toLong() / 10.0
+            "${rounded}MB"
         }
     }
 }
@@ -1185,19 +1361,19 @@ private fun AgentStateIcon(
             contentAlignment = Alignment.Center,
             modifier = Modifier.fillMaxSize()
         ) {
-            Text(
-                text = when {
-                    !sseConnected -> "⚪"
-                    state == AgentProcessingState.PROCESSING -> "🔄"
-                    else -> "💭"
-                },
-                fontSize = 20.sp,
-                modifier = if (state == AgentProcessingState.PROCESSING && sseConnected) {
-                    Modifier.graphicsLayer { rotationZ = rotation }
-                } else {
-                    Modifier
-                }
-            )
+            if (state == AgentProcessingState.PROCESSING && sseConnected) {
+                Text(
+                    text = "\u21BB", // ↻ clockwise circular arrow
+                    fontSize = 22.sp,
+                    color = Color(0xFF2563EB),
+                    modifier = Modifier.graphicsLayer { rotationZ = rotation }
+                )
+            } else {
+                Text(
+                    text = if (!sseConnected) "\u26AA" else "\uD83D\uDCAD",
+                    fontSize = 20.sp
+                )
+            }
         }
     }
 }
@@ -1416,9 +1592,11 @@ private fun TimelineRow(
  * Format timestamp for timeline (h:mm:ss)
  */
 private fun formatTimelineTimestamp(epochMillis: Long): String {
-    val hours = ((epochMillis / 3600000) % 24).toInt()
-    val minutes = ((epochMillis / 60000) % 60).toInt()
-    val seconds = ((epochMillis / 1000) % 60).toInt()
+    val instant = Instant.fromEpochMilliseconds(epochMillis)
+    val localDateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    val hours = localDateTime.hour
+    val minutes = localDateTime.minute
+    val seconds = localDateTime.second
     val displayHours = if (hours == 0) 12 else if (hours > 12) hours - 12 else hours
     return "$displayHours:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
 }

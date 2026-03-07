@@ -47,7 +47,7 @@ fun SessionsScreen(
                 title = { Text("Cognitive Sessions") },
                 navigationIcon = {
                     IconButton(
-                        onClick = {},
+                        onClick = onNavigateBack,
                         modifier = Modifier.testableClickable("btn_sessions_back") { onNavigateBack() }
                     ) {
                         Icon(
@@ -58,7 +58,7 @@ fun SessionsScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = {},
+                        onClick = onRefresh,
                         enabled = !isLoading,
                         modifier = Modifier.testableClickable("btn_sessions_refresh") { onRefresh() }
                     ) {
@@ -154,7 +154,7 @@ fun SessionsScreen(
             // Return to work button
             if (currentState !in listOf("WORK", "WAKEUP", "SHUTDOWN")) {
                 Button(
-                    onClick = {},
+                    onClick = { showConfirmDialog = "WORK" },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testableClickable("btn_return_to_work") { showConfirmDialog = "WORK" },
@@ -303,7 +303,7 @@ private fun SessionCard(
             }
 
             Button(
-                onClick = {},
+                onClick = onInitiate,
                 enabled = isEnabled && !isActive,
                 modifier = Modifier.testableClickable("btn_initiate_${title.lowercase()}") { onInitiate() }
             ) {
@@ -333,7 +333,7 @@ private fun ConfirmSessionDialog(
         text = { Text(message) },
         confirmButton = {
             Button(
-                onClick = {},
+                onClick = onConfirm,
                 modifier = Modifier.testableClickable("btn_confirm_session") { onConfirm() }
             ) {
                 Text("Confirm")
@@ -341,7 +341,7 @@ private fun ConfirmSessionDialog(
         },
         dismissButton = {
             TextButton(
-                onClick = {},
+                onClick = onDismiss,
                 modifier = Modifier.testableClickable("btn_cancel_session") { onDismiss() }
             ) {
                 Text("Cancel")

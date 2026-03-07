@@ -300,7 +300,7 @@ class IOSSerializedCursor:
         self._lock = lock
         self._conn = conn  # Keep reference to recreate cursor if needed
         self._closed = False
-        logger.info(f"[iOS_CURSOR] Created wrapper for {cursor}")
+        logger.debug(f"[iOS_CURSOR] Created wrapper for {cursor}")
 
     def _ensure_cursor(self) -> None:
         """Recreate cursor if it was closed (iOS pattern)."""
@@ -308,25 +308,25 @@ class IOSSerializedCursor:
             with self._lock:
                 self._cursor = self._conn.cursor()
                 self._closed = False
-                logger.info("[iOS_CURSOR] Recreated cursor after close")
+                logger.debug("[iOS_CURSOR] Recreated cursor after close")
 
     def execute(self, sql: str, parameters: Any = None) -> "IOSSerializedCursor":
         self._ensure_cursor()  # Recreate if needed on iOS
-        logger.info(f"[iOS_CURSOR] execute: {sql[:80]}...")
+        logger.debug(f"[iOS_CURSOR] execute: {sql[:80]}...")
         with self._lock:
             try:
                 if parameters is not None:
                     self._cursor.execute(sql, parameters)
                 else:
                     self._cursor.execute(sql)
-                logger.info("[iOS_CURSOR] execute succeeded")
+                logger.debug("[iOS_CURSOR] execute succeeded")
                 return self
             except Exception as e:
                 logger.error(f"[iOS_CURSOR] execute FAILED: {e}")
                 raise
 
     def executemany(self, sql: str, seq_of_parameters: Any) -> "IOSSerializedCursor":
-        logger.info(f"[iOS_CURSOR] executemany: {sql[:80]}...")
+        logger.debug(f"[iOS_CURSOR] executemany: {sql[:80]}...")
         with self._lock:
             self._cursor.executemany(sql, seq_of_parameters)
             return self
@@ -362,7 +362,7 @@ class IOSSerializedCursor:
         if self._closed:
             logger.warning("[iOS_CURSOR] fetchone() called on closed cursor, returning None")
             return None
-        logger.info("[iOS_CURSOR] fetchone() called...")
+        logger.debug("[iOS_CURSOR] fetchone() called...")
         with self._lock:
             try:
                 result = self._cursor.fetchone()
@@ -373,9 +373,9 @@ class IOSSerializedCursor:
                     # Close cursor immediately to prevent iOS tracking assertions
                     self._cursor.close()
                     self._closed = True
-                    logger.info(f"[iOS_CURSOR] fetchone() result={result}, cursor closed")
+                    logger.debug(f"[iOS_CURSOR] fetchone() result={result}, cursor closed")
                 else:
-                    logger.info(f"[iOS_CURSOR] fetchone() succeeded: {result}")
+                    logger.debug(f"[iOS_CURSOR] fetchone() succeeded: {result}")
                 return result
             except Exception as e:
                 logger.error(f"[iOS_CURSOR] fetchone() FAILED: {e}")
@@ -385,7 +385,7 @@ class IOSSerializedCursor:
         if self._closed:
             logger.warning("[iOS_CURSOR] fetchall() called on closed cursor, returning []")
             return []
-        logger.info("[iOS_CURSOR] fetchall() called...")
+        logger.debug("[iOS_CURSOR] fetchall() called...")
         with self._lock:
             try:
                 result = self._cursor.fetchall()
@@ -396,9 +396,9 @@ class IOSSerializedCursor:
                     # Close cursor immediately to prevent iOS tracking assertions
                     self._cursor.close()
                     self._closed = True
-                    logger.info(f"[iOS_CURSOR] fetchall() rows={len(result) if result else 0}, cursor closed")
+                    logger.debug(f"[iOS_CURSOR] fetchall() rows={len(result) if result else 0}, cursor closed")
                 else:
-                    logger.info(f"[iOS_CURSOR] fetchall() succeeded: {len(result) if result else 0} rows")
+                    logger.debug(f"[iOS_CURSOR] fetchall() succeeded: {len(result) if result else 0} rows")
                 return result
             except Exception as e:
                 logger.error(f"[iOS_CURSOR] fetchall() FAILED: {e}")
@@ -446,7 +446,7 @@ class IOSSerializedConnection:
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
         self._lock = _get_ios_lock()
-        logger.info("[iOS_CONN] IOSSerializedConnection created")
+        logger.debug("[iOS_CONN] IOSSerializedConnection created")
 
     def execute(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
         sql = args[0] if args else "unknown"
@@ -473,13 +473,13 @@ class IOSSerializedConnection:
 
     def cursor(self) -> IOSSerializedCursor:
         """Return a WRAPPED cursor that serializes all operations."""
-        logger.info("[iOS_CONN] cursor() called - creating wrapped cursor...")
+        logger.debug("[iOS_CONN] cursor() called - creating wrapped cursor...")
         with self._lock:
             try:
                 raw_cursor = self._conn.cursor()
                 # Pass connection reference so cursor can be recreated on iOS
                 wrapped = IOSSerializedCursor(raw_cursor, self._lock, self._conn)
-                logger.info("[iOS_CONN] cursor() succeeded, returning wrapped cursor")
+                logger.debug("[iOS_CONN] cursor() succeeded, returning wrapped cursor")
                 return wrapped
             except Exception as e:
                 logger.error(f"[iOS_CONN] cursor() FAILED: {e}")
@@ -496,7 +496,7 @@ class IOSSerializedConnection:
             self._conn.rollback()
 
     def close(self) -> None:
-        logger.info("[iOS_CONN] close() called")
+        logger.debug("[iOS_CONN] close() called")
         with self._lock:
             self._conn.close()
 
@@ -613,14 +613,14 @@ def _resolve_db_path(db_path: Optional[str]) -> str:
     if db_path is not None:
         return db_path
 
-    logger.info("[DB_CONNECT] db_path is None, resolving...")
+    logger.debug("[DB_CONNECT] db_path is None, resolving...")
     if _test_db_path is not None:
-        logger.info(f"[DB_CONNECT] Using test override path: {_test_db_path}")
+        logger.debug(f"[DB_CONNECT] Using test override path: {_test_db_path}")
         return _test_db_path
 
-    logger.info("[DB_CONNECT] Calling get_sqlite_db_full_path()...")
+    logger.debug("[DB_CONNECT] Calling get_sqlite_db_full_path()...")
     resolved = get_sqlite_db_full_path()
-    logger.info(f"[DB_CONNECT] Resolved path: {resolved}")
+    logger.debug(f"[DB_CONNECT] Resolved path: {resolved}")
     return resolved
 
 
@@ -637,9 +637,9 @@ def _create_postgres_connection(adapter: Any) -> Any:
 
 def _create_sqlite_connection_ios(db_path: str) -> sqlite3.Connection:
     """Create SQLite connection with iOS-specific settings."""
-    logger.info("[DB_CONNECT] iOS mode: using serialized connection settings")
+    logger.debug("[DB_CONNECT] iOS mode: using serialized connection settings")
     try:
-        logger.info(f"[DB_CONNECT] Calling sqlite3.connect({db_path})...")
+        logger.debug(f"[DB_CONNECT] Calling sqlite3.connect({db_path})...")
         conn = sqlite3.connect(
             db_path,
             check_same_thread=False,
@@ -647,7 +647,7 @@ def _create_sqlite_connection_ios(db_path: str) -> sqlite3.Connection:
             isolation_level=None,  # Autocommit mode - avoids transaction state issues
             timeout=30.0,  # Longer timeout for iOS
         )
-        logger.info(f"[DB_CONNECT] sqlite3.connect succeeded, conn={conn}")
+        logger.debug(f"[DB_CONNECT] sqlite3.connect succeeded, conn={conn}")
         return conn
     except Exception as e:
         logger.error(f"[DB_CONNECT] sqlite3.connect FAILED: {e}")
@@ -708,7 +708,7 @@ def get_db_connection(
     import traceback
 
     caller_info = "".join(traceback.format_stack()[-4:-1])
-    logger.info(f"[DB_CONNECT] get_db_connection called from:\n{caller_info}")
+    logger.debug(f"[DB_CONNECT] get_db_connection called from:\n{caller_info}")
 
     db_path = _resolve_db_path(db_path)
     adapter = init_dialect(db_path)
@@ -718,11 +718,11 @@ def get_db_connection(
         return _create_postgres_connection(adapter)
 
     # SQLite connection (default)
-    logger.info(f"[DB_CONNECT] Creating SQLite connection to: {db_path}")
+    logger.debug(f"[DB_CONNECT] Creating SQLite connection to: {db_path}")
     _ensure_adapters_registered()
 
     is_ios = _check_ios_platform()
-    logger.info(f"[DB_CONNECT] Platform detection: is_ios={is_ios}")
+    logger.debug(f"[DB_CONNECT] Platform detection: is_ios={is_ios}")
 
     # Create connection based on platform
     if is_ios:

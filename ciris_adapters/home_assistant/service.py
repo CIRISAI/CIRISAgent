@@ -209,6 +209,24 @@ class HAIntegrationService:
                         self._initialized = True
                         logger.info("Home Assistant connection verified")
                         return True
+                    elif response.status == 401:
+                        logger.warning("HA connection returned 401 - token expired, attempting refresh")
+                        if await self._try_refresh_token():
+                            # Retry with refreshed token
+                            async with aiohttp.ClientSession() as retry_session:
+                                async with retry_session.get(
+                                    f"{self.ha_url}/api/",
+                                    headers=self._get_headers(),
+                                    timeout=aiohttp.ClientTimeout(total=10),
+                                ) as retry_response:
+                                    if retry_response.status == 200:
+                                        self._initialized = True
+                                        logger.info("Home Assistant connection verified after token refresh")
+                                        return True
+                                    logger.error(f"HA connection failed after refresh: status {retry_response.status}")
+                        else:
+                            logger.error("HA token refresh failed during initialization")
+                        return False
                     else:
                         logger.error(f"HA connection failed with status {response.status}")
                         return False
@@ -226,6 +244,7 @@ class HAIntegrationService:
         """Get the current state of a Home Assistant entity."""
         if not self.ha_token:
             return None
+        await self._ensure_initialized()
 
         # Check cache first
         if entity_id in self._entity_cache:
@@ -281,6 +300,9 @@ class HAIntegrationService:
         logger.info(f"  action: {action}")
         logger.info(f"  kwargs: {kwargs}")
         logger.info(f"  ha_url: {self.ha_url}")
+
+        # Ensure initialized (lazy init if token appeared after startup)
+        await self._ensure_initialized()
 
         token = self.ha_token
         if not token:
@@ -459,12 +481,24 @@ class HAIntegrationService:
 
     # ========== Sensor Data ==========
 
+    async def _ensure_initialized(self) -> bool:
+        """Lazy initialization - retry if token has become available since startup."""
+        if self._initialized:
+            return True
+        if self.ha_token:
+            logger.info("[HA] Token now available, attempting lazy initialization...")
+            return await self.initialize()
+        return False
+
     async def get_all_entities(self, _retry: bool = True) -> List[HADeviceState]:
         """Get all Home Assistant entities."""
         if not self.ha_token:
             logger.warning("[HA] get_all_entities: No token available")
             logger.warning(f"[HA]   HOME_ASSISTANT_TOKEN env: {bool(os.getenv('HOME_ASSISTANT_TOKEN'))}")
             return []
+
+        # Ensure we're initialized (lazy init if token appeared after startup)
+        await self._ensure_initialized()
 
         try:
             async with aiohttp.ClientSession() as session:

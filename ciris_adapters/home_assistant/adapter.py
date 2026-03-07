@@ -120,6 +120,20 @@ class HomeAssistantAdapter(Service):
         self._running = True
         logger.info("Home Assistant adapter started")
 
+        # Run initial entity discovery so we can confirm HA connectivity in logs
+        if self.ha_service._initialized:
+            try:
+                entities = await self.ha_service.get_all_entities()
+                domains: dict[str, int] = {}
+                for e in entities:
+                    domains[e.domain] = domains.get(e.domain, 0) + 1
+                logger.warning(
+                    f"[HA DISCOVERY] Found {len(entities)} entities across {len(domains)} domains: "
+                    + ", ".join(f"{d}={c}" for d, c in sorted(domains.items(), key=lambda x: -x[1])[:15])
+                )
+            except Exception as e:
+                logger.warning(f"[HA DISCOVERY] Entity discovery failed: {e}")
+
     async def stop(self) -> None:
         """Stop the Home Assistant adapter."""
         logger.info("Stopping Home Assistant adapter")

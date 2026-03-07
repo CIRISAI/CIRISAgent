@@ -85,7 +85,20 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
 
     actual override suspend fun checkHealth(): Result<Boolean> = runCatching {
         val response = httpClient.get("$_serverUrl/v1/system/health")
-        response.status == HttpStatusCode.OK
+        if (response.status != HttpStatusCode.OK) {
+            return@runCatching false
+        }
+
+        // Parse JSON to check cognitive_state == "WORK"
+        val body = response.bodyAsText()
+        val stateMatch = Regex(""""cognitive_state"\s*:\s*"(\w+)"""").find(body)
+        val cognitiveState = stateMatch?.groupValues?.get(1) ?: ""
+
+        val isWorkState = cognitiveState == "WORK"
+        if (!isWorkState) {
+            println("[PythonRuntime.desktop] Not ready yet - cognitive_state: $cognitiveState")
+        }
+        isWorkState
     }
 
     actual override suspend fun getServicesStatus(): Result<Pair<Int, Int>> = runCatching {

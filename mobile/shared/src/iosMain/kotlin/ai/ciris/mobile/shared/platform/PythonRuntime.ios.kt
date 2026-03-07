@@ -104,7 +104,8 @@ actual class PythonRuntime : PythonRuntimeProtocol {
     }
 
     /**
-     * Check server health via HTTP request to /v1/system/health
+     * Check server health via HTTP request to /v1/system/health.
+     * Only returns true when cognitive_state == "WORK" (agent fully ready).
      */
     actual override suspend fun checkHealth(): Result<Boolean> {
         return suspendCancellableCoroutine { continuation ->
@@ -118,13 +119,33 @@ actual class PythonRuntime : PythonRuntimeProtocol {
             request.setHTTPMethod("GET")
             request.setTimeoutInterval(5.0)
 
-            val task = NSURLSession.sharedSession.dataTaskWithRequest(request) { _, response, error ->
+            val task = NSURLSession.sharedSession.dataTaskWithRequest(request) { data, response, error ->
                 if (error != null) {
                     continuation.resume(Result.success(false))
-                } else {
-                    val httpResponse = response as? NSHTTPURLResponse
-                    val isHealthy = httpResponse?.statusCode?.toInt() == 200
-                    continuation.resume(Result.success(isHealthy))
+                    return@dataTaskWithRequest
+                }
+
+                val httpResponse = response as? NSHTTPURLResponse
+                if (httpResponse?.statusCode?.toInt() != 200 || data == null) {
+                    continuation.resume(Result.success(false))
+                    return@dataTaskWithRequest
+                }
+
+                // Parse JSON to check cognitive_state == "WORK"
+                try {
+                    val jsonString = NSString.create(data = data, encoding = NSUTF8StringEncoding)?.toString() ?: ""
+                    // Look for "cognitive_state": "WORK" in the response
+                    val stateMatch = Regex(""""cognitive_state"\s*:\s*"(\w+)"""").find(jsonString)
+                    val cognitiveState = stateMatch?.groupValues?.get(1) ?: ""
+
+                    val isWorkState = cognitiveState == "WORK"
+                    if (!isWorkState) {
+                        println("[PythonRuntime.iOS] Not ready yet - cognitive_state: $cognitiveState")
+                    }
+                    continuation.resume(Result.success(isWorkState))
+                } catch (e: Exception) {
+                    println("[PythonRuntime.iOS] Error parsing health response: ${e.message}")
+                    continuation.resume(Result.success(false))
                 }
             }
             task.resume()

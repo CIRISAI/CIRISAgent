@@ -561,13 +561,17 @@ fun CIRISApp(
                                         val status = apiClient.getSystemStatus()
                                         PlatformLogger.i(TAG, " Token verified OK - backend status: ${status.status}")
                                         startupViewModel.setStatus("Token verified OK")
+                                        // Token verified OK - use it
+                                        onTokenUpdated?.invoke(storedToken)
+                                        currentAccessToken = storedToken
+                                        apiClient.logTokenState()
                                     } catch (e: Exception) {
                                         val errorMsg = e.message ?: ""
                                         if (errorMsg.contains("401") || errorMsg.contains("Unauthorized", ignoreCase = true)) {
                                             PlatformLogger.w(TAG, " Token rejected by backend (401) - triggering refresh")
                                             startupViewModel.setStatus("Token rejected (401), refreshing...")
                                             tokenManager.on401Error()
-                                            // Wait for refresh to complete
+                                            // Wait for refresh to complete - callback will set apiClient token
                                             var refreshWait = 0
                                             while (refreshWait < 50) {
                                                 kotlinx.coroutines.delay(100)
@@ -575,22 +579,24 @@ fun CIRISApp(
                                                 if (refreshWait % 10 == 0) {
                                                     startupViewModel.setStatus("Refreshing... ${refreshWait/10}s")
                                                 }
-                                                // Check if we got a new token
-                                                val newToken = tokenManager.currentToken.value
-                                                if (newToken != null && newToken != storedToken) {
-                                                    PlatformLogger.i(TAG, " Got new token after refresh")
-                                                    startupViewModel.setStatus("Got new token!")
+                                                // Check if token exchange completed (callback sets this)
+                                                if (tokenExchangeComplete && currentAccessToken != storedToken) {
+                                                    PlatformLogger.i(TAG, " Token exchange completed after refresh")
+                                                    startupViewModel.setStatus("Token refreshed!")
                                                     break
                                                 }
                                             }
+                                            // Token was refreshed by callback - don't overwrite with old token
+                                            apiClient.logTokenState()
                                         } else {
                                             PlatformLogger.w(TAG, " Backend check failed (non-auth): ${e.message}")
                                             startupViewModel.setStatus("Backend error: ${e.message?.take(30)}")
+                                            // Non-401 error - use stored token anyway
+                                            onTokenUpdated?.invoke(storedToken)
+                                            currentAccessToken = storedToken
+                                            apiClient.logTokenState()
                                         }
                                     }
-                                    onTokenUpdated?.invoke(storedToken) // Notify MainActivity for BillingManager
-                                    currentAccessToken = storedToken
-                                    apiClient.logTokenState() // Debug: confirm token was set
                                 }
 
                                 // Trigger data loading now that we have auth

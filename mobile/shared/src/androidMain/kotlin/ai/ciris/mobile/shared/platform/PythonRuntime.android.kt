@@ -117,11 +117,29 @@ actual class PythonRuntime : PythonRuntimeProtocol {
                 readTimeout = 5000
             }
 
-            val healthy = connection.responseCode == 200
+            if (connection.responseCode != 200) {
+                connection.disconnect()
+                return@withContext Result.success(false)
+            }
+
+            // Parse the response to check cognitive_state
+            val responseText = connection.inputStream.bufferedReader().use { it.readText() }
             connection.disconnect()
 
-            Result.success(healthy)
+            // Parse JSON: {"success": true, "data": {"cognitive_state": "WORK", ...}}
+            val json = JSONObject(responseText)
+            val data = json.optJSONObject("data")
+            val cognitiveState = data?.optString("cognitive_state", "") ?: ""
+
+            // Only consider healthy if in WORK state (not WAKEUP, INITIALIZING, etc.)
+            val isWorkState = cognitiveState == "WORK"
+            if (!isWorkState) {
+                Log.d(TAG, "[checkHealth] Not ready yet - cognitive_state: $cognitiveState")
+            }
+
+            Result.success(isWorkState)
         } catch (e: Exception) {
+            Log.d(TAG, "[checkHealth] Exception: ${e.message}")
             Result.success(false)
         }
     }

@@ -271,7 +271,9 @@ class HAIntegrationService:
 
         return None
 
-    async def control_device(self, entity_id: str, action: str, **kwargs: Any) -> HAAutomationResult:
+    async def control_device(
+        self, entity_id: str, action: str, _retry: bool = True, **kwargs: Any
+    ) -> HAAutomationResult:
         """Control a Home Assistant device."""
         logger.info("=" * 60)
         logger.info("[HA DEVICE CONTROL] Starting device control request")
@@ -340,7 +342,11 @@ class HAIntegrationService:
                     if not success:
                         logger.error(f"[HA DEVICE CONTROL] FAILED! Status {status}")
                         if status == 401:
-                            logger.error("[HA DEVICE CONTROL] 401 Unauthorized - Token may be expired or invalid")
+                            logger.error("[HA DEVICE CONTROL] 401 Unauthorized - Token expired, attempting refresh")
+                            if _retry and await self._try_refresh_token():
+                                logger.info("[HA DEVICE CONTROL] Token refreshed, retrying...")
+                                return await self.control_device(entity_id, action, _retry=False, **kwargs)
+                            logger.error("[HA DEVICE CONTROL] Token refresh failed or retry exhausted")
                         elif status == 403:
                             logger.error("[HA DEVICE CONTROL] 403 Forbidden - Token lacks required permissions")
                         elif status == 404:
@@ -401,11 +407,63 @@ class HAIntegrationService:
             logger.error(f"Error sending notification: {e}")
             return False
 
+    # ========== Token Refresh ==========
+
+    async def _try_refresh_token(self) -> bool:
+        """Attempt to refresh the HA access token using the refresh token.
+
+        Home Assistant OAuth2 token refresh requires:
+        - POST to /auth/token
+        - Content-Type: application/x-www-form-urlencoded
+        - Payload: client_id, grant_type=refresh_token, refresh_token
+        """
+        refresh_token = os.getenv("HOME_ASSISTANT_REFRESH_TOKEN")
+        client_id = os.getenv("HOME_ASSISTANT_CLIENT_ID")
+
+        if not refresh_token:
+            logger.warning("[HA] Token refresh: No refresh_token available")
+            return False
+        if not client_id:
+            logger.warning("[HA] Token refresh: No client_id available")
+            return False
+
+        try:
+            logger.info("[HA] Attempting token refresh...")
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.ha_url}/auth/token",
+                    data={
+                        "grant_type": "refresh_token",
+                        "refresh_token": refresh_token,
+                        "client_id": client_id,
+                    },
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as response:
+                    if response.status == 200:
+                        token_data = await response.json()
+                        new_access_token = token_data.get("access_token")
+                        if new_access_token:
+                            # Update environment variable and cached token
+                            os.environ["HOME_ASSISTANT_TOKEN"] = new_access_token
+                            self._ha_token = new_access_token
+                            logger.info("[HA] Token refreshed successfully!")
+                            return True
+                        logger.error("[HA] Token refresh response missing access_token")
+                    else:
+                        body = await response.text()
+                        logger.error(f"[HA] Token refresh failed: HTTP {response.status} - {body[:200]}")
+        except Exception as e:
+            logger.error(f"[HA] Token refresh exception: {e}")
+        return False
+
     # ========== Sensor Data ==========
 
-    async def get_all_entities(self) -> List[HADeviceState]:
+    async def get_all_entities(self, _retry: bool = True) -> List[HADeviceState]:
         """Get all Home Assistant entities."""
         if not self.ha_token:
+            logger.warning("[HA] get_all_entities: No token available")
+            logger.warning(f"[HA]   HOME_ASSISTANT_TOKEN env: {bool(os.getenv('HOME_ASSISTANT_TOKEN'))}")
             return []
 
         try:
@@ -429,9 +487,18 @@ class HAIntegrationService:
                             result.append(state)
                             self._entity_cache[state.entity_id] = state
                         self._cache_timestamp = datetime.now(timezone.utc)
+                        logger.info(f"[HA] get_all_entities: Retrieved {len(result)} entities")
                         return result
+                    elif response.status == 401 and _retry:
+                        logger.warning("[HA] get_all_entities: 401 Unauthorized - token expired, attempting refresh")
+                        if await self._try_refresh_token():
+                            return await self.get_all_entities(_retry=False)
+                        logger.error("[HA] get_all_entities: Token refresh failed")
+                    else:
+                        body = await response.text()
+                        logger.error(f"[HA] get_all_entities: HTTP {response.status} - {body[:200]}")
         except Exception as e:
-            logger.error(f"Error getting entities: {e}")
+            logger.error(f"[HA] get_all_entities: Exception - {e}")
 
         return []
 

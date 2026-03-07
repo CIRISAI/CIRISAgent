@@ -548,6 +548,8 @@ class HAConfigurableAdapter:
                             "expires_in": token_data.get("expires_in", 1800),
                             "ha_auth_provider_type": token_data.get("ha_auth_provider_type"),
                             "ha_auth_provider_id": token_data.get("ha_auth_provider_id"),
+                            # Store client_id for token refresh - MUST match OAuth authorization
+                            "client_id": client_id,
                         }
                     else:
                         error_text = await response.text()
@@ -736,6 +738,7 @@ class HAConfigurableAdapter:
         oauth_tokens = config.get("oauth_tokens", {})
         access_token = config.get("access_token") or oauth_tokens.get("access_token")
         refresh_token = config.get("refresh_token") or oauth_tokens.get("refresh_token")
+        client_id = config.get("client_id") or oauth_tokens.get("client_id")
 
         # Set environment variables for the HA service
         if config.get("base_url"):
@@ -744,6 +747,8 @@ class HAConfigurableAdapter:
             os.environ["HOME_ASSISTANT_TOKEN"] = access_token
         if refresh_token:
             os.environ["HOME_ASSISTANT_REFRESH_TOKEN"] = refresh_token
+        if client_id:
+            os.environ["HOME_ASSISTANT_CLIENT_ID"] = client_id
 
         # Log sanitized config
         safe_config = {k: ("***" if "token" in k.lower() else v) for k, v in config.items()}

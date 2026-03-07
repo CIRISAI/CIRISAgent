@@ -15,6 +15,8 @@ actual class EnvFileUpdater {
 
     private val envFile: File get() = File(cirisHome, ".env")
     private val configReloadFile: File get() = File(cirisHome, ".config_reload")
+    private val tokenRefreshSignalFile: File get() = File(cirisHome, ".token_refresh_needed")
+    private var lastSignalTimestamp: Long = 0
 
     actual suspend fun updateEnvWithToken(oauthIdToken: String): Result<Boolean> = runCatching {
         val envContent = if (envFile.exists()) envFile.readText() else ""
@@ -104,6 +106,25 @@ actual class EnvFileUpdater {
             envFile.delete()
         }
         true
+    }
+
+    actual fun checkTokenRefreshSignal(): Boolean {
+        if (!tokenRefreshSignalFile.exists()) return false
+
+        return try {
+            val signalContent = tokenRefreshSignalFile.readText().trim()
+            val signalTimestamp = signalContent.toDoubleOrNull()?.toLong() ?: 0L
+
+            if (signalTimestamp > lastSignalTimestamp) {
+                lastSignalTimestamp = signalTimestamp
+                tokenRefreshSignalFile.delete()
+                true
+            } else {
+                false
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 }
 

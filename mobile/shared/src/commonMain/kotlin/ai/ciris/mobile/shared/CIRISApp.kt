@@ -372,6 +372,18 @@ fun CIRISApp(
         }
     }
 
+    // Monitor .token_refresh_needed signal from Python billing provider
+    // Polls every 10 seconds (matches old Android TokenRefreshManager)
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(10_000)
+            if (envFileUpdater.checkTokenRefreshSignal()) {
+                PlatformLogger.i(TAG, "Token refresh signal detected from Python - triggering silent refresh")
+                tokenManager.on401Error()
+            }
+        }
+    }
+
     // ViewModels
     // Cast to PythonRuntimeProtocol since actual implementations implement it
     val pythonRuntimeProtocol: PythonRuntimeProtocol = pythonRuntime as PythonRuntimeProtocol

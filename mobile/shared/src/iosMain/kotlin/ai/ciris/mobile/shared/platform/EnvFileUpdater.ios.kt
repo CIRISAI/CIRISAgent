@@ -19,7 +19,10 @@ actual class EnvFileUpdater {
         private const val TAG = "EnvFileUpdater.ios"
         private const val ENV_FILE_NAME = ".env"
         private const val CONFIG_RELOAD_FILE = ".config_reload"
+        private const val TOKEN_REFRESH_SIGNAL_FILE = ".token_refresh_needed"
     }
+
+    private var lastSignalTimestamp: Long = 0
 
     private val cirisHome: String? by lazy {
         val documentsPath = NSSearchPathForDirectoriesInDomains(
@@ -236,6 +239,33 @@ actual class EnvFileUpdater {
         } catch (e: Exception) {
             println("[$TAG] Exception deleting .env file: ${e.message}")
             Result.failure(e)
+        }
+    }
+
+    actual fun checkTokenRefreshSignal(): Boolean {
+        val home = cirisHome ?: return false
+        val signalPath = "$home/$TOKEN_REFRESH_SIGNAL_FILE"
+        val fileManager = NSFileManager.defaultManager
+
+        if (!fileManager.fileExistsAtPath(signalPath)) return false
+
+        return try {
+            val content = NSString.stringWithContentsOfFile(signalPath, NSUTF8StringEncoding, null)
+                ?: return false
+            val signalTimestamp = (content as String).trim().toDoubleOrNull()?.toLong() ?: 0L
+
+            if (signalTimestamp > lastSignalTimestamp) {
+                println("[$TAG] Token refresh signal detected (timestamp: $signalTimestamp)")
+                lastSignalTimestamp = signalTimestamp
+                // Delete the signal file
+                fileManager.removeItemAtPath(signalPath, null)
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            println("[$TAG] Error reading token refresh signal: ${e.message}")
+            false
         }
     }
 }

@@ -260,8 +260,8 @@ class ServiceInitializer:
 
         # Server: Simple API key check
         api_key = os.getenv("CIRIS_BILLING_API_KEY", "")
-        # Android: Google ID token for JWT auth with CIRIS proxy
-        google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+        # Mobile: OAuth ID token for JWT auth with CIRIS proxy (Google on Android, Apple on iOS)
+        google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv("CIRIS_BILLING_APPLE_ID_TOKEN", "")
 
         if api_key and not is_android:
             # Server with API key - use API key auth
@@ -1053,7 +1053,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Supports both API key auth and CIRIS proxy with JWT auth (Google ID token)
         second_api_key = os.environ.get("CIRIS_OPENAI_API_KEY_2", "")
         second_base_url = os.environ.get("CIRIS_OPENAI_API_BASE_2", "")
-        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN", "")
 
         # Check if secondary LLM is CIRIS proxy (requires JWT auth, not API key)
         is_ciris_proxy_secondary = "ciris.ai" in second_base_url

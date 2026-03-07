@@ -970,17 +970,19 @@ def _store_oauth_profile(auth_service: APIAuthService, user_id: str, name: str, 
 
 
 def _update_billing_provider_token(google_id_token: str) -> None:
-    """Update the billing provider with a fresh Google ID token.
+    """Update the billing provider with a fresh OAuth ID token.
 
-    This is called after native Google token exchange to ensure billing
+    This is called after native Google/Apple token exchange to ensure billing
     is available immediately. The token is stored in the environment
     so the billing provider can use it for credit checks.
     """
     import os
 
-    # Update environment variable so billing provider can use it
+    # Update both environment variables so billing provider picks it up
+    # regardless of which env var it checks (Google on Android, Apple on iOS)
     os.environ["CIRIS_BILLING_GOOGLE_ID_TOKEN"] = google_id_token
-    logger.info("[NativeAuth] Updated CIRIS_BILLING_GOOGLE_ID_TOKEN in environment for billing provider")
+    os.environ["CIRIS_BILLING_APPLE_ID_TOKEN"] = google_id_token
+    logger.info("[NativeAuth] Updated CIRIS_BILLING_GOOGLE_ID_TOKEN and CIRIS_BILLING_APPLE_ID_TOKEN in environment for billing provider")
 
     # Try to reinitialize the billing provider if resource_monitor is available
     # This is done via a background task to not block the login response

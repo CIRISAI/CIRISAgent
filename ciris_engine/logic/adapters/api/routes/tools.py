@@ -169,8 +169,12 @@ def _get_google_id_token(request: Request) -> Optional[str]:
     if token:
         return token
 
-    # Try environment (set after login)
+    # Try environment (set after login) - Google on Android, Apple on iOS
     token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN")
+    if token:
+        return token
+
+    token = os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN")
     if token:
         return token
 

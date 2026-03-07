@@ -29,10 +29,10 @@ def create_billing_token_handler(credit_provider: Any) -> Callable[..., Any]:
     """Create handler for billing token refresh signals."""
 
     async def handle_billing_token_refreshed(signal: str, resource: str) -> None:
-        new_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+        new_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv("CIRIS_BILLING_APPLE_ID_TOKEN", "")
         if new_token and credit_provider:
             credit_provider.update_google_id_token(new_token)
-            logger.info("Updated billing provider with refreshed Google ID token")
+            logger.info("Updated billing provider with refreshed OAuth ID token")
 
     return handle_billing_token_refreshed
 
@@ -107,7 +107,7 @@ def create_billing_provider(google_id_token: str) -> Any:
     fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
 
     def get_fresh_token() -> str:
-        return os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+        return os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv("CIRIS_BILLING_APPLE_ID_TOKEN", "")
 
     return CIRISBillingProvider(
         google_id_token=google_id_token,
@@ -130,19 +130,19 @@ async def reinitialize_billing_provider(runtime: Any) -> None:
     if not resource_monitor:
         return
 
-    is_android = "ANDROID_DATA" in os.environ
+    is_mobile = "ANDROID_DATA" in os.environ or os.environ.get("CIRIS_IOS_FRAMEWORK_PATH", "")
     using_ciris_proxy = is_using_ciris_proxy()
 
-    logger.info(f"Billing provider check: is_android={is_android}, using_ciris_proxy={using_ciris_proxy}")
+    logger.info(f"Billing provider check: is_mobile={is_mobile}, using_ciris_proxy={using_ciris_proxy}")
     logger.info(f"  OPENAI_API_BASE={os.getenv('OPENAI_API_BASE', '')}")
 
-    if not (is_android and using_ciris_proxy):
-        logger.info("Billing provider not needed (not using CIRIS proxy or not Android)")
+    if not (is_mobile and using_ciris_proxy):
+        logger.info("Billing provider not needed (not using CIRIS proxy or not mobile)")
         return
 
-    google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+    google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv("CIRIS_BILLING_APPLE_ID_TOKEN", "")
     if not google_id_token:
-        logger.warning("Android using CIRIS LLM proxy without Google ID token - billing provider not configured")
+        logger.warning("Mobile using CIRIS LLM proxy without OAuth ID token - billing provider not configured")
         return
 
     credit_provider = create_billing_provider(google_id_token)

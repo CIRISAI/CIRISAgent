@@ -61,7 +61,7 @@ class CIRISBillingProvider(CreditGateProtocol):
         """
         # Read from env as fallback if not passed directly
         self._api_key = api_key or os.environ.get("CIRIS_BILLING_API_KEY", "")
-        self._google_id_token = google_id_token or os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+        self._google_id_token = google_id_token or os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN", "")
         self._token_refresh_callback = token_refresh_callback
         # Use provided URL or get from central config
         self._base_url = (base_url or get_billing_url()).rstrip("/")
@@ -110,7 +110,8 @@ class CIRISBillingProvider(CreditGateProtocol):
                 logger.warning("[BILLING_TOKEN] Token refresh callback failed: %s", exc)
 
         # Check environment for updated token (set by auth route or ResourceMonitor after .env reload)
-        env_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get("GOOGLE_ID_TOKEN", "")
+        # Check Google token (Android), Apple token (iOS), and legacy GOOGLE_ID_TOKEN
+        env_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN", "") or os.environ.get("GOOGLE_ID_TOKEN", "")
         if env_token and env_token != self._google_id_token:
             old_len = len(self._google_id_token) if self._google_id_token else 0
             new_len = len(env_token)

@@ -45,8 +45,11 @@ class TestGraceAntiGoodhart:
         assert "hours_worked" not in saved
         assert "work_duration" not in saved
 
-    def test_grace_status_no_hours(self):
+    @patch("tools.grace.main.subprocess.run")
+    def test_grace_status_no_hours(self, mock_run):
         """Test that Grace status doesn't show hours worked."""
+        # Mock subprocess to avoid SSH calls to production
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
         grace = Grace()
         status = grace.status()
 
@@ -60,8 +63,11 @@ class TestGraceAntiGoodhart:
 class TestGraceProductionMonitoring:
     """Test production incident monitoring features."""
 
-    def test_grace_checks_incidents(self):
+    @patch("tools.grace.main.subprocess.run")
+    def test_grace_checks_incidents(self, mock_run):
         """Test that Grace checks production incidents."""
+        # Mock subprocess to avoid SSH calls to production
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
         grace = Grace()
 
         # Check that incident checking method exists

@@ -56,9 +56,8 @@ actual class EnvFileUpdater {
             var newContent = content as String
             println("[$TAG] Read .env file (${newContent.length} bytes)")
 
-            // Check if we're in CIRIS proxy mode
-            val isCirisProxyMode = newContent.contains("llm.ciris.ai") ||
-                                   newContent.contains("llm.ciris-services.ai")
+            // Check if we're in CIRIS proxy mode (llm01.ciris-services-*)
+            val isCirisProxyMode = newContent.contains("llm01.ciris-services")
 
             var openaiUpdated = false
             if (isCirisProxyMode) {
@@ -208,14 +207,13 @@ actual class EnvFileUpdater {
             val provider = when {
                 baseUrl == null -> "openai"
                 baseUrl.contains("localhost") || baseUrl.contains("127.0.0.1") -> "local"
-                baseUrl.contains("llm.ciris") -> "other"  // CIRIS proxy uses "other"
+                baseUrl.contains("llm01.ciris-services") -> "other"  // CIRIS proxy uses "other"
                 baseUrl.contains("anthropic") -> "anthropic"
                 else -> "other"
             }
 
-            // Check if CIRIS proxy
-            val isCirisProxy = baseUrl != null &&
-                (baseUrl.contains("llm.ciris.ai") || baseUrl.contains("llm.ciris-services.ai"))
+            // Check if CIRIS proxy (llm01.ciris-services-*)
+            val isCirisProxy = baseUrl != null && baseUrl.contains("llm01.ciris-services")
 
             println("[$TAG] Parsed LLM config: provider=$provider, baseUrl=$baseUrl, model=$model, " +
                     "apiKeySet=${!apiKey.isNullOrEmpty()}, isCirisProxy=$isCirisProxy")

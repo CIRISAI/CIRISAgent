@@ -58,14 +58,14 @@ object CIRISConfig {
 
     // ==================== LLM PROXY ====================
 
-    private const val LLM_PROXY_HOST_PRIMARY = "proxy1.ciris-services-1.ai"
-    private const val LLM_PROXY_HOST_SECONDARY = "proxy1.ciris-services-2.ai"
+    private const val LLM_PROXY_HOST_PRIMARY = "llm01.ciris-services-1.ai"
+    private const val LLM_PROXY_HOST_SECONDARY = "llm01.ciris-services-eu-1.com"
 
     /**
      * LLM Proxy URL constants for setup wizard.
      */
-    const val CIRIS_LLM_PROXY_URL = "https://proxy1.ciris-services-1.ai/v1"
-    const val CIRIS_LLM_PROXY_URL_EU = "https://proxy1.ciris-services-2.ai/v1"
+    const val CIRIS_LLM_PROXY_URL = "https://llm01.ciris-services-1.ai/v1"
+    const val CIRIS_LLM_PROXY_URL_EU = "https://llm01.ciris-services-eu-1.com/v1"
 
     /**
      * Get the LLM proxy base URL for the active region.
@@ -146,12 +146,6 @@ object CIRISConfig {
     const val LEGACY_BILLING_URL = "https://billing.ciris.ai"
 
     /**
-     * Legacy LLM proxy endpoint (deprecated - use getLLMProxyUrl()).
-     */
-    @Deprecated("Use getLLMProxyUrl() instead", ReplaceWith("getLLMProxyUrl()"))
-    const val LEGACY_LLM_PROXY_URL = "https://llm.ciris.ai"
-
-    /**
      * Legacy agents endpoint (deprecated - use getAgentsApiUrl()).
      */
     @Deprecated("Use getAgentsApiUrl() instead", ReplaceWith("getAgentsApiUrl()"))
@@ -164,9 +158,7 @@ object CIRISConfig {
      */
     val LLM_PROXY_HOSTNAMES = listOf(
         LLM_PROXY_HOST_PRIMARY,
-        LLM_PROXY_HOST_SECONDARY,
-        "llm.ciris.ai",      // Legacy
-        "api.ciris.ai"       // Legacy
+        LLM_PROXY_HOST_SECONDARY
     )
 
     /**
@@ -198,12 +190,7 @@ object CIRISConfig {
      * Legacy URL to new infrastructure URL mappings.
      */
     private val LEGACY_URL_MIGRATIONS = mapOf(
-        // LLM Proxy migrations
-        "https://llm.ciris.ai/v1" to "https://proxy1.ciris-services-1.ai/v1",
-        "https://llm.ciris.ai" to "https://proxy1.ciris-services-1.ai/v1",
-        "https://api.ciris.ai/v1" to "https://proxy1.ciris-services-1.ai/v1",
-        "https://api.ciris.ai" to "https://proxy1.ciris-services-1.ai/v1",
-        // Billing migrations
+        // Billing migrations only - LLM endpoints are now llm01.ciris-services-*
         "https://billing.ciris.ai" to "https://billing1.ciris-services-1.ai"
     )
 

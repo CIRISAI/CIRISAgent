@@ -119,8 +119,8 @@ class CIRISHostedToolService:
 
         Args:
             config: Optional configuration dictionary with:
-                - proxy_url: Base URL for CIRIS proxy (default: proxy1.ciris-services-1.ai)
-                - proxy_fallback_url: Fallback proxy URL (default: proxy1.ciris-services-2.ai)
+                - proxy_url: Base URL for CIRIS proxy (default: llm01.ciris-services-1.ai)
+                - proxy_fallback_url: Fallback proxy URL (default: llm01.ciris-services-eu-1.com)
                 - billing_url: Base URL for billing service (default: billing1.ciris-services-1.ai)
                 - billing_fallback_url: Fallback billing URL (default: billing1.ciris-services-2.ai)
                 - timeout: Request timeout in seconds (default: 30)

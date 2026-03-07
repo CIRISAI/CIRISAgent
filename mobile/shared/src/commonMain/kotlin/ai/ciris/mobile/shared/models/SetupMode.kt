@@ -8,7 +8,7 @@ import kotlinx.serialization.Serializable
  * Source: android/app/src/main/java/ai/ciris/mobile/setup/SetupViewModel.kt:35-38
  *
  * - CIRIS_PROXY: Free AI via CIRIS hosted proxy (requires Google OAuth)
- *   Uses Google ID token with llm.ciris.ai proxy
+ *   Uses Google ID token with llm01.ciris-services-* proxy
  *
  * - BYOK: Bring Your Own Key
  *   User provides their own API key from OpenAI/Anthropic/etc
@@ -17,7 +17,7 @@ import kotlinx.serialization.Serializable
 enum class SetupMode {
     /**
      * Free AI via CIRIS proxy - requires Google OAuth.
-     * Google ID token is used to access llm.ciris.ai proxy.
+     * Google ID token is used to access llm01.ciris-services-* proxy.
      */
     CIRIS_PROXY,
 

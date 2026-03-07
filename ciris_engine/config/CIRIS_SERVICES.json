@@ -1,8 +1,8 @@
 {
   "_comment": "CIRIS hosted services infrastructure URLs. Primary is US-based, fallback is EU-based.",
   "proxy": {
-    "primary": "https://proxy1.ciris-services-1.ai",
-    "fallback": "https://proxy1.ciris-services-2.ai"
+    "primary": "https://llm01.ciris-services-1.ai",
+    "fallback": "https://llm01.ciris-services-eu-1.com"
   },
   "billing": {
     "primary": "https://billing1.ciris-services-1.ai",

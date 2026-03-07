@@ -2,6 +2,7 @@
 
 package ai.ciris.mobile.shared.platform
 
+import ai.ciris.mobile.shared.config.CIRISConfig
 import kotlinx.cinterop.*
 import platform.Foundation.*
 
@@ -56,8 +57,15 @@ actual class EnvFileUpdater {
             var newContent = content as String
             println("[$TAG] Read .env file (${newContent.length} bytes)")
 
-            // Check if we're in CIRIS proxy mode (llm01.ciris-services-*)
-            val isCirisProxyMode = newContent.contains("llm01.ciris-services")
+            // Migrate legacy URLs to new infrastructure if needed
+            val (migratedContent, wasMigrated) = CIRISConfig.migrateEnvToNewInfra(newContent)
+            if (wasMigrated) {
+                newContent = migratedContent
+                println("[$TAG] Migrated legacy URLs to new ciris-services infrastructure")
+            }
+
+            // Check if we're in CIRIS proxy mode
+            val isCirisProxyMode = CIRISConfig.isCirisProxyUrl(newContent)
 
             var openaiUpdated = false
             if (isCirisProxyMode) {
@@ -212,8 +220,8 @@ actual class EnvFileUpdater {
                 else -> "other"
             }
 
-            // Check if CIRIS proxy (llm01.ciris-services-*)
-            val isCirisProxy = baseUrl != null && baseUrl.contains("llm01.ciris-services")
+            // Check if CIRIS proxy (llmXX.ciris-services-* pattern for future scaling)
+            val isCirisProxy = baseUrl != null && CIRISConfig.isCirisProxyUrl(baseUrl)
 
             println("[$TAG] Parsed LLM config: provider=$provider, baseUrl=$baseUrl, model=$model, " +
                     "apiKeySet=${!apiKey.isNullOrEmpty()}, isCirisProxy=$isCirisProxy")

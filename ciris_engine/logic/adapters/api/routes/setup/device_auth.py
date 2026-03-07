@@ -412,6 +412,7 @@ async def _submit_activation_to_portal(validated_portal_url: str, device_code: s
     """Submit key activation to Portal API."""
     import httpx
 
+    # NOSONAR - URL is pre-validated by _validate_portal_url() which ensures trusted hosts only
     activate_url = urllib.parse.urljoin(validated_portal_url.rstrip("/") + "/", "api/device/activate")
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:

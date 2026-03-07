@@ -1,6 +1,7 @@
 """User management API routes."""
 
 import logging
+import re
 from datetime import datetime
 from typing import Annotated, Any, Dict, Generic, List, Optional, TypeVar
 
@@ -57,6 +58,17 @@ ERROR_SIGNATURE_OR_KEY_REQUIRED = "Either signature or private_key_path must be 
 router = APIRouter(prefix="/users", tags=["users"])
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
+    """Sanitize user-controlled data for safe logging."""
+    if value is None:
+        return "<none>"
+    val_str = str(value)
+    sanitized = re.sub(r"[\r\n\t\x00-\x1f\x7f-\x9f]", "", val_str)
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
 
 
 # Generic models
@@ -834,7 +846,11 @@ async def mint_wise_authority(
             # Encode to base64
             signature = base64.b64encode(signature_bytes).decode()
 
-            logger.info(f"Auto-signed WA mint request for {user_id} using key file: {filename}")
+            logger.info(
+                "Auto-signed WA mint request for user=%s using key file: %s",
+                _sanitize_for_log(user_id),
+                _sanitize_for_log(filename),
+            )
 
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Private key file not found: {filename}")

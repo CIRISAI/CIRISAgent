@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import ai.ciris.mobile.shared.platform.FilePickerDialog
 import ai.ciris.mobile.shared.platform.PickedFile
+import ai.ciris.mobile.shared.platform.platformImePadding
 import ai.ciris.mobile.shared.platform.TestAutomation
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
@@ -139,13 +140,13 @@ fun InteractScreen(
             .fillMaxSize()
             .background(Color(0xFFFAFAFA))
     ) {
-        // Main content column
-        // NOTE: Do NOT use imePadding() anywhere in this layout on iOS.
-        // WindowInsets.ime does not properly reset to 0 when keyboard dismisses,
-        // leaving a permanent white gap. iOS native keyboard avoidance handles
-        // the input field visibility automatically via the hosting UIViewController.
+        // Main content column with platform-specific keyboard padding
+        // Android: Uses imePadding() for proper keyboard avoidance
+        // iOS: No-op - native keyboard avoidance handles this automatically
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .platformImePadding()
         ) {
             // Enhanced status bar with LLM health, credits, and trust shield
             EnhancedStatusBar(

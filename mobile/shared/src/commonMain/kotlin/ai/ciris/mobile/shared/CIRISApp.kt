@@ -1789,9 +1789,11 @@ private suspend fun checkFirstRunStatus(baseUrl: String): Boolean {
         platformLog("checkFirstRunStatus", "[INFO] Got setup status: setup_required=${setupStatus.data.setup_required}")
         setupStatus.data.setup_required
     } catch (e: Exception) {
-        // On error, assume first run for safety
+        // On connection error, assume NOT first run (safer - user can still access setup if needed)
+        // This prevents incorrectly entering setup wizard when server is slow to start
         platformLog("checkFirstRunStatus", "[ERROR] Failed to check setup status: ${e::class.simpleName}: ${e.message}")
-        true
+        platformLog("checkFirstRunStatus", "[INFO] Defaulting to NOT first-run (server may still be starting)")
+        false
     }
 }
 

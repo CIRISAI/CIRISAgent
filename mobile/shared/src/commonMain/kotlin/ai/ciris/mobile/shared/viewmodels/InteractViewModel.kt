@@ -446,20 +446,35 @@ class InteractViewModel(
 
     /**
      * Poll for agent status
+     * Fast polls (200ms) until cognitive_state is available, then switches to normal interval
      */
     private fun startStatusPolling() {
         val method = "startStatusPolling"
-        logInfo(method, "Starting status polling (interval=${STATUS_POLL_INTERVAL_MS}ms)")
+        logInfo(method, "Starting status polling (fast until agent ready)")
 
         statusJob = viewModelScope.launch {
             var pollCount = 0
+            var agentReady = false  // True once we get a real cognitive_state
+            val FAST_POLL_MS = 200L
+
             while (isActive) {
                 pollCount++
                 try {
                     val status = apiClient.getSystemStatus()
                     val wasConnected = _isConnected.value
                     _isConnected.value = status.status == "healthy"
-                    _agentStatus.value = status.cognitive_state ?: "Unknown"
+
+                    // Check if we got a real cognitive state
+                    val cognitiveState = status.cognitive_state
+                    if (cognitiveState != null) {
+                        _agentStatus.value = cognitiveState.uppercase()
+                        if (!agentReady) {
+                            agentReady = true
+                            logInfo(method, "Agent ready with state: ${_agentStatus.value}")
+                        }
+                    } else {
+                        _agentStatus.value = "Starting..."
+                    }
 
                     if (_isConnected.value != wasConnected) {
                         logInfo(method, "Connection state changed: ${wasConnected} -> ${_isConnected.value}")
@@ -474,7 +489,9 @@ class InteractViewModel(
                     _isConnected.value = false
                     _agentStatus.value = "Disconnected"
                 }
-                delay(STATUS_POLL_INTERVAL_MS)
+
+                // Fast poll until agent ready, then normal interval
+                delay(if (agentReady) STATUS_POLL_INTERVAL_MS else FAST_POLL_MS)
             }
         }
     }

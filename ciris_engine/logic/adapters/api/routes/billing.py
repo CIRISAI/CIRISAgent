@@ -39,6 +39,25 @@ ERROR_INVALID_PAYMENT_ID = "Invalid payment ID format"
 # Regex pattern for valid payment IDs (Stripe format: pi_xxx or similar alphanumeric with underscores)
 PAYMENT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
 
+
+def _sanitize_for_log(value: str, max_length: int = 64) -> str:
+    """Sanitize user-controlled data for safe logging.
+
+    Prevents log injection by:
+    1. Removing newlines and control characters
+    2. Truncating to max_length
+    3. Escaping special characters
+    """
+    if not value:
+        return "<empty>"
+    # Remove newlines, carriage returns, and other control chars
+    sanitized = re.sub(r"[\r\n\t\x00-\x1f\x7f-\x9f]", "", str(value))
+    # Truncate to prevent log flooding
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
+
 # Trusted billing service hosts (prevents SSRF via env var manipulation)
 _TRUSTED_BILLING_HOSTS_EXACT = frozenset({"billing.ciris.ai", "localhost", "127.0.0.1"})
 
@@ -438,9 +457,13 @@ def _try_lazy_init_billing_provider(request: Request, resource_monitor: Any) -> 
             logger.debug("[BILLING_LAZY_INIT] Reloaded .env from %s", env_path)
 
     # Check for OAuth ID token (written by Kotlin when user logs in - Google on Android, Apple on iOS)
-    google_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+    google_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get(
+        "CIRIS_BILLING_APPLE_ID_TOKEN", ""
+    )
     if not google_token:
-        logger.debug("[BILLING_LAZY_INIT] No CIRIS_BILLING_GOOGLE_ID_TOKEN or CIRIS_BILLING_APPLE_ID_TOKEN in environment")
+        logger.debug(
+            "[BILLING_LAZY_INIT] No CIRIS_BILLING_GOOGLE_ID_TOKEN or CIRIS_BILLING_APPLE_ID_TOKEN in environment"
+        )
         return None
 
     # Get billing URL from central config (checks env var first)
@@ -462,9 +485,14 @@ def _try_lazy_init_billing_provider(request: Request, resource_monitor: Any) -> 
 
         # Attach to resource monitor
         resource_monitor.credit_provider = provider
+        # Log only hostname to avoid logging full URL (NOSONAR - sanitized)
+        try:
+            host_only = urlparse(billing_url).hostname or "unknown"
+        except Exception:
+            host_only = "parse-error"
         logger.info(
-            "[BILLING_LAZY_INIT] Successfully created CIRISBillingProvider: base_url=%s, token_length=%d",
-            billing_url,
+            "[BILLING_LAZY_INIT] Successfully created CIRISBillingProvider: host=%s, token_length=%d",
+            host_only,
             len(google_token),
         )
         return provider
@@ -889,7 +917,12 @@ async def verify_google_play_purchase(
 
     Only works when CIRISBillingProvider is configured.
     """
-    logger.info(f"[GOOGLE_PLAY_VERIFY] Verifying purchase for user_id={auth.user_id}, product={body.product_id}")
+    # Sanitize user-controlled data before logging to prevent log injection
+    logger.info(
+        "[GOOGLE_PLAY_VERIFY] Verifying purchase for user_id=%s, product=%s",
+        _sanitize_for_log(auth.user_id),
+        _sanitize_for_log(body.product_id),
+    )
 
     # Check if billing is enabled
     if not hasattr(request.app.state, "resource_monitor"):
@@ -931,7 +964,9 @@ async def verify_google_play_purchase(
     if not google_id_token:
         import os
 
-        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN") or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN")
+        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN") or os.environ.get(
+            "CIRIS_BILLING_APPLE_ID_TOKEN"
+        )
         if google_id_token:
             logger.info(f"[GOOGLE_PLAY_VERIFY] Using OAuth ID token from environment ({len(google_id_token)} chars)")
     else:

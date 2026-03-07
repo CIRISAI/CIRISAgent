@@ -166,9 +166,9 @@ fun StartupScreen(
                 // Verify label
                 Text(
                     text = when {
-                        verifyStepsCompleted >= StartupViewModel.TOTAL_VERIFY_STEPS -> "Integrity Verified"
-                        verifyStepsCompleted > 0 -> "Verifying Integrity... $verifyStepsCompleted/${StartupViewModel.TOTAL_VERIFY_STEPS}"
-                        else -> "Verifying Integrity"
+                        verifyStepsCompleted >= StartupViewModel.TOTAL_VERIFY_STEPS -> "Platform Attestation Complete"
+                        verifyStepsCompleted > 0 -> "Platform Attestation... $verifyStepsCompleted/${StartupViewModel.TOTAL_VERIFY_STEPS}"
+                        else -> "Platform Attestation"
                     },
                     fontSize = 10.sp,
                     color = when {

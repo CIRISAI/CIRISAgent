@@ -344,7 +344,7 @@ class StartupViewModel(
         // When all verify steps complete
         if (step >= TOTAL_VERIFY_STEPS) {
             PlatformLogger.i(TAG, "[STARTUP][VERIFY] All verify steps complete - integrity verified")
-            _statusMessage.value = "Integrity verified"
+            _statusMessage.value = "Platform Attestation Complete"
         }
     }
 

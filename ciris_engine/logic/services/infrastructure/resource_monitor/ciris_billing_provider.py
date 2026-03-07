@@ -363,10 +363,14 @@ class CIRISBillingProvider(CreditGateProtocol):
     def _handle_check_success(self, response: httpx.Response, cache_key: str) -> CreditCheckResult:
         """Handle successful credit check response."""
         response_data = response.json()
-        has_credit = response_data.get("has_credit", False)
-        free_remaining = response_data.get("free_uses_remaining", 0)
-        credits_remaining = response_data.get("credits_remaining", 0)
-        daily_free_remaining = response_data.get("daily_free_uses_remaining", 0)
+        free_remaining = response_data.get("free_uses_remaining", 0) or 0
+        credits_remaining = response_data.get("credits_remaining", 0) or 0
+        daily_free_remaining = response_data.get("daily_free_uses_remaining", 0) or 0
+
+        # Compute has_credit locally: user has credit if they have paid credits OR any free uses
+        # The billing API's has_credit field may not account for free uses correctly
+        has_credit = credits_remaining > 0 or free_remaining > 0 or daily_free_remaining > 0
+        response_data["has_credit"] = has_credit
 
         if has_credit:
             logger.info(

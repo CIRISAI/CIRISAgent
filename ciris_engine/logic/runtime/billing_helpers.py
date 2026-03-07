@@ -63,7 +63,7 @@ def update_llm_services_token(runtime: Any, new_token: str) -> None:
 
 
 def update_service_token_if_ciris_proxy(service: Any, new_token: str, is_primary: bool = False) -> None:
-    """Update a service's API key if it uses CIRIS proxy."""
+    """Update a service's API key and base URL if it uses CIRIS proxy."""
     if not hasattr(service, "openai_config") or not service.openai_config:
         return
     if not hasattr(service, "update_api_key"):
@@ -74,6 +74,14 @@ def update_service_token_if_ciris_proxy(service: Any, new_token: str, is_primary
         return
 
     service.update_api_key(new_token)
+
+    # Also update base URL if env has a newer one (e.g. after .env migration)
+    new_base_url = os.getenv("OPENAI_API_BASE", "")
+    if new_base_url and hasattr(service, "update_base_url") and hasattr(service, "client"):
+        current_url = str(service.client.base_url).rstrip("/") if service.client.base_url else ""
+        if new_base_url.rstrip("/") != current_url:
+            service.update_base_url(new_base_url)
+
     label = "primary LLM service" if is_primary else type(service).__name__
     logger.info(f"Updated {label} with refreshed token")
 

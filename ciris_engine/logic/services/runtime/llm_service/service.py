@@ -767,6 +767,25 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             self.circuit_breaker.get_stats().get("state", "unknown"),
         )
 
+    def update_base_url(self, new_base_url: str) -> None:
+        """Update the base URL on the OpenAI client.
+
+        Called when .env migration has updated OPENAI_API_BASE to new infrastructure URLs.
+        """
+        old_base_url = str(self.client.base_url) if self.client.base_url else "None"
+
+        self.client.base_url = new_base_url
+        if hasattr(self.instruct_client, "client") and hasattr(self.instruct_client.client, "base_url"):
+            self.instruct_client.client.base_url = new_base_url
+
+        logger.info(
+            "[LLM_TOKEN] Base URL updated:\n"
+            "  Old URL: %s\n"
+            "  New URL: %s",
+            old_base_url,
+            new_base_url,
+        )
+
     async def handle_token_refreshed(self, signal: str, resource: str) -> None:
         """Handle token_refreshed signal from ResourceMonitor.
 
@@ -789,13 +808,20 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             return
 
         # Check if key actually changed
-        if new_api_key == self.openai_config.api_key:
-            logger.info("[LLM_TOKEN] API key unchanged after refresh - just resetting circuit breaker")
+        key_changed = new_api_key != self.openai_config.api_key
+        if key_changed:
+            self.update_api_key(new_api_key)
+        else:
+            logger.info("[LLM_TOKEN] API key unchanged after refresh - resetting circuit breaker")
             self.circuit_breaker.reset()
-            return
 
-        # Update the key
-        self.update_api_key(new_api_key)
+        # Also check if base URL changed (e.g. .env migration from legacy URLs)
+        new_base_url = os.environ.get("OPENAI_API_BASE", "")
+        if new_base_url and hasattr(self.client, "base_url"):
+            current_base_url = str(self.client.base_url).rstrip("/") if self.client.base_url else ""
+            if new_base_url.rstrip("/") != current_base_url:
+                self.update_base_url(new_base_url)
+
         logger.info("[LLM_TOKEN] Token refresh complete - LLM service ready for requests")
 
     def _get_client(self) -> Any:

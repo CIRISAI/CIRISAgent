@@ -33,17 +33,20 @@ ALLOWED_PORTAL_HOSTS = frozenset(
 
 
 def _validate_portal_url(url: str) -> str:
-    """Validate portal URL to prevent SSRF attacks.
+    """Validate portal URL and return sanitized base URL.
 
     Only allows requests to trusted CIRIS Portal domains.
     This prevents attackers from using the agent as a proxy to access
     internal services, cloud metadata endpoints, or other untrusted hosts.
 
+    SECURITY: Returns a reconstructed URL from validated components only,
+    not the original user input. This prevents URL injection attacks.
+
     Args:
         url: The portal URL to validate
 
     Returns:
-        The validated URL
+        A sanitized base URL constructed from validated components only
 
     Raises:
         ValueError: If the URL is invalid or not a trusted Portal domain
@@ -72,7 +75,10 @@ def _validate_portal_url(url: str) -> str:
     if parsed.scheme == "http" and host not in ("localhost", "127.0.0.1"):
         raise ValueError("HTTP only allowed for localhost")
 
-    return url
+    # SECURITY: Reconstruct URL from validated components only (prevents injection)
+    # Only use scheme + netloc, discard any path/query/fragment from user input
+    sanitized_url = f"{parsed.scheme}://{parsed.netloc}"
+    return sanitized_url
 
 
 from .models import (
@@ -182,9 +188,9 @@ async def _submit_attestation_inline(challenge_nonce: str, device_code: str, por
 
     import httpx
 
-    # Validate portal URL to prevent SSRF
+    # Validate portal URL and get sanitized base (SSRF protection)
     try:
-        _validate_portal_url(portal_url)
+        safe_portal_url = _validate_portal_url(portal_url)
     except ValueError as e:
         logger.warning("Invalid portal URL for attestation: %s", e)
         return
@@ -233,11 +239,11 @@ async def _submit_attestation_inline(challenge_nonce: str, device_code: str, por
         len(proof_dict.get("challenge", "")),
     )
 
-    # POST proof to Portal's /api/device/attest
+    # POST proof to Portal's /api/device/attest (using sanitized URL)
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             attest_resp = await client.post(
-                f"{portal_url.rstrip('/')}/api/device/attest",
+                f"{safe_portal_url}/api/device/attest",
                 json={
                     "device_code": device_code,
                     "attestation_proof": proof_dict,
@@ -412,8 +418,8 @@ async def _submit_activation_to_portal(validated_portal_url: str, device_code: s
     """Submit key activation to Portal API."""
     import httpx
 
-    # NOSONAR - URL is pre-validated by _validate_portal_url() which ensures trusted hosts only
-    activate_url = urllib.parse.urljoin(validated_portal_url.rstrip("/") + "/", "api/device/activate")
+    # URL constructed from validated base + hardcoded path (SSRF-safe)
+    activate_url = f"{validated_portal_url}/api/device/activate"
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             activate_resp = await client.post(

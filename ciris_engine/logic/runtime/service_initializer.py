@@ -261,7 +261,9 @@ class ServiceInitializer:
         # Server: Simple API key check
         api_key = os.getenv("CIRIS_BILLING_API_KEY", "")
         # Mobile: OAuth ID token for JWT auth with CIRIS proxy (Google on Android, Apple on iOS)
-        google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+        google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv(
+            "CIRIS_BILLING_APPLE_ID_TOKEN", ""
+        )
 
         if api_key and not is_android:
             # Server with API key - use API key auth
@@ -975,10 +977,26 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Get config values using helper to reduce complexity
         # Base URL only applies to OpenAI-compatible providers
         base_url = None
+        base_urls = None  # Multi-endpoint support for CIRIS proxy
         if provider in (LLMProvider.OPENAI, LLMProvider.OPENAI_COMPATIBLE):
             base_url = os.environ.get("OPENAI_API_BASE") or self._get_llm_service_config_value(
                 config, "llm_endpoint", None
             )
+            # Check if this is a CIRIS proxy URL - if so, use multi-endpoint failover
+            if base_url:
+                from ciris_engine.config.ciris_services import get_all_proxy_endpoints, is_ciris_proxy_url
+
+                if is_ciris_proxy_url(base_url):
+                    # Get all CIRIS proxy endpoints for multi-region failover
+                    endpoints = get_all_proxy_endpoints()
+                    if len(endpoints) > 1:
+                        # Build list of URLs in priority order, preserving /v1 suffix if present
+                        suffix = "/v1" if base_url.rstrip("/").endswith("/v1") else ""
+                        base_urls = [ep.url.rstrip("/") + suffix for ep in endpoints]
+                        logger.info(
+                            f"[MULTI_ENDPOINT] CIRIS proxy detected, using {len(base_urls)} endpoints: "
+                            f"{[ep.region for ep in endpoints]}"
+                        )
 
         # Get model name - provider-specific defaults
         default_models = {
@@ -1013,6 +1031,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         llm_config = OpenAIConfig(
             base_url=base_url,
+            base_urls=base_urls,  # Multi-endpoint for CIRIS proxy failover
             model_name=model_name,
             api_key=api_key,
             instructor_mode=instructor_mode,
@@ -1053,7 +1072,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Supports both API key auth and CIRIS proxy with JWT auth (Google ID token)
         second_api_key = os.environ.get("CIRIS_OPENAI_API_KEY_2", "")
         second_base_url = os.environ.get("CIRIS_OPENAI_API_BASE_2", "")
-        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get(
+            "CIRIS_BILLING_APPLE_ID_TOKEN", ""
+        )
 
         # Check if secondary LLM is CIRIS proxy (requires JWT auth, not API key)
         is_ciris_proxy_secondary = "ciris.ai" in second_base_url

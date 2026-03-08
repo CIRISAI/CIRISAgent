@@ -87,6 +87,35 @@ def extract_query_params(url: str) -> Dict[str, str]:
     return dict(urllib.parse.parse_qsl(parsed.query))
 
 
+def _extract_hostname_from_netloc(netloc: str) -> str:
+    """
+    Safely extract hostname from netloc, handling userinfo and port.
+
+    netloc format: [user:password@]host[:port]
+
+    Security: Using urlparse().hostname is more robust than string splitting,
+    but we handle edge cases manually for compatibility.
+    """
+    # Strip userinfo if present (user:password@)
+    if "@" in netloc:
+        netloc = netloc.rsplit("@", 1)[-1]
+
+    # Strip port if present
+    # Handle IPv6 addresses in brackets: [::1]:8080
+    if netloc.startswith("["):
+        # IPv6 address
+        bracket_end = netloc.find("]")
+        if bracket_end != -1:
+            return netloc[1:bracket_end].lower()
+        return netloc.lower()
+
+    # IPv4 or hostname - strip port
+    if ":" in netloc:
+        return netloc.rsplit(":", 1)[0].lower()
+
+    return netloc.lower()
+
+
 def _is_private_network_host(host: str) -> bool:
     """
     Check if a host is on a private/local network.
@@ -95,8 +124,8 @@ def _is_private_network_host(host: str) -> bool:
     """
     import ipaddress
 
-    # Remove port if present
-    hostname = host.split(":")[0].lower()
+    # Extract hostname properly (handles userinfo@host:port format)
+    hostname = _extract_hostname_from_netloc(host)
 
     # Check for localhost variants
     if hostname in ("localhost", "127.0.0.1", "::1"):
@@ -138,8 +167,12 @@ def _get_allowed_redirect_domains() -> Set[str]:
     allowed_domains: Set[str] = set(OAUTH_ALLOWED_REDIRECT_DOMAINS)
     if OAUTH_FRONTEND_URL:
         frontend_parsed = urllib.parse.urlparse(OAUTH_FRONTEND_URL)
-        if frontend_parsed.netloc:
-            allowed_domains.add(frontend_parsed.netloc.lower())
+        if frontend_parsed.hostname:
+            # Use hostname (not netloc) to get just the host without port/userinfo
+            allowed_domains.add(frontend_parsed.hostname.lower())
+        elif frontend_parsed.netloc:
+            # Fallback: extract hostname from netloc manually
+            allowed_domains.add(_extract_hostname_from_netloc(frontend_parsed.netloc))
     return allowed_domains
 
 
@@ -180,17 +213,24 @@ def validate_redirect_uri(redirect_uri: Optional[str]) -> Optional[str]:
             logger.warning("Rejected malformed redirect_uri")
             return None
 
-        is_private = _is_private_network_host(parsed.netloc)
-        if not _validate_redirect_scheme(parsed.scheme.lower(), is_private, redirect_uri, parsed.netloc):
+        # Use hostname for security validation (strips port and userinfo)
+        # Fallback to manual extraction if hostname is None
+        redirect_hostname = parsed.hostname or _extract_hostname_from_netloc(parsed.netloc)
+        if not redirect_hostname:
+            logger.warning("Rejected redirect_uri with invalid hostname")
+            return None
+
+        is_private = _is_private_network_host(redirect_hostname)
+        if not _validate_redirect_scheme(parsed.scheme.lower(), is_private, redirect_uri, redirect_hostname):
             return None
 
         # Private network hosts are always allowed (Home Assistant, local dev)
         if is_private:
-            logger.debug(f"Allowing redirect to private network host: {parsed.netloc.lower()}")
+            logger.debug(f"Allowing redirect to private network host: {redirect_hostname}")
             return redirect_uri
 
-        # Check against allowed domains for public URLs
-        redirect_domain = parsed.netloc.lower()
+        # Check against allowed domains for public URLs (hostname only, no port)
+        redirect_domain = redirect_hostname.lower()
         allowed_domains = _get_allowed_redirect_domains()
         if _is_domain_allowed(redirect_domain, allowed_domains):
             return redirect_uri
@@ -219,8 +259,6 @@ async def login(request: LoginRequest, req: Request, auth_service: AuthServiceDe
     Currently supports system admin user only. In production, this would
     integrate with a proper user database.
     """
-    getattr(req.app.state, "config_service", None)
-
     # Verify username and password using secure bcrypt verification
     user = await auth_service.verify_user_password(request.username, request.password)
 

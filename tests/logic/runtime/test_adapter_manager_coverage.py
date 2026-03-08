@@ -1492,3 +1492,226 @@ class TestSanitizeConfigParamsRefactored:
 
         assert result.adapter_config is None
         assert result.settings["password"] == MASKED_VALUE
+
+
+class TestEnvVarPersistence:
+    """Tests for environment variable persistence functionality."""
+
+    @pytest.fixture
+    def adapter_manager_with_runtime(self):
+        """Create adapter manager with mock runtime."""
+        mock_runtime = Mock()
+        mock_runtime.bus_manager = Mock()
+        mock_runtime.adapters = []
+        mock_runtime.essential_config = Mock()
+        mock_runtime.modules_to_load = []
+        mock_runtime.startup_channel_id = "test_channel"
+        mock_runtime.debug = False
+        mock_runtime.service_registry = Mock()
+
+        mock_time_service = Mock(spec=TimeServiceProtocol)
+        mock_time_service.now.return_value = datetime.now(timezone.utc)
+
+        manager = RuntimeAdapterManager(mock_runtime, mock_time_service)
+        return manager, mock_runtime
+
+    def test_get_env_map_for_adapter_specific(self, adapter_manager_with_runtime):
+        """Test that adapter-specific env mappings are returned."""
+        manager, _ = adapter_manager_with_runtime
+
+        # Home assistant should have specific mappings
+        ha_map = manager._get_env_map_for_adapter("home_assistant")
+        assert "access_token" in ha_map
+        assert ha_map["access_token"] == "HOME_ASSISTANT_TOKEN"
+
+        # Ciris accord metrics should have specific mappings
+        accord_map = manager._get_env_map_for_adapter("ciris_accord_metrics")
+        assert "endpoint_url" in accord_map
+        assert accord_map["endpoint_url"] == "CIRIS_LENS_ENDPOINT"
+
+    def test_get_env_map_for_adapter_default(self, adapter_manager_with_runtime):
+        """Test that unknown adapters get default mappings."""
+        manager, _ = adapter_manager_with_runtime
+
+        # Unknown adapter should get default mappings
+        unknown_map = manager._get_env_map_for_adapter("unknown_adapter")
+        assert "access_token" in unknown_map  # Default mapping
+
+    def test_restore_env_vars_from_config_basic(self, adapter_manager_with_runtime):
+        """Test basic env var restoration from config."""
+        import os
+
+        manager, _ = adapter_manager_with_runtime
+
+        # Clear any existing env vars
+        for var in ["HOME_ASSISTANT_TOKEN", "HOME_ASSISTANT_URL"]:
+            os.environ.pop(var, None)
+
+        config = {
+            "access_token": "test_token_123",
+            "base_url": "http://localhost:8123",
+        }
+
+        manager._restore_env_vars_from_config("test_adapter", config, adapter_type="home_assistant")
+
+        assert os.environ.get("HOME_ASSISTANT_TOKEN") == "test_token_123"
+        assert os.environ.get("HOME_ASSISTANT_URL") == "http://localhost:8123"
+
+        # Cleanup
+        os.environ.pop("HOME_ASSISTANT_TOKEN", None)
+        os.environ.pop("HOME_ASSISTANT_URL", None)
+
+    def test_restore_env_vars_from_saved_env_vars(self, adapter_manager_with_runtime):
+        """Test env var restoration from _saved_env_vars dict."""
+        import os
+
+        manager, _ = adapter_manager_with_runtime
+
+        # Clear any existing env vars
+        os.environ.pop("CIRIS_LENS_ENDPOINT", None)
+
+        config = {
+            "_saved_env_vars": {
+                "CIRIS_LENS_ENDPOINT": "https://lens.test.ai/api/v1",
+            },
+        }
+
+        manager._restore_env_vars_from_config("accord_metrics", config, adapter_type="ciris_accord_metrics")
+
+        assert os.environ.get("CIRIS_LENS_ENDPOINT") == "https://lens.test.ai/api/v1"
+
+        # Cleanup
+        os.environ.pop("CIRIS_LENS_ENDPOINT", None)
+
+    def test_restore_env_vars_handles_booleans(self, adapter_manager_with_runtime):
+        """Test that boolean values are converted to strings."""
+        import os
+
+        manager, _ = adapter_manager_with_runtime
+
+        os.environ.pop("CIRIS_ACCORD_METRICS_CONSENT", None)
+
+        config = {
+            "consent_given": True,
+        }
+
+        manager._restore_env_vars_from_config("accord_metrics", config, adapter_type="ciris_accord_metrics")
+
+        assert os.environ.get("CIRIS_ACCORD_METRICS_CONSENT") == "true"
+
+        # Cleanup
+        os.environ.pop("CIRIS_ACCORD_METRICS_CONSENT", None)
+
+    def test_restore_env_vars_from_oauth_tokens(self, adapter_manager_with_runtime):
+        """Test env var restoration from nested oauth_tokens dict."""
+        import os
+
+        manager, _ = adapter_manager_with_runtime
+
+        os.environ.pop("HOME_ASSISTANT_TOKEN", None)
+        os.environ.pop("HOME_ASSISTANT_REFRESH_TOKEN", None)
+
+        config = {
+            "oauth_tokens": {
+                "access_token": "oauth_access_token",
+                "refresh_token": "oauth_refresh_token",
+            },
+        }
+
+        manager._restore_env_vars_from_config("ha_adapter", config, adapter_type="home_assistant")
+
+        assert os.environ.get("HOME_ASSISTANT_TOKEN") == "oauth_access_token"
+        assert os.environ.get("HOME_ASSISTANT_REFRESH_TOKEN") == "oauth_refresh_token"
+
+        # Cleanup
+        os.environ.pop("HOME_ASSISTANT_TOKEN", None)
+        os.environ.pop("HOME_ASSISTANT_REFRESH_TOKEN", None)
+
+    def test_capture_env_vars_for_adapter(self, adapter_manager_with_runtime):
+        """Test capturing current env vars for an adapter."""
+        import os
+
+        manager, _ = adapter_manager_with_runtime
+
+        # Set some env vars
+        os.environ["HOME_ASSISTANT_TOKEN"] = "captured_token"
+        os.environ["HOME_ASSISTANT_URL"] = "http://captured.local"
+
+        captured = manager._capture_env_vars_for_adapter("home_assistant")
+
+        assert "HOME_ASSISTANT_TOKEN" in captured
+        assert captured["HOME_ASSISTANT_TOKEN"] == "captured_token"
+        assert "HOME_ASSISTANT_URL" in captured
+        assert captured["HOME_ASSISTANT_URL"] == "http://captured.local"
+
+        # Cleanup
+        os.environ.pop("HOME_ASSISTANT_TOKEN", None)
+        os.environ.pop("HOME_ASSISTANT_URL", None)
+
+    def test_capture_env_vars_skips_unset(self, adapter_manager_with_runtime):
+        """Test that unset env vars are not captured."""
+        import os
+
+        manager, _ = adapter_manager_with_runtime
+
+        # Ensure env vars are not set
+        os.environ.pop("HOME_ASSISTANT_TOKEN", None)
+        os.environ.pop("HOME_ASSISTANT_URL", None)
+
+        captured = manager._capture_env_vars_for_adapter("home_assistant")
+
+        # Should be empty since nothing is set
+        assert "HOME_ASSISTANT_TOKEN" not in captured
+        assert "HOME_ASSISTANT_URL" not in captured
+
+    @pytest.mark.asyncio
+    async def test_save_adapter_config_captures_env_vars(self, adapter_manager_with_runtime):
+        """Test that saving adapter config also captures env vars."""
+        import os
+
+        manager, mock_runtime = adapter_manager_with_runtime
+
+        # Set env vars
+        os.environ["HOME_ASSISTANT_TOKEN"] = "persist_token"
+        os.environ["HOME_ASSISTANT_URL"] = "http://persist.local"
+
+        # Setup mock config service
+        mock_config = AsyncMock()
+        mock_config.set_config = AsyncMock()
+
+        mock_initializer = Mock()
+        mock_initializer.config_service = mock_config
+        mock_runtime.service_initializer = mock_initializer
+
+        config = AdapterConfig(adapter_type="home_assistant", persist=True)
+
+        await manager._save_adapter_config_to_graph("ha_test", "home_assistant", config)
+
+        # Should have saved env_vars
+        calls = mock_config.set_config.call_args_list
+        env_vars_call = next((c for c in calls if "env_vars" in str(c)), None)
+        assert env_vars_call is not None
+
+        # Cleanup
+        os.environ.pop("HOME_ASSISTANT_TOKEN", None)
+        os.environ.pop("HOME_ASSISTANT_URL", None)
+
+    @pytest.mark.asyncio
+    async def test_save_adapter_config_skips_without_persist(self, adapter_manager_with_runtime):
+        """Test that adapter config is not saved without persist flag."""
+        manager, mock_runtime = adapter_manager_with_runtime
+
+        # Setup mock config service
+        mock_config = AsyncMock()
+        mock_config.set_config = AsyncMock()
+
+        mock_initializer = Mock()
+        mock_initializer.config_service = mock_config
+        mock_runtime.service_initializer = mock_initializer
+
+        config = AdapterConfig(adapter_type="cli", persist=False)
+
+        await manager._save_adapter_config_to_graph("cli_test", "cli", config)
+
+        # Should NOT have called set_config since persist=False
+        mock_config.set_config.assert_not_called()

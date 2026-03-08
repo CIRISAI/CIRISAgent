@@ -59,8 +59,14 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
         self._config: Optional[AdaptiveFilterConfig] = None
         self._config_key = "adaptive_filter.config"  # Use proper config key format
         self._message_buffer: Dict[str, List[Tuple[datetime, object]]] = {}
+        self._user_last_seen: Dict[str, datetime] = {}  # Track last activity per user
+        self._last_stale_eviction: Optional[datetime] = None
         self._stats = FilterStats()
         self._init_task: Optional[asyncio.Task[None]] = None
+
+        # Stale user eviction settings
+        self._stale_user_ttl_seconds: int = 3600  # Evict users inactive for 1 hour
+        self._eviction_check_interval_seconds: int = 300  # Check every 5 minutes
 
     async def _on_start(self) -> None:
         """Custom startup logic for filter service."""
@@ -341,6 +347,12 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
         now = self._now()
         cutoff = now - timedelta(seconds=time_window)
 
+        # Track user last activity
+        self._user_last_seen[user_id] = now
+
+        # Periodically evict stale users to prevent memory growth
+        await self._evict_stale_users(now)
+
         if user_id not in self._message_buffer:
             self._message_buffer[user_id] = []
 
@@ -349,6 +361,31 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
         self._message_buffer[user_id] = [(ts, msg) for ts, msg in self._message_buffer[user_id] if ts > cutoff]
 
         return len(self._message_buffer[user_id]) > count_threshold
+
+    async def _evict_stale_users(self, now: datetime) -> None:
+        """Remove stale user entries from _message_buffer to prevent memory growth.
+
+        Only runs periodically (every _eviction_check_interval_seconds) to minimize overhead.
+        Evicts users who haven't been active for _stale_user_ttl_seconds.
+        """
+        # Check if enough time has passed since last eviction
+        if self._last_stale_eviction is not None:
+            elapsed = (now - self._last_stale_eviction).total_seconds()
+            if elapsed < self._eviction_check_interval_seconds:
+                return
+
+        self._last_stale_eviction = now
+        stale_cutoff = now - timedelta(seconds=self._stale_user_ttl_seconds)
+
+        # Find and remove stale users
+        stale_users = [user_id for user_id, last_seen in self._user_last_seen.items() if last_seen < stale_cutoff]
+
+        for user_id in stale_users:
+            self._message_buffer.pop(user_id, None)
+            self._user_last_seen.pop(user_id, None)
+
+        if stale_users:
+            logger.debug(f"Evicted {len(stale_users)} stale users from message buffer")
 
     async def _semantic_analysis(self, content: str, pattern: str) -> bool:
         """Use LLM to perform semantic analysis of content"""

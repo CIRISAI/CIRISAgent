@@ -474,11 +474,55 @@ fun CIRISApp(
             checkingFirstRun = true
             platformLog(TAG, "[INFO] Startup READY, checking first-run status...")
 
-            // If we just completed setup, skip token validation and go directly to Interact
+            // If we just completed setup, wait for agent WORK state before navigating to Interact
             // The token was literally just created during setup, so it's definitely valid
             if (justCompletedSetup) {
-                platformLog(TAG, "[INFO] Just completed setup, skipping token validation")
+                platformLog(TAG, "[INFO] Just completed setup, waiting for agent WORK state...")
                 justCompletedSetup = false
+
+                // Wait for agent to reach WORK state
+                // NOTE: Don't call setPhase() here - it would cancel this LaunchedEffect!
+                startupViewModel.setStatus("Waiting for agent...")
+
+                var agentReady = false
+                var pollAttempts = 0
+                val maxPollAttempts = 150 // 30 seconds
+                var lastState = "UNKNOWN"
+
+                while (pollAttempts < maxPollAttempts && !agentReady) {
+                    try {
+                        val status = apiClient.getSystemStatus()
+                        val cogState = (status.cognitive_state ?: "UNKNOWN").uppercase()
+
+                        if (cogState != lastState) {
+                            PlatformLogger.i(TAG, " Agent state: $cogState")
+                            startupViewModel.setStatus("Agent state: $cogState")
+                            lastState = cogState
+                        }
+
+                        if (cogState == "WORK") {
+                            PlatformLogger.i(TAG, " Agent reached WORK state!")
+                            agentReady = true
+                            break
+                        }
+                    } catch (e: Exception) {
+                        if (pollAttempts % 10 == 0) {
+                            PlatformLogger.d(TAG, " Waiting for server... (${e.message?.take(30)})")
+                            startupViewModel.setStatus("Connecting to backend...")
+                        }
+                    }
+                    kotlinx.coroutines.delay(200)
+                    pollAttempts++
+                }
+
+                if (!agentReady) {
+                    PlatformLogger.w(TAG, " Agent did not reach WORK state within timeout")
+                    startupViewModel.setStatus("Agent ready (timeout)")
+                } else {
+                    startupViewModel.setStatus("Agent ready!")
+                }
+                kotlinx.coroutines.delay(500)
+
                 interactViewModel.startPolling() // Start polling now that token is set
                 currentScreen = Screen.Interact
                 return@LaunchedEffect
@@ -598,6 +642,54 @@ fun CIRISApp(
                                         }
                                     }
                                 }
+
+                                // Wait for agent to reach WORK state before showing Interact
+                                // NOTE: Don't call setPhase() here - it would cancel this LaunchedEffect!
+                                // The status message is sufficient for user feedback
+                                startupViewModel.setStatus("Waiting for agent...")
+
+                                // Poll for WORK state with timeout
+                                var agentReady = false
+                                var pollAttempts = 0
+                                val maxPollAttempts = 150 // 30 seconds (150 * 200ms)
+                                var lastState = "UNKNOWN"
+
+                                while (pollAttempts < maxPollAttempts && !agentReady) {
+                                    try {
+                                        val status = apiClient.getSystemStatus()
+                                        val cogState = (status.cognitive_state ?: "UNKNOWN").uppercase()
+
+                                        if (cogState != lastState) {
+                                            PlatformLogger.i(TAG, " Agent state: $cogState")
+                                            startupViewModel.setStatus("Agent state: $cogState")
+                                            lastState = cogState
+                                        }
+
+                                        if (cogState == "WORK") {
+                                            PlatformLogger.i(TAG, " Agent reached WORK state!")
+                                            agentReady = true
+                                            break
+                                        }
+                                    } catch (e: Exception) {
+                                        // Server not ready yet, keep polling
+                                        if (pollAttempts % 10 == 0) {
+                                            PlatformLogger.d(TAG, " Waiting for server... (${e.message?.take(30)})")
+                                            startupViewModel.setStatus("Connecting to backend...")
+                                        }
+                                    }
+                                    kotlinx.coroutines.delay(200)
+                                    pollAttempts++
+                                }
+
+                                if (!agentReady) {
+                                    PlatformLogger.w(TAG, " Agent did not reach WORK state within timeout, proceeding anyway")
+                                    startupViewModel.setStatus("Agent ready (timeout)")
+                                } else {
+                                    startupViewModel.setStatus("Agent ready!")
+                                }
+
+                                // Brief pause to show ready state
+                                kotlinx.coroutines.delay(500)
 
                                 // Trigger data loading now that we have auth
                                 PlatformLogger.i(TAG, " Triggering data load for ViewModels after token set")
@@ -729,16 +821,40 @@ fun CIRISApp(
                                                     // Handle new token with TokenManager for periodic refresh
                                                     tokenManager.handleNewToken(result.idToken, result.provider)
 
+                                                    // Wait for agent WORK state
+                                                    loginStatusMessage = "Waiting for agent..."
+                                                    var agentReady = false
+                                                    var pollAttempts = 0
+                                                    while (pollAttempts < 150 && !agentReady) {
+                                                        try {
+                                                            val status = apiClient.getSystemStatus()
+                                                            val cogState = status.cognitive_state ?: "UNKNOWN"
+                                                            if (cogState.uppercase() == "WORK") {
+                                                                agentReady = true
+                                                                break
+                                                            }
+                                                            loginStatusMessage = "Agent state: $cogState"
+                                                        } catch (e: Exception) {
+                                                            loginStatusMessage = "Connecting to backend..."
+                                                        }
+                                                        kotlinx.coroutines.delay(200)
+                                                        pollAttempts++
+                                                    }
+
                                                     // Trigger data loading
                                                     PlatformLogger.i(TAG, " Triggering billingViewModel.loadBalance()...")
                                                     billingViewModel.loadBalance()
                                                     adaptersViewModel.fetchAdapters()
                                                     interactViewModel.startPolling() // Start polling now that token is set
 
+                                                    isLoginLoading = false
+                                                    loginStatusMessage = null
                                                     platformLog(TAG, "[INFO] Navigating to Screen.Interact")
                                                     currentScreen = Screen.Interact
                                                 } catch (e: Exception) {
                                                     platformLog(TAG, "[ERROR] Token exchange failed: ${e::class.simpleName}: ${e.message}")
+                                                    isLoginLoading = false
+                                                    loginStatusMessage = null
                                                     loginErrorMessage = "Token exchange failed: ${e.message}"
                                                 }
                                             } else {
@@ -811,8 +927,28 @@ fun CIRISApp(
                                     .onSuccess { PlatformLogger.i(TAG, " CIRIS token saved to secure storage") }
                                     .onFailure { e -> PlatformLogger.w(TAG, " Failed to save token: ${e.message}") }
 
+                                // Wait for agent WORK state
+                                PlatformLogger.i(TAG, " Local login successful, waiting for agent...")
+                                loginStatusMessage = "Waiting for agent..."
+                                var agentReady = false
+                                var pollAttempts = 0
+                                while (pollAttempts < 150 && !agentReady) {
+                                    try {
+                                        val status = apiClient.getSystemStatus()
+                                        val cogState = status.cognitive_state ?: "UNKNOWN"
+                                        if (cogState.uppercase() == "WORK") {
+                                            agentReady = true
+                                            break
+                                        }
+                                        loginStatusMessage = "Agent state: $cogState"
+                                    } catch (e: Exception) {
+                                        loginStatusMessage = "Connecting to backend..."
+                                    }
+                                    kotlinx.coroutines.delay(200)
+                                    pollAttempts++
+                                }
+
                                 // Trigger data loading
-                                PlatformLogger.i(TAG, " Local login successful, triggering data load...")
                                 billingViewModel.loadBalance()
                                 adaptersViewModel.fetchAdapters()
                                 interactViewModel.startPolling()
@@ -1000,6 +1136,7 @@ fun CIRISApp(
                 SettingsScreen(
                     viewModel = settingsViewModel,
                     apiClient = apiClient,
+                    secureStorage = secureStorage,
                     onNavigateBack = { currentScreen = Screen.Interact },
                     onLogout = {
                         PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout")

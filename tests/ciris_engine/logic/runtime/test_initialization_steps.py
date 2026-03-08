@@ -343,6 +343,80 @@ class TestLoadSavedAdaptersFromGraph:
             # Should NOT call load_adapter since persist=False
             mock_adapter_manager.load_adapter.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_load_saved_adapters_restores_env_vars(self) -> None:
+        """Test that saved env vars are restored before loading adapter."""
+        import os
+
+        from ciris_engine.logic.runtime.initialization_steps import load_saved_adapters_from_graph
+
+        runtime = MagicMock()
+        runtime.adapters = []
+
+        # Clear env var first
+        os.environ.pop("CIRIS_LENS_ENDPOINT", None)
+
+        # Define MockConfigNode inside the test
+        # _extract_config_value checks config_node.value, then config_node.value.value
+        class MockConfigValue:
+            def __init__(self, val: object) -> None:
+                self._value = val
+
+            @property
+            def value(self) -> object:
+                return self._value
+
+        class MockConfigNode:
+            def __init__(self, val: object) -> None:
+                self.value = MockConfigValue(val)
+
+        mock_config_service = MagicMock()
+        mock_config_service.list_configs = AsyncMock(
+            return_value={
+                "adapter.accord_metrics.type": "ciris_accord_metrics",
+                "adapter.accord_metrics.config": {},
+                "adapter.accord_metrics.persist": True,
+                "adapter.accord_metrics.env_vars": {"CIRIS_LENS_ENDPOINT": "https://lens.test.ai/api/v1"},
+            }
+        )
+
+        def mock_get_config(key: str) -> object:
+            configs = {
+                "adapter.accord_metrics.type": MockConfigNode("ciris_accord_metrics"),
+                "adapter.accord_metrics.config": MockConfigNode({"enabled": True}),
+                "adapter.accord_metrics.persist": MockConfigNode(True),
+                "adapter.accord_metrics.env_vars": MockConfigNode(
+                    {"CIRIS_LENS_ENDPOINT": "https://lens.test.ai/api/v1"}
+                ),
+            }
+            return configs.get(key)
+
+        mock_config_service.get_config = AsyncMock(side_effect=mock_get_config)
+
+        mock_adapter_manager = MagicMock()
+        mock_adapter_manager.loaded_adapters = {}
+        mock_adapter_manager.load_adapter = AsyncMock(return_value=MagicMock(success=True))
+
+        runtime.service_initializer.config_service = mock_config_service
+        mock_runtime_control_service = MagicMock()
+        mock_runtime_control_service.adapter_manager = mock_adapter_manager
+        runtime.service_initializer.runtime_control_service = mock_runtime_control_service
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.is_first_run",
+            return_value=False,
+        ):
+            await load_saved_adapters_from_graph(runtime)
+
+            # Env var should have been restored
+            assert os.environ.get("CIRIS_LENS_ENDPOINT") == "https://lens.test.ai/api/v1"
+
+            # Should have called load_adapter
+            mock_adapter_manager.load_adapter.assert_called_once()
+
+        # Cleanup
+        os.environ.pop("CIRIS_LENS_ENDPOINT", None)
+
 
 class TestVerifyIdentityIntegrity:
     """Tests for the verify_identity_integrity function."""

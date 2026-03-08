@@ -476,16 +476,18 @@ async def _load_single_saved_adapter(
         logger.debug(f"Adapter {adapter_id} already in adapter_manager, skipping")
         return False
 
-    # Get adapter type, config, occurrence_id, and persist flag
+    # Get adapter type, config, occurrence_id, persist flag, and saved env_vars
     adapter_type_node = await config_service.get_config(f"adapter.{adapter_id}.type")
     adapter_config_node = await config_service.get_config(f"adapter.{adapter_id}.config")
     occurrence_id_node = await config_service.get_config(f"adapter.{adapter_id}.occurrence_id")
     persist_node = await config_service.get_config(f"adapter.{adapter_id}.persist")
+    env_vars_node = await config_service.get_config(f"adapter.{adapter_id}.env_vars")
 
     adapter_type = _extract_config_value(adapter_type_node)
     adapter_config_data = _extract_config_value(adapter_config_node)
     saved_occurrence_id = _extract_config_value(occurrence_id_node)
     persist_flag = _extract_config_value(persist_node)
+    saved_env_vars = _extract_config_value(env_vars_node)
 
     # Check persist flag - only load if explicitly marked for persistence
     if not persist_flag:
@@ -506,7 +508,31 @@ async def _load_single_saved_adapter(
         logger.warning(f"No valid adapter type found for saved adapter {adapter_id}, skipping")
         return False
 
+    # Restore saved env vars BEFORE loading the adapter
+    # This ensures env vars are available when the adapter initializes
+    if saved_env_vars and isinstance(saved_env_vars, dict):
+        import os
+
+        restored_vars = []
+        for env_var, value in saved_env_vars.items():
+            if value is not None:
+                # Convert booleans to strings
+                if isinstance(value, bool):
+                    os.environ[env_var] = "true" if value else "false"
+                else:
+                    os.environ[env_var] = str(value)
+                restored_vars.append(env_var)
+        if restored_vars:
+            logger.info(f"Pre-restored env vars for {adapter_id}: {restored_vars}")
+
     adapter_config = _build_adapter_config_from_data(adapter_type, adapter_config_data)
+
+    # Include saved env vars in the adapter config for redundancy
+    if saved_env_vars and isinstance(saved_env_vars, dict) and adapter_config:
+        if hasattr(adapter_config, "adapter_config") and adapter_config.adapter_config:
+            if isinstance(adapter_config.adapter_config, dict):
+                adapter_config.adapter_config["_saved_env_vars"] = saved_env_vars
+
     logger.info(
         f"Loading saved adapter: {adapter_id} (type: {adapter_type}, occurrence: {saved_occurrence_id or 'legacy'})"
     )

@@ -266,8 +266,8 @@ class AdapterDiscoveryService:
     def get_eligible_adapters(self, disabled_adapters: Optional[List[str]] = None) -> List[ServiceManifest]:
         """Get adapters whose tools all pass eligibility checks.
 
-        An adapter is eligible if ALL of its tools are eligible.
-        This ensures the adapter can function fully.
+        An adapter is eligible if ALL of its tools are eligible AND
+        the adapter allows auto-loading (doesn't require consent/opt-in).
 
         Args:
             disabled_adapters: List of adapter names to exclude
@@ -282,6 +282,13 @@ class AdapterDiscoveryService:
             if manifest.module.name in disabled:
                 logger.info(f"Adapter '{manifest.module.name}' disabled by config")
                 continue
+
+            # Check manifest flags - skip adapters that require explicit enablement
+            skip_reason = self._should_skip_for_auto_load(manifest)
+            if skip_reason:
+                logger.info(f"Adapter skipped for auto-load: {skip_reason}")
+                continue
+
             eligible.append(manifest)
             logger.debug(f"Adapter '{manifest.module.name}' eligible")
 
@@ -331,6 +338,36 @@ class AdapterDiscoveryService:
             except Exception as e:
                 logger.debug(f"[AUTO-LOAD] Failed to check adapter '{adapter_name}': {e}")
 
+    def _should_skip_for_auto_load(self, manifest: ServiceManifest) -> Optional[str]:
+        """Check if manifest should be skipped during auto-load.
+
+        Adapters are skipped if they have:
+        - auto_load=False (require explicit enablement via setup wizard)
+        - requires_consent=True (require user consent)
+        - opt_in_required=True (require explicit opt-in)
+
+        These adapters should only be loaded via the post-setup adapter loading
+        path (load_post_setup_adapters_for_resume) after the user enables them.
+
+        Returns:
+            Skip reason string if should skip, None otherwise
+        """
+        module_name = manifest.module.name
+
+        # Check auto_load flag (defaults to True if not specified)
+        if hasattr(manifest.module, "auto_load") and not manifest.module.auto_load:
+            return f"auto_load=False (requires explicit enablement): {module_name}"
+
+        # Check requires_consent flag (defaults to False if not specified)
+        if hasattr(manifest.module, "requires_consent") and manifest.module.requires_consent:
+            return f"requires_consent=True (requires user consent): {module_name}"
+
+        # Check opt_in_required flag (defaults to False if not specified)
+        if hasattr(manifest.module, "opt_in_required") and manifest.module.opt_in_required:
+            return f"opt_in_required=True (requires explicit opt-in): {module_name}"
+
+        return None
+
     async def load_adapters_with_status(
         self,
         disabled_adapters: Optional[List[str]] = None,
@@ -350,6 +387,13 @@ class AdapterDiscoveryService:
             if manifest.module.name in disabled:
                 logger.info(f"[AUTO-LOAD] Skipping disabled adapter: {manifest.module.name}")
                 continue
+
+            # Check manifest flags - skip adapters that require explicit enablement
+            skip_reason = self._should_skip_for_auto_load(manifest)
+            if skip_reason:
+                logger.info(f"[AUTO-LOAD] Skipping adapter: {skip_reason}")
+                continue
+
             await self._process_adapter_services(manifest, deps, eligible_services, ineligible_adapters)
 
         logger.info(

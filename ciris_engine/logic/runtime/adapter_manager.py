@@ -215,7 +215,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             # via apply_config() during the wizard, but env vars are lost on restart.
             # Re-apply them so adapter.start() -> initialize() can find them.
             if config_params and config_params.adapter_config:
-                self._restore_env_vars_from_config(adapter_id, config_params.adapter_config)
+                self._restore_env_vars_from_config(adapter_id, config_params.adapter_config, adapter_type=adapter_type)
 
             instance = AdapterInstance(
                 adapter_id=adapter_id,
@@ -958,11 +958,11 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             warning_message=warning_message,
         )
 
-    # Known adapter config keys that map to environment variables.
-    # When a configurable adapter saves its config, tokens/URLs are stored in the
-    # adapter_config dict. On restart, we re-apply them to os.environ so the
-    # adapter's service can read them (e.g., HAIntegrationService.ha_token property).
-    _CONFIG_TO_ENV_MAP: Dict[str, str] = {
+    # Default config-to-env mappings for adapters that don't provide their own.
+    # Each adapter can define a _CONFIG_TO_ENV_MAP on their configurable class,
+    # or specify 'env' fields in their manifest.json configuration section.
+    _DEFAULT_CONFIG_TO_ENV_MAP: Dict[str, str] = {
+        # Home Assistant mappings
         "access_token": "HOME_ASSISTANT_TOKEN",
         "refresh_token": "HOME_ASSISTANT_REFRESH_TOKEN",
         "client_id": "HOME_ASSISTANT_CLIENT_ID",
@@ -970,23 +970,102 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         "base_url": "HOME_ASSISTANT_URL",
     }
 
-    def _restore_env_vars_from_config(self, adapter_id: str, config: Any) -> None:
-        """Restore environment variables from saved adapter config."""
+    # Adapter-specific env mappings (adapter_type -> {config_key: env_var})
+    # These supplement default mappings for adapters with custom env vars
+    _ADAPTER_SPECIFIC_ENV_MAPS: Dict[str, Dict[str, str]] = {
+        "home_assistant": {
+            "access_token": "HOME_ASSISTANT_TOKEN",
+            "refresh_token": "HOME_ASSISTANT_REFRESH_TOKEN",
+            "client_id": "HOME_ASSISTANT_CLIENT_ID",
+            "callback_base_url": "HOME_ASSISTANT_CLIENT_ID",
+            "base_url": "HOME_ASSISTANT_URL",
+        },
+        "ciris_accord_metrics": {
+            "endpoint_url": "CIRIS_LENS_ENDPOINT",
+            "trace_level": "CIRIS_ACCORD_METRICS_TRACE_LEVEL",
+            "consent_given": "CIRIS_ACCORD_METRICS_CONSENT",
+        },
+        "weather": {
+            "api_key": "WEATHER_API_KEY",
+        },
+        "reddit": {
+            "client_id": "REDDIT_CLIENT_ID",
+            "client_secret": "REDDIT_CLIENT_SECRET",
+            "username": "REDDIT_USERNAME",
+            "password": "REDDIT_PASSWORD",
+            "user_agent": "REDDIT_USER_AGENT",
+        },
+    }
+
+    def _get_env_map_for_adapter(self, adapter_type: str) -> Dict[str, str]:
+        """Get the config-to-env mapping for a specific adapter type.
+
+        Looks up adapter-specific mappings first, then falls back to defaults.
+        """
+        if adapter_type in self._ADAPTER_SPECIFIC_ENV_MAPS:
+            return self._ADAPTER_SPECIFIC_ENV_MAPS[adapter_type]
+        return self._DEFAULT_CONFIG_TO_ENV_MAP
+
+    def _restore_env_vars_from_config(self, adapter_id: str, config: Any, adapter_type: str = "") -> None:
+        """Restore environment variables from saved adapter config.
+
+        Supports multiple sources:
+        1. Adapter-specific env mappings (if adapter_type known)
+        2. env_vars dict saved in config (redundant storage)
+        3. Default config-to-env mappings
+        4. oauth_tokens nested dict for OAuth adapters
+        """
         if not isinstance(config, dict):
             return
 
-        restored = []
-        # Check top-level keys
-        for config_key, env_var in self._CONFIG_TO_ENV_MAP.items():
+        restored: list[str] = []
+
+        # First, restore from saved env_vars dict if present (redundant storage)
+        saved_env_vars = config.get("_saved_env_vars", {})
+        if isinstance(saved_env_vars, dict):
+            for env_var, value in saved_env_vars.items():
+                if value is not None:
+                    if isinstance(value, bool):
+                        os.environ[env_var] = "true" if value else "false"
+                    else:
+                        os.environ[env_var] = str(value)
+                    restored.append(env_var)
+
+        # Get the appropriate env map for this adapter
+        env_map = self._get_env_map_for_adapter(adapter_type)
+
+        # Check top-level config keys
+        for config_key, env_var in env_map.items():
+            if env_var in restored:
+                continue  # Already restored from saved env vars
             value = config.get(config_key)
-            if value and isinstance(value, str):
-                os.environ[env_var] = value
-                restored.append(env_var)
+            if value is not None:
+                if isinstance(value, bool):
+                    os.environ[env_var] = "true" if value else "false"
+                elif isinstance(value, str) and value:
+                    os.environ[env_var] = value
+                    restored.append(env_var)
+
+        # Also check nested settings dict (common pattern)
+        settings = config.get("settings", {})
+        if isinstance(settings, dict):
+            for config_key, env_var in env_map.items():
+                if env_var in restored:
+                    continue
+                value = settings.get(config_key)
+                if value is not None:
+                    if isinstance(value, bool):
+                        os.environ[env_var] = "true" if value else "false"
+                    elif isinstance(value, str) and value:
+                        os.environ[env_var] = value
+                        restored.append(env_var)
 
         # Also check nested oauth_tokens dict
         oauth_tokens = config.get("oauth_tokens", {})
         if isinstance(oauth_tokens, dict):
-            for config_key, env_var in self._CONFIG_TO_ENV_MAP.items():
+            for config_key, env_var in env_map.items():
+                if env_var in restored:
+                    continue
                 if env_var not in os.environ or not os.environ.get(env_var):
                     value = oauth_tokens.get(config_key)
                     if value and isinstance(value, str):
@@ -995,6 +1074,90 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
         if restored:
             logger.info(f"Restored env vars for adapter {adapter_id}: {restored}")
+
+        # Sync restored env vars to .env file for redundancy
+        if restored:
+            self._sync_env_vars_to_dotenv(restored)
+
+    def _sync_env_vars_to_dotenv(self, env_vars: list[str]) -> None:
+        """Sync environment variables to .env file for redundancy.
+
+        This ensures env vars survive even if graph config is lost.
+        """
+        from pathlib import Path
+
+        try:
+            # Get CIRIS home directory
+            ciris_home = os.environ.get("CIRIS_HOME")
+            if ciris_home:
+                env_path = Path(ciris_home) / ".env"
+            else:
+                env_path = Path.home() / ".ciris" / ".env"
+
+            if not env_path.exists():
+                logger.debug(f".env file not found at {env_path}, skipping sync")
+                return
+
+            # Read existing .env content
+            with open(env_path, "r") as f:
+                lines = f.readlines()
+
+            # Parse existing vars
+            existing_vars: Dict[str, int] = {}  # var_name -> line_index
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#") and "=" in stripped:
+                    var_name = stripped.split("=", 1)[0]
+                    existing_vars[var_name] = i
+
+            # Update or add env vars
+            modified = False
+            for env_var in env_vars:
+                value = os.environ.get(env_var, "")
+                if not value:
+                    continue
+
+                # Escape value for .env format
+                if '"' in value or "'" in value or " " in value:
+                    escaped_value = f'"{value}"'
+                else:
+                    escaped_value = value
+
+                new_line = f"{env_var}={escaped_value}\n"
+
+                if env_var in existing_vars:
+                    # Update existing line
+                    line_idx = existing_vars[env_var]
+                    if lines[line_idx].strip() != new_line.strip():
+                        lines[line_idx] = new_line
+                        modified = True
+                else:
+                    # Add new line
+                    lines.append(new_line)
+                    modified = True
+
+            if modified:
+                with open(env_path, "w") as f:
+                    f.writelines(lines)
+                logger.info(f"Synced {len(env_vars)} env vars to {env_path}")
+
+        except Exception as e:
+            logger.warning(f"Failed to sync env vars to .env: {e}")
+
+    def _capture_env_vars_for_adapter(self, adapter_type: str) -> Dict[str, str]:
+        """Capture current environment variable values for an adapter.
+
+        Returns a dict of {env_var: value} for all relevant env vars.
+        """
+        env_map = self._get_env_map_for_adapter(adapter_type)
+        captured: Dict[str, str] = {}
+
+        for config_key, env_var in env_map.items():
+            value = os.environ.get(env_var)
+            if value:
+                captured[env_var] = value
+
+        return captured
 
     async def _save_adapter_config_to_graph(
         self, adapter_id: str, adapter_type: str, config_params: AdapterConfig
@@ -1006,6 +1169,8 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
         In multi-occurrence deployments, the occurrence_id is saved alongside the config
         so each occurrence can identify which adapters it loaded.
+
+        Also captures current env vars for redundant storage.
         """
         from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
 
@@ -1033,6 +1198,11 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             # Get current occurrence ID for multi-occurrence support
             occurrence_id = get_current_occurrence_id()
 
+            # Capture current env vars for this adapter for redundant storage
+            captured_env_vars = self._capture_env_vars_for_adapter(adapter_type)
+            if captured_env_vars:
+                logger.debug(f"Captured env vars for {adapter_id}: {list(captured_env_vars.keys())}")
+
             # Store the full config object
             await config_service.set_config(
                 key=f"adapter.{adapter_id}.config", value=config_params, updated_by="runtime_adapter_manager"
@@ -1053,7 +1223,22 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 key=f"adapter.{adapter_id}.persist", value=True, updated_by="runtime_adapter_manager"
             )
 
-            logger.info(f"Persisted adapter config for {adapter_id} to graph (occurrence={occurrence_id})")
+            # Store captured env vars separately for redundant recovery
+            if captured_env_vars:
+                await config_service.set_config(
+                    key=f"adapter.{adapter_id}.env_vars",
+                    value=captured_env_vars,
+                    updated_by="runtime_adapter_manager",
+                )
+
+            # Also sync env vars to .env file for redundancy
+            if captured_env_vars:
+                self._sync_env_vars_to_dotenv(list(captured_env_vars.keys()))
+
+            logger.info(
+                f"Persisted adapter config for {adapter_id} to graph "
+                f"(occurrence={occurrence_id}, env_vars={len(captured_env_vars)})"
+            )
 
         except Exception as e:
             logger.error(f"Failed to save adapter config for {adapter_id}: {e}")

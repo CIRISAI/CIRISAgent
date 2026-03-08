@@ -14,6 +14,7 @@ when the wizard completes.
 """
 
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -159,13 +160,22 @@ class AccordMetricsConfigurable:
         logger.info("Configuration validated successfully")
         return True, None
 
+    # Mapping of config keys to environment variable names
+    # This mirrors the 'env' field in manifest.json configuration section
+    _CONFIG_TO_ENV_MAP = {
+        "endpoint_url": "CIRIS_LENS_ENDPOINT",
+        "trace_level": "CIRIS_ACCORD_METRICS_TRACE_LEVEL",
+        "consent_given": "CIRIS_ACCORD_METRICS_CONSENT",
+    }
+
     async def apply_config(self, config: Dict[str, Any]) -> bool:
         """Apply the configuration to the adapter.
 
         This method:
         1. Adds consent_timestamp if not present
-        2. Stores the configuration
-        3. The configuration will be persisted by AdapterConfigurationService
+        2. Sets environment variables for the service to read
+        3. Stores the configuration
+        4. The configuration will be persisted by AdapterConfigurationService
 
         Args:
             config: Validated configuration to apply
@@ -178,6 +188,18 @@ class AccordMetricsConfigurable:
         # Add consent timestamp if not present
         if "consent_timestamp" not in config or not config["consent_timestamp"]:
             config["consent_timestamp"] = datetime.now(timezone.utc).isoformat()
+
+        # Set environment variables for the accord metrics service
+        # This is critical for the service to find config on restart
+        for config_key, env_var in self._CONFIG_TO_ENV_MAP.items():
+            value = config.get(config_key)
+            if value is not None:
+                # Convert booleans to lowercase strings for env vars
+                if isinstance(value, bool):
+                    os.environ[env_var] = "true" if value else "false"
+                else:
+                    os.environ[env_var] = str(value)
+                logger.debug(f"Set env var {env_var} from config key {config_key}")
 
         # Store the applied configuration
         self._applied_config = config.copy()

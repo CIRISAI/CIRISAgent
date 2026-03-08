@@ -50,8 +50,8 @@ def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
     if value is None:
         return "<none>"
     val_str = str(value)
-    # Remove newlines, carriage returns, and other control chars
-    sanitized = re.sub(r"[\r\n\t\x00-\x1f\x7f-\x9f]", "", val_str)
+    # Remove control characters (C0: 0x00-0x1f, DEL+C1: 0x7f-0x9f)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", val_str)
     # Truncate to prevent log flooding
     if len(sanitized) > max_length:
         sanitized = sanitized[:max_length] + "..."

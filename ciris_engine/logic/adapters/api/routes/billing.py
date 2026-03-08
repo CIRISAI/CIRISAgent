@@ -50,8 +50,8 @@ def _sanitize_for_log(value: str, max_length: int = 64) -> str:
     """
     if not value:
         return "<empty>"
-    # Remove newlines, carriage returns, and other control chars
-    sanitized = re.sub(r"[\r\n\t\x00-\x1f\x7f-\x9f]", "", str(value))
+    # Remove control characters (C0: 0x00-0x1f, DEL+C1: 0x7f-0x9f)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", str(value))
     # Truncate to prevent log flooding
     if len(sanitized) > max_length:
         sanitized = sanitized[:max_length] + "..."
@@ -485,7 +485,7 @@ def _try_lazy_init_billing_provider(request: Request, resource_monitor: Any) -> 
 
         # Attach to resource monitor
         resource_monitor.credit_provider = provider
-        # Log only hostname to avoid logging full URL (NOSONAR - sanitized)
+        # Log only hostname to avoid logging full URL  # NOSONAR - sanitized
         try:
             host_only = urlparse(billing_url).hostname or "unknown"
         except Exception:

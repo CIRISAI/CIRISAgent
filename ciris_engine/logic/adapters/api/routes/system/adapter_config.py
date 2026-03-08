@@ -39,7 +39,7 @@ def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
         return "<none>"
     val_str = str(value)
     # Remove newlines, carriage returns, and other control chars
-    sanitized = re.sub(r"[\r\n\t\x00-\x1f\x7f-\x9f]", "", val_str)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", val_str)
     # Truncate to prevent log flooding
     if len(sanitized) > max_length:
         sanitized = sanitized[:max_length] + "..."
@@ -47,6 +47,9 @@ def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
 
 
 router = APIRouter()
+
+# Error message constants
+ERROR_SESSION_NOT_FOUND = "Session not found"
 
 
 # ============================================================================
@@ -276,7 +279,7 @@ async def get_session_status(
         session = config_service.get_session(session_id)
 
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail=ERROR_SESSION_NOT_FOUND)
 
         # Get adapter steps from the adapter manifest (InteractiveConfiguration)
         current_step = None
@@ -345,7 +348,7 @@ async def oauth_callback(
         # Verify session exists and state matches
         session = config_service.get_session(session_id)
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail=ERROR_SESSION_NOT_FOUND)
 
         if state != session_id:
             raise HTTPException(status_code=400, detail="Invalid OAuth state")
@@ -448,7 +451,7 @@ async def oauth_deeplink_callback(
         session = config_service.get_session(session_id)
         if not session:
             logger.error("[OAUTH DEEPLINK CALLBACK] Session not found: %s", _sanitize_for_log(session_id))
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail=ERROR_SESSION_NOT_FOUND)
 
         # Execute the OAuth callback step
         result = await config_service.execute_step(session_id, {"code": code, "state": state})

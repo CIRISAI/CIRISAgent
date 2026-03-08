@@ -51,7 +51,7 @@ def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
     if value is None:
         return "<none>"
     val_str = str(value)
-    sanitized = re.sub(r"[\r\n\t\x00-\x1f\x7f-\x9f]", "", val_str)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", val_str)
     if len(sanitized) > max_length:
         sanitized = sanitized[:max_length] + "..."
     return sanitized

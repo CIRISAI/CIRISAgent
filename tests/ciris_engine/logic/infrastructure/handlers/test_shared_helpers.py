@@ -732,6 +732,46 @@ class TestAuditParameterHelpers:
 
         assert "tool_name" not in result
 
+    def test_extract_tool_audit_params_with_ha_prefix(self):
+        """Test _extract_tool_audit_params extracts home_assistant adapter from ha_ prefix."""
+        from ciris_engine.schemas.actions.parameters import ToolParams
+
+        tool_params = ToolParams(name="ha_device_control", parameters={"entity_id": "light.lamp"})
+        result = extract_audit_parameters(HandlerActionType.TOOL, tool_params)
+
+        assert result["tool_name"] == "ha_device_control"
+        assert result["tool_adapter"] == "home_assistant"
+
+    def test_extract_tool_audit_params_with_web_prefix(self):
+        """Test _extract_tool_audit_params extracts web adapter from web_ prefix."""
+        from ciris_engine.schemas.actions.parameters import ToolParams
+
+        tool_params = ToolParams(name="web_search", parameters={"query": "test"})
+        result = extract_audit_parameters(HandlerActionType.TOOL, tool_params)
+
+        assert result["tool_name"] == "web_search"
+        assert result["tool_adapter"] == "web"
+
+    def test_extract_tool_audit_params_with_secrets_prefix(self):
+        """Test _extract_tool_audit_params extracts secrets adapter from secrets_ prefix."""
+        from ciris_engine.schemas.actions.parameters import ToolParams
+
+        tool_params = ToolParams(name="secrets_get", parameters={"key": "api_key"})
+        result = extract_audit_parameters(HandlerActionType.TOOL, tool_params)
+
+        assert result["tool_name"] == "secrets_get"
+        assert result["tool_adapter"] == "secrets"
+
+    def test_extract_tool_audit_params_no_adapter_prefix(self):
+        """Test _extract_tool_audit_params with tool that has no known adapter prefix."""
+        from ciris_engine.schemas.actions.parameters import ToolParams
+
+        tool_params = ToolParams(name="custom_tool", parameters={"arg": "value"})
+        result = extract_audit_parameters(HandlerActionType.TOOL, tool_params)
+
+        assert result["tool_name"] == "custom_tool"
+        assert "tool_adapter" not in result
+
 
 class TestIntegration:
     """Integration tests combining multiple helpers."""

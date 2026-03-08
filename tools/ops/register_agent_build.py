@@ -42,13 +42,14 @@ from pathlib import Path
 EXEMPT_EXTENSIONS = {".env", ".log", ".audit", ".db", ".sqlite", ".sqlite3", ".pyc", ".pyo"}
 
 # Directory names exempt from integrity checking (must match CIRISVerify)
+# Note: "data" was removed - runtime files (.db, .log) are covered by EXEMPT_EXTENSIONS
+# and we need ciris_engine/data/__init__.py etc. in the manifest for mobile verification
 EXEMPT_DIRS = {
     "__pycache__",
     ".git",
     ".venv",
     "venv",
     "node_modules",
-    "data",
     "logs",
     ".pytest_cache",
     ".mypy_cache",

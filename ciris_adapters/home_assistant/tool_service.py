@@ -366,14 +366,55 @@ class HAToolService:
     async def _execute_list_entities(self, params: Dict[str, Any]) -> ToolExecutionResult:
         """Execute list entities."""
         domain = params.get("domain")
+        include_unavailable = params.get("include_unavailable", False)
 
         if domain:
             entities = await self.ha_service.get_sensors_by_domain(domain)
         else:
             entities = await self.ha_service.get_all_entities()
 
+        # Filter out unavailable/unknown entities unless explicitly requested
+        if not include_unavailable:
+            active_entities = [e for e in entities if e.state not in ("unavailable", "unknown")]
+            filtered_count = len(entities) - len(active_entities)
+            logger.info(f"[HA ENTITY LIST] Filtered {filtered_count} unavailable/unknown entities")
+            entities = active_entities
+
+        # Prioritize controllable domains for context relevance
+        # Higher priority = more useful for the agent to know about
+        domain_priority = {
+            "light": 1,
+            "switch": 1,
+            "climate": 1,
+            "media_player": 2,
+            "cover": 2,
+            "fan": 2,
+            "lock": 2,
+            "vacuum": 2,
+            "sensor": 3,
+            "binary_sensor": 3,
+            "person": 4,
+            "device_tracker": 4,
+            "weather": 4,
+            "camera": 5,
+            "automation": 6,
+            "scene": 6,
+            "script": 6,
+            # Lower priority for system stuff
+            "update": 10,
+            "button": 10,
+            "select": 10,
+            "number": 10,
+        }
+
+        def get_priority(entity: Any) -> int:
+            return domain_priority.get(entity.domain, 8)
+
+        # Sort by priority (lower = more important)
+        entities = sorted(entities, key=get_priority)
+
         # Log entity details at INFO level for context tuning
-        logger.info(f"[HA ENTITY LIST] Retrieved {len(entities)} entities (domain filter: {domain})")
+        logger.info(f"[HA ENTITY LIST] Retrieved {len(entities)} active entities (domain filter: {domain})")
         for e in entities[:50]:
             # Log each entity with its metadata for context builder tuning
             attrs_summary = {k: v for k, v in (e.attributes or {}).items() if k in [

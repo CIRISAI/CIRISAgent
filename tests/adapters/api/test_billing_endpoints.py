@@ -811,3 +811,58 @@ class TestGetTransactions:
 
         assert exc_info.value.status_code == 503
         assert exc_info.value.detail == ERROR_BILLING_SERVICE_UNAVAILABLE
+
+
+class TestSanitizeForLog:
+    """Test _sanitize_for_log helper function."""
+
+    def test_returns_empty_placeholder_for_empty_string(self):
+        """Should return <empty> for empty string."""
+        from ciris_engine.logic.adapters.api.routes.billing import _sanitize_for_log
+
+        result = _sanitize_for_log("")
+        assert result == "<empty>"
+
+    def test_returns_empty_placeholder_for_none(self):
+        """Should return <empty> for None."""
+        from ciris_engine.logic.adapters.api.routes.billing import _sanitize_for_log
+
+        result = _sanitize_for_log(None)
+        assert result == "<empty>"
+
+    def test_removes_control_characters(self):
+        """Should remove newlines and control characters."""
+        from ciris_engine.logic.adapters.api.routes.billing import _sanitize_for_log
+
+        result = _sanitize_for_log("hello\nworld\r\ttab")
+        assert result == "helloworldtab"
+
+    def test_removes_c0_control_chars(self):
+        """Should remove C0 control characters (0x00-0x1f)."""
+        from ciris_engine.logic.adapters.api.routes.billing import _sanitize_for_log
+
+        result = _sanitize_for_log("hello\x00\x01\x1fworld")
+        assert result == "helloworld"
+
+    def test_removes_c1_control_chars(self):
+        """Should remove DEL and C1 control characters (0x7f-0x9f)."""
+        from ciris_engine.logic.adapters.api.routes.billing import _sanitize_for_log
+
+        result = _sanitize_for_log("hello\x7f\x80\x9fworld")
+        assert result == "helloworld"
+
+    def test_truncates_long_strings(self):
+        """Should truncate strings longer than max_length."""
+        from ciris_engine.logic.adapters.api.routes.billing import _sanitize_for_log
+
+        long_string = "a" * 100
+        result = _sanitize_for_log(long_string, max_length=64)
+        assert len(result) == 67  # 64 + "..."
+        assert result.endswith("...")
+
+    def test_preserves_short_strings(self):
+        """Should not truncate strings shorter than max_length."""
+        from ciris_engine.logic.adapters.api.routes.billing import _sanitize_for_log
+
+        result = _sanitize_for_log("short", max_length=64)
+        assert result == "short"

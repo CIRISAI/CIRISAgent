@@ -574,13 +574,33 @@ def extract_audit_parameters(
 
 
 def _extract_tool_audit_params(action_params: Any, params: Dict[str, str]) -> None:
-    """Extract tool-specific parameters for audit."""
+    """Extract tool-specific parameters for audit.
+
+    Extracts:
+    - tool_name: Name of the tool (e.g., "ha_device_control")
+    - tool_parameters: JSON-serialized parameters dict
+    - tool_adapter: Adapter prefix if detectable (e.g., "home_assistant")
+    """
     from ciris_engine.schemas.actions.parameters import ToolParams
 
     if hasattr(action_params, "name"):
         if isinstance(action_params, ToolParams):
-            params["tool_name"] = action_params.name
+            tool_name = action_params.name
+            params["tool_name"] = tool_name
             params["tool_parameters"] = json.dumps(action_params.parameters)
+
+            # Extract adapter name from tool name prefix (e.g., "ha_" -> "home_assistant")
+            adapter_prefixes = {
+                "ha_": "home_assistant",
+                "web_": "web",
+                "file_": "file_system",
+                "secrets_": "secrets",
+                "consent_": "consent",
+            }
+            for prefix, adapter in adapter_prefixes.items():
+                if tool_name.startswith(prefix):
+                    params["tool_adapter"] = adapter
+                    break
         else:
             # Fallback for dict-like params
             params["tool_name"] = str(getattr(action_params, "name", "unknown"))

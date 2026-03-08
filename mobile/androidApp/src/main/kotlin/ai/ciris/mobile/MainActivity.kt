@@ -402,20 +402,46 @@ class MainActivity : ComponentActivity() {
     private suspend fun startLogcatReader() = withContext(Dispatchers.IO) {
         try {
             PythonRuntime.resetServiceCount()
+            PythonRuntime.resetPrepCount()
 
             val process = Runtime.getRuntime().exec("logcat -v raw python.stdout:I python.stderr:W *:S")
             val reader = process.inputStream.bufferedReader()
+
+            // Pattern for service startup: [SERVICE 1/22] ... STARTED
             val servicePattern = Regex("""\[SERVICE (\d+)/(\d+)\].*STARTED""")
+            // Pattern for PREP steps: [1/8], [2/8], etc. (pydantic setup + code integrity)
+            val prepPattern = Regex("""\[(\d+)/(\d+)\]""")
+            // Pattern for VERIFY messages from CIRISVerify
+            val verifyPattern = Regex("""VERIFY""")
 
             while (true) {
                 val line = reader.readLine() ?: break
                 if (line.isNotBlank()) {
-                    val match = servicePattern.find(line)
-                    if (match != null) {
+                    // Check for service startup
+                    servicePattern.find(line)?.let { match ->
                         val serviceNum = match.groupValues[1].toIntOrNull() ?: 0
                         val total = match.groupValues[2].toIntOrNull() ?: 22
                         PythonRuntime.updateServiceCount(serviceNum, total)
                         Log.d(TAG, "Service $serviceNum started (${PythonRuntime.servicesOnline}/$total)")
+                        return@let
+                    }
+
+                    // Check for PREP steps (pydantic setup + code integrity)
+                    // Only match if it's NOT a SERVICE line (to avoid double-counting)
+                    if (!line.contains("SERVICE")) {
+                        prepPattern.find(line)?.let { match ->
+                            val stepNum = match.groupValues[1].toIntOrNull() ?: 0
+                            val total = match.groupValues[2].toIntOrNull() ?: 8
+                            PythonRuntime.updatePrepCount(stepNum, total)
+                            Log.d(TAG, "Prep step $stepNum/$total: $line")
+                            return@let
+                        }
+                    }
+
+                    // Forward VERIFY messages for attestation tracking
+                    if (verifyPattern.containsMatchIn(line)) {
+                        PythonRuntime.onVerifyMessage(line)
+                        Log.d(TAG, "Verify: $line")
                     }
                 }
             }

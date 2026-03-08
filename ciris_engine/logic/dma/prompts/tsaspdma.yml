@@ -98,14 +98,15 @@ response_format: |
     1. Why this tool is appropriate for the task
     2. Why using this tool is ethical in context
     3. Any gotchas you are acknowledging
+  - "parameters": object containing action-specific parameters (REQUIRED for all actions)
 
-  Additional fields based on action:
-  - If TOOL: "tool_parameters": object with parameters inferred from context
+  The "parameters" field format depends on selected_action:
+  - If TOOL: parameters = {{"entity_id": "...", "action": "...", ...}} (tool arguments)
     - Use the Parameter Schema above to determine required/optional parameters
     - Infer parameter values from the user's intent, conversation context, and examples
-    - Example: if user wants to "turn on the living room light", infer {{"entity_id": "light.living_room", "action": "on"}}
-  - If SPEAK: "speak_content": string starting "I need the user to answer: ..."
-  - If PONDER: "ponder_questions": array of strings
+    - Example: if user wants to "turn on the living room light", parameters = {{"entity_id": "light.living_room", "action": "turn_on"}}
+  - If SPEAK: parameters = {{"content": "I need the user to answer: ..."}}
+  - If PONDER: parameters = {{"questions": ["Question 1", "Question 2"]}}
 
   IMPORTANT: Reason about the appropriate parameters using:
   1. The tool's Parameter Schema (required vs optional fields)

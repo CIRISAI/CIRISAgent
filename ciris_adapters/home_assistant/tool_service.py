@@ -287,9 +287,50 @@ class HAToolService:
             )
 
     async def _execute_device_control(self, params: Dict[str, Any]) -> ToolExecutionResult:
-        """Execute device control."""
+        """Execute device control with parameter validation."""
         entity_id = params.get("entity_id", "")
         action = params.get("action", "")
+
+        # Validate required parameters BEFORE calling HA
+        missing_params = []
+        if not entity_id:
+            missing_params.append("entity_id")
+        if not action:
+            missing_params.append("action")
+
+        if missing_params:
+            error_msg = (
+                f"Missing required parameter(s): {', '.join(missing_params)}. "
+                f"ha_device_control requires: entity_id (e.g., 'light.bedroom_lamp'), "
+                f"action ('turn_on', 'turn_off', or 'toggle'). "
+                f"Received parameters: {params}"
+            )
+            logger.error(f"[HA TOOL] Parameter validation failed: {error_msg}")
+            return ToolExecutionResult(
+                tool_name="ha_device_control",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data={"received_params": params, "missing": missing_params},
+                error=error_msg,
+                correlation_id=str(uuid.uuid4()),
+            )
+
+        # Validate action is one of the allowed values
+        valid_actions = ["turn_on", "turn_off", "toggle"]
+        if action not in valid_actions:
+            error_msg = (
+                f"Invalid action '{action}'. Must be one of: {', '.join(valid_actions)}. "
+                f"Received parameters: {params}"
+            )
+            logger.error(f"[HA TOOL] Action validation failed: {error_msg}")
+            return ToolExecutionResult(
+                tool_name="ha_device_control",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data={"received_params": params, "invalid_action": action},
+                error=error_msg,
+                correlation_id=str(uuid.uuid4()),
+            )
 
         # Extract optional parameters
         kwargs: Dict[str, Any] = {}
@@ -315,8 +356,26 @@ class HAToolService:
         )
 
     async def _execute_automation_trigger(self, params: Dict[str, Any]) -> ToolExecutionResult:
-        """Execute automation trigger."""
+        """Execute automation trigger with parameter validation."""
         automation_id = params.get("automation_id", "")
+
+        # Validate required parameters
+        if not automation_id:
+            error_msg = (
+                f"Missing required parameter: automation_id. "
+                f"ha_automation_trigger requires: automation_id (e.g., 'automation.good_morning'). "
+                f"Received parameters: {params}"
+            )
+            logger.error(f"[HA TOOL] Parameter validation failed: {error_msg}")
+            return ToolExecutionResult(
+                tool_name="ha_automation_trigger",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data={"received_params": params, "missing": ["automation_id"]},
+                error=error_msg,
+                correlation_id=str(uuid.uuid4()),
+            )
+
         result = await self.ha_service.trigger_automation(automation_id)
 
         return ToolExecutionResult(
@@ -333,8 +392,25 @@ class HAToolService:
         )
 
     async def _execute_sensor_query(self, params: Dict[str, Any]) -> ToolExecutionResult:
-        """Execute sensor query."""
+        """Execute sensor query with parameter validation."""
         entity_id = params.get("entity_id", "")
+
+        # Validate required parameters
+        if not entity_id:
+            error_msg = (
+                f"Missing required parameter: entity_id. "
+                f"ha_sensor_query requires: entity_id (e.g., 'sensor.temperature', 'binary_sensor.door'). "
+                f"Received parameters: {params}"
+            )
+            logger.error(f"[HA TOOL] Parameter validation failed: {error_msg}")
+            return ToolExecutionResult(
+                tool_name="ha_sensor_query",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data={"received_params": params, "missing": ["entity_id"]},
+                error=error_msg,
+                correlation_id=str(uuid.uuid4()),
+            )
         state = await self.ha_service.get_device_state(entity_id)
 
         if state:
@@ -417,9 +493,11 @@ class HAToolService:
         logger.info(f"[HA ENTITY LIST] Retrieved {len(entities)} active entities (domain filter: {domain})")
         for e in entities[:50]:
             # Log each entity with its metadata for context builder tuning
-            attrs_summary = {k: v for k, v in (e.attributes or {}).items() if k in [
-                "friendly_name", "device_class", "unit_of_measurement", "icon", "supported_features"
-            ]}
+            attrs_summary = {
+                k: v
+                for k, v in (e.attributes or {}).items()
+                if k in ["friendly_name", "device_class", "unit_of_measurement", "icon", "supported_features"]
+            }
             logger.info(
                 f"[HA ENTITY] {e.entity_id} | state={e.state} | "
                 f"name={e.friendly_name} | domain={e.domain} | attrs={attrs_summary}"
@@ -449,10 +527,37 @@ class HAToolService:
         )
 
     async def _execute_notification(self, params: Dict[str, Any]) -> ToolExecutionResult:
-        """Execute notification send."""
+        """Execute notification send with parameter validation."""
+        title = params.get("title", "")
+        message = params.get("message", "")
+
+        # Validate required parameters
+        missing_params = []
+        if not title:
+            missing_params.append("title")
+        if not message:
+            missing_params.append("message")
+
+        if missing_params:
+            error_msg = (
+                f"Missing required parameter(s): {', '.join(missing_params)}. "
+                f"ha_notification requires: title (string), message (string). "
+                f"Optional: target (e.g., 'mobile_app_phone'). "
+                f"Received parameters: {params}"
+            )
+            logger.error(f"[HA TOOL] Parameter validation failed: {error_msg}")
+            return ToolExecutionResult(
+                tool_name="ha_notification",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data={"received_params": params, "missing": missing_params},
+                error=error_msg,
+                correlation_id=str(uuid.uuid4()),
+            )
+
         notification = HANotification(
-            title=params.get("title", ""),
-            message=params.get("message", ""),
+            title=title,
+            message=message,
             target=params.get("target"),
         )
 

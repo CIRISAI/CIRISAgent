@@ -715,6 +715,9 @@ def verify_code_integrity(package_names: list = None, save_to_file: bool = True)
     not just importable modules. This ensures we hash files that may not
     be importable due to missing dependencies.
 
+    Emits progress to stdout in format: [PREP 7/8] Hashing ciris_engine...
+    This is parsed by the Android logcat reader for UI updates.
+
     Args:
         package_names: List of packages to verify (default: ["ciris_engine", "ciris_adapters"])
         save_to_file: Whether to save hashes to JSON file (default: True)
@@ -742,12 +745,19 @@ def verify_code_integrity(package_names: list = None, save_to_file: bool = True)
 
     all_hashes = []
 
+    # PREP steps 7 and 8 are for code integrity (steps 1-6 are pydantic setup)
+    prep_step = 7
+
     for package_name in package_names:
         try:
+            # Emit progress for UI - format matches [X/Y] pattern parsed by logcat reader
+            print(f"[{prep_step}/8] Hashing {package_name}...", flush=True)
+
             # Import the package to find its location
             package = importlib.import_module(package_name)
             if not hasattr(package, "__path__"):
                 results["errors"].append(f"{package_name} is not a package")
+                prep_step += 1
                 continue
 
             # Get the package root directory
@@ -755,9 +765,8 @@ def verify_code_integrity(package_names: list = None, save_to_file: bool = True)
             # Get parent directory to compute relative paths like "ciris_engine/core.py"
             root_dir = package_path.parent
 
-            logger.info(f"[code-integrity] Walking {package_name} at {package_path}")
-
             # Walk ALL .py files in the package directory
+            file_count = 0
             for py_file in package_path.rglob("*.py"):
                 results["modules_checked"] += 1
                 try:
@@ -773,15 +782,22 @@ def verify_code_integrity(package_names: list = None, save_to_file: bool = True)
                     results["module_hashes"][rel_path] = file_hash
                     all_hashes.append(f"{rel_path}:{file_hash}")
                     results["modules_hashed"] += 1
+                    file_count += 1
 
                 except Exception as e:
                     if len(results["errors"]) < 20:
                         results["errors"].append(f"{py_file}: {e}")
 
+            # Emit completion for this package
+            print(f"[{prep_step}/8] {package_name}: {file_count} files hashed", flush=True)
+            prep_step += 1
+
         except ImportError as e:
             results["errors"].append(f"Cannot import {package_name}: {e}")
+            prep_step += 1
         except Exception as e:
             results["errors"].append(f"Failed to verify {package_name}: {e}")
+            prep_step += 1
 
     # Compute combined hash of all files (deterministic order)
     if all_hashes:
@@ -792,12 +808,6 @@ def verify_code_integrity(package_names: list = None, save_to_file: bool = True)
         f"Code integrity check: {results['modules_hashed']}/{results['modules_checked']} "
         f"files hashed, total_hash={results['total_hash'][:16] if results['total_hash'] else 'none'}..."
     )
-
-    # Log first 5 file names for debugging
-    if results["module_hashes"]:
-        first_5_files = list(results["module_hashes"].keys())[:5]
-        logger.info(f"[code-integrity] First 5 files hashed: {first_5_files}")
-        logger.info(f"[code-integrity] Total files in module_hashes: {len(results['module_hashes'])}")
 
     if results["errors"]:
         logger.warning(f"Code integrity errors: {results['errors'][:5]}...")
@@ -969,14 +979,47 @@ async def start_mobile_runtime():
         await runtime.shutdown()
 
 
+def _preload_heavy_imports():
+    """Pre-import heavy modules in parallel with code integrity.
+
+    This reduces the ~2.5s import gap by loading modules while
+    code integrity hashing is running.
+    """
+    # These are the heavy imports that normally happen in start_mobile_runtime()
+    # Pre-importing them here allows parallel execution with code integrity
+    try:
+        # Core runtime imports (the heaviest)
+        from ciris_engine.config import ciris_services  # noqa: F401
+        from ciris_engine.logic.adapters.api import config as api_config  # noqa: F401
+        from ciris_engine.logic.runtime import ciris_runtime  # noqa: F401
+        from ciris_engine.logic.utils import runtime_utils  # noqa: F401
+        from ciris_engine.schemas.runtime import adapter_management  # noqa: F401
+    except Exception as e:
+        # Non-fatal - imports will happen later anyway
+        logger.debug(f"Pre-import warning (non-fatal): {e}")
+
+
 def main():
     """Main entrypoint for Android app."""
+    import concurrent.futures
+
     logger.info("CIRIS Mobile - Full On-Device Runtime (LLM Remote)")
     setup_android_environment()
 
-    # Verify Python code integrity at startup (both ciris_engine and ciris_adapters)
-    logger.info("Verifying code integrity...")
-    integrity_ok, integrity_results = verify_code_integrity()
+    # Run code integrity and heavy imports IN PARALLEL
+    # This reduces startup time by ~2.5s by overlapping I/O-bound hashing
+    # with import-time module loading
+    logger.info("Verifying code integrity (parallel with imports)...")
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        # Submit both tasks
+        integrity_future = executor.submit(verify_code_integrity)
+        import_future = executor.submit(_preload_heavy_imports)
+
+        # Wait for both to complete
+        integrity_ok, integrity_results = integrity_future.result()
+        import_future.result()  # Just wait, don't need return value
+
     if integrity_ok:
         logger.info(
             f"Code integrity verified: {integrity_results['modules_hashed']} modules, "

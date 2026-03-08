@@ -242,6 +242,11 @@ actual class PythonRuntime : PythonRuntimeProtocol {
         }
     }
 
+    actual override suspend fun getPrepStatus(): Result<Pair<Int, Int>> {
+        // iOS doesn't track prep steps separately - assume complete when server starts
+        return Result.success(Pair(8, 8))
+    }
+
     override fun setOutputLineCallback(callback: ((String) -> Unit)?) {
         _outputLineCallback = callback
     }

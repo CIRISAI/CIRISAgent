@@ -115,6 +115,11 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
         Pair(online, total)
     }
 
+    actual override suspend fun getPrepStatus(): Result<Pair<Int, Int>> {
+        // Desktop doesn't track prep steps via console - assume complete when server starts
+        return Result.success(Pair(8, 8))
+    }
+
     actual override fun shutdown() {
         // On desktop, server lifecycle is managed by CLI - nothing to do here
         _serverStarted = false

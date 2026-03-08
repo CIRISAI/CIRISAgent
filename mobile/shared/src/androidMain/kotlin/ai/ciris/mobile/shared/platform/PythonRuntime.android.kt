@@ -32,6 +32,25 @@ actual class PythonRuntime : PythonRuntimeProtocol {
         var totalServices: Int = 22
             private set
 
+        // Shared state for prep steps (pydantic setup + code integrity)
+        @Volatile
+        var prepStepsCompleted: Int = 0
+            private set
+
+        @Volatile
+        var totalPrepSteps: Int = 8
+            private set
+
+        // Shared state for verify steps
+        @Volatile
+        var verifyStepsCompleted: Int = 0
+            private set
+
+        // Latest verify message for forwarding to ViewModel
+        @Volatile
+        var latestVerifyMessage: String? = null
+            private set
+
         /**
          * Track if server was started by THIS process (not orphaned)
          * Prevents SmartStartup from killing our own server on activity recreation
@@ -61,6 +80,42 @@ actual class PythonRuntime : PythonRuntimeProtocol {
             synchronized(startedServices) {
                 startedServices.clear()
                 servicesOnline = 0
+            }
+        }
+
+        /**
+         * Update prep step count (called from logcat reader)
+         * Prep steps include pydantic setup (1-6) and code integrity (7-8)
+         */
+        fun updatePrepCount(stepNum: Int, total: Int = 8) {
+            if (stepNum > prepStepsCompleted) {
+                prepStepsCompleted = stepNum
+                totalPrepSteps = total
+            }
+            Log.d(TAG, "Prep step $stepNum/$total completed")
+        }
+
+        /**
+         * Reset prep tracking (for app restart)
+         */
+        fun resetPrepCount() {
+            prepStepsCompleted = 0
+            verifyStepsCompleted = 0
+            latestVerifyMessage = null
+        }
+
+        /**
+         * Handle VERIFY message from logcat (for CIRISVerify attestation)
+         */
+        fun onVerifyMessage(message: String) {
+            latestVerifyMessage = message
+            // Parse step completion from message
+            val stepPattern = Regex("""VERIFY STEP (\d+)/(\d+) COMPLETE""")
+            stepPattern.find(message)?.let { match ->
+                val step = match.groupValues[1].toIntOrNull() ?: return
+                if (step > verifyStepsCompleted) {
+                    verifyStepsCompleted = step
+                }
             }
         }
 
@@ -147,6 +202,11 @@ actual class PythonRuntime : PythonRuntimeProtocol {
     actual override suspend fun getServicesStatus(): Result<Pair<Int, Int>> = withContext(Dispatchers.IO) {
         // Return the cached values from logcat parsing
         Result.success(servicesOnline to totalServices)
+    }
+
+    actual override suspend fun getPrepStatus(): Result<Pair<Int, Int>> = withContext(Dispatchers.IO) {
+        // Return the cached values from logcat parsing
+        Result.success(prepStepsCompleted to totalPrepSteps)
     }
 
     actual override fun shutdown() {

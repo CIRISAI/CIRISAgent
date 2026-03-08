@@ -38,30 +38,30 @@ class TestTSASPDMALLMResult:
         result = TSASPDMALLMResult(
             selected_action=HandlerActionType.TOOL,
             rationale="Tool is appropriate for this task",
-            parameters={"path": "/test"},
+            tool_parameters={"path": "/test"},
         )
         assert result.selected_action == HandlerActionType.TOOL
-        assert result.parameters == {"path": "/test"}
+        assert result.tool_parameters == {"path": "/test"}
 
     def test_speak_action_result(self) -> None:
         """Test creating a SPEAK action result."""
         result = TSASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
             rationale="Need clarification",
-            parameters={"content": "What file would you like to read?"},
+            speak_content="What file would you like to read?",
         )
         assert result.selected_action == HandlerActionType.SPEAK
-        assert result.parameters["content"] == "What file would you like to read?"
+        assert result.speak_content == "What file would you like to read?"
 
     def test_ponder_action_result(self) -> None:
         """Test creating a PONDER action result."""
         result = TSASPDMALLMResult(
             selected_action=HandlerActionType.PONDER,
             rationale="Should reconsider approach",
-            parameters={"questions": ["Is this the right tool?"]},
+            ponder_questions=["Is this the right tool?"],
         )
         assert result.selected_action == HandlerActionType.PONDER
-        assert result.parameters["questions"] == ["Is this the right tool?"]
+        assert result.ponder_questions == ["Is this the right tool?"]
 
 
 class TestTSASPDMAEvaluator:
@@ -141,7 +141,7 @@ class TestTSASPDMAEvaluator:
         llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.TOOL,
             rationale="Proceeding with tool",
-            parameters={"path": "/test"},
+            tool_parameters={"path": "/test"},
         )
 
         result = evaluator._convert_tsaspdma_result(llm_result, "file_read")
@@ -163,7 +163,7 @@ class TestTSASPDMAEvaluator:
         llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
             rationale="Need clarification",
-            parameters={"content": "Which file?"},
+            speak_content="Which file?",
         )
 
         result = evaluator._convert_tsaspdma_result(llm_result, "file_read")
@@ -184,7 +184,7 @@ class TestTSASPDMAEvaluator:
         llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.PONDER,
             rationale="Reconsidering",
-            parameters={"questions": ["Is this the right tool?"]},
+            ponder_questions=["Is this the right tool?"],
         )
 
         result = evaluator._convert_tsaspdma_result(llm_result, "file_read")
@@ -206,7 +206,6 @@ class TestTSASPDMAEvaluator:
         llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.OBSERVE,  # Unexpected for TSASPDMA
             rationale="Something went wrong",
-            parameters={},
         )
 
         result = evaluator._convert_tsaspdma_result(llm_result, "file_read")
@@ -374,7 +373,7 @@ class TestTSASPDMAEvaluator:
         mock_llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.TOOL,
             rationale="Tool appropriate for task",
-            parameters={"path": "/tmp/test.txt"},
+            tool_parameters={"path": "/tmp/test.txt"},
         )
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_result, None))
 
@@ -414,7 +413,7 @@ class TestTSASPDMAEvaluator:
         mock_llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
             rationale="Need to clarify file path",
-            parameters={"content": "Which file would you like me to read?"},
+            speak_content="Which file would you like me to read?",
         )
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_result, None))
 
@@ -453,7 +452,7 @@ class TestTSASPDMAEvaluator:
         mock_llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.PONDER,
             rationale="This tool is not appropriate",
-            parameters={"questions": ["Should I use a different tool?"]},
+            ponder_questions=["Should I use a different tool?"],
         )
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_result, None))
 
@@ -524,7 +523,7 @@ class TestTSASPDMAEvaluator:
         mock_llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.TOOL,
             rationale="Proceeding",
-            parameters={"path": "/test"},
+            tool_parameters={"path": "/test"},
         )
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_result, None))
 

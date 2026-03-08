@@ -30,14 +30,14 @@ from .prompt_loader import get_prompt_loader
 
 
 class TSASPDMALLMResult(BaseModel):
-    """Gemini-compatible TSASPDMA LLM output - flat structure, NO Union types.
+    """Gemini-compatible TSASPDMA LLM output - FLAT structure, NO Union types.
 
     TSASPDMA only returns 3 action types:
-    - TOOL: Proceed with execution (parameters dict contains tool args)
-    - SPEAK: Ask user for clarification (parameters dict contains 'content' key)
-    - PONDER: Reconsider the approach (parameters dict contains 'questions' key)
+    - TOOL: Proceed with execution (parameters in tool_parameters dict)
+    - SPEAK: Ask user for clarification (speak_content field)
+    - PONDER: Reconsider the approach (ponder_questions field)
 
-    All actions use the same 'parameters' field - the meaning depends on selected_action.
+    Mirrors ASPDMALLMResult pattern with flat, explicit fields per action type.
     """
 
     selected_action: HandlerActionType = Field(
@@ -45,14 +45,16 @@ class TSASPDMALLMResult(BaseModel):
     )
     rationale: str = Field(..., description="Reasoning for this decision, including any gotchas acknowledged")
 
-    # Unified parameters field - interpretation depends on selected_action:
-    # - TOOL: dict of tool parameters (e.g., {"path": "/tmp/file.txt"})
-    # - SPEAK: dict with 'content' key (e.g., {"content": "What file?"})
-    # - PONDER: dict with 'questions' key (e.g., {"questions": ["Is this right?"]})
-    parameters: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Action parameters. For TOOL: tool args. For SPEAK: {'content': '...'}. For PONDER: {'questions': [...]}",
+    # === TOOL parameters (TSASPDMA refines these) ===
+    tool_parameters: Optional[Dict[str, Any]] = Field(
+        None, description='Tool parameters dict (e.g., {"entity_id": "light.x", "action": "turn_on"})'
     )
+
+    # === SPEAK parameters ===
+    speak_content: Optional[str] = Field(None, description="Clarification question (for SPEAK action)")
+
+    # === PONDER parameters ===
+    ponder_questions: Optional[List[str]] = Field(None, description="Questions to reconsider (for PONDER action)")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -105,29 +107,28 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
     ) -> ActionSelectionDMAResult:
         """Convert flat TSASPDMA LLM result to typed ActionSelectionDMAResult.
 
-        TSASPDMA uses a unified 'parameters' field - interpretation depends on action:
-        - TOOL: parameters are the tool arguments
-        - SPEAK: parameters['content'] is the clarification question
-        - PONDER: parameters['questions'] is the list of questions to reconsider
+        Uses flat fields matching ASPDMALLMResult pattern:
+        - TOOL: tool_parameters dict contains the tool arguments
+        - SPEAK: speak_content is the clarification question
+        - PONDER: ponder_questions is the list to reconsider
         """
         action = llm_result.selected_action
-        raw_params = llm_result.parameters
 
         params: ToolParams | SpeakParams | PonderParams
 
         if action == HandlerActionType.TOOL:
-            # For TOOL, parameters are passed directly as tool args
+            # For TOOL, use tool_parameters dict
             params = ToolParams(
                 name=tool_name,
-                parameters=raw_params,
+                parameters=llm_result.tool_parameters or {},
             )
         elif action == HandlerActionType.SPEAK:
-            # For SPEAK, extract 'content' from parameters
-            content = raw_params.get("content", "I need clarification before proceeding.")
+            # For SPEAK, use speak_content
+            content = llm_result.speak_content or "I need clarification before proceeding."
             params = SpeakParams(content=str(content))
         elif action == HandlerActionType.PONDER:
-            # For PONDER, extract 'questions' from parameters
-            questions = raw_params.get("questions", ["Should I reconsider this approach?"])
+            # For PONDER, use ponder_questions
+            questions = llm_result.ponder_questions or ["Should I reconsider this approach?"]
             if isinstance(questions, str):
                 questions = [questions]
             params = PonderParams(questions=questions)

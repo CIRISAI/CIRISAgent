@@ -92,28 +92,26 @@ context_integration: |
   {tool_documentation}
 
 response_format: |
-  Return JSON with these fields:
+  Return a FLAT JSON object with these fields:
   - "selected_action": One of "TOOL", "SPEAK", "PONDER"
-  - "rationale": Explain your decision including:
-    1. Why this tool is appropriate for the task
-    2. Why using this tool is ethical in context
-    3. Any gotchas you are acknowledging
-  - "parameters": object containing action-specific parameters (REQUIRED for all actions)
+  - "rationale": Explain your decision including gotchas you're acknowledging
 
-  The "parameters" field format depends on selected_action:
-  - If TOOL: parameters = {{"entity_id": "...", "action": "...", ...}} (tool arguments)
-    - Use the Parameter Schema above to determine required/optional parameters
-    - Infer parameter values from the user's intent, conversation context, and examples
-    - Example: if user wants to "turn on the living room light", parameters = {{"entity_id": "light.living_room", "action": "turn_on"}}
-  - If SPEAK: parameters = {{"content": "I need the user to answer: ..."}}
-  - If PONDER: parameters = {{"questions": ["Question 1", "Question 2"]}}
+  PLUS action-specific fields (use the exact field names below):
 
-  IMPORTANT: Reason about the appropriate parameters using:
-  1. The tool's Parameter Schema (required vs optional fields)
-  2. The user's intent from their original request
-  3. Context and examples from the documentation
+  For TOOL action:
+  {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
 
-  Do not include extra fields or wrap in markdown code blocks.
+  For SPEAK action:
+  {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "I need the user to answer: which light?"}}
+
+  For PONDER action:
+  {{"selected_action": "PONDER", "rationale": "...", "ponder_questions": ["Is this the right approach?"]}}
+
+  IMPORTANT:
+  - Use the Parameter Schema above to determine required tool parameters
+  - Infer parameter values from the user's intent and conversation context
+  - tool_parameters is a dict containing the tool's arguments
+  - Do not wrap in markdown code blocks
 
 evaluation_steps: |
   STEP 1: Read the Documentation

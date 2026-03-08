@@ -372,6 +372,20 @@ class HAToolService:
         else:
             entities = await self.ha_service.get_all_entities()
 
+        # Log entity details at INFO level for context tuning
+        logger.info(f"[HA ENTITY LIST] Retrieved {len(entities)} entities (domain filter: {domain})")
+        for e in entities[:50]:
+            # Log each entity with its metadata for context builder tuning
+            attrs_summary = {k: v for k, v in (e.attributes or {}).items() if k in [
+                "friendly_name", "device_class", "unit_of_measurement", "icon", "supported_features"
+            ]}
+            logger.info(
+                f"[HA ENTITY] {e.entity_id} | state={e.state} | "
+                f"name={e.friendly_name} | domain={e.domain} | attrs={attrs_summary}"
+            )
+        if len(entities) > 50:
+            logger.info(f"[HA ENTITY LIST] ... and {len(entities) - 50} more entities (truncated)")
+
         return ToolExecutionResult(
             tool_name="ha_list_entities",
             status=ToolExecutionStatus.COMPLETED,

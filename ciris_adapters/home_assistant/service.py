@@ -511,15 +511,23 @@ class HAIntegrationService:
                         entities = await response.json()
                         result = []
                         for entity in entities:
+                            attrs = entity.get("attributes", {})
                             state = HADeviceState(
                                 entity_id=entity.get("entity_id", ""),
                                 state=entity.get("state", "unknown"),
-                                friendly_name=entity.get("attributes", {}).get("friendly_name", ""),
-                                attributes=entity.get("attributes", {}),
+                                friendly_name=attrs.get("friendly_name", ""),
+                                attributes=attrs,
                                 domain=entity.get("entity_id", "").split(".")[0],
                             )
                             result.append(state)
                             self._entity_cache[state.entity_id] = state
+                            # Log entity details at INFO level for context tuning
+                            logger.info(
+                                f"[HA ENTITY DISCOVERED] {state.entity_id} | "
+                                f"state={state.state} | name={state.friendly_name} | "
+                                f"device_class={attrs.get('device_class', 'N/A')} | "
+                                f"unit={attrs.get('unit_of_measurement', 'N/A')}"
+                            )
                         self._cache_timestamp = datetime.now(timezone.utc)
                         logger.info(f"[HA] get_all_entities: Retrieved {len(result)} entities")
                         return result

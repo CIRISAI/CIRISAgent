@@ -169,21 +169,36 @@ def format_system_snapshot(system_snapshot: SystemSnapshot) -> str:
     if hasattr(system_snapshot, "context_enrichment_results") and system_snapshot.context_enrichment_results:
         lines.append("")
         lines.append("=== Context Enrichment (Pre-fetched Tool Results) ===")
+        import logging
+        ctx_logger = logging.getLogger(__name__)
+        ctx_logger.info(f"[CONTEXT BUILDER] Formatting {len(system_snapshot.context_enrichment_results)} enrichment results")
         for tool_key, result in system_snapshot.context_enrichment_results.items():
             lines.append(f"--- {tool_key} ---")
+            ctx_logger.info(f"[CONTEXT BUILDER] Processing enrichment result: {tool_key}")
             if isinstance(result, dict):
                 if "error" in result:
                     lines.append(f"  Error: {result['error']}")
+                    ctx_logger.info(f"[CONTEXT BUILDER] {tool_key} had error: {result['error']}")
                 else:
                     # Format the result data in a readable way
                     import json
 
+                    # Log detailed structure for tuning
+                    if "entities" in result:
+                        ctx_logger.info(f"[CONTEXT BUILDER] {tool_key} has {result.get('count', len(result['entities']))} entities")
+                        for entity in result["entities"][:5]:
+                            ctx_logger.info(f"[CONTEXT BUILDER] Entity for LLM: {entity}")
+                        if len(result["entities"]) > 5:
+                            ctx_logger.info(f"[CONTEXT BUILDER] ... {len(result['entities']) - 5} more entities")
+
                     # Try to pretty-print, but limit length
                     try:
                         result_str = json.dumps(result, indent=2, default=str)
+                        ctx_logger.info(f"[CONTEXT BUILDER] {tool_key} JSON length: {len(result_str)} chars")
                         # Limit to ~2000 chars to avoid bloating the prompt
                         if len(result_str) > 2000:
                             result_str = result_str[:2000] + "\n  ... (truncated)"
+                            ctx_logger.info(f"[CONTEXT BUILDER] {tool_key} truncated to 2000 chars")
                         for line in result_str.split("\n"):
                             lines.append(f"  {line}")
                     except (TypeError, ValueError):

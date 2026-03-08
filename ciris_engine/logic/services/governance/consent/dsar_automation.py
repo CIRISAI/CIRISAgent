@@ -13,6 +13,7 @@ Philosophy: Real automation, real data, real compliance.
 import hashlib
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -35,6 +36,17 @@ from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
 from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
+    """Sanitize user-controlled data for safe logging."""
+    if value is None:
+        return "<none>"
+    val_str = str(value)
+    sanitized = re.sub(r"[\r\n\t\x00-\x1f\x7f-\x9f]", "", val_str)
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
 
 
 class DSARAutomationService:
@@ -101,7 +113,11 @@ class DSARAutomationService:
         if not request_id:
             request_id = f"ACCESS-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid4().hex[:8].upper()}"
 
-        logger.info(f"Processing DSAR access request {request_id} for user {user_id}")
+        logger.info(
+            "Processing DSAR access request %s for user %s",
+            _sanitize_for_log(request_id),
+            _sanitize_for_log(user_id),
+        )
 
         # Get consent status
         consent_status = await self._consent_service.get_consent(user_id, extend_expiry=False)
@@ -116,7 +132,7 @@ class DSARAutomationService:
         try:
             contribution_metrics = await self._consent_service.get_impact_report(user_id)
         except Exception as e:
-            logger.warning(f"Could not generate impact report for {user_id}: {e}")
+            logger.warning("Could not generate impact report for %s: %s", _sanitize_for_log(user_id), e)
             # Create minimal impact report
             contribution_metrics = ConsentImpactReport(
                 user_id=user_id,
@@ -183,7 +199,12 @@ class DSARAutomationService:
         if not request_id:
             request_id = f"EXPORT-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid4().hex[:8].upper()}"
 
-        logger.info(f"Processing DSAR export request {request_id} for user {user_id} (format: {export_format})")
+        logger.info(
+            "Processing DSAR export request %s for user %s (format: %s)",
+            _sanitize_for_log(request_id),
+            _sanitize_for_log(user_id),
+            _sanitize_for_log(export_format),
+        )
 
         # Get access package (contains all user data)
         access_package = await self.handle_access_request(user_id, request_id=f"{request_id}-ACCESS")
@@ -359,10 +380,10 @@ class DSARAutomationService:
 
         logger.info(
             "Deletion status for %s (ticket %s): %.1f%% complete, phase: %s",
-            user_id,
-            ticket_id,
+            _sanitize_for_log(user_id),
+            _sanitize_for_log(ticket_id),
             deletion_status.completion_percentage,
-            current_phase,
+            _sanitize_for_log(current_phase),
         )
         return deletion_status
 
@@ -443,7 +464,7 @@ class DSARAutomationService:
             logger.debug(f"Interaction summary for {user_id}: {total_interactions} total interactions")
 
         except Exception as e:
-            logger.warning(f"Failed to generate interaction summary for {user_id}: {e}")
+            logger.warning("Failed to generate interaction summary for %s: %s", _sanitize_for_log(user_id), e)
             summary = {"total": 0}
 
         return summary

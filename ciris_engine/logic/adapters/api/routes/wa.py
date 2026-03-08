@@ -192,7 +192,7 @@ async def resolve_deferral(
             success=True, deferral_id=deferral_id, resolved_at=datetime.now(timezone.utc)
         )
 
-        logger.info(
+        logger.info(  # NOSONAR - all values sanitized via sanitize_for_log()
             "Deferral %s resolved by %s with resolution: %s",
             sanitize_for_log(deferral_id),
             sanitize_for_log(auth.user_id),

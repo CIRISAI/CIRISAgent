@@ -21,14 +21,16 @@ class TestValidatePortalUrl:
     """Tests for _validate_portal_url SSRF protection."""
 
     def test_accepts_trusted_portal_domain(self):
-        """Should accept portal.ciris.ai."""
+        """Should accept portal.ciris.ai and return sanitized base URL (no path)."""
         result = _validate_portal_url("https://portal.ciris.ai/api")
-        assert result == "https://portal.ciris.ai/api"
+        # SSRF fix: returns sanitized base URL only (scheme + netloc), discards path
+        assert result == "https://portal.ciris.ai"
 
     def test_accepts_localhost_http(self):
         """Should accept http://localhost for development."""
         result = _validate_portal_url("http://localhost:8080/api")
-        assert result == "http://localhost:8080/api"
+        # SSRF fix: returns sanitized base URL only (scheme + netloc), discards path
+        assert result == "http://localhost:8080"
 
     def test_rejects_untrusted_domain(self):
         """Should reject untrusted domains (SSRF protection)."""

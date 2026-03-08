@@ -181,51 +181,57 @@ class StartupViewModel(
             return
         }
 
-        _phase.value = StartupPhase.WAITING_SERVER
-        _statusMessage.value = "Waiting for services..."
+        _phase.value = StartupPhase.LOADING_SERVICES
+        _statusMessage.value = "Loading services..."
 
         var attempts = 0
-        val maxAttempts = 60 // 2 minutes max (60 * 2s = 120s)
+        val maxAttempts = 300 // 60 seconds max (300 * 200ms)
         var healthyCount = 0
+        var lastOnline = 0
 
         while (attempts < maxAttempts && currentCoroutineContext().isActive) {
-            delay(2000) // Poll every 2 seconds
+            // Fast polling (200ms) to catch rapid service startup
+            delay(200)
 
-            // Check health
-            val healthResult = pythonRuntime.checkHealth()
-            if (healthResult.isSuccess && healthResult.getOrNull() == true) {
-                healthyCount++
+            // Get service count - on Android this reads from logcat-updated PythonRuntime.servicesOnline
+            val statusResult = pythonRuntime.getServicesStatus()
+            if (statusResult.isSuccess) {
+                val (online, total) = statusResult.getOrNull() ?: (0 to 22)
 
-                // Get service count from telemetry API
-                val statusResult = pythonRuntime.getServicesStatus()
-                if (statusResult.isSuccess) {
+                // Only log when count changes
+                if (online != lastOnline) {
+                    PlatformLogger.i(TAG, "[STARTUP][SERVICE] Service $online/$total started")
+                    lastOnline = online
+                }
+
+                _servicesOnline.value = online
+                _totalServices.value = total
+                _statusMessage.value = "$online / $total services"
+
+                // All services online - we're done!
+                if (online == total && online > 0) {
+                    PlatformLogger.i(TAG, "[STARTUP][SERVICE] All $total services started")
+                    showReadyAndComplete()
+                    return
+                }
+            }
+
+            // Check health every 10 polls (2 seconds)
+            if (attempts % 10 == 0) {
+                val healthResult = pythonRuntime.checkHealth()
+                if (healthResult.isSuccess && healthResult.getOrNull() == true) {
+                    healthyCount++
+
                     val (online, total) = statusResult.getOrNull() ?: (0 to 22)
-                    _servicesOnline.value = online
-                    _totalServices.value = total
-                    _statusMessage.value = "$online / $total services online"
 
-                    // Ready conditions:
-                    // 1. All services online (normal mode)
-                    // 2. 10+ services and health OK for 3+ checks (first-run mode)
-                    // 3. Any services online and health OK for 5+ checks (fallback)
-                    if (online == total && online > 0) {
-                        showReadyAndComplete()
-                        return
-                    }
-
+                    // First-run mode - 10 minimal services ready
                     if (online >= 10 && healthyCount >= 3) {
-                        // First-run mode - 10 minimal services ready
                         _phase.value = StartupPhase.READY
                         _statusMessage.value = "Setup required"
                         return
                     }
 
-                    if (online > 0 && healthyCount >= 5) {
-                        showReadyAndComplete()
-                        return
-                    }
-
-                    // iOS fallback - telemetry requires auth so services count is 0
+                    // Fallback - server healthy for a while
                     if (healthyCount >= 5) {
                         showReadyAndComplete()
                         return
@@ -272,6 +278,15 @@ class StartupViewModel(
         _phase.value = phase
         _statusMessage.value = phase.displayName
         PlatformLogger.i(TAG, "[STARTUP][PHASE] $oldPhase -> $phase (${phase.displayName})")
+    }
+
+    /**
+     * Update status message for debugging (visible on startup screen).
+     * Use this to show token validation/exchange progress.
+     */
+    fun setStatus(message: String) {
+        PlatformLogger.i(TAG, "[STARTUP][STATUS] $message")
+        _statusMessage.value = message
     }
 
     /**
@@ -329,7 +344,7 @@ class StartupViewModel(
         // When all verify steps complete
         if (step >= TOTAL_VERIFY_STEPS) {
             PlatformLogger.i(TAG, "[STARTUP][VERIFY] All verify steps complete - integrity verified")
-            _statusMessage.value = "Integrity verified"
+            _statusMessage.value = "Platform Attestation Complete"
         }
     }
 

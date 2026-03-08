@@ -58,6 +58,13 @@ FORBIDDEN_PATH_PREFIXES = frozenset(
     }
 )
 
+# Exceptions to forbidden paths (safe user-accessible locations)
+ALLOWED_PATH_EXCEPTIONS = frozenset(
+    {
+        "/dev/shm",  # tmpfs - safe for user data
+    }
+)
+
 # Context string for CIRIS_HOME validation errors
 CIRIS_HOME_ENV_CONTEXT = "CIRIS_HOME environment variable"
 
@@ -93,7 +100,12 @@ def validate_path_safety(path: Path, context: str = "path") -> Path:
     # Check against forbidden prefixes
     for forbidden in FORBIDDEN_PATH_PREFIXES:
         if resolved_str == forbidden or resolved_str.startswith(f"{forbidden}/"):
-            raise ValueError(f"Invalid {context}: path '{resolved}' is in forbidden system directory '{forbidden}'")
+            # Check if this path is in an allowed exception
+            is_allowed = any(
+                resolved_str == allowed or resolved_str.startswith(f"{allowed}/") for allowed in ALLOWED_PATH_EXCEPTIONS
+            )
+            if not is_allowed:
+                raise ValueError(f"Invalid {context}: path '{resolved}' is in forbidden system directory '{forbidden}'")
 
     return resolved
 
@@ -353,9 +365,7 @@ def find_template_file(template_name: str) -> Optional[Path]:
     env_home = os.getenv("CIRIS_HOME")
     if env_home:
         try:
-            validated_path = validate_path_safety(
-                Path(env_home).expanduser(), context=CIRIS_HOME_ENV_CONTEXT
-            )
+            validated_path = validate_path_safety(Path(env_home).expanduser(), context=CIRIS_HOME_ENV_CONTEXT)
             search_paths.append(validated_path / "ciris_templates" / template_name)
         except ValueError:
             pass  # Skip invalid CIRIS_HOME, fall through to other locations
@@ -409,9 +419,7 @@ def get_template_directory() -> Path:
     env_home = os.getenv("CIRIS_HOME")
     if env_home:
         try:
-            validated_path = validate_path_safety(
-                Path(env_home).expanduser(), context=CIRIS_HOME_ENV_CONTEXT
-            )
+            validated_path = validate_path_safety(Path(env_home).expanduser(), context=CIRIS_HOME_ENV_CONTEXT)
             env_templates = validated_path / "ciris_templates"
             if env_templates.exists():
                 return env_templates

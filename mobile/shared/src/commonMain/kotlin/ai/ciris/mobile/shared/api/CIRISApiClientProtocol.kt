@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.api
 
+import ai.ciris.api.models.DocumentPayload
+import ai.ciris.api.models.ImagePayload
 import ai.ciris.mobile.shared.models.*
 import ai.ciris.mobile.shared.viewmodels.SetupCompletionResult
 import ai.ciris.mobile.shared.viewmodels.StateTransitionResult
@@ -27,9 +29,14 @@ interface CIRISApiClientProtocol {
     }
 
     /**
-     * Send a chat message to the agent
+     * Send a chat message to the agent, optionally with image/document attachments
      */
-    suspend fun sendMessage(message: String, channelId: String = "mobile_app"): InteractResponse
+    suspend fun sendMessage(
+        message: String,
+        channelId: String = "mobile_app",
+        images: List<ImagePayload>? = null,
+        documents: List<DocumentPayload>? = null
+    ): InteractResponse
 
     /**
      * Get recent chat messages

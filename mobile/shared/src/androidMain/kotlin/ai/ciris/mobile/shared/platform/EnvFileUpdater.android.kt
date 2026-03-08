@@ -20,6 +20,7 @@ actual class EnvFileUpdater {
         private const val TAG = "EnvFileUpdater"
         private const val ENV_FILE_NAME = ".env"
         private const val CONFIG_RELOAD_FILE = ".config_reload"
+        private const val TOKEN_REFRESH_SIGNAL_FILE = ".token_refresh_needed"
 
         // CIRIS_HOME is typically at /data/user/0/ai.ciris.mobile/files/ciris
         // We'll find it by looking for common Android data paths
@@ -45,6 +46,7 @@ actual class EnvFileUpdater {
     }
 
     private val cirisHome: File? = findCirisHome()
+    private var lastSignalTimestamp: Long = 0
 
     actual suspend fun updateEnvWithToken(oauthIdToken: String): Result<Boolean> = withContext(Dispatchers.IO) {
         // On Android, the OAuth token is a Google ID token
@@ -90,6 +92,25 @@ actual class EnvFileUpdater {
                         openaiUpdated = true
                         Log.i(TAG, "Updated OPENAI_API_KEY")
                         break
+                    }
+                }
+
+                // Also update secondary CIRIS_OPENAI_API_KEY_2 if it points to a CIRIS proxy
+                val secondaryBasePattern = Regex("""CIRIS_OPENAI_API_BASE_2=["']?([^"'\n]*)["']?""")
+                val secondaryBaseMatch = secondaryBasePattern.find(content)
+                val secondaryBase = secondaryBaseMatch?.groupValues?.getOrNull(1) ?: ""
+                if (secondaryBase.contains("ciris.ai")) {
+                    val secondaryKeyPatterns = listOf(
+                        Regex("""CIRIS_OPENAI_API_KEY_2="[^"]*""""),
+                        Regex("""CIRIS_OPENAI_API_KEY_2='[^']*'"""),
+                        Regex("""CIRIS_OPENAI_API_KEY_2=[^\n]*""")
+                    )
+                    for (pattern in secondaryKeyPatterns) {
+                        if (pattern.containsMatchIn(content)) {
+                            content = pattern.replace(content, """CIRIS_OPENAI_API_KEY_2="$googleIdToken"""")
+                            Log.i(TAG, "Updated CIRIS_OPENAI_API_KEY_2 (secondary CIRIS proxy)")
+                            break
+                        }
                     }
                 }
             } else {
@@ -233,6 +254,29 @@ actual class EnvFileUpdater {
         } catch (e: Exception) {
             Log.e(TAG, "Exception deleting .env file: ${e.message}", e)
             Result.failure(e)
+        }
+    }
+
+    actual fun checkTokenRefreshSignal(): Boolean {
+        val signalFile = cirisHome?.let { File(it, TOKEN_REFRESH_SIGNAL_FILE) } ?: return false
+
+        if (!signalFile.exists()) return false
+
+        return try {
+            val signalContent = signalFile.readText().trim()
+            val signalTimestamp = signalContent.toDoubleOrNull()?.toLong() ?: 0L
+
+            if (signalTimestamp > lastSignalTimestamp) {
+                Log.i(TAG, "Token refresh signal detected (timestamp: $signalTimestamp)")
+                lastSignalTimestamp = signalTimestamp
+                signalFile.delete()
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading token refresh signal: ${e.message}")
+            false
         }
     }
 }

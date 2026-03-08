@@ -22,12 +22,24 @@ GDPR Requirements (Universal DSAR Support):
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.persistence.db import get_db_connection
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
+    """Sanitize user-controlled data for safe logging."""
+    if value is None:
+        return "<none>"
+    val_str = str(value)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", val_str)
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
 
 
 def create_ticket(
@@ -119,7 +131,13 @@ def create_ticket(
         with get_db_connection(db_path=db_path) as conn:
             conn.execute(sql, params)
             conn.commit()
-        logger.info(f"Created ticket {ticket_id} (sop: {sop}, type: {ticket_type}, status: {status})")
+        logger.info(
+            "Created ticket %s (sop: %s, type: %s, status: %s)",
+            _sanitize_for_log(ticket_id),
+            _sanitize_for_log(sop),
+            _sanitize_for_log(ticket_type),
+            _sanitize_for_log(status),
+        )
         return True
     except Exception as e:
         logger.exception(f"Failed to create ticket {ticket_id}: {e}")
@@ -156,7 +174,7 @@ def get_ticket(ticket_id: str, db_path: Optional[str] = None) -> Optional[Dict[s
             logger.debug(f"get_ticket: No row found for {ticket_id}")
             return None
     except Exception as e:
-        logger.exception(f"Failed to retrieve ticket {ticket_id}: {e}")
+        logger.exception("Failed to retrieve ticket %s: %s", _sanitize_for_log(ticket_id), e)
         return None
 
 
@@ -216,13 +234,15 @@ def update_ticket_status(
             conn.commit()
 
             if cursor.rowcount > 0:
-                logger.info(f"Updated ticket {ticket_id} status to {new_status}")
+                logger.info(
+                    "Updated ticket %s status to %s", _sanitize_for_log(ticket_id), _sanitize_for_log(new_status)
+                )
                 return True
             else:
-                logger.warning(f"Ticket {ticket_id} not found for status update")
+                logger.warning("Ticket %s not found for status update", _sanitize_for_log(ticket_id))
                 return False
     except Exception as e:
-        logger.exception(f"Failed to update ticket {ticket_id}: {e}")
+        logger.exception("Failed to update ticket %s: %s", _sanitize_for_log(ticket_id), e)
         return False
 
 
@@ -271,10 +291,14 @@ def update_ticket_metadata(
                 logger.debug(f"[DB_UPDATE_METADATA] T+{time.time()-start_time:.3f}s SUCCESS ticket_id={ticket_id}")
                 return True
             else:
-                logger.warning(f"[DB_UPDATE_METADATA] T+{time.time()-start_time:.3f}s NOT_FOUND ticket_id={ticket_id}")
+                logger.warning(
+                    "[DB_UPDATE_METADATA] T+%.3fs NOT_FOUND ticket_id=%s",
+                    time.time() - start_time,
+                    _sanitize_for_log(ticket_id),
+                )
                 return False
     except Exception as e:
-        logger.exception(f"Failed to update ticket {ticket_id} metadata: {e}")
+        logger.exception("Failed to update ticket %s metadata: %s", _sanitize_for_log(ticket_id), e)
         return False
 
 
@@ -331,7 +355,13 @@ def list_tickets(
             rows = cursor.fetchall()
             return [_row_to_dict(row) for row in rows]
     except Exception as e:
-        logger.exception(f"Failed to list tickets (sop={sop}, type={ticket_type}, status={status}): {e}")
+        logger.exception(
+            "Failed to list tickets (sop=%s, type=%s, status=%s): %s",
+            _sanitize_for_log(sop),
+            _sanitize_for_log(ticket_type),
+            _sanitize_for_log(status),
+            e,
+        )
         return []
 
 
@@ -353,13 +383,13 @@ def delete_ticket(ticket_id: str, db_path: Optional[str] = None) -> bool:
             conn.commit()
 
             if cursor.rowcount > 0:
-                logger.info(f"Deleted ticket {ticket_id}")
+                logger.info("Deleted ticket %s", _sanitize_for_log(ticket_id))
                 return True
             else:
-                logger.warning(f"Ticket {ticket_id} not found for deletion")
+                logger.warning("Ticket %s not found for deletion", _sanitize_for_log(ticket_id))
                 return False
     except Exception as e:
-        logger.exception(f"Failed to delete ticket {ticket_id}: {e}")
+        logger.exception("Failed to delete ticket %s: %s", _sanitize_for_log(ticket_id), e)
         return False
 
 

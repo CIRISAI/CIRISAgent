@@ -13,7 +13,7 @@ import time
 import zipfile
 from pathlib import Path
 from typing import Any, Dict
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urljoin, urlparse
 
 from fastapi import APIRouter, HTTPException, status
 
@@ -180,6 +180,7 @@ async def connect_node_status(device_code: str, portal_url: str) -> SuccessRespo
         )
 
     # Use urljoin for safe URL construction (prevents URL injection)
+    # NOSONAR - URL is pre-validated by _validate_portal_url() which ensures trusted hosts only
     token_url = urljoin(portal_url.rstrip("/") + "/", "api/device/token")
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:

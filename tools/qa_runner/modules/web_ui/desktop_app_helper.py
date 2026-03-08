@@ -159,23 +159,22 @@ class DesktopAppHelper:
         if not self._client:
             raise RuntimeError("Not connected. Call start() first.")
 
-        try:
-            response = await self._client.get(f"/element/{test_tag}")
-            if response.status_code == 404:
-                return None
-            data = response.json()
-            return ElementInfo(
-                test_tag=data["testTag"],
-                x=data["x"],
-                y=data["y"],
-                width=data["width"],
-                height=data["height"],
-                center_x=data["centerX"],
-                center_y=data["centerY"],
-                text=data.get("text"),
-            )
-        except Exception:
+        response = await self._client.get(f"/element/{test_tag}")
+        if response.status_code == 404:
             return None
+        data = response.json()
+        if "error" in data:
+            raise RuntimeError(f"get_element '{test_tag}' failed: {data['error']}")
+        return ElementInfo(
+            test_tag=data["testTag"],
+            x=data["x"],
+            y=data["y"],
+            width=data["width"],
+            height=data["height"],
+            center_x=data["centerX"],
+            center_y=data["centerY"],
+            text=data.get("text"),
+        )
 
     async def click(self, test_tag: str, timeout: Optional[int] = None) -> bool:
         """
@@ -192,16 +191,15 @@ class DesktopAppHelper:
             if not await self.wait_for_element(test_tag, timeout=timeout):
                 return False
 
-        try:
-            response = await self._client.post(
-                "/click",
-                json={"testTag": test_tag},
-            )
-            data = response.json()
-            return data.get("success", False)
-        except Exception as e:
-            print(f"Click failed: {e}")
-            return False
+        response = await self._client.post(
+            "/click",
+            json={"testTag": test_tag},
+        )
+        data = response.json()
+        if not data.get("success", False):
+            error = data.get("error", "unknown error")
+            raise RuntimeError(f"Click '{test_tag}' failed: {error} (response: {data})")
+        return True
 
     async def input_text(
         self, test_tag: str, text: str, clear_first: bool = True, timeout: Optional[int] = None
@@ -226,20 +224,19 @@ class DesktopAppHelper:
             if not await self.wait_for_element(test_tag, timeout=timeout):
                 return False
 
-        try:
-            response = await self._client.post(
-                "/input",
-                json={
-                    "testTag": test_tag,
-                    "text": text,
-                    "clearFirst": clear_first,
-                },
-            )
-            data = response.json()
-            return data.get("success", False)
-        except Exception as e:
-            print(f"Input failed: {e}")
-            return False
+        response = await self._client.post(
+            "/input",
+            json={
+                "testTag": test_tag,
+                "text": text,
+                "clearFirst": clear_first,
+            },
+        )
+        data = response.json()
+        if not data.get("success", False):
+            error = data.get("error", "unknown error")
+            raise RuntimeError(f"Input '{test_tag}' failed: {error} (response: {data})")
+        return True
 
     async def wait_for_element(self, test_tag: str, timeout: Optional[int] = None) -> bool:
         """
@@ -257,20 +254,19 @@ class DesktopAppHelper:
 
         timeout_ms = timeout or self.config.timeout_ms
 
-        try:
-            response = await self._client.post(
-                "/wait",
-                json={
-                    "testTag": test_tag,
-                    "timeoutMs": timeout_ms,
-                },
-                timeout=timeout_ms / 1000.0 + 5,  # Add 5s buffer
-            )
-            data = response.json()
-            return data.get("success", False)
-        except Exception as e:
-            print(f"Wait for element failed: {e}")
-            return False
+        response = await self._client.post(
+            "/wait",
+            json={
+                "testTag": test_tag,
+                "timeoutMs": timeout_ms,
+            },
+            timeout=timeout_ms / 1000.0 + 5,  # Add 5s buffer
+        )
+        data = response.json()
+        if not data.get("success", False):
+            error = data.get("error", "unknown error")
+            raise RuntimeError(f"Wait for element '{test_tag}' timed out after {timeout_ms}ms: {error}")
+        return True
 
     async def wait_for_screen(self, screen_name: str, timeout: Optional[int] = None) -> bool:
         """
@@ -426,6 +422,100 @@ class DesktopAppHelper:
 
         # Click menu item
         return await self.click_and_wait_for_screen(menu_tag, screen_name, timeout_ms=timeout_ms)
+
+    async def attach_file(
+        self,
+        filename: str,
+        media_type: str,
+        data_base64: str,
+        size_bytes: int,
+    ) -> bool:
+        """
+        Inject a file attachment via test automation (bypasses native file picker).
+
+        Args:
+            filename: Display name (e.g., "photo.jpg")
+            media_type: MIME type (e.g., "image/jpeg", "application/pdf")
+            data_base64: Base64-encoded file content
+            size_bytes: File size in bytes
+
+        Returns:
+            True if injection successful
+        """
+        if not self._client:
+            raise RuntimeError("Not connected. Call start() first.")
+
+        response = await self._client.post(
+            "/inject-file",
+            json={
+                "filename": filename,
+                "mediaType": media_type,
+                "dataBase64": data_base64,
+                "sizeBytes": size_bytes,
+            },
+        )
+        data = response.json()
+        if not data.get("success", False):
+            error = data.get("error", "unknown error")
+            raise RuntimeError(f"File injection '{filename}' failed: {error} (response: {data})")
+        return True
+
+    async def attach_file_from_path(self, file_path: str) -> bool:
+        """
+        Read a file from disk, base64-encode it, and inject as attachment.
+
+        Args:
+            file_path: Path to the file on disk
+
+        Returns:
+            True if injection successful
+        """
+        import base64
+        import os
+
+        path = Path(file_path)
+        if not path.exists():
+            print(f"File not found: {file_path}")
+            return False
+
+        size_bytes = path.stat().st_size
+        if size_bytes > 10 * 1024 * 1024:
+            print(f"File too large: {size_bytes} bytes (max 10MB)")
+            return False
+
+        data = path.read_bytes()
+        data_base64 = base64.b64encode(data).decode("ascii")
+
+        # Guess MIME type from extension
+        ext = path.suffix.lower()
+        media_type = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
+            ".pdf": "application/pdf",
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }.get(ext, "application/octet-stream")
+
+        return await self.attach_file(
+            filename=path.name,
+            media_type=media_type,
+            data_base64=data_base64,
+            size_bytes=size_bytes,
+        )
+
+    async def clear_attachments(self) -> bool:
+        """Clear all file attachments via test automation."""
+        if not self._client:
+            raise RuntimeError("Not connected. Call start() first.")
+
+        response = await self._client.post("/clear-attachments")
+        data = response.json()
+        if not data.get("success", False):
+            error = data.get("error", "unknown error")
+            raise RuntimeError(f"Clear attachments failed: {error} (response: {data})")
+        return True
 
     async def status(self) -> Dict[str, Any]:
         """

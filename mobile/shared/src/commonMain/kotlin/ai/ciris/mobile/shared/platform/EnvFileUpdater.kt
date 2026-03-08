@@ -52,6 +52,17 @@ expect class EnvFileUpdater {
      * @return Result with true on success, exception on failure
      */
     suspend fun deleteEnvFile(): Result<Boolean>
+
+    /**
+     * Check if Python has written a .token_refresh_needed signal file.
+     * This is written by the billing provider when it gets a 401 AUTH_EXPIRED.
+     *
+     * If a new signal is detected, deletes the signal file and returns true.
+     * Returns false if no signal or signal was already processed.
+     *
+     * Ported from: android/app/.../auth/TokenRefreshManager.kt (checkForRefreshSignal)
+     */
+    fun checkTokenRefreshSignal(): Boolean
 }
 
 /**

@@ -2,6 +2,7 @@
 
 package ai.ciris.mobile.shared.platform
 
+import ai.ciris.mobile.shared.config.CIRISConfig
 import kotlinx.cinterop.*
 import platform.Foundation.*
 
@@ -19,7 +20,10 @@ actual class EnvFileUpdater {
         private const val TAG = "EnvFileUpdater.ios"
         private const val ENV_FILE_NAME = ".env"
         private const val CONFIG_RELOAD_FILE = ".config_reload"
+        private const val TOKEN_REFRESH_SIGNAL_FILE = ".token_refresh_needed"
     }
+
+    private var lastSignalTimestamp: Long = 0
 
     private val cirisHome: String? by lazy {
         val documentsPath = NSSearchPathForDirectoriesInDomains(
@@ -53,9 +57,15 @@ actual class EnvFileUpdater {
             var newContent = content as String
             println("[$TAG] Read .env file (${newContent.length} bytes)")
 
+            // Migrate legacy URLs to new infrastructure if needed
+            val (migratedContent, wasMigrated) = CIRISConfig.migrateEnvToNewInfra(newContent)
+            if (wasMigrated) {
+                newContent = migratedContent
+                println("[$TAG] Migrated legacy URLs to new ciris-services infrastructure")
+            }
+
             // Check if we're in CIRIS proxy mode
-            val isCirisProxyMode = newContent.contains("llm.ciris.ai") ||
-                                   newContent.contains("llm.ciris-services.ai")
+            val isCirisProxyMode = CIRISConfig.isCirisProxyUrl(newContent)
 
             var openaiUpdated = false
             if (isCirisProxyMode) {
@@ -67,6 +77,18 @@ actual class EnvFileUpdater {
                     newContent = openaiPattern.replace(newContent, """OPENAI_API_KEY="$oauthIdToken"""")
                     openaiUpdated = true
                     println("[$TAG] Updated OPENAI_API_KEY")
+                }
+
+                // Also update secondary CIRIS_OPENAI_API_KEY_2 if it points to a CIRIS proxy
+                val secondaryBasePattern = Regex("""CIRIS_OPENAI_API_BASE_2=["']?([^"'\n]*)["']?""")
+                val secondaryBaseMatch = secondaryBasePattern.find(newContent)
+                val secondaryBase = secondaryBaseMatch?.groupValues?.getOrNull(1) ?: ""
+                if (secondaryBase.contains("ciris.ai")) {
+                    val secondaryKeyPattern = Regex("""CIRIS_OPENAI_API_KEY_2=["']?[^"'\n]*["']?""")
+                    if (secondaryKeyPattern.containsMatchIn(newContent)) {
+                        newContent = secondaryKeyPattern.replace(newContent, """CIRIS_OPENAI_API_KEY_2="$oauthIdToken"""")
+                        println("[$TAG] Updated CIRIS_OPENAI_API_KEY_2 (secondary CIRIS proxy)")
+                    }
                 }
             } else {
                 println("[$TAG] BYOK mode detected - preserving user's OPENAI_API_KEY")
@@ -85,6 +107,14 @@ actual class EnvFileUpdater {
                 newContent += "\nCIRIS_BILLING_APPLE_ID_TOKEN=\"$oauthIdToken\"\n"
                 billingUpdated = true
                 println("[$TAG] Added CIRIS_BILLING_APPLE_ID_TOKEN")
+            }
+
+            // Also update CIRIS_BILLING_GOOGLE_ID_TOKEN with the same token
+            // Python checks this env var first, so it must stay in sync on iOS
+            val googleBillingPattern = Regex("""CIRIS_BILLING_GOOGLE_ID_TOKEN=["']?[^"'\n]*["']?""")
+            if (googleBillingPattern.containsMatchIn(newContent)) {
+                newContent = googleBillingPattern.replace(newContent, """CIRIS_BILLING_GOOGLE_ID_TOKEN="$oauthIdToken"""")
+                println("[$TAG] Updated CIRIS_BILLING_GOOGLE_ID_TOKEN (sync with Apple token)")
             }
 
             if (openaiUpdated || billingUpdated) {
@@ -185,14 +215,13 @@ actual class EnvFileUpdater {
             val provider = when {
                 baseUrl == null -> "openai"
                 baseUrl.contains("localhost") || baseUrl.contains("127.0.0.1") -> "local"
-                baseUrl.contains("llm.ciris") -> "other"  // CIRIS proxy uses "other"
+                baseUrl.contains("llm01.ciris-services") -> "other"  // CIRIS proxy uses "other"
                 baseUrl.contains("anthropic") -> "anthropic"
                 else -> "other"
             }
 
-            // Check if CIRIS proxy
-            val isCirisProxy = baseUrl != null &&
-                (baseUrl.contains("llm.ciris.ai") || baseUrl.contains("llm.ciris-services.ai"))
+            // Check if CIRIS proxy (llmXX.ciris-services-* pattern for future scaling)
+            val isCirisProxy = baseUrl != null && CIRISConfig.isCirisProxyUrl(baseUrl)
 
             println("[$TAG] Parsed LLM config: provider=$provider, baseUrl=$baseUrl, model=$model, " +
                     "apiKeySet=${!apiKey.isNullOrEmpty()}, isCirisProxy=$isCirisProxy")
@@ -236,6 +265,33 @@ actual class EnvFileUpdater {
         } catch (e: Exception) {
             println("[$TAG] Exception deleting .env file: ${e.message}")
             Result.failure(e)
+        }
+    }
+
+    actual fun checkTokenRefreshSignal(): Boolean {
+        val home = cirisHome ?: return false
+        val signalPath = "$home/$TOKEN_REFRESH_SIGNAL_FILE"
+        val fileManager = NSFileManager.defaultManager
+
+        if (!fileManager.fileExistsAtPath(signalPath)) return false
+
+        return try {
+            val content = NSString.stringWithContentsOfFile(signalPath, NSUTF8StringEncoding, null)
+                ?: return false
+            val signalTimestamp = (content as String).trim().toDoubleOrNull()?.toLong() ?: 0L
+
+            if (signalTimestamp > lastSignalTimestamp) {
+                println("[$TAG] Token refresh signal detected (timestamp: $signalTimestamp)")
+                lastSignalTimestamp = signalTimestamp
+                // Delete the signal file
+                fileManager.removeItemAtPath(signalPath, null)
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            println("[$TAG] Error reading token refresh signal: ${e.message}")
+            false
         }
     }
 }

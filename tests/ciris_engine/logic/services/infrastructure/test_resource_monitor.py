@@ -350,7 +350,7 @@ async def test_resource_monitor_credit_spend(resource_budget, temp_db, time_serv
         nonlocal check_calls, spend_calls
         if request.url.path.endswith("/credits/check"):
             check_calls += 1
-            return httpx.Response(200, json={"has_credit": True})
+            return httpx.Response(200, json={"has_credit": True, "credits_remaining": 100})
         if request.url.path.endswith("/charges"):
             spend_calls += 1
             return httpx.Response(
@@ -412,10 +412,12 @@ async def test_resource_monitor_credit_failure(resource_budget, temp_db, time_se
     await monitor.start()
     try:
         account = CreditAccount(provider="oauth:google", account_id="user-789")
-        with pytest.raises(ValueError):
-            await monitor.check_credit(account)
+        # When fields are missing, billing provider returns has_credit=False (no credits)
+        result = await monitor.check_credit(account)
+        assert result.has_credit is False
+        # Metrics should indicate no credit available
         metrics = monitor._collect_custom_metrics()
-        assert metrics["credit_error_flag"] == 1.0
+        assert metrics["credit_last_available"] == 0.0
     finally:
         await monitor.stop()
 
@@ -525,7 +527,7 @@ async def test_billing_provider_boolean_conversion():
         nonlocal captured_payload
         if request.url.path.endswith("/credits/check"):
             captured_payload = json.loads(request.content)
-            return httpx.Response(200, json={"has_credit": True})
+            return httpx.Response(200, json={"has_credit": True, "credits_remaining": 100})
         raise AssertionError(f"Unexpected path {request.url.path}")
 
     provider = CIRISBillingProvider(api_key="test_key", transport=httpx.MockTransport(handler))
@@ -562,7 +564,7 @@ async def test_billing_provider_missing_optional_fields():
         nonlocal captured_payload
         if request.url.path.endswith("/credits/check"):
             captured_payload = json.loads(request.content)
-            return httpx.Response(200, json={"has_credit": True})
+            return httpx.Response(200, json={"has_credit": True, "credits_remaining": 100})
         raise AssertionError(f"Unexpected path {request.url.path}")
 
     provider = CIRISBillingProvider(api_key="test_key", transport=httpx.MockTransport(handler))
@@ -1173,7 +1175,7 @@ async def test_billing_provider_ensure_started():
 
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/credits/check"):
-            return httpx.Response(200, json={"has_credit": True})
+            return httpx.Response(200, json={"has_credit": True, "credits_remaining": 100})
         raise AssertionError(f"Unexpected path {request.url.path}")
 
     provider = CIRISBillingProvider(
@@ -1205,7 +1207,7 @@ async def test_billing_provider_token_refresh_callback_failure():
 
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/credits/check"):
-            return httpx.Response(200, json={"has_credit": True})
+            return httpx.Response(200, json={"has_credit": True, "credits_remaining": 100})
         raise AssertionError(f"Unexpected path {request.url.path}")
 
     provider = CIRISBillingProvider(

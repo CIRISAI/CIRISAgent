@@ -6,6 +6,7 @@ Provides functionality for listing, loading, unloading, and managing adapters.
 
 import json
 import logging
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,6 +44,18 @@ from .schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
+    """Sanitize user-controlled data for safe logging."""
+    if value is None:
+        return "<none>"
+    val_str = str(value)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", val_str)
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
 
 router = APIRouter()
 
@@ -1159,7 +1172,12 @@ async def load_adapter(
         if not adapter_id:
             adapter_id = f"{adapter_type}_{uuid.uuid4().hex[:8]}"
 
-        logger.info(f"[LOAD_ADAPTER] Loading adapter: type={adapter_type}, id={adapter_id}, persist={body.persist}")
+        logger.info(
+            "[LOAD_ADAPTER] Loading adapter: type=%s, id=%s, persist=%s",
+            _sanitize_for_log(adapter_type),
+            _sanitize_for_log(adapter_id),
+            body.persist,
+        )
 
         # Merge persist flag into config for RuntimeAdapterManager
         config = body.config or {}

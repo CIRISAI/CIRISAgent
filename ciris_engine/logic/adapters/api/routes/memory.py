@@ -9,6 +9,7 @@ This is a refactored version with better modularity and testability.
 
 import html
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Dict, List, Optional
 
@@ -39,6 +40,23 @@ from .memory_queries import get_memory_stats, query_timeline_nodes, search_nodes
 from .memory_visualization import generate_svg
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
+    """Sanitize user-controlled data for safe logging.
+
+    Prevents log injection by removing control characters and truncating.
+    """
+    if value is None:
+        return "<none>"
+    val_str = str(value)
+    # Remove control characters (C0: 0x00-0x1f, DEL+C1: 0x7f-0x9f)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", val_str)
+    # Truncate to prevent log flooding
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
 
 router = APIRouter(prefix="/memory", tags=["memory"])
 
@@ -477,9 +495,15 @@ async def get_timeline(
         # Determine user filtering before queries (for OBSERVER users)
         user_filter_ids = await get_user_filter_ids_for_observer(request, auth)
 
+        # Sanitize user-controlled data before logging
         logger.info(
-            f"[TIMELINE] Request: hours={hours}, scope={scope}, type={type}, "
-            f"user={auth.user_id}, role={auth.role}, filter_ids={user_filter_ids}"
+            "[TIMELINE] Request: hours=%d, scope=%s, type=%s, user=%s, role=%s, filter_count=%d",
+            hours,
+            _sanitize_for_log(scope),
+            _sanitize_for_log(type),
+            _sanitize_for_log(auth.user_id),
+            _sanitize_for_log(auth.role),
+            len(user_filter_ids) if user_filter_ids else 0,
         )
 
         # Query timeline nodes (with SQL Layer 1 filtering if OBSERVER)

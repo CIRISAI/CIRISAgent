@@ -2836,7 +2836,7 @@ class MainActivity : AppCompatActivity() {
      * Write a fresh Google ID token to the .env file BEFORE Python starts.
      * This ensures Python's billing service has a valid token on first read.
      *
-     * IMPORTANT: Only updates OPENAI_API_KEY if using CIRIS proxy mode (llm.ciris.ai).
+     * IMPORTANT: Only updates OPENAI_API_KEY if using CIRIS proxy mode (llm01.ciris-services-*).
      * In BYOK mode, the user's API key is preserved and only CIRIS_BILLING_GOOGLE_ID_TOKEN is updated.
      */
     private fun writeTokenToEnvFile(token: String): Boolean {

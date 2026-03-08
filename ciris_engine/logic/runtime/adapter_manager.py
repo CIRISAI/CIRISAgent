@@ -7,6 +7,7 @@ extending the existing processor control capabilities with adapter lifecycle man
 
 import asyncio
 import logging
+import os
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import aiofiles
@@ -142,7 +143,6 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         self.loaded_adapters: Dict[str, AdapterInstance] = {}
         self._adapter_counter = 0
         self._config_listener_registered = False
-
         # Register for config changes after initialization
         self._register_config_listener()
 
@@ -209,6 +209,13 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             # All adapters must support context - no fallback
             # Type ignore: adapter_class is dynamically loaded, mypy can't verify constructor signature
             adapter = adapter_class(self.runtime, context=startup_context, **adapter_kwargs)  # type: ignore[call-arg]
+
+            # Restore environment variables from saved adapter config BEFORE start().
+            # Configurable adapters (e.g. Home Assistant) store tokens/URLs in os.environ
+            # via apply_config() during the wizard, but env vars are lost on restart.
+            # Re-apply them so adapter.start() -> initialize() can find them.
+            if config_params and config_params.adapter_config:
+                self._restore_env_vars_from_config(adapter_id, config_params.adapter_config)
 
             instance = AdapterInstance(
                 adapter_id=adapter_id,
@@ -537,23 +544,23 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 try:
                     has_tool_service = hasattr(instance.adapter, "tool_service")
                     tool_service_value = getattr(instance.adapter, "tool_service", None) if has_tool_service else None
-                    logger.info(
+                    logger.debug(
                         f"[TOOL_DISCOVERY] Adapter {adapter_id}: has_tool_service={has_tool_service}, tool_service={type(tool_service_value).__name__ if tool_service_value else None}"
                     )
 
                     if has_tool_service and tool_service_value:
                         tool_service = tool_service_value
                         if hasattr(tool_service, "get_all_tool_info"):
-                            logger.info(f"[TOOL_DISCOVERY] Adapter {adapter_id}: calling get_all_tool_info()")
+                            logger.debug(f"[TOOL_DISCOVERY] Adapter {adapter_id}: calling get_all_tool_info()")
                             tool_infos = await tool_service.get_all_tool_info()
-                            logger.info(
+                            logger.debug(
                                 f"[TOOL_DISCOVERY] Adapter {adapter_id}: got {len(tool_infos) if tool_infos else 0} tools"
                             )
                             tools = tool_infos  # Pass ToolInfo objects directly, not just names
                         elif hasattr(tool_service, "list_tools"):
-                            logger.info(f"[TOOL_DISCOVERY] Adapter {adapter_id}: calling list_tools()")
+                            logger.debug(f"[TOOL_DISCOVERY] Adapter {adapter_id}: calling list_tools()")
                             tool_names = await tool_service.list_tools()
-                            logger.info(
+                            logger.debug(
                                 f"[TOOL_DISCOVERY] Adapter {adapter_id}: got {len(tool_names) if tool_names else 0} tool names"
                             )
                             # Convert string names to ToolInfo objects for schema compliance
@@ -950,6 +957,44 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             safe_to_unload=safe_to_unload,
             warning_message=warning_message,
         )
+
+    # Known adapter config keys that map to environment variables.
+    # When a configurable adapter saves its config, tokens/URLs are stored in the
+    # adapter_config dict. On restart, we re-apply them to os.environ so the
+    # adapter's service can read them (e.g., HAIntegrationService.ha_token property).
+    _CONFIG_TO_ENV_MAP: Dict[str, str] = {
+        "access_token": "HOME_ASSISTANT_TOKEN",
+        "refresh_token": "HOME_ASSISTANT_REFRESH_TOKEN",
+        "client_id": "HOME_ASSISTANT_CLIENT_ID",
+        "callback_base_url": "HOME_ASSISTANT_CLIENT_ID",  # HA OAuth uses callback URL as client_id
+        "base_url": "HOME_ASSISTANT_URL",
+    }
+
+    def _restore_env_vars_from_config(self, adapter_id: str, config: Any) -> None:
+        """Restore environment variables from saved adapter config."""
+        if not isinstance(config, dict):
+            return
+
+        restored = []
+        # Check top-level keys
+        for config_key, env_var in self._CONFIG_TO_ENV_MAP.items():
+            value = config.get(config_key)
+            if value and isinstance(value, str):
+                os.environ[env_var] = value
+                restored.append(env_var)
+
+        # Also check nested oauth_tokens dict
+        oauth_tokens = config.get("oauth_tokens", {})
+        if isinstance(oauth_tokens, dict):
+            for config_key, env_var in self._CONFIG_TO_ENV_MAP.items():
+                if env_var not in os.environ or not os.environ.get(env_var):
+                    value = oauth_tokens.get(config_key)
+                    if value and isinstance(value, str):
+                        os.environ[env_var] = value
+                        restored.append(env_var)
+
+        if restored:
+            logger.info(f"Restored env vars for adapter {adapter_id}: {restored}")
 
     async def _save_adapter_config_to_graph(
         self, adapter_id: str, adapter_type: str, config_params: AdapterConfig

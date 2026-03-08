@@ -970,17 +970,21 @@ def _store_oauth_profile(auth_service: APIAuthService, user_id: str, name: str, 
 
 
 def _update_billing_provider_token(google_id_token: str) -> None:
-    """Update the billing provider with a fresh Google ID token.
+    """Update the billing provider with a fresh OAuth ID token.
 
-    This is called after native Google token exchange to ensure billing
+    This is called after native Google/Apple token exchange to ensure billing
     is available immediately. The token is stored in the environment
     so the billing provider can use it for credit checks.
     """
     import os
 
-    # Update environment variable so billing provider can use it
+    # Update both environment variables so billing provider picks it up
+    # regardless of which env var it checks (Google on Android, Apple on iOS)
     os.environ["CIRIS_BILLING_GOOGLE_ID_TOKEN"] = google_id_token
-    logger.info("[NativeAuth] Updated CIRIS_BILLING_GOOGLE_ID_TOKEN in environment for billing provider")
+    os.environ["CIRIS_BILLING_APPLE_ID_TOKEN"] = google_id_token
+    logger.info(
+        "[NativeAuth] Updated CIRIS_BILLING_GOOGLE_ID_TOKEN and CIRIS_BILLING_APPLE_ID_TOKEN in environment for billing provider"
+    )
 
     # Try to reinitialize the billing provider if resource_monitor is available
     # This is done via a background task to not block the login response
@@ -1246,6 +1250,8 @@ async def oauth_callback(
         if not external_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth provider did not return user ID")
 
+        # Ensure users are loaded from DB before role determination (fixes role demotion bug)
+        await auth_service._ensure_users_loaded()
         # Determine user role (preserves existing role if user already exists)
         user_email = user_data["email"]
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider=provider)
@@ -1639,6 +1645,8 @@ async def native_google_token_exchange(
             )
 
         user_email = user_data.get("email")
+        # Ensure users are loaded from DB before role determination (fixes role demotion bug)
+        await auth_service._ensure_users_loaded()
         # Pass external_id to preserve existing user's role (don't demote on re-auth!)
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider="google")
         logger.info(f"[NativeAuth] Determined role for {user_email}: {user_role}")
@@ -1866,6 +1874,8 @@ async def native_apple_token_exchange(
             )
 
         user_email = user_data.get("email")
+        # Ensure users are loaded from DB before role determination (fixes role demotion bug)
+        await auth_service._ensure_users_loaded()
         # Pass external_id to preserve existing user's role (don't demote on re-auth!)
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider="apple")
         logger.info(f"[AppleNativeAuth] Determined role for {user_email}: {user_role}")
@@ -1891,6 +1901,10 @@ async def native_apple_token_exchange(
         # Generate API key
         logger.info(f"[AppleNativeAuth] Generating API key for user {oauth_user.user_id}")
         api_key = _generate_api_key_and_store(auth_service, oauth_user, "apple")
+
+        # Update billing provider with the Apple ID token for credit checks
+        # The billing backend accepts Apple tokens (same as Google flow)
+        _update_billing_provider_token(native_request.id_token)
 
         # Trigger billing credit check to create billing user
         logger.info(f"[AppleNativeAuth] Triggering billing credit check for user {oauth_user.user_id}")
@@ -2017,138 +2031,140 @@ async def delete_api_key(
     return None
 
 
+# ========== Attestation Helpers ==========
+
+
+def _build_attestation_response(
+    status: str,
+    *,
+    loaded: bool = True,
+    error: Optional[str] = None,
+    max_level: int = 0,
+    level_pending: bool = True,
+) -> Dict[str, Any]:
+    """Build a standardized attestation response."""
+    return {
+        "data": {
+            "loaded": loaded,
+            "attestation_status": status,
+            "level_pending": level_pending,
+            "max_level": max_level,
+            "error": error,
+        }
+    }
+
+
+def _get_infra_auth_service(request: Request) -> tuple[Any, Optional[Dict[str, Any]]]:
+    """Get infrastructure auth service from request, returning (service, error_response)."""
+    api_auth_service = getattr(request.app.state, "auth_service", None)
+    if not api_auth_service:
+        logger.warning("[attestation] API Auth service not available")
+        return None, _build_attestation_response(
+            "not_attempted", loaded=False, error="Authentication service not available"
+        )
+
+    infra_auth_service = getattr(api_auth_service, "_auth_service", None)
+    if not infra_auth_service:
+        logger.warning("[attestation] Infrastructure auth service not available")
+        return None, _build_attestation_response(
+            "not_attempted", loaded=False, error="Infrastructure authentication service not available"
+        )
+
+    if not hasattr(infra_auth_service, "get_cached_attestation"):
+        logger.warning("[attestation] Auth service does not support attestation caching")
+        return None, _build_attestation_response(
+            "not_attempted", loaded=False, error="Attestation caching not supported"
+        )
+
+    return infra_auth_service, None
+
+
+def _trigger_background_attestation(infra_auth_service: Any, force_refresh: bool = False) -> bool:
+    """Trigger attestation in background. Returns True if triggered successfully."""
+    import asyncio
+
+    if not hasattr(infra_auth_service, "run_attestation"):
+        return False
+
+    try:
+        if force_refresh:
+            infra_auth_service.invalidate_attestation_cache()
+        task = asyncio.create_task(infra_auth_service.run_attestation(mode="full", force_refresh=force_refresh))
+        if hasattr(infra_auth_service, "_background_tasks"):
+            infra_auth_service._background_tasks.add(task)
+            task.add_done_callback(infra_auth_service._background_tasks.discard)
+        return True
+    except Exception as e:
+        logger.warning(f"[attestation] Failed to trigger attestation: {e}")
+        return False
+
+
+def _handle_no_cached_attestation(infra_auth_service: Any) -> Dict[str, Any]:
+    """Handle case when no cached attestation is available."""
+    global _attestation_triggered_from_endpoint
+
+    # Check if attestation is currently in progress
+    in_progress = (
+        hasattr(infra_auth_service, "is_attestation_in_progress") and infra_auth_service.is_attestation_in_progress()
+    )
+    logger.info(f"[attestation] Cache empty. in_progress={in_progress}")
+
+    if in_progress:
+        logger.info("[attestation] Returning in_progress status")
+        return _build_attestation_response("in_progress")
+
+    # Try to trigger attestation if not already triggered
+    if not _attestation_triggered_from_endpoint:
+        logger.info("[attestation] No cached attestation - triggering now")
+        if _trigger_background_attestation(infra_auth_service):
+            _attestation_triggered_from_endpoint = True
+            return _build_attestation_response("in_progress")
+        # Trigger failed, reset flag handled in helper
+
+    # Already triggered or trigger not possible
+    if _attestation_triggered_from_endpoint:
+        logger.debug("[attestation] Attestation already triggered")
+        return _build_attestation_response("in_progress")
+
+    logger.info("[attestation] No cached attestation and could not trigger")
+    return _build_attestation_response(
+        "not_attempted",
+        error="No cached attestation - startup attestation may not have completed",
+    )
+
+
 # ========== Attestation Endpoint ==========
 
 
 @router.get("/auth/attestation")
-async def get_attestation(request: Request) -> Dict[str, Any]:
-    """Get cached CIRISVerify attestation from AuthenticationService.
+async def get_attestation(request: Request, refresh: bool = False) -> Dict[str, Any]:
+    """Get CIRISVerify attestation from AuthenticationService.
 
-    Returns the cached attestation result from startup attestation.
-    This endpoint does NOT trigger a new attestation - it only returns
-    the cached result from when the agent started.
-
-    This is the preferred endpoint for Trust & Security display as it:
-    1. Returns instantly (no network calls)
-    2. Uses the authoritative cached result from auth service
-    3. Ensures consistency with other auth-dependent features
+    By default returns the cached attestation result from startup.
+    Pass ?refresh=true to invalidate the cache and trigger a fresh
+    attestation run (used by the Trust page refresh button).
 
     Returns:
-        Cached attestation result in the same format as /v1/setup/verify-status
+        Attestation result in the same format as /v1/setup/verify-status
     """
-    # Get APIAuthService from app state, then access the underlying AuthenticationService
-    api_auth_service = getattr(request.app.state, "auth_service", None)
+    global _attestation_triggered_from_endpoint
 
-    if not api_auth_service:
-        logger.warning("[attestation] API Auth service not available")
-        return {
-            "data": {
-                "loaded": False,
-                "error": "Authentication service not available",
-                "attestation_status": "not_attempted",
-            }
-        }
+    # Get infrastructure auth service (handles service chain validation)
+    infra_auth_service, error_response = _get_infra_auth_service(request)
+    if error_response:
+        return error_response
 
-    # Access the underlying infrastructure AuthenticationService
-    # APIAuthService wraps it as _auth_service
-    infra_auth_service = getattr(api_auth_service, "_auth_service", None)
+    # Handle refresh request
+    if refresh:
+        logger.info("[attestation] Refresh requested — invalidating cache and re-running attestation")
+        _trigger_background_attestation(infra_auth_service, force_refresh=True)
+        return _build_attestation_response("in_progress")
 
-    if not infra_auth_service:
-        logger.warning("[attestation] Infrastructure auth service not available")
-        return {
-            "data": {
-                "loaded": False,
-                "error": "Infrastructure authentication service not available",
-                "attestation_status": "not_attempted",
-            }
-        }
-
-    # Check for cached attestation on the infrastructure service
-    if not hasattr(infra_auth_service, "get_cached_attestation"):
-        logger.warning("[attestation] Auth service does not support attestation caching")
-        return {
-            "data": {
-                "loaded": False,
-                "error": "Attestation caching not supported",
-                "attestation_status": "not_attempted",
-            }
-        }
-
-    # Use allow_stale=True so expired-but-recent data is returned while
-    # the periodic refresh loop re-populates the cache in the background.
+    # Check for cached attestation (allow stale data while refresh runs in background)
     cached = infra_auth_service.get_cached_attestation(allow_stale=True)
 
     if not cached:
-        # Check if attestation is currently in progress on the infrastructure service
-        has_method = hasattr(infra_auth_service, "is_attestation_in_progress")
-        in_progress = has_method and infra_auth_service.is_attestation_in_progress()
-        logger.info(
-            f"[attestation] Cache empty (even stale). has_method={has_method}, in_progress={in_progress}, instance_id={id(infra_auth_service)}"
-        )
-
-        if in_progress:
-            logger.info("[attestation] Returning in_progress status with level_pending=True")
-            return {
-                "data": {
-                    "loaded": True,
-                    "attestation_status": "in_progress",
-                    "level_pending": True,  # Keep polling while attestation runs
-                    "max_level": 0,
-                    "error": None,
-                }
-            }
-
-        # Trigger attestation as a fallback if startup attestation didn't run
-        # Use module-level flag to prevent multiple triggers
-        global _attestation_triggered_from_endpoint
-        if not _attestation_triggered_from_endpoint and hasattr(infra_auth_service, "run_attestation"):
-            import asyncio
-
-            try:
-                _attestation_triggered_from_endpoint = True
-                logger.info("[attestation] No cached attestation - triggering attestation now")
-                # Run attestation in background — store task on the service to
-                # prevent garbage collection and let the periodic loop track it.
-                task = asyncio.create_task(infra_auth_service.run_attestation(mode="full"))
-                if hasattr(infra_auth_service, "_background_tasks"):
-                    infra_auth_service._background_tasks.add(task)
-                    task.add_done_callback(infra_auth_service._background_tasks.discard)
-                logger.info("[attestation] Background attestation triggered, returning in_progress")
-                return {
-                    "data": {
-                        "loaded": True,
-                        "attestation_status": "in_progress",
-                        "level_pending": True,
-                        "max_level": 0,
-                        "error": None,
-                    }
-                }
-            except Exception as e:
-                logger.warning(f"[attestation] Failed to trigger attestation: {e}")
-                _attestation_triggered_from_endpoint = False  # Reset on failure
-        elif _attestation_triggered_from_endpoint:
-            # Already triggered, return in_progress
-            logger.debug("[attestation] Attestation already triggered, returning in_progress")
-            return {
-                "data": {
-                    "loaded": True,
-                    "attestation_status": "in_progress",
-                    "level_pending": True,
-                    "max_level": 0,
-                    "error": None,
-                }
-            }
-
-        logger.info("[attestation] No cached attestation and could not trigger")
-        return {
-            "data": {
-                "loaded": True,
-                "attestation_status": "not_attempted",
-                "level_pending": True,  # Keep polling until attestation runs
-                "max_level": 0,
-                "error": "No cached attestation - startup attestation may not have completed",
-            }
-        }
+        return _handle_no_cached_attestation(infra_auth_service)
 
     # Convert cached AttestationResult to response format
     # This matches the format returned by /v1/setup/verify-status

@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var reconnectAttempts = 0
     @StateObject private var storeKitManager = StoreKitManager.shared
     @Environment(\.scenePhase) var scenePhase
+    @State private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
 
     var body: some View {
         ZStack {
@@ -53,8 +54,14 @@ struct ContentView: View {
             }
         }
         .onChange(of: scenePhase) { newPhase in
+            if newPhase == .background && pythonReady {
+                // Keep the server alive for up to 60s so OAuth callbacks can arrive
+                NSLog("[ContentView] App entering background — requesting background time for server")
+                beginBackgroundKeepAlive()
+            }
             if newPhase == .active && pythonReady {
-                // App came to foreground - check if server is still alive
+                // App came to foreground - end background task and check server
+                endBackgroundKeepAlive()
                 NSLog("[ContentView] App became active, checking server health...")
                 Task {
                     await checkAndRestartServerIfNeeded()
@@ -128,6 +135,26 @@ struct ContentView: View {
         }
     }
 
+    /// Request background execution time to keep the Python server alive (e.g., for OAuth callbacks).
+    /// iOS grants up to ~30s (sometimes more). This prevents the server from being suspended
+    /// when the user switches to Safari for OAuth.
+    private func beginBackgroundKeepAlive() {
+        guard backgroundTaskID == .invalid else { return }
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "CIRISServerKeepAlive") {
+            // Expiration handler — iOS is about to suspend us
+            NSLog("[ContentView] Background time expired, ending keep-alive task")
+            self.endBackgroundKeepAlive()
+        }
+        NSLog("[ContentView] Background keep-alive started (taskID=\(backgroundTaskID.rawValue))")
+    }
+
+    private func endBackgroundKeepAlive() {
+        guard backgroundTaskID != .invalid else { return }
+        NSLog("[ContentView] Ending background keep-alive task")
+        UIApplication.shared.endBackgroundTask(backgroundTaskID)
+        backgroundTaskID = .invalid
+    }
+
     private func initializePython() async {
         NSLog("[ContentView] ========================================")
         NSLog("[ContentView] Starting Python initialization...")
@@ -193,9 +220,13 @@ struct ContentView: View {
             if PythonBridge.checkHealth() {
                 NSLog("[ContentView] Server is healthy after \(attempts) seconds")
 
-                // Trigger App Attest at startup (before login) so the result
-                // gets cached in CIRISVerify's FFI handle for run_attestation L2
-                await triggerAppAttestAtStartup()
+                // App Attest is handled by CIRISVerify's Rust FFI during
+                // run_attestation_sync. The Swift-side triggerAppAttestAtStartup
+                // was racing with it (both fetch a nonce from the registry, one
+                // consumes it before the other can verify → 409 nonce_expired).
+                // Disabled to let the Rust side own the full attestation flow.
+                // On-demand attestation via onDeviceAttestationRequested is still
+                // available for manual Trust page refresh.
 
                 await MainActor.run {
                     pythonReady = true
@@ -211,29 +242,10 @@ struct ContentView: View {
 
     /// Trigger App Attest at startup so the CIRISVerify FFI handle caches the
     /// device attestation result. Uses persistent cache (UserDefaults, 24h TTL)
-    /// to avoid slamming the registry on crash loops or normal restarts.
-    /// Retries up to 3 times with backoff because CIRISVerify FFI may not be
-    /// loaded yet when the health check first passes.
-    private func triggerAppAttestAtStartup() async {
-        NSLog("[ContentView] Checking App Attest cache...")
-        let manager = AppAttestManager.shared
-
-        for attempt in 1...3 {
-            let result = await manager.attestDeviceIfNeeded()
-            NSLog("[ContentView] App Attest attempt \(attempt): verified=\(result.verified), verdict=\(result.verdict), error=\(result.error ?? "none")")
-            if result.verified {
-                return
-            }
-            // Clear in-memory failed result so next attempt retries fully
-            manager.clearCache()
-            if attempt < 3 {
-                let delay = attempt * 5  // 5s, 10s backoff
-                NSLog("[ContentView] App Attest not verified, retrying in \(delay)s...")
-                try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
-            }
-        }
-        NSLog("[ContentView] App Attest failed after 3 attempts")
-    }
+    // NOTE: Startup attestation via triggerAppAttestAtStartup() is disabled.
+    // The Python-side CIRISVerify FFI runs run_attestation_sync at startup which
+    // would race with Swift (both fetch nonces from the registry). On-demand
+    // attestation via onDeviceAttestationRequested (Trust page) is still active.
 
     private func loadStartupStatus() -> StartupStatus? {
         let fileManager = FileManager.default
@@ -1237,7 +1249,9 @@ struct ComposeViewWithAuthAndStore: UIViewControllerRepresentable {
                 return self.storeKitManager.errorMessage
             },
 
-            // App Attest device attestation callback
+            // App Attest device attestation callback — uses Apple DCAppAttestService
+            // via AppAttestManager. The Rust CIRISVerify FFI binary integrity check
+            // fails on debug builds, so Swift handles App Attest independently.
             onDeviceAttestationRequested: { callback in
                 NSLog("[ComposeViewWithAuthAndStore] onDeviceAttestationRequested LAMBDA INVOKED")
 
@@ -1254,7 +1268,6 @@ struct ComposeViewWithAuthAndStore: UIViewControllerRepresentable {
 
                     if result.verified {
                         NSLog("[ComposeViewWithAuthAndStore] App Attest success: \(result.verdict)")
-                        // Map App Attest results to Play Integrity-style fields
                         let isStrong = result.isGenuineDevice && result.isUnmodifiedApp
                         callback(DeviceAttestationResultBridge.companion.success(
                             verified: true,

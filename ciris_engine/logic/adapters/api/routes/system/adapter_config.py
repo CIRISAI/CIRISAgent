@@ -6,6 +6,7 @@ Provides interactive configuration workflow for adapters including OAuth callbac
 
 import html
 import logging
+import re
 import uuid
 from typing import Annotated, Any, Dict, Optional
 
@@ -28,7 +29,27 @@ from .schemas import (
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
+    """Sanitize user-controlled data for safe logging.
+
+    Prevents log injection by removing control characters and truncating.
+    """
+    if value is None:
+        return "<none>"
+    val_str = str(value)
+    # Remove newlines, carriage returns, and other control chars
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", val_str)
+    # Truncate to prevent log flooding
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
+
 router = APIRouter()
+
+# Error message constants
+ERROR_SESSION_NOT_FOUND = "Session not found"
 
 
 # ============================================================================
@@ -258,7 +279,7 @@ async def get_session_status(
         session = config_service.get_session(session_id)
 
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail=ERROR_SESSION_NOT_FOUND)
 
         # Get adapter steps from the adapter manifest (InteractiveConfiguration)
         current_step = None
@@ -313,17 +334,13 @@ async def oauth_callback(
 
     No authentication required (OAuth state validation provides security).
     """
+    # Sanitize user-controlled data before logging to prevent log injection
     logger.info("=" * 60)
     logger.info("[OAUTH CALLBACK] *** CALLBACK RECEIVED ***")
-    logger.info(f"[OAUTH CALLBACK] Full URL: {request.url}")
-    logger.info(f"[OAUTH CALLBACK] Path: {request.url.path}")
-    logger.info(f"[OAUTH CALLBACK] session_id: {session_id}")
-    logger.info(f"[OAUTH CALLBACK] state: {state}")
-    logger.info(f"[OAUTH CALLBACK] code length: {len(code)}")
-    logger.info(
-        f"[OAUTH CALLBACK] code preview: {code[:20]}..." if len(code) > 20 else f"[OAUTH CALLBACK] code: {code}"
-    )
-    logger.info(f"[OAUTH CALLBACK] Headers: {dict(request.headers)}")
+    logger.info("[OAUTH CALLBACK] Path: %s", request.url.path)
+    logger.info("[OAUTH CALLBACK] session_id: %s", _sanitize_for_log(session_id))
+    logger.info("[OAUTH CALLBACK] state: %s", _sanitize_for_log(state))
+    logger.info("[OAUTH CALLBACK] code length: %d", len(code))
     logger.info("=" * 60)
     try:
         config_service = get_adapter_config_service(request)
@@ -331,7 +348,7 @@ async def oauth_callback(
         # Verify session exists and state matches
         session = config_service.get_session(session_id)
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail=ERROR_SESSION_NOT_FOUND)
 
         if state != session_id:
             raise HTTPException(status_code=400, detail="Invalid OAuth state")
@@ -402,13 +419,13 @@ async def oauth_deeplink_callback(
     Discord, Google, Microsoft, Reddit, etc.) - the state parameter contains the
     session_id which identifies the configuration session.
     """
+    # Sanitize user-controlled data before logging to prevent log injection
     logger.info("=" * 60)
     logger.info("[OAUTH DEEPLINK CALLBACK] *** FORWARDED CALLBACK RECEIVED ***")
-    logger.info(f"[OAUTH DEEPLINK CALLBACK] Full URL: {request.url}")
-    logger.info(f"[OAUTH DEEPLINK CALLBACK] state (session_id): {state}")
-    logger.info(f"[OAUTH DEEPLINK CALLBACK] provider: {provider}")
-    logger.info(f"[OAUTH DEEPLINK CALLBACK] source: {source}")
-    logger.info(f"[OAUTH DEEPLINK CALLBACK] code length: {len(code)}")
+    logger.info("[OAUTH DEEPLINK CALLBACK] state: %s", _sanitize_for_log(state))
+    logger.info("[OAUTH DEEPLINK CALLBACK] provider: %s", _sanitize_for_log(provider))
+    logger.info("[OAUTH DEEPLINK CALLBACK] source: %s", _sanitize_for_log(source))
+    logger.info("[OAUTH DEEPLINK CALLBACK] code length: %d", len(code))
     logger.info("=" * 60)
 
     try:
@@ -424,13 +441,17 @@ async def oauth_deeplink_callback(
                 # Looks like "provider:session_id"
                 provider = provider or parts[0]
                 session_id = parts[1]
-                logger.info(f"[OAUTH DEEPLINK CALLBACK] Extracted provider={provider}, session_id={session_id}")
+                logger.info(
+                    "[OAUTH DEEPLINK CALLBACK] Extracted provider=%s, session_id=%s",
+                    _sanitize_for_log(provider),
+                    _sanitize_for_log(session_id),
+                )
 
         # Verify session exists
         session = config_service.get_session(session_id)
         if not session:
-            logger.error(f"[OAUTH DEEPLINK CALLBACK] Session not found: {session_id}")
-            raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+            logger.error("[OAUTH DEEPLINK CALLBACK] Session not found: %s", _sanitize_for_log(session_id))
+            raise HTTPException(status_code=404, detail=ERROR_SESSION_NOT_FOUND)
 
         # Execute the OAuth callback step
         result = await config_service.execute_step(session_id, {"code": code, "state": state})
@@ -439,7 +460,10 @@ async def oauth_deeplink_callback(
             logger.error(f"[OAUTH DEEPLINK CALLBACK] OAuth step failed: {result.error}")
             raise HTTPException(status_code=400, detail=result.error or "OAuth callback failed")
 
-        logger.info(f"[OAUTH DEEPLINK CALLBACK] Successfully processed OAuth callback for session {session_id}")
+        logger.info(
+            "[OAUTH DEEPLINK CALLBACK] Successfully processed OAuth callback for session %s",
+            _sanitize_for_log(session_id),
+        )
 
         return SuccessResponse(
             data={

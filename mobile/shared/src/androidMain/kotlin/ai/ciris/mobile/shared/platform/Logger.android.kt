@@ -12,6 +12,7 @@ actual object PlatformLogger {
         if (LogConfig.minLevel.priority <= LogLevel.DEBUG.priority) {
             Log.d(tag, message)
             DebugLogBuffer.add("DEBUG", tag, message)
+            KMPFileLogger.log("DEBUG", tag, message)
         }
     }
 
@@ -19,6 +20,7 @@ actual object PlatformLogger {
         if (LogConfig.minLevel.priority <= LogLevel.INFO.priority) {
             Log.i(tag, message)
             DebugLogBuffer.add("INFO", tag, message)
+            KMPFileLogger.log("INFO", tag, message)
         }
     }
 
@@ -26,6 +28,7 @@ actual object PlatformLogger {
         if (LogConfig.minLevel.priority <= LogLevel.WARN.priority) {
             Log.w(tag, message)
             DebugLogBuffer.add("WARN", tag, message)
+            KMPFileLogger.log("WARN", tag, message)
         }
     }
 
@@ -33,6 +36,7 @@ actual object PlatformLogger {
         if (LogConfig.minLevel.priority <= LogLevel.ERROR.priority) {
             Log.e(tag, message)
             DebugLogBuffer.add("ERROR", tag, message)
+            KMPFileLogger.log("ERROR", tag, message)
         }
     }
 
@@ -41,6 +45,7 @@ actual object PlatformLogger {
             Log.e(tag, message, throwable)
             val stackTrace = throwable.stackTraceToString().take(500)
             DebugLogBuffer.add("ERROR", tag, "$message\n$stackTrace")
+            KMPFileLogger.log("ERROR", tag, "$message\n$stackTrace")
         }
     }
 }

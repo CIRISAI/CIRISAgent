@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 
@@ -57,6 +58,18 @@ from ciris_engine.schemas.types import ConfigMapping, ConfigValue
 
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
+    """Sanitize user-controlled data for safe logging."""
+    if value is None:
+        return "<none>"
+    val_str = str(value)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", val_str)
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
 
 # Error message constants
 _ERROR_AGENT_PROCESSOR_NOT_AVAILABLE = "Agent processor not available"
@@ -1587,8 +1600,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             "service_management", "update_priority", success=True, result=updated_info.model_dump()
         )
         logger.info(
-            f"Updated service provider '{provider_name}' priority from "
-            f"{updated_info.old_priority} to {updated_info.new_priority}"
+            "Updated service provider '%s' priority from %s to %s",
+            _sanitize_for_log(provider_name),
+            updated_info.old_priority,
+            updated_info.new_priority,
         )
 
         return ServicePriorityUpdateResponse(

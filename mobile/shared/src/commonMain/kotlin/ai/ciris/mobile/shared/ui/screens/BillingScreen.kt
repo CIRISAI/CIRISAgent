@@ -57,7 +57,7 @@ fun BillingScreen(
                 title = { Text("Buy Credits") },
                 navigationIcon = {
                     IconButton(
-                        onClick = {},
+                        onClick = onNavigateBack,
                         modifier = Modifier.testableClickable("btn_billing_back") { onNavigateBack() }
                     ) {
                         Icon(
@@ -132,7 +132,7 @@ fun BillingScreen(
                         )
                     } else {
                         TextButton(
-                            onClick = {},
+                            onClick = onRefresh,
                             modifier = Modifier.testableClickable("btn_billing_refresh") { onRefresh() }
                         ) {
                             Text("Refresh")
@@ -196,7 +196,7 @@ private fun ProductCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        onClick = {},
+        onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
             .testableClickable("item_product_${product.productId}") { onClick() },
@@ -236,7 +236,7 @@ private fun ProductCard(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Button(
-                    onClick = {},
+                    onClick = onClick,
                     modifier = Modifier.testableClickable("btn_buy_${product.productId}") { onClick() },
                     shape = RoundedCornerShape(8.dp)
                 ) {

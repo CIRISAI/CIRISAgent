@@ -225,6 +225,74 @@ class SonarClient:
             "issues": issues_data,
         }
 
+    def get_uncovered_files(self, pull_request: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get list of files with uncovered lines in a PR."""
+        params = {
+            "component": PROJECT_KEY,
+            "metricKeys": "new_uncovered_lines,new_lines_to_cover" if pull_request else "uncovered_lines,lines_to_cover",
+            "ps": 500,
+            "strategy": "leaves",
+        }
+        if pull_request:
+            params["pullRequest"] = pull_request
+
+        response = self.session.get(f"{SONAR_API_BASE}/measures/component_tree", params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        files_with_uncovered = []
+        metric_key = "new_uncovered_lines" if pull_request else "uncovered_lines"
+        cover_key = "new_lines_to_cover" if pull_request else "lines_to_cover"
+
+        for comp in data.get("components", []):
+            # Parse measures - handle both direct value and periods format
+            measures = {}
+            for m in comp.get("measures", []):
+                metric = m["metric"]
+                if "value" in m:
+                    measures[metric] = int(float(m["value"]))
+                elif "periods" in m and m["periods"]:
+                    measures[metric] = int(float(m["periods"][0].get("value", "0")))
+
+            uncovered = measures.get(metric_key, 0)
+            to_cover = measures.get(cover_key, 0)
+            if uncovered > 0:
+                files_with_uncovered.append({
+                    "path": comp.get("path", ""),
+                    "key": comp.get("key", ""),
+                    "uncovered": uncovered,
+                    "to_cover": to_cover,
+                    "coverage": ((to_cover - uncovered) / to_cover * 100) if to_cover > 0 else 0,
+                })
+
+        return sorted(files_with_uncovered, key=lambda x: -x["uncovered"])
+
+    def get_source_lines(self, component_key: str, pull_request: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get source lines with coverage info for a specific file."""
+        params = {"key": component_key}
+        if pull_request:
+            params["pullRequest"] = pull_request
+
+        response = self.session.get(f"{SONAR_API_BASE}/sources/lines", params=params)
+        response.raise_for_status()
+        return response.json().get("sources", [])
+
+    def get_uncovered_lines(self, component_key: str, pull_request: Optional[str] = None) -> List[int]:
+        """Get list of uncovered line numbers for a specific file."""
+        sources = self.get_source_lines(component_key, pull_request)
+        uncovered = []
+        for line_info in sources:
+            # Line is uncovered if it's coverable (lineHits exists) but has 0 hits
+            line_hits = line_info.get("lineHits")
+            if line_hits is not None and line_hits == 0:
+                # Check if it's new code (for PR analysis)
+                if pull_request:
+                    if line_info.get("isNew", False):
+                        uncovered.append(line_info["line"])
+                else:
+                    uncovered.append(line_info["line"])
+        return uncovered
+
 
 def get_recent_prs(limit: int = 2) -> List[Tuple[str, str]]:
     """Get recent open PRs from GitHub.
@@ -402,6 +470,13 @@ def main():
     # PR Analysis
     pr_parser = subparsers.add_parser("pr", help="Analyze a specific pull request")
     pr_parser.add_argument("pr_number", type=str, help="Pull request number")
+
+    # Uncovered Lines
+    uncovered_parser = subparsers.add_parser("uncovered", help="Show uncovered lines in PR")
+    uncovered_parser.add_argument("pr_number", type=str, help="Pull request number")
+    uncovered_parser.add_argument("--file", type=str, help="Filter to specific file path pattern")
+    uncovered_parser.add_argument("--lines", action="store_true", help="Show specific line numbers")
+    uncovered_parser.add_argument("--limit", type=int, default=20, help="Max files to show (default: 20)")
 
     args = parser.parse_args()
 
@@ -717,6 +792,59 @@ def main():
                             print(f"    {file_path}:{line}")
             except Exception as e:
                 print(f"\n❌ Issues: Could not retrieve issues ({e})")
+
+        elif args.command == "uncovered":
+            print(f"\n📊 Uncovered Lines in PR #{args.pr_number}")
+            print("=" * 70)
+
+            try:
+                files = client.get_uncovered_files(pull_request=args.pr_number)
+
+                if args.file:
+                    files = [f for f in files if args.file.lower() in f["path"].lower()]
+
+                if not files:
+                    print("\nNo files with uncovered new lines found.")
+                else:
+                    shown = 0
+                    for f in files:
+                        if shown >= args.limit:
+                            remaining = len(files) - shown
+                            print(f"\n... and {remaining} more files (use --limit to show more)")
+                            break
+
+                        print(f"\n📁 {f['path']}")
+                        print(f"   {f['uncovered']}/{f['to_cover']} uncovered ({f['coverage']:.0f}% covered)")
+
+                        if args.lines:
+                            try:
+                                uncovered_lines = client.get_uncovered_lines(f["key"], pull_request=args.pr_number)
+                                if uncovered_lines:
+                                    # Group consecutive lines
+                                    ranges = []
+                                    start = end = uncovered_lines[0] if uncovered_lines else 0
+                                    for line in uncovered_lines[1:]:
+                                        if line == end + 1:
+                                            end = line
+                                        else:
+                                            ranges.append(f"{start}-{end}" if start != end else str(start))
+                                            start = end = line
+                                    if uncovered_lines:
+                                        ranges.append(f"{start}-{end}" if start != end else str(start))
+                                    print(f"   Lines: {', '.join(ranges[:20])}")
+                                    if len(ranges) > 20:
+                                        print(f"   ... and {len(ranges) - 20} more ranges")
+                            except Exception as e:
+                                print(f"   (Could not get line details: {e})")
+
+                        shown += 1
+
+                    print(f"\n\nTotal: {sum(f['uncovered'] for f in files)} uncovered lines across {len(files)} files")
+
+            except Exception as e:
+                print(f"Error: {e}")
+                import traceback
+                traceback.print_exc()
 
         else:
             parser.print_help()

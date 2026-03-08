@@ -232,18 +232,17 @@ class HAConfigurableAdapter:
         """
         logger.info(f"Running HA discovery: {discovery_type}")
 
-        if discovery_type in ("mdns", "zeroconf"):
-            return await self._discover_mdns()
+        if discovery_type == "manual":
+            return []
         elif discovery_type == "env":
             return self._discover_from_env()
-        elif discovery_type == "manual":
-            return []
 
-        # Default: try mDNS first, then hostname probe, then env
+        # All discovery paths (explicit "mdns"/"zeroconf" or default) try the
+        # full chain: mDNS → hostname probe → env.  This ensures that when
+        # zeroconf is unavailable (e.g. iOS sandbox) we still find HA via
+        # direct hostname resolution of homeassistant.local.
         instances = await self._discover_mdns()
         if not instances:
-            # mDNS service discovery failed - try probing common hostnames
-            # This handles cases where HA isn't advertising via mDNS but hostname resolves
             instances = await self._discover_via_hostname_probe()
         if not instances:
             instances = self._discover_from_env()
@@ -299,6 +298,7 @@ class HAConfigurableAdapter:
         for host, port in common_hosts:
             url = f"http://{host}:{port}"
             try:
+                logger.info(f"[HOSTNAME PROBE] Trying {url}...")
                 async with aiohttp.ClientSession() as session:
                     async with session.get(
                         f"{url}/api/",
@@ -323,9 +323,11 @@ class HAConfigurableAdapter:
                             )
                             # Found one, return immediately (usually only one HA instance)
                             return discovered
-            except Exception:
+                        else:
+                            logger.info(f"[HOSTNAME PROBE] {url} returned status {response.status}")
+            except Exception as e:
                 # Host doesn't resolve or isn't reachable - try next
-                pass
+                logger.info(f"[HOSTNAME PROBE] {url} failed: {type(e).__name__}: {e}")
 
         if discovered:
             logger.info(f"[HOSTNAME PROBE] Found {len(discovered)} HA instances")
@@ -546,6 +548,8 @@ class HAConfigurableAdapter:
                             "expires_in": token_data.get("expires_in", 1800),
                             "ha_auth_provider_type": token_data.get("ha_auth_provider_type"),
                             "ha_auth_provider_id": token_data.get("ha_auth_provider_id"),
+                            # Store client_id for token refresh - MUST match OAuth authorization
+                            "client_id": client_id,
                         }
                     else:
                         error_text = await response.text()
@@ -734,6 +738,7 @@ class HAConfigurableAdapter:
         oauth_tokens = config.get("oauth_tokens", {})
         access_token = config.get("access_token") or oauth_tokens.get("access_token")
         refresh_token = config.get("refresh_token") or oauth_tokens.get("refresh_token")
+        client_id = config.get("client_id") or oauth_tokens.get("client_id")
 
         # Set environment variables for the HA service
         if config.get("base_url"):
@@ -742,6 +747,8 @@ class HAConfigurableAdapter:
             os.environ["HOME_ASSISTANT_TOKEN"] = access_token
         if refresh_token:
             os.environ["HOME_ASSISTANT_REFRESH_TOKEN"] = refresh_token
+        if client_id:
+            os.environ["HOME_ASSISTANT_CLIENT_ID"] = client_id
 
         # Log sanitized config
         safe_config = {k: ("***" if "token" in k.lower() else v) for k, v in config.items()}

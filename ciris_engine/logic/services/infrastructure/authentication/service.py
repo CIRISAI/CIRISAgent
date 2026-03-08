@@ -25,7 +25,6 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from ciris_engine.logic.persistence.stores import authentication_store
 from ciris_engine.logic.services.base_infrastructure_service import BaseInfrastructureService
 from ciris_engine.logic.services.lifecycle.time import TimeService
-from ciris_engine.logic.utils.shutdown_manager import request_global_shutdown
 from ciris_engine.logic.utils.mobile_exclusions import (
     compute_files_missing_list,
     compute_files_unexpected_list,
@@ -33,6 +32,7 @@ from ciris_engine.logic.utils.mobile_exclusions import (
     compute_mobile_excluded_list,
 )
 from ciris_engine.logic.utils.path_resolution import get_secrets_home
+from ciris_engine.logic.utils.shutdown_manager import request_global_shutdown
 from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.attestation import AttestationCacheStatus, AttestationResult
@@ -116,7 +116,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         self._attestation_stale_ttl = 7200  # 2 hour max stale data (fallback after TTL)
         self._attestation_refresh_interval = 2700  # 45 min refresh (before 1h TTL)
         self._attestation_refresh_task: Optional[asyncio.Task[None]] = None
-        self._baseline_attestation: Optional[AttestationResult] = None  # First successful result for degradation detection
+        self._baseline_attestation: Optional[AttestationResult] = (
+            None  # First successful result for degradation detection
+        )
 
         # CIRISVerify singleton - all code should use get_verifier() instead of creating instances
         self._verifier: Any = None
@@ -1630,6 +1632,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         self._start_time = self._get_current_time()
         logger.info("AuthenticationService started")
 
+        # Skip attestation in test mode to avoid TPM operations
+        if os.environ.get("CIRIS_IMPORT_MODE") == "true" or os.environ.get("CIRIS_MOCK_LLM") == "true":
+            logger.info("AuthenticationService: skipping attestation in test mode")
+            return
+
         # Kick off startup attestation in background (non-blocking)
         # Store task reference to prevent garbage collection
         attestation_task = asyncio.create_task(self.run_startup_attestation())
@@ -1650,7 +1657,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 try:
                     await self._attestation_refresh_task
                 except asyncio.CancelledError:
-                    pass  # Expected from the child task we just cancelled
+                    # Expected: we just cancelled this child task, no need to propagate
+                    pass  # noqa: S110 - intentional: child task we cancelled
             await super().stop()
             self._started = False
             # Clear caches
@@ -1658,12 +1666,12 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             self._channel_token_cache.clear()
             logger.info("AuthenticationService stopped")
         except asyncio.CancelledError:
-            # Ensure cleanup completes even if stop() itself is cancelled
+            # External cancellation of stop() - cleanup then re-raise per asyncio contract
             self._started = False
             self._token_cache.clear()
             self._channel_token_cache.clear()
             logger.info("AuthenticationService stopped (cancelled)")
-            raise
+            raise  # NOSONAR - CancelledError is re-raised after cleanup
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect authentication-specific metrics."""
@@ -1830,7 +1838,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         if not force_refresh:
             cached = self.get_cached_attestation()
             if cached is not None:
-                logger.info(f"[attestation] Returning cached result (early check), instance={hex(id(self))}, level={cached.max_level}")
+                logger.info(
+                    f"[attestation] Returning cached result (early check), instance={hex(id(self))}, level={cached.max_level}"
+                )
                 return cached
 
         # Set in_progress flag BEFORE acquiring lock so callers can see it
@@ -1843,7 +1853,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 if not force_refresh:
                     cached = self.get_cached_attestation()
                     if cached is not None:
-                        logger.info(f"[attestation] Returning cached result (lock-check), instance={hex(id(self))}, level={cached.max_level}")
+                        logger.info(
+                            f"[attestation] Returning cached result (lock-check), instance={hex(id(self))}, level={cached.max_level}"
+                        )
                         return cached
                 result = await self._run_attestation_internal(
                     mode=mode,
@@ -1856,7 +1868,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 self._attestation_cache = result
                 # Also save as last known (for stale-while-revalidate)
                 self._last_known_attestation = result
-                logger.info(f"[attestation] Cached result: level={result.max_level}, instance={hex(id(self))}, binary={'OK' if result.binary_ok else 'FAIL'}")
+                logger.info(
+                    f"[attestation] Cached result: level={result.max_level}, instance={hex(id(self))}, binary={'OK' if result.binary_ok else 'FAIL'}"
+                )
                 return result
         finally:
             self._attestation_in_progress = False
@@ -2035,8 +2049,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             await asyncio.sleep(1)
 
         logger.info(
-            f"[attestation-refresh] Periodic refresh loop started "
-            f"(interval={self._attestation_refresh_interval}s)"
+            f"[attestation-refresh] Periodic refresh loop started (interval={self._attestation_refresh_interval}s)"
         )
 
         while self._started:
@@ -2085,15 +2098,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # L1: Binary integrity — was OK at startup, now failing
         if baseline.binary_ok and not current.binary_ok:
-            degradations.append(
-                f"L1 binary_ok degraded: {baseline.binary_ok} -> {current.binary_ok}"
-            )
+            degradations.append(f"L1 binary_ok degraded: {baseline.binary_ok} -> {current.binary_ok}")
 
         # L2: Environment/key integrity
         if baseline.env_ok and not current.env_ok:
-            degradations.append(
-                f"L2 env_ok degraded: {baseline.env_ok} -> {current.env_ok}"
-            )
+            degradations.append(f"L2 env_ok degraded: {baseline.env_ok} -> {current.env_ok}")
 
         # L4: File integrity
         if baseline.file_integrity_ok and not current.file_integrity_ok:
@@ -2107,12 +2116,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # Integrity degradation detected — emergency shutdown
         detail = "; ".join(degradations)
-        shutdown_msg = (
-            "CIRIS ENGINE OR VERIFY INTEGRITY DEGRADATION DETECTED - SHUTTING DOWN"
-        )
-        logger.critical(
-            f"[attestation-refresh] {shutdown_msg} | Details: {detail}"
-        )
+        shutdown_msg = "CIRIS ENGINE OR VERIFY INTEGRITY DEGRADATION DETECTED - SHUTTING DOWN"
+        logger.critical(f"[attestation-refresh] {shutdown_msg} | Details: {detail}")
 
         request_global_shutdown(f"{shutdown_msg} | {detail}")
 

@@ -262,7 +262,7 @@ async def get_sop_metadata(
 
 
 @router.post(
-    "/",
+    "",
     status_code=status.HTTP_201_CREATED,
     responses={
         500: {"description": "Ticket creation or retrieval failed"},
@@ -383,7 +383,7 @@ async def get_ticket_by_id(
     return TicketResponse(**ticket)
 
 
-@router.get("/")
+@router.get("")
 async def list_all_tickets(
     req: Request,
     current_user: CurrentUserDep,

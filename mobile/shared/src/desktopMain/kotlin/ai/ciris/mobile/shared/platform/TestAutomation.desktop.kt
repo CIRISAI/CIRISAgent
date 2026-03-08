@@ -1,12 +1,6 @@
 package ai.ciris.mobile.shared.platform
 
 import androidx.compose.foundation.clickable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -36,6 +30,10 @@ actual object TestAutomation {
     // Text input requests flow
     private val _textInputRequests = MutableStateFlow<TextInputRequest?>(null)
     actual val textInputRequests: StateFlow<TextInputRequest?> = _textInputRequests.asStateFlow()
+
+    // File injection requests flow
+    private val _fileInjectionRequests = MutableStateFlow<PickedFile?>(null)
+    actual val fileInjectionRequests: StateFlow<PickedFile?> = _fileInjectionRequests.asStateFlow()
 
     /**
      * Configure callbacks from TestAutomationServer.
@@ -100,6 +98,19 @@ actual object TestAutomation {
     actual fun clearTextInputRequest() {
         _textInputRequests.value = null
     }
+
+    actual fun injectFile(name: String, mediaType: String, dataBase64: String, sizeBytes: Long) {
+        _fileInjectionRequests.value = PickedFile(
+            name = name,
+            mediaType = mediaType,
+            dataBase64 = dataBase64,
+            sizeBytes = sizeBytes
+        )
+    }
+
+    actual fun clearFileInjectionRequest() {
+        _fileInjectionRequests.value = null
+    }
 }
 
 /**
@@ -107,16 +118,6 @@ actual object TestAutomation {
  * When test mode is enabled, tracks element position for automation.
  */
 actual fun Modifier.testable(tag: String, text: String?): Modifier = composed {
-    var registered by remember { mutableStateOf(false) }
-
-    DisposableEffect(tag) {
-        onDispose {
-            if (registered && TestAutomation.isEnabled()) {
-                TestAutomation.unregisterElement(tag)
-            }
-        }
-    }
-
     if (TestAutomation.isEnabled()) {
         this
             .testTag(tag)
@@ -132,7 +133,6 @@ actual fun Modifier.testable(tag: String, text: String?): Modifier = composed {
                     height = size.height,
                     text = text
                 )
-                registered = true
             }
     } else {
         this.testTag(tag)
@@ -144,21 +144,9 @@ actual fun Modifier.testable(tag: String, text: String?): Modifier = composed {
  * Registers click handler for programmatic triggering by test server.
  */
 actual fun Modifier.testableClickable(tag: String, text: String?, onClick: () -> Unit): Modifier = composed {
-    var registered by remember { mutableStateOf(false) }
-
     // Register click handler when test mode enabled
-    DisposableEffect(tag, onClick) {
-        if (TestAutomation.isEnabled()) {
-            TestAutomation.registerClickHandler(tag, onClick)
-        }
-        onDispose {
-            if (TestAutomation.isEnabled()) {
-                TestAutomation.unregisterClickHandler(tag)
-            }
-            if (registered) {
-                TestAutomation.unregisterElement(tag)
-            }
-        }
+    if (TestAutomation.isEnabled()) {
+        TestAutomation.registerClickHandler(tag, onClick)
     }
 
     if (TestAutomation.isEnabled()) {
@@ -177,7 +165,6 @@ actual fun Modifier.testableClickable(tag: String, text: String?, onClick: () ->
                     height = size.height,
                     text = text
                 )
-                registered = true
             }
     } else {
         this

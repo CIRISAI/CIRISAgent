@@ -260,8 +260,8 @@ class ServiceInitializer:
 
         # Server: Simple API key check
         api_key = os.getenv("CIRIS_BILLING_API_KEY", "")
-        # Android: Google ID token for JWT auth with CIRIS proxy
-        google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+        # Mobile: OAuth ID token for JWT auth with CIRIS proxy (Google on Android, Apple on iOS)
+        google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv("CIRIS_BILLING_APPLE_ID_TOKEN", "")
 
         if api_key and not is_android:
             # Server with API key - use API key auth
@@ -1053,18 +1053,19 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Supports both API key auth and CIRIS proxy with JWT auth (Google ID token)
         second_api_key = os.environ.get("CIRIS_OPENAI_API_KEY_2", "")
         second_base_url = os.environ.get("CIRIS_OPENAI_API_BASE_2", "")
-        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN", "")
 
         # Check if secondary LLM is CIRIS proxy (requires JWT auth, not API key)
         is_ciris_proxy_secondary = "ciris.ai" in second_base_url
 
-        if second_api_key:
-            # Standard API key auth
-            await self._initialize_secondary_llm(config, second_api_key)
-        elif is_ciris_proxy_secondary and google_id_token:
-            # CIRIS proxy with JWT auth - use Google ID token as auth
+        if is_ciris_proxy_secondary and google_id_token:
+            # CIRIS proxy with JWT auth - always use fresh billing token
+            # (CIRIS_OPENAI_API_KEY_2 may contain a stale JWT from initial setup)
             logger.info("Secondary LLM using CIRIS proxy with JWT auth")
             await self._initialize_secondary_llm(config, google_id_token)
+        elif second_api_key:
+            # Standard API key auth (non-proxy)
+            await self._initialize_secondary_llm(config, second_api_key)
 
     async def _initialize_secondary_llm(self, config: Any, api_key: str) -> None:
         """Initialize optional secondary LLM service."""

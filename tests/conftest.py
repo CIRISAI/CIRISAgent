@@ -6,6 +6,7 @@ This file is automatically loaded by pytest and contains setup that applies to a
 
 # CRITICAL: Set import protection BEFORE any other imports
 import os
+import tempfile
 
 os.environ["CIRIS_IMPORT_MODE"] = "true"
 os.environ["CIRIS_MOCK_LLM"] = "true"
@@ -14,6 +15,21 @@ os.environ["CIRIS_MOCK_LLM"] = "true"
 # Tests should NEVER write to the main logs directory that containers use
 os.environ["CIRIS_LOG_DIR"] = "test_logs"
 os.environ["CIRIS_DATA_DIR"] = "test_data"
+
+# PERFORMANCE: Use tmpfs for all temp files to reduce disk I/O during tests
+# /dev/shm is a RAM-based tmpfs available on most Linux systems
+_TMPFS_DIR = "/dev/shm/ciris_tests"
+if os.path.isdir("/dev/shm"):
+    os.makedirs(_TMPFS_DIR, exist_ok=True)
+    os.environ["TMPDIR"] = _TMPFS_DIR
+    tempfile.tempdir = _TMPFS_DIR
+
+# PERFORMANCE: Disable network-dependent services in tests
+# This prevents NTP checks, billing API calls, etc.
+os.environ["CIRIS_DISABLE_NETWORK"] = "true"
+
+# NOTE: Network calls are disabled via CIRIS_IMPORT_MODE and CIRIS_MOCK_LLM
+# Code should check these flags and skip network operations entirely
 
 from pathlib import Path  # noqa: E402
 

@@ -61,7 +61,11 @@ class CIRISBillingProvider(CreditGateProtocol):
         """
         # Read from env as fallback if not passed directly
         self._api_key = api_key or os.environ.get("CIRIS_BILLING_API_KEY", "")
-        self._google_id_token = google_id_token or os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+        self._google_id_token = (
+            google_id_token
+            or os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+            or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+        )
         self._token_refresh_callback = token_refresh_callback
         # Use provided URL or get from central config
         self._base_url = (base_url or get_billing_url()).rstrip("/")
@@ -110,7 +114,12 @@ class CIRISBillingProvider(CreditGateProtocol):
                 logger.warning("[BILLING_TOKEN] Token refresh callback failed: %s", exc)
 
         # Check environment for updated token (set by auth route or ResourceMonitor after .env reload)
-        env_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get("GOOGLE_ID_TOKEN", "")
+        # Check Google token (Android), Apple token (iOS), and legacy GOOGLE_ID_TOKEN
+        env_token = (
+            os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+            or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+            or os.environ.get("GOOGLE_ID_TOKEN", "")
+        )
         if env_token and env_token != self._google_id_token:
             old_len = len(self._google_id_token) if self._google_id_token else 0
             new_len = len(env_token)
@@ -146,6 +155,13 @@ class CIRISBillingProvider(CreditGateProtocol):
         logger.info("Updated Google ID token for billing auth")
 
     async def start(self) -> None:
+        # Skip network client in test mode UNLESS a mock transport was explicitly provided
+        if self._transport is None and (
+            os.environ.get("CIRIS_IMPORT_MODE") == "true" or os.environ.get("CIRIS_MOCK_LLM") == "true"
+        ):
+            logger.info("[BILLING_PROVIDER] Skipped in test mode (no mock transport)")
+            return
+
         async with self._client_lock:
             if self._client is not None:
                 return
@@ -303,6 +319,12 @@ class CIRISBillingProvider(CreditGateProtocol):
         if not account.provider or not account.account_id:
             raise ValueError("Credit account must include provider and account_id")
 
+        # Return mock result in test mode (no network calls)
+        if self._transport is None and (
+            os.environ.get("CIRIS_IMPORT_MODE") == "true" or os.environ.get("CIRIS_MOCK_LLM") == "true"
+        ):
+            return CreditCheckResult(has_credit=True, credits_remaining=1000, free_uses_remaining=100)
+
         await self._ensure_started()
 
         cache_key = account.cache_key()
@@ -362,19 +384,29 @@ class CIRISBillingProvider(CreditGateProtocol):
     def _handle_check_success(self, response: httpx.Response, cache_key: str) -> CreditCheckResult:
         """Handle successful credit check response."""
         response_data = response.json()
-        has_credit = response_data.get("has_credit", False)
-        free_remaining = response_data.get("free_uses_remaining", 0)
-        credits_remaining = response_data.get("credits_remaining", 0)
+        free_remaining = response_data.get("free_uses_remaining", 0) or 0
+        credits_remaining = response_data.get("credits_remaining", 0) or 0
+        daily_free_remaining = response_data.get("daily_free_uses_remaining", 0) or 0
+
+        # Compute has_credit locally: user has credit if they have paid credits OR any free uses
+        # The billing API's has_credit field may not account for free uses correctly
+        has_credit = credits_remaining > 0 or free_remaining > 0 or daily_free_remaining > 0
+        response_data["has_credit"] = has_credit
 
         if has_credit:
             logger.info(
-                "[CREDIT_CHECK] ✓ HAS_CREDIT for %s: free=%s, paid=%s", cache_key, free_remaining, credits_remaining
+                "[CREDIT_CHECK] ✓ HAS_CREDIT for %s: free=%s, daily_free=%s, paid=%s",
+                cache_key,
+                free_remaining,
+                daily_free_remaining,
+                credits_remaining,
             )
         else:
             logger.warning(
-                "[CREDIT_CHECK] ✗ NO_CREDITS for %s: free=%s, paid=%s (exhausted)",
+                "[CREDIT_CHECK] ✗ NO_CREDITS for %s: free=%s, daily_free=%s, paid=%s (exhausted)",
                 cache_key,
                 free_remaining,
+                daily_free_remaining,
                 credits_remaining,
             )
 
@@ -421,6 +453,12 @@ class CIRISBillingProvider(CreditGateProtocol):
     ) -> CreditSpendResult:
         if request.amount_minor <= 0:
             raise ValueError("Spend amount must be positive")
+
+        # Return mock result in test mode (no network calls)
+        if self._transport is None and (
+            os.environ.get("CIRIS_IMPORT_MODE") == "true" or os.environ.get("CIRIS_MOCK_LLM") == "true"
+        ):
+            return CreditSpendResult(succeeded=True, balance_remaining=999)
 
         await self._ensure_started()
 

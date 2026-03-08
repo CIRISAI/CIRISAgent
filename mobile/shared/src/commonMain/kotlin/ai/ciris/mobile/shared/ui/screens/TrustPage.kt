@@ -109,6 +109,7 @@ fun TrustPage(
                             coroutineScope.launch {
                                 fetchVerifyStatus(
                                     apiClient = apiClient,
+                                    refresh = true,
                                     onSuccess = { verifyStatus = it; loading = false; error = null },
                                     onError = { error = it; loading = false }
                                 )
@@ -119,6 +120,7 @@ fun TrustPage(
                             coroutineScope.launch {
                                 fetchVerifyStatus(
                                     apiClient = apiClient,
+                                    refresh = true,
                                     onSuccess = { verifyStatus = it; loading = false; error = null },
                                     onError = { error = it; loading = false }
                                 )
@@ -194,12 +196,18 @@ fun TrustPage(
 
 private suspend fun fetchVerifyStatus(
     apiClient: CIRISApiClient,
+    refresh: Boolean = false,
     onSuccess: (VerifyStatusResponse) -> Unit,
     onError: (String) -> Unit
 ) {
     try {
+        if (refresh) {
+            // Trigger a fresh attestation run, then poll for the result
+            withContext(Dispatchers.IO) { apiClient.getVerifyStatus(refresh = true) }
+            // Wait for attestation to complete (typically 2-5s)
+            kotlinx.coroutines.delay(3000)
+        }
         val result = withContext(Dispatchers.IO) {
-            // Always use full mode - gets cached attestation from /v1/auth/attestation
             apiClient.getVerifyStatus()
         }
         onSuccess(result)

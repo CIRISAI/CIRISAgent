@@ -458,8 +458,11 @@ async def verify_app_attest(
         try:
             auth_service = _get_auth_service(request)
             auth_service.invalidate_attestation_cache()
-            # Fire-and-forget background re-attestation
-            asyncio.create_task(auth_service.run_startup_attestation())
+            # Background re-attestation - track task to prevent GC
+            task = asyncio.create_task(auth_service.run_startup_attestation())
+            if hasattr(auth_service, "_background_tasks"):
+                auth_service._background_tasks.add(task)
+                task.add_done_callback(auth_service._background_tasks.discard)
         except Exception as e:
             logger.warning(f"[app-attest] Failed to trigger re-attestation: {e}")
 

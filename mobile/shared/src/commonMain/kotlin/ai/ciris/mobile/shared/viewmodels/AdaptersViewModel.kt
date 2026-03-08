@@ -6,6 +6,7 @@ import ai.ciris.mobile.shared.models.ConfigSessionData
 import ai.ciris.mobile.shared.models.ConfigStepResultData
 import ai.ciris.mobile.shared.models.DiscoveredItemData
 import ai.ciris.mobile.shared.models.LoadableAdaptersData
+import ai.ciris.mobile.shared.models.SelectOptionData
 import ai.ciris.mobile.shared.ui.screens.AdapterItem
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -97,6 +98,19 @@ class AdaptersViewModel(
 
     private val _discoveryExecuted = MutableStateFlow(false)
     val discoveryExecuted: StateFlow<Boolean> = _discoveryExecuted.asStateFlow()
+
+    // Select step options
+    private val _selectOptions = MutableStateFlow<List<SelectOptionData>>(emptyList())
+    val selectOptions: StateFlow<List<SelectOptionData>> = _selectOptions.asStateFlow()
+
+    // OAuth state
+    private val _oauthUrl = MutableStateFlow<String?>(null)
+    val oauthUrl: StateFlow<String?> = _oauthUrl.asStateFlow()
+
+    private val _awaitingOAuthCallback = MutableStateFlow(false)
+    val awaitingOAuthCallback: StateFlow<Boolean> = _awaitingOAuthCallback.asStateFlow()
+
+    private var oauthPollJob: Job? = null
 
     // Polling job
     private var pollingJob: Job? = null
@@ -397,6 +411,24 @@ class AdaptersViewModel(
     }
 
     /**
+     * Auto-fetch options for a select step by executing with empty data.
+     */
+    private suspend fun fetchSelectOptionsInternal(session: ConfigSessionData) {
+        val method = "fetchSelectOptionsInternal"
+        try {
+            val result = apiClient.executeConfigurationStep(session.sessionId, emptyMap())
+            if (result.selectOptions.isNotEmpty()) {
+                logInfo(method, "Fetched ${result.selectOptions.size} select options")
+                _selectOptions.value = result.selectOptions
+            } else {
+                logInfo(method, "No select options returned")
+            }
+        } catch (e: Exception) {
+            logError(method, "Failed to fetch select options: ${e.message}")
+        }
+    }
+
+    /**
      * Select a discovered item and proceed to next step.
      */
     fun selectDiscoveredItem(item: DiscoveredItemData) {
@@ -457,6 +489,14 @@ class AdaptersViewModel(
             // Check if wizard is complete (advanced past all steps)
             if (updatedSession.currentStepIndex >= updatedSession.totalSteps) {
                 logInfo(method, "Wizard completed! (step ${updatedSession.currentStepIndex} >= totalSteps ${updatedSession.totalSteps})")
+                logInfo(method, "Calling completeAdapterConfiguration to apply config...")
+                try {
+                    val completeResult = apiClient.completeAdapterConfiguration(session.sessionId)
+                    logInfo(method, "Config applied: success=${completeResult.success}, message=${completeResult.message}")
+                } catch (e: Exception) {
+                    logError(method, "Failed to complete configuration: ${e.message}")
+                    _wizardError.value = "Failed to apply configuration: ${e.message}"
+                }
                 closeWizard()
                 fetchAdaptersInternal()
                 return
@@ -465,11 +505,18 @@ class AdaptersViewModel(
             _wizardSession.value = updatedSession
             _discoveredItems.value = emptyList()
             _discoveryExecuted.value = false
+            _selectOptions.value = emptyList()
 
             // Auto-execute if next step is also discovery
             if (updatedSession.currentStep?.stepType == "discovery") {
                 logInfo(method, "Next step is discovery, auto-executing...")
                 executeDiscoveryStepInternal(updatedSession)
+            }
+
+            // Auto-fetch options for select steps
+            if (updatedSession.currentStep?.stepType == "select") {
+                logInfo(method, "Next step is select, auto-fetching options...")
+                fetchSelectOptionsInternal(updatedSession)
             }
         } catch (e: Exception) {
             logError(method, "Failed to fetch session status: ${e.message}")
@@ -479,6 +526,12 @@ class AdaptersViewModel(
                 // Check if we've advanced past all steps (wizard complete)
                 if (result.nextStepIndex >= (session.totalSteps)) {
                     logInfo(method, "Wizard completed (fallback path): nextStepIndex ${result.nextStepIndex} >= totalSteps ${session.totalSteps}")
+                    try {
+                        val completeResult = apiClient.completeAdapterConfiguration(session.sessionId)
+                        logInfo(method, "Config applied (fallback): success=${completeResult.success}, message=${completeResult.message}")
+                    } catch (completeErr: Exception) {
+                        logError(method, "Failed to complete configuration (fallback): ${completeErr.message}")
+                    }
                     closeWizard()
                     try {
                         fetchAdaptersInternal()
@@ -530,7 +583,7 @@ class AdaptersViewModel(
     fun submitWizardStep(stepData: Map<String, String>) {
         val method = "submitWizardStep"
         val session = _wizardSession.value ?: return
-        logInfo(method, "Submitting step for session: ${session.sessionId}")
+        logInfo(method, "Submitting step for session: ${session.sessionId}, stepData=$stepData")
         viewModelScope.launch {
             _wizardLoading.value = true
             _wizardError.value = null
@@ -542,6 +595,174 @@ class AdaptersViewModel(
                 _wizardError.value = "Failed to submit step: ${e.message}"
             } finally {
                 _wizardLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Initiate the OAuth step — sends the step to backend, gets the OAuth URL,
+     * and starts polling for callback completion.
+     */
+    fun initiateOAuthStep() {
+        val method = "initiateOAuthStep"
+        val session = _wizardSession.value
+        if (session == null) {
+            logError(method, "No wizard session — cannot initiate OAuth")
+            return
+        }
+        logInfo(method, "=== OAUTH INITIATION START ===")
+        logInfo(method, "Session ID: ${session.sessionId}")
+        logInfo(method, "Current step index: ${session.currentStepIndex}")
+        logInfo(method, "Current step type: ${session.currentStep?.stepType}")
+        logInfo(method, "Current step title: ${session.currentStep?.title}")
+        viewModelScope.launch {
+            _wizardLoading.value = true
+            _wizardError.value = null
+            try {
+                val stepData = mapOf("callback_base_url" to "http://127.0.0.1:8080")
+                logInfo(method, "Sending step data: $stepData")
+                val result = apiClient.executeConfigurationStep(session.sessionId, stepData)
+                logInfo(method, "Step result: success=${result.success}, message=${result.message}")
+                logInfo(method, "  oauthUrl present: ${result.oauthUrl != null}")
+                logInfo(method, "  oauthUrl length: ${result.oauthUrl?.length ?: 0}")
+                logInfo(method, "  awaitingCallback: ${result.awaitingCallback}")
+                logInfo(method, "  nextStepIndex: ${result.nextStepIndex}")
+                logInfo(method, "  isComplete: ${result.isComplete}")
+
+                if (result.oauthUrl != null) {
+                    logInfo(method, "=== OAUTH URL RECEIVED ===")
+                    logInfo(method, "Full OAuth URL: ${result.oauthUrl}")
+                    logInfo(method, "Setting oauthUrl state and awaitingOAuthCallback=true")
+                    _oauthUrl.value = result.oauthUrl
+                    _awaitingOAuthCallback.value = true
+                    logInfo(method, "Starting OAuth callback polling")
+                    startOAuthPolling(session.sessionId)
+                } else {
+                    logError(method, "=== NO OAUTH URL IN RESPONSE ===")
+                    logError(method, "Result details: success=${result.success}, message=${result.message}")
+                    _wizardError.value = "Failed to get OAuth URL from server: ${result.message ?: "no details"}"
+                }
+            } catch (e: Exception) {
+                logException(method, e, "sessionId=${session.sessionId}")
+                _wizardError.value = "OAuth initiation failed: ${e.message}"
+            } finally {
+                _wizardLoading.value = false
+                logInfo(method, "=== OAUTH INITIATION END ===")
+            }
+        }
+    }
+
+    /**
+     * Poll session status until OAuth callback is received and step advances.
+     */
+    private fun startOAuthPolling(sessionId: String) {
+        val method = "startOAuthPolling"
+        oauthPollJob?.cancel()
+        oauthPollJob = viewModelScope.launch {
+            logInfo(method, "=== OAUTH POLLING START ===")
+            logInfo(method, "Polling session: $sessionId")
+            logInfo(method, "Current step index: ${_wizardSession.value?.currentStepIndex}")
+            var attempts = 0
+            val maxAttempts = 120 // 2 minutes at 1s intervals
+            while (isActive && attempts < maxAttempts && _awaitingOAuthCallback.value) {
+                delay(1000)
+                attempts++
+                try {
+                    val updated = apiClient.getConfigurationSessionStatus(sessionId)
+                    val currentSession = _wizardSession.value
+                    if (attempts <= 3 || attempts % 10 == 0) {
+                        logInfo(method, "Poll #$attempts: session status=${updated.status}, stepIndex=${updated.currentStepIndex} (was ${currentSession?.currentStepIndex}), stepType=${updated.currentStep?.stepType}")
+                    }
+                    // If the step index advanced, the callback was received
+                    if (currentSession != null && updated.currentStepIndex > currentSession.currentStepIndex) {
+                        logInfo(method, "=== OAUTH CALLBACK RECEIVED ===")
+                        logInfo(method, "Step advanced: ${currentSession.currentStepIndex} → ${updated.currentStepIndex}")
+                        logInfo(method, "New step type: ${updated.currentStep?.stepType}")
+                        logInfo(method, "New step title: ${updated.currentStep?.title}")
+                        _awaitingOAuthCallback.value = false
+                        _oauthUrl.value = null
+                        // Process the step advance through handleStepResult for auto-fetch
+                        onOAuthStepAdvanced(updated)
+                        return@launch
+                    }
+                } catch (e: Exception) {
+                    if (attempts <= 3 || attempts % 10 == 0) {
+                        logError(method, "Poll #$attempts failed: ${e::class.simpleName}: ${e.message}")
+                    }
+                }
+            }
+            if (_awaitingOAuthCallback.value) {
+                logError(method, "=== OAUTH POLLING TIMED OUT ===")
+                logError(method, "Timed out after $maxAttempts attempts ($maxAttempts seconds)")
+                _awaitingOAuthCallback.value = false
+                _wizardError.value = "OAuth authentication timed out. Please try again."
+            }
+        }
+    }
+
+    /**
+     * Called when OAuth polling detects step advancement.
+     * Updates session and triggers auto-fetch for next step (select options, discovery, etc.)
+     */
+    private suspend fun onOAuthStepAdvanced(updatedSession: ConfigSessionData) {
+        val method = "onOAuthStepAdvanced"
+        logInfo(method, "Processing step advance: step=${updatedSession.currentStepIndex}/${updatedSession.totalSteps}, type=${updatedSession.currentStep?.stepType}")
+
+        _wizardSession.value = updatedSession
+        _discoveredItems.value = emptyList()
+        _discoveryExecuted.value = false
+        _selectOptions.value = emptyList()
+
+        // Check if wizard is complete
+        if (updatedSession.currentStepIndex >= updatedSession.totalSteps) {
+            logInfo(method, "Wizard completed!")
+            try {
+                val completeResult = apiClient.completeAdapterConfiguration(updatedSession.sessionId)
+                logInfo(method, "Config applied: success=${completeResult.success}, message=${completeResult.message}")
+            } catch (e: Exception) {
+                logError(method, "Failed to complete configuration: ${e.message}")
+            }
+            closeWizard()
+            fetchAdaptersInternal()
+            return
+        }
+
+        // Auto-execute if next step is discovery
+        if (updatedSession.currentStep?.stepType == "discovery") {
+            logInfo(method, "Next step is discovery, auto-executing...")
+            executeDiscoveryStepInternal(updatedSession)
+        }
+
+        // Auto-fetch options for select steps
+        if (updatedSession.currentStep?.stepType == "select") {
+            logInfo(method, "Next step is select, auto-fetching options...")
+            fetchSelectOptionsInternal(updatedSession)
+        }
+    }
+
+    /**
+     * Check OAuth status once — call when app resumes from background.
+     * iOS suspends the polling coroutine when the browser opens (no debugger attached),
+     * so we need to re-check when the user returns.
+     */
+    fun checkOAuthOnResume() {
+        if (!_awaitingOAuthCallback.value) return
+        val session = _wizardSession.value ?: return
+        val method = "checkOAuthOnResume"
+        logInfo(method, "App resumed while awaiting OAuth, checking status...")
+        viewModelScope.launch {
+            try {
+                val updated = apiClient.getConfigurationSessionStatus(session.sessionId)
+                logInfo(method, "Session status: step=${updated.currentStepIndex} (was ${session.currentStepIndex}), type=${updated.currentStep?.stepType}")
+                if (updated.currentStepIndex > session.currentStepIndex) {
+                    logInfo(method, "OAuth completed while app was suspended!")
+                    _awaitingOAuthCallback.value = false
+                    _oauthUrl.value = null
+                    oauthPollJob?.cancel()
+                    onOAuthStepAdvanced(updated)
+                }
+            } catch (e: Exception) {
+                logError(method, "Resume check failed: ${e.message}")
             }
         }
     }
@@ -569,6 +790,10 @@ class AdaptersViewModel(
         _wizardError.value = null
         _discoveredItems.value = emptyList()
         _discoveryExecuted.value = false
+        _oauthUrl.value = null
+        _awaitingOAuthCallback.value = false
+        _selectOptions.value = emptyList()
+        oauthPollJob?.cancel()
     }
 
     /**

@@ -27,6 +27,18 @@ from ._common import RESPONSES_TOOL_BALANCE, RESPONSES_TOOL_BALANCE_ALL, RESPONS
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
+    """Sanitize user-controlled data for safe logging."""
+    if value is None:
+        return "<none>"
+    val_str = str(value)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", val_str)
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
+
 router = APIRouter(prefix="/api/tools", tags=["tools"])
 
 # Billing service URLs from central config
@@ -169,8 +181,12 @@ def _get_google_id_token(request: Request) -> Optional[str]:
     if token:
         return token
 
-    # Try environment (set after login)
+    # Try environment (set after login) - Google on Android, Apple on iOS
     token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN")
+    if token:
+        return token
+
+    token = os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN")
     if token:
         return token
 
@@ -488,8 +504,10 @@ async def verify_tool_purchase(
     # Validate tool name to prevent path injection
     _validate_tool_name(purchase.tool_name)
     logger.info(
-        f"[TOOL_PURCHASE] Verifying purchase for {purchase.tool_name}, "
-        f"product={purchase.product_id}, user={auth.user_id}"
+        "[TOOL_PURCHASE] Verifying purchase for tool=%s, product=%s, user=%s",
+        _sanitize_for_log(purchase.tool_name),
+        _sanitize_for_log(purchase.product_id),
+        _sanitize_for_log(auth.user_id),
     )
 
     google_token = _get_google_id_token(request)

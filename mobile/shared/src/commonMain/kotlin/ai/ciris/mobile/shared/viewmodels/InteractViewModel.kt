@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.viewmodels
 
+import ai.ciris.api.models.DocumentPayload
+import ai.ciris.api.models.ImagePayload
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.ReasoningEvent
 import ai.ciris.mobile.shared.api.ReasoningStreamClient
@@ -7,6 +9,9 @@ import ai.ciris.mobile.shared.auth.TokenManager
 import ai.ciris.mobile.shared.models.ChatMessage
 import ai.ciris.mobile.shared.models.MessageType
 import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.platform.PickedFile
+import ai.ciris.mobile.shared.platform.TestAutomation
+import ai.ciris.mobile.shared.platform.createEnvFileUpdater
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -192,6 +197,10 @@ class InteractViewModel(
     private val _trustStatus = MutableStateFlow(TrustStatus())
     val trustStatus: StateFlow<TrustStatus> = _trustStatus.asStateFlow()
 
+    // File attachments for current message
+    private val _attachedFiles = MutableStateFlow<List<PickedFile>>(emptyList())
+    val attachedFiles: StateFlow<List<PickedFile>> = _attachedFiles.asStateFlow()
+
     private var pollingJob: Job? = null
     private var statusJob: Job? = null
     private var healthJob: Job? = null
@@ -232,10 +241,62 @@ class InteractViewModel(
         startMessagePolling()
         startHealthPolling()
         startSseStream()
+        startFileInjectionObserver()
     }
 
     fun onInputTextChanged(text: String) {
         _inputText.value = text
+    }
+
+    /**
+     * Add a file attachment to the current message.
+     * Validates size and count limits before adding.
+     */
+    fun addAttachment(file: PickedFile) {
+        val method = "addAttachment"
+        val current = _attachedFiles.value
+        if (current.size >= PickedFile.MAX_ATTACHMENTS) {
+            logWarn(method, "Max attachments (${PickedFile.MAX_ATTACHMENTS}) reached, ignoring ${file.name}")
+            return
+        }
+        if (file.sizeBytes > PickedFile.MAX_FILE_SIZE_BYTES) {
+            logWarn(method, "File ${file.name} exceeds max size (${file.sizeBytes} > ${PickedFile.MAX_FILE_SIZE_BYTES})")
+            return
+        }
+        logInfo(method, "Adding attachment: ${file.name} (${file.mediaType}, ${file.sizeBytes} bytes)")
+        _attachedFiles.value = current + file
+    }
+
+    fun removeAttachment(index: Int) {
+        val current = _attachedFiles.value
+        if (index in current.indices) {
+            logInfo("removeAttachment", "Removing attachment at index $index: ${current[index].name}")
+            _attachedFiles.value = current.filterIndexed { i, _ -> i != index }
+        }
+    }
+
+    fun clearAttachments() {
+        _attachedFiles.value = emptyList()
+    }
+
+    /**
+     * Observe test automation file injection requests.
+     * When the test server injects a file, add it as an attachment.
+     */
+    private fun startFileInjectionObserver() {
+        if (!TestAutomation.isEnabled()) return
+        val method = "startFileInjectionObserver"
+        logInfo(method, "Starting file injection observer for test automation")
+
+        viewModelScope.launch {
+            TestAutomation.fileInjectionRequests.collect { file ->
+                if (file != null) {
+                    logInfo(method, "Test automation injected file: ${file.name} (${file.mediaType})")
+                    addAttachment(file)
+                    TestAutomation.clearFileInjectionRequest()
+                }
+            }
+        }
     }
 
     /**
@@ -244,9 +305,10 @@ class InteractViewModel(
     fun sendMessage() {
         val method = "sendMessage"
         val text = _inputText.value.trim()
+        val files = _attachedFiles.value
 
-        if (text.isEmpty()) {
-            logDebug(method, "Ignoring empty message")
+        if (text.isEmpty() && files.isEmpty()) {
+            logDebug(method, "Ignoring empty message with no attachments")
             return
         }
         if (_isSending.value) {
@@ -254,25 +316,52 @@ class InteractViewModel(
             return
         }
 
-        logInfo(method, "Sending message: '${text.take(50)}...'")
+        logInfo(method, "Sending message: '${text.take(50)}...' with ${files.size} attachments")
 
         viewModelScope.launch {
             try {
                 _isSending.value = true
                 _processingStatus.value = "Sending message..."
                 _inputText.value = ""
+                _attachedFiles.value = emptyList()
+
+                // Build attachment payloads
+                val imagePayloads = files.filter { it.isImage }.map { file ->
+                    ImagePayload(
+                        data = file.dataBase64,
+                        mediaType = file.mediaType,
+                        filename = file.name
+                    )
+                }.ifEmpty { null }
+
+                val documentPayloads = files.filter { it.isDocument }.map { file ->
+                    DocumentPayload(
+                        data = file.dataBase64,
+                        mediaType = file.mediaType,
+                        filename = file.name
+                    )
+                }.ifEmpty { null }
 
                 // Add user message to chat immediately
+                val displayText = if (text.isNotEmpty()) text else "Sent ${files.size} file${if (files.size > 1) "s" else ""}"
                 val userMessage = ChatMessage(
                     id = generateMessageId(),
-                    text = text,
+                    text = displayText,
                     type = MessageType.USER,
-                    timestamp = Clock.System.now()
+                    timestamp = Clock.System.now(),
+                    attachmentCount = files.size,
+                    attachmentNames = files.map { it.name },
+                    hasImageAttachments = files.any { it.isImage },
+                    hasDocumentAttachments = files.any { it.isDocument }
                 )
                 _messages.value = (_messages.value + userMessage).takeLast(50)
 
-                logDebug(method, "Calling apiClient.sendMessage")
-                val response = apiClient.sendMessage(text)
+                logDebug(method, "Calling apiClient.sendMessage with ${imagePayloads?.size ?: 0} images, ${documentPayloads?.size ?: 0} documents")
+                val response = apiClient.sendMessage(
+                    message = if (text.isNotEmpty()) text else "Please review the attached file(s).",
+                    images = imagePayloads,
+                    documents = documentPayloads
+                )
                 logInfo(method, "Message sent successfully: messageId=${response.message_id}")
 
                 // Add agent response to chat
@@ -358,20 +447,35 @@ class InteractViewModel(
 
     /**
      * Poll for agent status
+     * Fast polls (200ms) until cognitive_state is available, then switches to normal interval
      */
     private fun startStatusPolling() {
         val method = "startStatusPolling"
-        logInfo(method, "Starting status polling (interval=${STATUS_POLL_INTERVAL_MS}ms)")
+        logInfo(method, "Starting status polling (fast until agent ready)")
 
         statusJob = viewModelScope.launch {
             var pollCount = 0
+            var agentReady = false  // True once we get a real cognitive_state
+            val FAST_POLL_MS = 200L
+
             while (isActive) {
                 pollCount++
                 try {
                     val status = apiClient.getSystemStatus()
                     val wasConnected = _isConnected.value
                     _isConnected.value = status.status == "healthy"
-                    _agentStatus.value = status.cognitive_state ?: "Unknown"
+
+                    // Check if we got a real cognitive state
+                    val cognitiveState = status.cognitive_state
+                    if (cognitiveState != null) {
+                        _agentStatus.value = cognitiveState.uppercase()
+                        if (!agentReady) {
+                            agentReady = true
+                            logInfo(method, "Agent ready with state: ${_agentStatus.value}")
+                        }
+                    } else {
+                        _agentStatus.value = "Starting..."
+                    }
 
                     if (_isConnected.value != wasConnected) {
                         logInfo(method, "Connection state changed: ${wasConnected} -> ${_isConnected.value}")
@@ -386,25 +490,37 @@ class InteractViewModel(
                     _isConnected.value = false
                     _agentStatus.value = "Disconnected"
                 }
-                delay(STATUS_POLL_INTERVAL_MS)
+
+                // Fast poll until agent ready, then normal interval
+                delay(if (agentReady) STATUS_POLL_INTERVAL_MS else FAST_POLL_MS)
             }
         }
     }
 
     /**
      * Poll for LLM health, credits, and trust status (less frequent)
+     * Fast polls (2s) until LLM health is loaded, then switches to normal interval.
+     * Note: Using 2s to avoid rate limiting (429) from the /setup/config endpoint.
      */
     private fun startHealthPolling() {
         val method = "startHealthPolling"
-        logInfo(method, "Starting health polling (interval=${HEALTH_POLL_INTERVAL_MS}ms)")
+        logInfo(method, "Starting health polling (fast until LLM ready)")
 
         healthJob = viewModelScope.launch {
-            // Initial fetch on startup
-            fetchHealthData()
+            var llmReady = false  // True once LLM health is loaded successfully
+            val FAST_HEALTH_POLL_MS = 2000L  // 2 seconds - avoid rate limiting
 
             while (isActive) {
-                delay(HEALTH_POLL_INTERVAL_MS)
                 fetchHealthData()
+
+                // Check if LLM health was loaded (provider is not "unknown" anymore)
+                if (!llmReady && _llmHealth.value.provider != "unknown") {
+                    llmReady = true
+                    logInfo(method, "LLM health ready: provider=${_llmHealth.value.provider}")
+                }
+
+                // Fast poll until LLM ready, then normal interval
+                delay(if (llmReady) HEALTH_POLL_INTERVAL_MS else FAST_HEALTH_POLL_MS)
             }
         }
 
@@ -484,6 +600,8 @@ class InteractViewModel(
         val method = "fetchHealthData"
         try {
             // Fetch LLM config for health status
+            // First try API, fall back to local .env file if API fails (e.g., 401)
+            var configLoaded = false
             try {
                 val config = apiClient.getLlmConfig()
                 _llmHealth.value = LlmHealthStatus(
@@ -492,7 +610,8 @@ class InteractViewModel(
                     model = config.model,
                     isCirisProxy = config.isCirisProxy
                 )
-                logDebug(method, "LLM health: provider=${config.provider}, isCirisProxy=${config.isCirisProxy}")
+                logDebug(method, "LLM health from API: provider=${config.provider}, isCirisProxy=${config.isCirisProxy}")
+                configLoaded = true
 
                 // Only fetch credits if using CIRIS proxy
                 if (config.isCirisProxy) {
@@ -511,7 +630,25 @@ class InteractViewModel(
                     }
                 }
             } catch (e: Exception) {
-                logWarn(method, "Failed to fetch LLM config: ${e.message}")
+                logWarn(method, "Failed to fetch LLM config from API: ${e.message}")
+            }
+
+            // Fallback: Read from local .env file if API failed
+            if (!configLoaded && _llmHealth.value.provider == "unknown") {
+                try {
+                    val envConfig = createEnvFileUpdater().readLlmConfig()
+                    if (envConfig != null) {
+                        _llmHealth.value = LlmHealthStatus(
+                            provider = envConfig.provider,
+                            isHealthy = envConfig.apiKeySet || envConfig.isCirisProxy,
+                            model = envConfig.model ?: "unknown",
+                            isCirisProxy = envConfig.isCirisProxy
+                        )
+                        logInfo(method, "LLM health from .env fallback: provider=${envConfig.provider}, isCirisProxy=${envConfig.isCirisProxy}")
+                    }
+                } catch (e: Exception) {
+                    logWarn(method, "Failed to read LLM config from .env: ${e.message}")
+                }
             }
 
             // Fetch trust status (uses cached attestation from auth service)

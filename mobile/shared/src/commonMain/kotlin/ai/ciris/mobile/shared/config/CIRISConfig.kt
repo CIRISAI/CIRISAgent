@@ -15,32 +15,30 @@ object CIRISConfig {
 
     /**
      * Available service regions.
-     * - PRIMARY: Americas, Oceania
-     * - SECONDARY: Europe, Africa, Asia
      */
     enum class Region {
-        PRIMARY,    // ciris-services-1.ai
-        SECONDARY   // ciris-services-2.ai
+        NA,   // North America - ciris-services-1.ai
+        EU    // Europe - ciris-services-eu-1.com
     }
 
     /**
      * Current active region. Change this to switch all services.
      * In the future, this could be auto-selected based on latency.
      */
-    var activeRegion: Region = Region.PRIMARY
+    var activeRegion: Region = Region.NA
 
     // ==================== BILLING API ====================
 
-    private const val BILLING_HOST_PRIMARY = "billing1.ciris-services-1.ai"
-    private const val BILLING_HOST_SECONDARY = "billing1.ciris-services-2.ai"
+    private const val BILLING_HOST_NA = "billing1.ciris-services-1.ai"
+    private const val BILLING_HOST_EU = "billing1.ciris-services-2.ai"
 
     /**
      * Get the billing API base URL for the active region.
      */
     fun getBillingApiUrl(): String {
         val host = when (activeRegion) {
-            Region.PRIMARY -> BILLING_HOST_PRIMARY
-            Region.SECONDARY -> BILLING_HOST_SECONDARY
+            Region.NA -> BILLING_HOST_NA
+            Region.EU -> BILLING_HOST_EU
         }
         return "https://$host"
     }
@@ -50,22 +48,34 @@ object CIRISConfig {
      */
     fun getBillingApiUrl(region: Region): String {
         val host = when (region) {
-            Region.PRIMARY -> BILLING_HOST_PRIMARY
-            Region.SECONDARY -> BILLING_HOST_SECONDARY
+            Region.NA -> BILLING_HOST_NA
+            Region.EU -> BILLING_HOST_EU
         }
         return "https://$host"
     }
 
     // ==================== LLM PROXY ====================
 
-    private const val LLM_PROXY_HOST_PRIMARY = "proxy1.ciris-services-1.ai"
-    private const val LLM_PROXY_HOST_SECONDARY = "proxy1.ciris-services-2.ai"
+    /**
+     * Max proxy instance number per region.
+     * Currently only llm01 exists, but will scale to llm00-llm05+ per region.
+     */
+    const val MAX_LLM_PROXY_INSTANCE = 1
+
+    /**
+     * LLM proxy domain suffixes by region.
+     */
+    const val LLM_PROXY_DOMAIN_NA = "ciris-services-1.ai"       // North America (Vultr)
+    const val LLM_PROXY_DOMAIN_EU = "ciris-services-eu-1.com"   // Europe (Hetzner)
+
+    private const val LLM_PROXY_HOST_NA = "llm01.$LLM_PROXY_DOMAIN_NA"
+    private const val LLM_PROXY_HOST_EU = "llm01.$LLM_PROXY_DOMAIN_EU"
 
     /**
      * LLM Proxy URL constants for setup wizard.
      */
-    const val CIRIS_LLM_PROXY_URL = "https://proxy1.ciris-services-1.ai/v1"
-    const val CIRIS_LLM_PROXY_URL_EU = "https://proxy1.ciris-services-2.ai/v1"
+    const val CIRIS_LLM_PROXY_URL = "https://$LLM_PROXY_HOST_NA/v1"
+    const val CIRIS_LLM_PROXY_URL_EU = "https://$LLM_PROXY_HOST_EU/v1"
 
     /**
      * Get the LLM proxy base URL for the active region.
@@ -73,8 +83,8 @@ object CIRISConfig {
      */
     fun getLLMProxyUrl(): String {
         val host = when (activeRegion) {
-            Region.PRIMARY -> LLM_PROXY_HOST_PRIMARY
-            Region.SECONDARY -> LLM_PROXY_HOST_SECONDARY
+            Region.NA -> LLM_PROXY_HOST_NA
+            Region.EU -> LLM_PROXY_HOST_EU
         }
         return "https://$host/v1"
     }
@@ -84,24 +94,24 @@ object CIRISConfig {
      */
     fun getLLMProxyUrl(region: Region): String {
         val host = when (region) {
-            Region.PRIMARY -> LLM_PROXY_HOST_PRIMARY
-            Region.SECONDARY -> LLM_PROXY_HOST_SECONDARY
+            Region.NA -> LLM_PROXY_HOST_NA
+            Region.EU -> LLM_PROXY_HOST_EU
         }
         return "https://$host/v1"
     }
 
     // ==================== AGENTS API ====================
 
-    private const val AGENTS_HOST_PRIMARY = "agents.ciris-services-1.ai"
-    private const val AGENTS_HOST_SECONDARY = "agents.ciris-services-2.ai"
+    private const val AGENTS_HOST_NA = "agents.ciris-services-1.ai"
+    private const val AGENTS_HOST_EU = "agents.ciris-services-2.ai"
 
     /**
      * Get the agents API base URL for the active region.
      */
     fun getAgentsApiUrl(): String {
         val host = when (activeRegion) {
-            Region.PRIMARY -> AGENTS_HOST_PRIMARY
-            Region.SECONDARY -> AGENTS_HOST_SECONDARY
+            Region.NA -> AGENTS_HOST_NA
+            Region.EU -> AGENTS_HOST_EU
         }
         return "https://$host"
     }
@@ -146,12 +156,6 @@ object CIRISConfig {
     const val LEGACY_BILLING_URL = "https://billing.ciris.ai"
 
     /**
-     * Legacy LLM proxy endpoint (deprecated - use getLLMProxyUrl()).
-     */
-    @Deprecated("Use getLLMProxyUrl() instead", ReplaceWith("getLLMProxyUrl()"))
-    const val LEGACY_LLM_PROXY_URL = "https://llm.ciris.ai"
-
-    /**
      * Legacy agents endpoint (deprecated - use getAgentsApiUrl()).
      */
     @Deprecated("Use getAgentsApiUrl() instead", ReplaceWith("getAgentsApiUrl()"))
@@ -163,25 +167,38 @@ object CIRISConfig {
      * All LLM proxy hostnames (for detecting CIRIS proxy mode in .env files).
      */
     val LLM_PROXY_HOSTNAMES = listOf(
-        LLM_PROXY_HOST_PRIMARY,
-        LLM_PROXY_HOST_SECONDARY,
-        "llm.ciris.ai",      // Legacy
-        "api.ciris.ai"       // Legacy
+        LLM_PROXY_HOST_NA,
+        LLM_PROXY_HOST_EU
     )
 
     /**
+     * All LLM proxy domain suffixes (for regex-based detection).
+     */
+    val LLM_PROXY_DOMAINS = listOf(
+        LLM_PROXY_DOMAIN_NA,
+        LLM_PROXY_DOMAIN_EU
+    )
+
+    /**
+     * Regex pattern for matching any CIRIS LLM proxy (llm00-llmXX).
+     * Matches: llm01.ciris-services-1.ai, llm05.ciris-services-eu-1.com, etc.
+     */
+    val LLM_PROXY_PATTERN = Regex("""llm\d+\.(ciris-services-1\.ai|ciris-services-eu-1\.com)""")
+
+    /**
      * Check if a URL is a CIRIS LLM proxy URL.
+     * Uses pattern matching to support future scaling (llm00-llm05+).
      */
     fun isCirisProxyUrl(url: String): Boolean {
-        return LLM_PROXY_HOSTNAMES.any { url.contains(it) }
+        return LLM_PROXY_PATTERN.containsMatchIn(url)
     }
 
     /**
      * All billing hostnames (for URL detection).
      */
     val BILLING_HOSTNAMES = listOf(
-        BILLING_HOST_PRIMARY,
-        BILLING_HOST_SECONDARY,
+        BILLING_HOST_NA,
+        BILLING_HOST_EU,
         "billing.ciris.ai"   // Legacy
     )
 
@@ -198,11 +215,17 @@ object CIRISConfig {
      * Legacy URL to new infrastructure URL mappings.
      */
     private val LEGACY_URL_MIGRATIONS = mapOf(
-        // LLM Proxy migrations
-        "https://llm.ciris.ai/v1" to "https://proxy1.ciris-services-1.ai/v1",
-        "https://llm.ciris.ai" to "https://proxy1.ciris-services-1.ai/v1",
-        "https://api.ciris.ai/v1" to "https://proxy1.ciris-services-1.ai/v1",
-        "https://api.ciris.ai" to "https://proxy1.ciris-services-1.ai/v1",
+        // LLM Proxy migrations to llm01.ciris-services-*
+        "https://llm.ciris.ai/v1" to "https://llm01.ciris-services-1.ai/v1",
+        "https://llm.ciris.ai" to "https://llm01.ciris-services-1.ai/v1",
+        "https://llm-eu.ciris.ai/v1" to "https://llm01.ciris-services-eu-1.com/v1",
+        "https://llm-eu.ciris.ai" to "https://llm01.ciris-services-eu-1.com/v1",
+        "https://api.ciris.ai/v1" to "https://llm01.ciris-services-1.ai/v1",
+        "https://api.ciris.ai" to "https://llm01.ciris-services-1.ai/v1",
+        "https://proxy1.ciris-services-1.ai/v1" to "https://llm01.ciris-services-1.ai/v1",
+        "https://proxy1.ciris-services-1.ai" to "https://llm01.ciris-services-1.ai/v1",
+        "https://proxy1.ciris-services-2.ai/v1" to "https://llm01.ciris-services-eu-1.com/v1",
+        "https://proxy1.ciris-services-2.ai" to "https://llm01.ciris-services-eu-1.com/v1",
         // Billing migrations
         "https://billing.ciris.ai" to "https://billing1.ciris-services-1.ai"
     )

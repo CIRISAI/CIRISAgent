@@ -5,6 +5,7 @@ import ai.ciris.mobile.shared.models.ConfigSessionData
 import ai.ciris.mobile.shared.models.DiscoveredItemData
 import ai.ciris.mobile.shared.models.LoadableAdapterData
 import ai.ciris.mobile.shared.models.LoadableAdaptersData
+import ai.ciris.mobile.shared.models.SelectOptionData
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.clickable
@@ -46,12 +47,17 @@ fun AdapterWizardDialog(
     error: String?,
     discoveredItems: List<DiscoveredItemData> = emptyList(),
     discoveryExecuted: Boolean = false,
+    oauthUrl: String? = null,
+    awaitingOAuthCallback: Boolean = false,
+    selectOptions: List<SelectOptionData> = emptyList(),
     onSelectType: (String) -> Unit,
     onLoadDirectly: (String) -> Unit,
     onSubmitStep: (Map<String, String>) -> Unit,
     onSelectDiscoveredItem: (DiscoveredItemData) -> Unit = {},
     onSubmitManualUrl: (String) -> Unit = {},
     onRetryDiscovery: () -> Unit = {},
+    onInitiateOAuth: () -> Unit = {},
+    onCheckOAuthStatus: () -> Unit = {},
     onBack: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -138,10 +144,15 @@ fun AdapterWizardDialog(
                                 discoveredItems = discoveredItems,
                                 discoveryExecuted = discoveryExecuted,
                                 isLoading = isLoading,
+                                oauthUrl = oauthUrl,
+                                awaitingOAuthCallback = awaitingOAuthCallback,
+                                selectOptions = selectOptions,
                                 onSubmit = onSubmitStep,
                                 onSelectDiscoveredItem = onSelectDiscoveredItem,
                                 onSubmitManualUrl = onSubmitManualUrl,
-                                onRetryDiscovery = onRetryDiscovery
+                                onRetryDiscovery = onRetryDiscovery,
+                                onInitiateOAuth = onInitiateOAuth,
+                                onCheckOAuthStatus = onCheckOAuthStatus
                             )
                         }
                         loadableAdapters != null -> {
@@ -337,10 +348,15 @@ private fun WizardStepContent(
     discoveredItems: List<DiscoveredItemData>,
     discoveryExecuted: Boolean,
     isLoading: Boolean,
+    oauthUrl: String? = null,
+    awaitingOAuthCallback: Boolean = false,
+    selectOptions: List<SelectOptionData> = emptyList(),
     onSubmit: (Map<String, String>) -> Unit,
     onSelectDiscoveredItem: (DiscoveredItemData) -> Unit,
     onSubmitManualUrl: (String) -> Unit,
-    onRetryDiscovery: () -> Unit
+    onRetryDiscovery: () -> Unit,
+    onInitiateOAuth: () -> Unit = {},
+    onCheckOAuthStatus: () -> Unit = {}
 ) {
     val step = session.currentStep
     val fieldValues = remember(session.currentStepIndex) { mutableStateMapOf<String, String>() }
@@ -397,6 +413,15 @@ private fun WizardStepContent(
                 }
             }
 
+            // Log the step type being rendered
+            LaunchedEffect(step.stepType, session.currentStepIndex) {
+                ai.ciris.mobile.shared.platform.PlatformLogger.i(
+                    "WizardStepContent",
+                    "=== RENDERING STEP === type='${step.stepType}', index=${session.currentStepIndex}, " +
+                    "title='${step.title}', fields=${step.fields.size}, required=${step.required}"
+                )
+            }
+
             // Handle different step types
             when (step.stepType) {
                 "discovery" -> {
@@ -412,37 +437,75 @@ private fun WizardStepContent(
                         onRetryDiscovery = onRetryDiscovery
                     )
                 }
-                else -> {
-                    // Standard input step - show fields
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(step.fields) { field ->
-                            ConfigField(
-                                field = field,
-                                value = fieldValues[field.name] ?: field.defaultValue ?: "",
-                                onValueChange = { fieldValues[field.name] = it }
-                            )
+                "oauth", "device_auth" -> {
+                    // OAuth / device auth step
+                    OAuthStepContent(
+                        oauthUrl = oauthUrl,
+                        awaitingCallback = awaitingOAuthCallback,
+                        isLoading = isLoading,
+                        onInitiateOAuth = onInitiateOAuth,
+                        onCheckOAuthStatus = onCheckOAuthStatus
+                    )
+                }
+                "select" -> {
+                    // Select step - render options as checkboxes
+                    SelectStepContent(
+                        step = step,
+                        selectOptions = selectOptions,
+                        fieldValues = fieldValues,
+                        isLastStep = session.currentStepIndex == session.totalSteps - 1,
+                        onSubmit = onSubmit
+                    )
+                }
+                "confirm" -> {
+                    // Confirm step - show collected config summary
+                    if (session.collectedConfig.isNotEmpty()) {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(session.collectedConfig.entries.toList()) { (key, value) ->
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = key.replace("_", " ")
+                                            .replaceFirstChar { it.uppercaseChar() },
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = if (key.contains("token", ignoreCase = true) ||
+                                                   key.contains("secret", ignoreCase = true))
+                                            "****" else value.take(200),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
                         }
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
                     }
-
-                    // Submit button
                     Button(
-                        onClick = { onSubmit(fieldValues.toMap()) },
+                        onClick = { onSubmit(emptyMap()) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testableClickable(
-                                if (session.currentStepIndex == session.totalSteps - 1) "btn_wizard_complete" else "btn_wizard_next"
-                            ) { onSubmit(fieldValues.toMap()) },
-                        enabled = step.fields.filter { it.required }.all {
-                            (fieldValues[it.name] ?: it.defaultValue)?.isNotBlank() == true
-                        }
+                            .testableClickable("btn_wizard_confirm") { onSubmit(emptyMap()) },
+                        enabled = !isLoading
                     ) {
-                        Text(
-                            if (session.currentStepIndex == session.totalSteps - 1) "Complete" else "Next"
-                        )
+                        Text("Confirm & Apply")
                     }
+                }
+                else -> {
+                    // Standard input step - show fields
+                    InputStepContent(
+                        step = step,
+                        fieldValues = fieldValues,
+                        isLastStep = session.currentStepIndex == session.totalSteps - 1,
+                        onSubmit = onSubmit
+                    )
                 }
             }
         } else {
@@ -657,5 +720,251 @@ private fun ConfigField(
             },
             supportingText = field.helpText?.let { { Text(it) } }
         )
+    }
+}
+
+/**
+ * OAuth step content — shows "Sign In" button, then "Waiting for authentication..." while polling.
+ */
+@Composable
+private fun OAuthStepContent(
+    oauthUrl: String?,
+    awaitingCallback: Boolean,
+    isLoading: Boolean,
+    onInitiateOAuth: () -> Unit,
+    onCheckOAuthStatus: () -> Unit = {}
+) {
+    // When awaiting callback, periodically re-check status.
+    // This handles iOS app suspension (no debugger = coroutines frozen in background).
+    if (awaitingCallback) {
+        LaunchedEffect(Unit) {
+            while (true) {
+                kotlinx.coroutines.delay(2000)
+                onCheckOAuthStatus()
+            }
+        }
+    }
+
+    // Log state on every recomposition
+    LaunchedEffect(oauthUrl, awaitingCallback, isLoading) {
+        ai.ciris.mobile.shared.platform.PlatformLogger.i(
+            "OAuthStepContent",
+            "[RENDER] oauthUrl=${if (oauthUrl != null) "${oauthUrl.take(80)}..." else "null"}, " +
+            "awaitingCallback=$awaitingCallback, isLoading=$isLoading"
+        )
+    }
+
+    // If we have an OAuth URL, open it automatically
+    if (oauthUrl != null) {
+        LaunchedEffect(oauthUrl) {
+            ai.ciris.mobile.shared.platform.PlatformLogger.i(
+                "OAuthStepContent",
+                "=== OPENING BROWSER ==="
+            )
+            ai.ciris.mobile.shared.platform.PlatformLogger.i(
+                "OAuthStepContent",
+                "Full URL: $oauthUrl"
+            )
+            ai.ciris.mobile.shared.platform.openUrlInBrowser(oauthUrl)
+            ai.ciris.mobile.shared.platform.PlatformLogger.i(
+                "OAuthStepContent",
+                "openUrlInBrowser() returned"
+            )
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (awaitingCallback) {
+            CircularProgressIndicator()
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Waiting for authentication...",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Complete sign-in in your browser, then return here.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            // Show the URL for debugging
+            if (oauthUrl != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "If browser didn't open, tap below:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextButton(
+                    onClick = {
+                        ai.ciris.mobile.shared.platform.PlatformLogger.i(
+                            "OAuthStepContent",
+                            "Manual browser open tapped: $oauthUrl"
+                        )
+                        ai.ciris.mobile.shared.platform.openUrlInBrowser(oauthUrl)
+                    }
+                ) {
+                    Text("Open Browser", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        } else {
+            Text(
+                text = "Tap below to sign in via your browser.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    ai.ciris.mobile.shared.platform.PlatformLogger.i(
+                        "OAuthStepContent",
+                        "Sign In button tapped — calling onInitiateOAuth()"
+                    )
+                    onInitiateOAuth()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testableClickable("btn_oauth_sign_in") { onInitiateOAuth() },
+                enabled = !isLoading
+            ) {
+                Text("Sign In")
+            }
+        }
+    }
+}
+
+/**
+ * Select step content — renders fields (typically checkboxes/toggles) and a Next button.
+ */
+@Composable
+private fun SelectStepContent(
+    step: ai.ciris.mobile.shared.models.ConfigStepData,
+    selectOptions: List<SelectOptionData>,
+    fieldValues: MutableMap<String, String>,
+    isLastStep: Boolean,
+    onSubmit: (Map<String, String>) -> Unit
+) {
+    // Initialize defaults on first render
+    LaunchedEffect(selectOptions) {
+        for (option in selectOptions) {
+            if (!fieldValues.containsKey(option.id)) {
+                fieldValues[option.id] = option.defaultEnabled.toString()
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        if (selectOptions.isEmpty()) {
+            // Options still loading
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(selectOptions) { option ->
+                    val checked = (fieldValues[option.id] ?: option.defaultEnabled.toString()).toBooleanStrictOrNull() ?: true
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { fieldValues[option.id] = (!checked).toString() }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = { fieldValues[option.id] = it.toString() }
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = option.label,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            option.description?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Button(
+            onClick = {
+                // Backend expects {"selection": ["id1", "id2", ...]} for select steps
+                val selectedIds = fieldValues.filter { it.value == "true" }.keys.toList()
+                onSubmit(mapOf("selection" to selectedIds.joinToString(",")))
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testableClickable(if (isLastStep) "btn_wizard_complete" else "btn_wizard_next") {
+                    val selectedIds = fieldValues.filter { it.value == "true" }.keys.toList()
+                    onSubmit(mapOf("selection" to selectedIds.joinToString(",")))
+                },
+            enabled = selectOptions.isNotEmpty()
+        ) {
+            Text(if (isLastStep) "Complete" else "Next")
+        }
+    }
+}
+
+/**
+ * Input step content — standard text fields with a submit button.
+ */
+@Composable
+private fun InputStepContent(
+    step: ai.ciris.mobile.shared.models.ConfigStepData,
+    fieldValues: MutableMap<String, String>,
+    isLastStep: Boolean,
+    onSubmit: (Map<String, String>) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(step.fields) { field ->
+                ConfigField(
+                    field = field,
+                    value = fieldValues[field.name] ?: field.defaultValue ?: "",
+                    onValueChange = { fieldValues[field.name] = it }
+                )
+            }
+        }
+
+        Button(
+            onClick = { onSubmit(fieldValues.toMap()) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testableClickable(
+                    if (isLastStep) "btn_wizard_complete" else "btn_wizard_next"
+                ) { onSubmit(fieldValues.toMap()) },
+            enabled = step.fields.filter { it.required }.all {
+                (fieldValues[it.name] ?: it.defaultValue)?.isNotBlank() == true
+            }
+        ) {
+            Text(if (isLastStep) "Complete" else "Next")
+        }
     }
 }

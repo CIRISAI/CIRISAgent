@@ -59,14 +59,14 @@
     "proxy_url": {
       "type": "string",
       "env": "CIRIS_PROXY_URL",
-      "default": "https://proxy1.ciris-services-1.ai",
+      "default": "https://llm01.ciris-services-1.ai",
       "description": "Primary CIRIS proxy URL for tool execution"
     },
     "proxy_fallback_url": {
       "type": "string",
       "env": "CIRIS_PROXY_FALLBACK_URL",
-      "default": "https://proxy1.ciris-services-2.ai",
-      "description": "Fallback CIRIS proxy URL"
+      "default": "https://llm01.ciris-services-eu-1.com",
+      "description": "Fallback CIRIS proxy URL (EU)"
     },
     "billing_url": {
       "type": "string",

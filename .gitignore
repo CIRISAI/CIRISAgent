@@ -134,3 +134,20 @@ ciris_engine/desktop_app/*.jar
 # Test artifacts
 test_data/
 ~/
+
+# Mypy cache
+.mypy_cache/
+
+# Temporary GUI builds
+cirisgui_temp/
+
+# iOS web build artifacts
+ios/.web-build/
+ios/CirisiOS/src/ios_gui_static/
+ios/ios_gui_static/
+
+# iOS crash logs
+*.ips
+
+# Mobile temp files
+mobile/iosApp/zi*

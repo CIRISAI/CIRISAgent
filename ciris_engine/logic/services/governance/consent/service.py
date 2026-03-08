@@ -13,6 +13,7 @@ REFACTORED: Now uses modular architecture with separate modules for:
 """
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -48,6 +49,17 @@ from .metrics import ConsentMetricsCollector
 from .partnership import PartnershipManager
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
+    """Sanitize user-controlled data for safe logging."""
+    if value is None:
+        return "<none>"
+    val_str = str(value)
+    sanitized = re.sub(r"[\r\n\t\x00-\x1f\x7f-\x9f]", "", val_str)
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
 
 
 class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
@@ -591,7 +603,11 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         users_helped = len(users_helped_set)
 
         logger.info(
-            f"Real impact metrics for {user_id}: {total_interactions} interactions, {patterns_contributed} contributions, {users_helped} users helped"
+            "Real impact metrics for %s: %d interactions, %d contributions, %d users helped",
+            _sanitize_for_log(user_id),
+            total_interactions,
+            patterns_contributed,
+            users_helped,
         )
 
         report = ConsentImpactReport(
@@ -768,7 +784,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
                 logger.debug(f"Found {len(examples)} example contributions for {user_id}")
             except Exception as e:
-                logger.warning(f"Failed to query example contributions for {user_id}: {e}")
+                logger.warning("Failed to query example contributions for %s: %s", _sanitize_for_log(user_id), e)
 
         # Fallback examples if no graph data
         if not examples:

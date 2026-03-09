@@ -89,16 +89,17 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
             return@runCatching false
         }
 
-        // Parse JSON to check cognitive_state == "WORK"
+        // Parse JSON to check cognitive_state == "WORK" or "SETUP" (first-run)
         val body = response.bodyAsText()
         val stateMatch = Regex(""""cognitive_state"\s*:\s*"(\w+)"""").find(body)
         val cognitiveState = stateMatch?.groupValues?.get(1) ?: ""
 
-        val isWorkState = cognitiveState == "WORK"
-        if (!isWorkState) {
+        // WORK = normal ready, SETUP = first-run ready
+        val isReady = cognitiveState == "WORK" || cognitiveState == "SETUP"
+        if (!isReady) {
             println("[PythonRuntime.desktop] Not ready yet - cognitive_state: $cognitiveState")
         }
-        isWorkState
+        isReady
     }
 
     actual override suspend fun getServicesStatus(): Result<Pair<Int, Int>> = runCatching {

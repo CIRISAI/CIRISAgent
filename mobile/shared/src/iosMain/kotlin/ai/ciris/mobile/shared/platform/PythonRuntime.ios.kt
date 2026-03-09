@@ -131,18 +131,19 @@ actual class PythonRuntime : PythonRuntimeProtocol {
                     return@dataTaskWithRequest
                 }
 
-                // Parse JSON to check cognitive_state == "WORK"
+                // Parse JSON to check cognitive_state == "WORK" or "SETUP" (first-run)
                 try {
                     val jsonString = NSString.create(data = data, encoding = NSUTF8StringEncoding)?.toString() ?: ""
-                    // Look for "cognitive_state": "WORK" in the response
+                    // Look for "cognitive_state": "WORK" or "SETUP" in the response
                     val stateMatch = Regex(""""cognitive_state"\s*:\s*"(\w+)"""").find(jsonString)
                     val cognitiveState = stateMatch?.groupValues?.get(1) ?: ""
 
-                    val isWorkState = cognitiveState == "WORK"
-                    if (!isWorkState) {
+                    // WORK = normal ready, SETUP = first-run ready
+                    val isReady = cognitiveState == "WORK" || cognitiveState == "SETUP"
+                    if (!isReady) {
                         println("[PythonRuntime.iOS] Not ready yet - cognitive_state: $cognitiveState")
                     }
-                    continuation.resume(Result.success(isWorkState))
+                    continuation.resume(Result.success(isReady))
                 } catch (e: Exception) {
                     println("[PythonRuntime.iOS] Error parsing health response: ${e.message}")
                     continuation.resume(Result.success(false))

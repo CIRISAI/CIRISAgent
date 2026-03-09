@@ -91,7 +91,8 @@ class PythonRuntimeService : Service() {
         try {
             val py = Python.getInstance()
             val mobileMain = py.getModule("mobile_main")
-            mobileMain.callAttr("start_ciris_runtime")
+            // Call main() which starts the full CIRIS runtime
+            mobileMain.callAttr("main")
             serverStarted = true
             Log.i(TAG, "CIRIS server started on localhost:8080")
         } catch (e: Exception) {

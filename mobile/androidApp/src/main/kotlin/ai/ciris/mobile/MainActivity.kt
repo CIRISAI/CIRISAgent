@@ -22,6 +22,7 @@ import ai.ciris.mobile.shared.diagnostics.NetworkDiagnosticsAndroid
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -133,28 +134,18 @@ class MainActivity : ComponentActivity() {
                     Log.i(TAG, "Showing CIRISApp immediately for startup animation")
                     pythonReady = true
 
-                    // Start Python mobile_main in background thread
-                    Thread {
-                        try {
-                            Log.i(TAG, "Starting mobile_main.main()...")
-                            val py = Python.getInstance()
-                            val module = py.getModule("mobile_main")
-                            module.callAttr("main")
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Python runtime error", e)
-                            // Extract meaningful error message
-                            val errorMsg = e.message ?: e.toString()
-                            val shortError = when {
-                                errorMsg.contains("pydantic_core") -> "Build error: pydantic_core native library missing"
-                                errorMsg.contains("ModuleNotFoundError") -> "Module not found: ${errorMsg.substringAfter("ModuleNotFoundError:")}"
-                                else -> "Python error: ${errorMsg.take(100)}"
-                            }
-                            // Update Compose state on main thread (mutableStateOf is not thread-safe)
-                            runOnUiThread {
-                                pythonError = shortError
-                            }
+                    // Start Python via foreground service (survives activity backgrounding for OAuth)
+                    if (!PythonRuntimeService.isRunning) {
+                        Log.i(TAG, "Starting PythonRuntimeService...")
+                        val serviceIntent = Intent(this@MainActivity, PythonRuntimeService::class.java)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(serviceIntent)
+                        } else {
+                            startService(serviceIntent)
                         }
-                    }.start()
+                    } else {
+                        Log.i(TAG, "PythonRuntimeService already running")
+                    }
                 }
             }
 

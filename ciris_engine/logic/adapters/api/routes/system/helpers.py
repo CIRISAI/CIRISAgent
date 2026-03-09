@@ -50,9 +50,18 @@ def get_current_time(request: Request) -> datetime:
 
 
 def get_cognitive_state_safe(request: Request) -> Optional[str]:
-    """Safely get cognitive state from agent processor."""
+    """Safely get cognitive state from agent processor.
+
+    Returns "SETUP" during first-run mode (when agent_processor hasn't started).
+    This allows mobile clients to detect first-run readiness.
+    """
+    from ciris_engine.logic.setup.first_run import is_first_run
+
     runtime = getattr(request.app.state, "runtime", None)
     if not (runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor is not None):
+        # First-run mode: agent_processor not started, return SETUP state
+        if is_first_run():
+            return "SETUP"
         return None
 
     try:

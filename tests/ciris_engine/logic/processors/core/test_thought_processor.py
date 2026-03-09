@@ -839,8 +839,9 @@ class TestTSASPDMAIntegration:
         from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
         from ciris_engine.schemas.actions.parameters import ToolParams
 
-        # Mock tool bus to return None (tool not found)
+        # Mock tool bus to return None (tool not found) and empty tools list
         thought_processor_with_tsaspdma.dependencies.bus_manager.tool.get_tool_info = AsyncMock(return_value=None)
+        thought_processor_with_tsaspdma.dependencies.bus_manager.tool.get_all_tool_info = AsyncMock(return_value=[])
 
         thought_item = ProcessingQueueItem(
             thought_id="test_thought",
@@ -862,7 +863,12 @@ class TestTSASPDMAIntegration:
 
         # Should return PONDER when tool not found
         assert result.selected_action == HandlerActionType.PONDER
-        assert "not available" in result.rationale or "not found" in result.rationale
+        rationale_lower = result.rationale.lower()
+        assert (
+            "not available" in rationale_lower
+            or "not found" in rationale_lower
+            or "no tools available" in rationale_lower
+        )
 
     @pytest.mark.asyncio
     async def test_maybe_run_tsaspdma_handles_evaluator_error(

@@ -491,15 +491,16 @@ class UnifiedSigningKey:
     def initialize(self) -> None:
         """Initialize the signing key.
 
-        Tries paths in order:
-        1. CIRISVerify hardware vault (if ciris-verify package available)
-        2. Existing Ed25519 key file
-        3. Generate new Ed25519 key
+        CIRISVerify is the ONLY source of signing keys. Keys are either:
+        1. Imported from Portal during first-run setup
+        2. Already present in CIRISVerify vault from previous session
+
+        We NEVER generate local keys - all keys must come from Portal/Registry.
         """
         if self._initialized:
             return
 
-        # Path 1: Try CIRISVerify hardware vault
+        # Try CIRISVerify hardware vault (the ONLY source of signing keys)
         if not self._key_path:  # Only if no explicit key path was given
             try:
                 verify_signer = CIRISVerifySigner()
@@ -511,7 +512,7 @@ class UnifiedSigningKey:
             except Exception as e:
                 logger.debug(f"CIRISVerify vault not available: {e}")
 
-        # Path 2: Try existing Ed25519 key file
+        # Fallback: Try existing Ed25519 key file (legacy/migration support)
         self._signer = Ed25519Signer()
 
         key_locations = []
@@ -538,144 +539,56 @@ class UnifiedSigningKey:
             if self._signer._load_keypair(key_path):
                 self._key_path = key_path
                 self._initialized = True
+                logger.info(f"Loaded legacy Ed25519 key from {key_path}")
                 return
 
-        # Path 3: No existing key found - generate new one
-        logger.info("No unified signing key found, generating new Ed25519 keypair...")
-        self._signer._generate_keypair()
-
-        # Save to first writable location
-        for key_path in key_locations:
-            try:
-                self._signer._save_keypair(key_path)
-                self._key_path = key_path
-                break
-            except Exception as e:
-                logger.debug(f"Could not save key to {key_path}: {e}")
-
-        # Also import into CIRISVerify vault so other instances can find it
-        if self._key_path and isinstance(self._signer, Ed25519Signer) and self._signer._private_key:
-            try:
-                import threading
-
-                from cryptography.hazmat.primitives import serialization
-
-                private_bytes = self._signer._private_key.private_bytes(
-                    encoding=serialization.Encoding.Raw,
-                    format=serialization.PrivateFormat.Raw,
-                    encryption_algorithm=serialization.NoEncryption(),
-                )
-
-                # Use the global singleton instead of creating a new instance
-                try:
-                    from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
-                        get_verifier,
-                    )
-
-                    client = get_verifier()
-                    if client is not None:
-                        client.import_key_sync(private_bytes)
-                        logger.info("Imported generated key into CIRISVerify vault")
-                except Exception as ie:
-                    logger.debug(f"Could not import key into CIRISVerify: {ie}")
-            except Exception as e:
-                logger.debug(f"CIRISVerify import skipped: {e}")
-
-        self._initialized = True
+        # No key found - this is expected during first-run before Portal provides key
+        # Do NOT generate a local key - wait for Portal to provide one
+        logger.warning(
+            "No signing key found in CIRISVerify vault or legacy key files. "
+            "Key must be provided by Portal during first-run setup."
+        )
+        # Leave _initialized=False so callers know no key is available yet
 
     def load_provisioned_key(self, ed25519_private_key_b64: str, save_path: Optional[Path] = None) -> None:
         """Load signing key for a Registry-provisioned agent.
 
-        Tries CIRISVerify hardware/software vault first (sync FFI — no asyncio
-        overhead). When CIRISVerify is available, it manages the signing key
-        via Secure Enclave or software vault. The Registry-provisioned key is
-        saved to disk as fallback only.
+        CIRISVerify is the ONLY key storage - we NEVER write keys to disk directly.
+        All key management goes through CIRISVerify's secure storage.
 
         Args:
             ed25519_private_key_b64: Base64-encoded 32-byte Ed25519 private key
-            save_path: Where to save the fallback key (uses get_data_dir() if None)
+            save_path: Deprecated - ignored (CIRISVerify manages storage)
         """
         import base64
-
-        # Always save the provisioned key as fallback (uses writable path)
-        from cryptography.hazmat.primitives.asymmetric import ed25519
 
         private_bytes = base64.b64decode(ed25519_private_key_b64)
         if len(private_bytes) != 32:
             raise ValueError(f"Expected 32-byte Ed25519 private key, got {len(private_bytes)} bytes")
 
-        if not save_path:
-            from ciris_engine.logic.utils.path_resolution import get_data_dir
+        # Import directly into CIRISVerify vault (the ONLY path)
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
 
-            save_path = get_data_dir() / AGENT_SIGNING_KEY_FILENAME
+        client = get_verifier()
+        if client is None:
+            raise RuntimeError("CIRISVerify singleton not available - cannot import provisioned key")
 
-        try:
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-            save_path.write_bytes(private_bytes)
-            import os
+        # Import the portal-issued key
+        client.import_key_sync(private_bytes)
 
-            os.chmod(save_path, 0o600)
-            logger.info(f"Saved provisioned key fallback to {save_path}")
-        except OSError as e:
-            logger.warning(f"Could not save provisioned key to {save_path}: {e}")
+        # Validate by fetching public key
+        pub_key = client.get_ed25519_public_key_sync()
+        if pub_key is None:
+            raise RuntimeError("Key import succeeded but could not retrieve public key")
 
-        # Path 1: Import directly into CIRISVerify vault (preferred)
-        # This is the 2.0 requirement - portal keys go into secure storage
-        try:
-            verify_signer = CIRISVerifySigner()
-            # Initialize client on large stack (required for Android JNI)
-            import threading
-
-            import_result: list[Any] = [None, None, None]  # [success, pub_key, error]
-
-            # Use the global singleton instead of creating a new instance
-            try:
-                from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
-
-                client = get_verifier()
-                if client is not None:
-                    # Import the portal-issued key (algorithm=2 for Ed25519)
-                    client.import_key_sync(private_bytes)
-                    # Validate by fetching public key
-                    pub_key = client.get_ed25519_public_key_sync()
-                    import_result[0] = client
-                    import_result[1] = pub_key
-                else:
-                    import_result[2] = RuntimeError("CIRISVerify singleton not available")
-            except Exception as e:
-                import_result[2] = e
-
-            if import_result[2] is not None:
-                raise import_result[2]
-
-            if import_result[0] is not None and import_result[1] is not None:
-                # Successfully imported into ciris_verify
-                verify_signer._client = import_result[0]
-                verify_signer._public_key_cache = import_result[1]
-                verify_signer._key_id = verify_signer._compute_key_id(import_result[1])
-                self._signer = verify_signer
-                self._initialized = True
-                logger.info(f"Imported portal key into CIRISVerify vault (key_id={verify_signer.key_id})")
-
-                # Delete the disk fallback - we don't need it anymore
-                try:
-                    if save_path.exists():
-                        save_path.unlink()
-                        logger.debug("Deleted disk fallback after successful ciris_verify import")
-                except Exception as e:
-                    logger.debug(f"Could not delete disk fallback {save_path}: {e}")
-                return
-        except Exception as e:
-            logger.debug(f"CIRISVerify import not available for provisioned key: {e}")
-
-        # Path 2: Ed25519 fallback with the provisioned key (disk-based)
-        self._signer = Ed25519Signer()
-        self._signer._private_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_bytes)
-        self._signer._public_key = self._signer._private_key.public_key()
-        self._signer._key_id = self._signer._compute_key_id(self._signer.public_key_bytes)
-        self._key_path = save_path
+        # Set up the signer
+        verify_signer = CIRISVerifySigner()
+        verify_signer._client = client
+        verify_signer._public_key_cache = pub_key
+        verify_signer._key_id = verify_signer._compute_key_id(pub_key)
+        self._signer = verify_signer
         self._initialized = True
-        logger.info(f"Using Ed25519 fallback for provisioned key (key_id={self._signer._key_id})")
+        logger.info(f"Imported provisioned key into CIRISVerify vault (key_id={verify_signer.key_id})")
 
     def sign(self, data: bytes) -> bytes:
         """Sign data and return signature bytes."""

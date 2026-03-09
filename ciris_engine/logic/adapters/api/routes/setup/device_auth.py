@@ -202,9 +202,12 @@ async def _submit_attestation_inline(challenge_nonce: str, device_code: str, por
 
     def _attest_on_large_stack() -> None:
         try:
-            from ciris_verify import CIRISVerify as CV
+            from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
 
-            verifier = CV(skip_integrity_check=True)
+            verifier = get_verifier()
+            if verifier is None:
+                attest_result[1] = RuntimeError("CIRISVerify singleton not available")
+                return
             proof = verifier.export_attestation_sync(challenge_bytes)
             attest_result[0] = proof  # export_attestation_sync returns dict directly
         except Exception as e:
@@ -303,12 +306,16 @@ def _import_key_and_generate_attestation(
     """Import key into CIRISVerify and generate attestation proof.
 
     Returns (proof_dict, error) - one will be None.
+    IMPORTANT: Uses the global CIRISVerify singleton to ensure the imported
+    key is visible to all other components (especially UnifiedSigningKey).
     """
     try:
-        from ciris_verify import CIRISVerify as CV
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
 
-        logger.info("[KEY-IMPORT] Creating CIRISVerify instance...")
-        verifier = CV(skip_integrity_check=True)
+        logger.info("[KEY-IMPORT] Getting CIRISVerify singleton...")
+        verifier = get_verifier()
+        if verifier is None:
+            return None, RuntimeError("CIRISVerify singleton not available")
 
         # Import the Portal-issued key
         logger.info(f"[KEY-IMPORT] Calling import_key_sync() with {len(key_bytes)} byte key...")

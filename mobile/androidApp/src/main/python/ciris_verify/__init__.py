@@ -29,29 +29,29 @@ Logging:
 import logging as _logging
 
 from .client import CIRISVerify, MockCIRISVerify
-from .types import (
-    LicenseStatus,
-    LicenseTier,
-    LicenseDetails,
-    MandatoryDisclosure,
-    DisclosureSeverity,
-    LicenseStatusResponse,
-    CapabilityCheckResult,
-    FileIntegrityResult,
-    FileCheckStatus,
-    BinaryIntegrityStatus,
-    HardwareType,
-    ValidationStatus,
-    PythonModuleHashes,
-    PythonIntegrityResult,
-)
 from .exceptions import (
-    CIRISVerifyError,
     BinaryNotFoundError,
     BinaryTamperedError,
-    VerificationFailedError,
-    TimeoutError,
+    CIRISVerifyError,
     CommunicationError,
+    TimeoutError,
+    VerificationFailedError,
+)
+from .types import (
+    BinaryIntegrityStatus,
+    CapabilityCheckResult,
+    DisclosureSeverity,
+    FileCheckStatus,
+    FileIntegrityResult,
+    HardwareType,
+    LicenseDetails,
+    LicenseStatus,
+    LicenseStatusResponse,
+    LicenseTier,
+    MandatoryDisclosure,
+    PythonIntegrityResult,
+    PythonModuleHashes,
+    ValidationStatus,
 )
 
 
@@ -77,11 +77,11 @@ def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str =
 
     # Map Rust levels to Python logging levels
     level_map = {
-        1: _logging.ERROR,    # ERROR
+        1: _logging.ERROR,  # ERROR
         2: _logging.WARNING,  # WARN
-        3: _logging.INFO,     # INFO
-        4: _logging.DEBUG,    # DEBUG
-        5: _logging.DEBUG,    # TRACE (Python has no TRACE, use DEBUG)
+        3: _logging.INFO,  # INFO
+        4: _logging.DEBUG,  # DEBUG
+        5: _logging.DEBUG,  # TRACE (Python has no TRACE, use DEBUG)
     }
 
     # Map level string to Rust level int
@@ -107,7 +107,7 @@ def get_library_version() -> str:
     return __version__
 
 
-__version__ = "1.1.11"
+__version__ = "1.1.12"
 __all__ = [
     "CIRISVerify",
     "MockCIRISVerify",

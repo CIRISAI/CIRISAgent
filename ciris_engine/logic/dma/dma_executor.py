@@ -3,7 +3,7 @@ import logging
 import os
 import sys
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Awaitable, Callable, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional, Union
 
 # Python 3.10 compatibility: asyncio.timeout was added in Python 3.11
 if sys.version_info >= (3, 11):
@@ -827,4 +827,128 @@ async def run_tsaspdma(
                 tags=None,
             )
             persistence.update_correlation(update_req, time_service)
+        raise
+
+
+async def run_tsaspdma_correction(
+    evaluator: TSASPDMAEvaluator,
+    requested_tool_name: str,
+    available_tools: List["ToolInfo"],
+    aspdma_rationale: str,
+    original_thought: ProcessingQueueItem,
+    time_service: Optional["TimeServiceProtocol"] = None,
+) -> ActionSelectionDMAResult:
+    """Run TSASPDMA in correction mode when ASPDMA selected a non-existent tool.
+
+    CORRECTION MODE: ASPDMA hallucinated a tool name that doesn't exist.
+    TSASPDMA reviews available tools and either:
+    - Corrects to the right tool (returns TOOL with corrected tool_name)
+    - Asks for clarification (returns SPEAK)
+    - Reconsiders approach (returns PONDER)
+    """
+    if not time_service:
+        raise RuntimeError("TimeService is required for DMA execution")
+    start_time = time_service.now()
+
+    # Create trace for TSASPDMA correction execution
+    trace_id = f"task_{original_thought.source_task_id or 'unknown'}_{original_thought.thought_id}"
+    span_id = f"tsaspdma_correction_{original_thought.thought_id}_{requested_tool_name}"
+    parent_span_id = f"action_selection_pdma_{original_thought.thought_id}"
+
+    trace_context = TraceContext(
+        trace_id=trace_id,
+        span_id=span_id,
+        parent_span_id=parent_span_id,
+        span_name="run_tsaspdma_correction",
+        span_kind="internal",
+        baggage={
+            "thought_id": original_thought.thought_id,
+            "task_id": original_thought.source_task_id or "",
+            "dma_type": "tsaspdma_correction",
+            "requested_tool": requested_tool_name,
+            "available_tools_count": str(len(available_tools)),
+        },
+    )
+
+    correlation = ServiceCorrelation(
+        correlation_id=f"trace_{span_id}_{start_time.timestamp()}",
+        correlation_type=CorrelationType.TRACE_SPAN,
+        service_type="dma",
+        handler_name="TSASPDMAEvaluator",
+        action_type="evaluate_tool_correction",
+        created_at=start_time,
+        updated_at=start_time,
+        timestamp=start_time,
+        trace_context=trace_context,
+        tags={
+            "thought_id": original_thought.thought_id,
+            "task_id": original_thought.source_task_id or "",
+            "component_type": "dma",
+            "dma_type": "tsaspdma_correction",
+            "requested_tool": requested_tool_name,
+            "trace_depth": "4",
+        },
+        request_data=None,
+        response_data=None,
+        status=ServiceCorrelationStatus.PENDING,
+        metric_data=None,
+        log_data=None,
+        retention_policy="raw",
+        ttl_seconds=None,
+        parent_correlation_id=None,
+    )
+
+    # Add correlation
+    persistence.add_correlation(correlation, time_service)
+
+    try:
+        result = await evaluator.evaluate_tool_correction(
+            requested_tool_name=requested_tool_name,
+            available_tools=available_tools,
+            aspdma_rationale=aspdma_rationale,
+            original_thought=original_thought,
+            context=None,
+        )
+
+        # Update correlation with success
+        end_time = time_service.now()
+        corrected_tool = None
+        if result.selected_action == HandlerActionType.TOOL:
+            from ciris_engine.schemas.actions.parameters import ToolParams
+
+            if isinstance(result.action_parameters, ToolParams):
+                corrected_tool = result.action_parameters.name
+
+        update_req = CorrelationUpdateRequest(
+            correlation_id=correlation.correlation_id,
+            response_data={
+                "success": "true",
+                "result_summary": f"TSASPDMA correction: action={result.selected_action}, corrected_to={corrected_tool}",
+                "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
+                "response_timestamp": end_time.isoformat(),
+            },
+            status=ServiceCorrelationStatus.COMPLETED,
+            metric_value=None,
+            tags=None,
+        )
+        persistence.update_correlation(update_req, time_service)
+
+        return result
+
+    except Exception as e:
+        # Update correlation with failure
+        end_time = time_service.now()
+        update_req = CorrelationUpdateRequest(
+            correlation_id=correlation.correlation_id,
+            response_data={
+                "success": "false",
+                "error_message": str(e),
+                "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
+                "response_timestamp": end_time.isoformat(),
+            },
+            status=ServiceCorrelationStatus.FAILED,
+            metric_value=None,
+            tags=None,
+        )
+        persistence.update_correlation(update_req, time_service)
         raise

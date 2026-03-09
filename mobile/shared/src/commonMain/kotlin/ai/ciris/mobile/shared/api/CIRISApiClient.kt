@@ -2825,6 +2825,7 @@ class CIRISApiClient(
                                     userAgent = ctx.userAgent,
                                     result = ctx.result,
                                     error = ctx.error,
+                                    outcome = ctx.outcome,
                                     metadata = null // Skip metadata to avoid parsing issues
                                 )
                             },

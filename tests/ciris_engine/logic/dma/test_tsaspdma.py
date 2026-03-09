@@ -63,6 +63,29 @@ class TestTSASPDMALLMResult:
         assert result.selected_action == HandlerActionType.PONDER
         assert result.ponder_questions == ["Is this the right tool?"]
 
+    def test_tool_action_with_corrected_name(self) -> None:
+        """Test creating a TOOL action result with corrected tool_name."""
+        result = TSASPDMALLMResult(
+            selected_action=HandlerActionType.TOOL,
+            rationale="Correcting tool name from ha_control_light to ha_device_control",
+            tool_name="ha_device_control",  # Corrected name
+            tool_parameters={"entity_id": "light.bedroom", "action": "turn_off"},
+        )
+        assert result.selected_action == HandlerActionType.TOOL
+        assert result.tool_name == "ha_device_control"
+        assert result.tool_parameters == {"entity_id": "light.bedroom", "action": "turn_off"}
+
+    def test_tool_action_without_tool_name(self) -> None:
+        """Test creating a TOOL action result without tool_name (normal mode)."""
+        result = TSASPDMALLMResult(
+            selected_action=HandlerActionType.TOOL,
+            rationale="Tool is appropriate",
+            tool_parameters={"path": "/test"},
+        )
+        assert result.selected_action == HandlerActionType.TOOL
+        assert result.tool_name is None  # Not set in normal mode
+        assert result.tool_parameters == {"path": "/test"}
+
 
 class TestTSASPDMAEvaluator:
     """Tests for TSASPDMAEvaluator."""
@@ -150,6 +173,60 @@ class TestTSASPDMAEvaluator:
         assert isinstance(result.action_parameters, ToolParams)
         assert result.action_parameters.name == "file_read"
         assert result.action_parameters.parameters == {"path": "/test"}
+
+    def test_convert_tool_result_with_corrected_name(
+        self, mock_service_registry: MagicMock, mock_sink: MagicMock
+    ) -> None:
+        """Test converting TOOL action result with corrected tool_name."""
+        with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
+            mock_loader.return_value.load_prompt_template.return_value = {}
+            evaluator = TSASPDMAEvaluator(
+                service_registry=mock_service_registry,
+                sink=mock_sink,
+            )
+
+        # LLM returns corrected tool name
+        llm_result = TSASPDMALLMResult(
+            selected_action=HandlerActionType.TOOL,
+            rationale="Correcting tool name",
+            tool_name="ha_device_control",  # Corrected name
+            tool_parameters={"entity_id": "light.bedroom", "action": "turn_off"},
+        )
+
+        # Original requested name was "ha_control_light"
+        result = evaluator._convert_tsaspdma_result(llm_result, "ha_control_light")
+
+        assert result.selected_action == HandlerActionType.TOOL
+        assert isinstance(result.action_parameters, ToolParams)
+        # Should use the corrected name from LLM, not the original
+        assert result.action_parameters.name == "ha_device_control"
+        assert result.action_parameters.parameters == {"entity_id": "light.bedroom", "action": "turn_off"}
+
+    def test_convert_tool_result_without_correction(
+        self, mock_service_registry: MagicMock, mock_sink: MagicMock
+    ) -> None:
+        """Test converting TOOL action result without tool_name correction (normal mode)."""
+        with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
+            mock_loader.return_value.load_prompt_template.return_value = {}
+            evaluator = TSASPDMAEvaluator(
+                service_registry=mock_service_registry,
+                sink=mock_sink,
+            )
+
+        # LLM doesn't provide tool_name (normal mode)
+        llm_result = TSASPDMALLMResult(
+            selected_action=HandlerActionType.TOOL,
+            rationale="Tool is appropriate",
+            tool_parameters={"path": "/test"},
+            # tool_name not set
+        )
+
+        result = evaluator._convert_tsaspdma_result(llm_result, "file_read")
+
+        assert result.selected_action == HandlerActionType.TOOL
+        assert isinstance(result.action_parameters, ToolParams)
+        # Should use the original name when no correction
+        assert result.action_parameters.name == "file_read"
 
     def test_convert_speak_result(self, mock_service_registry: MagicMock, mock_sink: MagicMock) -> None:
         """Test converting SPEAK action result."""
@@ -569,3 +646,303 @@ class TestTSASPDMAEvaluator:
         repr_str = repr(evaluator)
         assert "TSASPDMAEvaluator" in repr_str
         assert "test-model" in repr_str
+
+
+class TestTSASPDMACorrectionMode:
+    """Tests for TSASPDMA tool name correction mode."""
+
+    @pytest.fixture
+    def mock_service_registry(self) -> MagicMock:
+        """Create a mock service registry."""
+        registry = MagicMock()
+        registry.get_llm_service = MagicMock(return_value=AsyncMock())
+        return registry
+
+    @pytest.fixture
+    def mock_sink(self) -> MagicMock:
+        """Create a mock sink for events."""
+        return MagicMock()
+
+    @pytest.fixture
+    def available_tools(self) -> List[ToolInfo]:
+        """Create a list of available tools for correction tests."""
+        return [
+            ToolInfo(
+                name="ha_device_control",
+                description="Control Home Assistant devices",
+                when_to_use="Use to control lights, switches, and other HA devices",
+                parameters=ToolParameterSchema(
+                    type="object",
+                    properties={
+                        "entity_id": {"type": "string", "description": "Entity ID"},
+                        "action": {"type": "string", "description": "Action to perform"},
+                    },
+                    required=["entity_id", "action"],
+                ),
+            ),
+            ToolInfo(
+                name="file_read",
+                description="Read file contents",
+                when_to_use="Use when you need to read a file",
+                parameters=ToolParameterSchema(type="object", properties={}),
+            ),
+            ToolInfo(
+                name="web_search",
+                description="Search the web",
+                when_to_use="Use when you need to search for information online",
+                parameters=ToolParameterSchema(type="object", properties={}),
+            ),
+        ]
+
+    @pytest.fixture
+    def sample_thought(self) -> ProcessingQueueItem:
+        """Create sample thought item for tests."""
+        return ProcessingQueueItem(
+            thought_id="test-thought-correction",
+            thought_type=ThoughtType.STANDARD,
+            content=ThoughtContent(text="Turn off the bedroom light"),
+            source_task_id="test-task-correction",
+            thought_depth=0,
+        )
+
+    def test_format_available_tools_for_correction(
+        self, mock_service_registry: MagicMock, mock_sink: MagicMock, available_tools: List[ToolInfo]
+    ) -> None:
+        """Test formatting available tools list for correction mode."""
+        with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
+            mock_loader.return_value.load_prompt_template.return_value = {}
+            evaluator = TSASPDMAEvaluator(
+                service_registry=mock_service_registry,
+                sink=mock_sink,
+            )
+
+        result = evaluator._format_available_tools_for_correction(available_tools)
+
+        # Should contain all tool names
+        assert "ha_device_control" in result
+        assert "file_read" in result
+        assert "web_search" in result
+
+        # Should contain descriptions
+        assert "Control Home Assistant" in result
+        assert "Read file contents" in result
+
+        # Should contain when_to_use guidance
+        assert "Use to control lights" in result
+
+    def test_format_available_tools_empty_list(self, mock_service_registry: MagicMock, mock_sink: MagicMock) -> None:
+        """Test formatting empty tools list."""
+        with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
+            mock_loader.return_value.load_prompt_template.return_value = {}
+            evaluator = TSASPDMAEvaluator(
+                service_registry=mock_service_registry,
+                sink=mock_sink,
+            )
+
+        result = evaluator._format_available_tools_for_correction([])
+        assert "No tools available" in result
+
+    @pytest.mark.asyncio
+    async def test_evaluate_tool_correction_success(
+        self,
+        mock_service_registry: MagicMock,
+        mock_sink: MagicMock,
+        available_tools: List[ToolInfo],
+        sample_thought: ProcessingQueueItem,
+    ) -> None:
+        """Test successful tool correction - LLM finds the right tool."""
+        with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
+            mock_loader_instance = MagicMock()
+            mock_template = MagicMock()
+            mock_template.get_prompt.return_value = "Tool correction template"
+            mock_loader_instance.load_prompt_template.return_value = mock_template
+            mock_loader_instance.get_accord_mode.return_value = "none"
+            mock_loader_instance.get_system_message.return_value = "System"
+            mock_loader.return_value = mock_loader_instance
+
+            evaluator = TSASPDMAEvaluator(
+                service_registry=mock_service_registry,
+                sink=mock_sink,
+            )
+
+        # LLM corrects ha_control_light -> ha_device_control
+        mock_llm_result = TSASPDMALLMResult(
+            selected_action=HandlerActionType.TOOL,
+            rationale="Correcting to ha_device_control which handles lights",
+            tool_name="ha_device_control",
+            tool_parameters={"entity_id": "light.bedroom", "action": "turn_off"},
+        )
+        evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_result, None))
+
+        result = await evaluator.evaluate_tool_correction(
+            requested_tool_name="ha_control_light",  # Hallucinated name
+            available_tools=available_tools,
+            aspdma_rationale="ASPDMA selected ha_control_light for turning off light",
+            original_thought=sample_thought,
+        )
+
+        assert result.selected_action == HandlerActionType.TOOL
+        assert isinstance(result.action_parameters, ToolParams)
+        assert result.action_parameters.name == "ha_device_control"
+        assert result.action_parameters.parameters == {"entity_id": "light.bedroom", "action": "turn_off"}
+        assert "TSASPDMA-CORRECTION" in result.rationale
+
+    @pytest.mark.asyncio
+    async def test_evaluate_tool_correction_returns_speak(
+        self,
+        mock_service_registry: MagicMock,
+        mock_sink: MagicMock,
+        available_tools: List[ToolInfo],
+        sample_thought: ProcessingQueueItem,
+    ) -> None:
+        """Test correction returns SPEAK when multiple tools could match."""
+        with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
+            mock_loader_instance = MagicMock()
+            mock_template = MagicMock()
+            mock_template.get_prompt.return_value = ""
+            mock_loader_instance.load_prompt_template.return_value = mock_template
+            mock_loader_instance.get_accord_mode.return_value = "none"
+            mock_loader_instance.get_system_message.return_value = "System"
+            mock_loader.return_value = mock_loader_instance
+
+            evaluator = TSASPDMAEvaluator(
+                service_registry=mock_service_registry,
+                sink=mock_sink,
+            )
+
+        # LLM decides to ask for clarification
+        mock_llm_result = TSASPDMALLMResult(
+            selected_action=HandlerActionType.SPEAK,
+            rationale="Multiple tools could match, need clarification",
+            speak_content="Did you mean ha_device_control or file_read?",
+        )
+        evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_result, None))
+
+        result = await evaluator.evaluate_tool_correction(
+            requested_tool_name="unknown_tool",
+            available_tools=available_tools,
+            aspdma_rationale="ASPDMA selected unknown_tool",
+            original_thought=sample_thought,
+        )
+
+        assert result.selected_action == HandlerActionType.SPEAK
+        assert isinstance(result.action_parameters, SpeakParams)
+        assert "TSASPDMA-CORRECTION" in result.rationale
+
+    @pytest.mark.asyncio
+    async def test_evaluate_tool_correction_returns_ponder(
+        self,
+        mock_service_registry: MagicMock,
+        mock_sink: MagicMock,
+        available_tools: List[ToolInfo],
+        sample_thought: ProcessingQueueItem,
+    ) -> None:
+        """Test correction returns PONDER when no tool matches intent."""
+        with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
+            mock_loader_instance = MagicMock()
+            mock_template = MagicMock()
+            mock_template.get_prompt.return_value = ""
+            mock_loader_instance.load_prompt_template.return_value = mock_template
+            mock_loader_instance.get_accord_mode.return_value = "none"
+            mock_loader_instance.get_system_message.return_value = "System"
+            mock_loader.return_value = mock_loader_instance
+
+            evaluator = TSASPDMAEvaluator(
+                service_registry=mock_service_registry,
+                sink=mock_sink,
+            )
+
+        # LLM decides no tool matches
+        mock_llm_result = TSASPDMALLMResult(
+            selected_action=HandlerActionType.PONDER,
+            rationale="No available tool matches the user's intent",
+            ponder_questions=["Should I use a different approach?"],
+        )
+        evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_result, None))
+
+        result = await evaluator.evaluate_tool_correction(
+            requested_tool_name="nonexistent_tool",
+            available_tools=available_tools,
+            aspdma_rationale="ASPDMA selected nonexistent_tool",
+            original_thought=sample_thought,
+        )
+
+        assert result.selected_action == HandlerActionType.PONDER
+        assert isinstance(result.action_parameters, PonderParams)
+        assert "TSASPDMA-CORRECTION" in result.rationale
+
+    @pytest.mark.asyncio
+    async def test_evaluate_tool_correction_invalid_corrected_name(
+        self,
+        mock_service_registry: MagicMock,
+        mock_sink: MagicMock,
+        available_tools: List[ToolInfo],
+        sample_thought: ProcessingQueueItem,
+    ) -> None:
+        """Test correction falls back to PONDER if LLM returns invalid tool name."""
+        with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
+            mock_loader_instance = MagicMock()
+            mock_template = MagicMock()
+            mock_template.get_prompt.return_value = ""
+            mock_loader_instance.load_prompt_template.return_value = mock_template
+            mock_loader_instance.get_accord_mode.return_value = "none"
+            mock_loader_instance.get_system_message.return_value = "System"
+            mock_loader.return_value = mock_loader_instance
+
+            evaluator = TSASPDMAEvaluator(
+                service_registry=mock_service_registry,
+                sink=mock_sink,
+            )
+
+        # LLM returns a tool_name that's also not in the available list
+        mock_llm_result = TSASPDMALLMResult(
+            selected_action=HandlerActionType.TOOL,
+            rationale="Trying to correct",
+            tool_name="also_nonexistent",  # This is also not in available_tools
+            tool_parameters={"some": "param"},
+        )
+        evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_result, None))
+
+        result = await evaluator.evaluate_tool_correction(
+            requested_tool_name="nonexistent_tool",
+            available_tools=available_tools,
+            aspdma_rationale="ASPDMA selected nonexistent_tool",
+            original_thought=sample_thought,
+        )
+
+        # Should fall back to PONDER since the corrected name is also invalid
+        assert result.selected_action == HandlerActionType.PONDER
+        assert isinstance(result.action_parameters, PonderParams)
+
+    @pytest.mark.asyncio
+    async def test_evaluate_tool_correction_raises_on_llm_error(
+        self,
+        mock_service_registry: MagicMock,
+        mock_sink: MagicMock,
+        available_tools: List[ToolInfo],
+        sample_thought: ProcessingQueueItem,
+    ) -> None:
+        """Test correction raises on LLM error (no silent fallback)."""
+        with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
+            mock_loader_instance = MagicMock()
+            mock_template = MagicMock()
+            mock_template.get_prompt.return_value = ""
+            mock_loader_instance.load_prompt_template.return_value = mock_template
+            mock_loader_instance.get_accord_mode.return_value = "none"
+            mock_loader_instance.get_system_message.return_value = "System"
+            mock_loader.return_value = mock_loader_instance
+
+            evaluator = TSASPDMAEvaluator(
+                service_registry=mock_service_registry,
+                sink=mock_sink,
+            )
+
+        evaluator.call_llm_structured = AsyncMock(side_effect=RuntimeError("LLM error"))
+
+        with pytest.raises(RuntimeError, match="LLM error"):
+            await evaluator.evaluate_tool_correction(
+                requested_tool_name="nonexistent_tool",
+                available_tools=available_tools,
+                aspdma_rationale="ASPDMA selected nonexistent_tool",
+                original_thought=sample_thought,
+            )

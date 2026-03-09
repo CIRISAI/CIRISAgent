@@ -323,23 +323,105 @@ class ThoughtProcessor(
             return action_result
 
         if not tool_info:
-            # ASPDMA selected a tool that doesn't exist - this is an error, override to PONDER
-            logger.error(
-                f"TSASPDMA-ERROR: Tool '{tool_name}' selected by ASPDMA but not registered! Overriding to PONDER."
-            )
-            from ciris_engine.schemas.actions.parameters import PonderParams
-            from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+            # ASPDMA selected a tool that doesn't exist - use TSASPDMA correction mode
+            logger.warning(f"TSASPDMA-CORRECTION: Tool '{tool_name}' not found, invoking TSASPDMA correction mode...")
 
-            return ActionSelectionDMAResult(
-                selected_action=HandlerActionType.PONDER,
-                action_parameters=PonderParams(
-                    questions=[
-                        f"Tool '{tool_name}' is not available. What alternative approach should I take?",
-                        f"Context: ASPDMA selected tool '{tool_name}' but it is not registered in the system.",
-                    ],
-                ),
-                rationale=f"TSASPDMA-OVERRIDE: Tool '{tool_name}' not found - forcing reconsideration",
-            )
+            try:
+                # Get all available tools for correction mode
+                all_tools = await tool_bus.get_all_tool_info()
+                if not all_tools:
+                    logger.error(f"TSASPDMA-CORRECTION: No tools available for correction")
+                    return ActionSelectionDMAResult(
+                        selected_action=HandlerActionType.PONDER,
+                        action_parameters=PonderParams(
+                            questions=[
+                                f"Tool '{tool_name}' doesn't exist and no tools are available.",
+                                "What alternative approach should I take?",
+                            ],
+                        ),
+                        rationale=f"TSASPDMA-CORRECTION: No tools available for correction",
+                    )
+
+                logger.info(
+                    f"TSASPDMA-CORRECTION: Running correction mode for '{tool_name}' "
+                    f"with {len(all_tools)} available tools: {[t.name for t in all_tools]}"
+                )
+
+                from ciris_engine.logic.dma.dma_executor import run_tsaspdma_correction
+
+                evaluator = self.dma_orchestrator.tsaspdma_evaluator
+                if not evaluator:
+                    logger.error(f"TSASPDMA-CORRECTION: No evaluator available")
+                    return ActionSelectionDMAResult(
+                        selected_action=HandlerActionType.PONDER,
+                        action_parameters=PonderParams(
+                            questions=[
+                                f"Tool '{tool_name}' doesn't exist.",
+                                "TSASPDMA evaluator unavailable for correction.",
+                            ],
+                        ),
+                        rationale=f"TSASPDMA-CORRECTION: Evaluator unavailable",
+                    )
+
+                correction_result = await run_tsaspdma_correction(
+                    evaluator=evaluator,
+                    requested_tool_name=tool_name,
+                    available_tools=all_tools,
+                    aspdma_rationale=action_result.rationale or "",
+                    original_thought=thought_item,
+                    time_service=self._time_service,
+                )
+
+                # If correction returned TOOL, verify the corrected tool exists
+                if correction_result.selected_action == HandlerActionType.TOOL:
+                    if isinstance(correction_result.action_parameters, ToolParams):
+                        corrected_name = correction_result.action_parameters.name
+                        # Get tool info for the corrected tool
+                        corrected_tool_info = await tool_bus.get_tool_info(corrected_name)
+                        if corrected_tool_info:
+                            logger.info(
+                                f"TSASPDMA-CORRECTION: Successfully corrected '{tool_name}' -> '{corrected_name}'"
+                            )
+                            # Now run normal TSASPDMA to fill in parameters
+                            tool_name = corrected_name
+                            tool_info = corrected_tool_info
+                            # Continue to normal TSASPDMA flow below
+                        else:
+                            logger.error(f"TSASPDMA-CORRECTION: Corrected tool '{corrected_name}' also not found!")
+                            return ActionSelectionDMAResult(
+                                selected_action=HandlerActionType.PONDER,
+                                action_parameters=PonderParams(
+                                    questions=[
+                                        f"Tool correction failed: '{corrected_name}' also doesn't exist.",
+                                        "What alternative approach should I take?",
+                                    ],
+                                ),
+                                rationale=f"TSASPDMA-CORRECTION: Corrected tool '{corrected_name}' also not found",
+                            )
+                else:
+                    # TSASPDMA chose SPEAK or PONDER - return that result
+                    logger.info(
+                        f"TSASPDMA-CORRECTION: Chose {correction_result.selected_action} instead of tool correction"
+                    )
+                    return correction_result
+
+            except Exception as e:
+                logger.error(f"TSASPDMA-CORRECTION: Failed for '{tool_name}': {e}", exc_info=True)
+                return ActionSelectionDMAResult(
+                    selected_action=HandlerActionType.PONDER,
+                    action_parameters=PonderParams(
+                        questions=[
+                            f"Tool '{tool_name}' doesn't exist and correction failed.",
+                            f"Error: {str(e)[:100]}",
+                            "What alternative approach should I take?",
+                        ],
+                    ),
+                    rationale=f"TSASPDMA-CORRECTION: Failed with error - {str(e)[:100]}",
+                )
+
+        # At this point tool_info is guaranteed to be set (either originally or via correction)
+        # Assert for type checker
+        assert tool_info is not None, "tool_info should be set after correction mode"
 
         logger.info(
             f"TSASPDMA-CHECK: Got tool info for '{tool_name}', has_documentation={bool(tool_info.documentation)}"

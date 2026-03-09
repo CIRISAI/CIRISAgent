@@ -32,10 +32,14 @@ from .prompt_loader import get_prompt_loader
 class TSASPDMALLMResult(BaseModel):
     """Gemini-compatible TSASPDMA LLM output - FLAT structure, NO Union types.
 
-    TSASPDMA only returns 3 action types:
-    - TOOL: Proceed with execution (parameters in tool_parameters dict)
+    TSASPDMA returns 3 action types:
+    - TOOL: Proceed with execution (parameters in tool_parameters dict, optionally corrected tool_name)
     - SPEAK: Ask user for clarification (speak_content field)
     - PONDER: Reconsider the approach (ponder_questions field)
+
+    In CORRECTION MODE (when ASPDMA selected a non-existent tool):
+    - TSASPDMA can return TOOL with a corrected tool_name from the available tools list
+    - Or SPEAK/PONDER if no suitable tool exists
 
     Mirrors ASPDMALLMResult pattern with flat, explicit fields per action type.
     """
@@ -46,6 +50,11 @@ class TSASPDMALLMResult(BaseModel):
     rationale: str = Field(..., description="Reasoning for this decision, including any gotchas acknowledged")
 
     # === TOOL parameters (TSASPDMA refines these) ===
+    tool_name: Optional[str] = Field(
+        None,
+        description="Corrected tool name if different from requested (use in correction mode). "
+        "Must be an EXACT name from the available tools list.",
+    )
     tool_parameters: Optional[Dict[str, Any]] = Field(
         None, description='Tool parameters dict (e.g., {"entity_id": "light.x", "action": "turn_on"})'
     )
@@ -108,18 +117,24 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         """Convert flat TSASPDMA LLM result to typed ActionSelectionDMAResult.
 
         Uses flat fields matching ASPDMALLMResult pattern:
-        - TOOL: tool_parameters dict contains the tool arguments
+        - TOOL: tool_parameters dict contains the tool arguments, tool_name may be corrected
         - SPEAK: speak_content is the clarification question
         - PONDER: ponder_questions is the list to reconsider
+
+        In correction mode, llm_result.tool_name may contain a corrected tool name
+        that should be used instead of the original tool_name parameter.
         """
         action = llm_result.selected_action
 
         params: ToolParams | SpeakParams | PonderParams
 
         if action == HandlerActionType.TOOL:
-            # For TOOL, use tool_parameters dict
+            # Use LLM-provided corrected tool_name if available, otherwise use original
+            final_tool_name = llm_result.tool_name if llm_result.tool_name else tool_name
+            if llm_result.tool_name and llm_result.tool_name != tool_name:
+                logger.info(f"TSASPDMA: Tool name corrected '{tool_name}' -> '{llm_result.tool_name}'")
             params = ToolParams(
-                name=tool_name,
+                name=final_tool_name,
                 parameters=llm_result.tool_parameters or {},
             )
         elif action == HandlerActionType.SPEAK:
@@ -360,6 +375,171 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             )
             # NO FALLBACK - re-raise to trigger proper deferral/ponder behavior
             raise
+
+    async def evaluate_tool_correction(
+        self,
+        requested_tool_name: str,
+        available_tools: List[ToolInfo],
+        aspdma_rationale: str,
+        original_thought: ProcessingQueueItem,
+        context: Optional[Any] = None,
+    ) -> ActionSelectionDMAResult:
+        """Evaluate tool correction when ASPDMA selected a non-existent tool.
+
+        CORRECTION MODE: ASPDMA hallucinated a tool name that doesn't exist.
+        TSASPDMA reviews available tools and either:
+        - Corrects to the right tool (returns TOOL with corrected tool_name)
+        - Asks for clarification (returns SPEAK)
+        - Reconsiders approach (returns PONDER)
+        """
+        thought_content_str = (
+            original_thought.content.text
+            if hasattr(original_thought.content, "text")
+            else str(original_thought.content)
+        )
+
+        # Format available tools list for prompt
+        tools_list_text = self._format_available_tools_for_correction(available_tools)
+
+        messages = self._create_correction_mode_messages(
+            requested_tool=requested_tool_name,
+            available_tools_list=tools_list_text,
+            aspdma_rationale=aspdma_rationale,
+            original_thought_content=thought_content_str,
+        )
+
+        logger.info(
+            f"TSASPDMA-CORRECTION: Evaluating correction for '{requested_tool_name}' "
+            f"with {len(available_tools)} available tools"
+        )
+
+        try:
+            result_tuple = await self.call_llm_structured(
+                messages=messages,
+                response_model=TSASPDMALLMResult,
+                max_tokens=4096,
+                temperature=0.0,
+                thought_id=original_thought.thought_id,
+                task_id=original_thought.source_task_id,
+            )
+            llm_result: TSASPDMALLMResult = result_tuple[0]
+
+            # Validate corrected tool name if TOOL action
+            if llm_result.selected_action == HandlerActionType.TOOL and llm_result.tool_name:
+                available_names = [t.name for t in available_tools]
+                if llm_result.tool_name not in available_names:
+                    logger.warning(
+                        f"TSASPDMA-CORRECTION: LLM returned invalid tool_name '{llm_result.tool_name}' "
+                        f"not in available: {available_names}. Falling back to PONDER."
+                    )
+                    return ActionSelectionDMAResult(
+                        selected_action=HandlerActionType.PONDER,
+                        action_parameters=PonderParams(
+                            questions=[
+                                f"Tool '{requested_tool_name}' doesn't exist and correction failed.",
+                                f"Available tools: {', '.join(available_names)}",
+                                "What alternative approach should I take?",
+                            ]
+                        ),
+                        rationale=f"TSASPDMA-CORRECTION: Invalid tool correction - forcing reconsideration",
+                    )
+
+            # Convert result, using the corrected tool_name if provided
+            tsaspdma_result = self._convert_tsaspdma_result(
+                llm_result=llm_result,
+                tool_name=llm_result.tool_name or requested_tool_name,
+            )
+
+            # Add correction marker to rationale
+            if tsaspdma_result.selected_action == HandlerActionType.TOOL and llm_result.tool_name:
+                tsaspdma_result = ActionSelectionDMAResult(
+                    selected_action=tsaspdma_result.selected_action,
+                    action_parameters=tsaspdma_result.action_parameters,
+                    rationale=f"TSASPDMA-CORRECTION: Corrected '{requested_tool_name}' -> '{llm_result.tool_name}'. {tsaspdma_result.rationale or ''}",
+                )
+            elif not tsaspdma_result.rationale.startswith("TSASPDMA"):
+                tsaspdma_result = ActionSelectionDMAResult(
+                    selected_action=tsaspdma_result.selected_action,
+                    action_parameters=tsaspdma_result.action_parameters,
+                    rationale=f"TSASPDMA-CORRECTION: {tsaspdma_result.rationale}",
+                )
+
+            logger.info(
+                f"TSASPDMA-CORRECTION: Result for '{requested_tool_name}': "
+                f"action={tsaspdma_result.selected_action}, "
+                f"corrected_to={llm_result.tool_name if llm_result.tool_name else 'N/A'}"
+            )
+            return tsaspdma_result
+
+        except Exception as e:
+            logger.error(f"TSASPDMA-CORRECTION: Failed for '{requested_tool_name}': {e}", exc_info=True)
+            raise
+
+    def _format_available_tools_for_correction(self, tools: List[ToolInfo]) -> str:
+        """Format available tools list for correction mode prompt."""
+        lines = []
+        for tool in tools:
+            line = f"  - {tool.name}: {tool.description}"
+            if tool.when_to_use:
+                line += f" (Use when: {tool.when_to_use})"
+            lines.append(line)
+        return "\n".join(lines) if lines else "  (No tools available)"
+
+    def _create_correction_mode_messages(
+        self,
+        requested_tool: str,
+        available_tools_list: str,
+        aspdma_rationale: str,
+        original_thought_content: str,
+    ) -> List[JSONDict]:
+        """Create prompt messages for TSASPDMA correction mode."""
+        messages: List[JSONDict] = []
+
+        # Add accord
+        accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
+        if accord_mode == "full":
+            messages.append({"role": "system", "content": ACCORD_TEXT})
+        elif accord_mode == "compressed":
+            messages.append({"role": "system", "content": ACCORD_TEXT_COMPRESSED})
+
+        # System message for correction mode
+        system_message = self.prompt_loader.get_system_message(
+            self.prompt_template_data,
+            tool_name=requested_tool,
+        )
+        messages.append({"role": "system", "content": system_message})
+
+        # Get the correction section template (stored in custom_prompts by loader)
+        correction_template = self.prompt_template_data.get_prompt("tool_correction_section") or ""
+        correction_section = correction_template.format(
+            requested_tool=requested_tool,
+            available_tools_list=available_tools_list,
+        )
+
+        # User message with correction context
+        user_message = f"""=== TOOL CORRECTION MODE ===
+
+ASPDMA selected tool '{requested_tool}' but this tool does NOT exist.
+
+{correction_section}
+
+=== ASPDMA'S ORIGINAL SELECTION ===
+Tool: {requested_tool}
+Rationale: {aspdma_rationale}
+
+=== ORIGINAL THOUGHT (user's intent) ===
+{original_thought_content}
+
+=== YOUR TASK ===
+1. Find the correct tool from the available list that matches the user's intent
+2. If found: Return TOOL with "tool_name" set to the EXACT name and appropriate "tool_parameters"
+3. If unclear: Return SPEAK to ask for clarification
+4. If no match: Return PONDER to reconsider
+
+Return your response as a FLAT JSON object."""
+
+        messages.append({"role": "user", "content": user_message})
+        return messages
 
     async def evaluate(self, *args: Any, **kwargs: Any) -> ActionSelectionDMAResult:
         """Evaluate tool action (generic interface)."""

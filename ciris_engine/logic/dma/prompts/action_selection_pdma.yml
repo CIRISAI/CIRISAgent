@@ -22,9 +22,15 @@ action_parameter_schemas: "FLAT field schemas per action (DO NOT use nested 'act
   FORGET: forget_node_id of the node to remove, forget_reason explaining why\n\
   DEFER: defer_reason explaining the deferral, defer_until as ISO timestamp\n\
   REJECT: reject_reason explaining why, reject_create_filter if pattern should be blocked\n\
-  TOOL: tool_name only - TSASPDMA determines parameters from documentation\n\
+  TOOL: tool_name only - use EXACT name from 'Available tools' list below. TSASPDMA determines parameters.\n\
   OBSERVE: observe_active true to actively observe\n\
   TASK_COMPLETE: completion_reason explaining task completion"
+tool_selection_guidance: "CRITICAL for TOOL action:\n\
+  - Your job is to select the correct ACTION VERB (SPEAK, TOOL, PONDER, etc.) and if TOOL, the correct TOOL NAME.\n\
+  - You do NOT provide tool parameters - TSASPDMA handles parameter selection using full tool documentation.\n\
+  - Use the EXACT tool name from the 'Available tools' list. Do NOT invent or modify tool names.\n\
+  - If no tool matches the user's intent, use SPEAK to clarify or PONDER to reconsider.\n\
+  - Example: If available tool is 'ha_device_control', use exactly 'ha_device_control' - not 'ha_control_light' or 'home:ha_device_control'."
 csdma_ambiguity_guidance: If CSDMA highlighted critical ambiguity, highly
   align 'Speak' (for user clarification) or 'Ponder' (to formulate key clarifying
   questions) with Fidelity & Do-Good.

@@ -98,8 +98,11 @@ response_format: |
 
   PLUS action-specific fields (use the exact field names below):
 
-  For TOOL action:
+  For TOOL action (normal mode - tool exists):
   {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
+  For TOOL action (correction mode - tool name was wrong):
+  {{"selected_action": "TOOL", "rationale": "Correcting tool name to match available tool...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
 
   For SPEAK action:
   {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "I need the user to answer: which light?"}}
@@ -111,7 +114,33 @@ response_format: |
   - Use the Parameter Schema above to determine required tool parameters
   - Infer parameter values from the user's intent and conversation context
   - tool_parameters is a dict containing the tool's arguments
+  - In CORRECTION MODE: include "tool_name" field with the EXACT name from available tools list
   - Do not wrap in markdown code blocks
+
+# Tool correction mode section (used when ASPDMA selected non-existent tool)
+tool_correction_section: |
+  === TOOL CORRECTION MODE ===
+
+  ASPDMA selected tool '{requested_tool}' but this tool does NOT exist.
+
+  Your task: Find the CORRECT tool from the available tools list that matches
+  the user's intent, OR use SPEAK/PONDER if no suitable tool exists.
+
+  Available tools:
+  {available_tools_list}
+
+  INSTRUCTIONS:
+  1. Analyze the user's original intent from the thought content
+  2. Review the available tools above - find one that matches the intent
+  3. If you find a matching tool:
+     - Return TOOL action with "tool_name" set to the EXACT name from the list
+     - Fill in appropriate "tool_parameters" based on the tool's schema
+  4. If multiple tools could match:
+     - Return SPEAK to ask the user which specific capability they want
+  5. If NO tool matches the intent:
+     - Return PONDER to reconsider the approach entirely
+
+  CRITICAL: The "tool_name" field must be an EXACT match from the available tools list above.
 
 evaluation_steps: |
   STEP 1: Read the Documentation

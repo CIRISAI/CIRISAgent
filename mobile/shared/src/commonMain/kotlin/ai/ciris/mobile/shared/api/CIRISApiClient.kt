@@ -2825,7 +2825,15 @@ class CIRISApiClient(
                                     userAgent = ctx.userAgent,
                                     result = ctx.result,
                                     error = ctx.error,
-                                    outcome = ctx.outcome,
+                                    // Infer outcome from result field if available
+                                    outcome = ctx.result?.let { result ->
+                                        when {
+                                            result.contains("success", ignoreCase = true) -> "success"
+                                            result.contains("fail", ignoreCase = true) -> "failure"
+                                            result.contains("error", ignoreCase = true) -> "failure"
+                                            else -> result
+                                        }
+                                    },
                                     metadata = null // Skip metadata to avoid parsing issues
                                 )
                             },

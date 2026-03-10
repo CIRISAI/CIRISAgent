@@ -287,7 +287,7 @@ class HAToolService:
             )
 
     async def _execute_device_control(self, params: Dict[str, Any]) -> ToolExecutionResult:
-        """Execute device control with parameter validation."""
+        """Execute device control with parameter validation and friendly name resolution."""
         entity_id = params.get("entity_id", "")
         action = params.get("action", "")
 
@@ -328,6 +328,35 @@ class HAToolService:
                 status=ToolExecutionStatus.FAILED,
                 success=False,
                 data={"received_params": params, "invalid_action": action},
+                error=error_msg,
+                correlation_id=str(uuid.uuid4()),
+            )
+
+        # Resolve entity by friendly name if needed (native HA feature support)
+        original_entity_id = entity_id
+        resolved_entity_id = await self.ha_service.resolve_entity_by_name(entity_id)
+
+        if resolved_entity_id:
+            if resolved_entity_id != entity_id:
+                logger.info(f"[HA TOOL] Resolved '{entity_id}' -> '{resolved_entity_id}'")
+            entity_id = resolved_entity_id
+        else:
+            # Entity not found - return helpful error with available entities hint
+            error_msg = (
+                f"Entity '{entity_id}' not found. "
+                f"Could not resolve as entity_id or friendly name. "
+                f"Use ha_list_entities to see available entities."
+            )
+            logger.error(f"[HA TOOL] Entity resolution failed: {error_msg}")
+            return ToolExecutionResult(
+                tool_name="ha_device_control",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data={
+                    "received_params": params,
+                    "original_entity_id": original_entity_id,
+                    "resolution_failed": True,
+                },
                 error=error_msg,
                 correlation_id=str(uuid.uuid4()),
             )

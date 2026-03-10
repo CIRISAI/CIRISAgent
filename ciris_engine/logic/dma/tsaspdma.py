@@ -231,17 +231,61 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
 
         return "\n".join(sections)
 
+    def _format_context_enrichment(self, context_enrichment: Optional[Dict[str, Any]]) -> str:
+        """Format context enrichment data for the prompt.
+
+        Context enrichment contains pre-run tool results like ha_list_entities
+        that provide available resources (e.g., entity IDs) for parameter selection.
+        """
+        if not context_enrichment:
+            return ""
+
+        sections = []
+        for tool_key, result in context_enrichment.items():
+            if not result:
+                continue
+
+            # Format based on tool type
+            if "ha_list_entities" in tool_key or "home_assistant" in tool_key:
+                # Format HA entities specially
+                if isinstance(result, dict):
+                    entities = result.get("entities", [])
+                    if entities:
+                        sections.append(f"--- Home Assistant Entities ({len(entities)} shown) ---")
+                        for entity in entities[:30]:  # Limit for prompt size
+                            entity_id = entity.get("entity_id", "")
+                            friendly_name = entity.get("friendly_name", "")
+                            state = entity.get("state", "")
+                            sections.append(f"  {entity_id}: '{friendly_name}' (state: {state})")
+                        if len(entities) > 30:
+                            sections.append(f"  ... and {len(entities) - 30} more entities")
+            else:
+                # Generic formatting for other tools
+                sections.append(f"--- {tool_key} ---")
+                if isinstance(result, dict):
+                    for key, value in list(result.items())[:10]:
+                        sections.append(f"  {key}: {value}")
+                else:
+                    sections.append(f"  {str(result)[:500]}")
+
+        return "\n".join(sections) if sections else ""
+
     def _create_tsaspdma_messages(
         self,
         tool_name: str,
         tool_info: ToolInfo,
         aspdma_rationale: str,
         original_thought_content: str,
+        context_enrichment: Optional[Dict[str, Any]] = None,
     ) -> List[JSONDict]:
         """Assemble prompt messages for TSASPDMA evaluation.
 
         NOTE: Parameters are NOT passed from ASPDMA - TSASPDMA extracts them
         from the original_thought_content which contains the user's request.
+
+        Args:
+            context_enrichment: Pre-run tool results (e.g., ha_list_entities)
+                               containing available resources for parameter selection.
         """
         messages: List[JSONDict] = []
 
@@ -272,6 +316,17 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         # Format tool documentation
         tool_documentation = self._format_tool_documentation(tool_info)
 
+        # Format context enrichment (available entities, etc.)
+        context_enrichment_data = self._format_context_enrichment(context_enrichment)
+        context_enrichment_section = ""
+        if context_enrichment_data:
+            context_enrichment_section = (
+                f"=== AVAILABLE RESOURCES (from context enrichment) ===\n"
+                f"{context_enrichment_data}\n\n"
+                f"IMPORTANT: Use the EXACT entity_id values from the list above.\n"
+                f"Do NOT use friendly names directly - map them to entity_id first."
+            )
+
         # Get user message from template
         # NOTE: No tool_parameters - TSASPDMA extracts them from original thought
         user_message_text = self.prompt_loader.get_user_message(
@@ -280,6 +335,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             aspdma_rationale=aspdma_rationale,
             original_thought_content=original_thought_content,
             tool_documentation=tool_documentation,
+            context_enrichment_section=context_enrichment_section,
         )
 
         messages.append({"role": "user", "content": user_message_text})
@@ -293,12 +349,17 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         aspdma_rationale: str,
         original_thought: ProcessingQueueItem,
         context: Optional[Any] = None,
+        context_enrichment: Optional[Dict[str, Any]] = None,
     ) -> ActionSelectionDMAResult:
         """Evaluate a TOOL action with full documentation.
 
         TSASPDMA reasons about and infers appropriate parameters from context
         using the tool's schema, documentation, and examples.
         ASPDMA only provides the tool name, not parameters.
+
+        Args:
+            context_enrichment: Pre-run tool results (e.g., ha_list_entities)
+                               containing available resources for parameter selection.
 
         Returns ActionSelectionDMAResult with:
         - TOOL: Proceed with execution (parameters inferred from context)
@@ -317,6 +378,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             tool_info=tool_info,
             aspdma_rationale=aspdma_rationale,
             original_thought_content=thought_content_str,
+            context_enrichment=context_enrichment,
         )
 
         # Store user prompt for debugging

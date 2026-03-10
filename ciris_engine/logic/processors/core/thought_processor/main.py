@@ -246,7 +246,7 @@ class ThoughtProcessor(
         # - Confirm TOOL action (possibly with refined parameters)
         # - Switch to SPEAK for user clarification
         # - Switch to PONDER to reconsider approach
-        action_result = await self._maybe_run_tsaspdma(thought_item, action_result)
+        action_result = await self._maybe_run_tsaspdma(thought_item, action_result, thought_context)
 
         # Phase 5: CONSCIENCE_EXECUTION - Apply ethical safety validation
         conscience_result = await self._conscience_execution_step(
@@ -280,6 +280,7 @@ class ThoughtProcessor(
         self,
         thought_item: ProcessingQueueItem,
         action_result: ActionSelectionDMAResult,
+        thought_context: Optional[Any] = None,
     ) -> ActionSelectionDMAResult:
         """Run TSASPDMA if action is TOOL and tool has documentation.
 
@@ -288,6 +289,10 @@ class ThoughtProcessor(
         - Proceed with TOOL (optionally with refined parameters)
         - Switch to SPEAK for user clarification
         - Switch to PONDER to reconsider the approach
+
+        Args:
+            thought_context: The batch context containing system_snapshot with
+                            context_enrichment_results (e.g., ha_list_entities data).
 
         Returns:
             The action result (possibly modified by TSASPDMA)
@@ -444,6 +449,16 @@ class ThoughtProcessor(
                 # Still proceed with original action, but this is a configuration error
                 return action_result
 
+            # Extract context enrichment from thought_context (contains entity lists, etc.)
+            context_enrichment = None
+            if thought_context:
+                # BatchContext has system_snapshot with context_enrichment_results
+                system_snapshot = getattr(thought_context, "system_snapshot", None)
+                if system_snapshot:
+                    context_enrichment = getattr(system_snapshot, "context_enrichment_results", None)
+                    if context_enrichment:
+                        logger.info(f"TSASPDMA-CONTEXT: Passing {len(context_enrichment)} context enrichment results")
+
             tsaspdma_result = await run_tsaspdma(
                 evaluator=evaluator,
                 tool_name=tool_name,
@@ -452,6 +467,7 @@ class ThoughtProcessor(
                 original_thought=thought_item,
                 context=None,
                 time_service=self._time_service,
+                context_enrichment=context_enrichment,
             )
 
             logger.info(

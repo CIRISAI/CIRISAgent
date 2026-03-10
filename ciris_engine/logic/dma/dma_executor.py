@@ -715,12 +715,17 @@ async def run_tsaspdma(
     original_thought: ProcessingQueueItem,
     context: Optional[Any] = None,
     time_service: Optional["TimeServiceProtocol"] = None,
+    context_enrichment: Optional[Dict[str, Any]] = None,
 ) -> ActionSelectionDMAResult:
     """Run the Tool-Specific Action Selection PDMA (TSASPDMA).
 
     TSASPDMA is invoked AFTER ASPDMA selects a TOOL action.
     It reasons about and infers appropriate parameters from context
     using the tool's schema and documentation.
+
+    Args:
+        context_enrichment: Pre-run tool results (e.g., ha_list_entities)
+                           containing available resources for parameter selection.
 
     Can return:
     - TOOL: Proceed with execution (parameters inferred from context)
@@ -789,6 +794,7 @@ async def run_tsaspdma(
             aspdma_rationale=aspdma_rationale,
             original_thought=original_thought,
             context=context,
+            context_enrichment=context_enrichment,
         )
 
         # Update correlation with success

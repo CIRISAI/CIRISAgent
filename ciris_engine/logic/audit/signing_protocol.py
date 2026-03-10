@@ -263,12 +263,13 @@ class CIRISVerifySigner(BaseSigner):
         from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
 
         # Import the attestation-in-progress exception if available
+        # (may not exist in all versions of ciris_verify)
         AttestationInProgressError: type | None = None
         try:
-            from ciris_verify import AttestationInProgressError as _AttestationErr
+            from ciris_verify import AttestationInProgressError as _AttestationErr  # type: ignore[attr-defined]
 
             AttestationInProgressError = _AttestationErr
-        except ImportError:
+        except (ImportError, AttributeError):
             pass
 
         # Retry with backoff when attestation is running

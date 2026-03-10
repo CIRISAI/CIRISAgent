@@ -80,6 +80,13 @@ tool_documentation_section: |
   ### DMA Guidance
   {dma_guidance}
 
+context_enrichment_section: |
+  === AVAILABLE RESOURCES (from context enrichment) ===
+  {context_enrichment_data}
+
+  IMPORTANT: Use the EXACT entity_id values from the list above.
+  Do NOT use friendly names directly - map them to entity_id first.
+
 context_integration: |
   === ASPDMA'S SELECTION ===
   Tool: {tool_name}
@@ -87,6 +94,8 @@ context_integration: |
 
   === ORIGINAL THOUGHT (user's intent - use to infer parameters) ===
   {original_thought_content}
+
+  {context_enrichment_section}
 
   === TOOL DOCUMENTATION (with Parameter Schema) ===
   {tool_documentation}

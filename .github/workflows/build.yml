@@ -704,6 +704,17 @@ jobs:
           # Verify changes
           grep -E "versionCode|versionName" "$BUILD_GRADLE" | head -2
 
+      - name: Commit version bump
+        id: commit_version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add mobile/androidApp/build.gradle
+          git commit -m "chore(mobile): bump Android versionCode to match v${{ steps.version.outputs.version }} [skip ci]"
+          git push origin main
+          # Store the commit SHA for tagging
+          echo "commit_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
       - name: Build debug APK
         run: |
           cd mobile
@@ -721,6 +732,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ steps.version.outputs.version }}
+          target_commitish: ${{ steps.commit_version.outputs.commit_sha }}
           name: CIRIS Agent v${{ steps.version.outputs.version }}
           draft: false
           prerelease: false
@@ -729,11 +741,3 @@ jobs:
             mobile/androidApp/build/outputs/apk/debug/CIRIS-${{ steps.version.outputs.version }}-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Commit version bump
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add mobile/androidApp/build.gradle
-          git commit -m "chore(mobile): bump Android versionCode [skip ci]" || echo "No changes to commit"
-          git push origin main || echo "Push failed - may need manual intervention"

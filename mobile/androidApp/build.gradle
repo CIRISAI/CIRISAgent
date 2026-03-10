@@ -80,7 +80,7 @@ android {
         release {
             storeFile file(System.getenv("CIRIS_KEYSTORE_PATH") ?: "${System.getProperty('user.home')}/ciris-release-key.jks")
             storePassword System.getenv("CIRIS_KEYSTORE_PASSWORD") ?: findProperty("cirisKeystorePassword") ?: ""
-            keyAlias System.getenv("CIRIS_KEY_ALIAS") ?: findProperty("cirisKeyAlias") ?: "ciris-key"
+            keyAlias System.getenv("CIRIS_KEY_ALIAS") ?: findProperty("cirisKeyAlias") ?: "ciris-release-key"
             keyPassword System.getenv("CIRIS_KEY_PASSWORD") ?: findProperty("cirisKeyPassword") ?: ""
         }
     }

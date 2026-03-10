@@ -650,7 +650,7 @@ jobs:
           echo "CIRISManager will handle the deployment orchestration."
           echo "Agents will be notified based on the canary deployment strategy."
 
-  # Build Android release APK, create GitHub release with tag
+  # Build Android debug APK, create GitHub release with tag
   android-release:
     name: Android Release
     needs: [build, register-build]
@@ -704,27 +704,18 @@ jobs:
           # Verify changes
           grep -E "versionCode|versionName" "$BUILD_GRADLE" | head -2
 
-      - name: Decode keystore
-        run: |
-          echo "${{ secrets.CIRIS_KEYSTORE_BASE64 }}" | base64 -d > /tmp/ciris-release-key.jks
-
-      - name: Build release APK
-        env:
-          CIRIS_KEYSTORE_PATH: /tmp/ciris-release-key.jks
-          CIRIS_KEYSTORE_PASSWORD: ${{ secrets.CIRIS_KEYSTORE_PASSWORD }}
-          CIRIS_KEY_PASSWORD: ${{ secrets.CIRIS_KEY_PASSWORD }}
-          CIRIS_KEY_ALIAS: ciris-release-key
+      - name: Build debug APK
         run: |
           cd mobile
           ./gradlew :androidApp:syncPythonSources
-          ./gradlew :androidApp:assembleRelease
+          ./gradlew :androidApp:assembleDebug
 
           # Copy APK with version name
           VERSION="${{ steps.version.outputs.version }}"
-          cp androidApp/build/outputs/apk/release/androidApp-release.apk \
-             androidApp/build/outputs/apk/release/CIRIS-$VERSION.apk
+          cp androidApp/build/outputs/apk/debug/androidApp-debug.apk \
+             androidApp/build/outputs/apk/debug/CIRIS-$VERSION-debug.apk
 
-          ls -lh androidApp/build/outputs/apk/release/
+          ls -lh androidApp/build/outputs/apk/debug/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -735,7 +726,7 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            mobile/androidApp/build/outputs/apk/release/CIRIS-${{ steps.version.outputs.version }}.apk
+            mobile/androidApp/build/outputs/apk/debug/CIRIS-${{ steps.version.outputs.version }}-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

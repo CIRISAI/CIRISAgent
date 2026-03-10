@@ -26,8 +26,22 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.manifest import ModuleInfo, ServiceDeclaration, ServiceManifest
 
 
-def create_mock_manifest(name: str, services: Optional[List[str]] = None) -> ServiceManifest:
-    """Create a mock service manifest for testing."""
+def create_mock_manifest(
+    name: str,
+    services: Optional[List[str]] = None,
+    auto_load: bool = True,
+    requires_consent: bool = False,
+    opt_in_required: bool = False,
+) -> ServiceManifest:
+    """Create a mock service manifest for testing.
+
+    Args:
+        name: Module name
+        services: List of service names
+        auto_load: Whether adapter auto-loads (default True)
+        requires_consent: Whether adapter requires consent (default False)
+        opt_in_required: Whether adapter requires explicit opt-in (default False)
+    """
     service_defs = [
         ServiceDeclaration(type=ServiceType.TOOL, class_path=f"{name}.service.{s}Service")
         for s in (services or ["main"])
@@ -38,6 +52,9 @@ def create_mock_manifest(name: str, services: Optional[List[str]] = None) -> Ser
             version="1.0.0",
             description=f"Test adapter {name}",
             author="test",
+            auto_load=auto_load,
+            requires_consent=requires_consent,
+            opt_in_required=opt_in_required,
         ),
         services=service_defs,
     )
@@ -592,3 +609,112 @@ class TestDiscoveryServiceHelpers:
         result = service._find_manifest_by_name("nonexistent")
 
         assert result is None
+
+
+class TestManifestFlagChecking:
+    """Tests for manifest flag checking in auto-load."""
+
+    def test_should_skip_for_auto_load_default_manifest(self) -> None:
+        """Test that default manifest (auto_load=True) is not skipped."""
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService()
+
+        manifest = create_mock_manifest("test_adapter")
+        result = service._should_skip_for_auto_load(manifest)
+
+        assert result is None  # Should not skip
+
+    def test_should_skip_for_auto_load_false(self) -> None:
+        """Test that auto_load=False causes skip."""
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService()
+
+        manifest = create_mock_manifest("test_adapter", auto_load=False)
+        result = service._should_skip_for_auto_load(manifest)
+
+        assert result is not None
+        assert "auto_load=False" in result
+
+    def test_should_skip_for_requires_consent(self) -> None:
+        """Test that requires_consent=True causes skip."""
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService()
+
+        manifest = create_mock_manifest("test_adapter", requires_consent=True)
+        result = service._should_skip_for_auto_load(manifest)
+
+        assert result is not None
+        assert "requires_consent=True" in result
+
+    def test_should_skip_for_opt_in_required(self) -> None:
+        """Test that opt_in_required=True causes skip."""
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService()
+
+        manifest = create_mock_manifest("test_adapter", opt_in_required=True)
+        result = service._should_skip_for_auto_load(manifest)
+
+        assert result is not None
+        assert "opt_in_required=True" in result
+
+    def test_should_skip_for_all_flags_set(self) -> None:
+        """Test that manifest with all restrictive flags is skipped."""
+        with patch.object(Path, "exists", return_value=False):
+            with patch.object(Path, "is_dir", return_value=False):
+                service = AdapterDiscoveryService()
+
+        manifest = create_mock_manifest(
+            "test_adapter",
+            auto_load=False,
+            requires_consent=True,
+            opt_in_required=True,
+        )
+        result = service._should_skip_for_auto_load(manifest)
+
+        # First flag check should trigger skip
+        assert result is not None
+        assert "auto_load=False" in result
+
+    @patch("ciris_engine.logic.services.tool.discovery_service.AdapterLoader")
+    def test_get_eligible_adapters_skips_consent_required(self, mock_loader_class) -> None:
+        """Test that get_eligible_adapters skips adapters requiring consent."""
+        mock_loader = MagicMock()
+        auto_load_manifest = create_mock_manifest("auto_adapter")
+        consent_manifest = create_mock_manifest("consent_adapter", requires_consent=True)
+        mock_loader.discover_services.return_value = [auto_load_manifest, consent_manifest]
+        mock_loader_class.return_value = mock_loader
+
+        with patch.object(Path, "exists", return_value=True):
+            with patch.object(Path, "is_dir", return_value=True):
+                service = AdapterDiscoveryService()
+
+        eligible = service.get_eligible_adapters()
+
+        # Only auto_adapter should be eligible
+        assert len(eligible) == 1
+        assert eligible[0].module.name == "auto_adapter"
+
+    @patch("ciris_engine.logic.services.tool.discovery_service.AdapterLoader")
+    @pytest.mark.asyncio
+    async def test_load_adapters_with_status_skips_opt_in_required(self, mock_loader_class) -> None:
+        """Test that load_adapters_with_status skips adapters requiring opt-in."""
+        mock_loader = MagicMock()
+        auto_load_manifest = create_mock_manifest("auto_adapter")
+        opt_in_manifest = create_mock_manifest("opt_in_adapter", opt_in_required=True)
+        mock_loader.discover_services.return_value = [auto_load_manifest, opt_in_manifest]
+        mock_loader.load_service_class.return_value = None  # Can't load class
+        mock_loader_class.return_value = mock_loader
+
+        with patch.object(Path, "exists", return_value=True):
+            with patch.object(Path, "is_dir", return_value=True):
+                service = AdapterDiscoveryService()
+
+        eligible, ineligible = await service.load_adapters_with_status()
+
+        # opt_in_adapter should be silently skipped (not in ineligible list either)
+        # The adapter requiring opt-in is filtered before processing
+        assert "opt_in_adapter" not in eligible

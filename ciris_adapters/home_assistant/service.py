@@ -238,6 +238,50 @@ class HAIntegrationService:
         """Get HTTP headers for HA API calls."""
         return {"Authorization": f"Bearer {self.ha_token}", "Content-Type": "application/json"}
 
+    # ========== Entity Resolution ==========
+
+    async def resolve_entity_by_name(self, name_or_id: str) -> Optional[str]:
+        """Resolve an entity by friendly name or entity_id.
+
+        If name_or_id contains a dot and exists as entity_id, returns it directly.
+        Otherwise, searches all entities for a matching friendly_name.
+
+        Returns:
+            The resolved entity_id, or None if not found.
+        """
+        # If it looks like an entity_id and exists, use it directly
+        if "." in name_or_id:
+            state = await self.get_device_state(name_or_id)
+            if state and state.state not in ("unavailable", "unknown"):
+                return name_or_id
+
+        # Search by friendly name (case-insensitive)
+        entities = await self.get_all_entities()
+        name_lower = name_or_id.lower().strip()
+
+        # Try exact match first
+        for entity in entities:
+            if entity.friendly_name and entity.friendly_name.lower() == name_lower:
+                logger.info(f"[HA RESOLVE] Resolved friendly name '{name_or_id}' -> '{entity.entity_id}'")
+                return entity.entity_id
+
+        # Try partial match (friendly name contains the search term)
+        for entity in entities:
+            if entity.friendly_name and name_lower in entity.friendly_name.lower():
+                logger.info(
+                    f"[HA RESOLVE] Partial match '{name_or_id}' -> '{entity.entity_id}' (name: {entity.friendly_name})"
+                )
+                return entity.entity_id
+
+        # Try if entity_id contains the search term (e.g., "bedroom" -> "light.bedroom_lamp")
+        for entity in entities:
+            if name_lower in entity.entity_id.lower():
+                logger.info(f"[HA RESOLVE] Entity ID contains '{name_or_id}' -> '{entity.entity_id}'")
+                return entity.entity_id
+
+        logger.warning(f"[HA RESOLVE] Could not resolve '{name_or_id}' to any entity")
+        return None
+
     # ========== Device Control ==========
 
     async def get_device_state(self, entity_id: str) -> Optional[HADeviceState]:
@@ -360,9 +404,27 @@ class HAIntegrationService:
                         else f"[HA DEVICE CONTROL] Response body: {response_text}"
                     )
 
-                    success = status == 200
+                    # HA returns 200 even for non-existent entities!
+                    # Check if response body contains any state changes
+                    # Empty array [] means the entity wasn't found/controlled
+                    response_data = None
+                    try:
+                        import json
+
+                        response_data = json.loads(response_text) if response_text else []
+                    except json.JSONDecodeError:
+                        response_data = []
+
+                    # Success only if HTTP 200 AND entity was actually affected
+                    success = status == 200 and (isinstance(response_data, list) and len(response_data) > 0)
+
                     if not success:
-                        logger.error(f"[HA DEVICE CONTROL] FAILED! Status {status}")
+                        if status == 200 and (not response_data or len(response_data) == 0):
+                            logger.error(
+                                f"[HA DEVICE CONTROL] FAILED! Entity '{entity_id}' not found or not controllable"
+                            )
+                        else:
+                            logger.error(f"[HA DEVICE CONTROL] FAILED! Status {status}")
                         if status == 401:
                             logger.error("[HA DEVICE CONTROL] 401 Unauthorized - Token expired, attempting refresh")
                             if _retry and await self._try_refresh_token():
@@ -374,12 +436,22 @@ class HAIntegrationService:
                         elif status == 404:
                             logger.error(f"[HA DEVICE CONTROL] 404 Not Found - Service {service} not found")
 
+                    # Build appropriate error message
+                    error_msg = None
+                    if not success:
+                        if status == 200 and (not response_data or len(response_data) == 0):
+                            error_msg = (
+                                f"Entity '{entity_id}' not found. Use ha_list_entities to see available entities."
+                            )
+                        else:
+                            error_msg = f"Status {status}: {response_text[:200]}"
+
                     logger.info("=" * 60)
                     return HAAutomationResult(
                         entity_id=entity_id,
                         action=action,
                         success=success,
-                        error=None if success else f"Status {status}: {response_text[:200]}",
+                        error=error_msg,
                     )
         except Exception as e:
             logger.error(f"[HA DEVICE CONTROL] Exception: {e}")
@@ -511,15 +583,23 @@ class HAIntegrationService:
                         entities = await response.json()
                         result = []
                         for entity in entities:
+                            attrs = entity.get("attributes", {})
                             state = HADeviceState(
                                 entity_id=entity.get("entity_id", ""),
                                 state=entity.get("state", "unknown"),
-                                friendly_name=entity.get("attributes", {}).get("friendly_name", ""),
-                                attributes=entity.get("attributes", {}),
+                                friendly_name=attrs.get("friendly_name", ""),
+                                attributes=attrs,
                                 domain=entity.get("entity_id", "").split(".")[0],
                             )
                             result.append(state)
                             self._entity_cache[state.entity_id] = state
+                            # Log entity details at INFO level for context tuning
+                            logger.info(
+                                f"[HA ENTITY DISCOVERED] {state.entity_id} | "
+                                f"state={state.state} | name={state.friendly_name} | "
+                                f"device_class={attrs.get('device_class', 'N/A')} | "
+                                f"unit={attrs.get('unit_of_measurement', 'N/A')}"
+                            )
                         self._cache_timestamp = datetime.now(timezone.utc)
                         logger.info(f"[HA] get_all_entities: Retrieved {len(result)} entities")
                         return result

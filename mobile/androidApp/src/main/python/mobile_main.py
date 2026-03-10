@@ -675,9 +675,11 @@ def _save_hashes_to_file(results: dict) -> None:
     try:
         import time
 
-        # Get CIRIS_HOME for save location
-        ciris_home = os.environ.get("CIRIS_HOME", "/data/data/ai.ciris.mobile/files/ciris")
-        output_path = Path(ciris_home) / "startup_python_hashes.json"
+        # Get CIRIS_HOME for save location using path_resolution
+        from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
+        ciris_home = get_ciris_home()
+        output_path = ciris_home / "startup_python_hashes.json"
 
         # Get agent version from ciris_engine
         try:
@@ -715,6 +717,9 @@ def verify_code_integrity(package_names: list = None, save_to_file: bool = True)
     not just importable modules. This ensures we hash files that may not
     be importable due to missing dependencies.
 
+    Emits progress to stdout in format: [PREP 7/8] Hashing ciris_engine...
+    This is parsed by the Android logcat reader for UI updates.
+
     Args:
         package_names: List of packages to verify (default: ["ciris_engine", "ciris_adapters"])
         save_to_file: Whether to save hashes to JSON file (default: True)
@@ -742,12 +747,19 @@ def verify_code_integrity(package_names: list = None, save_to_file: bool = True)
 
     all_hashes = []
 
+    # PREP steps 7 and 8 are for code integrity (steps 1-6 are pydantic setup)
+    prep_step = 7
+
     for package_name in package_names:
         try:
+            # Emit progress for UI - format matches [X/Y] pattern parsed by logcat reader
+            print(f"[{prep_step}/8] Hashing {package_name}...", flush=True)
+
             # Import the package to find its location
             package = importlib.import_module(package_name)
             if not hasattr(package, "__path__"):
                 results["errors"].append(f"{package_name} is not a package")
+                prep_step += 1
                 continue
 
             # Get the package root directory
@@ -755,9 +767,8 @@ def verify_code_integrity(package_names: list = None, save_to_file: bool = True)
             # Get parent directory to compute relative paths like "ciris_engine/core.py"
             root_dir = package_path.parent
 
-            logger.info(f"[code-integrity] Walking {package_name} at {package_path}")
-
             # Walk ALL .py files in the package directory
+            file_count = 0
             for py_file in package_path.rglob("*.py"):
                 results["modules_checked"] += 1
                 try:
@@ -773,15 +784,22 @@ def verify_code_integrity(package_names: list = None, save_to_file: bool = True)
                     results["module_hashes"][rel_path] = file_hash
                     all_hashes.append(f"{rel_path}:{file_hash}")
                     results["modules_hashed"] += 1
+                    file_count += 1
 
                 except Exception as e:
                     if len(results["errors"]) < 20:
                         results["errors"].append(f"{py_file}: {e}")
 
+            # Emit completion for this package
+            print(f"[{prep_step}/8] {package_name}: {file_count} files hashed", flush=True)
+            prep_step += 1
+
         except ImportError as e:
             results["errors"].append(f"Cannot import {package_name}: {e}")
+            prep_step += 1
         except Exception as e:
             results["errors"].append(f"Failed to verify {package_name}: {e}")
+            prep_step += 1
 
     # Compute combined hash of all files (deterministic order)
     if all_hashes:
@@ -792,12 +810,6 @@ def verify_code_integrity(package_names: list = None, save_to_file: bool = True)
         f"Code integrity check: {results['modules_hashed']}/{results['modules_checked']} "
         f"files hashed, total_hash={results['total_hash'][:16] if results['total_hash'] else 'none'}..."
     )
-
-    # Log first 5 file names for debugging
-    if results["module_hashes"]:
-        first_5_files = list(results["module_hashes"].keys())[:5]
-        logger.info(f"[code-integrity] First 5 files hashed: {first_5_files}")
-        logger.info(f"[code-integrity] Total files in module_hashes: {len(results['module_hashes'])}")
 
     if results["errors"]:
         logger.warning(f"Code integrity errors: {results['errors'][:5]}...")
@@ -814,6 +826,8 @@ def setup_android_environment():
 
     Sets up CIRIS_HOME and loads .env if present.
     First-run detection is handled by is_first_run() which is Android-aware.
+
+    Uses path_resolution.py for all path logic - only CIRIS_HOME is set here.
     """
     from dotenv import load_dotenv
 
@@ -821,25 +835,31 @@ def setup_android_environment():
         logger.warning("ANDROID_DATA not set - not running on Android?")
         return
 
-    # Running on Android device
+    # Step 1: Set CIRIS_HOME (the only env var we set manually)
+    # This is the root for path_resolution.py to build all other paths
     android_data = Path(os.environ["ANDROID_DATA"])
-    app_data = android_data / "data" / "ai.ciris.mobile"
-
-    # Ensure directories exist
-    ciris_home = app_data / "files" / "ciris"
-    ciris_home.mkdir(parents=True, exist_ok=True)
-    (ciris_home / "databases").mkdir(parents=True, exist_ok=True)
-    (ciris_home / "logs").mkdir(parents=True, exist_ok=True)
-
-    # Configure CIRIS environment - use standard paths
-    # CIRIS_HOME is used by path_resolution.py for Android-aware path detection
+    ciris_home = android_data / "data" / "ai.ciris.mobile" / "files" / "ciris"
     os.environ.setdefault("CIRIS_HOME", str(ciris_home))
-    os.environ.setdefault("CIRIS_DATA_DIR", str(ciris_home))
-    os.environ.setdefault("CIRIS_DB_PATH", str(ciris_home / "databases" / "ciris.db"))
-    os.environ.setdefault("CIRIS_LOG_DIR", str(ciris_home / "logs"))
+
+    # Step 2: Import path_resolution and use it for all paths
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home, get_data_dir, get_logs_dir
+
+    ciris_home = get_ciris_home()
+    data_dir = get_data_dir()
+    logs_dir = get_logs_dir()
+
+    # Step 3: Ensure directories exist
+    ciris_home.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    # NOTE: Do NOT set CIRIS_DATA_DIR or CIRIS_LOG_DIR here!
+    # CIRISVerify handles its own path resolution internally.
+    # Setting these env vars causes path inconsistencies between Python and Rust.
+
+    logger.info(f"Android paths: CIRIS_HOME={ciris_home}, data={data_dir}, logs={logs_dir}")
 
     # Load .env file if it exists (sets OPENAI_API_KEY, OPENAI_API_BASE, etc.)
-    # First-run detection is handled by is_first_run() - don't duplicate logic here
     env_file = ciris_home / ".env"
     if env_file.exists():
         logger.info(f"Loading configuration from {env_file}")
@@ -894,7 +914,6 @@ async def start_mobile_runtime():
     # Create security config with absolute paths (Android CWD is read-only)
     security_config = SecurityConfig(
         secrets_key_path=ciris_home / ".ciris_keys",
-        audit_key_path=ciris_home / "audit_keys",
     )
 
     # Create database config with absolute paths
@@ -917,26 +936,13 @@ async def start_mobile_runtime():
     api_config.host = "0.0.0.0"
     api_config.port = 8080
 
-    adapter_configs = {"api": AdapterConfig(adapter_type="api", enabled=True, settings=api_config.model_dump())}
+    # Bootstrap with API adapter only
+    # Other adapters (ciris_hosted_tools, ciris_accord_metrics, etc.) are loaded from:
+    # 1. Graph config via load_saved_adapters_from_graph (normal restart)
+    # 2. CIRIS_ADAPTER env via load_post_setup_adapters_for_resume (first restart after setup)
     adapter_types = ["api"]
-
-    # Auto-load ciris_hosted_tools adapter when Google Play Services is available
-    # This provides web_search and other CIRIS-hosted tools
-    if os.environ.get("GOOGLE_PLAY_SERVICES_AVAILABLE", "").lower() == "true":
-        logger.info("Google Play Services detected - loading ciris_hosted_tools adapter")
-        adapter_configs["ciris_hosted_tools"] = AdapterConfig(
-            adapter_type="ciris_hosted_tools",
-            enabled=True,
-            settings={
-                "proxy_url": get_proxy_url(),
-                "proxy_fallback_url": get_proxy_url(use_fallback=True),
-                "billing_url": get_billing_url(),
-                "billing_fallback_url": get_billing_url(use_fallback=True),
-            },
-        )
-        adapter_types.append("ciris_hosted_tools")
-    else:
-        logger.info("Google Play Services not available - ciris_hosted_tools disabled")
+    adapter_configs = {"api": AdapterConfig(adapter_type="api", enabled=True, settings=api_config.model_dump())}
+    logger.info("Bootstrap adapters: ['api'] - additional adapters loaded from graph/resume")
 
     startup_channel_id = api_config.get_home_channel_id(api_config.host, api_config.port)
 
@@ -969,14 +975,78 @@ async def start_mobile_runtime():
         await runtime.shutdown()
 
 
+def _preload_heavy_imports():
+    """Pre-import heavy modules in parallel with code integrity.
+
+    This reduces the ~2.5s import gap by loading modules while
+    code integrity hashing is running.
+    """
+    # These are the heavy imports that normally happen in start_mobile_runtime()
+    # Pre-importing them here allows parallel execution with code integrity
+    try:
+        # Core runtime imports (the heaviest)
+        from ciris_engine.config import ciris_services  # noqa: F401
+        from ciris_engine.logic.adapters.api import config as api_config  # noqa: F401
+        from ciris_engine.logic.runtime import ciris_runtime  # noqa: F401
+        from ciris_engine.logic.utils import runtime_utils  # noqa: F401
+        from ciris_engine.schemas.runtime import adapter_management  # noqa: F401
+    except Exception as e:
+        # Non-fatal - imports will happen later anyway
+        logger.debug(f"Pre-import warning (non-fatal): {e}")
+
+
+def clear_signing_key() -> bool:
+    """Clear the agent signing key from CIRISVerify.
+
+    This properly deletes both the encrypted key file AND the AES wrapper
+    key from Android Keystore. Called from Kotlin when user requests
+    "Re-run Setup Wizard".
+
+    Returns:
+        True if key was deleted, False if no key existed or deletion failed.
+    """
+    try:
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
+
+        verifier = get_verifier()
+        if verifier is None:
+            logger.warning("[clear_signing_key] CIRISVerify not initialized, nothing to clear")
+            return True  # Nothing to clear is success
+
+        if not verifier.has_key_sync():
+            logger.info("[clear_signing_key] No signing key present, nothing to clear")
+            return True
+
+        logger.info("[clear_signing_key] Deleting signing key via CIRISVerify FFI...")
+        result = verifier.delete_key_sync()
+        logger.info(f"[clear_signing_key] delete_key_sync returned: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"[clear_signing_key] Failed to clear signing key: {e}", exc_info=True)
+        return False
+
+
 def main():
     """Main entrypoint for Android app."""
+    import concurrent.futures
+
     logger.info("CIRIS Mobile - Full On-Device Runtime (LLM Remote)")
     setup_android_environment()
 
-    # Verify Python code integrity at startup (both ciris_engine and ciris_adapters)
-    logger.info("Verifying code integrity...")
-    integrity_ok, integrity_results = verify_code_integrity()
+    # Run code integrity and heavy imports IN PARALLEL
+    # This reduces startup time by ~2.5s by overlapping I/O-bound hashing
+    # with import-time module loading
+    logger.info("Verifying code integrity (parallel with imports)...")
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        # Submit both tasks
+        integrity_future = executor.submit(verify_code_integrity)
+        import_future = executor.submit(_preload_heavy_imports)
+
+        # Wait for both to complete
+        integrity_ok, integrity_results = integrity_future.result()
+        import_future.result()  # Just wait, don't need return value
+
     if integrity_ok:
         logger.info(
             f"Code integrity verified: {integrity_results['modules_hashed']} modules, "
@@ -991,7 +1061,13 @@ def main():
         logger.info("Server stopped by user")
     except Exception as e:
         logger.error(f"Server error: {e}", exc_info=True)
-        raise
+        # Output fatal error in a format the mobile UI can detect and display
+        error_msg = str(e)
+        print(f"[FATAL] {error_msg}", flush=True)
+        print(f"[FATAL_EXIT] CIRIS cannot start: {error_msg}", flush=True)
+        import sys
+
+        sys.exit(1)
 
 
 if __name__ == "__main__":

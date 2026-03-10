@@ -32,7 +32,7 @@ def get_config_paths() -> list[Path]:
           1. ~/ciris/.env (user-specific config)
           2. /etc/ciris/.env (system-wide config, Linux/Unix)
 
-        Note: ~/.ciris/ is for keys/secrets/audit_keys only, NOT config!
+        Note: ~/.ciris/ is for keys/secrets only, NOT config!
     """
     from ciris_engine.logic.utils.path_resolution import (
         get_ciris_home,

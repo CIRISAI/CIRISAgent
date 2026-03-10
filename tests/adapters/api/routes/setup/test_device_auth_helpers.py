@@ -21,14 +21,16 @@ class TestValidatePortalUrl:
     """Tests for _validate_portal_url SSRF protection."""
 
     def test_accepts_trusted_portal_domain(self):
-        """Should accept portal.ciris.ai."""
+        """Should accept portal.ciris.ai and return sanitized base URL (no path)."""
         result = _validate_portal_url("https://portal.ciris.ai/api")
-        assert result == "https://portal.ciris.ai/api"
+        # SSRF fix: returns sanitized base URL only (scheme + netloc), discards path
+        assert result == "https://portal.ciris.ai"
 
     def test_accepts_localhost_http(self):
         """Should accept http://localhost for development."""
         result = _validate_portal_url("http://localhost:8080/api")
-        assert result == "http://localhost:8080/api"
+        # SSRF fix: returns sanitized base URL only (scheme + netloc), discards path
+        assert result == "http://localhost:8080"
 
     def test_rejects_untrusted_domain(self):
         """Should reject untrusted domains (SSRF protection)."""
@@ -220,9 +222,11 @@ class TestImportKeyAndGenerateAttestation:
         mock_verifier.get_ed25519_public_key_sync.return_value = b"public_key_32_bytes_here_!!!!!!"
         mock_verifier.run_attestation_sync.return_value = {"key_type": "portal"}
 
-        # Patch ciris_verify module (imported inline)
-        mock_cv_class = MagicMock(return_value=mock_verifier)
-        with patch.dict("sys.modules", {"ciris_verify": MagicMock(CIRISVerify=mock_cv_class)}):
+        # Patch get_verifier singleton (the function now uses get_verifier, not direct CIRISVerify)
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
+            return_value=mock_verifier,
+        ):
             with patch(
                 "ciris_engine.logic.audit.signing_protocol.reset_unified_signing_key",
                 MagicMock(),
@@ -234,17 +238,19 @@ class TestImportKeyAndGenerateAttestation:
         mock_verifier.import_key_sync.assert_called_once()
 
     def test_key_import_exception_returns_error(self):
-        """Should return error when key import fails."""
+        """Should return error when get_verifier returns None."""
         from ciris_engine.logic.adapters.api.routes.setup.device_auth import _import_key_and_generate_attestation
 
-        # Make CIRISVerify constructor raise exception
-        mock_cv_class = MagicMock(side_effect=RuntimeError("CIRISVerify unavailable"))
-        with patch.dict("sys.modules", {"ciris_verify": MagicMock(CIRISVerify=mock_cv_class)}):
+        # Mock get_verifier to return None
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
+            return_value=None,
+        ):
             proof, error = _import_key_and_generate_attestation(os.urandom(32), os.urandom(32))
 
         assert proof is None
         assert error is not None
-        assert "CIRISVerify unavailable" in str(error)
+        assert "not available" in str(error)
 
     def test_key_import_success_but_has_key_fails(self, caplog):
         """Should log error when has_key_sync returns False after import."""
@@ -254,8 +260,10 @@ class TestImportKeyAndGenerateAttestation:
         mock_verifier.has_key_sync.return_value = False  # Key import failed silently
         mock_verifier.run_attestation_sync.return_value = {"key_type": "unknown"}
 
-        mock_cv_class = MagicMock(return_value=mock_verifier)
-        with patch.dict("sys.modules", {"ciris_verify": MagicMock(CIRISVerify=mock_cv_class)}):
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
+            return_value=mock_verifier,
+        ):
             with patch(
                 "ciris_engine.logic.audit.signing_protocol.reset_unified_signing_key",
                 MagicMock(),

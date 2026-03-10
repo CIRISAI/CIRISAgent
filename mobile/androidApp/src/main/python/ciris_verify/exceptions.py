@@ -43,3 +43,34 @@ class CommunicationError(CIRISVerifyError):
     def __init__(self, message: str, cause: Exception = None):
         self.cause = cause
         super().__init__(message)
+
+
+class AttestationInProgressError(CIRISVerifyError):
+    """Key operation blocked because attestation is currently running.
+
+    This error is returned when key operations (has_key, get_public_key,
+    sign, import_key) are called while attestation is in progress.
+
+    The caller should wait ~500ms and retry. Example:
+
+        import time
+        from ciris_verify import CIRISVerify, AttestationInProgressError
+
+        verifier = CIRISVerify()
+        max_retries = 5
+
+        for attempt in range(max_retries):
+            try:
+                has_key = verifier.has_key_sync()
+                break
+            except AttestationInProgressError:
+                if attempt < max_retries - 1:
+                    time.sleep(0.5)
+                else:
+                    raise
+    """
+    def __init__(self, operation: str = "key operation"):
+        self.operation = operation
+        super().__init__(
+            f"Attestation in progress - {operation} blocked. Retry after ~500ms."
+        )

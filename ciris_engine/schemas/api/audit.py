@@ -26,6 +26,7 @@ class AuditContext(BaseModel):
     user_agent: Optional[str] = Field(None, description="User agent if applicable")
     result: Optional[str] = Field(None, description="Operation result")
     error: Optional[str] = Field(None, description="Error message if failed")
+    outcome: Optional[str] = Field(None, description="Action outcome (success, failure, etc.)")
     metadata: Optional[JSONDict] = Field(None, description="Additional metadata")
 
 

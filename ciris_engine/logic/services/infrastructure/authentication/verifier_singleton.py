@@ -11,6 +11,7 @@ This ensures:
 """
 
 import logging
+import os
 import threading
 from typing import Any, Optional
 
@@ -57,6 +58,21 @@ def get_verifier() -> Any:
 
         try:
             from ciris_verify import CIRISVerify
+
+            # CRITICAL: Ensure CIRIS_HOME is set before CIRISVerify init
+            ciris_home = os.environ.get("CIRIS_HOME")
+            if not ciris_home:
+                raise RuntimeError(
+                    "CIRIS_HOME not set! Call setup_android_environment() before get_verifier(). "
+                    "CIRISVerify needs CIRIS_HOME to determine key storage path."
+                )
+
+            # CRITICAL: Set CIRIS_DATA_DIR based on CIRIS_HOME
+            # CIRISVerify reads CIRIS_DATA_DIR for key storage path
+            # This MUST be set here, right before init, to ensure consistency
+            ciris_data_dir = os.path.join(ciris_home, "data")
+            os.environ["CIRIS_DATA_DIR"] = ciris_data_dir
+            logger.info(f"[verifier_singleton] Initializing CIRISVerify with CIRIS_DATA_DIR={ciris_data_dir}")
 
             # CIRISVerify() triggers Rust/Tokio init which needs 8MB stack
             holder: list[Any] = [None, None]  # [verifier, error]

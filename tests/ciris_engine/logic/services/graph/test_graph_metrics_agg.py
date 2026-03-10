@@ -280,16 +280,36 @@ class TestAuditServiceMetrics(BaseMetricsTest):
     @pytest_asyncio.fixture
     async def audit_service(self, mock_memory_bus, time_service):
         """Create audit service."""
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ed25519
+
+        # Generate real Ed25519 keypair for testing
+        private_key = ed25519.Ed25519PrivateKey.generate()
+        public_key = private_key.public_key()
+        pub_bytes = public_key.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+
+        # Mock the CIRISVerify verifier singleton
+        mock_verifier = MagicMock()
+        mock_verifier.has_key_sync.return_value = True
+        mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
+        mock_verifier.sign_ed25519_sync.side_effect = lambda data: private_key.sign(data)
+
         with tempfile.TemporaryDirectory() as temp_dir:
-            service = GraphAuditService(
-                memory_bus=mock_memory_bus,
-                time_service=time_service,
-                db_path=os.path.join(temp_dir, "audit.db"),
-                key_path=os.path.join(temp_dir, "keys"),
-            )
-            await service.start()
-            yield service
-            await service.stop()
+            with patch(
+                "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
+                return_value=mock_verifier,
+            ):
+                service = GraphAuditService(
+                    memory_bus=mock_memory_bus,
+                    time_service=time_service,
+                    db_path=os.path.join(temp_dir, "audit.db"),
+                )
+                await service.start()
+                yield service
+                await service.stop()
 
     @pytest.mark.asyncio
     async def test_audit_service_base_metrics(self, audit_service):

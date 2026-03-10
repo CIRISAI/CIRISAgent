@@ -116,6 +116,15 @@ def _convert_audit_entry(entry: AuditEntry) -> AuditEntryResponse:
         else:
             logger.debug("_convert_audit_entry - No additional_data in ctx_dict")
 
+        # Extract outcome from additional_data (stored by audit service)
+        outcome = additional_data.get("outcome") if additional_data else None
+        # Also check for error field to determine outcome
+        error = ctx_dict.get("error")
+        if not outcome and error:
+            outcome = "failure"
+        elif not outcome:
+            outcome = "success"
+
         context = AuditContext(
             entity_id=ctx_dict.get("entity_id"),
             entity_type=ctx_dict.get("entity_type"),
@@ -127,7 +136,8 @@ def _convert_audit_entry(entry: AuditEntry) -> AuditEntryResponse:
             ip_address=ctx_dict.get("ip_address"),
             user_agent=ctx_dict.get("user_agent"),
             result=ctx_dict.get("result"),
-            error=ctx_dict.get("error"),
+            error=error,
+            outcome=outcome,
             metadata=additional_data,
         )
     else:
@@ -302,9 +312,19 @@ def _process_sqlite_entries(
         if entry_id not in merged:
             # Convert SQLite entry to AuditEntryResponse format
             timestamp = datetime.fromisoformat(event_timestamp.replace("Z", UTC_TIMEZONE_SUFFIX))
+            # Extract outcome from SQLite entry
+            outcome = get_str_optional(sqlite_entry, "outcome")
+            if not outcome:
+                # Try to infer from event_type
+                event_type = get_str(sqlite_entry, "event_type", "").lower()
+                if "fail" in event_type or "error" in event_type:
+                    outcome = "failure"
+                else:
+                    outcome = "success"
             context = AuditContext(
                 description=get_str_optional(sqlite_entry, "event_payload"),
                 entity_id=get_str_optional(sqlite_entry, "originator_id"),
+                outcome=outcome,
             )
 
             merged[entry_id] = _MergedAuditEntry(
@@ -343,7 +363,16 @@ def _process_jsonl_entries(
             )
 
             description = get_str_optional(jsonl_entry, "description") or get_str_optional(jsonl_entry, "event_payload")
-            context = AuditContext(description=description)
+            # Extract outcome from JSONL entry
+            outcome = get_str_optional(jsonl_entry, "outcome")
+            if not outcome:
+                # Try to infer from action or event_type
+                action = get_str_optional(jsonl_entry, "action") or get_str(jsonl_entry, "event_type", "")
+                if "fail" in action.lower() or "error" in action.lower():
+                    outcome = "failure"
+                else:
+                    outcome = "success"
+            context = AuditContext(description=description, outcome=outcome)
 
             merged[entry_id] = _MergedAuditEntry(
                 entry=AuditEntryResponse(

@@ -4,21 +4,21 @@ Provides cryptographic hash chain and digital signature capabilities for audit t
 
 Key components:
 - AuditHashChain: Maintains hash chain integrity
-- AuditSignatureManager: Now uses Ed25519 via unified signing key (shared with accord metrics)
-- AuditVerifier: Verifies signatures (supports both RSA and Ed25519)
-- UnifiedSigningKey: Ed25519 signing key management (recommended)
+- AuditSignatureManager: Uses CIRISVerify for all signing (via unified signing key)
+- AuditVerifier: Verifies signatures (supports RSA legacy and Ed25519)
+- UnifiedSigningKey: Ed25519 signing key management via CIRISVerify
 - AuditKeyMigration: Migrate existing RSA audit chains to Ed25519
 
-Note: New installations automatically use Ed25519. RSA-2048 is deprecated but
-verification is maintained for backward compatibility with existing audit chains.
-Use database_maintenance.migrate_audit_key_to_ed25519() to migrate existing chains.
+Note: CIRISVerify is the ONLY source of signing keys. It handles hardware-backed
+storage (TPM, Keystore, Keychain) with software fallback. RSA-2048 verification
+is maintained for backward compatibility with existing audit chains.
 """
 
 from .hash_chain import AuditHashChain
 from .key_migration import AuditKeyMigration, MigrationResult, migrate_audit_key_to_ed25519
 from .signature_manager import AuditSignatureManager
 from .signing_protocol import (
-    Ed25519Signer,
+    CIRISVerifySigner,
     SignerProtocol,
     SigningAlgorithm,
     UnifiedSigningKey,
@@ -31,10 +31,10 @@ __all__ = [
     "AuditHashChain",
     "AuditSignatureManager",
     "AuditVerifier",
-    # New unified signing
+    # Unified signing via CIRISVerify
     "SigningAlgorithm",
     "SignerProtocol",
-    "Ed25519Signer",
+    "CIRISVerifySigner",
     "UnifiedSigningKey",
     "get_unified_signing_key",
     "reset_unified_signing_key",

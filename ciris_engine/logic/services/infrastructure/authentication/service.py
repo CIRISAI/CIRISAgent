@@ -71,7 +71,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         """
         super().__init__()  # Initialize BaseService
         self.db_path = db_path
-        # Use platform-aware secrets directory (iOS: Documents/.secrets, desktop: ~/.ciris)
+        # Use platform-aware secrets directory (mobile: CIRIS_HOME/secrets, desktop: ~/ciris/secrets)
         self.key_dir = Path(key_dir) if key_dir else get_secrets_home()
         self.key_dir.mkdir(mode=0o700, exist_ok=True, parents=True)
 
@@ -1656,22 +1656,23 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 self._attestation_refresh_task.cancel()
                 try:
                     await self._attestation_refresh_task
-                except asyncio.CancelledError:
-                    # Expected: we just cancelled this child task, no need to propagate
-                    pass  # noqa: S110 - intentional: child task we cancelled
+                except asyncio.CancelledError:  # noqa: ASYNC910
+                    # Expected: we just cancelled this child task on line above.
+                    # Do NOT re-raise - this is OUR cancellation, not external.
+                    pass
             await super().stop()
             self._started = False
             # Clear caches
             self._token_cache.clear()
             self._channel_token_cache.clear()
             logger.info("AuthenticationService stopped")
-        except asyncio.CancelledError:
+        except asyncio.CancelledError:  # noqa: ASYNC910
             # External cancellation of stop() - cleanup then re-raise per asyncio contract
             self._started = False
             self._token_cache.clear()
             self._channel_token_cache.clear()
             logger.info("AuthenticationService stopped (cancelled)")
-            raise  # NOSONAR - CancelledError is re-raised after cleanup
+            raise  # Re-raised after cleanup per asyncio contract
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect authentication-specific metrics."""

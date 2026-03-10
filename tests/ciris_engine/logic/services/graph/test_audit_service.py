@@ -57,22 +57,45 @@ def memory_bus():
 @pytest_asyncio.fixture
 async def audit_service(memory_bus, temp_db, time_service):
     """Create an audit service for testing."""
+    from unittest.mock import MagicMock, patch
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+
+    # Generate real Ed25519 keypair for testing
+    private_key = ed25519.Ed25519PrivateKey.generate()
+    public_key = private_key.public_key()
+    pub_bytes = public_key.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+
+    # Mock the CIRISVerify verifier singleton with real key operations
+    mock_verifier = MagicMock()
+    mock_verifier.has_key_sync.return_value = True
+    mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
+    mock_verifier.sign_ed25519_sync.side_effect = lambda data: private_key.sign(data)
+
     # Create a temporary directory for export
     with tempfile.TemporaryDirectory() as temp_dir:
         export_path = os.path.join(temp_dir, "audit_export.jsonl")
-        service = GraphAuditService(
-            memory_bus=memory_bus,
-            time_service=time_service,
-            db_path=temp_db,
-            export_path=export_path,  # Provide export path for tests
-            enable_hash_chain=True,  # REQUIRED - audit trail now requires hash chain data
-        )
-        await service.start()
-        yield service
-        try:
-            await service.stop()
-        except asyncio.CancelledError:
-            pass  # Expected when cancelling export task
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
+            return_value=mock_verifier,
+        ):
+            service = GraphAuditService(
+                memory_bus=memory_bus,
+                time_service=time_service,
+                db_path=temp_db,
+                export_path=export_path,  # Provide export path for tests
+                enable_hash_chain=True,  # REQUIRED - audit trail now requires hash chain data
+            )
+            await service.start()
+            yield service
+            try:
+                await service.stop()
+            except asyncio.CancelledError:
+                pass  # Expected when cancelling export task
 
 
 @pytest.mark.asyncio

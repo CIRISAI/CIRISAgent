@@ -16,6 +16,8 @@ from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
 from fastapi import status
 
 from ciris_engine.logic.adapters.api.routes.setup import (
@@ -29,6 +31,29 @@ from ciris_engine.logic.adapters.api.routes.setup import (
     _validate_llm_connection,
 )
 from ciris_engine.schemas.api.auth import UserRole
+
+
+@pytest.fixture(autouse=True)
+def mock_verifier_singleton():
+    """Mock CIRISVerify verifier singleton for all tests."""
+    # Generate real Ed25519 keypair for testing
+    private_key = ed25519.Ed25519PrivateKey.generate()
+    public_key = private_key.public_key()
+    pub_bytes = public_key.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+
+    mock_verifier = MagicMock()
+    mock_verifier.has_key_sync.return_value = True
+    mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
+    mock_verifier.sign_ed25519_sync.side_effect = lambda data: private_key.sign(data)
+
+    with patch(
+        "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
+        return_value=mock_verifier,
+    ):
+        yield mock_verifier
 
 
 @pytest.fixture

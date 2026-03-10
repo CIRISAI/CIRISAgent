@@ -32,10 +32,10 @@ logger = logging.getLogger(__name__)
 class AuditVerifier:
     """Verifies audit log integrity and detects tampering"""
 
-    def __init__(self, db_path: str, key_path: str, time_service: TimeServiceProtocol) -> None:
+    def __init__(self, db_path: str, time_service: TimeServiceProtocol) -> None:
         self.db_path = db_path
         self.hash_chain = AuditHashChain(db_path)
-        self.signature_manager = AuditSignatureManager(key_path, db_path, time_service)
+        self.signature_manager = AuditSignatureManager(db_path, time_service)
         self._time_service = time_service
         self._initialized = False
 

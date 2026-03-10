@@ -1,28 +1,48 @@
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+
 package ai.ciris.mobile.shared.platform
 
 import kotlinx.cinterop.ExperimentalForeignApi
+import platform.Foundation.NSFileManager
+import platform.Foundation.NSHomeDirectory
 import platform.Foundation.NSLog
-import platform.posix.exit
+import platform.Foundation.NSString
+import platform.Foundation.NSUTF8StringEncoding
+import platform.Foundation.writeToFile
 
 /**
  * iOS implementation of AppRestarter.
  *
- * iOS doesn't allow apps to restart themselves the way Android does.
- * However, we can terminate the app, and iOS will allow the user to relaunch it.
+ * Instead of exit(0) (which looks like a crash), writes a .restart_signal
+ * file that the Python watchdog thread detects. The watchdog stops the
+ * event loop and kmp_main.py's restart loop brings up a fresh runtime.
  *
- * NOTE: Calling exit() may cause App Store rejection in release builds.
- * Apple prefers apps to handle errors gracefully rather than terminating.
- * This is primarily useful for debug/development scenarios.
+ * The caller (CIRISApp) navigates to Screen.Startup, and StartupViewModel
+ * polls until the new runtime is healthy — seamless restart like Android.
  */
 actual object AppRestarter {
 
-    @OptIn(ExperimentalForeignApi::class)
     actual fun restartApp() {
-        NSLog("[AppRestarter.ios] restartApp called - terminating app")
-        NSLog("[AppRestarter.ios] User should tap the app icon to restart fresh")
+        NSLog("[AppRestarter.ios] restartApp — writing .restart_signal for Python watchdog")
 
-        // Terminate the app - iOS will allow the user to relaunch
-        // This ensures Python runtime starts fresh on next launch
-        exit(0)
+        val homeDir = NSHomeDirectory()
+        val cirisDir = "$homeDir/Documents/ciris"
+        val signalPath = "$cirisDir/.restart_signal"
+
+        // Ensure directory exists
+        NSFileManager.defaultManager.createDirectoryAtPath(
+            cirisDir, withIntermediateDirectories = true, attributes = null, error = null
+        )
+
+        // Write signal file
+        @Suppress("CAST_NEVER_SUCCEEDS")
+        val content = "restart" as NSString
+        val written = content.writeToFile(signalPath, atomically = true, encoding = NSUTF8StringEncoding, error = null)
+
+        if (written) {
+            NSLog("[AppRestarter.ios] .restart_signal written — Python runtime will restart")
+        } else {
+            NSLog("[AppRestarter.ios] WARNING: Failed to write .restart_signal")
+        }
     }
 }

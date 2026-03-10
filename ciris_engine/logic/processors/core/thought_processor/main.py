@@ -246,7 +246,7 @@ class ThoughtProcessor(
         # - Confirm TOOL action (possibly with refined parameters)
         # - Switch to SPEAK for user clarification
         # - Switch to PONDER to reconsider approach
-        action_result = await self._maybe_run_tsaspdma(thought_item, action_result)
+        action_result = await self._maybe_run_tsaspdma(thought_item, action_result, thought_context)
 
         # Phase 5: CONSCIENCE_EXECUTION - Apply ethical safety validation
         conscience_result = await self._conscience_execution_step(
@@ -280,6 +280,7 @@ class ThoughtProcessor(
         self,
         thought_item: ProcessingQueueItem,
         action_result: ActionSelectionDMAResult,
+        thought_context: Optional[Any] = None,
     ) -> ActionSelectionDMAResult:
         """Run TSASPDMA if action is TOOL and tool has documentation.
 
@@ -288,6 +289,10 @@ class ThoughtProcessor(
         - Proceed with TOOL (optionally with refined parameters)
         - Switch to SPEAK for user clarification
         - Switch to PONDER to reconsider the approach
+
+        Args:
+            thought_context: The batch context containing system_snapshot with
+                            context_enrichment_results (e.g., ha_list_entities data).
 
         Returns:
             The action result (possibly modified by TSASPDMA)
@@ -323,23 +328,105 @@ class ThoughtProcessor(
             return action_result
 
         if not tool_info:
-            # ASPDMA selected a tool that doesn't exist - this is an error, override to PONDER
-            logger.error(
-                f"TSASPDMA-ERROR: Tool '{tool_name}' selected by ASPDMA but not registered! Overriding to PONDER."
-            )
-            from ciris_engine.schemas.actions.parameters import PonderParams
-            from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+            # ASPDMA selected a tool that doesn't exist - use TSASPDMA correction mode
+            logger.warning(f"TSASPDMA-CORRECTION: Tool '{tool_name}' not found, invoking TSASPDMA correction mode...")
 
-            return ActionSelectionDMAResult(
-                selected_action=HandlerActionType.PONDER,
-                action_parameters=PonderParams(
-                    questions=[
-                        f"Tool '{tool_name}' is not available. What alternative approach should I take?",
-                        f"Context: ASPDMA selected tool '{tool_name}' but it is not registered in the system.",
-                    ],
-                ),
-                rationale=f"TSASPDMA-OVERRIDE: Tool '{tool_name}' not found - forcing reconsideration",
-            )
+            try:
+                # Get all available tools for correction mode
+                all_tools = await tool_bus.get_all_tool_info()
+                if not all_tools:
+                    logger.error(f"TSASPDMA-CORRECTION: No tools available for correction")
+                    return ActionSelectionDMAResult(
+                        selected_action=HandlerActionType.PONDER,
+                        action_parameters=PonderParams(
+                            questions=[
+                                f"Tool '{tool_name}' doesn't exist and no tools are available.",
+                                "What alternative approach should I take?",
+                            ],
+                        ),
+                        rationale=f"TSASPDMA-CORRECTION: No tools available for correction",
+                    )
+
+                logger.info(
+                    f"TSASPDMA-CORRECTION: Running correction mode for '{tool_name}' "
+                    f"with {len(all_tools)} available tools: {[t.name for t in all_tools]}"
+                )
+
+                from ciris_engine.logic.dma.dma_executor import run_tsaspdma_correction
+
+                evaluator = self.dma_orchestrator.tsaspdma_evaluator
+                if not evaluator:
+                    logger.error(f"TSASPDMA-CORRECTION: No evaluator available")
+                    return ActionSelectionDMAResult(
+                        selected_action=HandlerActionType.PONDER,
+                        action_parameters=PonderParams(
+                            questions=[
+                                f"Tool '{tool_name}' doesn't exist.",
+                                "TSASPDMA evaluator unavailable for correction.",
+                            ],
+                        ),
+                        rationale=f"TSASPDMA-CORRECTION: Evaluator unavailable",
+                    )
+
+                correction_result = await run_tsaspdma_correction(
+                    evaluator=evaluator,
+                    requested_tool_name=tool_name,
+                    available_tools=all_tools,
+                    aspdma_rationale=action_result.rationale or "",
+                    original_thought=thought_item,
+                    time_service=self._time_service,
+                )
+
+                # If correction returned TOOL, verify the corrected tool exists
+                if correction_result.selected_action == HandlerActionType.TOOL:
+                    if isinstance(correction_result.action_parameters, ToolParams):
+                        corrected_name = correction_result.action_parameters.name
+                        # Get tool info for the corrected tool
+                        corrected_tool_info = await tool_bus.get_tool_info(corrected_name)
+                        if corrected_tool_info:
+                            logger.info(
+                                f"TSASPDMA-CORRECTION: Successfully corrected '{tool_name}' -> '{corrected_name}'"
+                            )
+                            # Now run normal TSASPDMA to fill in parameters
+                            tool_name = corrected_name
+                            tool_info = corrected_tool_info
+                            # Continue to normal TSASPDMA flow below
+                        else:
+                            logger.error(f"TSASPDMA-CORRECTION: Corrected tool '{corrected_name}' also not found!")
+                            return ActionSelectionDMAResult(
+                                selected_action=HandlerActionType.PONDER,
+                                action_parameters=PonderParams(
+                                    questions=[
+                                        f"Tool correction failed: '{corrected_name}' also doesn't exist.",
+                                        "What alternative approach should I take?",
+                                    ],
+                                ),
+                                rationale=f"TSASPDMA-CORRECTION: Corrected tool '{corrected_name}' also not found",
+                            )
+                else:
+                    # TSASPDMA chose SPEAK or PONDER - return that result
+                    logger.info(
+                        f"TSASPDMA-CORRECTION: Chose {correction_result.selected_action} instead of tool correction"
+                    )
+                    return correction_result
+
+            except Exception as e:
+                logger.error(f"TSASPDMA-CORRECTION: Failed for '{tool_name}': {e}", exc_info=True)
+                return ActionSelectionDMAResult(
+                    selected_action=HandlerActionType.PONDER,
+                    action_parameters=PonderParams(
+                        questions=[
+                            f"Tool '{tool_name}' doesn't exist and correction failed.",
+                            f"Error: {str(e)[:100]}",
+                            "What alternative approach should I take?",
+                        ],
+                    ),
+                    rationale=f"TSASPDMA-CORRECTION: Failed with error - {str(e)[:100]}",
+                )
+
+        # At this point tool_info is guaranteed to be set (either originally or via correction)
+        # Assert for type checker
+        assert tool_info is not None, "tool_info should be set after correction mode"
 
         logger.info(
             f"TSASPDMA-CHECK: Got tool info for '{tool_name}', has_documentation={bool(tool_info.documentation)}"
@@ -362,6 +449,16 @@ class ThoughtProcessor(
                 # Still proceed with original action, but this is a configuration error
                 return action_result
 
+            # Extract context enrichment from thought_context (contains entity lists, etc.)
+            context_enrichment = None
+            if thought_context:
+                # BatchContext has system_snapshot with context_enrichment_results
+                system_snapshot = getattr(thought_context, "system_snapshot", None)
+                if system_snapshot:
+                    context_enrichment = getattr(system_snapshot, "context_enrichment_results", None)
+                    if context_enrichment:
+                        logger.info(f"TSASPDMA-CONTEXT: Passing {len(context_enrichment)} context enrichment results")
+
             tsaspdma_result = await run_tsaspdma(
                 evaluator=evaluator,
                 tool_name=tool_name,
@@ -370,6 +467,7 @@ class ThoughtProcessor(
                 original_thought=thought_item,
                 context=None,
                 time_service=self._time_service,
+                context_enrichment=context_enrichment,
             )
 
             logger.info(

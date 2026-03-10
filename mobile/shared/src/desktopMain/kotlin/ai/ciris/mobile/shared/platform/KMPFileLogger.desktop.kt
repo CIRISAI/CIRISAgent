@@ -32,5 +32,5 @@ actual fun getCurrentTimestamp(): String {
 
 actual fun getKMPLogDir(): String {
     val home = System.getProperty("user.home") ?: "/tmp"
-    return "$home/.ciris/logs"
+    return "$home/ciris/logs"
 }

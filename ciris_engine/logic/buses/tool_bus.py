@@ -306,21 +306,48 @@ class ToolBus(BaseBus[ToolService]):
         return None
 
     async def get_all_tool_info(self, handler_name: str = "default") -> List[ToolInfo]:
-        """Get detailed information about all available tools"""
-        service = await self.get_service(handler_name=handler_name, required_capabilities=["get_all_tool_info"])
+        """Get detailed information about all available tools from ALL registered services.
 
-        if not service:
-            logger.error(f"No tool service available for {handler_name}")
-            return []
+        Aggregates tools from all tool services, not just one.
+        """
+        all_tools: List[ToolInfo] = []
+        seen_names: set[str] = set()
 
+        # Collect tools from all registered tool services
         try:
-            # Cast to Any to handle dynamic method access
-            service_any = cast(Any, service)
-            result: List[ToolInfo] = await service_any.get_all_tool_info()
-            return result
+            all_services = self._collect_tool_services()
+            logger.debug(f"get_all_tool_info: Collecting tools from {len(all_services)} services")
         except Exception as e:
-            logger.error(f"Error getting all tool info: {e}", exc_info=True)
-            return []
+            logger.error(f"get_all_tool_info: Failed to collect tool services: {e}")
+            all_services = []
+
+        for service in all_services:
+            service_name = getattr(service, "adapter_name", type(service).__name__)
+            try:
+                if hasattr(service, "get_all_tool_info"):
+                    tools = await service.get_all_tool_info()
+                    for tool in tools:
+                        if tool.name not in seen_names:
+                            all_tools.append(tool)
+                            seen_names.add(tool.name)
+                    logger.debug(f"get_all_tool_info: {service_name} provided {len(tools)} tools")
+                elif hasattr(service, "get_available_tools"):
+                    # Fallback: build ToolInfo from available tools list
+                    tool_names = await service.get_available_tools()
+                    for name in tool_names:
+                        if name not in seen_names:
+                            info = await self._search_services_for_tool([service], name)
+                            if info:
+                                all_tools.append(info)
+                                seen_names.add(name)
+                    logger.debug(
+                        f"get_all_tool_info: {service_name} provided {len(tool_names)} tools (via get_available_tools)"
+                    )
+            except Exception as e:
+                logger.warning(f"get_all_tool_info: Error getting tools from {service_name}: {e}")
+
+        logger.info(f"get_all_tool_info: Aggregated {len(all_tools)} tools from {len(all_services)} services")
+        return all_tools
 
     async def get_capabilities(self, handler_name: str = "default") -> List[str]:
         """Get tool service capabilities"""

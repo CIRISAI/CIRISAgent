@@ -491,5 +491,111 @@ class TestErrorHandling:
             assert entry.timestamp is not None
 
 
+class TestOutcomeExtraction:
+    """Test outcome extraction from audit entries."""
+
+    @pytest.mark.asyncio
+    async def test_sqlite_entry_with_fail_event_type_has_failure_outcome(self):
+        """Test SQLite entry with 'fail' in event_type gets outcome='failure'."""
+        sqlite_entries = [
+            {
+                "event_id": "fail_001",
+                "event_timestamp": "2025-09-01T10:00:00+00:00",
+                "event_type": "HANDLER_ACTION_FAILED",  # Contains 'fail'
+                "originator_id": "test_user",
+            }
+        ]
+
+        merged = await _merge_audit_sources([], sqlite_entries, [])
+
+        assert len(merged) == 1
+        assert merged[0].context.outcome == "failure"
+
+    @pytest.mark.asyncio
+    async def test_sqlite_entry_with_error_event_type_has_failure_outcome(self):
+        """Test SQLite entry with 'error' in event_type gets outcome='failure'."""
+        sqlite_entries = [
+            {
+                "event_id": "error_001",
+                "event_timestamp": "2025-09-01T10:00:00+00:00",
+                "event_type": "TOOL_EXECUTION_ERROR",  # Contains 'error'
+                "originator_id": "test_user",
+            }
+        ]
+
+        merged = await _merge_audit_sources([], sqlite_entries, [])
+
+        assert len(merged) == 1
+        assert merged[0].context.outcome == "failure"
+
+    @pytest.mark.asyncio
+    async def test_sqlite_entry_with_success_event_type_has_success_outcome(self):
+        """Test SQLite entry with normal event_type gets outcome='success'."""
+        sqlite_entries = [
+            {
+                "event_id": "success_001",
+                "event_timestamp": "2025-09-01T10:00:00+00:00",
+                "event_type": "HANDLER_ACTION_SPEAK",  # Normal event
+                "originator_id": "test_user",
+            }
+        ]
+
+        merged = await _merge_audit_sources([], sqlite_entries, [])
+
+        assert len(merged) == 1
+        assert merged[0].context.outcome == "success"
+
+    @pytest.mark.asyncio
+    async def test_jsonl_entry_with_fail_action_has_failure_outcome(self):
+        """Test JSONL entry with 'fail' in action gets outcome='failure'."""
+        jsonl_entries = [
+            {
+                "id": "jsonl_fail_001",
+                "timestamp": "2025-09-01T10:00:00+00:00",
+                "action": "TASK_FAILED",  # Contains 'fail'
+                "actor": "test_user",
+            }
+        ]
+
+        merged = await _merge_audit_sources([], [], jsonl_entries)
+
+        assert len(merged) == 1
+        assert merged[0].context.outcome == "failure"
+
+    @pytest.mark.asyncio
+    async def test_jsonl_entry_with_error_action_has_failure_outcome(self):
+        """Test JSONL entry with 'error' in action gets outcome='failure'."""
+        jsonl_entries = [
+            {
+                "id": "jsonl_error_001",
+                "timestamp": "2025-09-01T10:00:00+00:00",
+                "action": "CONNECTION_ERROR",  # Contains 'error'
+                "actor": "test_user",
+            }
+        ]
+
+        merged = await _merge_audit_sources([], [], jsonl_entries)
+
+        assert len(merged) == 1
+        assert merged[0].context.outcome == "failure"
+
+    @pytest.mark.asyncio
+    async def test_jsonl_entry_with_success_action_has_success_outcome(self):
+        """Test JSONL entry with normal action gets outcome='success'."""
+        jsonl_entries = [
+            {
+                "id": "jsonl_success_001",
+                "timestamp": "2025-09-01T10:00:00+00:00",
+                "action": "MESSAGE_SENT",  # Normal action
+                "actor": "test_user",
+            }
+        ]
+
+        merged = await _merge_audit_sources([], [], jsonl_entries)
+
+        assert len(merged) == 1
+        assert merged[0].context.outcome == "success"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -188,12 +188,42 @@ class AuditViewModel(
         if (context == null) return ""
         return try {
             buildString {
+                // Primary action details
+                context.description?.let { appendLine("Description: $it") }
+                context.operation?.let { appendLine("Operation: $it") }
                 context.details?.let { appendLine("Details: $it") }
+
+                // Result info
+                context.result?.let { appendLine("Result: $it") }
+                context.error?.let { appendLine("Error: $it") }
+
+                // Entity info
                 context.entityId?.let { appendLine("Entity: $it") }
+                context.entityType?.let { appendLine("Type: $it") }
+
+                // Service info
                 context.service?.let { appendLine("Service: $it") }
+
+                // Correlation
+                context.correlationId?.let { appendLine("Correlation: ${it.take(16)}...") }
+                context.requestId?.let { appendLine("Request: ${it.take(16)}...") }
+
+                // User/Source
+                context.userId?.let { appendLine("User: $it") }
                 context.ipAddress?.let { appendLine("IP: $it") }
-            }
+
+                // Metadata (tool parameters, etc.)
+                context.metadata?.let { meta ->
+                    if (meta.isNotEmpty()) {
+                        appendLine("Parameters:")
+                        meta.forEach { (key, value) ->
+                            appendLine("  $key: $value")
+                        }
+                    }
+                }
+            }.trim()
         } catch (e: Exception) {
+            logError("formatContextJson", "Error formatting context: ${e.message}")
             ""
         }
     }

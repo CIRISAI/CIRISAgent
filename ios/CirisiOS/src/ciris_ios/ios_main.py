@@ -371,7 +371,6 @@ async def start_mobile_runtime():
     # Create security config with absolute paths
     security_config = SecurityConfig(
         secrets_key_path=ciris_home / ".ciris_keys",
-        audit_key_path=ciris_home / "audit_keys",
     )
 
     # Create database config with absolute paths

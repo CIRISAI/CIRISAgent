@@ -65,6 +65,12 @@ expect class PythonRuntime() {
     suspend fun getServicesStatus(): Result<Pair<Int, Int>>
 
     /**
+     * Get prep step status (pydantic setup + code integrity)
+     * @return Result with (prepStepsCompleted, totalPrepSteps)
+     */
+    suspend fun getPrepStatus(): Result<Pair<Int, Int>>
+
+    /**
      * Shutdown Python runtime gracefully
      * Note: On Android (Chaquopy), Python persists for app lifetime
      * On iOS, this calls Py_Finalize()

@@ -971,6 +971,17 @@ def _process_tool_result(result: Any, tool_key: str) -> Any:
     """Process and return the appropriate result from a tool execution."""
     if hasattr(result, "data") and result.data is not None:
         logger.info(f"[CONTEXT_ENRICHMENT] {tool_key} returned data with {len(result.data)} keys")
+        # Log detailed result structure for context builder tuning
+        if isinstance(result.data, dict):
+            for key, value in result.data.items():
+                if key == "entities" and isinstance(value, list):
+                    logger.info(f"[CONTEXT_ENRICHMENT] {tool_key} entities count: {len(value)}")
+                    for entity in value[:10]:  # Log first 10 entities
+                        logger.info(f"[CONTEXT_ENRICHMENT] Entity in context: {entity}")
+                    if len(value) > 10:
+                        logger.info(f"[CONTEXT_ENRICHMENT] ... and {len(value) - 10} more entities")
+                else:
+                    logger.info(f"[CONTEXT_ENRICHMENT] {tool_key}.{key} = {value}")
         return result.data
     elif hasattr(result, "success") and result.success:
         return {"success": True, "message": "Tool executed successfully"}

@@ -101,8 +101,7 @@ class MockAuditHashChain:
 class MockAuditSignatureManager:
     """Mock signature manager for testing."""
 
-    def __init__(self, key_path: str, db_path: str, time_service: Any):
-        self.key_path = key_path
+    def __init__(self, db_path: str, time_service: Any):
         self.db_path = db_path
         self.time_service = time_service
         self.initialized = False
@@ -190,20 +189,13 @@ def temp_db():
 
 
 @pytest.fixture
-def temp_key_path():
-    """Create temporary key path."""
-    with tempfile.TemporaryDirectory() as temp_dir:
-        yield temp_dir
-
-
-@pytest.fixture
-def verifier(temp_db, temp_key_path, mock_time_service):
+def verifier(temp_db, mock_time_service):
     """Create AuditVerifier with mocked dependencies."""
-    verifier = AuditVerifier(temp_db, temp_key_path, mock_time_service)
+    verifier = AuditVerifier(temp_db, mock_time_service)
 
     # Replace internal components with mocks
     verifier.hash_chain = MockAuditHashChain(temp_db)
-    verifier.signature_manager = MockAuditSignatureManager(temp_key_path, temp_db, mock_time_service)
+    verifier.signature_manager = MockAuditSignatureManager(temp_db, mock_time_service)
 
     # Mock the private methods that query the database
     def mock_verify_all_signatures():
@@ -278,9 +270,9 @@ def populated_db(temp_db):
 class TestAuditVerifierInitialization:
     """Test verifier initialization."""
 
-    def test_init_with_valid_paths(self, temp_db, temp_key_path, mock_time_service):
+    def test_init_with_valid_paths(self, temp_db, mock_time_service):
         """Test initialization with valid paths."""
-        verifier = AuditVerifier(temp_db, temp_key_path, mock_time_service)
+        verifier = AuditVerifier(temp_db, mock_time_service)
 
         assert verifier.db_path == temp_db
         assert verifier._time_service == mock_time_service

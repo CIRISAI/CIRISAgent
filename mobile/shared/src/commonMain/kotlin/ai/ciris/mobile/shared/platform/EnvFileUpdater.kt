@@ -63,6 +63,19 @@ expect class EnvFileUpdater {
      * Ported from: android/app/.../auth/TokenRefreshManager.kt (checkForRefreshSignal)
      */
     fun checkTokenRefreshSignal(): Boolean
+
+    /**
+     * Clear the agent signing key for a complete setup reset.
+     * This is necessary when re-running the setup wizard to get a fresh Portal key.
+     *
+     * Deletes:
+     * - The encrypted key file (agent_signing.ed25519.enc)
+     * - The AES wrapper key from platform keystore (Android Keystore / iOS Keychain)
+     * - The data directory (databases, audit logs, etc.)
+     *
+     * @return Result with true on success, exception on failure
+     */
+    suspend fun clearSigningKey(): Result<Boolean>
 }
 
 /**

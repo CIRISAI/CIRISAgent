@@ -58,6 +58,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     apiClient: CIRISApiClient,
+    secureStorage: ai.ciris.mobile.shared.platform.SecureStorage,
     onNavigateBack: () -> Unit,
     onLogout: () -> Unit,
     onResetSetup: () -> Unit,  // Callback to restart app after reset
@@ -88,6 +89,7 @@ fun SettingsScreen(
     var showApiKey by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
     var showResetConfirmDialog by remember { mutableStateOf(false) }
+    var showFactoryResetDialog by remember { mutableStateOf(false) }
 
     // Show snackbar for success/error
     val snackbarHostState = remember { SnackbarHostState() }
@@ -120,7 +122,7 @@ fun SettingsScreen(
         }
     }
 
-    // Confirmation dialog for resetting setup
+    // Confirmation dialog for re-running setup wizard (keeps data)
     if (showResetConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showResetConfirmDialog = false },
@@ -128,31 +130,74 @@ fun SettingsScreen(
             text = {
                 Text(
                     "This will reset your configuration and restart the app. " +
-                    "You'll need to set up CIRIS again.\n\n" +
-                    "Choose this if you want to:\n" +
-                    "• Use your own API key (BYOK mode)\n" +
-                    "• Switch LLM providers\n" +
-                    "• Change your configuration"
+                    "Your data (conversations, memory, audit logs) will be kept.\n\n" +
+                    "Use this to:\n" +
+                    "• Switch between CIRIS Proxy and BYOK mode\n" +
+                    "• Change LLM providers or API keys\n" +
+                    "• Fix authentication issues"
                 )
             },
             confirmButton = {
                 Button(
                     onClick = {
                         showResetConfirmDialog = false
-                        viewModel.resetSetup { onResetSetup() }
+                        viewModel.rerunSetupWizard { onResetSetup() }
                     },
                     modifier = Modifier.testableClickable("btn_reset_confirm") {
                         showResetConfirmDialog = false
-                        viewModel.resetSetup { onResetSetup() }
+                        viewModel.rerunSetupWizard { onResetSetup() }
                     }
                 ) {
-                    Text("Reset & Restart")
+                    Text("Re-run Setup")
                 }
             },
             dismissButton = {
                 TextButton(
                     onClick = { showResetConfirmDialog = false },
                     modifier = Modifier.testableClickable("btn_reset_cancel") { showResetConfirmDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Confirmation dialog for factory reset (wipes ALL data)
+    if (showFactoryResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showFactoryResetDialog = false },
+            title = { Text("Factory Reset?") },
+            text = {
+                Text(
+                    "⚠️ WARNING: This will DELETE ALL DATA including:\n\n" +
+                    "• Conversations and chat history\n" +
+                    "• Memory and knowledge graph\n" +
+                    "• Audit logs and signing keys\n" +
+                    "• All configuration\n\n" +
+                    "This cannot be undone. The app will restart as if freshly installed."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showFactoryResetDialog = false
+                        viewModel.factoryReset { onResetSetup() }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.testableClickable("btn_factory_reset_confirm") {
+                        showFactoryResetDialog = false
+                        viewModel.factoryReset { onResetSetup() }
+                    }
+                ) {
+                    Text("Delete All & Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showFactoryResetDialog = false },
+                    modifier = Modifier.testableClickable("btn_factory_reset_cancel") { showFactoryResetDialog = false }
                 ) {
                     Text("Cancel")
                 }
@@ -225,10 +270,7 @@ fun SettingsScreen(
 
                 if (isCirisProxy) {
                     // CIRIS Proxy mode - Read-only info card
-                    CirisProxyInfoCard(
-                        isResetting = isResetting,
-                        onResetClick = { showResetConfirmDialog = true }
-                    )
+                    CirisProxyInfoCard()
                 } else {
                     // BYOK mode - Editable form
                     ByokConfigSection(
@@ -246,6 +288,27 @@ fun SettingsScreen(
                         onEditingChange = { isEditing = it }
                     )
                 }
+
+                // Backup LLM Configuration (if available)
+                llmConfig?.let { config ->
+                    if (config.backupBaseUrl != null || config.backupModel != null) {
+                        BackupLlmConfigCard(config)
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+                // CIRIS Authentication Section
+                Text(
+                    text = "CIRIS Authentication",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                CirisJwtInfoCard(
+                    apiClient = apiClient,
+                    secureStorage = secureStorage
+                )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
@@ -272,6 +335,110 @@ fun SettingsScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
+                // Setup Section
+                Text(
+                    text = "Setup",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                // Re-run Setup Wizard (keeps data)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Re-run Setup Wizard",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Reconfigure LLM settings without losing data. Your conversations, memory, and audit logs are preserved.\n\n" +
+                                   "Use this to:\n" +
+                                   "• Switch between CIRIS Proxy and BYOK mode\n" +
+                                   "• Change LLM providers or API keys\n" +
+                                   "• Fix authentication issues",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(
+                            onClick = { showResetConfirmDialog = true },
+                            enabled = !isResetting,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            ),
+                            modifier = Modifier.fillMaxWidth().testableClickable("btn_rerun_setup") {
+                                showResetConfirmDialog = true
+                            }
+                        ) {
+                            if (isResetting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text(if (isResetting) "Resetting..." else "Re-run Setup Wizard")
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Factory Reset (wipes ALL data)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Factory Reset",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            text = "Delete ALL data and start fresh. This removes conversations, memory, audit logs, and signing keys. Cannot be undone.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                        )
+                        Button(
+                            onClick = { showFactoryResetDialog = true },
+                            enabled = !isResetting,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error
+                            ),
+                            modifier = Modifier.fillMaxWidth().testableClickable("btn_factory_reset") {
+                                showFactoryResetDialog = true
+                            }
+                        ) {
+                            if (isResetting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = MaterialTheme.colorScheme.onError,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text(if (isResetting) "Resetting..." else "Factory Reset")
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
                 // App Info
                 Text(
                     text = "App Info",
@@ -286,7 +453,7 @@ fun SettingsScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        InfoRow("Version", "2.0.0 (KMP)")
+                        InfoRow("Version", "2.1.0 (KMP)")
                         InfoRow("Platform", "Kotlin Multiplatform")
                         InfoRow("UI", "Compose Multiplatform")
                         InfoRow("Mode", if (isCirisProxy) "CIRIS Proxy" else "BYOK")
@@ -302,10 +469,7 @@ fun SettingsScreen(
  * Read-only, no configuration needed.
  */
 @Composable
-private fun CirisProxyInfoCard(
-    isResetting: Boolean,
-    onResetClick: () -> Unit
-) {
+private fun CirisProxyInfoCard() {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -327,14 +491,14 @@ private fun CirisProxyInfoCard(
             )
 
             Text(
-                text = "Using CIRIS AI",
+                text = "Using CIRIS AI Proxy",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
 
             Text(
                 text = "Your AI requests are routed through CIRIS proxy services. " +
-                       "No additional configuration is needed.",
+                       "Your Google account authenticates you, and CIRIS handles LLM access.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center
@@ -361,22 +525,6 @@ private fun CirisProxyInfoCard(
                 BenefitItem("Cost managed by CIRIS")
             }
         }
-    }
-
-    // Switch to BYOK mode button
-    OutlinedButton(
-        onClick = onResetClick,
-        enabled = !isResetting,
-        modifier = Modifier.fillMaxWidth().testableClickable("btn_switch_to_byok") { onResetClick() }
-    ) {
-        if (isResetting) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp
-            )
-            Spacer(Modifier.width(8.dp))
-        }
-        Text(if (isResetting) "Resetting..." else "Switch to BYOK Mode (Use Own API Key)")
     }
 }
 
@@ -599,6 +747,380 @@ private fun InfoRow(label: String, value: String) {
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+/**
+ * Card showing backup LLM configuration if available.
+ */
+@Composable
+private fun BackupLlmConfigCard(config: ai.ciris.mobile.shared.api.LlmConfigData) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+                Text(
+                    text = "Backup LLM Configuration",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+            }
+
+            Text(
+                text = "If the primary LLM provider fails, CIRIS will automatically fall back to this backup.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+            )
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 4.dp),
+                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.2f)
+            )
+
+            config.backupBaseUrl?.let { url ->
+                val provider = when {
+                    url.contains("groq.com") -> "Groq"
+                    url.contains("together") -> "Together AI"
+                    url.contains("openai.com") -> "OpenAI"
+                    url.contains("anthropic") -> "Anthropic"
+                    url.contains("ciris.ai") -> "CIRIS Proxy"
+                    else -> url.take(30)
+                }
+                InfoRowTertiary("Provider", provider)
+            }
+
+            config.backupModel?.let { model ->
+                InfoRowTertiary("Model", model)
+            }
+
+            InfoRowTertiary("API Key", if (config.backupApiKeySet) "Configured" else "Not set")
+        }
+    }
+}
+
+@Composable
+private fun InfoRowTertiary(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onTertiaryContainer
+        )
+    }
+}
+
+/**
+ * Card explaining CIRIS JWT token and showing current token status.
+ */
+@Composable
+private fun CirisJwtInfoCard(
+    apiClient: CIRISApiClient,
+    secureStorage: ai.ciris.mobile.shared.platform.SecureStorage
+) {
+    var tokenInfo by remember { mutableStateOf<TokenDisplayInfo?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Load token info on mount
+    LaunchedEffect(Unit) {
+        try {
+            val result = secureStorage.getAccessToken()
+            result.onSuccess { token ->
+                if (token != null) {
+                    tokenInfo = parseTokenForDisplay(token)
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore errors
+        } finally {
+            isLoading = false
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Header
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "CIRIS Access Token",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Explanation
+            Text(
+                text = "When using CIRIS Proxy, your Google Sign-In token is exchanged for a CIRIS access token. " +
+                       "This token authenticates you to the local agent and the CIRIS AI proxy.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 4.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+            )
+
+            if (isLoading) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Text(
+                        text = "Loading token info...",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            } else if (tokenInfo != null) {
+                val info = tokenInfo!!
+
+                // Token format indicator
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = if (info.isJwt) Color(0xFFD1FAE5) else Color(0xFFFEF3C7)
+                ) {
+                    Text(
+                        text = if (info.isJwt) "JWT Token" else "Opaque Token",
+                        fontSize = 10.sp,
+                        color = if (info.isJwt) Color(0xFF065F46) else Color(0xFF92400E),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Token details
+                InfoRow("Token Type", info.tokenType)
+                InfoRow("Token ID", info.tokenIdShort)
+
+                if (info.expiresAt != null) {
+                    val expiryColor = if (info.isExpired) Color(0xFFDC2626) else Color(0xFF059669)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Expires",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = if (info.isExpired) "EXPIRED" else info.expiresAt,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = expiryColor,
+                            fontWeight = if (info.isExpired) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+
+                if (info.issuer != null) {
+                    InfoRow("Issuer", info.issuer)
+                }
+
+                // Warning for old/problematic tokens
+                if (info.isExpired || info.hasSigningKeyIssue) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFFFEE2E2),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = if (info.hasSigningKeyIssue)
+                                    "Token Signing Key Rotated"
+                                else
+                                    "Token Expired",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = Color(0xFFDC2626)
+                            )
+                            Text(
+                                text = if (info.hasSigningKeyIssue)
+                                    "Google has rotated its signing keys. Your token was signed with an old key that's no longer valid. Re-run the setup wizard to get a fresh token."
+                                else
+                                    "Your access token has expired. Re-run the setup wizard to refresh authentication.",
+                                fontSize = 11.sp,
+                                color = Color(0xFF991B1B)
+                            )
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    text = "No access token found",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Data class for displaying token information.
+ */
+private data class TokenDisplayInfo(
+    val tokenType: String,
+    val tokenIdShort: String,
+    val isJwt: Boolean,
+    val expiresAt: String?,
+    val isExpired: Boolean,
+    val issuer: String?,
+    val hasSigningKeyIssue: Boolean
+)
+
+/**
+ * Parse a token string for display purposes.
+ */
+private fun parseTokenForDisplay(token: String): TokenDisplayInfo {
+    // Check if it's a JWT (3 parts separated by dots)
+    val parts = token.split(".")
+    val isJwt = parts.size == 3
+
+    if (!isJwt) {
+        // Opaque token (like ciris_xxx)
+        val prefix = if (token.startsWith("ciris_")) "CIRIS" else "Unknown"
+        return TokenDisplayInfo(
+            tokenType = "$prefix Access Token",
+            tokenIdShort = "${token.take(10)}...${token.takeLast(4)}",
+            isJwt = false,
+            expiresAt = null,
+            isExpired = false,
+            issuer = "CIRIS",
+            hasSigningKeyIssue = false
+        )
+    }
+
+    // Parse JWT
+    try {
+        // Decode the payload (second part)
+        val payloadBase64 = parts[1]
+        // Add padding if needed
+        val paddedPayload = when (payloadBase64.length % 4) {
+            2 -> payloadBase64 + "=="
+            3 -> payloadBase64 + "="
+            else -> payloadBase64
+        }
+
+        // Base64url decode using kotlin.io.encoding (KMP-compatible)
+        @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+        val payloadJson = try {
+            val bytes = kotlin.io.encoding.Base64.UrlSafe.decode(paddedPayload)
+            bytes.decodeToString()
+        } catch (e: Exception) {
+            "{}"
+        }
+
+        // Simple JSON parsing (not using kotlinx.serialization to keep it light)
+        val expMatch = Regex(""""exp"\s*:\s*(\d+)""").find(payloadJson)
+        val issMatch = Regex(""""iss"\s*:\s*"([^"]+)"""").find(payloadJson)
+        val kidMatch = Regex(""""kid"\s*:\s*"([^"]+)"""").find(parts[0].let {
+            val headerPadded = when (it.length % 4) {
+                2 -> it + "=="
+                3 -> it + "="
+                else -> it
+            }
+            @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+            try {
+                kotlin.io.encoding.Base64.UrlSafe.decode(headerPadded).decodeToString()
+            } catch (e: Exception) { "{}" }
+        })
+
+        val expTimestamp = expMatch?.groupValues?.get(1)?.toLongOrNull()
+        val issuer = issMatch?.groupValues?.get(1)
+
+        // Check if expired
+        val now = kotlinx.datetime.Clock.System.now().epochSeconds
+        val isExpired = expTimestamp != null && expTimestamp < now
+
+        // Format expiry
+        val expiresAt = expTimestamp?.let {
+            val remaining = it - now
+            when {
+                remaining < 0 -> "Expired ${-remaining / 60}m ago"
+                remaining < 60 -> "${remaining}s"
+                remaining < 3600 -> "${remaining / 60}m"
+                remaining < 86400 -> "${remaining / 3600}h"
+                else -> "${remaining / 86400}d"
+            }
+        }
+
+        return TokenDisplayInfo(
+            tokenType = when {
+                issuer?.contains("google") == true -> "Google ID Token"
+                issuer?.contains("ciris") == true -> "CIRIS JWT"
+                else -> "JWT Token"
+            },
+            tokenIdShort = "${token.take(20)}...${token.takeLast(10)}",
+            isJwt = true,
+            expiresAt = expiresAt,
+            isExpired = isExpired,
+            issuer = issuer?.let {
+                when {
+                    it.contains("google") -> "Google"
+                    it.contains("ciris") -> "CIRIS"
+                    else -> it.take(20)
+                }
+            },
+            hasSigningKeyIssue = false // Would need backend validation to detect
+        )
+    } catch (e: Exception) {
+        return TokenDisplayInfo(
+            tokenType = "JWT Token",
+            tokenIdShort = "${token.take(20)}...",
+            isJwt = true,
+            expiresAt = null,
+            isExpired = false,
+            issuer = null,
+            hasSigningKeyIssue = false
         )
     }
 }

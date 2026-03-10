@@ -181,7 +181,11 @@ class ActionInstructionGenerator:
         # Check for pre-cached tools first (set by async caller before prompt building)
         if hasattr(self, "_cached_tools") and self._cached_tools:
             logger.info(f"[TOOL_SCHEMA] Using {len(self._cached_tools)} pre-cached tools")
-            return base_schema + self._format_tools_for_prompt(self._cached_tools)
+            tools_text = self._format_tools_for_prompt(self._cached_tools)
+            # Log the exact tool names being presented to the LLM
+            tool_names = [t.get("name", k) if isinstance(t, dict) else k for k, t in self._cached_tools.items()]
+            logger.info(f"[TOOL_SCHEMA] Tool names for LLM prompt: {tool_names}")
+            return base_schema + tools_text
 
         # No service registry = no tools
         if not self.service_registry:
@@ -221,6 +225,11 @@ class ActionInstructionGenerator:
 
         self._cached_tools = all_tools
         logger.info(f"[TOOL_CACHE] ✓ Cached {len(all_tools)} total tools: {list(all_tools.keys())}")
+        # Log individual tool names for debugging LLM tool selection
+        for tool_key, tool_info in all_tools.items():
+            tool_name = tool_info.get("name", tool_key) if isinstance(tool_info, dict) else tool_key
+            service = tool_info.get("service", "unknown") if isinstance(tool_info, dict) else "unknown"
+            logger.info(f"[TOOL_CACHE] Tool available: '{tool_name}' (service={service}, key={tool_key})")
         return len(all_tools)
 
     async def _cache_tools_from_service(self, tool_service: Any, service_name: str, all_tools: JSONDict) -> None:
@@ -297,12 +306,15 @@ class ActionInstructionGenerator:
         ASPDMA gets concise tool summaries - full documentation is provided
         by TSASPDMA when a TOOL action is selected. This keeps the ASPDMA
         prompt focused on action selection, not tool details.
+
+        IMPORTANT: Tool names are formatted to emphasize exact matching.
+        ASPDMA must use the exact tool_name shown here.
         """
         if not all_tools:
             return "\n\n⚠️ No tools registered. TOOL action is not available."
 
         tools_info = []
-        tools_info.append("\nAvailable tools (full documentation provided if TOOL selected):")
+        tools_info.append("\nAvailable tools (use EXACT tool_name shown, TSASPDMA will handle parameters):")
 
         for tool_key, tool_info_raw in all_tools.items():
             tool_info = get_dict({"info": tool_info_raw}, "info", {})
@@ -315,8 +327,9 @@ class ActionInstructionGenerator:
                 desc = get_str(tool_info, "description", "")
                 when_to_use = desc[:80] + "..." if len(desc) > 80 else desc
 
-            # Format: tool_name: concise guidance (from service)
-            tool_line = f"  - {tool_name}: {when_to_use}"
+            # Format: tool_name (exact): concise guidance (from service)
+            # Emphasize exact name matching by quoting the tool name
+            tool_line = f'  - tool_name="{tool_name}": {when_to_use}'
             if tool_service and tool_service != tool_name:
                 tool_line += f" (from {tool_service})"
             tools_info.append(tool_line)

@@ -75,9 +75,8 @@ class TestSetupApplicationDirectories:
                 "data": 0o755,
                 "data_archive": 0o755,
                 "logs": 0o755,
-                "audit_keys": 0o700,
                 "config": 0o755,
-                ".secrets": 0o700,
+                "secrets": 0o700,
             }
 
             for dir_name, expected_mode in expected_dirs.items():
@@ -186,7 +185,7 @@ class TestValidateDirectories:
             base_dir = Path(tmpdir)
 
             # Create all required directories
-            for dir_name in ["data", "data_archive", "logs", "audit_keys", "config"]:
+            for dir_name in ["data", "data_archive", "logs", "config"]:
                 (base_dir / dir_name).mkdir()
 
             # Should validate successfully
@@ -201,7 +200,7 @@ class TestValidateDirectories:
             # Create some but not all directories
             (base_dir / "data").mkdir()
             (base_dir / "logs").mkdir()
-            # Missing: data_archive, audit_keys, config
+            # Missing: data_archive, config
 
             with pytest.raises(DirectoryCreationError) as exc_info:
                 validate_directories(base_dir=base_dir)
@@ -213,7 +212,7 @@ class TestValidateDirectories:
             base_dir = Path(tmpdir)
 
             # Create all directories except one
-            for dir_name in ["data", "logs", "audit_keys", "config"]:
+            for dir_name in ["data", "logs", "config"]:
                 (base_dir / dir_name).mkdir()
 
             # Create a file instead of directory
@@ -229,7 +228,7 @@ class TestValidateDirectories:
             base_dir = Path(tmpdir)
 
             # Create all directories
-            for dir_name in ["data", "data_archive", "logs", "audit_keys", "config"]:
+            for dir_name in ["data", "data_archive", "logs", "config"]:
                 dir_path = base_dir / dir_name
                 dir_path.mkdir()
 
@@ -250,7 +249,7 @@ class TestValidateDirectories:
             base_dir = Path(tmpdir)
 
             # Create all directories
-            for dir_name in ["data", "data_archive", "logs", "audit_keys", "config"]:
+            for dir_name in ["data", "data_archive", "logs", "config"]:
                 (base_dir / dir_name).mkdir()
 
             with patch("ciris_engine.logic.utils.directory_setup.check_disk_space") as mock_check:
@@ -534,7 +533,7 @@ class TestWindowsCompatibility:
                 setup_application_directories(base_dir=base_dir, fail_fast=False)
 
                 # Check all directories were created
-                expected_dirs = ["data", "data_archive", "logs", "audit_keys", "config", ".secrets"]
+                expected_dirs = ["data", "data_archive", "logs", "config", "secrets"]
                 for dir_name in expected_dirs:
                     assert (base_dir / dir_name).exists(), f"Directory {dir_name} should exist"
             finally:
@@ -550,7 +549,7 @@ class TestWindowsCompatibility:
             base_dir = Path(tmpdir)
 
             # Create all required directories
-            for dir_name in ["data", "data_archive", "logs", "audit_keys", "config"]:
+            for dir_name in ["data", "data_archive", "logs", "config"]:
                 (base_dir / dir_name).mkdir()
 
             # Save original functions if they exist

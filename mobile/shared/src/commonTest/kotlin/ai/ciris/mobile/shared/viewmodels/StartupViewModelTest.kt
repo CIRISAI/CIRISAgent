@@ -220,6 +220,10 @@ class FakePythonRuntime(
         return Result.success(servicesOnline to servicesTotal)
     }
 
+    override suspend fun getPrepStatus(): Result<Pair<Int, Int>> {
+        return Result.success(8 to 8)  // Prep complete for tests
+    }
+
     override fun shutdown() {
         started = false
     }
@@ -269,6 +273,10 @@ class FakePythonRuntimeGradual : PythonRuntimeProtocol {
         checkCount++
         val online = minOf(checkCount * 5, 22)
         return Result.success(online to 22)
+    }
+
+    override suspend fun getPrepStatus(): Result<Pair<Int, Int>> {
+        return Result.success(8 to 8)  // Prep complete for tests
     }
 
     override fun shutdown() {

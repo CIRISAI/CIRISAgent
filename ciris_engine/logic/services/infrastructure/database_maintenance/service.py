@@ -1138,11 +1138,6 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         logger.info("🔐 AUDIT KEY MIGRATION REQUESTED")
         logger.info("=" * 70)
 
-        # Determine key path (default is audit_keys/)
-        key_path = "audit_keys"
-        if hasattr(self, "key_path"):
-            key_path = str(self.key_path)
-
         # Get database path
         db_path = self.db_path
         if not db_path:
@@ -1152,7 +1147,6 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         result = await migrate_audit_key_to_ed25519(
             db_path=str(db_path),
-            key_path=key_path,
             time_service=self.time_service,
             backup=backup,
         )

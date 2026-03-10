@@ -22,6 +22,7 @@ import ai.ciris.mobile.shared.diagnostics.NetworkDiagnosticsAndroid
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -133,28 +134,18 @@ class MainActivity : ComponentActivity() {
                     Log.i(TAG, "Showing CIRISApp immediately for startup animation")
                     pythonReady = true
 
-                    // Start Python mobile_main in background thread
-                    Thread {
-                        try {
-                            Log.i(TAG, "Starting mobile_main.main()...")
-                            val py = Python.getInstance()
-                            val module = py.getModule("mobile_main")
-                            module.callAttr("main")
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Python runtime error", e)
-                            // Extract meaningful error message
-                            val errorMsg = e.message ?: e.toString()
-                            val shortError = when {
-                                errorMsg.contains("pydantic_core") -> "Build error: pydantic_core native library missing"
-                                errorMsg.contains("ModuleNotFoundError") -> "Module not found: ${errorMsg.substringAfter("ModuleNotFoundError:")}"
-                                else -> "Python error: ${errorMsg.take(100)}"
-                            }
-                            // Update Compose state on main thread (mutableStateOf is not thread-safe)
-                            runOnUiThread {
-                                pythonError = shortError
-                            }
+                    // Start Python via foreground service (survives activity backgrounding for OAuth)
+                    if (!PythonRuntimeService.isRunning) {
+                        Log.i(TAG, "Starting PythonRuntimeService...")
+                        val serviceIntent = Intent(this@MainActivity, PythonRuntimeService::class.java)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(serviceIntent)
+                        } else {
+                            startService(serviceIntent)
                         }
-                    }.start()
+                    } else {
+                        Log.i(TAG, "PythonRuntimeService already running")
+                    }
                 }
             }
 
@@ -402,20 +393,46 @@ class MainActivity : ComponentActivity() {
     private suspend fun startLogcatReader() = withContext(Dispatchers.IO) {
         try {
             PythonRuntime.resetServiceCount()
+            PythonRuntime.resetPrepCount()
 
             val process = Runtime.getRuntime().exec("logcat -v raw python.stdout:I python.stderr:W *:S")
             val reader = process.inputStream.bufferedReader()
+
+            // Pattern for service startup: [SERVICE 1/22] ... STARTED
             val servicePattern = Regex("""\[SERVICE (\d+)/(\d+)\].*STARTED""")
+            // Pattern for PREP steps: [1/8], [2/8], etc. (pydantic setup + code integrity)
+            val prepPattern = Regex("""\[(\d+)/(\d+)\]""")
+            // Pattern for VERIFY messages from CIRISVerify
+            val verifyPattern = Regex("""VERIFY""")
 
             while (true) {
                 val line = reader.readLine() ?: break
                 if (line.isNotBlank()) {
-                    val match = servicePattern.find(line)
-                    if (match != null) {
+                    // Check for service startup
+                    servicePattern.find(line)?.let { match ->
                         val serviceNum = match.groupValues[1].toIntOrNull() ?: 0
                         val total = match.groupValues[2].toIntOrNull() ?: 22
                         PythonRuntime.updateServiceCount(serviceNum, total)
                         Log.d(TAG, "Service $serviceNum started (${PythonRuntime.servicesOnline}/$total)")
+                        return@let
+                    }
+
+                    // Check for PREP steps (pydantic setup + code integrity)
+                    // Only match if it's NOT a SERVICE line (to avoid double-counting)
+                    if (!line.contains("SERVICE")) {
+                        prepPattern.find(line)?.let { match ->
+                            val stepNum = match.groupValues[1].toIntOrNull() ?: 0
+                            val total = match.groupValues[2].toIntOrNull() ?: 8
+                            PythonRuntime.updatePrepCount(stepNum, total)
+                            Log.d(TAG, "Prep step $stepNum/$total: $line")
+                            return@let
+                        }
+                    }
+
+                    // Forward VERIFY messages for attestation tracking
+                    if (verifyPattern.containsMatchIn(line)) {
+                        PythonRuntime.onVerifyMessage(line)
+                        Log.d(TAG, "Verify: $line")
                     }
                 }
             }

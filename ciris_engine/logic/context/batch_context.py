@@ -11,6 +11,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
 from ciris_engine.schemas.runtime.models import Task
 from ciris_engine.schemas.runtime.system_context import ContinuitySummary, SystemSnapshot, TaskSummary, TelemetrySummary
+from ciris_engine.schemas.services.attestation import AttestationResult
 from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryQuery
 
@@ -365,25 +366,39 @@ async def prefetch_batch_context(
                             else str(disclosure.severity)
                         )
 
-                # Get attestation result from AuthenticationService cache
+                # Get attestation result from CIRISVerify singleton cache
                 # CRITICAL: Attestation MUST have run at startup and be cached
                 # If it's not there, something has gone wrong - fail fast
                 attestation_result = None
-                if service_registry:
-                    try:
-                        auth_service = service_registry.get_service("authentication")
-                        if auth_service and hasattr(auth_service, "get_cached_attestation"):
-                            attestation_result = auth_service.get_cached_attestation()
-                            if attestation_result:
+                try:
+                    import secrets
+
+                    from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+                        get_verifier,
+                    )
+
+                    cv = get_verifier()
+                    if cv is not None:
+                        # Get attestation result (uses cached data if available)
+                        challenge_nonce = secrets.token_bytes(32)
+                        result = cv.export_attestation_sync(challenge_nonce)
+                        if result and isinstance(result, dict):
+                            # Convert dict to AttestationResult schema for type safety
+                            try:
+                                attestation_result = AttestationResult.model_validate(result)
                                 logger.debug(
-                                    f"[BATCH] Got cached attestation from auth service: level={attestation_result.max_level}"
+                                    f"[BATCH] Got cached attestation from verifier singleton: level={attestation_result.max_level}"
                                 )
-                    except Exception as e:
-                        logger.error(f"[BATCH] CRITICAL: Could not get auth service for attestation: {e}")
+                            except Exception as validation_error:
+                                logger.warning(f"[BATCH] Failed to validate attestation result: {validation_error}")
+                except Exception as e:
+                    logger.warning(f"[BATCH] Could not get attestation from verifier singleton: {e}")
 
                 # Fallback: try through adapter's service (legacy path)
-                if attestation_result is None and hasattr(ciris_verify_adapter, "_service") and hasattr(
-                    ciris_verify_adapter._service, "get_cached_attestation"
+                if (
+                    attestation_result is None
+                    and hasattr(ciris_verify_adapter, "_service")
+                    and hasattr(ciris_verify_adapter._service, "get_cached_attestation")
                 ):
                     attestation_result = ciris_verify_adapter._service.get_cached_attestation()
 

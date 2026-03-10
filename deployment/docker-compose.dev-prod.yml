@@ -27,7 +27,6 @@ services:
     volumes:
       - datum_data:/app/data
       - datum_logs:/app/logs
-      - datum_audit:/app/audit_keys
       - datum_archive:/app/data_archive
       # Mount the .env file into the container
       - /home/ciris/CIRISAgent/.env.datum:/app/.env:ro
@@ -60,7 +59,6 @@ services:
 volumes:
   datum_data:
   datum_logs:
-  datum_audit:
   datum_archive:
   oauth_shared:
     driver: local

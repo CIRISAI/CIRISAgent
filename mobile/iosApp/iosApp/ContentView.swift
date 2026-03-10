@@ -11,6 +11,10 @@ struct ContentView: View {
     @StateObject private var storeKitManager = StoreKitManager.shared
     @Environment(\.scenePhase) var scenePhase
     @State private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+    @State private var backgroundTimeoutTimer: Timer? = nil
+
+    /// Background keep-alive timeout for OAuth/purchase flows (3 minutes)
+    private let backgroundTimeoutSeconds: TimeInterval = 180
 
     var body: some View {
         ZStack {
@@ -55,12 +59,13 @@ struct ContentView: View {
         }
         .onChange(of: scenePhase) { newPhase in
             if newPhase == .background && pythonReady {
-                // Keep the server alive for up to 60s so OAuth callbacks can arrive
-                NSLog("[ContentView] App entering background — requesting background time for server")
+                // Keep the server alive for up to 3 minutes so OAuth/purchase callbacks can arrive
+                NSLog("[ContentView] App entering background — requesting background time for server (timeout: \(Int(backgroundTimeoutSeconds))s)")
                 beginBackgroundKeepAlive()
             }
             if newPhase == .active && pythonReady {
-                // App came to foreground - end background task and check server
+                // App came to foreground - cancel timeout and end background task
+                cancelBackgroundTimeout()
                 endBackgroundKeepAlive()
                 NSLog("[ContentView] App became active, checking server health...")
                 Task {
@@ -135,22 +140,47 @@ struct ContentView: View {
         }
     }
 
-    /// Request background execution time to keep the Python server alive (e.g., for OAuth callbacks).
-    /// iOS grants up to ~30s (sometimes more). This prevents the server from being suspended
-    /// when the user switches to Safari for OAuth.
+    /// Request background execution time to keep the Python server alive (e.g., for OAuth/purchase callbacks).
+    /// We set a 3-minute timeout to allow external flows to complete, after which we allow iOS to suspend.
     private func beginBackgroundKeepAlive() {
         guard backgroundTaskID == .invalid else { return }
         backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "CIRISServerKeepAlive") {
-            // Expiration handler — iOS is about to suspend us
-            NSLog("[ContentView] Background time expired, ending keep-alive task")
+            // Expiration handler — iOS is about to suspend us (iOS may call this before our timer)
+            NSLog("[ContentView] iOS background time expired, ending keep-alive task")
+            self.cancelBackgroundTimeout()
             self.endBackgroundKeepAlive()
         }
         NSLog("[ContentView] Background keep-alive started (taskID=\(backgroundTaskID.rawValue))")
+
+        // Start our own 3-minute timeout timer
+        startBackgroundTimeout()
+    }
+
+    /// Start the 3-minute background timeout timer
+    private func startBackgroundTimeout() {
+        cancelBackgroundTimeout()  // Cancel any existing timer
+        backgroundTimeoutTimer = Timer.scheduledTimer(withTimeInterval: backgroundTimeoutSeconds, repeats: false) { _ in
+            NSLog("[ContentView] Background timeout reached (\(Int(self.backgroundTimeoutSeconds))s), ending keep-alive")
+            DispatchQueue.main.async {
+                self.endBackgroundKeepAlive()
+            }
+        }
+        NSLog("[ContentView] Background timeout timer started (\(Int(backgroundTimeoutSeconds))s)")
+    }
+
+    /// Cancel the background timeout timer
+    private func cancelBackgroundTimeout() {
+        if let timer = backgroundTimeoutTimer {
+            timer.invalidate()
+            backgroundTimeoutTimer = nil
+            NSLog("[ContentView] Background timeout timer cancelled")
+        }
     }
 
     private func endBackgroundKeepAlive() {
         guard backgroundTaskID != .invalid else { return }
         NSLog("[ContentView] Ending background keep-alive task")
+        cancelBackgroundTimeout()
         UIApplication.shared.endBackgroundTask(backgroundTaskID)
         backgroundTaskID = .invalid
     }
@@ -1264,7 +1294,7 @@ struct ComposeViewWithAuthAndStore: UIViewControllerRepresentable {
                         return
                     }
 
-                    let result = await manager.attestDevice()
+                    let result = await manager.attestDeviceIfNeeded()
 
                     if result.verified {
                         NSLog("[ComposeViewWithAuthAndStore] App Attest success: \(result.verdict)")

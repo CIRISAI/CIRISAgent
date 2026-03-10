@@ -316,9 +316,8 @@ def setup_application_directories(
         "data": 0o755,  # Database files
         "data_archive": 0o755,  # Archived thoughts/tasks
         "logs": 0o755,  # Log files
-        "audit_keys": 0o700,  # Sensitive audit keys - restricted!
         "config": 0o755,  # Configuration files
-        ".secrets": 0o700,  # Secrets storage - restricted!
+        "secrets": 0o700,  # Secrets storage - restricted!
     }
 
     for dir_name, mode in directories.items():
@@ -456,7 +455,7 @@ def validate_directories(base_dir: Optional[Path] = None) -> bool:
     # Check disk space first
     _check_disk_space_or_fail(base_dir, False)
 
-    required_dirs = ["data", "data_archive", "logs", "audit_keys", "config"]
+    required_dirs = ["data", "data_archive", "logs", "config"]
 
     for dir_name in required_dirs:
         dir_path = base_dir / dir_name

@@ -2825,7 +2825,29 @@ class CIRISApiClient(
                                     userAgent = ctx.userAgent,
                                     result = ctx.result,
                                     error = ctx.error,
-                                    metadata = null // Skip metadata to avoid parsing issues
+                                    // Infer outcome from result field if available
+                                    outcome = ctx.result?.let { result ->
+                                        when {
+                                            result.contains("success", ignoreCase = true) -> "success"
+                                            result.contains("fail", ignoreCase = true) -> "failure"
+                                            result.contains("error", ignoreCase = true) -> "failure"
+                                            else -> result
+                                        }
+                                    },
+                                    // Parse metadata (contains tool parameters, etc.)
+                                    metadata = try {
+                                        ctx.metadata?.let { meta ->
+                                            kotlinx.serialization.json.buildJsonObject {
+                                                (meta as? Map<*, *>)?.forEach { (key, value) ->
+                                                    if (key is String && value != null) {
+                                                        put(key, kotlinx.serialization.json.JsonPrimitive(value.toString()))
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        null // Fallback if metadata parsing fails
+                                    }
                                 )
                             },
                             signature = entry.signature,

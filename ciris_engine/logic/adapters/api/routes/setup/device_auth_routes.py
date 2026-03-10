@@ -13,7 +13,7 @@ import time
 import zipfile
 from pathlib import Path
 from typing import Any, Dict
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, status
 
@@ -62,14 +62,15 @@ async def connect_node(req: ConnectNodeRequest) -> SuccessResponse[ConnectNodeRe
     """
     import httpx
 
-    portal_url = req.node_url.strip().rstrip("/")
+    raw_portal_url = req.node_url.strip().rstrip("/")
     # Normalize URL — add https:// if no scheme provided
-    if not portal_url.startswith("http://") and not portal_url.startswith("https://"):
-        portal_url = f"https://{portal_url}"
+    if not raw_portal_url.startswith("http://") and not raw_portal_url.startswith("https://"):
+        raw_portal_url = f"https://{raw_portal_url}"
 
-    # Validate portal URL to prevent SSRF attacks
+    # Validate and sanitize portal URL (SSRF protection)
+    # Returns reconstructed URL from validated components only
     try:
-        _validate_portal_url(portal_url)
+        portal_url = _validate_portal_url(raw_portal_url)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -170,18 +171,17 @@ async def connect_node_status(device_code: str, portal_url: str) -> SuccessRespo
     """
     import httpx
 
-    # Validate portal URL to prevent SSRF attacks
+    # Validate portal URL and get sanitized base URL (SSRF protection)
     try:
-        _validate_portal_url(portal_url)
+        safe_base_url = _validate_portal_url(portal_url)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid portal URL: {e}",
         )
 
-    # Use urljoin for safe URL construction (prevents URL injection)
-    # NOSONAR - URL is pre-validated by _validate_portal_url() which ensures trusted hosts only
-    token_url = urljoin(portal_url.rstrip("/") + "/", "api/device/token")
+    # Construct URL from sanitized base + hardcoded path (not user input)
+    token_url = f"{safe_base_url}/api/device/token"
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             token_resp = await client.post(

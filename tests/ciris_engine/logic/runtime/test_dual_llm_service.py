@@ -21,7 +21,6 @@ def mock_config():
     config.services.llm_timeout = 30
     config.services.llm_max_retries = 3
     config.security = Mock()
-    config.security.audit_key_path = ".ciris_keys"
     config.security.audit_retention_days = 90
     config.database = Mock()
     config.database.graph_db = ":memory:"

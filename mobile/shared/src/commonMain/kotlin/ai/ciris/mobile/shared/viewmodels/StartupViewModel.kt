@@ -53,11 +53,15 @@ class StartupViewModel(
     private val _hasError = MutableStateFlow(false)
     val hasError: StateFlow<Boolean> = _hasError.asStateFlow()
 
+    // Flag to keep timer running even after phase == READY (for CIRISApp backend polling)
+    private val _keepTimerAlive = MutableStateFlow(false)
+    val keepTimerAlive: StateFlow<Boolean> = _keepTimerAlive.asStateFlow()
+
     private var startTime: Long = 0
 
     companion object {
         private const val TAG = "StartupViewModel"
-        const val TOTAL_PREP_STEPS = 6  // pydantic/native lib setup steps
+        const val TOTAL_PREP_STEPS = 8  // pydantic/native lib setup (1-6) + code integrity (7-8)
         const val TOTAL_VERIFY_STEPS = 11  // CIRISVerify attestation: Phase 1 (5) + Phase 2 (6)
 
         // VERIFY log patterns from ciris-verify v1.1.5
@@ -87,19 +91,28 @@ class StartupViewModel(
             startElapsedTimer()
 
             // Start elapsed time counter
+            // Timer runs until: (phase is READY or ERROR) AND keepTimerAlive is false
             launch {
-                while (isActive && _phase.value != StartupPhase.READY && _phase.value != StartupPhase.ERROR) {
+                while (isActive) {
+                    val shouldStop = (_phase.value == StartupPhase.READY || _phase.value == StartupPhase.ERROR) && !_keepTimerAlive.value
+                    if (shouldStop) {
+                        PlatformLogger.d(TAG, "[TIMER] Stopping timer: phase=${_phase.value}, keepTimerAlive=${_keepTimerAlive.value}")
+                        break
+                    }
                     _elapsedSeconds.value = ((Clock.System.now().toEpochMilliseconds() - startTime) / 1000).toInt()
-                    delay(1000)
+                    delay(100)  // Update more frequently for smoother display
                 }
             }
 
             // Execute startup sequence
             try {
+                PlatformLogger.i(TAG, "[STARTUP] === Beginning 3-step startup sequence ===")
                 initializePython()
                 startFastAPIServer()
                 waitForServices()
+                PlatformLogger.i(TAG, "[STARTUP] === Startup sequence complete ===")
             } catch (e: Exception) {
+                PlatformLogger.e(TAG, "[STARTUP] === Startup sequence FAILED: ${e.message} ===")
                 _errorMessage.value = e.message ?: "Unknown error during startup"
                 _phase.value = StartupPhase.ERROR
             }
@@ -110,14 +123,17 @@ class StartupViewModel(
      * Step 1: Initialize Python interpreter
      */
     private suspend fun initializePython() {
+        PlatformLogger.i(TAG, "[STARTUP] Step 1: initializePython()")
         _phase.value = StartupPhase.LOADING_RUNTIME
         _statusMessage.value = "Starting Python interpreter..."
 
         val result = pythonRuntime.initialize(pythonHomePath)
         if (result.isFailure) {
+            PlatformLogger.e(TAG, "[STARTUP] Python init FAILED: ${result.exceptionOrNull()?.message}")
             throw result.exceptionOrNull() ?: Exception("Failed to initialize Python")
         }
 
+        PlatformLogger.i(TAG, "[STARTUP] Step 1 complete: Python initialized")
         _statusMessage.value = "Python ready"
     }
 
@@ -132,13 +148,35 @@ class StartupViewModel(
 
         // Wire output callback to parse service startup lines
         val servicePattern = Regex("""\[SERVICE (\d+)/(\d+)\] (\S+) STARTED""")
+        val prepPattern = Regex("""\[(\d+)/(\d+)\]""")
+        val fatalPattern = Regex("""\[FATAL(?:_EXIT)?\]\s*(.+)""")
         pythonRuntime.setOutputLineCallback { line ->
+            // Check for FATAL errors first - these indicate unrecoverable startup failures
+            fatalPattern.find(line)?.let { match ->
+                val errorMsg = match.groupValues[1].trim()
+                PlatformLogger.e(TAG, "[STARTUP][FATAL] $errorMsg")
+                _errorMessage.value = errorMsg
+                _phase.value = StartupPhase.ERROR
+                return@setOutputLineCallback
+            }
             // Check for service startup
             servicePattern.find(line)?.let { match ->
                 val num = match.groupValues[1].toIntOrNull() ?: return@let
                 val total = match.groupValues[2].toIntOrNull() ?: return@let
                 _totalServices.value = total
                 onServiceStarted(num)
+                return@setOutputLineCallback
+            }
+            // Check for PREP steps (pydantic + code integrity)
+            if (!line.contains("SERVICE")) {
+                prepPattern.find(line)?.let { match ->
+                    val step = match.groupValues[1].toIntOrNull() ?: return@let
+                    val total = match.groupValues[2].toIntOrNull() ?: return@let
+                    if (total <= 8) {  // PREP steps are 1-8
+                        onPrepStepCompleted(step)
+                        return@setOutputLineCallback
+                    }
+                }
             }
             // Forward verify messages
             if (line.contains("VERIFY")) {
@@ -146,15 +184,35 @@ class StartupViewModel(
             }
         }
 
+        // Start polling for prep status in background (Android)
+        viewModelScope.launch {
+            while (_prepStepsCompleted.value < TOTAL_PREP_STEPS && _phase.value == StartupPhase.STARTING_SERVER) {
+                val prepResult = pythonRuntime.getPrepStatus()
+                if (prepResult.isSuccess) {
+                    val (completed, total) = prepResult.getOrNull() ?: (0 to 8)
+                    if (completed > _prepStepsCompleted.value) {
+                        _prepStepsCompleted.value = completed
+                        _statusMessage.value = "Preparing... $completed/$total"
+                        PlatformLogger.d(TAG, "[STARTUP][PREP] Polled: $completed/$total")
+                    }
+                }
+                delay(100)  // Fast polling for snappy UI updates
+            }
+        }
+
         // Poll for server to become healthy (Python may still be starting)
+        PlatformLogger.i(TAG, "[STARTUP] Step 2: calling pythonRuntime.startServer()...")
         val result = pythonRuntime.startServer()
 
         // Clean up callback
         pythonRuntime.setOutputLineCallback(null)
 
         if (result.isFailure) {
+            val errMsg = result.exceptionOrNull()?.message ?: "Unknown"
+            PlatformLogger.e(TAG, "[STARTUP] Step 2 FAILED: startServer() -> $errMsg")
             throw result.exceptionOrNull() ?: Exception("Failed to connect to server")
         }
+        PlatformLogger.i(TAG, "[STARTUP] Step 2 complete: server healthy at ${result.getOrNull()}")
 
         // Server is healthy — verify/prep completed before server was available
         // Mark them done only if they weren't already driven by console output
@@ -287,6 +345,15 @@ class StartupViewModel(
     fun setStatus(message: String) {
         PlatformLogger.i(TAG, "[STARTUP][STATUS] $message")
         _statusMessage.value = message
+    }
+
+    /**
+     * Keep the timer running even after phase becomes READY.
+     * Call this before starting backend polling so the timer continues.
+     */
+    fun setKeepTimerAlive(keep: Boolean) {
+        PlatformLogger.i(TAG, "[TIMER] setKeepTimerAlive($keep)")
+        _keepTimerAlive.value = keep
     }
 
     /**
@@ -518,6 +585,7 @@ enum class StartupPhase(val displayName: String) {
     CHECKING_CONFIG("CHECKING CONFIG"),
     FIRST_RUN_SETUP("FIRST-TIME SETUP"),
     AUTHENTICATING("AUTHENTICATING"),
+    WAITING_FOR_AGENT("WAITING FOR AGENT"),
     READY("READY"),
     ERROR("ERROR")
 }

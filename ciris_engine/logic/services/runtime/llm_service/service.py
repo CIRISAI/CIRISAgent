@@ -366,11 +366,18 @@ def _handle_generic_llm_exception(
 
 # Configuration class for LLM services (supports multiple providers)
 class OpenAIConfig(BaseModel):
-    """Configuration for LLM services. Supports OpenAI, Anthropic, and Google."""
+    """Configuration for LLM services. Supports OpenAI, Anthropic, and Google.
+
+    For CIRIS proxy, supports multi-endpoint failover via base_urls parameter.
+    Endpoints are tried in order on failure (geographic redundancy).
+    """
 
     api_key: str = Field(default="")
     model_name: str = Field(default="gpt-4o-mini")
     base_url: Optional[str] = Field(default=None)
+    # Multi-endpoint support: list of base URLs to try in order (optional)
+    # If provided, takes precedence over base_url for endpoint rotation
+    base_urls: Optional[List[str]] = Field(default=None)
     instructor_mode: str = Field(default="JSON")
     max_retries: int = Field(default=3)
     timeout_seconds: int = Field(default=60)  # Increased from 5s for live LLM APIs
@@ -378,6 +385,17 @@ class OpenAIConfig(BaseModel):
     provider: LLMProvider = Field(default=LLMProvider.OPENAI)
 
     model_config = ConfigDict(protected_namespaces=())
+
+    def get_effective_base_urls(self) -> List[str]:
+        """Get list of base URLs to use, in priority order.
+
+        Returns base_urls if set, otherwise [base_url] if set, otherwise empty list.
+        """
+        if self.base_urls:
+            return [url for url in self.base_urls if url]
+        if self.base_url:
+            return [self.base_url]
+        return []
 
 
 def _detect_provider_from_env() -> LLMProvider:
@@ -441,7 +459,10 @@ StructuredCallFunc = Callable[
 
 
 class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
-    """Client for interacting with OpenAI-compatible APIs with circuit breaker protection."""
+    """Client for interacting with OpenAI-compatible APIs with circuit breaker protection.
+
+    Supports multi-endpoint failover for CIRIS proxy (NA/EU regions).
+    """
 
     # Type annotations for client attributes - actual type varies by provider
     client: Any  # AsyncOpenAI, AsyncAnthropic, or genai module
@@ -467,6 +488,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             self.openai_config = OpenAIConfig()
         else:
             self.openai_config = config
+
+        # Multi-endpoint support: track available endpoints and current index
+        self._endpoint_urls: List[str] = self.openai_config.get_effective_base_urls()
+        self._current_endpoint_index: int = 0
+        self._endpoint_failure_counts: Dict[str, int] = {}  # Track failures per endpoint
 
         # Initialize circuit breaker BEFORE calling super().__init__
         circuit_config = CircuitBreakerConfig(
@@ -561,6 +587,84 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         self._total_cost_cents = 0.0
         self._total_errors = 0
         self.pricing_calculator = LLMPricingCalculator()
+
+    # Multi-endpoint failover methods
+
+    def _get_current_endpoint(self) -> Optional[str]:
+        """Get the current active endpoint URL."""
+        if not self._endpoint_urls:
+            return self.openai_config.base_url
+        if self._current_endpoint_index >= len(self._endpoint_urls):
+            self._current_endpoint_index = 0
+        return self._endpoint_urls[self._current_endpoint_index]
+
+    def _rotate_to_next_endpoint(self) -> bool:
+        """Rotate to the next available endpoint.
+
+        Returns True if we rotated to a new endpoint, False if no more endpoints.
+        """
+        if not self._endpoint_urls or len(self._endpoint_urls) <= 1:
+            return False
+
+        old_index = self._current_endpoint_index
+        self._current_endpoint_index = (self._current_endpoint_index + 1) % len(self._endpoint_urls)
+
+        # Check if we've tried all endpoints
+        if self._current_endpoint_index == 0:
+            # We've cycled through all endpoints
+            logger.warning(f"[MULTI_ENDPOINT] Cycled through all {len(self._endpoint_urls)} endpoints")
+            return False
+
+        old_url = self._endpoint_urls[old_index]
+        new_url = self._endpoint_urls[self._current_endpoint_index]
+        logger.info(
+            f"[MULTI_ENDPOINT] Rotating from {old_url} to {new_url} "
+            f"(index {old_index} -> {self._current_endpoint_index})"
+        )
+
+        # Update the client's base URL
+        self._update_client_base_url(new_url)
+        return True
+
+    def _update_client_base_url(self, new_url: str) -> None:
+        """Update the OpenAI client's base URL for endpoint rotation."""
+        if hasattr(self.client, "base_url"):
+            self.client.base_url = new_url
+        if hasattr(self.instruct_client, "client") and hasattr(self.instruct_client.client, "base_url"):
+            self.instruct_client.client.base_url = new_url
+        # Also update the config for consistency
+        self.openai_config.base_url = new_url
+
+    def _record_endpoint_failure(self, endpoint_url: str) -> None:
+        """Record a failure for a specific endpoint."""
+        if endpoint_url not in self._endpoint_failure_counts:
+            self._endpoint_failure_counts[endpoint_url] = 0
+        self._endpoint_failure_counts[endpoint_url] += 1
+        logger.info(
+            f"[MULTI_ENDPOINT] Endpoint {endpoint_url} failure count: " f"{self._endpoint_failure_counts[endpoint_url]}"
+        )
+
+    def _record_endpoint_success(self, endpoint_url: str) -> None:
+        """Record a success for a specific endpoint, resetting its failure count."""
+        if endpoint_url in self._endpoint_failure_counts:
+            self._endpoint_failure_counts[endpoint_url] = 0
+
+    def _reset_to_primary_endpoint(self) -> None:
+        """Reset to the primary (first) endpoint."""
+        if self._endpoint_urls and self._current_endpoint_index != 0:
+            self._current_endpoint_index = 0
+            self._update_client_base_url(self._endpoint_urls[0])
+            logger.info(f"[MULTI_ENDPOINT] Reset to primary endpoint: {self._endpoint_urls[0]}")
+
+    def get_endpoint_stats(self) -> Dict[str, Any]:
+        """Get statistics about endpoint usage and failures."""
+        return {
+            "endpoints": self._endpoint_urls,
+            "current_index": self._current_endpoint_index,
+            "current_endpoint": self._get_current_endpoint(),
+            "failure_counts": self._endpoint_failure_counts.copy(),
+            "total_endpoints": len(self._endpoint_urls),
+        }
 
     def _init_openai_client(
         self, api_key: str, base_url: Optional[str], model_name: str, timeout: int, instructor_mode: str
@@ -779,9 +883,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             self.instruct_client.client.base_url = new_base_url
 
         logger.info(
-            "[LLM_TOKEN] Base URL updated:\n"
-            "  Old URL: %s\n"
-            "  New URL: %s",
+            "[LLM_TOKEN] Base URL updated:\n" "  Old URL: %s\n" "  New URL: %s",
             old_base_url,
             new_base_url,
         )
@@ -1030,16 +1132,63 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 self._handle_general_exception(e, resp_model.__name__)
                 raise  # Should not reach here as _handle_general_exception always raises
 
-        try:
-            return await self._retry_with_backoff(
-                _make_structured_call, messages, response_model, max_tokens, temperature, retry_state=retry_state
-            )
-        except CircuitBreakerError:
-            logger.warning("LLM service circuit breaker is open, failing fast")
-            raise
-        except TimeoutError:
-            logger.warning("LLM structured service timeout, failing fast to prevent retry cascade")
-            raise
+        # Multi-endpoint failover: try each endpoint before giving up
+        last_exception: Optional[Exception] = None
+        endpoints_tried = 0
+        max_endpoint_attempts = max(len(self._endpoint_urls), 1)
+
+        while endpoints_tried < max_endpoint_attempts:
+            current_endpoint = self._get_current_endpoint()
+            endpoints_tried += 1
+
+            try:
+                result = await self._retry_with_backoff(
+                    _make_structured_call, messages, response_model, max_tokens, temperature, retry_state=retry_state
+                )
+                # Success! Record it and reset retry state for next call
+                if current_endpoint:
+                    self._record_endpoint_success(current_endpoint)
+                return result
+
+            except CircuitBreakerError:
+                logger.warning("LLM service circuit breaker is open, failing fast")
+                raise
+
+            except TimeoutError as e:
+                last_exception = e
+                if current_endpoint:
+                    self._record_endpoint_failure(current_endpoint)
+                # Try next endpoint if available
+                if self._rotate_to_next_endpoint():
+                    logger.info(
+                        f"[MULTI_ENDPOINT] Timeout on {current_endpoint}, "
+                        f"trying next endpoint (attempt {endpoints_tried + 1}/{max_endpoint_attempts})"
+                    )
+                    retry_state = {"count": 0, "previous_error": None, "original_request_id": None}
+                    continue
+                logger.warning("LLM structured service timeout, no more endpoints to try")
+                raise
+
+            except (RuntimeError, APIConnectionError, InternalServerError) as e:
+                last_exception = e
+                if current_endpoint:
+                    self._record_endpoint_failure(current_endpoint)
+                # Try next endpoint if available (but not for auth errors)
+                error_str = str(e).lower()
+                is_auth_error = "401" in error_str or "authentication" in error_str
+                if not is_auth_error and self._rotate_to_next_endpoint():
+                    logger.info(
+                        f"[MULTI_ENDPOINT] Error on {current_endpoint}, "
+                        f"trying next endpoint (attempt {endpoints_tried + 1}/{max_endpoint_attempts})"
+                    )
+                    retry_state = {"count": 0, "previous_error": None, "original_request_id": None}
+                    continue
+                raise
+
+        # All endpoints exhausted
+        if last_exception:
+            raise last_exception
+        raise RuntimeError("All endpoints exhausted without success")
 
     def _build_extra_kwargs(
         self,

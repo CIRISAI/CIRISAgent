@@ -80,6 +80,13 @@ tool_documentation_section: |
   ### DMA Guidance
   {dma_guidance}
 
+context_enrichment_section: |
+  === AVAILABLE RESOURCES (from context enrichment) ===
+  {context_enrichment_data}
+
+  IMPORTANT: Use the EXACT entity_id values from the list above.
+  Do NOT use friendly names directly - map them to entity_id first.
+
 context_integration: |
   === ASPDMA'S SELECTION ===
   Tool: {tool_name}
@@ -88,31 +95,61 @@ context_integration: |
   === ORIGINAL THOUGHT (user's intent - use to infer parameters) ===
   {original_thought_content}
 
+  {context_enrichment_section}
+
   === TOOL DOCUMENTATION (with Parameter Schema) ===
   {tool_documentation}
 
 response_format: |
-  Return JSON with these fields:
+  Return a FLAT JSON object with these fields:
   - "selected_action": One of "TOOL", "SPEAK", "PONDER"
-  - "rationale": Explain your decision including:
-    1. Why this tool is appropriate for the task
-    2. Why using this tool is ethical in context
-    3. Any gotchas you are acknowledging
+  - "rationale": Explain your decision including gotchas you're acknowledging
 
-  Additional fields based on action:
-  - If TOOL: "tool_parameters": object with parameters inferred from context
-    - Use the Parameter Schema above to determine required/optional parameters
-    - Infer parameter values from the user's intent, conversation context, and examples
-    - Example: if user wants to "turn on the living room light", infer {{"entity_id": "light.living_room", "action": "on"}}
-  - If SPEAK: "speak_content": string starting "I need the user to answer: ..."
-  - If PONDER: "ponder_questions": array of strings
+  PLUS action-specific fields (use the exact field names below):
 
-  IMPORTANT: Reason about the appropriate parameters using:
-  1. The tool's Parameter Schema (required vs optional fields)
-  2. The user's intent from their original request
-  3. Context and examples from the documentation
+  For TOOL action (normal mode - tool exists):
+  {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
 
-  Do not include extra fields or wrap in markdown code blocks.
+  For TOOL action (correction mode - tool name was wrong):
+  {{"selected_action": "TOOL", "rationale": "Correcting tool name to match available tool...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
+  For SPEAK action:
+  {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "I need the user to answer: which light?"}}
+
+  For PONDER action:
+  {{"selected_action": "PONDER", "rationale": "...", "ponder_questions": ["Is this the right approach?"]}}
+
+  IMPORTANT:
+  - Use the Parameter Schema above to determine required tool parameters
+  - Infer parameter values from the user's intent and conversation context
+  - tool_parameters is a dict containing the tool's arguments
+  - In CORRECTION MODE: include "tool_name" field with the EXACT name from available tools list
+  - Do not wrap in markdown code blocks
+
+# Tool correction mode section (used when ASPDMA selected non-existent tool)
+tool_correction_section: |
+  === TOOL CORRECTION MODE ===
+
+  ASPDMA selected tool '{requested_tool}' but this tool does NOT exist.
+
+  Your task: Find the CORRECT tool from the available tools list that matches
+  the user's intent, OR use SPEAK/PONDER if no suitable tool exists.
+
+  Available tools:
+  {available_tools_list}
+
+  INSTRUCTIONS:
+  1. Analyze the user's original intent from the thought content
+  2. Review the available tools above - find one that matches the intent
+  3. If you find a matching tool:
+     - Return TOOL action with "tool_name" set to the EXACT name from the list
+     - Fill in appropriate "tool_parameters" based on the tool's schema
+  4. If multiple tools could match:
+     - Return SPEAK to ask the user which specific capability they want
+  5. If NO tool matches the intent:
+     - Return PONDER to reconsider the approach entirely
+
+  CRITICAL: The "tool_name" field must be an EXACT match from the available tools list above.
 
 evaluation_steps: |
   STEP 1: Read the Documentation

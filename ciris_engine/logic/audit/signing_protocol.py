@@ -265,7 +265,7 @@ class CIRISVerifySigner(BaseSigner):
         # Import the attestation-in-progress exception if available
         AttestationInProgressError: type | None = None
         try:
-            from ciris_verify import AttestationInProgressError as _AttestationErr  # type: ignore[attr-defined]
+            from ciris_verify import AttestationInProgressError as _AttestationErr
 
             AttestationInProgressError = _AttestationErr
         except ImportError:

@@ -43,16 +43,43 @@ class TestGraphAuditService:
     ) -> AsyncGenerator[GraphAuditService, None]:
         """Create GraphAuditService instance."""
         import tempfile
+        from unittest.mock import MagicMock, patch
+
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ed25519
+
+        # Generate real Ed25519 keypair for testing
+        private_key = ed25519.Ed25519PrivateKey.generate()
+        public_key = private_key.public_key()
+        pub_bytes = public_key.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+
+        # Mock the CIRISVerify verifier singleton with real key operations
+        mock_verifier = MagicMock()
+        mock_verifier.has_key_sync.return_value = True
+        mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
+
+        # sign_ed25519_sync returns real signature
+        def mock_sign(data: bytes) -> bytes:
+            return private_key.sign(data)
+
+        mock_verifier.sign_ed25519_sync.side_effect = mock_sign
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            service = GraphAuditService(
-                memory_bus=mock_memory_bus,
-                time_service=mock_time_service,
-                retention_days=30,
-                db_path=f"{temp_dir}/test_audit.db",  # Use temporary database
-                export_path=f"{temp_dir}/audit_export.jsonl",  # Provide export path
-            )
-            yield service
+            with patch(
+                "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
+                return_value=mock_verifier,
+            ):
+                service = GraphAuditService(
+                    memory_bus=mock_memory_bus,
+                    time_service=mock_time_service,
+                    retention_days=30,
+                    db_path=f"{temp_dir}/test_audit.db",  # Use temporary database
+                    export_path=f"{temp_dir}/audit_export.jsonl",  # Provide export path
+                )
+                yield service
             # Ensure service is stopped if it was started
             try:
                 if hasattr(service, "_started") and service._started:

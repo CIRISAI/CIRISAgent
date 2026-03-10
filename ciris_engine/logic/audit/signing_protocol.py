@@ -1,13 +1,16 @@
 """
 Algorithm-agnostic signing protocol for audit and trace signing.
 
-Designed for migration path: RSA-2048 -> Ed25519 -> PQC (ML-DSA/SLH-DSA)
+CIRISVerify is the ONLY source of signing keys. All key management goes through
+the CIRISVerify singleton which handles:
+- Hardware-backed storage (TPM, Android Keystore, iOS Keychain)
+- Software fallback (Ed25519 in memory, persisted by Rust)
+- Key import from Portal during first-run setup
 
-The protocol abstracts the signing algorithm so the system can:
-1. Support multiple algorithms during migration periods
-2. Verify historical signatures with old algorithms
-3. Sign new entries with the current algorithm
-4. Eventually migrate to post-quantum algorithms
+The protocol supports verification of historical signatures using different algorithms:
+- RSA-2048-PSS (legacy, verification only)
+- Ed25519 (current default)
+- Future: PQC algorithms (ML-DSA/SLH-DSA)
 """
 
 import base64
@@ -15,16 +18,12 @@ import hashlib
 import logging
 from abc import ABC, abstractmethod
 from enum import Enum
-from pathlib import Path
 from typing import Any, Dict, Optional, Protocol, cast, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
 # Error message constants
 SIGNER_NOT_INITIALIZED = "Signer not initialized"
-
-# Key file constant
-AGENT_SIGNING_KEY_FILENAME = "agent_signing.key"
 
 
 class SigningAlgorithm(str, Enum):
@@ -87,8 +86,6 @@ class BaseSigner(ABC):
 
     _algorithm: SigningAlgorithm
     _key_id: Optional[str] = None
-    _private_key: Any = None
-    _public_key: Any = None
 
     @property
     def algorithm(self) -> SigningAlgorithm:
@@ -121,21 +118,6 @@ class BaseSigner(ABC):
         """Verify a signature against data."""
         ...
 
-    @abstractmethod
-    def _generate_keypair(self) -> None:
-        """Generate a new key pair."""
-        ...
-
-    @abstractmethod
-    def _load_keypair(self, key_path: Path) -> bool:
-        """Load key pair from file. Returns True if successful."""
-        ...
-
-    @abstractmethod
-    def _save_keypair(self, key_path: Path) -> None:
-        """Save key pair to file."""
-        ...
-
     def _compute_key_id(self, public_key_bytes: bytes) -> str:
         """Compute key ID from public key bytes.
 
@@ -145,111 +127,13 @@ class BaseSigner(ABC):
         return f"agent-{hashlib.sha256(public_key_bytes).hexdigest()[:12]}"
 
 
-class Ed25519Signer(BaseSigner):
-    """Ed25519 signing implementation.
-
-    Ed25519 advantages over RSA-2048:
-    - Faster signing and verification
-    - Smaller signatures (64 bytes vs 256 bytes)
-    - Smaller keys (32 bytes vs 256 bytes)
-    - Deterministic signatures (no random component)
-    - Resistant to side-channel attacks
-    - Simple and auditable implementation
-    """
-
-    def __init__(self) -> None:
-        self._algorithm = SigningAlgorithm.ED25519
-        self._private_key = None
-        self._public_key = None
-        self._key_id = None
-
-    @property
-    def public_key_bytes(self) -> bytes:
-        if not self._public_key:
-            raise RuntimeError(SIGNER_NOT_INITIALIZED)
-        from cryptography.hazmat.primitives import serialization
-
-        result: bytes = self._public_key.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
-        )
-        return result
-
-    def sign(self, data: bytes) -> bytes:
-        if not self._private_key:
-            raise RuntimeError(SIGNER_NOT_INITIALIZED)
-        result: bytes = self._private_key.sign(data)
-        return result
-
-    def verify(self, data: bytes, signature: bytes) -> bool:
-        if not self._public_key:
-            raise RuntimeError(SIGNER_NOT_INITIALIZED)
-        try:
-            self._public_key.verify(signature, data)
-            return True
-        except Exception:
-            return False
-
-    def _generate_keypair(self) -> None:
-        from cryptography.hazmat.primitives.asymmetric import ed25519
-
-        self._private_key = ed25519.Ed25519PrivateKey.generate()
-        self._public_key = self._private_key.public_key()
-        self._key_id = self._compute_key_id(self.public_key_bytes)
-        logger.info(f"Generated new Ed25519 keypair (key_id={self._key_id})")
-
-    def _load_keypair(self, key_path: Path) -> bool:
-        """Load Ed25519 keypair from raw 32-byte private key file."""
-        try:
-            if not key_path.exists():
-                return False
-
-            from cryptography.hazmat.primitives.asymmetric import ed25519
-
-            private_bytes = key_path.read_bytes()
-            self._private_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_bytes)
-            self._public_key = self._private_key.public_key()
-            self._key_id = self._compute_key_id(self.public_key_bytes)
-            logger.info(f"Loaded Ed25519 keypair from {key_path} (key_id={self._key_id})")
-            return True
-        except Exception as e:
-            logger.debug(f"Could not load Ed25519 key from {key_path}: {e}")
-            return False
-
-    def _save_keypair(self, key_path: Path) -> None:
-        """Save Ed25519 keypair as raw 32-byte private key file."""
-        if not self._private_key:
-            raise RuntimeError("No keypair to save")
-
-        import os
-
-        from cryptography.hazmat.primitives import serialization
-
-        # Ensure parent directory exists
-        key_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Get raw private key bytes (32 bytes)
-        private_bytes = self._private_key.private_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PrivateFormat.Raw,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
-
-        key_path.write_bytes(private_bytes)
-        os.chmod(key_path, 0o600)  # Restrictive permissions
-        logger.info(f"Saved Ed25519 keypair to {key_path}")
-
-
 class CIRISVerifySigner(BaseSigner):
-    """Signing implementation that delegates to CIRISVerify hardware vault.
+    """Signing implementation that delegates to CIRISVerify.
 
-    When the ciris-verify package is installed and the binary is available,
-    this signer delegates all signing operations to the hardware security
-    module via FFI. The private key never leaves the secure hardware.
-
-    This integrates CIRISVerify as a "path" in the unified signing protocol:
-    - If CIRISVerify binary is available → use hardware-bound key
-    - If not → fall back to software Ed25519
+    CIRISVerify is the ONLY source of signing keys. It handles:
+    - Hardware-backed storage (TPM, Android Keystore, iOS Keychain)
+    - Software fallback (Ed25519 in memory, persisted by Rust to CIRIS_DATA_DIR)
+    - Key import from Portal during first-run setup
 
     The algorithm depends on the hardware platform:
     - Mobile HSMs: ECDSA P-256
@@ -271,11 +155,27 @@ class CIRISVerifySigner(BaseSigner):
         return self._public_key_cache
 
     def sign(self, data: bytes) -> bytes:
-        """Sign data via CIRISVerify FFI (direct sync call, no asyncio)."""
+        """Sign data via CIRISVerify FFI.
+
+        CIRISVerify handles all key management - if no key exists, it creates
+        an ephemeral one automatically.
+        """
         if not self._client:
             raise RuntimeError(SIGNER_NOT_INITIALIZED)
         try:
-            return cast(bytes, self._client.sign_ed25519_sync(data))
+            signature = cast(bytes, self._client.sign_ed25519_sync(data))
+
+            # If we didn't have the public key cached, fetch it now
+            if self._public_key_cache is None:
+                try:
+                    self._public_key_cache = self._client.get_ed25519_public_key_sync()
+                    self._algo_name = "Ed25519"
+                    self._key_id = self._compute_key_id(self._public_key_cache)
+                    logger.info(f"CIRISVerify created key (key_id={self._key_id})")
+                except Exception:
+                    pass  # Public key fetch is optional for signing
+
+            return signature
         except Exception as e:
             raise RuntimeError(f"CIRISVerify signing failed: {e}") from e
 
@@ -306,170 +206,161 @@ class CIRISVerifySigner(BaseSigner):
                 return False
         return False
 
-    def _generate_keypair(self) -> None:
-        """Not applicable — key is managed by hardware."""
-        raise RuntimeError("CIRISVerify manages keys in hardware — cannot generate locally")
+    def _try_generate_key_with_retry(self, client: Any) -> bool:
+        """Try to generate an ephemeral Ed25519 key with singleton reset on failure.
 
-    def _load_keypair(self, key_path: Path) -> bool:
-        """Load CIRISVerify client and fetch public key.
+        Args:
+            client: CIRISVerify client instance
 
-        Runs initialization on a dedicated 8MB-stack thread because the Rust
-        ciris_verify_init → LicenseEngine::with_config → Tokio runtime needs
-        far more stack than the 544K iOS CIRISRuntime thread provides.
-        After init, the client handle is safe for lightweight sign_sync() calls.
-
-        Also handles auto-migration: if a file-based key exists but ciris_verify
-        doesn't have one, imports it and deletes the file.
+        Returns:
+            True if key generation succeeded, False if failed after retry
         """
-        import threading
+        import time
 
-        # [client, key_bytes, algo, error, has_key]
-        result: list[Any] = [None, None, None, None, False]
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+            get_verifier,
+            reset_verifier,
+        )
 
-        # Use the global singleton instead of creating a new instance
-        try:
-            from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
+        for attempt in range(2):  # Try twice: original + one retry after reset
+            try:
+                logger.info(f"[signing] Attempting key generation (attempt {attempt + 1}/2)")
+                client.generate_key_sync()  # type: ignore[attr-defined, unused-ignore]
+                logger.info("[signing] Ephemeral Ed25519 key generated successfully")
+                return True
+            except Exception as e:
+                logger.error(f"[signing] Key generation failed (attempt {attempt + 1}/2): {e}")
 
-            client = get_verifier()
-            if client is None:
-                result[3] = RuntimeError("CIRISVerify singleton not available")
-            else:
-                # Check if key already exists in secure storage
-                has_key = client.has_key_sync()  # type: ignore[attr-defined, unused-ignore]
-                result[4] = has_key
-
-                if has_key:
-                    # Key exists, get the public key
-                    key_bytes, algo = client.get_public_key_sync()  # type: ignore[attr-defined, unused-ignore]
-                    result[0] = client
-                    result[1] = key_bytes
-                    result[2] = algo
+                if attempt == 0:
+                    # First failure - try resetting the singleton and getting fresh client
+                    logger.warning("[signing] Resetting CIRISVerify singleton and retrying...")
+                    try:
+                        reset_verifier()
+                        time.sleep(0.5)  # Brief pause before retry
+                        client = get_verifier()
+                        self._client = client
+                    except Exception as reset_error:
+                        logger.error(f"[signing] Singleton reset failed: {reset_error}")
+                        return False
                 else:
-                    # No key yet - client is ready for import
-                    result[0] = client
-        except Exception as e:
-            result[3] = e
+                    # Second failure - give up
+                    logger.error(
+                        "[signing] FATAL: Key generation failed after singleton reset. "
+                        "Native library or keystore issue."
+                    )
+                    return False
 
-        if result[3] is not None:
-            logger.debug(f"CIRISVerify not available: {result[3]}")
-            return False
-        if result[0] is None:
-            logger.debug("CIRISVerify initialization timed out")
-            return False
+        return False
 
-        self._client = result[0]
+    def initialize(self) -> bool:
+        """Initialize from CIRISVerify singleton.
 
-        # If key exists in secure storage, use it
-        if result[4] and result[1] is not None:
-            self._public_key_cache = result[1]
-            self._algo_name = result[2]
-            self._key_id = self._compute_key_id(result[1])
-            if self._algo_name and "Ed25519" in self._algo_name:
-                self._algorithm = SigningAlgorithm.ED25519
-            logger.info(f"CIRISVerify vault signer loaded (algo={self._algo_name}, key_id={self._key_id})")
-            return True
-
-        # No key in secure storage - try auto-migration from file
-        return self._try_auto_migrate()
-
-    def _try_auto_migrate(self) -> bool:
-        """Try to auto-migrate an existing file-based key into ciris_verify.
-
-        Checks standard key locations for existing Ed25519 keys,
-        imports them into ciris_verify, validates, and deletes the original.
+        Returns True if CIRISVerify has a key available, False if waiting for Portal import.
+        Retries with backoff if attestation is in progress (AttestationInProgressError).
         """
-        if not self._client:
-            return False
+        import time
 
-        # Standard key locations to check
-        key_locations = [
-            Path("data") / AGENT_SIGNING_KEY_FILENAME,
-            Path("/app/data") / AGENT_SIGNING_KEY_FILENAME,
-        ]
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
 
-        # Also check path resolution (CIRIS_HOME and CIRIS_HOME/data/)
+        # Import the attestation-in-progress exception if available
+        AttestationInProgressError: type | None = None
         try:
-            from ciris_engine.logic.utils.path_resolution import get_ciris_home, get_data_dir
+            from ciris_verify import AttestationInProgressError as _AttestationErr  # type: ignore[attr-defined]
 
-            key_locations.insert(0, get_data_dir() / AGENT_SIGNING_KEY_FILENAME)
-            key_locations.insert(0, get_ciris_home() / AGENT_SIGNING_KEY_FILENAME)
-        except Exception:
+            AttestationInProgressError = _AttestationErr
+        except ImportError:
             pass
 
-        for key_path in key_locations:
-            if not key_path.exists():
-                continue
+        # Retry with backoff when attestation is running
+        max_retries = 10
+        base_delay = 0.5  # Start with 500ms delay
 
+        for attempt in range(max_retries):
             try:
-                key_bytes = key_path.read_bytes()
-                if len(key_bytes) != 32:
-                    logger.warning(f"Invalid key size at {key_path}: {len(key_bytes)} bytes")
-                    continue
+                client = get_verifier()
+                if client is None:
+                    logger.debug("CIRISVerify singleton not available")
+                    return False
 
-                # Import into ciris_verify
-                logger.info(f"Auto-migrating key from {key_path} to ciris_verify secure storage")
-                self._client.import_key_sync(key_bytes)
+                self._client = client
 
-                # Fetch public key to validate
-                pub_key = self._client.get_ed25519_public_key_sync()
-                self._public_key_cache = pub_key
+                # Check if key exists in secure storage
+                has_key = client.has_key_sync()  # type: ignore[attr-defined, unused-ignore]
+
+                if not has_key:
+                    # No key exists - generate ephemeral key (v1.1.17+ fixed catch_unwind)
+                    if hasattr(client, "generate_key_sync"):
+                        logger.info("[signing] No signing key found, generating ephemeral Ed25519 key")
+                        if not self._try_generate_key_with_retry(client):
+                            # Key generation failed after retries - fatal error
+                            error_msg = (
+                                "FATAL: Ed25519 key generation failed after retry. "
+                                "The signing system cannot initialize. "
+                                "Check ciris_verify native library and Android Keystore access."
+                            )
+                            logger.error(f"[signing] {error_msg}")
+                            raise RuntimeError(error_msg)
+                    else:
+                        # Older CIRISVerify without generate_key support
+                        logger.debug("CIRISVerify initialized but no key available (waiting for Portal import)")
+                        return False
+
+                # Key exists (or was just generated), get the public key
+                key_bytes = client.get_ed25519_public_key_sync()  # type: ignore[attr-defined, unused-ignore]
+                self._public_key_cache = key_bytes
                 self._algo_name = "Ed25519"
-                self._key_id = self._compute_key_id(pub_key)
-
-                if self._algo_name and "Ed25519" in self._algo_name:
-                    self._algorithm = SigningAlgorithm.ED25519
-
-                # Note: Do NOT delete the key file. CIRISVerify's persist_key()
-                # stores to the same CIRIS_DATA_DIR path, so deleting the "original"
-                # would also delete the Rust-persisted copy.
-                logger.info(f"Key imported from {key_path} (file retained for Rust persistence)")
-
-                logger.info(f"Key auto-migrated to ciris_verify (key_id={self._key_id})")
+                self._key_id = self._compute_key_id(key_bytes)
+                self._algorithm = SigningAlgorithm.ED25519
+                logger.info(f"CIRISVerify signer loaded (algo={self._algo_name}, key_id={self._key_id})")
                 return True
 
             except Exception as e:
-                logger.warning(f"Failed to auto-migrate key from {key_path}: {e}")
-                continue
+                # Check if it's the specific attestation-in-progress error
+                is_attestation_busy = (
+                    AttestationInProgressError is not None and isinstance(e, AttestationInProgressError)
+                ) or "attestation" in str(e).lower()
 
-        # No key to migrate - ciris_verify is ready but has no key
-        logger.debug("CIRISVerify initialized but no key available (waiting for import)")
+                if is_attestation_busy and attempt < max_retries - 1:
+                    delay = base_delay * (2 ** min(attempt, 4))  # Cap at 8s
+                    logger.info(
+                        f"Attestation in progress, waiting {delay:.1f}s before retry "
+                        f"(attempt {attempt + 1}/{max_retries})"
+                    )
+                    time.sleep(delay)
+                elif attempt < max_retries - 1:
+                    # Other transient error - shorter retry
+                    logger.debug(f"CIRISVerify FFI call failed, retrying: {e}")
+                    time.sleep(0.1)
+                else:
+                    logger.warning(f"CIRISVerify not available after {max_retries} attempts: {e}")
+                    return False
+
         return False
-
-    def _save_keypair(self, key_path: Path) -> None:
-        """Not applicable — key lives in hardware."""
-        pass
 
 
 class UnifiedSigningKey:
     """Unified signing key management for audit and accord metrics.
 
-    Manages a single Ed25519 key used for:
-    1. Audit trail signing
-    2. Accord metrics trace signing
-    3. Future: any other cryptographic signing needs
+    CIRISVerify is the ONLY source of signing keys. All key management goes through
+    CIRISVerify which handles hardware/software storage internally.
 
-    The key is stored at: data/agent_signing.key (32-byte raw Ed25519 private key)
+    Keys are either:
+    1. Imported from Portal during first-run setup
+    2. Already present in CIRISVerify vault from previous session
+
     Key ID format: agent-{sha256(pubkey)[:12]}
     """
 
-    # Standard key location
-    DEFAULT_KEY_PATH = Path("data") / AGENT_SIGNING_KEY_FILENAME
-    DOCKER_KEY_PATH = Path("/app/data") / AGENT_SIGNING_KEY_FILENAME
-
-    def __init__(self, key_path: Optional[Path] = None) -> None:
-        """Initialize unified signing key manager.
-
-        Args:
-            key_path: Custom key path (defaults to data/agent_signing.key)
-        """
-        self._key_path = key_path
-        self._signer: Optional[BaseSigner] = None
+    def __init__(self) -> None:
+        """Initialize unified signing key manager."""
+        self._signer: Optional[CIRISVerifySigner] = None
         self._initialized = False
+        self._on_key_registered: Optional[Any] = None  # Callback for key registration
 
     @property
     def signer(self) -> BaseSigner:
         if not self._signer:
-            raise RuntimeError("UnifiedSigningKey not initialized")
+            raise RuntimeError("UnifiedSigningKey not initialized - no key available from CIRISVerify")
         return self._signer
 
     @property
@@ -488,85 +379,69 @@ class UnifiedSigningKey:
     def algorithm(self) -> SigningAlgorithm:
         return self.signer.algorithm
 
+    @property
+    def has_key(self) -> bool:
+        """Check if a signing key is actually available (not just initialized).
+
+        Returns True only if CIRISVerify has a key loaded or imported.
+        Returns False if waiting for Portal import or ephemeral key creation.
+        """
+        return self._signer is not None and self._initialized and self._signer._key_id is not None
+
     def initialize(self) -> None:
-        """Initialize the signing key.
+        """Initialize the signing key from CIRISVerify.
 
-        CIRISVerify is the ONLY source of signing keys. Keys are either:
-        1. Imported from Portal during first-run setup
-        2. Already present in CIRISVerify vault from previous session
+        CIRISVerify is REQUIRED and handles all key management:
+        - Hardware-backed keys (TPM, Keystore, Keychain)
+        - Software fallback with ephemeral key creation
+        - Key persistence
 
-        We NEVER generate local keys - all keys must come from Portal/Registry.
+        Raises:
+            RuntimeError: If CIRISVerify singleton is not available
         """
         if self._initialized:
             return
 
-        # Try CIRISVerify hardware vault (the ONLY source of signing keys)
-        if not self._key_path:  # Only if no explicit key path was given
-            try:
-                verify_signer = CIRISVerifySigner()
-                if verify_signer._load_keypair(Path("__ciris_verify__")):
-                    self._signer = verify_signer
-                    self._initialized = True
-                    logger.info(f"Using CIRISVerify hardware vault for signing (key_id={verify_signer.key_id})")
-                    return
-            except Exception as e:
-                logger.debug(f"CIRISVerify vault not available: {e}")
+        # CIRISVerify is REQUIRED - fail hard if not available
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
 
-        # Fallback: Try existing Ed25519 key file (legacy/migration support)
-        self._signer = Ed25519Signer()
+        client = get_verifier()
+        if client is None:
+            raise RuntimeError(
+                "FATAL: CIRISVerify is not available. "
+                "Cannot initialize signing without CIRISVerify singleton. "
+                "Ensure ciris_verify is properly installed and initialized."
+            )
 
-        key_locations = []
-        if self._key_path:
-            key_locations.append(self._key_path)
+        verify_signer = CIRISVerifySigner()
+        if verify_signer.initialize():
+            self._signer = verify_signer
+            self._initialized = True
+            logger.info(f"Using CIRISVerify for signing (key_id={verify_signer.key_id})")
+            # Notify callback that key is available (may be new ephemeral or existing)
+            self._notify_key_registered()
+        else:
+            # CIRISVerify has no key - it will create an ephemeral one when needed
+            # Store the client reference so we can use it for signing
+            verify_signer._client = client
+            self._signer = verify_signer
+            self._initialized = True
+            logger.info("CIRISVerify ready - will create ephemeral key on first sign")
 
-        # Check CIRIS_HOME (iOS: Documents/ciris/, Android: files/ciris/)
-        try:
-            from ciris_engine.logic.utils.path_resolution import get_ciris_home, get_data_dir
+    def load_provisioned_key(self, ed25519_private_key_b64: str) -> None:
+        """Load signing key from Portal provisioning.
 
-            key_locations.append(get_ciris_home() / AGENT_SIGNING_KEY_FILENAME)
-            key_locations.append(get_data_dir() / AGENT_SIGNING_KEY_FILENAME)
-        except Exception:
-            pass
-
-        key_locations.extend(
-            [
-                self.DEFAULT_KEY_PATH,
-                self.DOCKER_KEY_PATH,
-            ]
-        )
-
-        for key_path in key_locations:
-            if self._signer._load_keypair(key_path):
-                self._key_path = key_path
-                self._initialized = True
-                logger.info(f"Loaded legacy Ed25519 key from {key_path}")
-                return
-
-        # No key found - this is expected during first-run before Portal provides key
-        # Do NOT generate a local key - wait for Portal to provide one
-        logger.warning(
-            "No signing key found in CIRISVerify vault or legacy key files. "
-            "Key must be provided by Portal during first-run setup."
-        )
-        # Leave _initialized=False so callers know no key is available yet
-
-    def load_provisioned_key(self, ed25519_private_key_b64: str, save_path: Optional[Path] = None) -> None:
-        """Load signing key for a Registry-provisioned agent.
-
-        CIRISVerify is the ONLY key storage - we NEVER write keys to disk directly.
-        All key management goes through CIRISVerify's secure storage.
+        CIRISVerify is the ONLY key storage. The key is imported into CIRISVerify
+        which handles hardware/software storage internally.
 
         Args:
-            ed25519_private_key_b64: Base64-encoded 32-byte Ed25519 private key
-            save_path: Deprecated - ignored (CIRISVerify manages storage)
+            ed25519_private_key_b64: Base64-encoded 32-byte Ed25519 private key from Portal
         """
-        import base64
-
         private_bytes = base64.b64decode(ed25519_private_key_b64)
         if len(private_bytes) != 32:
             raise ValueError(f"Expected 32-byte Ed25519 private key, got {len(private_bytes)} bytes")
 
-        # Import directly into CIRISVerify vault (the ONLY path)
+        # Import directly into CIRISVerify vault
         from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
 
         client = get_verifier()
@@ -585,14 +460,58 @@ class UnifiedSigningKey:
         verify_signer = CIRISVerifySigner()
         verify_signer._client = client
         verify_signer._public_key_cache = pub_key
+        verify_signer._algo_name = "Ed25519"
         verify_signer._key_id = verify_signer._compute_key_id(pub_key)
         self._signer = verify_signer
         self._initialized = True
-        logger.info(f"Imported provisioned key into CIRISVerify vault (key_id={verify_signer.key_id})")
+        logger.info(f"Imported Portal key into CIRISVerify (key_id={verify_signer.key_id})")
+
+        # Register public key in audit_signing_keys table
+        self._notify_key_registered()
+
+    def _notify_key_registered(self) -> None:
+        """Notify that a key has been registered/changed.
+
+        This triggers registration in audit_signing_keys table via callback.
+        The callback is set by AuditSignatureManager during initialization.
+        """
+        if self._signer and hasattr(self, "_on_key_registered") and self._on_key_registered:
+            try:
+                self._on_key_registered(
+                    key_id=self._signer.key_id,
+                    public_key_base64=self._signer.public_key_base64,
+                    algorithm="ed25519",
+                )
+            except Exception as e:
+                logger.warning(f"Failed to notify key registration: {e}")
+
+    def set_key_registration_callback(self, callback: Optional[Any]) -> None:
+        """Set callback for key registration events.
+
+        Args:
+            callback: Function(key_id, public_key_base64, algorithm) to call on key changes
+        """
+        self._on_key_registered = callback
 
     def sign(self, data: bytes) -> bytes:
-        """Sign data and return signature bytes."""
-        return self.signer.sign(data)
+        """Sign data and return signature bytes.
+
+        If CIRISVerify creates an ephemeral key during this sign operation,
+        the key is registered in audit_signing_keys via callback.
+        """
+        # Track if we had a key before signing
+        had_key_before = self._signer is not None and self._signer._key_id is not None
+        old_key_id = self._signer._key_id if self._signer else None
+
+        signature = self.signer.sign(data)
+
+        # Check if a new key was created during signing (ephemeral key case)
+        new_key_id = self._signer._key_id if self._signer else None
+        if new_key_id and new_key_id != old_key_id:
+            logger.info(f"Ephemeral key created during sign: {new_key_id}")
+            self._notify_key_registered()
+
+        return signature
 
     def sign_base64(self, data: bytes) -> str:
         """Sign data and return URL-safe base64 signature."""
@@ -637,8 +556,9 @@ def get_unified_signing_key() -> UnifiedSigningKey:
     """
     global _unified_key
     if _unified_key is None:
-        _unified_key = UnifiedSigningKey()
-        _unified_key.initialize()
+        key = UnifiedSigningKey()
+        key.initialize()  # If this throws, _unified_key stays None for retry
+        _unified_key = key  # Only set global after successful init
     return _unified_key
 
 

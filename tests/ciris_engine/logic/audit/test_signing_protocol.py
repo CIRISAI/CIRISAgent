@@ -2,28 +2,32 @@
 Comprehensive test suite for signing_protocol.py.
 
 Tests cover:
-- Ed25519Signer: key generation, signing, verification
+- CIRISVerifySigner: signing, verification via CIRISVerify singleton
 - UnifiedSigningKey: initialization, singleton behavior, registration
 - Error handling with SIGNER_NOT_INITIALIZED constant
 - Base64 encoding/decoding utilities
+
+Note: CIRISVerify is the ONLY source of signing keys. These tests mock the
+CIRISVerify singleton to test the signing protocol logic without requiring
+the actual CIRISVerify Rust library.
 """
 
 import base64
-import tempfile
-from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from ciris_engine.logic.audit.signing_protocol import (
     SIGNER_NOT_INITIALIZED,
-    BaseSigner,
-    Ed25519Signer,
+    CIRISVerifySigner,
     SigningAlgorithm,
     UnifiedSigningKey,
     get_unified_signing_key,
     reset_unified_signing_key,
 )
+
+# Patch path for get_verifier - it's imported from verifier_singleton inside the functions
+VERIFIER_PATCH_PATH = "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier"
 
 
 class TestSignerNotInitializedConstant:
@@ -33,33 +37,26 @@ class TestSignerNotInitializedConstant:
         """Test the constant has expected value."""
         assert SIGNER_NOT_INITIALIZED == "Signer not initialized"
 
-    def test_ed25519_key_id_raises_with_constant(self):
-        """Test Ed25519Signer.key_id raises with the constant message."""
-        signer = Ed25519Signer()
+    def test_ciris_verify_signer_key_id_raises_with_constant(self):
+        """Test CIRISVerifySigner.key_id raises with the constant message."""
+        signer = CIRISVerifySigner()
         # Not initialized, should raise
         with pytest.raises(RuntimeError) as exc_info:
             _ = signer.key_id
         assert SIGNER_NOT_INITIALIZED in str(exc_info.value)
 
-    def test_ed25519_public_key_bytes_raises_with_constant(self):
-        """Test Ed25519Signer.public_key_bytes raises with the constant message."""
-        signer = Ed25519Signer()
+    def test_ciris_verify_signer_public_key_bytes_raises_with_constant(self):
+        """Test CIRISVerifySigner.public_key_bytes raises with the constant message."""
+        signer = CIRISVerifySigner()
         with pytest.raises(RuntimeError) as exc_info:
             _ = signer.public_key_bytes
         assert SIGNER_NOT_INITIALIZED in str(exc_info.value)
 
-    def test_ed25519_sign_raises_with_constant(self):
-        """Test Ed25519Signer.sign raises with the constant message."""
-        signer = Ed25519Signer()
+    def test_ciris_verify_signer_sign_raises_with_constant(self):
+        """Test CIRISVerifySigner.sign raises with the constant message."""
+        signer = CIRISVerifySigner()
         with pytest.raises(RuntimeError) as exc_info:
             signer.sign(b"test data")
-        assert SIGNER_NOT_INITIALIZED in str(exc_info.value)
-
-    def test_ed25519_verify_raises_with_constant(self):
-        """Test Ed25519Signer.verify raises with the constant message."""
-        signer = Ed25519Signer()
-        with pytest.raises(RuntimeError) as exc_info:
-            signer.verify(b"data", b"signature")
         assert SIGNER_NOT_INITIALIZED in str(exc_info.value)
 
 
@@ -80,180 +77,164 @@ class TestSigningAlgorithm:
         assert SigningAlgorithm.ED25519 == "ed25519"
 
 
-class TestEd25519Signer:
-    """Test Ed25519Signer implementation."""
+class TestCIRISVerifySigner:
+    """Test CIRISVerifySigner implementation with mocked CIRISVerify."""
 
     def test_init_sets_algorithm(self):
         """Test initialization sets correct algorithm."""
-        signer = Ed25519Signer()
+        signer = CIRISVerifySigner()
         assert signer._algorithm == SigningAlgorithm.ED25519
 
-    def test_init_keys_are_none(self):
-        """Test initialization leaves keys as None."""
-        signer = Ed25519Signer()
-        assert signer._private_key is None
-        assert signer._public_key is None
+    def test_init_client_is_none(self):
+        """Test initialization leaves client as None."""
+        signer = CIRISVerifySigner()
+        assert signer._client is None
+        assert signer._public_key_cache is None
         assert signer._key_id is None
 
-    def test_generate_keypair(self):
-        """Test keypair generation."""
-        signer = Ed25519Signer()
-        signer._generate_keypair()
+    def test_initialize_with_existing_key(self):
+        """Test initialize when CIRISVerify has a key."""
+        mock_client = MagicMock()
+        mock_client.has_key_sync.return_value = True
+        mock_client.get_ed25519_public_key_sync.return_value = b"x" * 32
 
-        assert signer._private_key is not None
-        assert signer._public_key is not None
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            signer = CIRISVerifySigner()
+            result = signer.initialize()
+
+            assert result is True
+            assert signer._client is mock_client
+            assert signer._public_key_cache == b"x" * 32
+            assert signer._algo_name == "Ed25519"
+            assert signer._key_id.startswith("agent-")
+
+    def test_initialize_without_key_generates_ephemeral(self):
+        """Test initialize generates ephemeral key when CIRISVerify has no key."""
+        mock_client = MagicMock()
+        mock_client.has_key_sync.return_value = False
+        mock_client.generate_key_sync.return_value = None  # Generation succeeds
+        mock_client.get_ed25519_public_key_sync.return_value = b"e" * 32
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            signer = CIRISVerifySigner()
+            result = signer.initialize()
+
+            # Now generates ephemeral key instead of returning False
+            assert result is True
+            assert signer._client is mock_client
+            assert signer._public_key_cache == b"e" * 32
+            mock_client.generate_key_sync.assert_called_once()
+
+    def test_initialize_without_key_no_generator(self):
+        """Test initialize returns False when no key and no generator available."""
+        mock_client = MagicMock(spec=["has_key_sync"])  # Only has_key_sync, no generate
+        mock_client.has_key_sync.return_value = False
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            signer = CIRISVerifySigner()
+            result = signer.initialize()
+
+            assert result is False
+            assert signer._client is mock_client
+            assert signer._public_key_cache is None
+
+    def test_initialize_no_verifier(self):
+        """Test initialize when CIRISVerify singleton not available."""
+        with patch(VERIFIER_PATCH_PATH, return_value=None):
+            signer = CIRISVerifySigner()
+            result = signer.initialize()
+
+            assert result is False
+            assert signer._client is None
+
+    def test_sign_calls_client(self):
+        """Test sign delegates to CIRISVerify client."""
+        mock_client = MagicMock()
+        mock_client.sign_ed25519_sync.return_value = b"signature" * 8  # 64 bytes
+
+        signer = CIRISVerifySigner()
+        signer._client = mock_client
+
+        signature = signer.sign(b"test data")
+
+        mock_client.sign_ed25519_sync.assert_called_once_with(b"test data")
+        assert signature == b"signature" * 8
+
+    def test_sign_fetches_public_key_if_not_cached(self):
+        """Test sign fetches public key after signing if not cached."""
+        mock_client = MagicMock()
+        mock_client.sign_ed25519_sync.return_value = b"x" * 64
+        mock_client.get_ed25519_public_key_sync.return_value = b"pubkey" + b"\x00" * 26
+
+        signer = CIRISVerifySigner()
+        signer._client = mock_client
+        signer._public_key_cache = None
+
+        signer.sign(b"data")
+
+        mock_client.get_ed25519_public_key_sync.assert_called_once()
+        assert signer._public_key_cache == b"pubkey" + b"\x00" * 26
         assert signer._key_id is not None
-        assert signer._key_id.startswith("agent-")
 
-    def test_public_key_bytes_is_32_bytes(self):
-        """Test public key is 32 bytes for Ed25519."""
-        signer = Ed25519Signer()
-        signer._generate_keypair()
+    def test_verify_ed25519_signature(self):
+        """Test verify with Ed25519 algorithm."""
+        # Generate a real Ed25519 keypair for testing
+        from cryptography.hazmat.primitives.asymmetric import ed25519
 
-        pub_bytes = signer.public_key_bytes
-        assert len(pub_bytes) == 32
+        private_key = ed25519.Ed25519PrivateKey.generate()
+        public_key = private_key.public_key()
 
-    def test_public_key_base64(self):
-        """Test public key base64 encoding."""
-        signer = Ed25519Signer()
-        signer._generate_keypair()
+        from cryptography.hazmat.primitives import serialization
 
-        pub_b64 = signer.public_key_base64
-        # Decode to verify it's valid base64
-        decoded = base64.b64decode(pub_b64)
-        assert len(decoded) == 32
+        pub_bytes = public_key.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
 
-    def test_sign_produces_64_byte_signature(self):
-        """Test signing produces 64-byte Ed25519 signature."""
-        signer = Ed25519Signer()
-        signer._generate_keypair()
+        data = b"test data to verify"
+        signature = private_key.sign(data)
 
-        signature = signer.sign(b"test data to sign")
-        assert len(signature) == 64
-
-    def test_sign_deterministic(self):
-        """Test Ed25519 signatures are deterministic."""
-        signer = Ed25519Signer()
-        signer._generate_keypair()
-
-        data = b"same data"
-        sig1 = signer.sign(data)
-        sig2 = signer.sign(data)
-
-        assert sig1 == sig2
-
-    def test_verify_valid_signature(self):
-        """Test verification of valid signature."""
-        signer = Ed25519Signer()
-        signer._generate_keypair()
-
-        data = b"data to verify"
-        signature = signer.sign(data)
+        signer = CIRISVerifySigner()
+        signer._public_key_cache = pub_bytes
+        signer._algo_name = "Ed25519"
 
         assert signer.verify(data, signature) is True
 
     def test_verify_invalid_signature(self):
-        """Test verification of invalid signature."""
-        signer = Ed25519Signer()
-        signer._generate_keypair()
+        """Test verify returns False for invalid signature."""
+        from cryptography.hazmat.primitives.asymmetric import ed25519
 
-        data = b"original data"
-        signature = signer.sign(data)
+        private_key = ed25519.Ed25519PrivateKey.generate()
+        public_key = private_key.public_key()
 
-        # Modify the data
-        assert signer.verify(b"modified data", signature) is False
+        from cryptography.hazmat.primitives import serialization
 
-    def test_verify_corrupted_signature(self):
-        """Test verification of corrupted signature."""
-        signer = Ed25519Signer()
-        signer._generate_keypair()
+        pub_bytes = public_key.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
 
-        data = b"data"
-        signature = signer.sign(data)
+        signer = CIRISVerifySigner()
+        signer._public_key_cache = pub_bytes
+        signer._algo_name = "Ed25519"
 
-        # Corrupt the signature
-        corrupted = bytes([b ^ 0xFF for b in signature])
-        assert signer.verify(data, corrupted) is False
-
-    def test_key_id_format(self):
-        """Test key ID has correct format."""
-        signer = Ed25519Signer()
-        signer._generate_keypair()
-
-        key_id = signer.key_id
-        assert key_id.startswith("agent-")
-        # Should be agent- followed by 12 hex chars
-        assert len(key_id) == len("agent-") + 12
-        # The hash part should be hex
-        hex_part = key_id[6:]
-        int(hex_part, 16)  # Should not raise
+        # Wrong signature
+        assert signer.verify(b"data", b"wrong" * 13) is False
 
     def test_algorithm_property(self):
         """Test algorithm property returns correct value."""
-        signer = Ed25519Signer()
+        signer = CIRISVerifySigner()
         assert signer.algorithm == SigningAlgorithm.ED25519
-
-    def test_save_and_load_keypair(self):
-        """Test saving and loading keypair."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            key_path = Path(temp_dir) / "test_signing.key"
-
-            # Generate and save
-            signer1 = Ed25519Signer()
-            signer1._generate_keypair()
-            original_key_id = signer1.key_id
-            original_pub_bytes = signer1.public_key_bytes
-            signer1._save_keypair(key_path)
-
-            # Verify file exists and has correct size (32 bytes)
-            assert key_path.exists()
-            assert key_path.stat().st_size == 32
-
-            # Load into new signer
-            signer2 = Ed25519Signer()
-            assert signer2._load_keypair(key_path) is True
-            assert signer2.key_id == original_key_id
-            assert signer2.public_key_bytes == original_pub_bytes
-
-    def test_load_keypair_nonexistent_returns_false(self):
-        """Test loading from nonexistent file returns False."""
-        signer = Ed25519Signer()
-        result = signer._load_keypair(Path("/nonexistent/path/key.key"))
-        assert result is False
-
-    def test_cross_signer_verification(self):
-        """Test signature from one signer can be verified by another with same key."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            key_path = Path(temp_dir) / "shared.key"
-
-            # Signer 1 generates and signs
-            signer1 = Ed25519Signer()
-            signer1._generate_keypair()
-            signer1._save_keypair(key_path)
-            data = b"shared data"
-            signature = signer1.sign(data)
-
-            # Signer 2 loads and verifies
-            signer2 = Ed25519Signer()
-            signer2._load_keypair(key_path)
-            assert signer2.verify(data, signature) is True
 
 
 class TestUnifiedSigningKey:
     """Test UnifiedSigningKey management class."""
 
-    def test_init_default_path(self):
-        """Test initialization with default path."""
+    def test_init_default(self):
+        """Test initialization with defaults."""
         key = UnifiedSigningKey()
-        assert key._key_path is None
         assert key._signer is None
         assert key._initialized is False
-
-    def test_init_custom_path(self):
-        """Test initialization with custom path."""
-        custom_path = Path("/custom/path/key.key")
-        key = UnifiedSigningKey(key_path=custom_path)
-        assert key._key_path == custom_path
 
     def test_signer_raises_before_init(self):
         """Test accessing signer before initialization raises."""
@@ -262,37 +243,41 @@ class TestUnifiedSigningKey:
             _ = key.signer
         assert "UnifiedSigningKey not initialized" in str(exc_info.value)
 
-    def test_initialize_creates_new_key(self):
-        """Test initialization creates new key when none exists."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            key_path = Path(temp_dir) / "new.key"
-            key = UnifiedSigningKey(key_path=key_path)
+    def test_has_key_false_before_init(self):
+        """Test has_key is False before initialization."""
+        key = UnifiedSigningKey()
+        assert key.has_key is False
+
+    def test_initialize_requires_ciris_verify(self):
+        """Test initialization fails without CIRISVerify."""
+        with patch(VERIFIER_PATCH_PATH, return_value=None):
+            key = UnifiedSigningKey()
+            with pytest.raises(RuntimeError) as exc_info:
+                key.initialize()
+            assert "CIRISVerify is not available" in str(exc_info.value)
+
+    def test_initialize_with_key_available(self):
+        """Test initialization when CIRISVerify has a key."""
+        mock_client = MagicMock()
+        mock_client.has_key_sync.return_value = True
+        mock_client.get_ed25519_public_key_sync.return_value = b"x" * 32
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key = UnifiedSigningKey()
             key.initialize()
 
             assert key._initialized is True
             assert key._signer is not None
-            assert key.key_id.startswith("agent-")
-
-    def test_initialize_loads_existing_key(self):
-        """Test initialization loads existing key."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            key_path = Path(temp_dir) / "existing.key"
-
-            # Create a key first
-            key1 = UnifiedSigningKey(key_path=key_path)
-            key1.initialize()
-            original_key_id = key1.key_id
-
-            # Create new instance and verify it loads the same key
-            key2 = UnifiedSigningKey(key_path=key_path)
-            key2.initialize()
-            assert key2.key_id == original_key_id
+            assert key.has_key is True
 
     def test_initialize_idempotent(self):
         """Test initialize is idempotent."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            key_path = Path(temp_dir) / "idem.key"
-            key = UnifiedSigningKey(key_path=key_path)
+        mock_client = MagicMock()
+        mock_client.has_key_sync.return_value = True
+        mock_client.get_ed25519_public_key_sync.return_value = b"y" * 32
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key = UnifiedSigningKey()
             key.initialize()
             key_id = key.key_id
 
@@ -302,9 +287,12 @@ class TestUnifiedSigningKey:
 
     def test_properties_delegate_to_signer(self):
         """Test properties delegate to underlying signer."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            key_path = Path(temp_dir) / "props.key"
-            key = UnifiedSigningKey(key_path=key_path)
+        mock_client = MagicMock()
+        mock_client.has_key_sync.return_value = True
+        mock_client.get_ed25519_public_key_sync.return_value = b"z" * 32
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key = UnifiedSigningKey()
             key.initialize()
 
             assert key.key_id == key.signer.key_id
@@ -312,48 +300,46 @@ class TestUnifiedSigningKey:
             assert key.public_key_base64 == key.signer.public_key_base64
             assert key.algorithm == SigningAlgorithm.ED25519
 
-    def test_sign_and_verify(self):
-        """Test sign and verify methods."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            key_path = Path(temp_dir) / "signverify.key"
-            key = UnifiedSigningKey(key_path=key_path)
+    def test_sign_delegates_to_signer(self):
+        """Test sign delegates to signer."""
+        mock_client = MagicMock()
+        mock_client.has_key_sync.return_value = True
+        mock_client.get_ed25519_public_key_sync.return_value = b"a" * 32
+        mock_client.sign_ed25519_sync.return_value = b"sig" * 22  # ~64 bytes
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key = UnifiedSigningKey()
             key.initialize()
 
-            data = b"test data"
-            signature = key.sign(data)
-            assert key.verify(data, signature) is True
+            signature = key.sign(b"test data")
+            assert signature == b"sig" * 22
 
     def test_sign_base64(self):
         """Test sign_base64 produces URL-safe base64."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            key_path = Path(temp_dir) / "b64.key"
-            key = UnifiedSigningKey(key_path=key_path)
+        mock_client = MagicMock()
+        mock_client.has_key_sync.return_value = True
+        mock_client.get_ed25519_public_key_sync.return_value = b"b" * 32
+        mock_client.sign_ed25519_sync.return_value = b"x" * 64
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key = UnifiedSigningKey()
             key.initialize()
 
-            data = b"base64 test"
-            sig_b64 = key.sign_base64(data)
+            sig_b64 = key.sign_base64(b"base64 test")
 
             # Should be URL-safe base64 without padding
             assert "+" not in sig_b64
             assert "/" not in sig_b64
             assert not sig_b64.endswith("=")
 
-    def test_verify_base64(self):
-        """Test verify_base64 handles URL-safe base64."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            key_path = Path(temp_dir) / "vb64.key"
-            key = UnifiedSigningKey(key_path=key_path)
-            key.initialize()
-
-            data = b"verify base64"
-            sig_b64 = key.sign_base64(data)
-            assert key.verify_base64(data, sig_b64) is True
-
     def test_get_registration_payload(self):
         """Test registration payload for CIRISLens."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            key_path = Path(temp_dir) / "reg.key"
-            key = UnifiedSigningKey(key_path=key_path)
+        mock_client = MagicMock()
+        mock_client.has_key_sync.return_value = True
+        mock_client.get_ed25519_public_key_sync.return_value = b"c" * 32
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key = UnifiedSigningKey()
             key.initialize()
 
             payload = key.get_registration_payload("test description")
@@ -362,6 +348,23 @@ class TestUnifiedSigningKey:
             assert payload["public_key_base64"] == key.public_key_base64
             assert payload["algorithm"] == "ed25519"
             assert payload["description"] == "test description"
+
+    def test_load_provisioned_key(self):
+        """Test loading a Portal-provisioned key."""
+        mock_client = MagicMock()
+        mock_client.get_ed25519_public_key_sync.return_value = b"d" * 32
+
+        # Create a valid 32-byte key
+        test_key = b"e" * 32
+        test_key_b64 = base64.b64encode(test_key).decode()
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key = UnifiedSigningKey()
+            key.load_provisioned_key(test_key_b64)
+
+            mock_client.import_key_sync.assert_called_once_with(test_key)
+            assert key._initialized is True
+            assert key._signer is not None
 
 
 class TestGlobalSigningKey:
@@ -377,51 +380,51 @@ class TestGlobalSigningKey:
 
     def test_get_unified_signing_key_creates_instance(self):
         """Test get_unified_signing_key creates and initializes instance."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Patch default paths to use temp directory
-            with patch.object(
-                UnifiedSigningKey, "DEFAULT_KEY_PATH", Path(temp_dir) / "agent_signing.key"
-            ), patch.object(UnifiedSigningKey, "DOCKER_KEY_PATH", Path(temp_dir) / "docker_signing.key"):
-                key = get_unified_signing_key()
+        mock_client = MagicMock()
+        mock_client.has_key_sync.return_value = True
+        mock_client.get_ed25519_public_key_sync.return_value = b"f" * 32
 
-                assert key is not None
-                assert key._initialized is True
-                assert key.key_id.startswith("agent-")
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key = get_unified_signing_key()
+
+            assert key is not None
+            assert key._initialized is True
+            assert key.key_id.startswith("agent-")
 
     def test_get_unified_signing_key_returns_same_instance(self):
         """Test get_unified_signing_key returns singleton."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            with patch.object(
-                UnifiedSigningKey, "DEFAULT_KEY_PATH", Path(temp_dir) / "agent_signing.key"
-            ), patch.object(UnifiedSigningKey, "DOCKER_KEY_PATH", Path(temp_dir) / "docker_signing.key"):
-                key1 = get_unified_signing_key()
-                key2 = get_unified_signing_key()
+        mock_client = MagicMock()
+        mock_client.has_key_sync.return_value = True
+        mock_client.get_ed25519_public_key_sync.return_value = b"g" * 32
 
-                assert key1 is key2
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key1 = get_unified_signing_key()
+            key2 = get_unified_signing_key()
+
+            assert key1 is key2
 
     def test_reset_unified_signing_key(self):
         """Test reset_unified_signing_key clears the singleton."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            with patch.object(
-                UnifiedSigningKey, "DEFAULT_KEY_PATH", Path(temp_dir) / "agent_signing.key"
-            ), patch.object(UnifiedSigningKey, "DOCKER_KEY_PATH", Path(temp_dir) / "docker_signing.key"):
-                key1 = get_unified_signing_key()
-                key1_id = key1.key_id
+        mock_client = MagicMock()
+        mock_client.has_key_sync.return_value = True
+        mock_client.get_ed25519_public_key_sync.return_value = b"h" * 32
 
-                reset_unified_signing_key()
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key1 = get_unified_signing_key()
 
-                # New call should create new instance (with new key)
-                key2 = get_unified_signing_key()
-                # Note: key_id might be same if key file persists, but instance should be different
-                assert key2 is not key1
+            reset_unified_signing_key()
+
+            # New call should create new instance
+            key2 = get_unified_signing_key()
+            assert key2 is not key1
 
 
 class TestBaseSigner:
-    """Test BaseSigner abstract class behavior."""
+    """Test BaseSigner abstract class behavior via CIRISVerifySigner."""
 
     def test_compute_key_id_format(self):
         """Test _compute_key_id produces correct format."""
-        signer = Ed25519Signer()
+        signer = CIRISVerifySigner()
         # Use known bytes to get deterministic result
         test_bytes = b"test public key bytes for hashing"
         key_id = signer._compute_key_id(test_bytes)
@@ -435,7 +438,7 @@ class TestBaseSigner:
 
     def test_compute_key_id_deterministic(self):
         """Test _compute_key_id is deterministic."""
-        signer = Ed25519Signer()
+        signer = CIRISVerifySigner()
         test_bytes = b"same bytes"
 
         id1 = signer._compute_key_id(test_bytes)
@@ -445,9 +448,112 @@ class TestBaseSigner:
 
     def test_compute_key_id_different_for_different_bytes(self):
         """Test _compute_key_id produces different IDs for different inputs."""
-        signer = Ed25519Signer()
+        signer = CIRISVerifySigner()
 
         id1 = signer._compute_key_id(b"bytes one")
         id2 = signer._compute_key_id(b"bytes two")
 
         assert id1 != id2
+
+
+class TestKeyRegistrationCallback:
+    """Test key registration callback mechanism for audit_signing_keys sync."""
+
+    def test_set_key_registration_callback(self):
+        """Test callback can be set."""
+        key = UnifiedSigningKey()
+        callback = MagicMock()
+
+        key.set_key_registration_callback(callback)
+
+        assert key._on_key_registered is callback
+
+    def test_callback_not_called_without_signer(self):
+        """Test callback is not called when no signer is present."""
+        key = UnifiedSigningKey()
+        callback = MagicMock()
+
+        key.set_key_registration_callback(callback)
+        key._notify_key_registered()
+
+        callback.assert_not_called()
+
+    def test_callback_called_on_portal_key_import(self):
+        """Test callback is called when importing Portal key."""
+        mock_client = MagicMock()
+        mock_client.get_ed25519_public_key_sync.return_value = b"x" * 32
+
+        callback = MagicMock()
+        test_key = b"y" * 32
+        test_key_b64 = base64.b64encode(test_key).decode()
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key = UnifiedSigningKey()
+            key.set_key_registration_callback(callback)
+            key.load_provisioned_key(test_key_b64)
+
+            callback.assert_called_once()
+            call_kwargs = callback.call_args.kwargs
+            assert "key_id" in call_kwargs
+            assert call_kwargs["key_id"].startswith("agent-")
+            assert call_kwargs["algorithm"] == "ed25519"
+            assert call_kwargs["public_key_base64"] == base64.b64encode(b"x" * 32).decode()
+
+    def test_callback_called_on_ephemeral_key_creation(self):
+        """Test callback is called when ephemeral key is created during initialize."""
+        mock_client = MagicMock()
+        mock_client.has_key_sync.return_value = False  # No key initially
+        mock_client.generate_key_sync.return_value = None  # Generation succeeds
+        mock_client.get_ed25519_public_key_sync.return_value = b"p" * 32
+
+        callback = MagicMock()
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key = UnifiedSigningKey()
+            key.set_key_registration_callback(callback)
+            key.initialize()  # Now generates ephemeral key during initialize
+
+            # Callback should be triggered during initialize when key is generated
+            callback.assert_called_once()
+            call_kwargs = callback.call_args.kwargs
+            assert call_kwargs["key_id"].startswith("agent-")
+            assert call_kwargs["algorithm"] == "ed25519"
+
+    def test_callback_not_called_when_signing_with_existing_key(self):
+        """Test callback is not called when signing with existing key."""
+        mock_client = MagicMock()
+        mock_client.has_key_sync.return_value = True
+        mock_client.get_ed25519_public_key_sync.return_value = b"q" * 32
+        mock_client.sign_ed25519_sync.return_value = b"r" * 64
+
+        callback = MagicMock()
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key = UnifiedSigningKey()
+            key.initialize()
+            key.set_key_registration_callback(callback)
+
+            # Sign should NOT trigger callback since key already exists
+            key.sign(b"test data")
+
+            callback.assert_not_called()
+
+    def test_callback_exception_logged_not_raised(self):
+        """Test callback exception is logged but not propagated."""
+        mock_client = MagicMock()
+        mock_client.get_ed25519_public_key_sync.return_value = b"t" * 32
+
+        def failing_callback(**kwargs):
+            raise RuntimeError("DB connection failed")
+
+        test_key_b64 = base64.b64encode(b"u" * 32).decode()
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key = UnifiedSigningKey()
+            key.set_key_registration_callback(failing_callback)
+
+            # Should not raise - exception is caught and logged
+            key.load_provisioned_key(test_key_b64)
+
+            # Key should still be loaded successfully
+            assert key._initialized is True

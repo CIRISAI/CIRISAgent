@@ -551,6 +551,87 @@ async def _load_single_saved_adapter(
     return False
 
 
+# Bootstrap adapters that are always loaded at startup (skip in env fallback)
+BOOTSTRAP_ADAPTER_TYPES = {"api", "cli", "ciris_verify"}
+
+
+async def _load_adapters_from_env_fallback(
+    runtime: Any,
+    config_service: Any,
+    adapter_manager: Any,
+    bootstrap_ids: Set[str],
+    graph_adapter_ids: Set[str],
+    current_occurrence_id: str,
+) -> int:
+    """Load adapters from CIRIS_ADAPTER env var that aren't already in the graph.
+
+    This is a fallback for when setup wizard saves adapters to .env but they weren't
+    persisted to the graph (e.g., first restart after setup wizard re-run).
+
+    Loaded adapters are persisted to graph so they load from graph on subsequent restarts.
+
+    Returns:
+        Number of adapters loaded from env var.
+    """
+    env_adapters = os.environ.get("CIRIS_ADAPTER", "")
+    if not env_adapters:
+        return 0
+
+    env_adapter_list = [a.strip() for a in env_adapters.split(",") if a.strip()]
+    if not env_adapter_list:
+        return 0
+
+    # Filter to adapters not already loaded or in graph
+    adapters_to_load = []
+    for adapter_type in env_adapter_list:
+        adapter_type_lower = adapter_type.lower()
+        # Skip bootstrap adapters (already loaded)
+        if adapter_type_lower in BOOTSTRAP_ADAPTER_TYPES:
+            continue
+        # Skip if already in graph
+        if adapter_type_lower in graph_adapter_ids or adapter_type in graph_adapter_ids:
+            continue
+        # Skip if already loaded via bootstrap
+        if adapter_type_lower in bootstrap_ids or adapter_type in bootstrap_ids:
+            continue
+        # Skip if already in adapter_manager
+        if adapter_type_lower in adapter_manager.loaded_adapters:
+            continue
+        adapters_to_load.append(adapter_type)
+
+    if not adapters_to_load:
+        return 0
+
+    # Import here to avoid circular imports
+    from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+
+    logger.info(f"[ENV-FALLBACK] Loading adapters from CIRIS_ADAPTER: {adapters_to_load}")
+
+    loaded_count = 0
+    for adapter_type in adapters_to_load:
+        try:
+            # Load the adapter via adapter_manager with persist=True
+            adapter_config = AdapterConfig(adapter_type=adapter_type, persist=True)
+            result = await adapter_manager.load_adapter(
+                adapter_type=adapter_type,
+                adapter_id=adapter_type,  # Use type as ID for simplicity
+                config_params=adapter_config,
+            )
+
+            if not result.success:
+                logger.warning(f"[ENV-FALLBACK] Failed to load adapter {adapter_type}: {result.message}")
+                continue
+
+            # adapter_manager.load_adapter with persist=True automatically persists to graph
+            logger.info(f"[ENV-FALLBACK] Loaded and persisted adapter: {adapter_type}")
+            loaded_count += 1
+
+        except Exception as e:
+            logger.error(f"[ENV-FALLBACK] Error loading adapter {adapter_type}: {e}", exc_info=True)
+
+    return loaded_count
+
+
 async def load_saved_adapters_from_graph(runtime: Any) -> None:
     """Load adapters that were saved to the graph config service.
 
@@ -602,6 +683,14 @@ async def load_saved_adapters_from_graph(runtime: Any) -> None:
 
         if loaded_count > 0:
             logger.info(f"Loaded {loaded_count} saved adapters from graph for occurrence {current_occurrence_id}")
+
+        # Fallback: Load adapters from CIRIS_ADAPTER env var that aren't in the graph
+        # This handles the case where setup wizard saved to .env but adapters weren't persisted to graph
+        env_loaded_count = await _load_adapters_from_env_fallback(
+            runtime, config_service, adapter_manager, bootstrap_ids, adapter_ids, current_occurrence_id
+        )
+        if env_loaded_count > 0:
+            logger.info(f"Loaded {env_loaded_count} adapters from CIRIS_ADAPTER env var (not in graph)")
 
     except Exception as e:
         logger.error(f"Error loading saved adapters from graph: {e}", exc_info=True)

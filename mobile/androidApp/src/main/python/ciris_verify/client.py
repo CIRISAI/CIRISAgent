@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Set
 
-from .exceptions import BinaryNotFoundError, BinaryTamperedError, CommunicationError
+from .exceptions import AttestationInProgressError, BinaryNotFoundError, BinaryTamperedError, CommunicationError
 from .exceptions import TimeoutError as CIRISTimeoutError
 from .exceptions import VerificationFailedError
 from .types import (
@@ -35,6 +35,10 @@ from .types import (
     SourceDetails,
     ValidationStatus,
 )
+
+# FFI error codes
+CIRIS_ERROR_ATTESTATION_IN_PROGRESS = -100
+
 
 # Default paths for the CIRISVerify binary by platform
 DEFAULT_BINARY_PATHS = {
@@ -1593,6 +1597,7 @@ class CIRISVerify:
         Raises:
             ValueError: If key_bytes is not 32 bytes.
             NotImplementedError: If Ed25519 support is not available.
+            AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
             raise NotImplementedError(
@@ -1608,6 +1613,8 @@ class CIRISVerify:
             len(key_bytes),
         )
 
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("import_key")
         return ret == 0
 
     def await_key_registration(self, timeout_seconds: int = 5) -> dict:
@@ -1692,10 +1699,13 @@ class CIRISVerify:
 
         Raises:
             NotImplementedError: If Ed25519 support is not available.
+            AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
             raise NotImplementedError("Ed25519 key functions not available in this library version.")
         ret = self._lib.ciris_verify_has_key(self._handle)
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("has_key")
         return ret == 1
 
     def delete_key_sync(self) -> bool:
@@ -1706,10 +1716,56 @@ class CIRISVerify:
 
         Raises:
             NotImplementedError: If Ed25519 support is not available.
+            AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
             raise NotImplementedError("Ed25519 key functions not available in this library version.")
         ret = self._lib.ciris_verify_delete_key(self._handle)
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("delete_key")
+        return ret == 0
+
+    def generate_key_sync(self) -> bool:
+        """Generate a new ephemeral Ed25519 signing key.
+
+        This creates an ephemeral key that can be used for attestation before
+        Portal issues a permanent key. The key is stored with hardware protection
+        (TPM/Keystore/Secure Enclave) if available.
+
+        Use cases:
+            - Initial attestation before Portal key activation
+            - Recovery after orphaned key cleanup
+            - Testing/development without Portal
+
+        Returns:
+            True if key was generated successfully, False otherwise.
+            Returns True if a key already exists (idempotent).
+
+        Raises:
+            NotImplementedError: If Ed25519 support is not available.
+            AttestationInProgressError: If attestation is currently running.
+
+        Example:
+            # Generate ephemeral key for initial attestation
+            if not verifier.has_key_sync():
+                verifier.generate_key_sync()
+
+            # Now attestation will work with ephemeral key
+            attestation = verifier.run_attestation_sync(challenge)
+            # attestation["key_attestation"]["key_type"] == "ephemeral"
+        """
+        if not self._has_ed25519_support:
+            raise NotImplementedError("Ed25519 key functions not available in this library version.")
+
+        # Check if the FFI function exists
+        if not hasattr(self._lib, "ciris_verify_generate_key"):
+            raise NotImplementedError(
+                "generate_key not available in this library version. " "Update to ciris-verify >= 1.1.16."
+            )
+
+        ret = self._lib.ciris_verify_generate_key(self._handle)
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("generate_key")
         return ret == 0
 
     def sign_ed25519_sync(self, data: bytes) -> bytes:
@@ -1727,6 +1783,7 @@ class CIRISVerify:
         Raises:
             NotImplementedError: If Ed25519 support is not available.
             VerificationFailedError: If no key is loaded or signing fails.
+            AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
             raise NotImplementedError("Ed25519 key functions not available in this library version.")
@@ -1741,6 +1798,8 @@ class CIRISVerify:
             ctypes.byref(sig_len),
         )
 
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("sign_ed25519")
         if ret != 0:
             raise VerificationFailedError(ret, f"Ed25519 signing failed with code {ret}")
 
@@ -1759,6 +1818,7 @@ class CIRISVerify:
         Raises:
             NotImplementedError: If Ed25519 support is not available.
             VerificationFailedError: If no key is loaded.
+            AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
             raise NotImplementedError("Ed25519 key functions not available in this library version.")
@@ -1771,6 +1831,8 @@ class CIRISVerify:
             ctypes.byref(key_len),
         )
 
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("get_ed25519_public_key")
         if ret != 0:
             raise VerificationFailedError(ret, f"Get Ed25519 public key failed with code {ret}")
 

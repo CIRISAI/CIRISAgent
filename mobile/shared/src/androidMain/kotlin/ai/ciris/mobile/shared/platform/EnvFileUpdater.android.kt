@@ -279,6 +279,57 @@ actual class EnvFileUpdater {
             false
         }
     }
+
+    /**
+     * Clear the agent signing key for a complete setup reset.
+     *
+     * Deletes:
+     * 1. The encrypted key file (agent_signing.ed25519.enc)
+     * 2. The AES wrapper key from Android Keystore
+     * 3. The data directory (databases, audit logs, etc.)
+     *
+     * On restart, CIRISVerify will generate an ephemeral key if needed.
+     */
+    actual suspend fun clearSigningKey(): Result<Boolean> = withContext(Dispatchers.IO) {
+        Log.i(TAG, "[clearSigningKey] Starting signing key and data cleanup...")
+
+        try {
+            // Step 1: Delete the AES wrapper key from Android Keystore
+            try {
+                val keyStore = java.security.KeyStore.getInstance("AndroidKeyStore")
+                keyStore.load(null)
+                if (keyStore.containsAlias("agent_signing_aes_wrapper")) {
+                    keyStore.deleteEntry("agent_signing_aes_wrapper")
+                    Log.i(TAG, "[clearSigningKey] Deleted agent_signing_aes_wrapper from Android Keystore")
+                } else {
+                    Log.i(TAG, "[clearSigningKey] agent_signing_aes_wrapper not found in Keystore")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "[clearSigningKey] Error deleting Keystore entry: ${e.message}")
+                // Continue anyway - we'll delete files and the runtime will generate ephemeral key
+            }
+
+            // Step 2: Delete the encrypted key file
+            val keyFile = cirisHome?.let { File(it, "agent_signing.ed25519.enc") }
+            if (keyFile != null && keyFile.exists()) {
+                val deleted = keyFile.delete()
+                Log.i(TAG, "[clearSigningKey] Key file ${if (deleted) "deleted" else "NOT deleted"}: ${keyFile.absolutePath}")
+            }
+
+            // Step 3: Delete the data directory (databases, audit logs, etc.)
+            val dataDir = cirisHome?.let { File(it, "data") }
+            if (dataDir != null && dataDir.exists()) {
+                val deleted = dataDir.deleteRecursively()
+                Log.i(TAG, "[clearSigningKey] Data directory ${if (deleted) "deleted" else "NOT deleted"}: ${dataDir.absolutePath}")
+            }
+
+            Log.i(TAG, "[clearSigningKey] Cleanup complete - runtime will generate ephemeral key if needed")
+            Result.success(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "[clearSigningKey] Error: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
 }
 
 /**

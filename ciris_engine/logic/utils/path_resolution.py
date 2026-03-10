@@ -301,21 +301,21 @@ def get_config_dir() -> Path:
 
 
 def get_secrets_home() -> Path:
-    """Get the secrets/keys directory (traditionally ~/.ciris/).
+    """Get the secrets/keys directory.
 
-    On desktop: ~/.ciris/
-    On Android: CIRIS_HOME/.secrets/ (within app sandbox)
-    On iOS: CIRIS_HOME/.secrets/ (within Documents/)
+    On desktop: ~/ciris/secrets/
+    On Android: CIRIS_HOME/secrets/ (within app sandbox)
+    On iOS: CIRIS_HOME/secrets/ (within Documents/)
 
     Returns:
         Path to secrets directory for keys, oauth config, etc.
     """
     if is_android() or is_ios():
-        # On mobile, use a hidden dir within CIRIS_HOME (which is in app sandbox)
-        return get_ciris_home() / ".secrets"
+        # On mobile, use secrets dir within CIRIS_HOME (which is in app sandbox)
+        return get_ciris_home() / "secrets"
 
-    # Desktop: use ~/.ciris/
-    return Path.home() / ".ciris"
+    # Desktop: use ~/ciris/secrets/
+    return Path.home() / "ciris" / "secrets"
 
 
 def get_package_root() -> Path:

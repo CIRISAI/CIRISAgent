@@ -312,7 +312,6 @@ def mock_essential_config(tmp_path):
             audit_retention_days=7,
             secrets_encryption_key_env="TEST_KEY",
             secrets_key_path=tmp_path / "secrets_keys",
-            audit_key_path=tmp_path / "audit_keys",
             enable_signed_audit=False,
             max_thought_depth=5,
         ),
@@ -495,7 +494,6 @@ def centralized_essential_config():
             audit_retention_days=1,
             secrets_encryption_key_env="TEST_KEY",
             secrets_key_path="/tmp/test_secrets",
-            audit_key_path="/tmp/test_audit",
             enable_signed_audit=False,
             max_thought_depth=2,  # Minimal depth
         ),

@@ -452,9 +452,6 @@ class DBStatusTool:
 
     def verify_audit_integrity(self, sample_size: Optional[int] = None):
         """Run comprehensive audit verification."""
-        # Get the key path from the parent directory of db_path
-        key_path = Path(self.db_path).parent / "audit_keys"
-
         # Create a simple time service
         from datetime import datetime, timezone
 
@@ -462,9 +459,7 @@ class DBStatusTool:
             def now(self):
                 return datetime.now(timezone.utc)
 
-        verifier = AuditVerifier(
-            db_path=str(self.audit_db_path), key_path=str(key_path), time_service=SimpleTimeService()
-        )
+        verifier = AuditVerifier(db_path=str(self.audit_db_path), time_service=SimpleTimeService())
 
         if sample_size:
             # Verify a sample - verify the first N entries

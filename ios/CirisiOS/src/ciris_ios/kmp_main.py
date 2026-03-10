@@ -277,7 +277,6 @@ async def start_mobile_runtime_with_watchdog():
     log_step(runtime_log, "Creating configuration", "...")
     security_config = SecurityConfig(
         secrets_key_path=ciris_home / ".ciris_keys",
-        audit_key_path=ciris_home / "audit_keys",
     )
     db_config = DatabaseConfig(
         main_db=data_dir / "ciris_engine.db",

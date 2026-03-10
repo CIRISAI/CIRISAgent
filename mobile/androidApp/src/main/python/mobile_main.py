@@ -675,9 +675,11 @@ def _save_hashes_to_file(results: dict) -> None:
     try:
         import time
 
-        # Get CIRIS_HOME for save location
-        ciris_home = os.environ.get("CIRIS_HOME", "/data/data/ai.ciris.mobile/files/ciris")
-        output_path = Path(ciris_home) / "startup_python_hashes.json"
+        # Get CIRIS_HOME for save location using path_resolution
+        from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
+        ciris_home = get_ciris_home()
+        output_path = ciris_home / "startup_python_hashes.json"
 
         # Get agent version from ciris_engine
         try:
@@ -824,6 +826,8 @@ def setup_android_environment():
 
     Sets up CIRIS_HOME and loads .env if present.
     First-run detection is handled by is_first_run() which is Android-aware.
+
+    Uses path_resolution.py for all path logic - only CIRIS_HOME is set here.
     """
     from dotenv import load_dotenv
 
@@ -831,25 +835,31 @@ def setup_android_environment():
         logger.warning("ANDROID_DATA not set - not running on Android?")
         return
 
-    # Running on Android device
+    # Step 1: Set CIRIS_HOME (the only env var we set manually)
+    # This is the root for path_resolution.py to build all other paths
     android_data = Path(os.environ["ANDROID_DATA"])
-    app_data = android_data / "data" / "ai.ciris.mobile"
-
-    # Ensure directories exist
-    ciris_home = app_data / "files" / "ciris"
-    ciris_home.mkdir(parents=True, exist_ok=True)
-    (ciris_home / "databases").mkdir(parents=True, exist_ok=True)
-    (ciris_home / "logs").mkdir(parents=True, exist_ok=True)
-
-    # Configure CIRIS environment - use standard paths
-    # CIRIS_HOME is used by path_resolution.py for Android-aware path detection
+    ciris_home = android_data / "data" / "ai.ciris.mobile" / "files" / "ciris"
     os.environ.setdefault("CIRIS_HOME", str(ciris_home))
-    os.environ.setdefault("CIRIS_DATA_DIR", str(ciris_home))
-    os.environ.setdefault("CIRIS_DB_PATH", str(ciris_home / "databases" / "ciris.db"))
-    os.environ.setdefault("CIRIS_LOG_DIR", str(ciris_home / "logs"))
+
+    # Step 2: Import path_resolution and use it for all paths
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home, get_data_dir, get_logs_dir
+
+    ciris_home = get_ciris_home()
+    data_dir = get_data_dir()
+    logs_dir = get_logs_dir()
+
+    # Step 3: Ensure directories exist
+    ciris_home.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    # NOTE: Do NOT set CIRIS_DATA_DIR or CIRIS_LOG_DIR here!
+    # CIRISVerify handles its own path resolution internally.
+    # Setting these env vars causes path inconsistencies between Python and Rust.
+
+    logger.info(f"Android paths: CIRIS_HOME={ciris_home}, data={data_dir}, logs={logs_dir}")
 
     # Load .env file if it exists (sets OPENAI_API_KEY, OPENAI_API_BASE, etc.)
-    # First-run detection is handled by is_first_run() - don't duplicate logic here
     env_file = ciris_home / ".env"
     if env_file.exists():
         logger.info(f"Loading configuration from {env_file}")
@@ -904,7 +914,6 @@ async def start_mobile_runtime():
     # Create security config with absolute paths (Android CWD is read-only)
     security_config = SecurityConfig(
         secrets_key_path=ciris_home / ".ciris_keys",
-        audit_key_path=ciris_home / "audit_keys",
     )
 
     # Create database config with absolute paths
@@ -927,26 +936,13 @@ async def start_mobile_runtime():
     api_config.host = "0.0.0.0"
     api_config.port = 8080
 
-    adapter_configs = {"api": AdapterConfig(adapter_type="api", enabled=True, settings=api_config.model_dump())}
+    # Bootstrap with API adapter only
+    # Other adapters (ciris_hosted_tools, ciris_accord_metrics, etc.) are loaded from:
+    # 1. Graph config via load_saved_adapters_from_graph (normal restart)
+    # 2. CIRIS_ADAPTER env via load_post_setup_adapters_for_resume (first restart after setup)
     adapter_types = ["api"]
-
-    # Auto-load ciris_hosted_tools adapter when Google Play Services is available
-    # This provides web_search and other CIRIS-hosted tools
-    if os.environ.get("GOOGLE_PLAY_SERVICES_AVAILABLE", "").lower() == "true":
-        logger.info("Google Play Services detected - loading ciris_hosted_tools adapter")
-        adapter_configs["ciris_hosted_tools"] = AdapterConfig(
-            adapter_type="ciris_hosted_tools",
-            enabled=True,
-            settings={
-                "proxy_url": get_proxy_url(),
-                "proxy_fallback_url": get_proxy_url(use_fallback=True),
-                "billing_url": get_billing_url(),
-                "billing_fallback_url": get_billing_url(use_fallback=True),
-            },
-        )
-        adapter_types.append("ciris_hosted_tools")
-    else:
-        logger.info("Google Play Services not available - ciris_hosted_tools disabled")
+    adapter_configs = {"api": AdapterConfig(adapter_type="api", enabled=True, settings=api_config.model_dump())}
+    logger.info("Bootstrap adapters: ['api'] - additional adapters loaded from graph/resume")
 
     startup_channel_id = api_config.get_home_channel_id(api_config.host, api_config.port)
 
@@ -999,6 +995,37 @@ def _preload_heavy_imports():
         logger.debug(f"Pre-import warning (non-fatal): {e}")
 
 
+def clear_signing_key() -> bool:
+    """Clear the agent signing key from CIRISVerify.
+
+    This properly deletes both the encrypted key file AND the AES wrapper
+    key from Android Keystore. Called from Kotlin when user requests
+    "Re-run Setup Wizard".
+
+    Returns:
+        True if key was deleted, False if no key existed or deletion failed.
+    """
+    try:
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
+
+        verifier = get_verifier()
+        if verifier is None:
+            logger.warning("[clear_signing_key] CIRISVerify not initialized, nothing to clear")
+            return True  # Nothing to clear is success
+
+        if not verifier.has_key_sync():
+            logger.info("[clear_signing_key] No signing key present, nothing to clear")
+            return True
+
+        logger.info("[clear_signing_key] Deleting signing key via CIRISVerify FFI...")
+        result = verifier.delete_key_sync()
+        logger.info(f"[clear_signing_key] delete_key_sync returned: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"[clear_signing_key] Failed to clear signing key: {e}", exc_info=True)
+        return False
+
+
 def main():
     """Main entrypoint for Android app."""
     import concurrent.futures
@@ -1034,7 +1061,13 @@ def main():
         logger.info("Server stopped by user")
     except Exception as e:
         logger.error(f"Server error: {e}", exc_info=True)
-        raise
+        # Output fatal error in a format the mobile UI can detect and display
+        error_msg = str(e)
+        print(f"[FATAL] {error_msg}", flush=True)
+        print(f"[FATAL_EXIT] CIRIS cannot start: {error_msg}", flush=True)
+        import sys
+
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -185,6 +185,33 @@ async def auto_enable_android_adapters_for_resume(runtime: Any) -> None:
 BOOTSTRAP_ADAPTERS = {"api", "cli", "ciris_verify"}
 
 
+async def _persist_adapter_to_graph(runtime: Any, adapter_type: str, adapter_config: Any) -> None:
+    """Persist adapter config to graph so it loads on subsequent restarts.
+
+    Uses the same key pattern as RuntimeAdapterManager: adapter.{adapter_id}.*
+    """
+    from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
+
+    config_service = getattr(runtime, "config_service", None)
+    if not config_service:
+        logger.warning(f"[RESUME] No config_service - cannot persist adapter {adapter_type} to graph")
+        return
+
+    try:
+        occurrence_id = get_current_occurrence_id()
+        adapter_id = adapter_type  # Use adapter_type as ID for simplicity
+
+        # Save adapter config to graph (same pattern as RuntimeAdapterManager)
+        await config_service.set_config(f"adapter.{adapter_id}.type", adapter_type)
+        await config_service.set_config(f"adapter.{adapter_id}.config", adapter_config.model_dump_json())
+        await config_service.set_config(f"adapter.{adapter_id}.occurrence_id", occurrence_id)
+        await config_service.set_config(f"adapter.{adapter_id}.persist", True)
+
+        logger.info(f"[RESUME] Persisted adapter {adapter_type} to graph (occurrence={occurrence_id})")
+    except Exception as e:
+        logger.warning(f"[RESUME] Failed to persist adapter {adapter_type} to graph: {e}")
+
+
 async def load_post_setup_adapters_for_resume(
     runtime: Any, log_step: Callable[[int, int, str], None], total_steps: int
 ) -> None:
@@ -259,8 +286,8 @@ async def load_post_setup_adapters_for_resume(
         try:
             adapter_class = load_adapter(adapter_type)
 
-            # Get adapter-specific config from environment
-            adapter_config = AdapterConfig(adapter_type=adapter_type)
+            # Get adapter-specific config from environment - MUST set persist=True
+            adapter_config = AdapterConfig(adapter_type=adapter_type, persist=True)
 
             # Create and register adapter
             adapter_instance = adapter_class(runtime, context=context, adapter_config=adapter_config.settings)  # type: ignore[call-arg]
@@ -282,6 +309,9 @@ async def load_post_setup_adapters_for_resume(
             # Start the adapter
             if hasattr(adapter_instance, "start"):
                 await adapter_instance.start()
+
+            # Persist to graph so it loads on subsequent restarts
+            await _persist_adapter_to_graph(runtime, adapter_type, adapter_config)
 
             logger.info(f"[RESUME] Successfully loaded and started post-setup adapter: {adapter_type}")
 

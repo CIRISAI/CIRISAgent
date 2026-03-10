@@ -71,7 +71,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         """
         super().__init__()  # Initialize BaseService
         self.db_path = db_path
-        # Use platform-aware secrets directory (iOS: Documents/.secrets, desktop: ~/.ciris)
+        # Use platform-aware secrets directory (mobile: CIRIS_HOME/secrets, desktop: ~/ciris/secrets)
         self.key_dir = Path(key_dir) if key_dir else get_secrets_home()
         self.key_dir.mkdir(mode=0o700, exist_ok=True, parents=True)
 

@@ -1249,7 +1249,6 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Use config accessor for audit configuration
         assert self.config_accessor is not None
         audit_db_path = await self.config_accessor.get_path("database.audit_db", Path("data/ciris_audit.db"))
-        audit_key_path = await self.config_accessor.get_path("security.audit_key_path", Path(".ciris_keys"))
         retention_days = await self.config_accessor.get_int("security.audit_retention_days", 90)
 
         from ciris_engine.logic.services.graph.audit_service import GraphAuditService
@@ -1263,7 +1262,6 @@ This directory contains critical cryptographic keys for the CIRIS system.
             export_format="jsonl",
             enable_hash_chain=True,
             db_path=str(audit_db_path),
-            key_path=str(audit_key_path),
             retention_days=retention_days,
         )
         # Runtime will be set later when available

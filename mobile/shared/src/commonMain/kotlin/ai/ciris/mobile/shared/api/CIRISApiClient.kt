@@ -2834,7 +2834,20 @@ class CIRISApiClient(
                                             else -> result
                                         }
                                     },
-                                    metadata = null // Skip metadata to avoid parsing issues
+                                    // Parse metadata (contains tool parameters, etc.)
+                                    metadata = try {
+                                        ctx.metadata?.let { meta ->
+                                            kotlinx.serialization.json.buildJsonObject {
+                                                (meta as? Map<*, *>)?.forEach { (key, value) ->
+                                                    if (key is String && value != null) {
+                                                        put(key, kotlinx.serialization.json.JsonPrimitive(value.toString()))
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        null // Fallback if metadata parsing fails
+                                    }
                                 )
                             },
                             signature = entry.signature,

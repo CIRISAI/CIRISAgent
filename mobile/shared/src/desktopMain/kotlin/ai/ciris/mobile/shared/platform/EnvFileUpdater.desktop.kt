@@ -126,6 +126,26 @@ actual class EnvFileUpdater {
             false
         }
     }
+
+    actual suspend fun clearSigningKey(): Result<Boolean> = runCatching {
+        // Delete the data directory which contains the encrypted key file and databases
+        val dataDir = File(cirisHome, "data")
+        if (dataDir.exists()) {
+            val deleted = dataDir.deleteRecursively()
+            println("[EnvFileUpdater.desktop] Data directory ${if (deleted) "deleted" else "NOT deleted"}: ${dataDir.absolutePath}")
+        }
+
+        // Also try the older path where key might be stored
+        val oldKeyFile = File(cirisHome, "agent_signing.ed25519.enc")
+        if (oldKeyFile.exists()) {
+            val deleted = oldKeyFile.delete()
+            println("[EnvFileUpdater.desktop] Old key file ${if (deleted) "deleted" else "NOT deleted"}: ${oldKeyFile.absolutePath}")
+        }
+
+        // Desktop doesn't use hardware keystore, so no keystore deletion needed
+        println("[EnvFileUpdater.desktop] Signing key and data cleared successfully")
+        true
+    }
 }
 
 actual fun createEnvFileUpdater(): EnvFileUpdater = EnvFileUpdater()

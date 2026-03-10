@@ -427,21 +427,22 @@ class SettingsViewModel(
     val resetSuccess: StateFlow<Boolean> = _resetSuccess.asStateFlow()
 
     /**
-     * Reset setup to re-run the setup wizard.
-     * Deletes .env file and restarts the app.
+     * Re-run setup wizard without wiping data.
+     * Only deletes .env file - keeps databases, audit logs, signing keys, etc.
+     * Use this to reconfigure LLM settings or fix auth issues.
      *
      * @param onSuccess Callback before app restart (for any cleanup)
      */
-    fun resetSetup(onSuccess: () -> Unit = {}) {
-        val method = "resetSetup"
-        logInfo(method, "Starting setup reset - will delete .env file and restart app")
+    fun rerunSetupWizard(onSuccess: () -> Unit = {}) {
+        val method = "rerunSetupWizard"
+        logInfo(method, "Re-running setup wizard - deleting .env only, keeping data")
 
         viewModelScope.launch {
             _isResetting.value = true
             _errorMessage.value = null
 
             try {
-                // Delete the .env file
+                // Only delete the .env file - keep everything else
                 envFileUpdater.deleteEnvFile().getOrThrow()
 
                 logInfo(method, ".env deleted successfully - restarting app for setup wizard")
@@ -459,12 +460,65 @@ class SettingsViewModel(
                 AppRestarter.restartApp()
 
             } catch (e: Exception) {
-                logError(method, "Failed to reset setup: ${e::class.simpleName}: ${e.message}")
-                _errorMessage.value = "Failed to reset setup: ${e.message}"
+                logError(method, "Failed to re-run setup: ${e::class.simpleName}: ${e.message}")
+                _errorMessage.value = "Failed to re-run setup: ${e.message}"
                 _isResetting.value = false
             }
-            // Note: We don't reset _isResetting in finally block because the app will restart
         }
+    }
+
+    /**
+     * Factory reset - wipe ALL data and start fresh.
+     * Deletes .env file, signing keys, databases, audit logs, etc.
+     * Use this to completely reset the agent to first-run state.
+     *
+     * @param onSuccess Callback before app restart (for any cleanup)
+     */
+    fun factoryReset(onSuccess: () -> Unit = {}) {
+        val method = "factoryReset"
+        logInfo(method, "Factory reset - wiping ALL data including databases and signing keys")
+
+        viewModelScope.launch {
+            _isResetting.value = true
+            _errorMessage.value = null
+
+            try {
+                // Clear the signing key and data directory (databases, audit logs, etc.)
+                logInfo(method, "Clearing signing key and data directory...")
+                envFileUpdater.clearSigningKey().getOrThrow()
+                logInfo(method, "Signing key and data cleared")
+
+                // Delete the .env file
+                envFileUpdater.deleteEnvFile().getOrThrow()
+
+                logInfo(method, "Factory reset complete - restarting app for setup wizard")
+                _resetSuccess.value = true
+
+                // Invoke callback for any cleanup before restart
+                onSuccess()
+
+                // Small delay to let UI update
+                kotlinx.coroutines.delay(100)
+
+                // Restart the app completely
+                logInfo(method, "Triggering app restart...")
+                AppRestarter.restartApp()
+
+            } catch (e: Exception) {
+                logError(method, "Failed to factory reset: ${e::class.simpleName}: ${e.message}")
+                _errorMessage.value = "Failed to factory reset: ${e.message}"
+                _isResetting.value = false
+            }
+        }
+    }
+
+    /**
+     * Legacy method for backwards compatibility.
+     * Now calls factoryReset() for full wipe behavior.
+     */
+    @Deprecated("Use rerunSetupWizard() or factoryReset() instead", ReplaceWith("factoryReset(onSuccess)"))
+    fun resetSetup(onSuccess: () -> Unit = {}) {
+        factoryReset(onSuccess)
     }
 
     /**

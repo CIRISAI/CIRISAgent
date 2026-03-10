@@ -18,7 +18,6 @@ services:
 security:
   audit_retention_days: 90
   secrets_encryption_key_env: "CIRIS_MASTER_KEY"
-  audit_key_path: "audit_keys"
   enable_signed_audit: true
   max_thought_depth: 7
 

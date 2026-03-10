@@ -1,4 +1,5 @@
 package ai.ciris.mobile.shared
+import ai.ciris.mobile.shared.platform.PlatformBackHandler
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.TestAutomation
 import ai.ciris.mobile.shared.platform.testable
@@ -269,6 +270,20 @@ fun CIRISApp(
         TestAutomation.setCurrentScreen(currentScreen::class.simpleName ?: "unknown")
     }
 
+    // Handle system back button - navigate back to appropriate parent screen
+    PlatformBackHandler(enabled = currentScreen !is Screen.Startup && currentScreen !is Screen.Interact) {
+        currentScreen = when (currentScreen) {
+            // Login/Setup flow - don't go back, let user complete the flow
+            is Screen.Login, is Screen.Setup -> currentScreen
+
+            // GraphMemory goes back to Memory list
+            is Screen.GraphMemory -> Screen.Memory
+
+            // All other screens go back to Interact (main screen)
+            else -> Screen.Interact
+        }
+    }
+
     // First-run detection state
     var isFirstRun by remember { mutableStateOf<Boolean?>(null) }
     var checkingFirstRun by remember { mutableStateOf(false) }
@@ -480,6 +495,9 @@ fun CIRISApp(
                 platformLog(TAG, "[INFO] Just completed setup, waiting for agent WORK state...")
                 justCompletedSetup = false
 
+                // Keep timer running during backend polling
+                startupViewModel.setKeepTimerAlive(true)
+
                 // Wait for agent to reach WORK state
                 // NOTE: Don't call setPhase() here - it would cancel this LaunchedEffect!
                 startupViewModel.setStatus("Waiting for agent...")
@@ -516,12 +534,15 @@ fun CIRISApp(
                 }
 
                 if (!agentReady) {
-                    PlatformLogger.w(TAG, " Agent did not reach WORK state within timeout")
+                    PlatformLogger.w(TAG, " Agent did not reach WORK state within timeout, proceeding anyway")
                     startupViewModel.setStatus("Agent ready (timeout)")
                 } else {
                     startupViewModel.setStatus("Agent ready!")
                 }
                 kotlinx.coroutines.delay(500)
+
+                // Stop timer before navigating away
+                startupViewModel.setKeepTimerAlive(false)
 
                 interactViewModel.startPolling() // Start polling now that token is set
                 currentScreen = Screen.Interact
@@ -529,10 +550,27 @@ fun CIRISApp(
             }
 
             // Check if this is first run via API
-            isFirstRun = checkFirstRunStatus(baseUrl)
+            // Keep timer running and show status while waiting for backend
+            startupViewModel.setKeepTimerAlive(true)
+            startupViewModel.setStatus("Checking setup status...")
+
+            isFirstRun = checkFirstRunStatus(
+                baseUrl = baseUrl,
+                maxRetries = 60,  // Wait up to 30 seconds (60 * 500ms)
+                onStatusUpdate = { status ->
+                    startupViewModel.setStatus(status)
+                }
+            )
+
+            startupViewModel.setKeepTimerAlive(false)
             platformLog(TAG, "[INFO] First run check result: $isFirstRun")
 
-            if (isFirstRun == true) {
+            if (isFirstRun == null) {
+                // Server unreachable after all retries - show error
+                platformLog(TAG, "[ERROR] Backend unreachable, cannot determine setup status")
+                startupViewModel.onErrorDetected("Backend unreachable. Please restart the app.")
+                return@LaunchedEffect
+            } else if (isFirstRun == true) {
                 // First run - show login screen first
                 platformLog(TAG, "[INFO] First run detected, navigating to Login")
                 currentScreen = Screen.Login
@@ -646,6 +684,8 @@ fun CIRISApp(
                                 // Wait for agent to reach WORK state before showing Interact
                                 // NOTE: Don't call setPhase() here - it would cancel this LaunchedEffect!
                                 // The status message is sufficient for user feedback
+                                // Keep timer running during backend polling
+                                startupViewModel.setKeepTimerAlive(true)
                                 startupViewModel.setStatus("Waiting for agent...")
 
                                 // Poll for WORK state with timeout
@@ -690,6 +730,9 @@ fun CIRISApp(
 
                                 // Brief pause to show ready state
                                 kotlinx.coroutines.delay(500)
+
+                                // Stop timer before navigating away
+                                startupViewModel.setKeepTimerAlive(false)
 
                                 // Trigger data loading now that we have auth
                                 PlatformLogger.i(TAG, " Triggering data load for ViewModels after token set")
@@ -782,10 +825,10 @@ fun CIRISApp(
                                         // Check if setup is already complete
                                         coroutineScope.launch {
                                             platformLog(TAG, "[INFO] Checking setup status at $baseUrl...")
-                                            val setupRequired = checkFirstRunStatus(baseUrl)
+                                            val setupRequired = checkFirstRunStatus(baseUrl) // No retries needed here - server is up
                                             platformLog(TAG, "[INFO] Setup required check result: $setupRequired")
 
-                                            if (!setupRequired) {
+                                            if (setupRequired == false) {
                                                 // Setup already done - exchange token immediately
                                                 platformLog(TAG, "[INFO] Setup already complete, exchanging token directly")
                                                 try {
@@ -1318,10 +1361,11 @@ fun CIRISApp(
                         "adapters=${adaptersList.size}, connected=$isAdaptersConnected, " +
                         "isLoading=$isAdaptersLoading, operationInProgress=$adaptersOperationInProgress")
 
-                // Start polling when screen is visible
+                // Fetch adapters immediately and start polling when screen is visible
                 DisposableEffect(Unit) {
-                    PlatformLogger.i("CIRISApp", "[Screen.Adapters] Starting adapter polling")
-                    adaptersViewModel.startPolling()
+                    PlatformLogger.i("CIRISApp", "[Screen.Adapters] Fetching adapters and starting polling")
+                    adaptersViewModel.fetchAdapters()  // Immediate fetch on screen entry
+                    adaptersViewModel.startPolling()   // Then poll for updates
                     onDispose {
                         PlatformLogger.i("CIRISApp", "[Screen.Adapters] Stopping adapter polling")
                         adaptersViewModel.stopPolling()
@@ -1987,22 +2031,38 @@ fun CIRISApp(
 /**
  * Check if setup is required via /v1/setup/status API
  * Uses the API client for platform-independent HTTP handling.
+ *
+ * @param baseUrl The API base URL
+ * @param maxRetries Maximum number of retries on connection error (0 = no retries, just fail)
+ * @param onStatusUpdate Optional callback to update status message during retries
+ * @return true if setup is required, false if not, null if server unreachable after retries
  */
-private suspend fun checkFirstRunStatus(baseUrl: String): Boolean {
-    return try {
-        platformLog("checkFirstRunStatus", "[INFO] Creating API client for $baseUrl")
-        val client = CIRISApiClient(baseUrl)
-        platformLog("checkFirstRunStatus", "[INFO] Calling getSetupStatus()...")
-        val setupStatus = client.getSetupStatus()
-        platformLog("checkFirstRunStatus", "[INFO] Got setup status: setup_required=${setupStatus.data.setup_required}")
-        setupStatus.data.setup_required
-    } catch (e: Exception) {
-        // On connection error, assume NOT first run (safer - user can still access setup if needed)
-        // This prevents incorrectly entering setup wizard when server is slow to start
-        platformLog("checkFirstRunStatus", "[ERROR] Failed to check setup status: ${e::class.simpleName}: ${e.message}")
-        platformLog("checkFirstRunStatus", "[INFO] Defaulting to NOT first-run (server may still be starting)")
-        false
+private suspend fun checkFirstRunStatus(
+    baseUrl: String,
+    maxRetries: Int = 0,
+    onStatusUpdate: ((String) -> Unit)? = null
+): Boolean? {
+    var attempts = 0
+    while (attempts <= maxRetries) {
+        try {
+            platformLog("checkFirstRunStatus", "[INFO] Attempt ${attempts + 1}/${maxRetries + 1}: Checking setup status at $baseUrl")
+            val client = CIRISApiClient(baseUrl)
+            val setupStatus = client.getSetupStatus()
+            platformLog("checkFirstRunStatus", "[INFO] Got setup status: setup_required=${setupStatus.data.setup_required}")
+            return setupStatus.data.setup_required
+        } catch (e: Exception) {
+            attempts++
+            if (attempts <= maxRetries) {
+                platformLog("checkFirstRunStatus", "[INFO] Connection error, retrying in 500ms... (${e::class.simpleName})")
+                onStatusUpdate?.invoke("Waiting for backend... (attempt $attempts)")
+                kotlinx.coroutines.delay(500)
+            } else {
+                platformLog("checkFirstRunStatus", "[ERROR] Failed to check setup status after ${maxRetries + 1} attempts: ${e::class.simpleName}: ${e.message}")
+                return null
+            }
+        }
     }
+    return null
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

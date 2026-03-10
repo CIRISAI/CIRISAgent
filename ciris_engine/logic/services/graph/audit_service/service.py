@@ -100,7 +100,6 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         # Hash chain options
         enable_hash_chain: bool = True,
         db_path: str = "ciris_audit.db",
-        key_path: str = "audit_keys",
         # Retention options
         retention_days: int = 90,
         cache_size: int = 1000,
@@ -115,7 +114,6 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             export_format: Format for exports (jsonl, csv, sqlite)
             enable_hash_chain: Whether to maintain cryptographic hash chain
             db_path: Path for hash chain database
-            key_path: Directory for signing keys
             retention_days: How long to retain audit data
             cache_size: Size of in-memory cache
         """
@@ -139,7 +137,6 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             self.db_path = db_path
         else:
             self.db_path = Path(db_path)
-        self.key_path = Path(key_path)
 
         # Retention configuration
         self.retention_days = retention_days
@@ -992,16 +989,13 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
     async def _initialize_hash_chain(self) -> None:
         """Initialize hash chain components."""
         try:
-            # Ensure directories exist
-            self.key_path.mkdir(parents=True, exist_ok=True)
-
             # Initialize database
             await self._init_database()
 
             # Initialize components
             self.hash_chain = AuditHashChain(str(self.db_path))
             logger.debug(
-                f"Initializing AuditSignatureManager with key_path={self.key_path}, db_path={self.db_path}, time_service={self._time_service}"
+                f"Initializing AuditSignatureManager with db_path={self.db_path}, time_service={self._time_service}"
             )
 
             # Ensure time_service is not None
@@ -1009,12 +1003,10 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
                 raise RuntimeError("TimeService is None - cannot initialize AuditSignatureManager")
 
             # Check actual types
-            logger.debug(
-                f"Types: key_path={type(self.key_path)}, db_path={type(self.db_path)}, time_service={type(self._time_service)}"
-            )
+            logger.debug(f"Types: db_path={type(self.db_path)}, time_service={type(self._time_service)}")
 
-            self.signature_manager = AuditSignatureManager(str(self.key_path), str(self.db_path), self._time_service)
-            self.verifier = AuditVerifier(str(self.db_path), str(self.key_path), self._time_service)
+            self.signature_manager = AuditSignatureManager(str(self.db_path), self._time_service)
+            self.verifier = AuditVerifier(str(self.db_path), self._time_service)
 
             # Initialize in thread
             await asyncio.to_thread(self._init_components_sync)

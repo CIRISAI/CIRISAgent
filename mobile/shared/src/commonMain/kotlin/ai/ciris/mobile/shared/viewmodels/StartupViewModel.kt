@@ -53,6 +53,10 @@ class StartupViewModel(
     private val _hasError = MutableStateFlow(false)
     val hasError: StateFlow<Boolean> = _hasError.asStateFlow()
 
+    // Flag to keep timer running even after phase == READY (for CIRISApp backend polling)
+    private val _keepTimerAlive = MutableStateFlow(false)
+    val keepTimerAlive: StateFlow<Boolean> = _keepTimerAlive.asStateFlow()
+
     private var startTime: Long = 0
 
     companion object {
@@ -87,10 +91,16 @@ class StartupViewModel(
             startElapsedTimer()
 
             // Start elapsed time counter
+            // Timer runs until: (phase is READY or ERROR) AND keepTimerAlive is false
             launch {
-                while (isActive && _phase.value != StartupPhase.READY && _phase.value != StartupPhase.ERROR) {
+                while (isActive) {
+                    val shouldStop = (_phase.value == StartupPhase.READY || _phase.value == StartupPhase.ERROR) && !_keepTimerAlive.value
+                    if (shouldStop) {
+                        PlatformLogger.d(TAG, "[TIMER] Stopping timer: phase=${_phase.value}, keepTimerAlive=${_keepTimerAlive.value}")
+                        break
+                    }
                     _elapsedSeconds.value = ((Clock.System.now().toEpochMilliseconds() - startTime) / 1000).toInt()
-                    delay(1000)
+                    delay(100)  // Update more frequently for smoother display
                 }
             }
 
@@ -133,7 +143,16 @@ class StartupViewModel(
         // Wire output callback to parse service startup lines
         val servicePattern = Regex("""\[SERVICE (\d+)/(\d+)\] (\S+) STARTED""")
         val prepPattern = Regex("""\[(\d+)/(\d+)\]""")
+        val fatalPattern = Regex("""\[FATAL(?:_EXIT)?\]\s*(.+)""")
         pythonRuntime.setOutputLineCallback { line ->
+            // Check for FATAL errors first - these indicate unrecoverable startup failures
+            fatalPattern.find(line)?.let { match ->
+                val errorMsg = match.groupValues[1].trim()
+                PlatformLogger.e(TAG, "[STARTUP][FATAL] $errorMsg")
+                _errorMessage.value = errorMsg
+                _phase.value = StartupPhase.ERROR
+                return@setOutputLineCallback
+            }
             // Check for service startup
             servicePattern.find(line)?.let { match ->
                 val num = match.groupValues[1].toIntOrNull() ?: return@let
@@ -316,6 +335,15 @@ class StartupViewModel(
     fun setStatus(message: String) {
         PlatformLogger.i(TAG, "[STARTUP][STATUS] $message")
         _statusMessage.value = message
+    }
+
+    /**
+     * Keep the timer running even after phase becomes READY.
+     * Call this before starting backend polling so the timer continues.
+     */
+    fun setKeepTimerAlive(keep: Boolean) {
+        PlatformLogger.i(TAG, "[TIMER] setKeepTimerAlive($keep)")
+        _keepTimerAlive.value = keep
     }
 
     /**

@@ -89,6 +89,7 @@ fun SettingsScreen(
     var showApiKey by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
     var showResetConfirmDialog by remember { mutableStateOf(false) }
+    var showFactoryResetDialog by remember { mutableStateOf(false) }
 
     // Show snackbar for success/error
     val snackbarHostState = remember { SnackbarHostState() }
@@ -121,7 +122,7 @@ fun SettingsScreen(
         }
     }
 
-    // Confirmation dialog for resetting setup
+    // Confirmation dialog for re-running setup wizard (keeps data)
     if (showResetConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showResetConfirmDialog = false },
@@ -129,31 +130,74 @@ fun SettingsScreen(
             text = {
                 Text(
                     "This will reset your configuration and restart the app. " +
-                    "You'll need to set up CIRIS again.\n\n" +
-                    "Choose this if you want to:\n" +
-                    "• Use your own API key (BYOK mode)\n" +
-                    "• Switch LLM providers\n" +
-                    "• Change your configuration"
+                    "Your data (conversations, memory, audit logs) will be kept.\n\n" +
+                    "Use this to:\n" +
+                    "• Switch between CIRIS Proxy and BYOK mode\n" +
+                    "• Change LLM providers or API keys\n" +
+                    "• Fix authentication issues"
                 )
             },
             confirmButton = {
                 Button(
                     onClick = {
                         showResetConfirmDialog = false
-                        viewModel.resetSetup { onResetSetup() }
+                        viewModel.rerunSetupWizard { onResetSetup() }
                     },
                     modifier = Modifier.testableClickable("btn_reset_confirm") {
                         showResetConfirmDialog = false
-                        viewModel.resetSetup { onResetSetup() }
+                        viewModel.rerunSetupWizard { onResetSetup() }
                     }
                 ) {
-                    Text("Reset & Restart")
+                    Text("Re-run Setup")
                 }
             },
             dismissButton = {
                 TextButton(
                     onClick = { showResetConfirmDialog = false },
                     modifier = Modifier.testableClickable("btn_reset_cancel") { showResetConfirmDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Confirmation dialog for factory reset (wipes ALL data)
+    if (showFactoryResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showFactoryResetDialog = false },
+            title = { Text("Factory Reset?") },
+            text = {
+                Text(
+                    "⚠️ WARNING: This will DELETE ALL DATA including:\n\n" +
+                    "• Conversations and chat history\n" +
+                    "• Memory and knowledge graph\n" +
+                    "• Audit logs and signing keys\n" +
+                    "• All configuration\n\n" +
+                    "This cannot be undone. The app will restart as if freshly installed."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showFactoryResetDialog = false
+                        viewModel.factoryReset { onResetSetup() }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.testableClickable("btn_factory_reset_confirm") {
+                        showFactoryResetDialog = false
+                        viewModel.factoryReset { onResetSetup() }
+                    }
+                ) {
+                    Text("Delete All & Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showFactoryResetDialog = false },
+                    modifier = Modifier.testableClickable("btn_factory_reset_cancel") { showFactoryResetDialog = false }
                 ) {
                     Text("Cancel")
                 }
@@ -298,6 +342,7 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
 
+                // Re-run Setup Wizard (keeps data)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -314,11 +359,11 @@ fun SettingsScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Reset your configuration and start fresh. Use this to:\n" +
-                                   "• Fix authentication issues (stale tokens)\n" +
+                            text = "Reconfigure LLM settings without losing data. Your conversations, memory, and audit logs are preserved.\n\n" +
+                                   "Use this to:\n" +
                                    "• Switch between CIRIS Proxy and BYOK mode\n" +
                                    "• Change LLM providers or API keys\n" +
-                                   "• Clear corrupted configuration",
+                                   "• Fix authentication issues",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -326,10 +371,57 @@ fun SettingsScreen(
                             onClick = { showResetConfirmDialog = true },
                             enabled = !isResetting,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error
+                                containerColor = MaterialTheme.colorScheme.primary
                             ),
                             modifier = Modifier.fillMaxWidth().testableClickable("btn_rerun_setup") {
                                 showResetConfirmDialog = true
+                            }
+                        ) {
+                            if (isResetting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text(if (isResetting) "Resetting..." else "Re-run Setup Wizard")
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Factory Reset (wipes ALL data)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Factory Reset",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            text = "Delete ALL data and start fresh. This removes conversations, memory, audit logs, and signing keys. Cannot be undone.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                        )
+                        Button(
+                            onClick = { showFactoryResetDialog = true },
+                            enabled = !isResetting,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error
+                            ),
+                            modifier = Modifier.fillMaxWidth().testableClickable("btn_factory_reset") {
+                                showFactoryResetDialog = true
                             }
                         ) {
                             if (isResetting) {
@@ -340,7 +432,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(Modifier.width(8.dp))
                             }
-                            Text(if (isResetting) "Resetting..." else "Re-run Setup Wizard")
+                            Text(if (isResetting) "Resetting..." else "Factory Reset")
                         }
                     }
                 }

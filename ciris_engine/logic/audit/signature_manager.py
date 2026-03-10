@@ -36,12 +36,11 @@ class AuditSignatureManager:
     RSA-2048 verification is maintained for backward compatibility with existing audit chains.
     """
 
-    def __init__(self, key_path: str, db_path: str, time_service: TimeServiceProtocol) -> None:
-        self.key_path = Path(key_path)
+    def __init__(self, db_path: str, time_service: TimeServiceProtocol) -> None:
         self.db_path = db_path
         self._time_service = time_service
 
-        # Unified Ed25519 signing key (new default)
+        # Unified Ed25519 signing key (managed by CIRISVerify)
         self._unified_key: Optional[Any] = None
         self._key_id: Optional[str] = None
         self._using_ed25519 = False
@@ -49,13 +48,8 @@ class AuditSignatureManager:
         # Legacy RSA key (for verification only)
         self._legacy_rsa_public_key: Optional[PublicKeyTypes] = None
 
-        # Ensure key directory exists
-        self.key_path.mkdir(parents=True, exist_ok=True)
-
     def initialize(self) -> None:
-        """Initialize the signature manager using unified Ed25519 key."""
-        if self.key_path == Path("/") or not os.access(self.key_path, os.W_OK):
-            raise PermissionError(f"Key path {self.key_path} is not writable")
+        """Initialize the signature manager using unified Ed25519 key from CIRISVerify."""
         try:
             self._load_unified_key()
             self._register_public_key()
@@ -65,43 +59,37 @@ class AuditSignatureManager:
             raise
 
     def _load_unified_key(self) -> None:
-        """Load the unified Ed25519 signing key."""
+        """Load the unified Ed25519 signing key from CIRISVerify."""
         from .signing_protocol import get_unified_signing_key
 
         self._unified_key = get_unified_signing_key()
-        self._key_id = self._unified_key.key_id
+
+        # Set callback for key lifecycle events (Portal import, ephemeral creation)
+        self._unified_key.set_key_registration_callback(self._on_key_registered)
+
+        # Get key_id if available (may be None if no key yet)
+        if self._unified_key.has_key:
+            self._key_id = self._unified_key.key_id
         self._using_ed25519 = True
 
-        # Check for legacy RSA keys (for verification only)
-        rsa_private_path = self.key_path / "audit_signing_private.pem"
-        rsa_public_path = self.key_path / "audit_signing_public.pem"
-
-        if rsa_private_path.exists() and rsa_public_path.exists():
-            logger.info("Legacy RSA keys found - will be used for verification of old signatures only")
-            try:
-                with open(rsa_public_path, "rb") as f:
-                    self._legacy_rsa_public_key = serialization.load_pem_public_key(f.read())
-            except Exception as e:
-                logger.warning(f"Could not load legacy RSA public key: {e}")
-
-    def _register_public_key(self) -> None:
-        """Register the Ed25519 public key in the database."""
-        if not self._unified_key or not self._key_id:
-            raise RuntimeError("Keys not initialized for registration")
+    def _on_key_registered(self, key_id: str, public_key_base64: str, algorithm: str) -> None:
+        """Callback when a new key is registered via Portal import or ephemeral creation."""
+        logger.info(f"Key lifecycle event: registering {key_id} in audit_signing_keys")
+        self._key_id = key_id
 
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
             # Check if key already exists
-            cursor.execute("SELECT key_id FROM audit_signing_keys WHERE key_id = ?", (self._key_id,))
+            cursor.execute("SELECT key_id FROM audit_signing_keys WHERE key_id = ?", (key_id,))
 
             if cursor.fetchone():
-                logger.debug(f"Key {self._key_id} already registered")
+                logger.debug(f"Key {key_id} already registered")
                 conn.close()
                 return
 
-            # Insert new Ed25519 key
+            # Insert new key
             cursor.execute(
                 """
                 INSERT INTO audit_signing_keys
@@ -109,10 +97,10 @@ class AuditSignatureManager:
                 VALUES (?, ?, ?, ?, ?)
             """,
                 (
-                    self._key_id,
-                    self._unified_key.public_key_base64,
-                    "ed25519",
-                    256,  # Ed25519 uses 256-bit keys
+                    key_id,
+                    public_key_base64,
+                    algorithm,
+                    256 if algorithm == "ed25519" else 2048,
                     self._time_service.now_iso(),
                 ),
             )
@@ -120,10 +108,31 @@ class AuditSignatureManager:
             conn.commit()
             conn.close()
 
-            logger.info(f"Registered Ed25519 public key in database: {self._key_id}")
+            logger.info(f"Registered key in audit_signing_keys: {key_id}")
 
         except sqlite3.Error as e:
-            logger.error(f"Failed to register public key: {e}")
+            logger.error(f"Failed to register key {key_id}: {e}")
+
+    def _register_public_key(self) -> None:
+        """Register the Ed25519 public key in the database.
+
+        Delegates to _on_key_registered for consistency across all key lifecycle ops.
+        If no key exists yet (waiting for Portal import or ephemeral creation),
+        registration is deferred - the callback will handle it when the key is created.
+        """
+        if not self._unified_key:
+            raise RuntimeError("Unified key manager not initialized")
+
+        # If no key exists yet, skip registration - callback will handle it
+        if not self._key_id:
+            logger.info("No signing key available yet - registration deferred to callback")
+            return
+
+        self._on_key_registered(
+            key_id=self._key_id,
+            public_key_base64=self._unified_key.public_key_base64,
+            algorithm="ed25519",
+        )
 
     def sign_entry(self, entry_hash: str) -> str:
         """Sign an entry hash and return base64 encoded signature."""
@@ -318,19 +327,50 @@ class AuditSignatureManager:
         return self._key_id
 
     def test_signing(self) -> bool:
-        """Test that signing and verification work correctly."""
-        try:
-            test_data = "test_entry_hash_12345"
-            signature = self.sign_entry(test_data)
-            verified = self.verify_signature(test_data, signature)
+        """Test that signing and verification work correctly.
 
-            if verified:
-                logger.debug("Signature test passed (Ed25519)")
-                return True
-            else:
-                logger.error("Signature test failed - verification failed")
-                return False
+        Retries with backoff if attestation is in progress (sign_ed25519 blocked).
+        """
+        import time
 
-        except Exception as e:
-            logger.error(f"Signature test failed with exception: {e}")
-            return False
+        max_retries = 10
+        base_delay = 0.5  # 500ms as suggested by ciris_verify
+
+        for attempt in range(max_retries):
+            try:
+                test_data = "test_entry_hash_12345"
+                signature = self.sign_entry(test_data)
+                verified = self.verify_signature(test_data, signature)
+
+                if verified:
+                    if attempt > 0:
+                        logger.info(f"Signature test passed after {attempt + 1} attempts (waited for attestation)")
+                    else:
+                        logger.debug("Signature test passed (Ed25519)")
+                    return True
+                else:
+                    logger.error("Signature test failed - verification failed")
+                    return False
+
+            except Exception as e:
+                error_msg = str(e)
+                # Check if attestation is blocking signing - retry with backoff
+                if "Attestation in progress" in error_msg or "sign_ed25519 blocked" in error_msg:
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (1.5**attempt)  # Exponential backoff
+                        logger.info(
+                            f"[signing] Attestation in progress, waiting {delay:.1f}s "
+                            f"(attempt {attempt + 1}/{max_retries})"
+                        )
+                        time.sleep(delay)
+                        continue
+                    else:
+                        logger.error(
+                            f"Signature test failed - attestation still in progress after {max_retries} retries"
+                        )
+                        return False
+                else:
+                    logger.error(f"Signature test failed with exception: {e}")
+                    return False
+
+        return False

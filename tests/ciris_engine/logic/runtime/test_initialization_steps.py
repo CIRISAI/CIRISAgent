@@ -1,8 +1,18 @@
 """Tests for initialization_steps.py module."""
 
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def clear_ciris_adapter_env():
+    """Clear CIRIS_ADAPTER env var to prevent env fallback from interfering with tests."""
+    old_value = os.environ.pop("CIRIS_ADAPTER", None)
+    yield
+    if old_value is not None:
+        os.environ["CIRIS_ADAPTER"] = old_value
 
 
 class TestInitializeIdentity:

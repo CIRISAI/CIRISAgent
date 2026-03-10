@@ -294,6 +294,39 @@ actual class EnvFileUpdater {
             false
         }
     }
+
+    actual suspend fun clearSigningKey(): Result<Boolean> {
+        val home = cirisHome ?: run {
+            println("[$TAG] Cannot clear signing key - cirisHome not found")
+            return Result.failure(Exception("cirisHome not found"))
+        }
+
+        return try {
+            val fileManager = NSFileManager.defaultManager
+
+            // Delete the data directory which contains the encrypted key file and databases
+            val dataPath = "$home/data"
+            if (fileManager.fileExistsAtPath(dataPath)) {
+                val deleted = fileManager.removeItemAtPath(dataPath, null)
+                println("[$TAG] Data directory ${if (deleted) "deleted" else "NOT deleted"}: $dataPath")
+            }
+
+            // Also try the older path where key might be stored
+            val oldKeyPath = "$home/agent_signing.ed25519.enc"
+            if (fileManager.fileExistsAtPath(oldKeyPath)) {
+                val deleted = fileManager.removeItemAtPath(oldKeyPath, null)
+                println("[$TAG] Old key file ${if (deleted) "deleted" else "NOT deleted"}: $oldKeyPath")
+            }
+
+            // Delete from iOS Keychain
+            // TODO: Implement keychain deletion if CIRISVerify uses iOS Keychain for key storage
+            println("[$TAG] Signing key and data cleared successfully")
+            Result.success(true)
+        } catch (e: Exception) {
+            println("[$TAG] Error clearing signing key: ${e.message}")
+            Result.failure(e)
+        }
+    }
 }
 
 /**

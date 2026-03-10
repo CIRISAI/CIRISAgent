@@ -59,8 +59,7 @@ coverage.xml
 # env_student.sh
 
 # Sensitive directories
-.secrets/
-audit_keys/
+secrets/
 
 # Project specific ignores
 scripts/

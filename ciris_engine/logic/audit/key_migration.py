@@ -5,14 +5,14 @@ This module provides a safe migration path from RSA-2048 signed audit trails
 to Ed25519, with full chain re-signing and verification.
 
 Migration steps:
-1. Backup current state (keys + database)
-2. Generate new Ed25519 key (or use existing unified key)
+1. Backup database state
+2. Get Ed25519 key from CIRISVerify (the ONLY source of signing keys)
 3. Load all audit entries in order
 4. Re-sign each entry with Ed25519, preserving original timestamps
 5. Update hash chain links
 6. Verify the new chain integrity
 7. Register the new key in the database
-8. Archive the old RSA key (kept for historical verification)
+8. Mark old RSA key as archived
 
 The migration is atomic - if any step fails, the original state is restored.
 """
@@ -21,7 +21,6 @@ import base64
 import hashlib
 import json
 import logging
-import os
 import shutil
 import sqlite3
 from dataclasses import dataclass, field
@@ -65,12 +64,12 @@ class AuditKeyMigration:
     """Migrate audit signing keys from RSA-2048 to Ed25519.
 
     This utility:
-    1. Creates a backup of the current state
-    2. Generates a new Ed25519 key (using the unified signing key)
+    1. Creates a backup of the database
+    2. Gets Ed25519 key from CIRISVerify (the ONLY source of signing keys)
     3. Re-signs the entire audit chain
     4. Updates the database with new signatures
     5. Registers the new key
-    6. Archives the old RSA key
+    6. Marks old RSA key as archived
 
     The migration preserves:
     - Original timestamps
@@ -82,11 +81,9 @@ class AuditKeyMigration:
     def __init__(
         self,
         db_path: str,
-        key_path: str,
         time_service: TimeServiceProtocol,
     ) -> None:
         self.db_path = Path(db_path)
-        self.key_path = Path(key_path)
         self.time_service = time_service
         self._backup_path: Optional[Path] = None
 
@@ -236,7 +233,7 @@ class AuditKeyMigration:
             return None
 
     def _create_backup(self) -> Path:
-        """Create backup of database and keys."""
+        """Create backup of database."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_dir = Path("data_archive") / f"audit_migration_backup_{timestamp}"
         backup_dir.mkdir(parents=True, exist_ok=True)
@@ -244,17 +241,10 @@ class AuditKeyMigration:
         # Backup database
         shutil.copy2(self.db_path, backup_dir / self.db_path.name)
 
-        # Backup keys
-        key_backup_dir = backup_dir / "keys"
-        key_backup_dir.mkdir(exist_ok=True)
-
-        for key_file in self.key_path.glob("audit_signing_*"):
-            shutil.copy2(key_file, key_backup_dir / key_file.name)
-
         return backup_dir
 
     def _restore_backup(self) -> None:
-        """Restore from backup."""
+        """Restore database from backup."""
         if not self._backup_path or not self._backup_path.exists():
             raise RuntimeError("No backup to restore")
 
@@ -262,12 +252,6 @@ class AuditKeyMigration:
         backup_db = self._backup_path / self.db_path.name
         if backup_db.exists():
             shutil.copy2(backup_db, self.db_path)
-
-        # Restore keys
-        key_backup_dir = self._backup_path / "keys"
-        if key_backup_dir.exists():
-            for key_file in key_backup_dir.glob("audit_signing_*"):
-                shutil.copy2(key_file, self.key_path / key_file.name)
 
     def _load_all_entries(self) -> List[AuditEntry]:
         """Load all audit entries in order."""
@@ -420,7 +404,7 @@ class AuditKeyMigration:
             conn.close()
 
     def _archive_old_key(self, old_key_id: str) -> None:
-        """Mark old RSA key as archived (not revoked, for verification)."""
+        """Mark old RSA key as archived in database (not revoked, for verification)."""
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
 
@@ -445,15 +429,6 @@ class AuditKeyMigration:
 
         finally:
             conn.close()
-
-        # Also rename old key files to .archived
-        for key_file in self.key_path.glob("audit_signing_*.pem"):
-            archived_name = key_file.with_suffix(".pem.archived")
-            try:
-                key_file.rename(archived_name)
-                logger.info(f"Archived key file: {key_file.name} -> {archived_name.name}")
-            except Exception as e:
-                logger.warning(f"Could not archive key file {key_file}: {e}")
 
     def _verify_chain_integrity(self, unified_key: Any) -> bool:
         """Verify the migrated chain integrity."""
@@ -497,7 +472,6 @@ class AuditKeyMigration:
 
 async def migrate_audit_key_to_ed25519(
     db_path: str,
-    key_path: str,
     time_service: TimeServiceProtocol,
     backup: bool = True,
 ) -> MigrationResult:
@@ -505,12 +479,11 @@ async def migrate_audit_key_to_ed25519(
 
     Args:
         db_path: Path to the SQLite database
-        key_path: Path to the key directory
         time_service: Time service for timestamps
         backup: Create backup before migration
 
     Returns:
         MigrationResult with migration details
     """
-    migration = AuditKeyMigration(db_path, key_path, time_service)
+    migration = AuditKeyMigration(db_path, time_service)
     return await migration.migrate_to_ed25519(backup=backup)

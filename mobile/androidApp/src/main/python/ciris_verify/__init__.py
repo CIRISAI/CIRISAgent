@@ -30,6 +30,7 @@ import logging as _logging
 
 from .client import CIRISVerify, MockCIRISVerify
 from .exceptions import (
+    AttestationInProgressError,
     BinaryNotFoundError,
     BinaryTamperedError,
     CIRISVerifyError,
@@ -107,7 +108,7 @@ def get_library_version() -> str:
     return __version__
 
 
-__version__ = "1.1.12"
+__version__ = "1.1.17"
 __all__ = [
     "CIRISVerify",
     "MockCIRISVerify",
@@ -133,4 +134,5 @@ __all__ = [
     "VerificationFailedError",
     "TimeoutError",
     "CommunicationError",
+    "AttestationInProgressError",
 ]

@@ -1050,13 +1050,12 @@ private fun parseTokenForDisplay(token: String): TokenDisplayInfo {
             else -> payloadBase64
         }
 
-        // Base64 decode - use platform-specific or simple decode
+        // Base64url decode using kotlin.io.encoding (KMP-compatible)
+        @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
         val payloadJson = try {
-            // Try to decode as base64url
-            val bytes = java.util.Base64.getUrlDecoder().decode(paddedPayload)
-            String(bytes, Charsets.UTF_8)
+            val bytes = kotlin.io.encoding.Base64.UrlSafe.decode(paddedPayload)
+            bytes.decodeToString()
         } catch (e: Exception) {
-            // Fallback for platforms without java.util.Base64
             "{}"
         }
 
@@ -1069,8 +1068,9 @@ private fun parseTokenForDisplay(token: String): TokenDisplayInfo {
                 3 -> it + "="
                 else -> it
             }
+            @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
             try {
-                String(java.util.Base64.getUrlDecoder().decode(headerPadded), Charsets.UTF_8)
+                kotlin.io.encoding.Base64.UrlSafe.decode(headerPadded).decodeToString()
             } catch (e: Exception) { "{}" }
         })
 
@@ -1078,7 +1078,7 @@ private fun parseTokenForDisplay(token: String): TokenDisplayInfo {
         val issuer = issMatch?.groupValues?.get(1)
 
         // Check if expired
-        val now = System.currentTimeMillis() / 1000
+        val now = kotlinx.datetime.Clock.System.now().epochSeconds
         val isExpired = expTimestamp != null && expTimestamp < now
 
         // Format expiry

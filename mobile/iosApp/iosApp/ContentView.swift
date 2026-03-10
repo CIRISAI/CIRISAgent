@@ -1294,7 +1294,7 @@ struct ComposeViewWithAuthAndStore: UIViewControllerRepresentable {
                         return
                     }
 
-                    let result = await manager.attestDevice()
+                    let result = await manager.attestDeviceIfNeeded()
 
                     if result.verified {
                         NSLog("[ComposeViewWithAuthAndStore] App Attest success: \(result.verdict)")

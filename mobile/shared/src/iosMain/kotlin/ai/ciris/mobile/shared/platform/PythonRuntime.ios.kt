@@ -41,23 +41,30 @@ actual class PythonRuntime : PythonRuntimeProtocol {
 
     /**
      * On iOS, the server is started by Swift before Compose UI loads.
-     * This method checks if the server is actually running.
+     * Polls health up to 60 times (1s apart) waiting for cognitive_state WORK/SETUP.
      */
     actual override suspend fun startServer(): Result<String> {
-        println("[PythonRuntime.iOS] startServer called - checking if server is running...")
+        println("[PythonRuntime.iOS] startServer() called — polling for server at $serverUrl")
 
-        // Poll startup-status to drive UI lights
-        pollStartupStatus()
+        for (attempt in 0 until 60) {
+            // Drive UI service lights from file on each poll
+            pollStartupStatus()
 
-        val healthResult = checkHealth()
-        return if (healthResult.getOrNull() == true) {
-            pollStartupStatus() // Final poll
-            _serverStarted = true
-            println("[PythonRuntime.iOS] Server is running at $serverUrl")
-            Result.success(serverUrl)
-        } else {
-            Result.failure(Exception("Server not responding at $serverUrl"))
+            val health = checkHealth()
+            val isHealthy = health.getOrNull() == true
+            println("[PythonRuntime.iOS] Health check attempt $attempt: healthy=$isHealthy")
+
+            if (isHealthy) {
+                pollStartupStatus() // Final poll
+                _serverStarted = true
+                println("[PythonRuntime.iOS] Server is healthy after $attempt attempts")
+                return Result.success(serverUrl)
+            }
+            kotlinx.coroutines.delay(1000)
         }
+
+        println("[PythonRuntime.iOS] Server did not become healthy after 60s")
+        return Result.failure(Exception("Server not responding at $serverUrl after 60s"))
     }
 
     /**
@@ -121,12 +128,15 @@ actual class PythonRuntime : PythonRuntimeProtocol {
 
             val task = NSURLSession.sharedSession.dataTaskWithRequest(request) { data, response, error ->
                 if (error != null) {
+                    println("[PythonRuntime.iOS] checkHealth error: ${error.localizedDescription}")
                     continuation.resume(Result.success(false))
                     return@dataTaskWithRequest
                 }
 
                 val httpResponse = response as? NSHTTPURLResponse
-                if (httpResponse?.statusCode?.toInt() != 200 || data == null) {
+                val statusCode = httpResponse?.statusCode?.toInt() ?: -1
+                if (statusCode != 200 || data == null) {
+                    println("[PythonRuntime.iOS] checkHealth HTTP $statusCode (data=${data != null})")
                     continuation.resume(Result.success(false))
                     return@dataTaskWithRequest
                 }
@@ -134,18 +144,20 @@ actual class PythonRuntime : PythonRuntimeProtocol {
                 // Parse JSON to check cognitive_state == "WORK" or "SETUP" (first-run)
                 try {
                     val jsonString = NSString.create(data = data, encoding = NSUTF8StringEncoding)?.toString() ?: ""
-                    // Look for "cognitive_state": "WORK" or "SETUP" in the response
                     val stateMatch = Regex(""""cognitive_state"\s*:\s*"(\w+)"""").find(jsonString)
                     val cognitiveState = stateMatch?.groupValues?.get(1) ?: ""
 
-                    // WORK = normal ready, SETUP = first-run ready
-                    val isReady = cognitiveState == "WORK" || cognitiveState == "SETUP"
+                    // WORK = normal ready, SETUP = first-run ready (case-insensitive)
+                    val upper = cognitiveState.uppercase()
+                    val isReady = upper == "WORK" || upper == "SETUP"
                     if (!isReady) {
-                        println("[PythonRuntime.iOS] Not ready yet - cognitive_state: $cognitiveState")
+                        println("[PythonRuntime.iOS] checkHealth: cognitive_state='$cognitiveState' (not ready)")
+                    } else {
+                        println("[PythonRuntime.iOS] checkHealth: cognitive_state='$cognitiveState' — READY")
                     }
                     continuation.resume(Result.success(isReady))
                 } catch (e: Exception) {
-                    println("[PythonRuntime.iOS] Error parsing health response: ${e.message}")
+                    println("[PythonRuntime.iOS] checkHealth parse error: ${e.message}")
                     continuation.resume(Result.success(false))
                 }
             }

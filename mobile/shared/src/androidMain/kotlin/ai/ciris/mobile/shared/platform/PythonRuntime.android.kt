@@ -186,8 +186,9 @@ actual class PythonRuntime : PythonRuntimeProtocol {
             val data = json.optJSONObject("data")
             val cognitiveState = data?.optString("cognitive_state", "") ?: ""
 
-            // Consider healthy if in WORK state (normal) or SETUP state (first-run ready)
-            val isReady = cognitiveState == "WORK" || cognitiveState == "SETUP"
+            // Consider healthy if in WORK state (normal) or SETUP state (first-run ready, case-insensitive)
+            val upper = cognitiveState.uppercase()
+            val isReady = upper == "WORK" || upper == "SETUP"
             if (!isReady) {
                 Log.d(TAG, "[checkHealth] Not ready yet - cognitive_state: $cognitiveState")
             }

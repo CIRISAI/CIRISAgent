@@ -106,10 +106,13 @@ class StartupViewModel(
 
             // Execute startup sequence
             try {
+                PlatformLogger.i(TAG, "[STARTUP] === Beginning 3-step startup sequence ===")
                 initializePython()
                 startFastAPIServer()
                 waitForServices()
+                PlatformLogger.i(TAG, "[STARTUP] === Startup sequence complete ===")
             } catch (e: Exception) {
+                PlatformLogger.e(TAG, "[STARTUP] === Startup sequence FAILED: ${e.message} ===")
                 _errorMessage.value = e.message ?: "Unknown error during startup"
                 _phase.value = StartupPhase.ERROR
             }
@@ -120,14 +123,17 @@ class StartupViewModel(
      * Step 1: Initialize Python interpreter
      */
     private suspend fun initializePython() {
+        PlatformLogger.i(TAG, "[STARTUP] Step 1: initializePython()")
         _phase.value = StartupPhase.LOADING_RUNTIME
         _statusMessage.value = "Starting Python interpreter..."
 
         val result = pythonRuntime.initialize(pythonHomePath)
         if (result.isFailure) {
+            PlatformLogger.e(TAG, "[STARTUP] Python init FAILED: ${result.exceptionOrNull()?.message}")
             throw result.exceptionOrNull() ?: Exception("Failed to initialize Python")
         }
 
+        PlatformLogger.i(TAG, "[STARTUP] Step 1 complete: Python initialized")
         _statusMessage.value = "Python ready"
     }
 
@@ -195,14 +201,18 @@ class StartupViewModel(
         }
 
         // Poll for server to become healthy (Python may still be starting)
+        PlatformLogger.i(TAG, "[STARTUP] Step 2: calling pythonRuntime.startServer()...")
         val result = pythonRuntime.startServer()
 
         // Clean up callback
         pythonRuntime.setOutputLineCallback(null)
 
         if (result.isFailure) {
+            val errMsg = result.exceptionOrNull()?.message ?: "Unknown"
+            PlatformLogger.e(TAG, "[STARTUP] Step 2 FAILED: startServer() -> $errMsg")
             throw result.exceptionOrNull() ?: Exception("Failed to connect to server")
         }
+        PlatformLogger.i(TAG, "[STARTUP] Step 2 complete: server healthy at ${result.getOrNull()}")
 
         // Server is healthy — verify/prep completed before server was available
         // Mark them done only if they weren't already driven by console output

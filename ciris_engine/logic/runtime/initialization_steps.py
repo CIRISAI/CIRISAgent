@@ -674,12 +674,36 @@ async def load_saved_adapters_from_graph(runtime: Any) -> None:
         bootstrap_ids = _get_bootstrap_adapter_ids(runtime)
         loaded_count = 0
 
+        # Track loaded adapter types to prevent duplicates (e.g., two home_assistant entries
+        # with different IDs persisted by different code paths)
+        loaded_adapter_types: Set[str] = set()
+
         for adapter_id in adapter_ids:
+            # Pre-check: resolve adapter type from graph to skip duplicate types
+            adapter_type_node = await config_service.get_config(f"adapter.{adapter_id}.type")
+            adapter_type_val = _extract_config_value(adapter_type_node)
+            if adapter_type_val and isinstance(adapter_type_val, str):
+                if adapter_type_val in loaded_adapter_types:
+                    logger.warning(
+                        f"Skipping duplicate adapter {adapter_id} — type '{adapter_type_val}' already loaded, "
+                        f"removing stale graph entry"
+                    )
+                    # Clean up stale duplicate from graph
+                    try:
+                        stale_configs = await config_service.list_configs(prefix=f"adapter.{adapter_id}")
+                        for config_key in stale_configs.keys():
+                            await config_service.set_config(config_key, None, updated_by="dedup_cleanup")
+                    except Exception as cleanup_err:
+                        logger.debug(f"Could not clean up stale adapter {adapter_id}: {cleanup_err}")
+                    continue
+
             loaded = await _load_single_saved_adapter(
                 adapter_id, config_service, adapter_manager, bootstrap_ids, current_occurrence_id
             )
             if loaded:
                 loaded_count += 1
+                if adapter_type_val and isinstance(adapter_type_val, str):
+                    loaded_adapter_types.add(adapter_type_val)
 
         if loaded_count > 0:
             logger.info(f"Loaded {loaded_count} saved adapters from graph for occurrence {current_occurrence_id}")

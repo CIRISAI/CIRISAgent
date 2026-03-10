@@ -1189,9 +1189,11 @@ fun CIRISApp(
                         }
                     },
                     onResetSetup = {
-                        PlatformLogger.i("CIRISApp", "[onResetSetup] Setup reset requested, restarting app...")
-                        // Navigate to Startup which will detect first-run and show setup wizard
-                        // The .env file has been deleted, so first-run detection will trigger
+                        PlatformLogger.i("CIRISApp", "[onResetSetup] Setup reset — restarting runtime via signal")
+                        // AppRestarter writes .restart_signal → Python watchdog restarts runtime
+                        // retry() resets StartupViewModel and re-polls until new runtime is healthy
+                        startupViewModel.retry()
+                        checkingFirstRun = false  // Allow first-run re-check after restart
                         currentScreen = Screen.Startup
                     }
                 )

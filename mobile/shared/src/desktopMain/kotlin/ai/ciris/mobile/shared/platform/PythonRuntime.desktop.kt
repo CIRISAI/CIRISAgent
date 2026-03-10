@@ -94,8 +94,9 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
         val stateMatch = Regex(""""cognitive_state"\s*:\s*"(\w+)"""").find(body)
         val cognitiveState = stateMatch?.groupValues?.get(1) ?: ""
 
-        // WORK = normal ready, SETUP = first-run ready
-        val isReady = cognitiveState == "WORK" || cognitiveState == "SETUP"
+        // WORK = normal ready, SETUP = first-run ready (case-insensitive)
+        val upper = cognitiveState.uppercase()
+        val isReady = upper == "WORK" || upper == "SETUP"
         if (!isReady) {
             println("[PythonRuntime.desktop] Not ready yet - cognitive_state: $cognitiveState")
         }

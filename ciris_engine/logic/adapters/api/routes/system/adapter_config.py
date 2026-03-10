@@ -93,6 +93,19 @@ async def _load_adapter_after_config(request: Request, session: Any, persist: bo
     adapter_config["persist"] = persist
     adapter_id = f"{session.adapter_type}_{uuid.uuid4().hex[:8]}"
 
+    # Unload any existing adapter of the same type to prevent duplicates
+    # (e.g., user re-configures home_assistant — old instance must be replaced)
+    adapter_manager = getattr(runtime_control_service, "adapter_manager", None)
+    if adapter_manager:
+        for existing_id, instance in list(adapter_manager.loaded_adapters.items()):
+            if instance.adapter_type == session.adapter_type:
+                logger.info(
+                    f"[COMPLETE_CONFIG] Unloading existing adapter {existing_id} "
+                    f"(type={session.adapter_type}) before loading new instance"
+                )
+                await adapter_manager.unload_adapter(existing_id)
+                break
+
     load_result = await runtime_control_service.load_adapter(
         adapter_type=session.adapter_type,
         adapter_id=adapter_id,

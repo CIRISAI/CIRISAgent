@@ -32,6 +32,10 @@ class AppAttestManager {
     /// In-memory cached result for the current session
     private var cachedResult: AppAttestResult?
 
+    /// Serialization: if an attestation is already in-flight, all callers
+    /// await the same Task instead of requesting a second nonce.
+    private var inFlightTask: Task<AppAttestResult, Never>?
+
     private static let cachedBuildKey = "ciris_app_attest_build"
 
     private init() {
@@ -85,19 +89,40 @@ class AppAttestManager {
     }
 
     /// Perform App Attest, using cache if available.
-    /// Safe to call on every startup — will no-op if cache is fresh.
+    /// Safe to call concurrently — serializes so only one nonce is in-flight.
     func attestDeviceIfNeeded() async -> AppAttestResult {
         // Return cached result if fresh
         if let cached = getCachedResult() {
+            NSLog("[AppAttest] Returning cached result (verified=\(cached.verified))")
             return cached
         }
 
-        // No cache or stale — do full attestation
+        // No cache or stale — do full attestation (serialized)
         return await attestDevice()
     }
 
     /// Perform full App Attest attestation (bypasses cache).
+    /// Serialized: if already in-flight, returns the same Task's result
+    /// instead of requesting a second nonce (which would cause nonce_expired).
     func attestDevice() async -> AppAttestResult {
+        // If another call is already in-flight, piggyback on it
+        if let existing = inFlightTask {
+            NSLog("[AppAttest] Attestation already in-flight, waiting for existing task...")
+            return await existing.value
+        }
+
+        let task = Task<AppAttestResult, Never> {
+            let result = await performAttestationFlow()
+            // Clear in-flight so next call can start fresh
+            self.inFlightTask = nil
+            return result
+        }
+        inFlightTask = task
+        return await task.value
+    }
+
+    /// The actual attestation flow — called only once at a time via serialization.
+    private func performAttestationFlow() async -> AppAttestResult {
         guard isSupported else {
             NSLog("[AppAttest] Not supported on this device")
             let result = AppAttestResult(verified: false, error: "App Attest not supported")

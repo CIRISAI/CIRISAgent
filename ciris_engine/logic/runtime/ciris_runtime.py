@@ -1367,9 +1367,13 @@ class CIRISRuntime(ServicePropertyMixin):
                     agent_id = getattr(self.identity_manager.agent_identity, "agent_id", None)
 
             # Use EventPayload as expected by AuditServiceProtocol.log_event
+            # result should be normalized outcome, config details go in action
+            config_details = (
+                f"key_id={key_id}, template={identity_template or 'unknown'}, agent={agent_id or 'unknown'}"
+            )
             audit_event = EventPayload(
-                action="agent_configured",
-                result=f"key_id={key_id}, template={identity_template or 'unknown'}, agent={agent_id or 'unknown'}",
+                action=f"agent_configured: {config_details}",
+                result="success",
                 service_name="resume_from_first_run",
             )
             await self.audit_service.log_event("agent_configured", audit_event)

@@ -131,7 +131,6 @@ class SQLToolService(BaseService, ToolService):
         if self._time_service:
             try:
                 self._signature_manager = AuditSignatureManager(
-                    key_path=str(self._signature_key_path),
                     db_path=self._signature_db_path,
                     time_service=self._time_service,
                 )

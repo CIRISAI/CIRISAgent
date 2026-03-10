@@ -28,7 +28,7 @@ android {
             buildPython "/usr/bin/python3.10"
             // Extract packages to real filesystem so they can be scanned for code integrity
             // ciris_engine MUST be included for startup hash verification to work!
-            extractPackages "pydantic_core", "ciris_engine", "ciris_adapters", "ciris_verify"
+            extractPackages "pydantic_core", "ciris_engine", "ciris_adapters"
 
             pip {
                 options "--find-links", "../../android/app/wheels"  // Reuse existing wheels

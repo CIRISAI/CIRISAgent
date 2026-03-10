@@ -63,11 +63,13 @@ def _extract_module_integrity(attestation: Dict[str, Any]) -> Dict[str, Any]:
 
 def _count_agreeing_sources(sources: Dict[str, Any]) -> int:
     """Count number of agreeing DNS/HTTPS sources."""
-    return sum([
-        sources.get("dns_us_valid", False),
-        sources.get("dns_eu_valid", False),
-        sources.get("https_valid", False),
-    ])
+    return sum(
+        [
+            sources.get("dns_us_valid", False),
+            sources.get("dns_eu_valid", False),
+            sources.get("https_valid", False),
+        ]
+    )
 
 
 def _build_file_integrity_fields(
@@ -92,6 +94,13 @@ def _build_file_integrity_fields(
         }
 
     per_file_results = file_integrity.get("per_file_results")
+
+    # Get unexpected files directly from file_integrity response (preferred)
+    # Falls back to computing from per_file_results if not available
+    unexpected_files = file_integrity.get("unexpected_files")
+    if unexpected_files is None and per_file_results:
+        unexpected_files = compute_files_unexpected_list(per_file_results)
+
     return {
         "file_integrity_ok": file_integrity.get("valid", False),
         "total_files": file_integrity.get("total_files"),
@@ -102,7 +111,7 @@ def _build_file_integrity_fields(
         "files_missing_count": file_integrity.get("files_missing_count"),
         "files_missing_list": compute_files_missing_list(per_file_results) if per_file_results else None,
         "files_failed_list": file_integrity.get("files_failed_list"),
-        "files_unexpected_list": compute_files_unexpected_list(per_file_results) if per_file_results else None,
+        "files_unexpected_list": unexpected_files,
         "mobile_excluded_count": compute_mobile_excluded_count(per_file_results) if per_file_results else None,
         "mobile_excluded_list": compute_mobile_excluded_list(per_file_results) if per_file_results else None,
     }
@@ -185,9 +194,7 @@ def _build_self_verification_fields(
 def _log_diagnostic_info(data: Dict[str, Any], attestation: Dict[str, Any]) -> None:
     """Log diagnostic information for debugging."""
     logger.info(f"[attestation] DIAGNOSTIC: verify_result[0] keys: {list(data.keys()) if data else 'None'}")
-    logger.info(
-        f"[attestation] DIAGNOSTIC: attestation keys: {list(attestation.keys()) if attestation else 'None'}"
-    )
+    logger.info(f"[attestation] DIAGNOSTIC: attestation keys: {list(attestation.keys()) if attestation else 'None'}")
     if attestation:
         logger.info(
             f"[attestation] DIAGNOSTIC: level={attestation.get('level')}, "

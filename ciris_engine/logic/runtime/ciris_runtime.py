@@ -1330,6 +1330,53 @@ class CIRISRuntime(ServicePropertyMixin):
         self._resume_started_at = None
         logger.info(f"[RESUME] Completed in {elapsed:.2f}s, _resume_in_progress=False")
 
+        # Log "agent_configured" audit event - this is the definitive first-run completion record
+        # It captures whether portal key was provisioned, identity template used, etc.
+        await self._log_agent_configured_event()
+
+    async def _log_agent_configured_event(self) -> None:
+        """Log audit event for first-run configuration completion.
+
+        This creates a tamper-evident record of the agent's initial configuration.
+        This event is logged AFTER resume_from_first_run completes, when the audit service
+        is fully initialized. Attestation may still be pending at this point.
+        """
+        if not self.audit_service:
+            logger.warning("[AUDIT] Cannot log agent_configured - audit_service not available")
+            return
+
+        try:
+            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+            from ciris_engine.schemas.audit import EventPayload
+
+            # Get signing key info - be defensive, attestation may not have completed
+            key_id = "unknown"
+            try:
+                signing_key = get_unified_signing_key()
+                key_id = signing_key.key_id if signing_key.has_key else "pending"
+            except Exception:
+                pass  # Key not available yet, that's fine
+
+            # Get identity info if available
+            identity_template = None
+            agent_id = None
+            if self.identity_manager:
+                if self.identity_manager.agent_template:
+                    identity_template = getattr(self.identity_manager.agent_template, "name", None)
+                if self.identity_manager.agent_identity:
+                    agent_id = getattr(self.identity_manager.agent_identity, "agent_id", None)
+
+            # Use EventPayload as expected by AuditServiceProtocol.log_event
+            audit_event = EventPayload(
+                action="agent_configured",
+                result=f"key_id={key_id}, template={identity_template or 'unknown'}, agent={agent_id or 'unknown'}",
+                service_name="resume_from_first_run",
+            )
+            await self.audit_service.log_event("agent_configured", audit_event)
+            logger.info(f"[AUDIT] agent_configured event logged (key_id={key_id})")
+        except Exception as e:
+            logger.warning(f"[AUDIT] Failed to log agent_configured event: {e}")
+
     async def _create_agent_processor_when_ready(self) -> None:
         """Create and start agent processor once all services are ready."""
         logger.info("Waiting for services to be ready before starting agent processor...")

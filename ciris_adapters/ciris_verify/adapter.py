@@ -23,14 +23,13 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
-from ciris_verify import CapabilityCheckResult, DisclosureSeverity, LicenseStatusResponse, MandatoryDisclosure
-
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.registries.base import Priority
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, RuntimeAdapterStatus
 from ciris_engine.schemas.runtime.enums import ServiceType
 
+from .ffi_bindings import CapabilityCheckResult, DisclosureSeverity, LicenseStatusResponse, MandatoryDisclosure
 from .service import CIRISVerifyService, VerificationConfig
 
 

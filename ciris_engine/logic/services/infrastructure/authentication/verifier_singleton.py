@@ -57,7 +57,7 @@ def get_verifier() -> Any:
             _init_error = None
 
         try:
-            from ciris_verify import CIRISVerify
+            from ciris_adapters.ciris_verify import CIRISVerify
 
             # CRITICAL: Ensure CIRIS_HOME is set before CIRISVerify init
             ciris_home = os.environ.get("CIRIS_HOME")
@@ -117,7 +117,7 @@ def get_verifier() -> Any:
 def _setup_logging(verifier: Any) -> None:
     """Set up Rust logging callback to forward to Python logging."""
     try:
-        from ciris_verify import setup_logging
+        from ciris_adapters.ciris_verify import setup_logging
 
         # Use TRACE level for maximum detail during attestation debugging
         setup_logging(verifier, level="TRACE")

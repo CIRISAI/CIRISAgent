@@ -145,12 +145,19 @@ class AuditViewModel(
                 logInfo(method, "Fetched ${entries.entries.size} entries, total=${entries.total}")
 
                 val displayEntries = entries.entries.map { entry ->
+                    // Debug: Log outcome extraction for troubleshooting
+                    val extractedOutcome = entry.context?.outcome ?: "unknown"
+                    logDebug(method, "Entry ${entry.id}: action=${entry.action}, " +
+                        "context.outcome=${entry.context?.outcome}, " +
+                        "context.result=${entry.context?.result}, " +
+                        "extractedOutcome=$extractedOutcome")
+
                     AuditEntryData(
                         id = entry.id,
                         action = entry.action,
                         actor = entry.actor,
                         timestamp = entry.timestamp ?: "",
-                        outcome = entry.context?.outcome ?: "unknown",
+                        outcome = extractedOutcome,
                         hashChain = entry.hashChain,
                         signature = entry.signature,
                         storageSources = entry.storageSources,
@@ -185,7 +192,13 @@ class AuditViewModel(
     }
 
     private fun formatContextJson(context: AuditContextApiData?): String {
-        if (context == null) return ""
+        val method = "formatContextJson"
+        if (context == null) {
+            logDebug(method, "Context is null, returning empty string")
+            return ""
+        }
+        logDebug(method, "Formatting context: description=${context.description}, " +
+            "result=${context.result}, metadata=${context.metadata?.keys}")
         return try {
             buildString {
                 // Primary action details
@@ -217,7 +230,15 @@ class AuditViewModel(
                     if (meta.isNotEmpty()) {
                         appendLine("Parameters:")
                         meta.forEach { (key, value) ->
-                            appendLine("  $key: $value")
+                            // Extract actual value from JsonPrimitive to avoid escaped quotes
+                            val displayValue = when {
+                                value is kotlinx.serialization.json.JsonPrimitive && value.isString ->
+                                    value.content // Get string content without quotes
+                                value is kotlinx.serialization.json.JsonPrimitive ->
+                                    value.content // Numbers, booleans, etc.
+                                else -> value.toString() // Arrays/objects as JSON
+                            }
+                            appendLine("  $key: $displayValue")
                         }
                     }
                 }

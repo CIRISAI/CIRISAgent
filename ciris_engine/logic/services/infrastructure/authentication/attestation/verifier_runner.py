@@ -73,7 +73,7 @@ def _get_verifier_version(verifier: Any) -> str:
         if callable(version):
             version = version()
         if version is None:
-            import ciris_verify
+            import ciris_adapters.ciris_verify as ciris_verify
 
             version = getattr(ciris_verify, "__version__", "unknown")
         return str(version) if version else "unknown"

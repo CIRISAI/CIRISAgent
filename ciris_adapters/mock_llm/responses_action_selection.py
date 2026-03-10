@@ -24,6 +24,7 @@ def _extract_text_content(content: Any) -> str:
         return " ".join(text_parts)
     return str(content) if content else ""
 
+
 from ciris_engine.logic.dma.tsaspdma import TSASPDMALLMResult
 from ciris_engine.schemas.actions import (
     DeferParams,
@@ -1606,14 +1607,14 @@ def tsaspdma_llm_result(
         return TSASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
             rationale="TSASPDMA: Documentation review revealed ambiguity requiring user clarification.",
-            parameters={"content": "TSASPDMA: I need clarification before proceeding with this tool."},
+            tool_parameters={"content": "TSASPDMA: I need clarification before proceeding with this tool."},
         )
     elif "$tsaspdma_ponder" in user_input:
         logger.info("[MOCK_LLM] TSASPDMA: Switching to PONDER to reconsider (test mode)")
         return TSASPDMALLMResult(
             selected_action=HandlerActionType.PONDER,
             rationale="TSASPDMA: After reviewing documentation, reconsidering if this is the right approach.",
-            parameters={"questions": ["Would a different tool be more appropriate?", "What are the gotchas?"]},
+            tool_parameters={"questions": ["Would a different tool be more appropriate?", "What are the gotchas?"]},
         )
 
     # Extract tool name and parameters from the TSASPDMA prompt
@@ -1730,5 +1731,5 @@ def tsaspdma_llm_result(
     return TSASPDMALLMResult(
         selected_action=HandlerActionType.TOOL,
         rationale=f"TSASPDMA: Reviewed documentation for '{tool_name}'. Proceeding with tool execution.",
-        parameters=tool_params,
+        tool_parameters=tool_params,
     )

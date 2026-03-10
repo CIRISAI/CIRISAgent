@@ -4,7 +4,7 @@ All types use Pydantic for validation and follow CIRIS typing conventions.
 """
 
 from enum import IntEnum, Enum
-from typing import Optional, List, Set
+from typing import Dict, List, Optional, Set
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -262,7 +262,7 @@ class FileIntegrityResult(BaseModel):
     files_unexpected: int = Field(default=0, description="Unexpected files not in manifest")
     failure_reason: str = Field(default="", description="Opaque failure category")
     # Per-file results (v0.8.5+)
-    per_file_results: dict = Field(default_factory=dict, description="file_path -> FileCheckStatus")
+    per_file_results: Dict[str, str] = Field(default_factory=dict, description="file_path -> FileCheckStatus")
     unexpected_files: List[str] = Field(default_factory=list, description="List of unexpected file paths")
 
     def get_failed_files(self) -> List[str]:
@@ -317,7 +317,7 @@ class PythonModuleHashes(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     total_hash: str = Field(..., description="SHA-256 hex of all module hashes concatenated")
-    module_hashes: dict = Field(default_factory=dict, description="module_name -> SHA-256 hex")
+    module_hashes: Dict[str, str] = Field(default_factory=dict, description="module_name -> SHA-256 hex")
     module_count: int = Field(default=0, description="Number of modules hashed")
     agent_version: str = Field(default="", description="Agent version that generated these hashes")
     computed_at: int = Field(default=0, description="Unix timestamp when hashes were computed")
@@ -339,7 +339,7 @@ class PythonIntegrityResult(BaseModel):
     expected_total_hash: Optional[str] = Field(default=None, description="Expected hash from manifest")
     actual_total_hash: str = Field(default="", description="Actual total hash from agent")
     verification_mode: str = Field(default="", description="total_hash_only, individual_modules, or record_only")
-    failed_modules: dict = Field(default_factory=dict, description="Modules that failed: path -> reason")
-    unexpected_modules: list = Field(default_factory=list, description="Modules not in registry manifest")
-    missing_modules: list = Field(default_factory=list, description="Modules in manifest but not provided")
+    failed_modules: Dict[str, str] = Field(default_factory=dict, description="Modules that failed: path -> reason")
+    unexpected_modules: List[str] = Field(default_factory=list, description="Modules not in registry manifest")
+    missing_modules: List[str] = Field(default_factory=list, description="Modules in manifest but not provided")
     error: Optional[str] = Field(default=None, description="Error message if verification failed")

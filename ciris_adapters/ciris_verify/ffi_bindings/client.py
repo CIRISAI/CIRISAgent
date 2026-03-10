@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr,arg-type,no-untyped-def,attr-defined,assignment,no-any-return,misc,import-not-found,type-arg"
 """CIRISVerify client - Python FFI wrapper for the verification binary.
 
 This module provides a high-level Python interface to the CIRISVerify

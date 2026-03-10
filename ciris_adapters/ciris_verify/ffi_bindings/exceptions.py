@@ -1,5 +1,7 @@
 """Exception types for CIRISVerify Python bindings."""
 
+from typing import Optional
+
 
 class CIRISVerifyError(Exception):
     """Base exception for all CIRISVerify errors."""
@@ -40,7 +42,7 @@ class TimeoutError(CIRISVerifyError):
 
 class CommunicationError(CIRISVerifyError):
     """Error communicating with CIRISVerify binary."""
-    def __init__(self, message: str, cause: Exception = None):
+    def __init__(self, message: str, cause: Optional[Exception] = None):
         self.cause = cause
         super().__init__(message)
 

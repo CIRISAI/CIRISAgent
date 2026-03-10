@@ -56,7 +56,7 @@ from .exceptions import (
 )
 
 
-def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str = "ciris_verify"):
+def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str = "ciris_verify") -> None:
     """Configure CIRISVerify to forward internal logs to Python logging.
 
     Args:
@@ -96,7 +96,7 @@ def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str =
     }
     rust_level = rust_level_map.get(level.upper(), 3)
 
-    def log_callback(lvl: int, target: str, message: str):
+    def log_callback(lvl: int, target: str, message: str) -> None:
         py_level = level_map.get(lvl, _logging.DEBUG)
         logger.log(py_level, "[%s] %s", target, message)
 

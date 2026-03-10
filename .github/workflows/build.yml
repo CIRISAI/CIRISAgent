@@ -649,3 +649,100 @@ jobs:
           echo ""
           echo "CIRISManager will handle the deployment orchestration."
           echo "Agents will be notified based on the canary deployment strategy."
+
+  # Build Android release APK, create GitHub release with tag
+  android-release:
+    name: Android Release
+    needs: [build, register-build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
+    permissions:
+      contents: write  # Required for creating releases and tags
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Get version from constants
+        id: version
+        run: |
+          VERSION=$(grep "^CIRIS_VERSION = " ciris_engine/constants.py | cut -d'"' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Update Android version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BUILD_GRADLE="mobile/androidApp/build.gradle"
+
+          # Get current versionCode and increment
+          CURRENT_CODE=$(grep "versionCode" "$BUILD_GRADLE" | head -1 | grep -oE '[0-9]+')
+          NEW_CODE=$((CURRENT_CODE + 1))
+
+          echo "Updating Android version:"
+          echo "  versionName: $VERSION"
+          echo "  versionCode: $CURRENT_CODE -> $NEW_CODE"
+
+          # Update versionCode
+          sed -i "s/versionCode $CURRENT_CODE/versionCode $NEW_CODE/" "$BUILD_GRADLE"
+
+          # Update versionName
+          sed -i "s/versionName \"[^\"]*\"/versionName \"$VERSION\"/" "$BUILD_GRADLE"
+
+          # Verify changes
+          grep -E "versionCode|versionName" "$BUILD_GRADLE" | head -2
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.CIRIS_KEYSTORE_BASE64 }}" | base64 -d > /tmp/ciris-release-key.jks
+
+      - name: Build release APK
+        env:
+          CIRIS_KEYSTORE_PATH: /tmp/ciris-release-key.jks
+          CIRIS_KEYSTORE_PASSWORD: ${{ secrets.CIRIS_KEYSTORE_PASSWORD }}
+          CIRIS_KEY_PASSWORD: ${{ secrets.CIRIS_KEY_PASSWORD }}
+          CIRIS_KEY_ALIAS: ciris-release-key
+        run: |
+          cd mobile
+          ./gradlew :androidApp:syncPythonSources
+          ./gradlew :androidApp:assembleRelease
+
+          # Copy APK with version name
+          VERSION="${{ steps.version.outputs.version }}"
+          cp androidApp/build/outputs/apk/release/androidApp-release.apk \
+             androidApp/build/outputs/apk/release/CIRIS-$VERSION.apk
+
+          ls -lh androidApp/build/outputs/apk/release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: CIRIS Agent v${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            mobile/androidApp/build/outputs/apk/release/CIRIS-${{ steps.version.outputs.version }}.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add mobile/androidApp/build.gradle
+          git commit -m "chore(mobile): bump Android versionCode [skip ci]" || echo "No changes to commit"
+          git push origin main || echo "Push failed - may need manual intervention"

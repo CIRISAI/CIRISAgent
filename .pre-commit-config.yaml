@@ -60,20 +60,20 @@ repos:
         always_run: false
         stages: [manual]
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+  # Mypy - Type checking (informational, doesn't block)
+  - repo: local
     hooks:
-      - id: mypy
-        args: ['--config-file=mypy.ini', '--ignore-missing-imports']
-        additional_dependencies: [
-          'pydantic>=2.0',
-          'types-PyYAML',
-          'types-requests',
-        ]
+      - id: mypy-check
+        name: mypy (type checking - informational)
+        entry: python tools/dev/mypy_precommit.py
+        language: python
+        types: [python]
+        files: '^(ciris_engine|ciris_adapters)/.*\.py$'
         exclude: '^(tests|tools|scripts|docs|main\.py|grace\.py)'
-        # Don't block commits
+        pass_filenames: true
         always_run: false
-        stages: [manual]
+        stages: [pre-commit]
+        verbose: true
 
   # Custom CIRIS checks - Informational only
   - repo: local

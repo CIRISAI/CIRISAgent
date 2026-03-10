@@ -361,7 +361,7 @@ class ComponentBuilder:
         Returns:
             CognitiveStateBehaviors if found in graph, None otherwise
         """
-        from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
+        from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors, WakeupBehavior
 
         logger.info("[COGNITIVE_LOAD] Loading cognitive behaviors from graph...")
 
@@ -387,8 +387,10 @@ class ComponentBuilder:
         except Exception as e:
             logger.warning(f"[COGNITIVE_LOAD] Failed to get cognitive behaviors from graph: {e}")
 
-        # Fallback: return default (full Accord compliance)
+        # Fallback: ally-style defaults (wakeup disabled for seamless UX)
         logger.info(
-            "[COGNITIVE_LOAD] No cognitive behaviors in graph - using Accord-compliant defaults (wakeup.enabled=True)"
+            "[COGNITIVE_LOAD] No cognitive behaviors in graph - using ally defaults (wakeup.enabled=False)"
         )
-        return CognitiveStateBehaviors()
+        return CognitiveStateBehaviors(
+            wakeup=WakeupBehavior(enabled=False, rationale="No config in graph - ally-style seamless startup"),
+        )

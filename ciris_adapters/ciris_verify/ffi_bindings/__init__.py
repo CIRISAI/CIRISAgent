@@ -29,34 +29,34 @@ Logging:
 import logging as _logging
 
 from .client import CIRISVerify, MockCIRISVerify
-from .types import (
-    LicenseStatus,
-    LicenseTier,
-    LicenseDetails,
-    MandatoryDisclosure,
-    DisclosureSeverity,
-    LicenseStatusResponse,
-    CapabilityCheckResult,
-    FileIntegrityResult,
-    FileCheckStatus,
-    BinaryIntegrityStatus,
-    HardwareType,
-    ValidationStatus,
-    PythonModuleHashes,
-    PythonIntegrityResult,
-)
 from .exceptions import (
-    CIRISVerifyError,
+    AttestationInProgressError,
     BinaryNotFoundError,
     BinaryTamperedError,
-    VerificationFailedError,
-    TimeoutError,
+    CIRISVerifyError,
     CommunicationError,
-    AttestationInProgressError,
+    TimeoutError,
+    VerificationFailedError,
+)
+from .types import (
+    BinaryIntegrityStatus,
+    CapabilityCheckResult,
+    DisclosureSeverity,
+    FileCheckStatus,
+    FileIntegrityResult,
+    HardwareType,
+    LicenseDetails,
+    LicenseStatus,
+    LicenseStatusResponse,
+    LicenseTier,
+    MandatoryDisclosure,
+    PythonIntegrityResult,
+    PythonModuleHashes,
+    ValidationStatus,
 )
 
 
-def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str = "ciris_verify"):
+def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str = "ciris_verify") -> None:
     """Configure CIRISVerify to forward internal logs to Python logging.
 
     Args:
@@ -78,11 +78,11 @@ def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str =
 
     # Map Rust levels to Python logging levels
     level_map = {
-        1: _logging.ERROR,    # ERROR
+        1: _logging.ERROR,  # ERROR
         2: _logging.WARNING,  # WARN
-        3: _logging.INFO,     # INFO
-        4: _logging.DEBUG,    # DEBUG
-        5: _logging.DEBUG,    # TRACE (Python has no TRACE, use DEBUG)
+        3: _logging.INFO,  # INFO
+        4: _logging.DEBUG,  # DEBUG
+        5: _logging.DEBUG,  # TRACE (Python has no TRACE, use DEBUG)
     }
 
     # Map level string to Rust level int
@@ -96,7 +96,7 @@ def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str =
     }
     rust_level = rust_level_map.get(level.upper(), 3)
 
-    def log_callback(lvl: int, target: str, message: str):
+    def log_callback(lvl: int, target: str, message: str) -> None:
         py_level = level_map.get(lvl, _logging.DEBUG)
         logger.log(py_level, "[%s] %s", target, message)
 

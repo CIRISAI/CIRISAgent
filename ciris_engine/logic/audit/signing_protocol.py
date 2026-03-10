@@ -266,7 +266,7 @@ class CIRISVerifySigner(BaseSigner):
         # (may not exist in all versions of ciris_verify)
         AttestationInProgressError: type | None = None
         try:
-            import ciris_verify
+            import ciris_adapters.ciris_verify as ciris_verify
 
             if hasattr(ciris_verify, "AttestationInProgressError"):
                 AttestationInProgressError = ciris_verify.AttestationInProgressError

@@ -34,7 +34,12 @@ MOBILE_ROOT = REPO_ROOT / "mobile"
 
 # Android paths
 JNI_LIBS_DIR = MOBILE_ROOT / "androidApp" / "src" / "main" / "jniLibs"
-ANDROID_PYTHON_DIR = MOBILE_ROOT / "androidApp" / "src" / "main" / "python" / "ciris_verify"
+
+# Canonical FFI bindings location (used by both mobile and server)
+FFI_BINDINGS_DIR = REPO_ROOT / "ciris_adapters" / "ciris_verify" / "ffi_bindings"
+
+# Legacy path (deprecated - now synced from FFI_BINDINGS_DIR)
+ANDROID_PYTHON_DIR = FFI_BINDINGS_DIR
 
 # iOS paths
 IOS_APP_DIR = MOBILE_ROOT / "iosApp"
@@ -240,16 +245,26 @@ def convert_static_to_dynamic(static_lib: Path, output_dylib: Path, target: str)
     print(f"  {target}: linking with deployment target {min_version}")
 
     cmd = [
-        "clang", "-shared",
-        "-arch", "arm64",
-        "-isysroot", sdk_path,
-        "-target", clang_target,
-        "-Wl,-all_load", str(static_lib),
-        "-o", str(output_dylib),
-        "-framework", "CoreFoundation",
-        "-framework", "Security",
-        "-framework", "SystemConfiguration",
-        "-install_name", "@rpath/CIRISVerify.framework/CIRISVerify",
+        "clang",
+        "-shared",
+        "-arch",
+        "arm64",
+        "-isysroot",
+        sdk_path,
+        "-target",
+        clang_target,
+        "-Wl,-all_load",
+        str(static_lib),
+        "-o",
+        str(output_dylib),
+        "-framework",
+        "CoreFoundation",
+        "-framework",
+        "Security",
+        "-framework",
+        "SystemConfiguration",
+        "-install_name",
+        "@rpath/CIRISVerify.framework/CIRISVerify",
     ]
     result = run_cmd(cmd, check=False)
     if result.returncode != 0:
@@ -342,10 +357,14 @@ def update_ios_from_release(version: str, extract_dir: Path, checksums: dict[str
             current_id = run_cmd(["otool", "-D", str(fw_dir / "CIRISVerify")], check=False)
             needs_id_fix = expected_id not in (current_id.stdout or "")
             if needs_id_fix:
-                run_cmd([
-                    "install_name_tool", "-id", expected_id,
-                    str(fw_dir / "CIRISVerify"),
-                ])
+                run_cmd(
+                    [
+                        "install_name_tool",
+                        "-id",
+                        expected_id,
+                        str(fw_dir / "CIRISVerify"),
+                    ]
+                )
                 print(f"  {label}: applied install_name_tool")
             else:
                 print(f"  {label}: install name already correct, skipping (preserves hash)")
@@ -454,11 +473,14 @@ def build_ios_xcframework(ciris_verify_root: Path, version: str) -> None:
             shutil.copy2(dylib, fw_dir / "CIRISVerify")
 
             # Set install name for embedded framework
-            run_cmd([
-                "install_name_tool", "-id",
-                "@rpath/CIRISVerify.framework/CIRISVerify",
-                str(fw_dir / "CIRISVerify"),
-            ])
+            run_cmd(
+                [
+                    "install_name_tool",
+                    "-id",
+                    "@rpath/CIRISVerify.framework/CIRISVerify",
+                    str(fw_dir / "CIRISVerify"),
+                ]
+            )
 
             # Copy header
             if bridging_header:
@@ -698,9 +720,7 @@ def ensure_device_fwork_stubs() -> None:
     print("\nEnsuring device .fwork stubs exist...")
     count = 0
     for fwork in IOS_RESOURCES_DIR.rglob("*.cpython-310-iphonesimulator.fwork"):
-        device_fwork = fwork.with_name(
-            fwork.name.replace("iphonesimulator", "iphoneos")
-        )
+        device_fwork = fwork.with_name(fwork.name.replace("iphonesimulator", "iphoneos"))
         if not device_fwork.exists():
             shutil.copy2(fwork, device_fwork)
             count += 1
@@ -735,7 +755,10 @@ def update_python_bindings(version: str, tmpdir: Path) -> None:
     """Download and extract Python bindings from PyPI."""
     print(f"\nUpdating Python bindings from PyPI...")
 
-    result = run_cmd([sys.executable, "-m", "pip", "download", f"ciris-verify=={version}", "--no-deps", "-d", str(tmpdir)], check=False)
+    result = run_cmd(
+        [sys.executable, "-m", "pip", "download", f"ciris-verify=={version}", "--no-deps", "-d", str(tmpdir)],
+        check=False,
+    )
 
     wheel_file = None
     for f in tmpdir.iterdir():

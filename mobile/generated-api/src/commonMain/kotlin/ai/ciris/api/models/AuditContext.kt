@@ -35,6 +35,7 @@ import kotlinx.serialization.encoding.*
  * @param userAgent
  * @param result
  * @param error
+ * @param outcome Action outcome (success, failure, etc.)
  * @param metadata
  */
 @Serializable
@@ -62,6 +63,8 @@ data class AuditContext (
     @SerialName(value = "result") val result: kotlin.String? = null,
 
     @SerialName(value = "error") val error: kotlin.String? = null,
+
+    @SerialName(value = "outcome") val outcome: kotlin.String? = null,
 
     @SerialName(value = "metadata") val metadata: kotlin.collections.Map<kotlin.String, ResponseGetSystemStatusV1TransparencyStatusGetValue>? = null
 

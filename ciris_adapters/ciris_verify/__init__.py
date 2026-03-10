@@ -1,7 +1,7 @@
 """CIRISVerify adapter package.
 
 This adapter integrates CIRISVerify license verification into the CIRIS agent.
-The core ciris_verify bindings are provided by the 'ciris-verify' PyPI package.
+The FFI bindings are bundled in the ffi_bindings subpackage.
 
 Usage:
     from ciris_adapters.ciris_verify import CIRISVerifyAdapter
@@ -10,8 +10,13 @@ Usage:
     await adapter.start()
 """
 
-# Re-export from the ciris-verify PyPI package for convenience
-from ciris_verify import (  # noqa: F401
+# Export adapter-specific classes
+from .adapter import CIRISVerifyAdapter  # noqa: F401
+
+# Import from bundled FFI bindings
+from .ffi_bindings import (  # noqa: F401
+    AttestationInProgressError,
+    BinaryIntegrityStatus,
     BinaryNotFoundError,
     BinaryTamperedError,
     CapabilityCheckResult,
@@ -19,6 +24,7 @@ from ciris_verify import (  # noqa: F401
     CIRISVerifyError,
     CommunicationError,
     DisclosureSeverity,
+    FileCheckStatus,
     FileIntegrityResult,
     HardwareType,
     LicenseDetails,
@@ -27,31 +33,33 @@ from ciris_verify import (  # noqa: F401
     LicenseTier,
     MandatoryDisclosure,
     MockCIRISVerify,
+    PythonIntegrityResult,
+    PythonModuleHashes,
     TimeoutError,
     ValidationStatus,
     VerificationFailedError,
     get_library_version,
+    setup_logging,
 )
-
-# Export adapter-specific classes
-from .adapter import CIRISVerifyAdapter  # noqa: F401
 from .service import CIRISVerifyService, VerificationConfig  # noqa: F401
 
 # Alias for adapter loading code (looks for 'Adapter' class)
 Adapter = CIRISVerifyAdapter
 
-# Fallback version - actual version should be queried via get_library_version()
-__version__ = "0.9.7"
+# Version from FFI bindings
+from .ffi_bindings import __version__
+
 __all__ = [
     # Adapter exports
     "Adapter",
     "CIRISVerifyAdapter",
     "CIRISVerifyService",
     "VerificationConfig",
-    # Re-exports from ciris-verify package
+    # Re-exports from FFI bindings
     "CIRISVerify",
     "MockCIRISVerify",
     "get_library_version",
+    "setup_logging",
     "LicenseStatus",
     "LicenseTier",
     "LicenseDetails",
@@ -60,12 +68,17 @@ __all__ = [
     "LicenseStatusResponse",
     "CapabilityCheckResult",
     "FileIntegrityResult",
+    "FileCheckStatus",
+    "BinaryIntegrityStatus",
     "HardwareType",
     "ValidationStatus",
+    "PythonModuleHashes",
+    "PythonIntegrityResult",
     "CIRISVerifyError",
     "BinaryNotFoundError",
     "BinaryTamperedError",
     "VerificationFailedError",
     "TimeoutError",
     "CommunicationError",
+    "AttestationInProgressError",
 ]

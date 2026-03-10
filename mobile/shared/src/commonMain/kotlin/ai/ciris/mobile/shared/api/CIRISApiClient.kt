@@ -2807,49 +2807,56 @@ class CIRISApiClient(
 
                 AuditEntriesData(
                     entries = data.propertyEntries.map { entry ->
+                        // Debug: Log raw entry context for audit troubleshooting
+                        val ctx = entry.context
+                        logDebug(method, "Entry ${entry.id}: action=${entry.action}, " +
+                            "ctx.outcome=${ctx.outcome}, ctx.result=${ctx.result}, ctx.error=${ctx.error}")
+
+                        // Use outcome from API response (preferred), fall back to inference
+                        val finalOutcome = ctx.outcome ?: ctx.result?.let { result ->
+                            when {
+                                result.contains("success", ignoreCase = true) -> "success"
+                                result.contains("fail", ignoreCase = true) -> "failure"
+                                result.contains("error", ignoreCase = true) -> "failure"
+                                else -> result
+                            }
+                        } ?: if (ctx.error != null) "failure" else null
+
+                        logDebug(method, "Entry ${entry.id}: finalOutcome=$finalOutcome")
+
                         AuditEntryApiData(
                             id = entry.id,
                             action = entry.action,
                             actor = entry.actor,
                             timestamp = entry.timestamp ?: "",
-                            context = entry.context.let { ctx ->
-                                AuditContextApiData(
-                                    entityId = ctx.entityId,
-                                    entityType = ctx.entityType,
-                                    operation = ctx.operation,
-                                    description = ctx.description,
-                                    requestId = ctx.requestId,
-                                    correlationId = ctx.correlationId,
-                                    userId = ctx.userId,
-                                    ipAddress = ctx.ipAddress,
-                                    userAgent = ctx.userAgent,
-                                    result = ctx.result,
-                                    error = ctx.error,
-                                    // Infer outcome from result field if available
-                                    outcome = ctx.result?.let { result ->
-                                        when {
-                                            result.contains("success", ignoreCase = true) -> "success"
-                                            result.contains("fail", ignoreCase = true) -> "failure"
-                                            result.contains("error", ignoreCase = true) -> "failure"
-                                            else -> result
-                                        }
-                                    },
-                                    // Parse metadata (contains tool parameters, etc.)
-                                    metadata = try {
-                                        ctx.metadata?.let { meta ->
-                                            kotlinx.serialization.json.buildJsonObject {
-                                                (meta as? Map<*, *>)?.forEach { (key, value) ->
-                                                    if (key is String && value != null) {
-                                                        put(key, kotlinx.serialization.json.JsonPrimitive(value.toString()))
-                                                    }
+                            context = AuditContextApiData(
+                                entityId = ctx.entityId,
+                                entityType = ctx.entityType,
+                                operation = ctx.operation,
+                                description = ctx.description,
+                                requestId = ctx.requestId,
+                                correlationId = ctx.correlationId,
+                                userId = ctx.userId,
+                                ipAddress = ctx.ipAddress,
+                                userAgent = ctx.userAgent,
+                                result = ctx.result,
+                                error = ctx.error,
+                                outcome = finalOutcome,
+                                // Parse metadata (contains tool parameters, etc.)
+                                metadata = try {
+                                    ctx.metadata?.let { meta ->
+                                        kotlinx.serialization.json.buildJsonObject {
+                                            (meta as? Map<*, *>)?.forEach { (key, value) ->
+                                                if (key is String && value != null) {
+                                                    put(key, kotlinx.serialization.json.JsonPrimitive(value.toString()))
                                                 }
                                             }
                                         }
-                                    } catch (e: Exception) {
-                                        null // Fallback if metadata parsing fails
                                     }
-                                )
-                            },
+                                } catch (e: Exception) {
+                                    null // Fallback if metadata parsing fails
+                                }
+                            ),
                             signature = entry.signature,
                             hashChain = entry.hashChain,
                             storageSources = entry.storageSources

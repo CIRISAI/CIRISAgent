@@ -11806,6 +11806,18 @@
             "title": "Error",
             "description": "Error message if failed"
           },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome",
+            "description": "Action outcome (success, failure, etc.)"
+          },
           "metadata": {
             "anyOf": [
               {

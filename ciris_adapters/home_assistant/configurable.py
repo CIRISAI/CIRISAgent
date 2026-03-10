@@ -33,10 +33,10 @@ logger = logging.getLogger(__name__)
 # Zeroconf is lazy-loaded to avoid blocking startup (can take 60s+ to import)
 # See _get_zeroconf_classes() for lazy loading
 ZEROCONF_AVAILABLE: Optional[bool] = None  # None = not checked yet
-_zeroconf_classes: Optional[tuple] = None
+_zeroconf_classes: Optional[Tuple[Any, Any, Any]] = None
 
 
-def _get_zeroconf_classes() -> Optional[tuple]:
+def _get_zeroconf_classes() -> Optional[Tuple[Any, Any, Any]]:
     """Lazy-load zeroconf classes to avoid blocking module import.
 
     Returns (ServiceBrowser, ServiceListener, Zeroconf) tuple if available, else None.

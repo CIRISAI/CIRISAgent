@@ -6,7 +6,12 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
-from ciris_verify import (
+from pydantic import BaseModel, Field
+
+# Import singleton - CRITICAL: Only one CIRISVerify instance should exist
+from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier, has_verifier
+
+from .ffi_bindings import (
     BinaryNotFoundError,
     BinaryTamperedError,
     CapabilityCheckResult,
@@ -16,10 +21,6 @@ from ciris_verify import (
     LicenseTier,
     MandatoryDisclosure,
 )
-from pydantic import BaseModel, Field
-
-# Import singleton - CRITICAL: Only one CIRISVerify instance should exist
-from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier, has_verifier
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +103,7 @@ class CIRISVerifyService:
                 logger.debug(log_msg)
 
         try:
-            self._client.set_log_callback(log_callback, level=callback_level)  # type: ignore[attr-defined]
+            self._client.set_log_callback(log_callback, level=callback_level)
             self._log_callback_enabled = True
             logger.debug("CIRISVerify log callback enabled at level %d", callback_level)
         except Exception as e:

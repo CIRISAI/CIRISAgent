@@ -10,6 +10,7 @@ Usage:
 
 This tool updates version in:
     - ciris_engine/constants.py (main version source)
+    - mobile/androidApp/build.gradle (Android versionCode + versionName)
     - CIRISGUI/apps/agui/package.json (GUI version)
     - CIRISGUI/apps/agui/lib/ciris-sdk/version.ts (SDK version)
     - README.md (automatically switches between STABLE/BETA RELEASE based on version stage)
@@ -144,6 +145,28 @@ def bump_version(bump_type: str):
         with open(readme_file, "w") as f:
             f.write(readme_content)
         print(f"  Updated README.md to {release_type} {new_version}")
+
+    # Update Android build.gradle
+    android_gradle_file = Path(__file__).parent.parent.parent / "mobile" / "androidApp" / "build.gradle"
+    if android_gradle_file.exists():
+        with open(android_gradle_file, "r") as f:
+            gradle_content = f.read()
+
+        # Extract and increment versionCode
+        version_code_match = re.search(r"versionCode (\d+)", gradle_content)
+        if version_code_match:
+            old_code = int(version_code_match.group(1))
+            new_code = old_code + 1
+            gradle_content = re.sub(r"versionCode \d+", f"versionCode {new_code}", gradle_content)
+            print(f"  Updated Android versionCode: {old_code} -> {new_code}")
+
+        # Update versionName (use version without stage suffix for cleaner display)
+        display_version = f"{major}.{minor}.{patch}"
+        gradle_content = re.sub(r'versionName "[^"]+"', f'versionName "{display_version}"', gradle_content)
+        print(f"  Updated Android versionName: {display_version}")
+
+        with open(android_gradle_file, "w") as f:
+            f.write(gradle_content)
 
     print(f"Version bumped to {new_version}")
     return True

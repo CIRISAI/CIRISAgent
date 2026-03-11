@@ -598,8 +598,8 @@ data class VerifyStatusResponse(
         // L3: Registry cross-validation (need majority agreement - 2+ sources)
         val sourcesOk = (sourcesAgreeing ?: 0) >= 2
         val l3Passed = l2Passed && sourcesOk
-        // L4: File integrity check
-        val l4Passed = l3Passed && fileIntegrityOk
+        // L4: Module integrity check (excludes server-only files correctly)
+        val l4Passed = l3Passed && moduleIntegrityOk
         // L5: Portal key active AND audit trail intact
         val portalKeyOk = registryKeyStatus?.contains("active", ignoreCase = true) == true
         val l5Passed = l4Passed && portalKeyOk && auditOk

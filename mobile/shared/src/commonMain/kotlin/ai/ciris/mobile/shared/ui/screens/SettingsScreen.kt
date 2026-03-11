@@ -1706,10 +1706,10 @@ private fun TrustSecurityCard(
                             }
                         }
 
-                        // Level 4: File Integrity - Tripwire-style hash verification
-                        // If any lower level failed, we can't vouch for file integrity
+                        // Level 4: Module Integrity - Cross-validated hash verification
+                        // Uses moduleIntegrityOk which correctly excludes server-only files
                         val anyLowerLevelFailed = level1Failed || level2Failed || !level3Passed
-                        val level4Passed = status.fileIntegrityOk
+                        val level4Passed = status.moduleIntegrityOk
                         val level4Unverified = anyLowerLevelFailed && level4Passed
                         val level4Color = when {
                             !level4Passed -> Color(0xFFDC2626)  // Red: failed

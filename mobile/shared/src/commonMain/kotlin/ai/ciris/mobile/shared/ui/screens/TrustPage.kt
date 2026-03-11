@@ -278,8 +278,8 @@ private fun TrustSummaryCard(
     val portalKeyOk = status.registryKeyStatus?.contains("active", ignoreCase = true) == true
     val isPartial = when (level) {
         1 -> status.envOk || status.playIntegrityOk  // Some L2 checks pass
-        2 -> sourcesOk || status.fileIntegrityOk  // Some L3/L4 checks pass
-        3 -> status.fileIntegrityOk  // L4 passes
+        2 -> sourcesOk || status.moduleIntegrityOk  // Some L3/L4 checks pass
+        3 -> status.moduleIntegrityOk  // L4 passes
         4 -> status.auditOk || portalKeyOk  // Some L5 checks pass
         else -> false
     }

@@ -256,13 +256,16 @@ async def migrate_cognitive_state_behaviors_to_graph(runtime: Any, force_from_te
     # Try to get cognitive behaviors from template
     cognitive_behaviors = get_cognitive_behaviors_from_template(runtime)
 
-    # If no template available, use Accord-compliant defaults (all states enabled)
-    # This applies to fresh installs without templates (e.g., QA testing, API-only mode)
+    # If no template available, use ally-style defaults (wakeup disabled for seamless UX).
+    # This applies to non_ciris templates, fresh installs without templates, QA testing, API-only mode.
+    # Templates that want full wakeup ceremony (e.g., Echo) must explicitly set wakeup.enabled=True.
     if not cognitive_behaviors:
-        from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
+        from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors, WakeupBehavior
 
-        logger.info("[COGNITIVE_MIGRATION] No template - using Accord-compliant defaults (all states enabled)")
-        cognitive_behaviors = CognitiveStateBehaviors()
+        logger.info("[COGNITIVE_MIGRATION] No template - using ally defaults (wakeup disabled)")
+        cognitive_behaviors = CognitiveStateBehaviors(
+            wakeup=WakeupBehavior(enabled=False, rationale="No template loaded - ally-style seamless startup"),
+        )
 
     try:
         await save_cognitive_behaviors_to_graph(config_service, cognitive_behaviors)

@@ -187,7 +187,7 @@ class TestGetCognitiveBehaviorsFromGraph:
         # Should return default CognitiveStateBehaviors
         assert result is not None
         assert isinstance(result, CognitiveStateBehaviors)
-        assert result.wakeup.enabled is True  # Default
+        assert result.wakeup.enabled is False  # Ally-style default (seamless UX)
 
     @pytest.mark.asyncio
     async def test_returns_default_on_exception(self):

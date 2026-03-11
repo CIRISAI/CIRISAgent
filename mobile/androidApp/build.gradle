@@ -140,6 +140,7 @@ android {
 task syncPythonSources(type: Sync) {
     description = "Sync ciris_engine and ciris_adapters from main repo"
 
+    // Always run fresh - delete stale files not in source
     from("../../ciris_engine") {
         into "ciris_engine"
     }
@@ -160,6 +161,22 @@ task syncPythonSources(type: Sync) {
     // Exclude adapters that depend on libraries not available on Android
     // Discord adapter requires discord.py which has no Android wheels
     exclude "**/adapters/discord/**"
+
+    // Force re-sync every build to ensure freshness
+    outputs.upToDateWhen { false }
+
+    doFirst {
+        // Clean target directory to remove any stale files
+        def targetDir = file("${buildDir}/python-src")
+        if (targetDir.exists()) {
+            println "Cleaning stale Python sources from ${targetDir}"
+            delete targetDir
+        }
+    }
+
+    doLast {
+        println "Synced fresh ciris_engine and ciris_adapters to ${buildDir}/python-src"
+    }
 }
 
 // Make Python tasks depend on sync

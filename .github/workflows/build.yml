@@ -729,7 +729,7 @@ jobs:
           ls -lh androidApp/build/outputs/apk/debug/
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@26994186c0ac3ef5cae75ac16aa32e8153525f77  # v1
         with:
           tag_name: v${{ steps.version.outputs.version }}
           target_commitish: ${{ steps.commit_version.outputs.commit_sha }}

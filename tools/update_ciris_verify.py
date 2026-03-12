@@ -538,13 +538,17 @@ def build_ios_xcframework(ciris_verify_root: Path, version: str) -> None:
 
 
 def update_ios_python_bindings(source_dir: Path) -> None:
-    """Copy Python bindings to iOS Resources.
+    """Copy Python bindings to iOS Resources. Skips if Resources directory doesn't exist.
 
     Args:
         source_dir: Directory containing the Python source files.
                     Typically the Android Python dir or a wheel extract.
     """
     print("\nUpdating iOS Python bindings...")
+
+    if not IOS_RESOURCES_DIR.exists():
+        print("  Skipping (no Resources directory)")
+        return
 
     IOS_PYTHON_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -581,6 +585,10 @@ def sync_ios_adapter() -> None:
     service.py, which requires manual merging.
     """
     print("\nSyncing iOS adapter code...")
+
+    if not IOS_RESOURCES_DIR.exists():
+        print("  Skipping (no Resources directory)")
+        return
 
     if not REPO_ADAPTER_DIR.exists():
         print(f"  Repo adapter not found: {REPO_ADAPTER_DIR}")
@@ -723,6 +731,9 @@ def ensure_device_fwork_stubs() -> None:
     Python looks for ``*.cpython-310-iphoneos.fwork`` instead, so we
     duplicate every simulator stub with a device-named copy.
     """
+    if not IOS_RESOURCES_DIR.exists():
+        return
+
     print("\nEnsuring device .fwork stubs exist...")
     count = 0
     for fwork in IOS_RESOURCES_DIR.rglob("*.cpython-310-iphonesimulator.fwork"):
@@ -734,7 +745,11 @@ def ensure_device_fwork_stubs() -> None:
 
 
 def rebuild_resources_zip() -> None:
-    """Rebuild the iOS Resources.zip."""
+    """Rebuild the iOS Resources.zip. Skips if Resources directory doesn't exist (e.g. Linux CI)."""
+    if not IOS_RESOURCES_DIR.exists():
+        print("\nSkipping Resources.zip rebuild (no Resources directory - not on macOS?)")
+        return
+
     # Ensure device .fwork stubs before zipping
     ensure_device_fwork_stubs()
 

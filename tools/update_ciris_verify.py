@@ -621,6 +621,12 @@ def _patch_ios_service_py() -> None:
         print("  -> service.py (already has stack fix)")
         return
 
+    # Check if using singleton pattern (8MB stack fix is in verifier_singleton.py)
+    if "get_verifier" in content:
+        shutil.copy2(repo_service, ios_service)
+        print("  -> service.py (uses singleton - 8MB stack fix is in verifier_singleton)")
+        return
+
     # Add threading import
     if "import threading" not in content:
         content = content.replace(

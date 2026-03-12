@@ -232,13 +232,34 @@ class AuditViewModel(
                         meta.forEach { (key, value) ->
                             // Extract actual value from JsonPrimitive to avoid escaped quotes
                             val displayValue = when {
-                                value is kotlinx.serialization.json.JsonPrimitive && value.isString ->
-                                    value.content // Get string content without quotes
+                                value is kotlinx.serialization.json.JsonPrimitive && value.isString -> {
+                                    val content = value.content
+                                    // Check if it's a nested JSON string and parse it
+                                    if (content.startsWith("{") || content.startsWith("[")) {
+                                        try {
+                                            formatNestedJson(content, indent = "    ")
+                                        } catch (e: Exception) {
+                                            content
+                                        }
+                                    } else {
+                                        content
+                                    }
+                                }
                                 value is kotlinx.serialization.json.JsonPrimitive ->
                                     value.content // Numbers, booleans, etc.
-                                else -> value.toString() // Arrays/objects as JSON
+                                value is kotlinx.serialization.json.JsonObject ->
+                                    formatNestedJson(value.toString(), indent = "    ")
+                                value is kotlinx.serialization.json.JsonArray ->
+                                    formatNestedJson(value.toString(), indent = "    ")
+                                else -> value.toString()
                             }
-                            appendLine("  $key: $displayValue")
+                            // For multi-line values, put on next line with indent
+                            if (displayValue.contains("\n")) {
+                                appendLine("  $key:")
+                                appendLine(displayValue)
+                            } else {
+                                appendLine("  $key: $displayValue")
+                            }
                         }
                     }
                 }
@@ -246,6 +267,49 @@ class AuditViewModel(
         } catch (e: Exception) {
             logError("formatContextJson", "Error formatting context: ${e.message}")
             ""
+        }
+    }
+
+    /**
+     * Format a nested JSON string for display.
+     * Parses the JSON and formats key-value pairs with proper indentation.
+     */
+    private fun formatNestedJson(jsonString: String, indent: String = ""): String {
+        return try {
+            val json = kotlinx.serialization.json.Json.parseToJsonElement(jsonString)
+            when (json) {
+                is kotlinx.serialization.json.JsonObject -> {
+                    buildString {
+                        json.forEach { (key, value) ->
+                            val displayValue = when {
+                                value is kotlinx.serialization.json.JsonPrimitive && value.isString ->
+                                    value.content
+                                value is kotlinx.serialization.json.JsonPrimitive ->
+                                    value.content
+                                else -> value.toString()
+                            }
+                            appendLine("$indent$key: $displayValue")
+                        }
+                    }.trimEnd()
+                }
+                is kotlinx.serialization.json.JsonArray -> {
+                    buildString {
+                        json.forEachIndexed { index, value ->
+                            val displayValue = when {
+                                value is kotlinx.serialization.json.JsonPrimitive && value.isString ->
+                                    value.content
+                                value is kotlinx.serialization.json.JsonPrimitive ->
+                                    value.content
+                                else -> value.toString()
+                            }
+                            appendLine("$indent[$index]: $displayValue")
+                        }
+                    }.trimEnd()
+                }
+                else -> jsonString
+            }
+        } catch (e: Exception) {
+            jsonString
         }
     }
 

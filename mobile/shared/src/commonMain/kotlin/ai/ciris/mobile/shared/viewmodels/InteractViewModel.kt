@@ -6,6 +6,8 @@ import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.ReasoningEvent
 import ai.ciris.mobile.shared.api.ReasoningStreamClient
 import ai.ciris.mobile.shared.auth.TokenManager
+import ai.ciris.mobile.shared.models.ActionDetails
+import ai.ciris.mobile.shared.models.ActionType
 import ai.ciris.mobile.shared.models.ChatMessage
 import ai.ciris.mobile.shared.models.MessageType
 import ai.ciris.mobile.shared.platform.PlatformLogger
@@ -706,7 +708,7 @@ class InteractViewModel(
     }
 
     /**
-     * Poll for message history
+     * Poll for message history and audit actions
      */
     private fun startMessagePolling() {
         val method = "startMessagePolling"
@@ -716,6 +718,8 @@ class InteractViewModel(
             while (isActive) {
                 try {
                     fetchHistory()
+                    // Also fetch audit actions to show in timeline
+                    fetchAuditActions()
                 } catch (e: Exception) {
                     logError(method, "Message polling failed: ${e::class.simpleName}: ${e.message}")
                 } finally {
@@ -793,6 +797,261 @@ class InteractViewModel(
                 logWarn(method, "Failed to fetch history on first load: ${e.message}")
             }
         }
+    }
+
+    // Track action IDs we've already added to avoid duplicates
+    private val addedActionIds = mutableSetOf<String>()
+
+    /**
+     * Fetch recent audit actions and add them to the chat timeline.
+     * Called on load and during polling to keep timeline up to date.
+     */
+    private suspend fun fetchAuditActions() {
+        val method = "fetchAuditActions"
+
+        try {
+            // Fetch recent audit entries (all types, we'll filter by action types)
+            val entries = apiClient.getAuditEntries(
+                limit = 50,
+                offset = 0
+            )
+
+            if (entries.entries.isEmpty()) {
+                return
+            }
+
+            val newActionMessages = mutableListOf<ChatMessage>()
+
+            // Get current message IDs to check if actions need re-adding after history refresh
+            val currentMessageIds = _messages.value.map { it.id }.toSet()
+
+            for (entry in entries.entries) {
+                val actionMessageId = "action_${entry.id}"
+
+                // Skip if already in current messages (already displayed)
+                if (actionMessageId in currentMessageIds) {
+                    continue
+                }
+
+                // Check if this is one of the 10 action types
+                val actionType = ActionType.fromAuditEventType(entry.action) ?: continue
+
+                // Track that we've processed this entry (for SSE deduplication)
+                addedActionIds.add(entry.id)
+
+                // Extract details from metadata
+                val metadata = entry.context?.metadata
+                val outcome = entry.context?.outcome
+                    ?: metadata?.get("outcome")?.jsonPrimitiveContent()
+                    ?: "success"
+                val description = entry.context?.description
+                    ?: metadata?.get("description")?.jsonPrimitiveContent()
+
+                // Build action-specific details
+                val actionDetails = buildActionDetails(actionType, outcome, entry.id, description, metadata)
+
+                // Parse timestamp
+                val timestamp = try {
+                    kotlinx.datetime.Instant.parse(entry.timestamp)
+                } catch (e: Exception) {
+                    Clock.System.now()
+                }
+
+                val actionMessage = ChatMessage(
+                    id = "action_${entry.id}",
+                    text = actionType.displayName,
+                    type = MessageType.ACTION,
+                    timestamp = timestamp,
+                    actionDetails = actionDetails
+                )
+
+                newActionMessages.add(actionMessage)
+            }
+
+            if (newActionMessages.isNotEmpty()) {
+                logInfo(method, "Adding ${newActionMessages.size} action entries to timeline")
+
+                // Merge with existing messages, sort by timestamp, keep last 50
+                val allMessages = (_messages.value + newActionMessages)
+                    .distinctBy { it.id }
+                    .sortedBy { it.timestamp }
+                    .takeLast(50)
+
+                _messages.value = allMessages
+            }
+
+        } catch (e: Exception) {
+            // Don't log errors on every poll, only on first failure
+            if (isFirstLoad) {
+                logWarn(method, "Failed to fetch audit actions: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Build ActionDetails from audit entry metadata
+     */
+    private fun buildActionDetails(
+        actionType: ActionType,
+        outcome: String,
+        auditEntryId: String,
+        description: String?,
+        metadata: kotlinx.serialization.json.JsonObject?
+    ): ActionDetails {
+        return when (actionType) {
+            ActionType.TOOL -> {
+                val toolName = metadata?.get("tool_name")?.jsonPrimitiveContent() ?: "Unknown Tool"
+                val toolAdapter = metadata?.get("tool_adapter")?.jsonPrimitiveContent() ?: "unknown"
+                val toolParameters = parseToolParameters(metadata?.get("tool_parameters"))
+
+                ActionDetails(
+                    actionType = actionType,
+                    outcome = outcome,
+                    auditEntryId = auditEntryId,
+                    description = description,
+                    toolName = toolName,
+                    toolAdapter = toolAdapter,
+                    toolParameters = toolParameters
+                )
+            }
+            ActionType.MEMORIZE, ActionType.RECALL, ActionType.FORGET -> {
+                val memoryKey = metadata?.get("memory_key")?.jsonPrimitiveContent()
+                    ?: metadata?.get("key")?.jsonPrimitiveContent()
+                val memoryContent = metadata?.get("content")?.jsonPrimitiveContent()
+                    ?: metadata?.get("value")?.jsonPrimitiveContent()
+
+                ActionDetails(
+                    actionType = actionType,
+                    outcome = outcome,
+                    auditEntryId = auditEntryId,
+                    description = description,
+                    memoryKey = memoryKey,
+                    memoryContent = memoryContent
+                )
+            }
+            ActionType.DEFER -> {
+                val deferReason = metadata?.get("reason")?.jsonPrimitiveContent()
+                    ?: metadata?.get("defer_reason")?.jsonPrimitiveContent()
+                val deferTarget = metadata?.get("target")?.jsonPrimitiveContent()
+                    ?: metadata?.get("wise_authority")?.jsonPrimitiveContent()
+
+                ActionDetails(
+                    actionType = actionType,
+                    outcome = outcome,
+                    auditEntryId = auditEntryId,
+                    description = description,
+                    deferReason = deferReason,
+                    deferTarget = deferTarget
+                )
+            }
+            ActionType.REJECT -> {
+                val rejectReason = metadata?.get("reason")?.jsonPrimitiveContent()
+                    ?: metadata?.get("reject_reason")?.jsonPrimitiveContent()
+
+                ActionDetails(
+                    actionType = actionType,
+                    outcome = outcome,
+                    auditEntryId = auditEntryId,
+                    description = description,
+                    rejectReason = rejectReason
+                )
+            }
+            ActionType.PONDER -> {
+                val ponderTopic = metadata?.get("topic")?.jsonPrimitiveContent()
+                    ?: metadata?.get("ponder_topic")?.jsonPrimitiveContent()
+
+                ActionDetails(
+                    actionType = actionType,
+                    outcome = outcome,
+                    auditEntryId = auditEntryId,
+                    description = description,
+                    ponderTopic = ponderTopic
+                )
+            }
+            else -> {
+                // SPEAK, OBSERVE, TASK_COMPLETE - just basic details
+                ActionDetails(
+                    actionType = actionType,
+                    outcome = outcome,
+                    auditEntryId = auditEntryId,
+                    description = description
+                )
+            }
+        }
+    }
+
+    /**
+     * Trigger an immediate refresh of audit actions when an SSE emoji event is received.
+     * This provides live updates to the timeline when actions occur.
+     */
+    private fun fetchAndAddLatestAction(actionType: ActionType) {
+        val method = "fetchAndAddLatestAction"
+        logDebug(method, "SSE triggered refresh for ${actionType.name}")
+
+        // Trigger immediate fetch of audit actions
+        viewModelScope.launch {
+            // Small delay to allow audit entry to be written
+            delay(500)
+            fetchAuditActions()
+        }
+    }
+
+    /**
+     * Helper to extract string content from JsonElement
+     */
+    private fun kotlinx.serialization.json.JsonElement?.jsonPrimitiveContent(): String? {
+        return when (this) {
+            is kotlinx.serialization.json.JsonPrimitive -> this.content
+            else -> this?.toString()
+        }
+    }
+
+    /**
+     * Parse tool parameters from a JSON element (may be string or object)
+     */
+    private fun parseToolParameters(element: kotlinx.serialization.json.JsonElement?): Map<String, String> {
+        if (element == null) return emptyMap()
+
+        val parameters = mutableMapOf<String, String>()
+        try {
+            val paramsContent = when (element) {
+                is kotlinx.serialization.json.JsonPrimitive -> element.content
+                is kotlinx.serialization.json.JsonObject -> {
+                    // Already an object, extract directly
+                    element.forEach { (key, value) ->
+                        parameters[key] = value.jsonPrimitiveContent() ?: value.toString()
+                    }
+                    return parameters
+                }
+                else -> element.toString()
+            }
+
+            // Parse JSON string - handle double-quoted strings like "{...}"
+            var jsonToParse = paramsContent.trim()
+            // Strip outer quotes if present (double-encoded JSON)
+            if (jsonToParse.startsWith("\"") && jsonToParse.endsWith("\"")) {
+                jsonToParse = jsonToParse.drop(1).dropLast(1)
+            }
+            // Unescape escaped quotes and backslashes
+            jsonToParse = jsonToParse
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\")
+
+            if (jsonToParse.startsWith("{")) {
+                val parsed = kotlinx.serialization.json.Json.parseToJsonElement(jsonToParse)
+                if (parsed is kotlinx.serialization.json.JsonObject) {
+                    parsed.forEach { (key, value) ->
+                        parameters[key] = when (value) {
+                            is kotlinx.serialization.json.JsonPrimitive -> value.content
+                            else -> value.toString()
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore parse errors - return empty parameters
+        }
+        return parameters
     }
 
     /**
@@ -883,6 +1142,12 @@ class InteractViewModel(
 
                                 // Add to timeline (persists for bubble net)
                                 addTimelineEvent(event.emoji, event.eventType)
+
+                                // Check if this is one of the 10 CIRIS action emojis
+                                val actionType = ActionType.fromEmoji(event.emoji)
+                                if (actionType != null) {
+                                    fetchAndAddLatestAction(actionType)
+                                }
 
                                 // Update processing state and status text
                                 if (event.isComplete) {

@@ -35,6 +35,7 @@ class VerifyStatusResponse(BaseModel):
 
     loaded: bool = Field(..., description="Whether CIRISVerify library is loaded")
     version: Optional[str] = Field(None, description="CIRISVerify version if loaded")
+    agent_version: Optional[str] = Field(None, description="CIRIS Agent version")
     hardware_type: Optional[str] = Field(None, description="Hardware security type")
     key_status: str = Field(..., description="Key status: 'none', 'ephemeral', 'portal_pending', 'portal_active'")
     key_id: Optional[str] = Field(None, description="Portal-issued key ID if activated")
@@ -146,6 +147,7 @@ def _attestation_to_response(result: AttestationResult) -> VerifyStatusResponse:
     return VerifyStatusResponse(
         loaded=result.loaded,
         version=result.version,
+        agent_version=result.agent_version,
         hardware_type=result.hardware_type,
         key_status=result.key_status,
         key_id=result.key_id,

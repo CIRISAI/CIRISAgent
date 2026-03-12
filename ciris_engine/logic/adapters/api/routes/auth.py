@@ -2239,6 +2239,7 @@ async def get_attestation(request: Request, refresh: bool = False) -> Dict[str, 
         "data": {
             "loaded": cached.loaded,
             "version": cached.version,
+            "agent_version": cached.agent_version,
             "hardware_type": cached.hardware_type,
             "key_status": cached.key_status,
             "key_id": cached.key_id,

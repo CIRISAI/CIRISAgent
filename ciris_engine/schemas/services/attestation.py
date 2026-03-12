@@ -19,6 +19,7 @@ class AttestationResult(BaseModel):
     # Core status
     loaded: bool = Field(..., description="Whether CIRISVerify library is loaded")
     version: Optional[str] = Field(None, description="CIRISVerify version if loaded")
+    agent_version: Optional[str] = Field(None, description="CIRIS Agent version")
     hardware_type: Optional[str] = Field(None, description="Hardware security type (TPM_2_0, SOFTWARE_ONLY, etc.)")
     key_status: str = Field(..., description="Key status: 'none', 'ephemeral', 'portal_pending', 'portal_active'")
     key_id: Optional[str] = Field(None, description="Portal-issued key ID if activated")

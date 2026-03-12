@@ -552,6 +552,19 @@ jobs:
         run: |
           python tools/ops/register_agent_build.py --build . --modules core
 
+      - name: Extract mobile Resources.zip
+        run: |
+          mkdir -p mobile/iosApp/Resources/app
+          cd mobile/iosApp/Resources && unzip -qo ../Resources.zip
+
+      - name: Register mobile build manifest with Registry
+        env:
+          REGISTRY_JWT_SECRET: ${{ secrets.REGISTRY_JWT_SECRET }}
+          REGISTRY_GRPC_ADDR: "207.148.13.157:50051"
+        run: |
+          python tools/ops/register_agent_build.py --build mobile/iosApp/Resources/app \
+            --modules core --include-dirs ciris_engine ciris_adapters ciris_ios ciris_sdk
+
   deploy:
     name: Notify CIRISManager of Update
     needs: [build, register-build]
@@ -674,6 +687,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
+      - name: Symlink python3.10 for Chaquopy
+        run: |
+          PYTHON_PATH=$(which python3.10)
+          if [ ! -f /usr/bin/python3.10 ] && [ -n "$PYTHON_PATH" ]; then
+            sudo ln -s "$PYTHON_PATH" /usr/bin/python3.10
+          fi
 
       - name: Get version from constants
         id: version

@@ -285,17 +285,14 @@ private fun TrustSummaryCard(
     }
 
     val bgColor = when {
-        level >= 5 -> Color(0xFFD1FAE5)  // Green
-        level >= 3 -> Color(0xFFDBEAFE)  // Blue
-        isPartial -> Color(0xFFFEF3C7)   // Yellow (partial)
-        level >= 1 -> Color(0xFFFEF3C7)  // Yellow
-        else -> Color(0xFFF5F5F5)        // Gray
+        level >= 5 -> Color(0xFFD1FAE5)  // Green - Identity Validated
+        level == 4 -> Color(0xFFFEF3C7)  // Amber - Agent Validated
+        else -> Color(0xFFFEE2E2)        // Red - Issues Detected (L1-3)
     }
     val textColor = when {
-        level >= 5 -> Color(0xFF065F46)
-        level >= 3 -> Color(0xFF1E40AF)
-        level >= 1 -> Color(0xFF92400E)
-        else -> Color(0xFF6B7280)
+        level >= 5 -> Color(0xFF065F46)  // Green text
+        level == 4 -> Color(0xFF92400E)  // Amber text
+        else -> Color(0xFFDC2626)        // Red text
     }
 
     Card(
@@ -321,13 +318,9 @@ private fun TrustSummaryCard(
 
             Text(
                 text = when {
-                    level >= 5 -> "Full Attestation State - All checks passed"
-                    level >= 4 -> "High Attestation - Integrity checks passed"
-                    level >= 3 -> "Good Attestation - Registry validation complete"
-                    level >= 2 -> "Basic Attestation - Environment validation complete"
-                    level >= 1 -> "Minimal Attestation - Binary loaded"
-                    status.attestationStatus == "not_attempted" -> "Incomplete - Attestation not started"
-                    else -> "Level 0 - No checks passed"
+                    level >= 5 -> "Identity Validated - Full attestation complete"
+                    level == 4 -> "Agent Validated - Awaiting identity confirmation"
+                    else -> "Issues Detected - Verification incomplete"
                 },
                 fontSize = 14.sp,
                 color = textColor.copy(alpha = 0.8f)

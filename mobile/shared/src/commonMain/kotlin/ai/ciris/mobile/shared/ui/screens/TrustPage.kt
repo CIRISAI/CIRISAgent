@@ -917,7 +917,7 @@ private fun TierCardsSection(
         ExpandableTierCard(
             level = 4,
             title = "Agent Code Integrity",
-            passed = status.fileIntegrityOk,
+            passed = status.moduleIntegrityOk,
             checksInfo = buildL4ChecksInfo(status),
             expanded = expandedTier == 4,
             onToggle = { expandedTier = if (expandedTier == 4) null else 4 }

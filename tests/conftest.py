@@ -115,7 +115,7 @@ def manage_import_protection():
 
 
 @pytest.fixture(autouse=True, scope="function")
-def cleanup_after_test():
+def cleanup_after_test(request):
     """
     Ensure proper cleanup after each test.
     This helps prevent interference between tests, especially when Discord is involved.
@@ -125,8 +125,16 @@ def cleanup_after_test():
     # Force garbage collection to clean up any lingering objects
     gc.collect()
 
-    # Add a small delay to allow sockets to close
-    time.sleep(0.1)
+    # Only add socket cleanup delay for tests that actually use network/Discord
+    # This saves ~0.1s per test for the majority of tests that don't need it
+    test_path = str(request.fspath) if hasattr(request, "fspath") else ""
+    needs_socket_cleanup = (
+        "discord" in test_path.lower()
+        or request.node.get_closest_marker("requires_discord_token")
+        or request.node.get_closest_marker("needs_socket_cleanup")
+    )
+    if needs_socket_cleanup:
+        time.sleep(0.1)
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -195,6 +203,7 @@ except ImportError:
 # Skip Discord tests if no token is set
 def pytest_configure(config):
     config.addinivalue_line("markers", "requires_discord_token: mark test as requiring Discord token")
+    config.addinivalue_line("markers", "needs_socket_cleanup: mark test as needing socket cleanup delay")
 
 
 @pytest.fixture(autouse=True)

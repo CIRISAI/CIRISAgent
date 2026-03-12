@@ -65,6 +65,7 @@ async def test_llm_service_retry_logic(llm_service):
     """Test LLM retry logic on failures."""
     # Mock to fail twice then succeed
     call_count = 0
+    sleep_calls = []
 
     async def mock_create(*args, **kwargs):
         nonlocal call_count
@@ -89,24 +90,32 @@ async def test_llm_service_retry_logic(llm_service):
         mock_completion.usage = MagicMock(prompt_tokens=50, completion_tokens=20)
         return TestResponse(test="data"), mock_completion
 
+    async def mock_sleep(duration):
+        sleep_calls.append(duration)
+
     with patch.object(
         llm_service.instruct_client.chat.completions, "create_with_completion", AsyncMock(side_effect=mock_create)
     ):
+        # Mock asyncio.sleep to avoid real delays (saves ~3 seconds)
+        with patch("asyncio.sleep", mock_sleep):
+            from pydantic import BaseModel
 
-        from pydantic import BaseModel
+            class TestResponse(BaseModel):
+                test: str
 
-        class TestResponse(BaseModel):
-            test: str
+            result, usage = await llm_service.call_llm_structured(
+                messages=[{"role": "user", "content": "Test"}],
+                response_model=TestResponse,
+                max_tokens=1024,
+                temperature=0.0,
+            )
 
-        result, usage = await llm_service.call_llm_structured(
-            messages=[{"role": "user", "content": "Test"}],
-            response_model=TestResponse,
-            max_tokens=1024,
-            temperature=0.0,
-        )
-
-        assert result.test == "data"
-        assert call_count == 3  # Failed twice, succeeded on third
+            assert result.test == "data"
+            assert call_count == 3  # Failed twice, succeeded on third
+            # Verify exponential backoff was called (1.0s, then 2.0s)
+            assert len(sleep_calls) == 2
+            assert sleep_calls[0] == 1.0
+            assert sleep_calls[1] == 2.0
 
 
 @pytest.mark.asyncio

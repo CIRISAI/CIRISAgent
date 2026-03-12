@@ -365,6 +365,9 @@ data class VerifyStatusResponse(
     val loaded: Boolean,
     /** CIRISVerify version if loaded */
     val version: String? = null,
+    /** CIRIS Agent version */
+    @SerialName("agent_version")
+    val agentVersion: String? = null,
     /** Hardware security type (TPM_2_0, SECURE_ENCLAVE, SOFTWARE_ONLY, etc.) */
     @SerialName("hardware_type")
     val hardwareType: String? = null,

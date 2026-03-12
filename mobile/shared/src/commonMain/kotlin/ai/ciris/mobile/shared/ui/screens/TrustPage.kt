@@ -7,6 +7,11 @@ import ai.ciris.mobile.shared.DeviceAttestationCallback
 import ai.ciris.mobile.shared.DeviceAttestationResult
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.viewmodels.VerifyStatusResponse
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -65,13 +70,21 @@ fun TrustPage(
     val uriHandler = LocalUriHandler.current
     val clipboardManager = LocalClipboardManager.current
 
-    // Fetch verify status on mount (always full mode from cached attestation)
+    // Fetch verify status on mount and poll every 5 seconds while on trust page
     LaunchedEffect(Unit) {
-        fetchVerifyStatus(
-            apiClient = apiClient,
-            onSuccess = { verifyStatus = it; loading = false; error = null },
-            onError = { error = it; loading = false }
-        )
+        while (true) {
+            fetchVerifyStatus(
+                apiClient = apiClient,
+                onSuccess = {
+                    verifyStatus = it
+                    loading = false
+                    error = null
+                    PlatformLogger.d("TrustPage", "Verify status updated: maxLevel=${it.maxLevel}, levelPending=${it.levelPending}")
+                },
+                onError = { error = it; loading = false }
+            )
+            kotlinx.coroutines.delay(5000) // Poll every 5 seconds
+        }
     }
 
     // Only trigger device attestation if level_pending=true (backend needs it)
@@ -330,20 +343,39 @@ private fun TrustSummaryCard(
                 color = textColor.copy(alpha = 0.8f)
             )
 
-            // Version badge
-            status.version?.let { version ->
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = textColor.copy(alpha = 0.1f)
-                ) {
-                    Text(
-                        text = "CIRISVerify v$version",
-                        fontSize = 12.sp,
-                        color = textColor,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+            // Version badges (Agent + CIRISVerify)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                status.agentVersion?.let { agentVer ->
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = textColor.copy(alpha = 0.1f)
+                    ) {
+                        Text(
+                            text = "Agent v$agentVer",
+                            fontSize = 12.sp,
+                            color = textColor,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+                status.version?.let { version ->
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = textColor.copy(alpha = 0.1f)
+                    ) {
+                        Text(
+                            text = "CIRISVerify v$version",
+                            fontSize = 12.sp,
+                            color = textColor,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
                 }
             }
+
 
             // Timestamp badge showing when attestation was performed
             status.cachedAt?.let { timestamp ->
@@ -353,7 +385,141 @@ private fun TrustSummaryCard(
                     color = textColor.copy(alpha = 0.6f)
                 )
             }
+
+            // Expandable level debug info
+            LevelDebugExpansion(status = status, textColor = textColor)
         }
+    }
+}
+
+/**
+ * Expandable debug info showing level calculation details
+ */
+@Composable
+private fun LevelDebugExpansion(status: VerifyStatusResponse, textColor: Color) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Tap to expand
+        Row(
+            modifier = Modifier
+                .clickable { expanded = !expanded }
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (expanded) "▼" else "▶",
+                fontSize = 10.sp,
+                color = textColor.copy(alpha = 0.6f)
+            )
+            Text(
+                text = "Level Debug",
+                fontSize = 10.sp,
+                color = textColor.copy(alpha = 0.6f)
+            )
+        }
+
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Surface(
+                color = Color.White.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.padding(top = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // Description text explaining attestation levels
+                    Text(
+                        text = "L1: Verify binary+func manifests | L2: HW-backed keys | L3: 3-source key agreement | L4: Agent manifest | L5: Audit+portal",
+                        fontSize = 9.sp,
+                        color = textColor.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+
+                    Divider(color = textColor.copy(alpha = 0.2f), modifier = Modifier.padding(bottom = 4.dp))
+
+                    // L1 checks
+                    val l1Pass = status.binarySelfCheck == "verified"
+                    LevelDebugRow("L1", l1Pass, "binary=${status.binarySelfCheck}")
+
+                    // L2 checks
+                    val l2Pass = status.hardwareBacked && status.hardwareType?.contains("Software", ignoreCase = true) != true
+                    LevelDebugRow("L2", l2Pass, "hw=${status.hardwareBacked}, type=${status.hardwareType?.take(10)}")
+
+                    // L3 checks - network key agreement (3 sources)
+                    val dnsOk = status.dnsUsOk || status.dnsEuOk
+                    val httpsOk = status.httpsUsOk || status.httpsEuOk
+                    val l3Sources = listOf(status.registryOk, dnsOk, httpsOk).count { it }
+                    val l3Pass = l3Sources >= 2
+                    val regIcon = if (status.registryOk) "✓" else "✗"
+                    val dnsIcon = if (dnsOk) "✓" else "✗"
+                    val httpsIcon = if (httpsOk) "✓" else "✗"
+                    LevelDebugRow("L3", l3Pass, "$l3Sources/3: Reg$regIcon DNS$dnsIcon HTTPS$httpsIcon")
+
+                    // L4 checks
+                    val l4Pass = status.moduleIntegrityOk
+                    LevelDebugRow("L4", l4Pass, "module=${status.moduleIntegrityOk}, file=${status.fileIntegrityOk}")
+
+                    // L5 checks
+                    val l5Pass = status.auditOk && status.registryKeyStatus?.contains("active", ignoreCase = true) == true
+                    LevelDebugRow("L5", l5Pass, "audit=${status.auditOk}, key=${status.registryKeyStatus?.take(10)}")
+
+                    Divider(color = textColor.copy(alpha = 0.2f), modifier = Modifier.padding(vertical = 4.dp))
+
+                    // Calculated vs reported
+                    val calc = when {
+                        l5Pass && l4Pass && l3Pass && l2Pass && l1Pass -> 5
+                        l4Pass && l3Pass && l2Pass && l1Pass -> 4
+                        l3Pass && l2Pass && l1Pass -> 3
+                        l2Pass && l1Pass -> 2
+                        l1Pass -> 1
+                        else -> 0
+                    }
+                    val match = calc == status.maxLevel
+                    Text(
+                        text = "Calc: L$calc | API: L${status.maxLevel} | Pending: ${status.levelPending}",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = if (match) Color(0xFF059669) else Color(0xFFDC2626)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LevelDebugRow(level: String, pass: Boolean, details: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = if (pass) "✓" else "✗",
+                fontSize = 10.sp,
+                color = if (pass) Color(0xFF059669) else Color(0xFFDC2626)
+            )
+            Text(text = level, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+        }
+        Text(
+            text = details,
+            fontSize = 9.sp,
+            fontFamily = FontFamily.Monospace,
+            color = Color(0xFF6B7280)
+        )
     }
 }
 
@@ -2394,16 +2560,18 @@ private fun DiagnosticsLogCard(
                             .fillMaxWidth()
                             .padding(12.dp)
                     ) {
-                        if (diagnostics.isNullOrEmpty()) {
+                        // Check for null, empty, or literal "null" string
+                        val hasContent = !diagnostics.isNullOrEmpty() && diagnostics != "null"
+                        if (!hasContent) {
                             Text(
-                                text = "No diagnostics available",
+                                text = "No diagnostics available. Tap refresh to re-run attestation.",
                                 fontSize = 11.sp,
                                 fontFamily = FontFamily.Monospace,
                                 color = Color(0xFF9CA3AF)
                             )
                         } else {
                             // Split into lines and display with proper formatting
-                            diagnostics.lines().forEach { line ->
+                            diagnostics!!.lines().forEach { line ->
                                 val color = when {
                                     line.startsWith("===") -> Color(0xFF60A5FA) // Section headers
                                     line.contains("PASS") || line.contains("✓") -> Color(0xFF34D399)

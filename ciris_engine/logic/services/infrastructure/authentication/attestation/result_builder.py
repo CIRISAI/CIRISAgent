@@ -6,6 +6,7 @@ This module builds AttestationResult from raw CIRISVerify response data.
 import logging
 from typing import Any, Dict, List, Optional
 
+from ciris_engine.constants import CIRIS_VERSION
 from ciris_engine.logic.utils.mobile_exclusions import (
     compute_files_missing_list,
     compute_files_unexpected_list,
@@ -224,6 +225,7 @@ def build_attestation_result(
         logger.info(f"[attestation] DIAGNOSTIC: Early return due to error: {verify_result.error}")
         return AttestationResult(
             loaded=False,
+            agent_version=CIRIS_VERSION,
             key_status="none",
             attestation_status="failed",
             error=verify_result.error,
@@ -259,6 +261,7 @@ def build_attestation_result(
     return AttestationResult(
         loaded=True,
         version=data.get("version") or self_verification.get("binary_version"),
+        agent_version=CIRIS_VERSION,
         hardware_type=key_attestation.get("hardware_type") or attestation.get("hardware_type"),
         key_status=key_attestation.get("key_type", "none"),
         key_id=key_attestation.get("key_id"),

@@ -973,6 +973,7 @@ class CIRISApiClient(
             val verifyStatus = VerifyStatusResponse(
                 loaded = loaded,
                 version = (data["version"] as? JsonPrimitive)?.content,
+                agentVersion = (data["agent_version"] as? JsonPrimitive)?.content,
                 hardwareType = (data["hardware_type"] as? JsonPrimitive)?.content,
                 keyStatus = (data["key_status"] as? JsonPrimitive)?.content ?: "none",
                 keyId = (data["key_id"] as? JsonPrimitive)?.content,

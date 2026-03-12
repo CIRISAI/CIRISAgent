@@ -440,8 +440,8 @@ def main():
     parser.add_argument(
         "--include-dirs",
         nargs="+",
-        default=["ciris_engine", "ciris_adapters", "ciris_ios", "ciris_sdk"],
-        help="Directories to include in manifest (for --build), default: ciris_engine ciris_adapters ciris_ios ciris_sdk",
+        default=["ciris_engine", "ciris_adapters", "ciris_sdk"],
+        help="Directories to include in manifest (for --build), default: ciris_engine ciris_adapters ciris_sdk",
     )
 
     args = parser.parse_args()

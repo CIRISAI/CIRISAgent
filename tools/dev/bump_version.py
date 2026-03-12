@@ -10,6 +10,7 @@ Usage:
 
 This tool updates version in:
     - ciris_engine/constants.py (main version source)
+    - mobile/iosApp/iosApp/Info.plist (iOS CFBundleVersion)
     - mobile/androidApp/build.gradle (Android versionCode + versionName)
     - CIRISGUI/apps/agui/package.json (GUI version)
     - CIRISGUI/apps/agui/lib/ciris-sdk/version.ts (SDK version)
@@ -145,6 +146,27 @@ def bump_version(bump_type: str):
         with open(readme_file, "w") as f:
             f.write(readme_content)
         print(f"  Updated README.md to {release_type} {new_version}")
+
+    # Update iOS Info.plist CFBundleVersion
+    ios_plist_file = Path(__file__).parent.parent.parent / "mobile" / "iosApp" / "iosApp" / "Info.plist"
+    if ios_plist_file.exists():
+        with open(ios_plist_file, "r") as f:
+            plist_content = f.read()
+
+        bundle_version_match = re.search(
+            r"<key>CFBundleVersion</key>\s*<string>(\d+)</string>", plist_content
+        )
+        if bundle_version_match:
+            old_build = int(bundle_version_match.group(1))
+            new_build = old_build + 1
+            plist_content = re.sub(
+                r"(<key>CFBundleVersion</key>\s*<string>)\d+(</string>)",
+                rf"\g<1>{new_build}\2",
+                plist_content,
+            )
+            with open(ios_plist_file, "w") as f:
+                f.write(plist_content)
+            print(f"  Updated iOS CFBundleVersion: {old_build} -> {new_build}")
 
     # Update Android build.gradle
     android_gradle_file = Path(__file__).parent.parent.parent / "mobile" / "androidApp" / "build.gradle"

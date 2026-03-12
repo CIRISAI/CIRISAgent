@@ -550,7 +550,16 @@ jobs:
           REGISTRY_JWT_SECRET: ${{ secrets.REGISTRY_JWT_SECRET }}
           REGISTRY_GRPC_ADDR: "207.148.13.157:50051"
         run: |
-          python tools/ops/register_agent_build.py --build . --modules core
+          python tools/ops/register_agent_build.py --build . --modules core \
+            --include-dirs ciris_engine ciris_adapters ciris_ios ciris_sdk
+
+      - name: Register mobile build manifest with Registry
+        env:
+          REGISTRY_JWT_SECRET: ${{ secrets.REGISTRY_JWT_SECRET }}
+          REGISTRY_GRPC_ADDR: "207.148.13.157:50051"
+        run: |
+          python tools/ops/register_agent_build.py --build mobile/iosApp/Resources/app \
+            --modules core --include-dirs ciris_engine ciris_adapters ciris_ios ciris_sdk
 
   deploy:
     name: Notify CIRISManager of Update

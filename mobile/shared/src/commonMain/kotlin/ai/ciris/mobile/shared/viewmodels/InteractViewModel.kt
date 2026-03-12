@@ -822,16 +822,21 @@ class InteractViewModel(
 
             val newActionMessages = mutableListOf<ChatMessage>()
 
+            // Get current message IDs to check if actions need re-adding after history refresh
+            val currentMessageIds = _messages.value.map { it.id }.toSet()
+
             for (entry in entries.entries) {
-                // Skip if already added
-                if (entry.id in addedActionIds) {
+                val actionMessageId = "action_${entry.id}"
+
+                // Skip if already in current messages (already displayed)
+                if (actionMessageId in currentMessageIds) {
                     continue
                 }
 
                 // Check if this is one of the 10 action types
                 val actionType = ActionType.fromAuditEventType(entry.action) ?: continue
 
-                // Mark as added
+                // Track that we've processed this entry (for SSE deduplication)
                 addedActionIds.add(entry.id)
 
                 // Extract details from metadata

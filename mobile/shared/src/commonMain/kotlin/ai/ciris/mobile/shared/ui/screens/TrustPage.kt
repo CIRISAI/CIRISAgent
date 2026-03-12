@@ -284,14 +284,17 @@ private fun TrustSummaryCard(
         else -> false
     }
 
+    val notAttempted = level == 0 && status.attestationStatus == "not_attempted"
     val bgColor = when {
         level >= 5 -> Color(0xFFD1FAE5)  // Green - Identity Validated
         level == 4 -> Color(0xFFFEF3C7)  // Amber - Agent Validated
+        notAttempted -> Color(0xFFF5F5F5)  // Gray - Not yet started
         else -> Color(0xFFFEE2E2)        // Red - Issues Detected (L1-3)
     }
     val textColor = when {
         level >= 5 -> Color(0xFF065F46)  // Green text
         level == 4 -> Color(0xFF92400E)  // Amber text
+        notAttempted -> Color(0xFF6B7280)  // Gray text
         else -> Color(0xFFDC2626)        // Red text
     }
 
@@ -320,6 +323,7 @@ private fun TrustSummaryCard(
                 text = when {
                     level >= 5 -> "Identity Validated - Full attestation complete"
                     level == 4 -> "Agent Validated - Awaiting identity confirmation"
+                    notAttempted -> "Pending - Attestation not yet started"
                     else -> "Issues Detected - Verification incomplete"
                 },
                 fontSize = 14.sp,

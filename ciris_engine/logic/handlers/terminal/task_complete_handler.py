@@ -190,28 +190,25 @@ class TaskCompleteHandler(BaseActionHandler):
             await self._handle_completion_notification(task, task_id)
 
     async def _handle_completion_notification(self, task: Task, task_id: str) -> None:
-        """Send notification for API channel completions without SPEAK."""
+        """Send notification for API channel completions with unhandled updates.
+
+        Note: Silent completion (without SPEAK) is expected behavior when tool actions
+        are performed. We only notify when new messages arrived that weren't addressed.
+        """
         if not is_api_channel(task.channel_id):
             return
 
-        has_spoken = await self._has_speak_action_completed(task_id)
         has_unhandled_updates = getattr(task, "updated_info_available", False)
 
-        if has_spoken and not has_unhandled_updates:
+        # Only notify if there are unhandled updates (new messages arrived during processing)
+        # Silent completion without speaking is expected behavior - tool actions are shown in timeline
+        if not has_unhandled_updates:
             return
 
-        # Build notification message
-        has_tool = await self._has_tool_action_completed(task_id)
-        if has_unhandled_updates:
-            msg = "Agent completed task but new messages arrived that weren't addressed"
-        elif has_tool:
-            msg = "Agent chose task complete without speaking after a tool call"
-        else:
-            msg = "Agent chose task complete without speaking immediately"
+        msg = "Agent completed task but new messages arrived that weren't addressed"
 
         self.logger.info(
-            f"Task {task_id} completed without speaking on API channel {task.channel_id} "
-            f"(has_spoken={has_spoken}, has_unhandled_updates={has_unhandled_updates}) - sending notification"
+            f"Task {task_id} completed with unhandled updates on API channel {task.channel_id} - sending notification"
         )
         await self._send_notification(task.channel_id, msg)
 

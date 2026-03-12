@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.models.ActionDetails
+import ai.ciris.mobile.shared.models.ActionType
 import ai.ciris.mobile.shared.models.ChatMessage
 import ai.ciris.mobile.shared.models.MessageType
 import ai.ciris.mobile.shared.viewmodels.AgentProcessingState
@@ -501,6 +503,7 @@ private fun CreditsIndicator(
 
 /**
  * Trust shield - shows attestation level X/5
+ * Colors match TrustPage: L5=green, L4=amber, L1-3=red (issues detected)
  */
 @Composable
 private fun TrustShield(
@@ -511,10 +514,10 @@ private fun TrustShield(
     // TrustStatus.maxLevel now contains actual achieved level (calculated in ViewModel)
     val level = trustStatus.maxLevel
     val shieldColor = when {
-        level >= 5 -> Color(0xFF059669)  // Full trust - green
-        level >= 3 -> Color(0xFF2563EB)  // Good trust - blue
-        level >= 1 -> Color(0xFFD97706)  // Some trust - amber
-        else -> Color(0xFF6B7280)        // No trust - gray
+        level >= 5 -> Color(0xFF059669)  // Identity Validated - green
+        level == 4 -> Color(0xFFD97706)  // Agent Validated - amber
+        level >= 1 -> Color(0xFFDC2626)  // Issues Detected (L1-3) - red
+        else -> Color(0xFF6B7280)        // Not started - gray
     }
 
     Surface(
@@ -805,6 +808,7 @@ private fun ChatMessageList(
                 MessageType.AGENT -> AgentChatBubble(message)
                 MessageType.SYSTEM -> SystemMessage(message)
                 MessageType.ERROR -> ErrorMessage(message)
+                MessageType.ACTION -> ActionBubble(message)
             }
         }
     }
@@ -1020,6 +1024,261 @@ private fun ErrorMessage(message: ChatMessage, modifier: Modifier = Modifier) {
                         color = Color(0xFFDC2626) // Red text
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Action bubble - expandable card showing CIRIS action details
+ * Supports all 10 action types: SPEAK, TOOL, OBSERVE, MEMORIZE, RECALL, FORGET, REJECT, PONDER, DEFER, TASK_COMPLETE
+ */
+@Composable
+private fun ActionBubble(message: ChatMessage, modifier: Modifier = Modifier) {
+    var isExpanded by remember { mutableStateOf(false) }
+    val actionDetails = message.actionDetails
+    val actionType = actionDetails?.actionType
+
+    // Color scheme based on action type
+    val (bgColor, textColor, dividerColor) = when (actionType) {
+        ActionType.SPEAK -> Triple(Color(0xFFEFF6FF), Color(0xFF1E40AF), Color(0xFFBFDBFE))  // Blue
+        ActionType.TOOL -> Triple(Color(0xFFF0FDF4), Color(0xFF065F46), Color(0xFFD1FAE5))  // Green
+        ActionType.OBSERVE -> Triple(Color(0xFFFEF3C7), Color(0xFF92400E), Color(0xFFFDE68A))  // Amber
+        ActionType.MEMORIZE -> Triple(Color(0xFFF3E8FF), Color(0xFF6B21A8), Color(0xFFE9D5FF))  // Purple
+        ActionType.RECALL -> Triple(Color(0xFFEDE9FE), Color(0xFF5B21B6), Color(0xFFDDD6FE))  // Violet
+        ActionType.FORGET -> Triple(Color(0xFFFFF7ED), Color(0xFFC2410C), Color(0xFFFED7AA))  // Orange
+        ActionType.REJECT -> Triple(Color(0xFFFEF2F2), Color(0xFFDC2626), Color(0xFFFECACA))  // Red
+        ActionType.PONDER -> Triple(Color(0xFFF0F9FF), Color(0xFF0369A1), Color(0xFFBAE6FD))  // Sky
+        ActionType.DEFER -> Triple(Color(0xFFFDF4FF), Color(0xFFA21CAF), Color(0xFFF5D0FE))  // Fuchsia
+        ActionType.TASK_COMPLETE -> Triple(Color(0xFFECFDF5), Color(0xFF047857), Color(0xFFA7F3D0))  // Emerald
+        null -> Triple(Color(0xFFF5F5F5), Color(0xFF6B7280), Color(0xFFE5E5E5))  // Gray fallback
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Surface(
+            onClick = { isExpanded = !isExpanded },
+            shape = RoundedCornerShape(8.dp),
+            color = bgColor,
+            modifier = Modifier.widthIn(max = 320.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(10.dp)
+            ) {
+                // Header row with emoji and action name
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Action emoji
+                    Text(text = actionType?.emoji ?: "❓", fontSize = 16.sp)
+
+                    // Action name and subtitle
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = getActionTitle(actionDetails),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = textColor
+                        )
+                        getActionSubtitle(actionDetails)?.let { subtitle ->
+                            Text(
+                                text = subtitle,
+                                fontSize = 10.sp,
+                                color = Color(0xFF6B7280)
+                            )
+                        }
+                    }
+
+                    // Outcome badge
+                    val outcomeColor = when (actionDetails?.outcome?.lowercase()) {
+                        "success" -> Color(0xFF10B981)
+                        "failure", "error", "failed" -> Color(0xFFEF4444)
+                        "pending" -> Color(0xFFD97706)
+                        else -> Color(0xFF6B7280)
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = outcomeColor.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = actionDetails?.outcome ?: "success",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            fontSize = 10.sp,
+                            color = outcomeColor,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    // Expand indicator
+                    Text(
+                        text = if (isExpanded) "▲" else "▼",
+                        fontSize = 10.sp,
+                        color = Color(0xFF9CA3AF)
+                    )
+                }
+
+                // Expanded details
+                AnimatedVisibility(
+                    visible = isExpanded,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(top = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Divider(color = dividerColor)
+
+                        // Action-specific details
+                        ActionExpandedDetails(actionDetails = actionDetails)
+
+                        // Timestamp
+                        Text(
+                            text = formatTimestamp(message.timestamp),
+                            fontSize = 9.sp,
+                            color = Color(0xFF9CA3AF),
+                            modifier = Modifier.align(Alignment.End)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Get the main title for an action
+ */
+private fun getActionTitle(details: ActionDetails?): String {
+    return when (details?.actionType) {
+        ActionType.SPEAK -> "Speak"
+        ActionType.TOOL -> details.toolName ?: "Tool"
+        ActionType.OBSERVE -> "Observe"
+        ActionType.MEMORIZE -> "Memorize"
+        ActionType.RECALL -> "Recall"
+        ActionType.FORGET -> "Forget"
+        ActionType.REJECT -> "Reject"
+        ActionType.PONDER -> "Ponder"
+        ActionType.DEFER -> "Defer"
+        ActionType.TASK_COMPLETE -> "Task Complete"
+        null -> "Action"
+    }
+}
+
+/**
+ * Get the subtitle for an action (adapter, target, etc.)
+ */
+private fun getActionSubtitle(details: ActionDetails?): String? {
+    return when (details?.actionType) {
+        ActionType.TOOL -> details.toolAdapter
+        ActionType.MEMORIZE, ActionType.RECALL, ActionType.FORGET -> details.memoryKey
+        ActionType.DEFER -> details.deferTarget
+        ActionType.PONDER -> details.ponderTopic
+        else -> null
+    }
+}
+
+/**
+ * Expanded details for each action type
+ */
+@Composable
+private fun ActionExpandedDetails(
+    actionDetails: ActionDetails?,
+    modifier: Modifier = Modifier
+) {
+    if (actionDetails == null) return
+
+    Column(
+        modifier = modifier.padding(top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // Description (if present)
+        actionDetails.description?.let { desc ->
+            if (desc.isNotBlank()) {
+                SelectionContainer {
+                    Text(
+                        text = desc,
+                        fontSize = 11.sp,
+                        color = Color(0xFF374151)
+                    )
+                }
+            }
+        }
+
+        when (actionDetails.actionType) {
+            ActionType.TOOL -> {
+                // Tool parameters
+                if (actionDetails.toolParameters.isNotEmpty()) {
+                    Text(
+                        text = "Parameters",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF374151)
+                    )
+                    actionDetails.toolParameters.forEach { (key, value) ->
+                        Row(
+                            modifier = Modifier.padding(start = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "$key:",
+                                fontSize = 10.sp,
+                                color = Color(0xFF6B7280)
+                            )
+                            SelectionContainer {
+                                Text(
+                                    text = value,
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF1F2937)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            ActionType.MEMORIZE, ActionType.RECALL -> {
+                actionDetails.memoryContent?.let { content ->
+                    Text(
+                        text = "Content",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF374151)
+                    )
+                    SelectionContainer {
+                        Text(
+                            text = content.take(200) + if (content.length > 200) "..." else "",
+                            fontSize = 10.sp,
+                            color = Color(0xFF1F2937),
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
+            }
+            ActionType.DEFER -> {
+                actionDetails.deferReason?.let { reason ->
+                    Text(
+                        text = "Reason: $reason",
+                        fontSize = 10.sp,
+                        color = Color(0xFF6B7280)
+                    )
+                }
+            }
+            ActionType.REJECT -> {
+                actionDetails.rejectReason?.let { reason ->
+                    Text(
+                        text = "Reason: $reason",
+                        fontSize = 10.sp,
+                        color = Color(0xFF6B7280)
+                    )
+                }
+            }
+            else -> {
+                // No additional details for SPEAK, OBSERVE, FORGET, PONDER, TASK_COMPLETE
             }
         }
     }

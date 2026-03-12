@@ -688,6 +688,13 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Symlink python3.10 for Chaquopy
+        run: |
+          PYTHON_PATH=$(which python3.10)
+          if [ ! -f /usr/bin/python3.10 ] && [ -n "$PYTHON_PATH" ]; then
+            sudo ln -s "$PYTHON_PATH" /usr/bin/python3.10
+          fi
+
       - name: Get version from constants
         id: version
         run: |

@@ -1146,15 +1146,11 @@ class InteractViewModel(
                                 // Add bubble emoji (floats up and disappears)
                                 addBubbleEmoji(event.emoji)
 
+                                // Add to timeline (persists for bubble net)
+                                addTimelineEvent(event.emoji, event.eventType)
+
                                 // Check if this is one of the 10 CIRIS action emojis
                                 val actionType = ActionType.fromEmoji(event.emoji)
-
-                                // Add to timeline (persists for bubble net)
-                                // Skip SPEAK and TASK_COMPLETE - not interesting for timeline
-                                if (actionType != ActionType.SPEAK && actionType != ActionType.TASK_COMPLETE) {
-                                    addTimelineEvent(event.emoji, event.eventType)
-                                }
-
                                 if (actionType != null) {
                                     fetchAndAddLatestAction(actionType)
                                 }

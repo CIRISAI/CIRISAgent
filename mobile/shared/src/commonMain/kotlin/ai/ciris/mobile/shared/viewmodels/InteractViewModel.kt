@@ -842,6 +842,7 @@ class InteractViewModel(
                     continue
                 }
 
+
                 // Track that we've processed this entry (for SSE deduplication)
                 addedActionIds.add(entry.id)
 

@@ -134,11 +134,12 @@ data class SetupFormState(
     // CIRISVerify setup state (node flow only)
     val verifySetup: VerifySetupState = VerifySetupState(),
 
-    // Google OAuth state
+    // Google/Apple OAuth state
     val isGoogleAuth: Boolean = false,
     val googleIdToken: String? = null,
     val googleEmail: String? = null,
     val googleUserId: String? = null,
+    val oauthProvider: String = "google", // "google" or "apple"
 
     // LLM mode selection (CIRIS_PROXY or BYOK)
     val setupMode: SetupMode? = null,

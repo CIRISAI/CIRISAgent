@@ -1235,9 +1235,9 @@ struct ComposeViewWithAuthAndStore: UIViewControllerRepresentable {
                 NSLog("[ComposeViewWithAuthAndStore] onPurchase LAMBDA INVOKED for \(productId)")
 
                 Task { @MainActor in
-                    // Find the product
-                    guard let product = self.storeKitManager.products.first(where: { $0.id == productId }) else {
-                        NSLog("[ComposeViewWithAuthAndStore] Product not found: \(productId)")
+                    // Find the product - match exact ID or fully-qualified StoreKit ID containing the short ID
+                    guard let product = self.storeKitManager.products.first(where: { $0.id == productId || $0.id.contains(productId) }) else {
+                        NSLog("[ComposeViewWithAuthAndStore] Product not found: \(productId), available: \(self.storeKitManager.products.map { $0.id })")
                         callback(StoreKitPurchaseResultBridge.companion.failed(error: "Product not found"))
                         return
                     }

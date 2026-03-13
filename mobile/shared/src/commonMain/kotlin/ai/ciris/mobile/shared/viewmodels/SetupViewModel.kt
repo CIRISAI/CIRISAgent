@@ -47,13 +47,15 @@ class SetupViewModel : ViewModel() {
         isAuth: Boolean,
         idToken: String?,
         email: String?,
-        userId: String?
+        userId: String?,
+        provider: String = "google"
     ) {
         _state.value = _state.value.copy(
             isGoogleAuth = isAuth,
             googleIdToken = idToken,
             googleEmail = email,
             googleUserId = userId,
+            oauthProvider = provider,
             // Default mode: CIRIS_PROXY for Google auth, BYOK for local credentials
             setupMode = when {
                 _state.value.setupMode != null -> _state.value.setupMode
@@ -651,10 +653,10 @@ class SetupViewModel : ViewModel() {
                 // Admin account (auto-generated)
                 system_admin_password = adminPassword,
 
-                // Google OAuth user
-                admin_username = "oauth_google_user",
+                // OAuth user
+                admin_username = "oauth_${currentState.oauthProvider}_user",
                 admin_password = null,
-                oauth_provider = "google",
+                oauth_provider = currentState.oauthProvider,
                 oauth_external_id = currentState.googleUserId,
                 oauth_email = currentState.googleEmail,
 

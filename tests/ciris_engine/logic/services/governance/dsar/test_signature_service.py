@@ -205,17 +205,20 @@ class TestKeyRotation:
 
     def test_rotate_keys_changes_key_id(self):
         """Test that key rotation changes the public key ID."""
-        import time
+        from datetime import datetime, timedelta
+        from unittest.mock import patch
 
         service = RSASignatureService()
 
         old_key_id = service.get_public_key_id()
 
-        # Wait 1 second to ensure timestamp differs
-        time.sleep(1)
-
-        # Rotate keys
-        service.rotate_keys()
+        # Mock datetime to return a time 2 seconds later (avoids real 1s sleep)
+        future_time = datetime.now() + timedelta(seconds=2)
+        with patch("ciris_engine.logic.services.governance.dsar.signature_service.datetime") as mock_dt:
+            mock_dt.now.return_value = future_time
+            mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+            # Rotate keys
+            service.rotate_keys()
 
         new_key_id = service.get_public_key_id()
 

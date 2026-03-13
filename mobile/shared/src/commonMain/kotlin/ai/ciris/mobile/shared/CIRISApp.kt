@@ -911,7 +911,8 @@ fun CIRISApp(
                                                     isAuth = true,
                                                     idToken = result.idToken,
                                                     email = result.email,
-                                                    userId = result.userId
+                                                    userId = result.userId,
+                                                    provider = result.provider
                                                 )
                                                 platformLog(TAG, "[INFO] Navigating to Screen.Setup")
                                                 currentScreen = Screen.Setup
@@ -1064,6 +1065,9 @@ fun CIRISApp(
                                     PlatformLogger.i(TAG, " Waiting 1.5s for Python to reload billing token...")
                                     kotlinx.coroutines.delay(1500)
                                     PlatformLogger.i(TAG, " Python reload wait complete")
+
+                                    // Store OAuth token in TokenManager for billing purchases
+                                    tokenManager.handleNewToken(idToken, provider ?: "apple")
 
                                     // Trigger data loading now that we have auth AND Python has reloaded
                                     PlatformLogger.i(TAG, " Triggering billingViewModel.loadBalance()...")
@@ -1240,7 +1244,14 @@ fun CIRISApp(
                             PlatformLogger.i("CIRISApp", "[Screen.Billing] Launching purchase for: ${selectedProduct.productId}")
                             if (purchaseLauncher != null) {
                                 billingViewModel.onPurchaseStarted(selectedProduct.productId)
-                                purchaseLauncher.launchPurchase(selectedProduct.productId)
+                                // Use the Apple/Google OAuth ID token (not the CIRIS API token)
+                                val oauthToken = tokenManager.currentToken.value
+                                if (oauthToken != null) {
+                                    purchaseLauncher.launchPurchaseWithAuth(selectedProduct.productId, oauthToken)
+                                } else {
+                                    PlatformLogger.w("CIRISApp", "[Screen.Billing] No OAuth ID token available for purchase")
+                                    billingViewModel.onPurchaseError("Please sign in again to make purchases")
+                                }
                             } else {
                                 PlatformLogger.w("CIRISApp", "[Screen.Billing] No purchase launcher available")
                                 billingViewModel.onPurchaseError("In-app purchases not available on this platform")

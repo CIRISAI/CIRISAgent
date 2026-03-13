@@ -468,12 +468,14 @@ class TestRunRuntime:
         mock_runtime.shutdown = AsyncMock()
 
         async def slow_run(rounds):
-            await asyncio.sleep(10)  # Longer than timeout
+            # Use a short sleep that is still longer than timeout
+            # This makes the test run faster while still testing timeout behavior
+            await asyncio.sleep(0.2)
 
         mock_runtime.run = slow_run
 
-        # 0.5 second timeout
-        await _run_runtime(mock_runtime, timeout=0.5, num_rounds=1)
+        # 0.05 second timeout (run function takes 0.2s, so this will timeout)
+        await _run_runtime(mock_runtime, timeout=0.05, num_rounds=1)
 
         # Should have requested shutdown
         assert mock_runtime._shutdown_reason is not None

@@ -836,6 +836,13 @@ class InteractViewModel(
                 // Check if this is one of the 10 action types
                 val actionType = ActionType.fromAuditEventType(entry.action) ?: continue
 
+                // Skip SPEAK and TASK_COMPLETE - not interesting for timeline display
+                // SPEAK is already shown as a chat message, TASK_COMPLETE is just a marker
+                if (actionType == ActionType.SPEAK || actionType == ActionType.TASK_COMPLETE) {
+                    continue
+                }
+
+
                 // Track that we've processed this entry (for SSE deduplication)
                 addedActionIds.add(entry.id)
 

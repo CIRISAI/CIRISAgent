@@ -534,6 +534,16 @@ private fun DiscoveryStepContent(
     onSubmitManualUrl: () -> Unit,
     onRetryDiscovery: () -> Unit
 ) {
+    // Debug: log what DiscoveryStepContent receives on each recomposition
+    LaunchedEffect(discoveredItems, discoveryExecuted, isLoading) {
+        ai.ciris.mobile.shared.platform.PlatformLogger.i(
+            "DiscoveryStepContent",
+            "=== RENDER STATE === items=${discoveredItems.size}, " +
+            "executed=$discoveryExecuted, isLoading=$isLoading" +
+            if (discoveredItems.isNotEmpty()) ", first=${discoveredItems[0].label}, value=${discoveredItems[0].value}" else ""
+        )
+    }
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -559,88 +569,95 @@ private fun DiscoveryStepContent(
                 }
             }
         } else {
-            // Discovered items section
-            if (discoveredItems.isNotEmpty()) {
-                Text(
-                    text = "Found on your network:",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold
-                )
-
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+            // Single scrollable list: discovered items + manual URL entry
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Discovered items section
+                if (discoveredItems.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Found on your network:",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                     items(discoveredItems) { item ->
                         DiscoveredItemCard(
                             item = item,
                             onClick = { onSelectItem(item) }
                         )
                     }
-                }
-            } else if (discoveryExecuted) {
-                // No items found
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "No devices found on network",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        TextButton(
-                            onClick = onRetryDiscovery,
-                            enabled = !isLoading
+                } else if (discoveryExecuted) {
+                    // No items found
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Retry scan")
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "No devices found on network",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                TextButton(
+                                    onClick = onRetryDiscovery,
+                                    enabled = !isLoading
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Retry scan")
+                                }
+                            }
                         }
                     }
                 }
-            }
 
-            // Manual URL entry section
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "Or enter URL manually:",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold
-            )
-
-            OutlinedTextField(
-                value = manualUrl,
-                onValueChange = onManualUrlChange,
-                label = { Text("URL") },
-                placeholder = { Text("http://homeassistant.local:8123") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testable("input_manual_url"),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
-            )
-
-            Button(
-                onClick = onSubmitManualUrl,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testableClickable("btn_submit_manual_url") { onSubmitManualUrl() },
-                enabled = manualUrl.isNotBlank() && !isLoading
-            ) {
-                Text("Connect")
+                // Manual URL entry section
+                item {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Or enter URL manually:",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = manualUrl,
+                        onValueChange = onManualUrlChange,
+                        label = { Text("URL") },
+                        placeholder = { Text("http://homeassistant.local:8123") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testable("input_manual_url"),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                    )
+                }
+                item {
+                    Button(
+                        onClick = onSubmitManualUrl,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testableClickable("btn_submit_manual_url") { onSubmitManualUrl() },
+                        enabled = manualUrl.isNotBlank() && !isLoading
+                    ) {
+                        Text("Connect")
+                    }
+                }
             }
         }
     }

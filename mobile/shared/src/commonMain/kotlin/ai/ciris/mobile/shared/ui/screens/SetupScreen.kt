@@ -953,7 +953,7 @@ private fun NodeAuthStep(
 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Tap Continue to configure your LLM provider.",
+                    text = "Tap Next to configure your LLM provider.",
                     color = SetupColors.TextSecondary,
                     fontSize = 14.sp,
                     textAlign = TextAlign.Center

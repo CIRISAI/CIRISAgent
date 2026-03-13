@@ -50,13 +50,13 @@ class HAToolService:
                     "action": {
                         "type": "string",
                         "enum": ["turn_on", "turn_off", "toggle"],
-                        "description": "Action to perform",
+                        "description": "Action to perform. To set brightness, use 'turn_on' with the brightness parameter.",
                     },
                     "brightness": {
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 255,
-                        "description": "Brightness level for lights (optional)",
+                        "description": "Brightness level 0-255 for lights. Use with action='turn_on' to set brightness.",
                     },
                     "color_temp": {"type": "integer", "description": "Color temperature in mireds (optional)"},
                 },
@@ -314,6 +314,21 @@ class HAToolService:
                 error=error_msg,
                 correlation_id=str(uuid.uuid4()),
             )
+
+        # Map common LLM action aliases to valid HA actions
+        action_aliases = {
+            "set_brightness": "turn_on",
+            "set_level": "turn_on",
+            "dim": "turn_on",
+            "brighten": "turn_on",
+            "set_color_temp": "turn_on",
+            "set_color": "turn_on",
+        }
+        if action in action_aliases:
+            original_action = action
+            action = action_aliases[action]
+            params["action"] = action
+            logger.info(f"[HA TOOL] Mapped action alias '{original_action}' -> '{action}'")
 
         # Validate action is one of the allowed values
         valid_actions = ["turn_on", "turn_off", "toggle"]

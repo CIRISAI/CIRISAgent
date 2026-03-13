@@ -271,6 +271,9 @@ async def start_mobile_runtime_with_watchdog():
     data_dir = get_data_dir()
     runtime_log.info(f"  CIRIS_HOME: {ciris_home}")
     runtime_log.info(f"  DATA_DIR: {data_dir}")
+    # Ensure all required directories exist (fresh install has empty container)
+    for d in [data_dir, ciris_home / ".ciris_keys", ciris_home / "logs"]:
+        d.mkdir(parents=True, exist_ok=True)
     log_step(runtime_log, "Resolving paths", "OK")
 
     # Create configs
@@ -411,6 +414,14 @@ def _run_runtime_iteration(restart_count: int) -> tuple[bool, bool]:
     if _restart_requested:
         _log.warning(f"Restart requested by watchdog (count: {restart_count + 1})")
         write_status_file({"phase": "RESTARTING", "status": "watchdog_triggered", "restart_count": restart_count + 1})
+
+        # Clear CIRIS_CONFIGURED so is_first_run() re-checks the .env file.
+        # On iOS the process isn't killed (unlike Android), so env vars persist.
+        # If .env was deleted (e.g. rerunSetupWizard), first_run must detect that.
+        if "CIRIS_CONFIGURED" in os.environ:
+            del os.environ["CIRIS_CONFIGURED"]
+            _log.info("Cleared CIRIS_CONFIGURED from environ for fresh first-run check")
+
         time.sleep(1.0)
         return True, False  # continue, not clean exit
 
@@ -430,6 +441,8 @@ def _handle_runtime_error(e: Exception, restart_count: int) -> tuple[bool, int]:
     if _restart_requested or check_restart_signal():
         new_count = restart_count + 1
         clear_restart_signal()
+        # Clear CIRIS_CONFIGURED for fresh first-run check (iOS doesn't kill process)
+        os.environ.pop("CIRIS_CONFIGURED", None)
         _log.warning(f"Restart signal found after error, restarting... (count: {new_count})")
         time.sleep(1.0)
         return True, new_count

@@ -836,6 +836,12 @@ class InteractViewModel(
                 // Check if this is one of the 10 action types
                 val actionType = ActionType.fromAuditEventType(entry.action) ?: continue
 
+                // Skip SPEAK and TASK_COMPLETE - not interesting for timeline display
+                // SPEAK is already shown as a chat message, TASK_COMPLETE is just a marker
+                if (actionType == ActionType.SPEAK || actionType == ActionType.TASK_COMPLETE) {
+                    continue
+                }
+
                 // Track that we've processed this entry (for SSE deduplication)
                 addedActionIds.add(entry.id)
 
@@ -1140,11 +1146,15 @@ class InteractViewModel(
                                 // Add bubble emoji (floats up and disappears)
                                 addBubbleEmoji(event.emoji)
 
-                                // Add to timeline (persists for bubble net)
-                                addTimelineEvent(event.emoji, event.eventType)
-
                                 // Check if this is one of the 10 CIRIS action emojis
                                 val actionType = ActionType.fromEmoji(event.emoji)
+
+                                // Add to timeline (persists for bubble net)
+                                // Skip SPEAK and TASK_COMPLETE - not interesting for timeline
+                                if (actionType != ActionType.SPEAK && actionType != ActionType.TASK_COMPLETE) {
+                                    addTimelineEvent(event.emoji, event.eventType)
+                                }
+
                                 if (actionType != null) {
                                     fetchAndAddLatestAction(actionType)
                                 }

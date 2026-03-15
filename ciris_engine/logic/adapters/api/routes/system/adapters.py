@@ -356,6 +356,7 @@ def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str
         platform_requirements=platform_requirements,
         platform_requirements_rationale=platform_requirements_rationale,
         platform_available=platform_available,
+        internal_only=module_info.get("internal_only", False),
     )
 
 
@@ -995,6 +996,10 @@ async def list_loadable_adapters(
         for adapter in all_adapters:
             # Skip adapters not available on this platform
             if not adapter.platform_available:
+                continue
+
+            # Skip internal-only adapters (e.g., ciris_verify which auto-loads)
+            if adapter.internal_only:
                 continue
 
             is_configurable = adapter.module_id in configurable_types

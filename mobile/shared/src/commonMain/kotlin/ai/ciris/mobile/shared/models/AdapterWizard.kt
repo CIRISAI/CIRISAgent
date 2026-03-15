@@ -54,6 +54,15 @@ data class ConfigStepData(
 )
 
 /**
+ * An option for a select-type field.
+ */
+data class ConfigFieldOption(
+    val value: String,
+    val label: String,
+    val description: String? = null
+)
+
+/**
  * A field within a configuration step.
  */
 data class ConfigFieldData(
@@ -62,7 +71,8 @@ data class ConfigFieldData(
     val fieldType: String,
     val required: Boolean,
     val defaultValue: String?,
-    val helpText: String?
+    val helpText: String?,
+    val options: List<ConfigFieldOption> = emptyList()
 )
 
 /**

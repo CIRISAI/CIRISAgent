@@ -205,6 +205,7 @@ class ModuleTypeInfo(BaseModel):
         None, description="Explanation of why platform requirements exist"
     )
     platform_available: bool = Field(True, description="Whether this adapter is available on the current platform")
+    internal_only: bool = Field(False, description="If True, adapter is hidden from UI and cannot be manually loaded")
 
     model_config = ConfigDict(defer_build=True)
 

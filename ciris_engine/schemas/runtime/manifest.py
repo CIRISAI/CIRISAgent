@@ -73,6 +73,8 @@ class ModuleInfo(BaseModel):
     auto_load: bool = Field(True, description="Whether to auto-load this module")
     opt_in_required: bool = Field(False, description="Whether explicit opt-in is required")
     requires_consent: bool = Field(False, description="Whether user consent is required for data collection")
+    # UI visibility - internal adapters should not appear in Add Adapter dialog
+    internal_only: bool = Field(False, description="If True, adapter is hidden from UI and cannot be manually loaded")
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True, defer_build=True)
 

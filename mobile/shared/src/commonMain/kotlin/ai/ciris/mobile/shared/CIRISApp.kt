@@ -64,7 +64,6 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -2397,7 +2396,7 @@ private fun CIRISTopBar(
                     onClick = { activeCategory = if (activeCategory == NavCategory.DATA) NavCategory.NONE else NavCategory.DATA }
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Lock,
+                        imageVector = Icons.Default.Info,
                         contentDescription = "Data & Privacy",
                         tint = if (activeCategory == NavCategory.DATA)
                             MaterialTheme.colorScheme.primary

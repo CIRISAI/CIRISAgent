@@ -65,6 +65,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.ui.screens.graph.LiveGraphBackground
+import ai.ciris.mobile.shared.ui.theme.InteractTheme
 
 /**
  * Chat interface screen
@@ -142,26 +143,24 @@ fun InteractScreen(
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
+    // Create theme based on live background state - all colors defined in LiveBackgroundTheme.kt
+    val theme = remember(liveBackgroundEnabled) { InteractTheme.forLiveBackground(liveBackgroundEnabled) }
+
     // Note: CIRISApp wraps this screen in a Scaffold with TopAppBar,
     // so we don't need our own Scaffold here. Use Box for bubble overlay.
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(if (liveBackgroundEnabled) Color(0xFF0D1117) else Color(0xFFFAFAFA))
+            .background(theme.background)
     ) {
         // Live animated memory graph background (when enabled)
         // Event trigger: timeline events trigger organic graph refreshes
-        ai.ciris.mobile.shared.platform.PlatformLogger.i("InteractScreen", ">>> LIVE BG CHECK: enabled=$liveBackgroundEnabled, apiClient=${if (apiClient != null) "present" else "NULL"}")
         if (liveBackgroundEnabled && apiClient != null) {
-            ai.ciris.mobile.shared.platform.PlatformLogger.i("InteractScreen", ">>> RENDERING LiveGraphBackground (timelineEvents=${timelineEvents.size})")
             LiveGraphBackground(
                 apiClient = apiClient,
                 modifier = Modifier.fillMaxSize(),
-                baseOpacity = 0.25f,  // Subtle background
                 eventTrigger = timelineEvents.size  // New events trigger refresh
             )
-        } else {
-            ai.ciris.mobile.shared.platform.PlatformLogger.w("InteractScreen", ">>> SKIPPING LiveGraphBackground: enabled=$liveBackgroundEnabled, apiClient=${if (apiClient != null) "present" else "NULL"}")
         }
 
         // Main content column with platform-specific keyboard padding
@@ -184,18 +183,20 @@ fun InteractScreen(
                 onTrustShieldClick = onOpenTrustPage,
                 onCreditsClick = onOpenBilling,
                 onLocalClick = onOpenSystem,
-                onSettingsClick = onOpenSettings
+                onSettingsClick = onOpenSettings,
+                theme = theme
             )
 
         // Auth error is now handled by LaunchedEffect above - navigates to login silently
 
         // AI Warning banner (from fragment_interact.xml:65-76)
-        AIWarningBanner()
+        AIWarningBanner(theme = theme)
 
         // Bubble Net - timeline of events (expandable)
         BubbleNet(
             events = timelineEvents,
             isExpanded = showTimeline,
+            theme = theme,
             onToggle = { viewModel.toggleTimeline() },
             onClear = { viewModel.clearTimeline() }
         )
@@ -228,9 +229,9 @@ fun InteractScreen(
                 .fillMaxWidth()
         ) {
             if (messages.isEmpty() && !isLoading) {
-                EmptyStateView()
+                EmptyStateView(transparentBackground = liveBackgroundEnabled)
             } else {
-                ChatMessageList(messages = messages)
+                ChatMessageList(messages = messages, transparentBackground = liveBackgroundEnabled)
             }
         }
 
@@ -240,10 +241,10 @@ fun InteractScreen(
                 text = "Showing last ${messages.size} messages",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.White)
+                    .background(theme.messageCountBackground)
                     .padding(horizontal = 12.dp, vertical = 4.dp),
                 fontSize = 11.sp,
-                color = Color(0xFF9CA3AF),
+                color = theme.messageCountText,
                 textAlign = TextAlign.Center
             )
         }
@@ -319,11 +320,12 @@ private fun EnhancedStatusBar(
     onCreditsClick: () -> Unit,
     onLocalClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    theme: InteractTheme,
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = Color.White,
-        shadowElevation = 2.dp,
+        color = theme.surface,
+        shadowElevation = if (theme.isDark) 0.dp else 2.dp,
         modifier = modifier.fillMaxWidth()
     ) {
         Column {
@@ -347,27 +349,27 @@ private fun EnhancedStatusBar(
                         modifier = Modifier
                             .size(8.dp)
                             .background(
-                                color = if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444),
+                                color = if (isConnected) theme.statusConnected else theme.statusDisconnected,
                                 shape = CircleShape
                             )
                     )
                     Text(
                         text = if (isConnected) "Local" else "Offline",
                         fontSize = 11.sp,
-                        color = if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444)
+                        color = if (isConnected) theme.statusConnected else theme.statusDisconnected
                     )
                 }
 
                 // Divider
-                Text(text = "•", fontSize = 10.sp, color = Color(0xFFD1D5DB))
+                Text(text = "•", fontSize = 10.sp, color = theme.textMuted)
 
                 // LLM health indicator - tappable to Settings (LLM config)
-                LlmHealthIndicator(health = llmHealth, onClick = onSettingsClick)
+                LlmHealthIndicator(health = llmHealth, onClick = onSettingsClick, theme = theme)
 
                 // Credits indicator (only if CIRIS proxy) - clickable to billing
                 if (llmHealth.isCirisProxy && creditStatus.isLoaded) {
-                    Text(text = "•", fontSize = 10.sp, color = Color(0xFFD1D5DB))
-                    CreditsIndicator(credits = creditStatus, onClick = onCreditsClick)
+                    Text(text = "•", fontSize = 10.sp, color = theme.textMuted)
+                    CreditsIndicator(credits = creditStatus, onClick = onCreditsClick, theme = theme)
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -375,7 +377,8 @@ private fun EnhancedStatusBar(
                 // Trust shield
                 TrustShield(
                     trustStatus = trustStatus,
-                    onClick = onTrustShieldClick
+                    onClick = onTrustShieldClick,
+                    theme = theme
                 )
             }
 
@@ -392,7 +395,7 @@ private fun EnhancedStatusBar(
                 Text(
                     text = status,
                     fontSize = 10.sp,
-                    color = Color(0xFF6B7280),
+                    color = theme.textSecondary,
                     modifier = Modifier.weight(1f)
                 )
 
@@ -403,7 +406,7 @@ private fun EnhancedStatusBar(
                         .height(26.dp)
                         .testableClickable("btn_shutdown") { onShutdown() },
                     colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color(0xFFEF4444)
+                        contentColor = theme.shutdownOutline
                     ),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
@@ -437,6 +440,7 @@ private fun EnhancedStatusBar(
 private fun LlmHealthIndicator(
     health: LlmHealthStatus,
     onClick: () -> Unit,
+    theme: InteractTheme,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -454,9 +458,9 @@ private fun LlmHealthIndicator(
                 .size(6.dp)
                 .background(
                     color = when {
-                        isMockLlm -> Color(0xFFDC2626)
-                        health.isHealthy -> Color(0xFF10B981)
-                        else -> Color(0xFFD97706)
+                        isMockLlm -> theme.statusDisconnected
+                        health.isHealthy -> theme.statusConnected
+                        else -> theme.statusWarning
                     },
                     shape = CircleShape
                 )
@@ -487,7 +491,11 @@ private fun LlmHealthIndicator(
             text = displayName,
             fontSize = if (isMockLlm) 11.sp else 10.sp,
             fontWeight = if (isMockLlm) FontWeight.Bold else FontWeight.Normal,
-            color = if (isMockLlm) Color(0xFFDC2626) else if (health.isHealthy) Color(0xFF059669) else Color(0xFFD97706)
+            color = when {
+                isMockLlm -> theme.statusDisconnected
+                health.isHealthy -> theme.statusConnected
+                else -> theme.statusWarning
+            }
         )
     }
 }
@@ -499,6 +507,7 @@ private fun LlmHealthIndicator(
 private fun CreditsIndicator(
     credits: CreditStatus,
     onClick: () -> Unit,
+    theme: InteractTheme,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -511,8 +520,8 @@ private fun CreditsIndicator(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
         ) {
-            // Coin emoji for credits
-            Text(text = "💰", fontSize = 10.sp)
+            // Fire emoji for credits
+            Text(text = "🔥", fontSize = 10.sp)
 
             // Credits count
             val creditsText = when {
@@ -521,10 +530,10 @@ private fun CreditsIndicator(
                 else -> "0"
             }
             val creditsColor = when {
-                credits.creditsRemaining > 10 -> Color(0xFF059669)
-                credits.creditsRemaining > 0 -> Color(0xFFD97706)
-                credits.freeUsesRemaining > 0 -> Color(0xFF2563EB)
-                else -> Color(0xFFDC2626)
+                credits.creditsRemaining > 10 -> theme.statusConnected
+                credits.creditsRemaining > 0 -> theme.statusWarning
+                credits.freeUsesRemaining > 0 -> theme.textAccent
+                else -> theme.statusDisconnected
             }
             Text(
                 text = creditsText,
@@ -544,21 +553,22 @@ private fun CreditsIndicator(
 private fun TrustShield(
     trustStatus: TrustStatus,
     onClick: () -> Unit,
+    theme: InteractTheme,
     modifier: Modifier = Modifier
 ) {
     // TrustStatus.maxLevel now contains actual achieved level (calculated in ViewModel)
     val level = trustStatus.maxLevel
     val shieldColor = when {
-        level >= 5 -> Color(0xFF059669)  // Identity Validated - green
-        level == 4 -> Color(0xFFD97706)  // Agent Validated - amber
-        level >= 1 -> Color(0xFFDC2626)  // Issues Detected (L1-3) - red
-        else -> Color(0xFF6B7280)        // Not started - gray
+        level >= 5 -> theme.trustLevel5  // Identity Validated - green
+        level == 4 -> theme.trustLevel4  // Agent Validated - amber
+        level >= 1 -> theme.trustLevelLow  // Issues Detected (L1-3) - red
+        else -> theme.trustDefault        // Not started - gray
     }
 
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(4.dp),
-        color = shieldColor.copy(alpha = 0.1f),
+        color = shieldColor.copy(alpha = 0.15f),
         modifier = modifier.testableClickable("btn_trust_shield") { onClick() }
     ) {
         Row(
@@ -698,15 +708,18 @@ private fun AuthErrorBanner(
  * From fragment_interact.xml:65-76
  */
 @Composable
-private fun AIWarningBanner(modifier: Modifier = Modifier) {
+private fun AIWarningBanner(
+    theme: InteractTheme,
+    modifier: Modifier = Modifier
+) {
     Text(
         text = "⚠️ AI HALLUCINATES - CHECK FACTS",
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFFFEF3C7))
+            .background(theme.warningBackground)
             .padding(horizontal = 12.dp, vertical = 4.dp),
         fontSize = 11.sp,
-        color = Color(0xFFB45309),
+        color = theme.warningText,
         textAlign = TextAlign.Center
     )
 }
@@ -771,11 +784,14 @@ private fun getStatusEmoji(status: String): String {
  * From fragment_interact.xml:142-188
  */
 @Composable
-private fun EmptyStateView(modifier: Modifier = Modifier) {
+private fun EmptyStateView(
+    modifier: Modifier = Modifier,
+    transparentBackground: Boolean = false
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFF3F4F6))
+            .then(if (transparentBackground) Modifier else Modifier.background(Color(0xFFF3F4F6)))
             .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -792,7 +808,7 @@ private fun EmptyStateView(modifier: Modifier = Modifier) {
             text = "Welcome to Ally",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF1F2937),
+            color = if (transparentBackground) Color.White else Color(0xFF1F2937),
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
@@ -800,7 +816,7 @@ private fun EmptyStateView(modifier: Modifier = Modifier) {
         Text(
             text = "Your personal thriving assistant",
             fontSize = 14.sp,
-            color = Color(0xFF6B7280),
+            color = if (transparentBackground) Color.White.copy(alpha = 0.7f) else Color(0xFF6B7280),
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
@@ -808,7 +824,7 @@ private fun EmptyStateView(modifier: Modifier = Modifier) {
         Text(
             text = "Ask Ally how it can help with tasks, scheduling, decisions, or wellbeing — or ask how CIRIS works!",
             fontSize = 14.sp,
-            color = Color(0xFF419CA0),
+            color = if (transparentBackground) Color(0xFF7DD3FC) else Color(0xFF419CA0),  // Lighter cyan on dark
             textAlign = TextAlign.Center,
             lineHeight = 18.sp,
             modifier = Modifier.padding(horizontal = 16.dp)
@@ -823,7 +839,8 @@ private fun EmptyStateView(modifier: Modifier = Modifier) {
 @Composable
 private fun ChatMessageList(
     messages: List<ChatMessage>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    transparentBackground: Boolean = false
 ) {
     val listState = rememberLazyListState()
 
@@ -831,7 +848,7 @@ private fun ChatMessageList(
         state = listState,
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFF3F4F6))
+            .then(if (transparentBackground) Modifier else Modifier.background(Color(0xFFF3F4F6)))
             .padding(8.dp),
         reverseLayout = true,
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1751,6 +1768,7 @@ private fun FullScreenFloatingBubble(
 private fun BubbleNet(
     events: List<TimelineEvent>,
     isExpanded: Boolean,
+    theme: InteractTheme,
     onToggle: () -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier
@@ -1759,7 +1777,7 @@ private fun BubbleNet(
 
     Surface(
         onClick = onToggle,
-        color = Color(0xFFF0FDF4), // Light green background
+        color = theme.timelineBackground,
         modifier = modifier.fillMaxWidth().testableClickable("btn_toggle_timeline") { onToggle() }
     ) {
         Column {
@@ -1791,12 +1809,12 @@ private fun BubbleNet(
                     Text(
                         text = "${events.size}",
                         fontSize = 11.sp,
-                        color = Color(0xFF059669)
+                        color = theme.timelineText
                     )
                     Text(
                         text = if (isExpanded) "▲" else "▼",
                         fontSize = 10.sp,
-                        color = Color(0xFF059669)
+                        color = theme.timelineText
                     )
                 }
             }

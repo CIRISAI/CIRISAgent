@@ -53,7 +53,7 @@ private const val MIN_REFRESH_INTERVAL_MS = 5000L  // Minimum time between refre
 fun LiveGraphBackground(
     apiClient: CIRISApiClient,
     modifier: Modifier = Modifier,
-    baseOpacity: Float = 0.25f,  // Low opacity for background
+    baseOpacity: Float = 0.85f,  // Near-solid for sharp nodes
     eventTrigger: Int = 0  // Incremented when SSE events occur (speak, tool, etc.)
 ) {
     // Log when composable is first called
@@ -168,7 +168,7 @@ fun LiveGraphBackground(
                     theta = theta,
                     heightOffset = heightOffset,
                     color = GraphColors.getScopeColor(node.scope),
-                    radius = GraphColors.getNodeRadius(node.type) * 0.7f,
+                    radius = GraphColors.getNodeRadius(node.type) * 1.5f,  // Larger nodes for visibility
                     birthTimeMs = birthTime
                 )
             }
@@ -266,20 +266,7 @@ fun LiveGraphBackground(
             }
         }
 
-        // Dark gradient overlay for text readability
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            // Subtle vignette effect - darker at edges
-            drawRect(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        Color.Black.copy(alpha = 0.3f)
-                    ),
-                    center = Offset(size.width / 2, size.height / 2),
-                    radius = maxOf(size.width, size.height) * 0.8f
-                )
-            )
-        }
+        // Vignette overlay removed for clarity
     }
 }
 
@@ -349,9 +336,8 @@ private fun projectNode(
     val screenX = centerX + x3d * scale
     val screenY = centerY + y3dRotated * scale
 
-    // Depth-based alpha (nodes behind cylinder are more transparent)
-    val normalizedDepth = (z3dRotated + cylinderRadius) / (2 * cylinderRadius)
-    val alpha = 0.3f + normalizedDepth * 0.7f
+    // Full opacity - no depth-based fading
+    val alpha = 1.0f
 
     return ProjectedNode(
         x = screenX,
@@ -388,33 +374,21 @@ private fun DrawScope.drawBackgroundNode(
 
     if (scaledRadius < 0.5f) return  // Skip nearly invisible nodes
 
-    // Enhanced glow for new nodes (pulsing)
-    val glowMultiplier = if (birthProgress < 1f) {
-        2f + birthPulse * 1.5f  // Larger pulsing glow for new nodes
-    } else 1f
-
-    // Glow effect
-    drawCircle(
-        color = projected.color.copy(alpha = effectiveAlpha * 0.3f * glowMultiplier),
-        radius = scaledRadius * 2f * glowMultiplier,
-        center = Offset(projected.x, projected.y)
-    )
-
-    // Extra inner glow for new nodes
-    if (birthProgress < 1f) {
-        drawCircle(
-            color = Color.White.copy(alpha = effectiveAlpha * 0.5f * (1f - birthProgress)),
-            radius = scaledRadius * 1.5f,
-            center = Offset(projected.x, projected.y)
-        )
-    }
-
-    // Main node
+    // Main node - solid, no blur/glow
     drawCircle(
         color = projected.color.copy(alpha = effectiveAlpha),
         radius = scaledRadius,
         center = Offset(projected.x, projected.y)
     )
+
+    // Subtle highlight for new nodes only
+    if (birthProgress < 1f) {
+        drawCircle(
+            color = Color.White.copy(alpha = effectiveAlpha * 0.3f * (1f - birthProgress)),
+            radius = scaledRadius * 0.5f,
+            center = Offset(projected.x, projected.y)
+        )
+    }
 }
 
 /**

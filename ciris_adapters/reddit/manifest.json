@@ -6,6 +6,8 @@
     "author": "CIRIS Team",
     "safe_domain": true
   },
+  "platform_requirements": ["desktop_cli"],
+  "platform_requirements_rationale": "Reddit adapter requires OAuth credentials and persistent background connections for observation, only suitable for desktop/server deployments",
   "services": [
     {
       "type": "TOOL",

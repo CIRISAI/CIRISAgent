@@ -3337,7 +3337,8 @@ class CIRISApiClient(
             hours: Int = 24,
             scope: String? = null,  // null = ALL SCOPES (multi-scope cylinder)
             nodeType: String? = null,
-            limit: Int = 100
+            limit: Int = 1000,
+            includeMetrics: Boolean = false  // Exclude telemetry by default for performance
         ): GraphDataResponse {
             val method = "getGraphData"
             val totalStart = System.currentTimeMillis()
@@ -3345,21 +3346,32 @@ class CIRISApiClient(
 
             return try {
                 // Single API call - timeline now includes edges!
+                // Note: include_metrics=true to get all nodes including telemetry
                 val timelineStart = System.currentTimeMillis()
-                val timelineResponse = memoryApi.getTimelineV1MemoryTimelineGet(
-                    hours = hours,
-                    scope = scope,  // null = all scopes
-                    type = nodeType,
-                    authorization = authHeader()
-                )
+                val timelineUrl = buildString {
+                    append("$baseUrl/v1/memory/timeline?hours=$hours&include_edges=true&include_metrics=$includeMetrics")
+                    scope?.let { append("&scope=$it") }
+                    nodeType?.let { append("&type=$it") }
+                }
+                logInfo(method, "Fetching timeline: $timelineUrl")
+
+                val client = HttpClient {
+                    httpClientConfig(this)
+                }
+                val timelineResponse: io.ktor.client.statement.HttpResponse = client.get(timelineUrl) {
+                    headers {
+                        append("Authorization", authHeader() ?: "")
+                    }
+                }
+                client.close()
                 val timelineMs = System.currentTimeMillis() - timelineStart
 
-                if (!timelineResponse.success) {
+                if (!timelineResponse.status.isSuccess()) {
                     logError(method, "API returned non-success status: ${timelineResponse.status}")
                     throw RuntimeException("API error: HTTP ${timelineResponse.status}")
                 }
 
-                val timelineBody = timelineResponse.body()
+                val timelineBody: ai.ciris.api.models.SuccessResponseTimelineResponse = timelineResponse.body()
                 val timelineData = timelineBody.`data` ?: throw RuntimeException("API returned null data")
                 val nodes = timelineData.memories.take(limit)
 

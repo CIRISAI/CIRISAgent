@@ -63,6 +63,8 @@ import androidx.compose.ui.zIndex
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.ui.screens.graph.LiveGraphBackground
 
 /**
  * Chat interface screen
@@ -87,6 +89,8 @@ fun InteractScreen(
     onOpenBilling: () -> Unit = {},
     onOpenSystem: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    apiClient: CIRISApiClient? = null,  // For live background
+    liveBackgroundEnabled: Boolean = false,  // From settings
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsState()
@@ -143,8 +147,19 @@ fun InteractScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFFAFAFA))
+            .background(if (liveBackgroundEnabled) Color(0xFF0D1117) else Color(0xFFFAFAFA))
     ) {
+        // Live animated memory graph background (when enabled)
+        // Event trigger: timeline events trigger organic graph refreshes
+        if (liveBackgroundEnabled && apiClient != null) {
+            LiveGraphBackground(
+                apiClient = apiClient,
+                modifier = Modifier.fillMaxSize(),
+                baseOpacity = 0.25f,  // Subtle background
+                eventTrigger = timelineEvents.size  // New events trigger refresh
+            )
+        }
+
         // Main content column with platform-specific keyboard padding
         // Android: Uses imePadding() for proper keyboard avoidance
         // iOS: No-op - native keyboard avoidance handles this automatically

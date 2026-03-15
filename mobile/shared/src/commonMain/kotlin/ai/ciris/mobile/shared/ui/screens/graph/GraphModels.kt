@@ -120,7 +120,8 @@ data class GraphDisplayState(
     val layout: GraphLayout = GraphLayout.CYLINDER,
     val isSimulationRunning: Boolean = false,
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val dataVersion: Int = 0  // Increments each time data is loaded to trigger re-layout
 ) {
     val selectedNode: GraphNodeDisplay?
         get() = selectedNodeId?.let { id -> nodes.find { it.id == id } }
@@ -139,7 +140,8 @@ data class GraphFilter(
     val scope: GraphScope = GraphScope.LOCAL,
     val nodeTypes: Set<NodeType> = emptySet(),
     val hours: Int = 24,
-    val searchQuery: String = ""
+    val searchQuery: String = "",
+    val includeTelemetry: Boolean = false  // Exclude tsdb_data by default for performance
 )
 
 /**

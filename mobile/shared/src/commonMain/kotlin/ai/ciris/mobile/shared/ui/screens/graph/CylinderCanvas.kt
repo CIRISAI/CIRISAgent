@@ -61,11 +61,16 @@ fun CylinderCanvas(
         val canvasWidth = constraints.maxWidth.toFloat()
         val canvasHeight = constraints.maxHeight.toFloat()
 
-        PlatformLogger.d(TAG, "Canvas size: ${canvasWidth}x${canvasHeight}, nodes: ${state.nodes.size}, edges: ${state.edges.size}")
+        // Track layout completion to avoid rendering before positions are set
+        var layoutComplete by remember { mutableStateOf(false) }
+        var layoutVersion by remember { mutableStateOf(0) }
 
-        // Apply layout when we have size and nodes
-        LaunchedEffect(state.nodes.size, canvasWidth, canvasHeight) {
+        PlatformLogger.d(TAG, "Canvas size: ${canvasWidth}x${canvasHeight}, nodes: ${state.nodes.size}, edges: ${state.edges.size}, layoutComplete: $layoutComplete")
+
+        // Apply layout when we have size and nodes - uses dataVersion to trigger on each load
+        LaunchedEffect(state.dataVersion, canvasWidth, canvasHeight) {
             if (state.nodes.isNotEmpty() && canvasWidth > 0 && canvasHeight > 0) {
+                layoutComplete = false
                 val layoutStart = System.currentTimeMillis()
                 PlatformLogger.d(TAG, ">>> Layout START: ${state.nodes.size} nodes, ${state.edges.size} edges")
 
@@ -81,18 +86,29 @@ fun CylinderCanvas(
                 cylinderLayout.timeRings.forEach { ring ->
                     PlatformLogger.d(TAG, "  Ring: ${ring.label} @ x=${ring.xPosition.toInt()}, ${ring.nodeCount} nodes")
                 }
+
+                // Log a few node positions for debugging
+                state.nodes.take(3).forEach { node ->
+                    PlatformLogger.d(TAG, "  Node ${node.id.take(8)}: cylinderX=${node.cylinderX}, theta=${node.cylinderTheta}")
+                }
+
+                layoutComplete = true
+                layoutVersion++
                 onLayoutApplied()
             }
         }
 
-        CylinderCanvasContent(
-            state = state,
-            cylinderLayout = cylinderLayout,
-            onNodeSelected = onNodeSelected,
-            canvasWidth = canvasWidth,
-            canvasHeight = canvasHeight,
-            autoRotate = autoRotate
-        )
+        // Only render when layout is complete
+        if (layoutComplete) {
+            CylinderCanvasContent(
+                state = state,
+                cylinderLayout = cylinderLayout,
+                onNodeSelected = onNodeSelected,
+                canvasWidth = canvasWidth,
+                canvasHeight = canvasHeight,
+                autoRotate = autoRotate
+            )
+        }
     }
 }
 
@@ -248,6 +264,14 @@ private fun CylinderCanvasContent(
         // Project nodes to 2D with depth sorting (with time offset applied)
         val projectedNodes = cylinderLayout.projectNodes(state.nodes, scrolledCenterX, centerY)
 
+        // Draw connecting lines from time rings to their nodes
+        drawTimeRingToNodeEdges(
+            rings = cylinderLayout.timeRings,
+            projectedNodes = projectedNodes,
+            centerX = scrolledCenterX,
+            centerY = centerY
+        )
+
         // Draw edges (sorted by average depth)
         drawCylinderEdges(
             edges = state.edges,
@@ -382,6 +406,62 @@ private fun DrawScope.drawTimeRings(
                 centerY - sliceHeight / 2 - countText.size.height - 2f
             )
         )
+    }
+}
+
+/**
+ * Draw subtle connecting lines from time ring centers to their associated nodes.
+ * These help visualize which nodes belong to which time period.
+ */
+private fun DrawScope.drawTimeRingToNodeEdges(
+    rings: List<CylinderLayout.TimeRing>,
+    projectedNodes: List<Pair<GraphNodeDisplay, CylinderLayout.ProjectedPoint>>,
+    centerX: Float,
+    centerY: Float
+) {
+    val lineColor = Color(0xFF63B3ED)  // Blue to match highlight color
+    val sliceHeight = 140f  // Match the slice height from drawTimeRings
+
+    // Group projected nodes by their ring (using cylinderX to match ring xPosition)
+    rings.forEach { ring ->
+        // Apply centerX offset (same as in drawTimeRings)
+        val ringX = ring.xPosition + (centerX - size.width / 2)
+        val ringTopY = centerY - sliceHeight / 2
+        val ringBottomY = centerY + sliceHeight / 2
+
+        // Find nodes belonging to this ring (their cylinderX matches ring.xPosition)
+        // Use larger tolerance since floating point values may differ slightly
+        val ringNodes = projectedNodes.filter { (node, _) ->
+            abs(node.cylinderX - ring.xPosition) < 20f  // Increased tolerance for matching
+        }
+
+        // Draw lines from ring to each node
+        ringNodes.forEach { (node, projected) ->
+            // Only draw for visible (front-facing) nodes
+            if (!projected.isBehind && projected.alpha > 0.3f) {
+                // Determine which edge of the ring to connect from (top or bottom)
+                val ringY = if (projected.screenY < centerY) ringTopY else ringBottomY
+
+                // Draw a subtle curved line from ring edge to node
+                val path = Path().apply {
+                    moveTo(ringX, ringY)
+                    // Control point for gentle curve
+                    val controlX = (ringX + projected.screenX) / 2
+                    val controlY = ringY + (projected.screenY - ringY) * 0.3f
+                    quadraticBezierTo(controlX, controlY, projected.screenX, projected.screenY)
+                }
+
+                drawPath(
+                    path = path,
+                    color = lineColor.copy(alpha = 0.4f * projected.alpha),
+                    style = Stroke(
+                        width = 1.5f,
+                        cap = StrokeCap.Round,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 3f), 0f)
+                    )
+                )
+            }
+        }
     }
 }
 

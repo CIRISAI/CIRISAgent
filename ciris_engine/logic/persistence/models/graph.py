@@ -327,6 +327,7 @@ def get_edges_for_nodes_batch(
         return []
 
     import time
+
     start = time.time()
 
     # Build placeholders for IN clause
@@ -342,7 +343,7 @@ def get_edges_for_nodes_batch(
         params = node_ids + node_ids
 
     edges: List[GraphEdge] = []
-    seen_edges: set = set()  # Deduplicate by (source, target, relationship)
+    seen_edges: set[tuple[str, str, str]] = set()  # Deduplicate by (source, target, relationship)
 
     try:
         with get_db_connection(db_path=db_path) as conn:

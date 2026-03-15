@@ -89,6 +89,10 @@ class SettingsViewModel(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    // Live background setting (persisted)
+    private val _liveBackgroundEnabled = MutableStateFlow(true)  // Default enabled
+    val liveBackgroundEnabled: StateFlow<Boolean> = _liveBackgroundEnabled.asStateFlow()
+
     // Available LLM providers for BYOK mode
     val availableProviders = listOf(
         "openai" to "OpenAI",
@@ -124,6 +128,26 @@ class SettingsViewModel(
         // Don't auto-load here - wait for refresh() to be called when screen is shown
         // This avoids making API calls before authentication is complete
         logDebug("init", "SettingsViewModel created, waiting for refresh() call")
+
+        // Load persisted display settings immediately (no auth needed)
+        loadDisplaySettings()
+    }
+
+    /**
+     * Load display-related settings that don't require authentication.
+     */
+    private fun loadDisplaySettings() {
+        viewModelScope.launch {
+            try {
+                secureStorage.get("live_background_enabled").onSuccess { value ->
+                    // Default to true if not set
+                    _liveBackgroundEnabled.value = value?.toBooleanStrictOrNull() ?: true
+                    logDebug("loadDisplaySettings", "Live background enabled: ${_liveBackgroundEnabled.value}")
+                }
+            } catch (e: Exception) {
+                logWarn("loadDisplaySettings", "Failed to load display settings: ${e.message}")
+            }
+        }
     }
 
     /**
@@ -559,5 +583,27 @@ class SettingsViewModel(
      */
     fun getProviderDisplayName(provider: String): String {
         return availableProviders.find { it.first == provider }?.second ?: provider
+    }
+
+    // ========== Display Settings ==========
+
+    /**
+     * Toggle live background on/off.
+     * Persists to secure storage immediately.
+     */
+    fun toggleLiveBackground(enabled: Boolean) {
+        val method = "toggleLiveBackground"
+        logInfo(method, "Setting live background to: $enabled")
+
+        _liveBackgroundEnabled.value = enabled
+
+        viewModelScope.launch {
+            try {
+                secureStorage.save("live_background_enabled", enabled.toString()).getOrThrow()
+                logDebug(method, "Live background setting persisted")
+            } catch (e: Exception) {
+                logWarn(method, "Failed to persist live background setting: ${e.message}")
+            }
+        }
     }
 }

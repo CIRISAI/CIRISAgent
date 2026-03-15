@@ -7,7 +7,7 @@ Provides access to scheduled tasks and task scheduling functionality.
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.runtime.extended import ScheduledTaskInfo
 
-from ._common import RESPONSES_400, RESPONSES_500_503, AuthObserverDep, AuthAdminDep
+from ._common import RESPONSES_400, RESPONSES_500_503, AuthAdminDep, AuthObserverDep
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +55,12 @@ class CreateScheduledTaskRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=200, description="Human-readable task name")
     goal_description: str = Field(..., min_length=1, max_length=1000, description="What the task aims to achieve")
     trigger_prompt: str = Field(..., min_length=1, max_length=2000, description="Prompt to execute when triggered")
-    defer_until: Optional[str] = Field(None, description="ISO timestamp for one-time execution (mutually exclusive with schedule_cron)")
-    schedule_cron: Optional[str] = Field(None, description="Cron expression for recurring tasks (e.g., '0 9 * * *' for daily at 9am)")
+    defer_until: Optional[str] = Field(
+        None, description="ISO timestamp for one-time execution (mutually exclusive with schedule_cron)"
+    )
+    schedule_cron: Optional[str] = Field(
+        None, description="Cron expression for recurring tasks (e.g., '0 9 * * *' for daily at 9am)"
+    )
 
 
 class CancelTaskResponse(BaseModel):
@@ -82,14 +86,11 @@ class SchedulerStatsResponse(BaseModel):
 # Helper functions
 
 
-def _get_task_scheduler(request: Request):
+def _get_task_scheduler(request: Request) -> Any:
     """Get task scheduler from app state with validation."""
     task_scheduler = getattr(request.app.state, "task_scheduler", None)
     if not task_scheduler:
-        raise HTTPException(
-            status_code=503,
-            detail="Task scheduler service not available"
-        )
+        raise HTTPException(status_code=503, detail="Task scheduler service not available")
     return task_scheduler
 
 
@@ -105,7 +106,7 @@ def _convert_to_response(task_info: ScheduledTaskInfo) -> ScheduledTaskResponse:
         created_at=task_info.created_at,
         last_triggered_at=task_info.last_triggered_at,
         deferral_count=task_info.deferral_count,
-        is_recurring=task_info.schedule_cron is not None
+        is_recurring=task_info.schedule_cron is not None,
     )
 
 
@@ -146,19 +147,14 @@ async def list_scheduled_tasks(
         recurring_count = sum(1 for t in task_responses if t.is_recurring)
 
         response = ScheduledTasksListResponse(
-            tasks=task_responses,
-            total=len(task_responses),
-            active_count=active_count,
-            recurring_count=recurring_count
+            tasks=task_responses, total=len(task_responses), active_count=active_count, recurring_count=recurring_count
         )
 
         return SuccessResponse(
             data=response,
             metadata=ResponseMetadata(
-                timestamp=datetime.now(timezone.utc),
-                request_id=str(uuid.uuid4()),
-                duration_ms=0
-            )
+                timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0
+            ),
         )
 
     except HTTPException:
@@ -192,16 +188,14 @@ async def get_scheduler_stats(
             tasks_pending=int(metrics.get("tasks_pending", 0)),
             recurring_tasks=int(metrics.get("recurring_tasks", 0)),
             oneshot_tasks=int(metrics.get("oneshot_tasks", 0)),
-            scheduler_uptime_seconds=float(metrics.get("scheduler_uptime_seconds", 0))
+            scheduler_uptime_seconds=float(metrics.get("scheduler_uptime_seconds", 0)),
         )
 
         return SuccessResponse(
             data=response,
             metadata=ResponseMetadata(
-                timestamp=datetime.now(timezone.utc),
-                request_id=str(uuid.uuid4()),
-                duration_ms=0
-            )
+                timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0
+            ),
         )
 
     except HTTPException:
@@ -234,14 +228,12 @@ async def create_scheduled_task(
     # Validate: must have either defer_until or schedule_cron, not both
     if task_request.defer_until and task_request.schedule_cron:
         raise HTTPException(
-            status_code=400,
-            detail="Cannot specify both defer_until and schedule_cron. Use one or the other."
+            status_code=400, detail="Cannot specify both defer_until and schedule_cron. Use one or the other."
         )
 
     if not task_request.defer_until and not task_request.schedule_cron:
         raise HTTPException(
-            status_code=400,
-            detail="Must specify either defer_until (for one-time) or schedule_cron (for recurring)."
+            status_code=400, detail="Must specify either defer_until (for one-time) or schedule_cron (for recurring)."
         )
 
     try:
@@ -253,7 +245,7 @@ async def create_scheduled_task(
             trigger_prompt=task_request.trigger_prompt,
             origin_thought_id=f"api_created_{uuid.uuid4().hex[:8]}",
             defer_until=task_request.defer_until,
-            schedule_cron=task_request.schedule_cron
+            schedule_cron=task_request.schedule_cron,
         )
 
         # Convert to response format
@@ -264,10 +256,16 @@ async def create_scheduled_task(
             status=scheduled_task.status,
             defer_until=scheduled_task.defer_until.isoformat() if scheduled_task.defer_until else None,
             schedule_cron=scheduled_task.schedule_cron,
-            created_at=scheduled_task.created_at.isoformat() if isinstance(scheduled_task.created_at, datetime) else scheduled_task.created_at,
-            last_triggered_at=scheduled_task.last_triggered_at.isoformat() if scheduled_task.last_triggered_at else None,
+            created_at=(
+                scheduled_task.created_at.isoformat()
+                if isinstance(scheduled_task.created_at, datetime)
+                else scheduled_task.created_at
+            ),
+            last_triggered_at=(
+                scheduled_task.last_triggered_at.isoformat() if scheduled_task.last_triggered_at else None
+            ),
             deferral_count=scheduled_task.deferral_count,
-            is_recurring=scheduled_task.schedule_cron is not None
+            is_recurring=scheduled_task.schedule_cron is not None,
         )
 
         logger.info(f"Created scheduled task: {scheduled_task.task_id} - {scheduled_task.name}")
@@ -275,10 +273,8 @@ async def create_scheduled_task(
         return SuccessResponse(
             data=response,
             metadata=ResponseMetadata(
-                timestamp=datetime.now(timezone.utc),
-                request_id=str(uuid.uuid4()),
-                duration_ms=0
-            )
+                timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0
+            ),
         )
 
     except ValueError as e:
@@ -309,26 +305,17 @@ async def cancel_scheduled_task(
         success = await task_scheduler.cancel_task(task_id)
 
         if not success:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Task not found: {task_id}"
-            )
+            raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
 
         logger.info(f"Cancelled scheduled task: {task_id}")
 
-        response = CancelTaskResponse(
-            success=True,
-            task_id=task_id,
-            message=f"Task {task_id} has been cancelled"
-        )
+        response = CancelTaskResponse(success=True, task_id=task_id, message=f"Task {task_id} has been cancelled")
 
         return SuccessResponse(
             data=response,
             metadata=ResponseMetadata(
-                timestamp=datetime.now(timezone.utc),
-                request_id=str(uuid.uuid4()),
-                duration_ms=0
-            )
+                timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0
+            ),
         )
 
     except HTTPException:

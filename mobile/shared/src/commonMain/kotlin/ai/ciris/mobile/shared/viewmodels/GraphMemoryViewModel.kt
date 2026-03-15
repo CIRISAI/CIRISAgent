@@ -87,7 +87,8 @@ class GraphMemoryViewModel(
                     hours = _filter.value.hours,
                     scope = null,  // ALL SCOPES for multi-scope cylinder
                     nodeType = null,
-                    limit = 200  // Increased limit for multi-scope view
+                    limit = 1000,  // High limit for multi-scope cylinder view
+                    includeMetrics = _filter.value.includeTelemetry  // Toggle telemetry nodes
                 )
 
                 val requestTime = System.currentTimeMillis() - requestStart
@@ -124,7 +125,8 @@ class GraphMemoryViewModel(
                     nodes = displayNodes,
                     edges = displayEdges,
                     isLoading = false,
-                    error = null
+                    error = null,
+                    dataVersion = _displayState.value.dataVersion + 1  // Increment to trigger re-layout
                 )
 
                 // Start simulation
@@ -249,8 +251,15 @@ class GraphMemoryViewModel(
      * Start force simulation.
      */
     fun startSimulation() {
-        if (simulationJob?.isActive == true) return
-        if (_displayState.value.layout != GraphLayout.FORCE) return
+        PlatformLogger.d(TAG, "startSimulation() called, layout=${_displayState.value.layout}, nodes=${_displayState.value.nodes.size}")
+        if (simulationJob?.isActive == true) {
+            PlatformLogger.d(TAG, "startSimulation(): already running, returning")
+            return
+        }
+        if (_displayState.value.layout != GraphLayout.FORCE) {
+            PlatformLogger.d(TAG, "startSimulation(): layout is not FORCE (${_displayState.value.layout}), returning")
+            return
+        }
 
         PlatformLogger.d(TAG, "Starting force simulation")
         simulation.restart()

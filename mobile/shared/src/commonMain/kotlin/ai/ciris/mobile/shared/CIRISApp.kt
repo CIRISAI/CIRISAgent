@@ -1173,6 +1173,9 @@ fun CIRISApp(
                 ) { paddingValues ->
                     // Only apply top padding from Scaffold - InteractScreen handles
                     // bottom insets (keyboard + nav bar) via windowInsetsPadding
+                    // Live background state from settings
+                    val liveBackgroundEnabled by settingsViewModel.liveBackgroundEnabled.collectAsState()
+
                     InteractScreen(
                         viewModel = interactViewModel,
                         onNavigateBack = { /* Already at root */ },
@@ -1202,6 +1205,8 @@ fun CIRISApp(
                             platformLog(TAG, "[INFO] Opening Settings page from LLM indicator")
                             currentScreen = Screen.Settings
                         },
+                        apiClient = apiClient,
+                        liveBackgroundEnabled = liveBackgroundEnabled,
                         modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
                     )
                 }
@@ -1821,8 +1826,8 @@ fun CIRISApp(
                         graphMemoryViewModel.stopSimulation()
                     },
                     onNavigateBack = {
-                        PlatformLogger.i("CIRISApp", "[Screen.GraphMemory] Navigating back to Interact")
-                        currentScreen = Screen.Interact
+                        PlatformLogger.i("CIRISApp", "[Screen.GraphMemory] Navigating back to Memory list")
+                        currentScreen = Screen.Memory
                     }
                 )
             }

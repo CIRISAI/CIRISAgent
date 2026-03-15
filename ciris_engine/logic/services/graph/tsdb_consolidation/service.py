@@ -635,7 +635,94 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
                 period_label,
             )
 
+            # 4. Immediate cleanup - delete raw data now that summaries exist
+            deleted = self._cleanup_period_raw_data(summaries_created, period_start, period_end)
+            if deleted > 0:
+                logger.info(f"Immediate cleanup: deleted {deleted} raw nodes for period {period_label}")
+
         return summaries_created
+
+    def _cleanup_period_raw_data(
+        self,
+        summaries: List[GraphNode],
+        period_start: datetime,
+        period_end: datetime,
+    ) -> int:
+        """
+        Immediately clean up raw data after summaries are created.
+
+        This replaces the delayed 24-hour retention cleanup with immediate cleanup
+        once summaries are verified to exist.
+
+        Args:
+            summaries: List of summary nodes just created
+            period_start: Start of the consolidated period
+            period_end: End of the consolidated period
+
+        Returns:
+            Total number of raw nodes deleted
+        """
+        from ciris_engine.logic.persistence.db.core import get_db_connection
+        from ciris_engine.logic.services.graph.tsdb_consolidation.cleanup_helpers import delete_nodes_in_period
+
+        total_deleted = 0
+
+        try:
+            with get_db_connection(db_path=self.db_path) as conn:
+                cursor = conn.cursor()
+
+                # Map summary types to their raw data types
+                summary_to_raw = {
+                    NodeType.TSDB_SUMMARY: "tsdb_data",
+                    NodeType.AUDIT_SUMMARY: "audit_entry",
+                    # Note: trace_summary cleans up service_correlations, not graph_nodes
+                    # conversation_summary and task_summary don't have raw nodes to clean
+                }
+
+                for summary in summaries:
+                    raw_type = summary_to_raw.get(summary.type)
+                    if raw_type:
+                        deleted = delete_nodes_in_period(
+                            cursor,
+                            raw_type,
+                            period_start.isoformat(),
+                            period_end.isoformat(),
+                        )
+                        if deleted > 0:
+                            logger.info(f"Deleted {deleted} {raw_type} nodes for {summary.id}")
+                            total_deleted += deleted
+
+                            # Update the summary to mark raw data as expired
+                            self._mark_raw_data_expired(cursor, summary.id)
+
+                conn.commit()
+
+        except Exception as e:
+            logger.error(f"Error during immediate cleanup: {e}", exc_info=True)
+
+        return total_deleted
+
+    def _mark_raw_data_expired(self, cursor: Any, summary_id: str) -> None:
+        """Mark a summary node's raw_data_expired flag as true."""
+        import json
+
+        from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+        adapter = get_adapter()
+        ph = adapter.placeholder()
+
+        cursor.execute(
+            f"SELECT attributes_json FROM graph_nodes WHERE node_id = {ph}",
+            (summary_id,),
+        )
+        row = cursor.fetchone()
+        if row:
+            attrs = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+            attrs["raw_data_expired"] = True
+            cursor.execute(
+                f"UPDATE graph_nodes SET attributes_json = {ph} WHERE node_id = {ph}",
+                (json.dumps(attrs), summary_id),
+            )
 
     def _get_consolidator_edges_for_summary(
         self,

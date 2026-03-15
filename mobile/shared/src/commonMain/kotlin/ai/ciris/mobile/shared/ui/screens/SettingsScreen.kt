@@ -298,6 +298,11 @@ fun SettingsScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
+                // Display Settings Section
+                DisplaySettingsSection(viewModel = viewModel)
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
                 // CIRIS Authentication Section
                 Text(
                     text = "CIRIS Authentication",
@@ -2143,5 +2148,52 @@ private fun NetworkCheck(label: String, passed: Boolean) {
             fontSize = 10.sp,
             color = if (passed) Color(0xFF059669) else Color.Gray
         )
+    }
+}
+
+/**
+ * Display settings section with live background toggle.
+ */
+@Composable
+private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
+    val liveBackgroundEnabled by viewModel.liveBackgroundEnabled.collectAsState()
+
+    Text(
+        text = "Display",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary
+    )
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Live Memory Background",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "Show animated 3D memory graph behind chat",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = liveBackgroundEnabled,
+                onCheckedChange = { viewModel.toggleLiveBackground(it) },
+                modifier = Modifier.testable("switch_live_background")
+            )
+        }
     }
 }

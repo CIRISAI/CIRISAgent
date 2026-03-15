@@ -43,6 +43,7 @@ import ai.ciris.mobile.shared.viewmodels.UsersViewModel
 import ai.ciris.mobile.shared.viewmodels.WiseAuthorityViewModel
 import ai.ciris.mobile.shared.viewmodels.TicketsViewModel
 import ai.ciris.mobile.shared.viewmodels.SchedulerViewModel
+import ai.ciris.mobile.shared.viewmodels.ToolsViewModel
 import ai.ciris.mobile.shared.ui.screens.graph.GraphMemoryScreen
 import androidx.compose.foundation.layout.*
 import kotlinx.coroutines.Dispatchers
@@ -467,6 +468,9 @@ fun CIRISApp(
     }
     val schedulerViewModel: SchedulerViewModel = viewModel {
         SchedulerViewModel(apiClient)
+    }
+    val toolsViewModel: ToolsViewModel = viewModel {
+        ToolsViewModel(apiClient)
     }
 
     // Set up purchase result callback
@@ -1157,7 +1161,8 @@ fun CIRISApp(
                             onRuntimeClick = { currentScreen = Screen.Runtime },
                             onUsersClick = { currentScreen = Screen.Users },
                             onTicketsClick = { currentScreen = Screen.Tickets },
-                            onSchedulerClick = { currentScreen = Screen.Scheduler }
+                            onSchedulerClick = { currentScreen = Screen.Scheduler },
+                            onToolsClick = { currentScreen = Screen.Tools }
                         )
                     }
                 ) { paddingValues ->
@@ -2112,6 +2117,42 @@ fun CIRISApp(
                 )
             }
 
+            Screen.Tools -> {
+                val toolsState by toolsViewModel.state.collectAsState()
+
+                LaunchedEffect(Unit) {
+                    PlatformLogger.i(TAG, "[Screen.Tools] Loading tools on screen entry")
+                    toolsViewModel.startPolling()
+                }
+
+                DisposableEffect(Unit) {
+                    onDispose {
+                        toolsViewModel.stopPolling()
+                    }
+                }
+
+                ToolsScreen(
+                    state = toolsState,
+                    filteredTools = toolsViewModel.getFilteredTools(),
+                    categories = toolsViewModel.getCategories(),
+                    providers = toolsViewModel.getProviders(),
+                    onRefresh = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Tools] User triggered refresh")
+                        toolsViewModel.refresh()
+                    },
+                    onSearchQueryChange = { query ->
+                        toolsViewModel.updateSearchQuery(query)
+                    },
+                    onCategoryFilter = { category ->
+                        toolsViewModel.filterByCategory(category)
+                    },
+                    onProviderFilter = { provider ->
+                        toolsViewModel.filterByProvider(provider)
+                    },
+                    onNavigateBack = { currentScreen = Screen.Interact }
+                )
+            }
+
             Screen.Trust -> {
                 TrustPage(
                     apiClient = apiClient,
@@ -2182,7 +2223,8 @@ private fun CIRISTopBar(
     onRuntimeClick: () -> Unit = {},
     onUsersClick: () -> Unit = {},
     onTicketsClick: () -> Unit = {},
-    onSchedulerClick: () -> Unit = {}
+    onSchedulerClick: () -> Unit = {},
+    onToolsClick: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -2428,6 +2470,19 @@ private fun CIRISTopBar(
                             )
                         }
                     )
+                    DropdownMenuItem(
+                        text = { Text("Tools") },
+                        onClick = {
+                            showMenu = false
+                            onToolsClick()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Build,
+                                contentDescription = null
+                            )
+                        }
+                    )
                 }
             }
         },
@@ -2465,4 +2520,5 @@ private sealed class Screen {
     object Trust : Screen()
     object Tickets : Screen()
     object Scheduler : Screen()
+    object Tools : Screen()
 }

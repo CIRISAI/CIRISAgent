@@ -2756,6 +2756,75 @@ class CIRISApiClient(
         }
     }
 
+    suspend fun getTools(): ToolsResult {
+        val method = "getTools"
+        logInfo(method, "Fetching available tools")
+
+        return try {
+            // Use direct HTTP call to parse the tools response properly
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+
+            val response = client.get("$baseUrl/v1/system/tools") {
+                header("Authorization", "Bearer $accessToken")
+            }
+
+            if (response.status != HttpStatusCode.OK) {
+                logError(method, "API returned non-success status: ${response.status}")
+                client.close()
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val jsonString = response.bodyAsText()
+            client.close()
+
+            val json = Json.parseToJsonElement(jsonString).jsonObject
+            val dataArray = json["data"]?.jsonArray ?: emptyList()
+            val metadataObj = json["metadata"]?.jsonObject
+
+            val tools = dataArray.mapNotNull { toolElement ->
+                val tool = toolElement.jsonObject
+                ToolInfoData(
+                    name = tool["name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null,
+                    description = tool["description"]?.jsonPrimitive?.contentOrNull ?: "",
+                    provider = tool["provider"]?.jsonPrimitive?.contentOrNull ?: "unknown",
+                    category = tool["category"]?.jsonPrimitive?.contentOrNull ?: "general",
+                    cost = tool["cost"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: 0.0,
+                    whenToUse = tool["when_to_use"]?.jsonPrimitive?.contentOrNull,
+                    parameters = tool["parameters"]?.jsonObject?.let { params ->
+                        params.entries.associate { (k, v) -> k to v.toString() }
+                    }
+                )
+            }
+
+            val metadata = metadataObj?.let {
+                ToolsMetadataData(
+                    providers = it["providers"]?.jsonArray?.mapNotNull { p ->
+                        p.jsonPrimitive.contentOrNull
+                    } ?: emptyList(),
+                    providerCount = it["provider_count"]?.jsonPrimitive?.int ?: 0,
+                    totalTools = it["total_tools"]?.jsonPrimitive?.int ?: tools.size
+                )
+            }
+
+            logInfo(method, "Loaded ${tools.size} tools from ${metadata?.providerCount ?: 0} providers")
+
+            ToolsResult(
+                tools = tools,
+                metadata = metadata
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
     suspend fun getUnifiedTelemetry(): UnifiedTelemetryData {
         val method = "getUnifiedTelemetry"
         logInfo(method, "Fetching unified telemetry")
@@ -4199,4 +4268,36 @@ data class TicketStatsData(
     val completed: Int,
     val failed: Int,
     val urgent: Int
+)
+
+// ===== Tools Data Models =====
+
+/**
+ * Tool information from the system.
+ */
+data class ToolInfoData(
+    val name: String,
+    val description: String,
+    val provider: String,
+    val category: String,
+    val cost: Double,
+    val whenToUse: String?,
+    val parameters: Map<String, String>?
+)
+
+/**
+ * Tools metadata.
+ */
+data class ToolsMetadataData(
+    val providers: List<String>,
+    val providerCount: Int,
+    val totalTools: Int
+)
+
+/**
+ * Result of fetching tools.
+ */
+data class ToolsResult(
+    val tools: List<ToolInfoData>,
+    val metadata: ToolsMetadataData?
 )

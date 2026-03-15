@@ -1631,6 +1631,70 @@ class CIRISApiClient(
     }
 
     /**
+     * Get detailed status of a specific adapter including config, services, tools, and metrics.
+     */
+    suspend fun getAdapterDetails(adapterId: String): ai.ciris.mobile.shared.models.AdapterDetailsData {
+        val method = "getAdapterDetails"
+        logInfo(method, "Fetching adapter details: $adapterId")
+
+        return try {
+            val response = systemApi.getAdapterStatusV1SystemAdaptersAdapterIdGet(
+                adapterId = adapterId,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Adapter details received: adapterId=${data.adapterId}, services=${data.servicesRegistered?.size ?: 0}, tools=${data.tools?.size ?: 0}")
+
+            // Convert API model to our internal model
+            ai.ciris.mobile.shared.models.AdapterDetailsData(
+                adapterId = data.adapterId,
+                adapterType = data.adapterType,
+                isRunning = data.isRunning,
+                loadedAt = data.loadedAt?.toString(),
+                servicesRegistered = data.servicesRegistered ?: emptyList(),
+                configParams = data.configParams?.let { config ->
+                    ai.ciris.mobile.shared.models.AdapterConfigData(
+                        adapterType = config.adapterType,
+                        enabled = config.enabled ?: true,
+                        persist = config.persist ?: false,
+                        settings = config.settings?.mapValues { it.value?.toString() ?: "" } ?: emptyMap()
+                    )
+                },
+                tools = data.tools?.map { tool ->
+                    ai.ciris.mobile.shared.models.ToolInfoData(
+                        name = tool.name,
+                        description = tool.description,
+                        category = tool.category ?: "general",
+                        cost = tool.cost?.toFloat() ?: 0f,
+                        whenToUse = tool.whenToUse
+                    )
+                },
+                metrics = data.metrics?.let { m ->
+                    ai.ciris.mobile.shared.models.AdapterMetricsData(
+                        messagesProcessed = m.messagesProcessed ?: 0,
+                        errorsCount = m.errorsCount ?: 0,
+                        uptimeSeconds = (m.uptimeSeconds ?: 0.0).toFloat(),
+                        lastError = m.lastError,
+                        lastErrorTime = m.lastErrorTime?.toString()
+                    )
+                },
+                lastActivity = data.lastActivity?.toString()
+            )
+        } catch (e: Exception) {
+            logException(method, e, "adapterId=$adapterId")
+            throw e
+        }
+    }
+
+    /**
      * Get available module/adapter types for adding new adapters.
      */
     suspend fun getModuleTypes(): ModuleTypesData {
@@ -1783,7 +1847,8 @@ class CIRISApiClient(
                     platformAvailable = obj["platform_available"]?.jsonPrimitive?.boolean ?: true,
                     externalDependencies = obj["external_dependencies"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
                     dependenciesAvailable = obj["dependencies_available"]?.jsonPrimitive?.boolean ?: true,
-                    missingDependencies = obj["missing_dependencies"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
+                    missingDependencies = obj["missing_dependencies"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                    loadedInstances = obj["loaded_instances"]?.jsonPrimitive?.int ?: 0
                 )
             } ?: emptyList()
 
@@ -1886,29 +1951,45 @@ class CIRISApiClient(
                 currentStepIndex = data.currentStepIndex ?: 0,
                 totalSteps = data.totalSteps ?: 0,
                 currentStep = data.currentStep?.let { step ->
-                    ConfigStepData(
-                        stepId = step.stepId ?: "",
-                        stepType = step.stepType ?: "",
-                        title = step.title ?: "",
-                        description = step.description,
-                        required = step.required ?: false,
-                        fields = step.fields?.map { field ->
-                            ConfigFieldData(
-                                name = field.name ?: "",
-                                label = field.label ?: "",
-                                fieldType = field.fieldType ?: "",
-                                required = field.required ?: false,
-                                defaultValue = field.defaultValue,
-                                helpText = field.helpText
-                            )
-                        } ?: emptyList()
-                    )
+                    mapConfigStep(step)
                 }
             )
         } catch (e: Exception) {
             logException(method, e, "adapterType=$adapterType")
             throw e
         }
+    }
+
+    /**
+     * Map SDK ConfigurationStep to mobile ConfigStepData.
+     */
+    private fun mapConfigStep(step: ai.ciris.api.models.ConfigurationStep): ConfigStepData {
+        return ConfigStepData(
+            stepId = step.stepId ?: "",
+            stepType = step.stepType ?: "",
+            title = step.title ?: "",
+            description = step.description,
+            required = step.required ?: false,
+            fields = step.fields?.map { field ->
+                ConfigFieldData(
+                    name = field.name ?: "",
+                    label = field.label ?: "",
+                    // Backend uses "type", SDK may have "field_type" as fallback
+                    fieldType = field.type ?: field.fieldType ?: "",
+                    required = field.required ?: false,
+                    defaultValue = field.default ?: field.defaultValue,
+                    helpText = field.description ?: field.helpText,
+                    // Map options for select-type fields
+                    options = field.options?.map { option ->
+                        ConfigFieldOption(
+                            value = option.value ?: "",
+                            label = option.label ?: option.value ?: "",
+                            description = option.description
+                        )
+                    } ?: emptyList()
+                )
+            } ?: emptyList()
+        )
     }
 
     /**
@@ -2090,25 +2171,7 @@ class CIRISApiClient(
                 status = data.status ?: "",
                 currentStepIndex = data.currentStepIndex ?: 0,
                 totalSteps = data.totalSteps ?: 0,
-                currentStep = data.currentStep?.let { step ->
-                    ConfigStepData(
-                        stepId = step.stepId ?: "",
-                        stepType = step.stepType ?: "",
-                        title = step.title ?: "",
-                        description = step.description,
-                        required = step.required ?: false,
-                        fields = step.fields?.map { field ->
-                            ConfigFieldData(
-                                name = field.name ?: "",
-                                label = field.label ?: "",
-                                fieldType = field.fieldType ?: "",
-                                required = field.required ?: false,
-                                defaultValue = field.defaultValue,
-                                helpText = field.helpText
-                            )
-                        } ?: emptyList()
-                    )
-                },
+                currentStep = data.currentStep?.let { step -> mapConfigStep(step) },
                 collectedConfig = collectedConfig
             )
         } catch (e: Exception) {

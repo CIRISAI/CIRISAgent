@@ -88,6 +88,7 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.release
+            resValue "string", "app_name", "CIRIS"
             // Temporarily disabled due to R8 race condition bug (NoSuchFileException: base.jar)
             // TODO: Re-enable when AGP is updated to fix this issue
             minifyEnabled false
@@ -97,6 +98,8 @@ android {
 
         debug {
             debuggable true
+            applicationIdSuffix ".debug"  // Allows debug build to coexist with Play Store version
+            resValue "string", "app_name", "CIRIS DEBUG"
             // Use default debug signing config
         }
     }

@@ -6,6 +6,9 @@
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": "https://www.spotify.com"
   },
+  "platform_requirements": ["desktop_cli"],
+  "platform_requirements_rationale": "Requires spogo or spotify_player CLI tools only available on desktop",
+  "cli_dependencies": ["spogo"],
   "services": [
     {
       "type": "TOOL",

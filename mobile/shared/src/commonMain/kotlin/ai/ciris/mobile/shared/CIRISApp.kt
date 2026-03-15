@@ -1369,6 +1369,9 @@ fun CIRISApp(
                 val wizardLoading by adaptersViewModel.wizardLoading.collectAsState()
                 val discoveredItems by adaptersViewModel.discoveredItems.collectAsState()
                 val discoveryExecuted by adaptersViewModel.discoveryExecuted.collectAsState()
+                // Expansion state
+                val expandedAdapterIds by adaptersViewModel.expandedAdapterIds.collectAsState()
+                val adapterDetails by adaptersViewModel.adapterDetails.collectAsState()
 
                 PlatformLogger.d("CIRISApp", "[Screen.Adapters] Rendering adapters screen: " +
                         "adapters=${adaptersList.size}, connected=$isAdaptersConnected, " +
@@ -1396,6 +1399,16 @@ fun CIRISApp(
                     adapters = adaptersList,
                     isConnected = isAdaptersConnected,
                     isLoading = isAdaptersLoading || adaptersOperationInProgress,
+                    expandedAdapterIds = expandedAdapterIds,
+                    adapterDetails = adapterDetails,
+                    onToggleExpanded = { adapterId ->
+                        PlatformLogger.d("CIRISApp", "[Screen.Adapters] Toggling expansion for: $adapterId")
+                        adaptersViewModel.toggleExpanded(adapterId)
+                    },
+                    onEditConfig = { adapterType ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Adapters] Edit config for: $adapterType")
+                        adaptersViewModel.editAdapterConfig(adapterType)
+                    },
                     onReloadAdapter = { adapterId ->
                         PlatformLogger.i("CIRISApp", "[Screen.Adapters] Reloading adapter: $adapterId")
                         adaptersViewModel.reloadAdapter(adapterId)
@@ -1536,6 +1549,7 @@ fun CIRISApp(
                 val servicesData by servicesViewModel.servicesData.collectAsState()
                 val isServicesLoading by servicesViewModel.isLoading.collectAsState()
                 val servicesError by servicesViewModel.error.collectAsState()
+                val expandedServiceIds by servicesViewModel.expandedServiceIds.collectAsState()
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
@@ -1560,6 +1574,11 @@ fun CIRISApp(
                 ServicesScreen(
                     servicesData = servicesData,
                     isLoading = isServicesLoading,
+                    expandedServiceIds = expandedServiceIds,
+                    onToggleServiceExpanded = { serviceId ->
+                        PlatformLogger.d("CIRISApp", "[Screen.Services] Toggle expansion: $serviceId")
+                        servicesViewModel.toggleServiceExpanded(serviceId)
+                    },
                     onRefresh = {
                         PlatformLogger.i("CIRISApp", "[Screen.Services] User triggered refresh")
                         servicesViewModel.refresh()

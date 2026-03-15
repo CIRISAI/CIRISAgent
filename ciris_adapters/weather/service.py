@@ -57,32 +57,95 @@ class WeatherToolService:
         # Cache for grid points (NOAA uses a grid system)
         self._grid_cache: Dict[tuple[float, float], Dict[str, Any]] = {}
 
+        # Default location from config (set via wizard)
+        self._default_location = os.getenv("CIRIS_WEATHER_DEFAULT_LOCATION")
+        self._default_lat: Optional[float] = None
+        self._default_lon: Optional[float] = None
+        if self._default_location:
+            self._parse_default_location()
+
         # Tool definitions
         self._tools: Dict[str, ToolInfo] = self._define_tools()
 
         logger.info("WeatherToolService initialized with NOAA API")
+        if self._default_lat is not None:
+            logger.info(f"Default location configured: {self._default_lat}, {self._default_lon}")
         if self.owm_api_key:
             logger.info("OpenWeatherMap backup available")
 
+    def _parse_default_location(self) -> None:
+        """Parse default location from env var (format: 'lat,lon' or city name)."""
+        if not self._default_location:
+            return
+
+        # Try to parse as "lat,lon" format
+        if "," in self._default_location:
+            try:
+                parts = self._default_location.split(",")
+                if len(parts) == 2:
+                    self._default_lat = float(parts[0].strip())
+                    self._default_lon = float(parts[1].strip())
+                    logger.info(f"Parsed default location: lat={self._default_lat}, lon={self._default_lon}")
+                    return
+            except ValueError:
+                pass
+
+        logger.warning(f"Could not parse default location '{self._default_location}' - expected 'lat,lon' format")
+
+    def _get_coordinates_with_defaults(
+        self, parameters: Dict[str, Any]
+    ) -> tuple[Optional[float], Optional[float], bool]:
+        """
+        Get coordinates from parameters, falling back to configured defaults.
+
+        Returns:
+            (latitude, longitude, used_defaults) - used_defaults is True if defaults were applied
+        """
+        lat = parameters.get("latitude")
+        lon = parameters.get("longitude")
+        used_defaults = False
+
+        # If coordinates not provided, use defaults
+        if lat is None and lon is None and self._default_lat is not None:
+            lat = self._default_lat
+            lon = self._default_lon
+            used_defaults = True
+            logger.info(f"Using configured default location: {lat}, {lon}")
+
+        return lat, lon, used_defaults
+
     def _define_tools(self) -> Dict[str, ToolInfo]:
         """Define available tools."""
+        # Build dynamic description with default location info
+        default_info = ""
+        lat_desc = "Latitude coordinate of the location"
+        lon_desc = "Longitude coordinate of the location"
+
+        if self._default_lat is not None and self._default_lon is not None:
+            default_info = (
+                f" User has configured default location: {self._default_lat}, {self._default_lon}. "
+                f"If no specific location is mentioned, use empty parameters {{}} to use this default."
+            )
+            lat_desc = f"Latitude coordinate (default: {self._default_lat} if omitted)"
+            lon_desc = f"Longitude coordinate (default: {self._default_lon} if omitted)"
+
         return {
             "weather:current": ToolInfo(
                 name="weather:current",
-                description="Get current weather conditions for a location (temperature, wind, conditions)",
+                description=f"Get current weather conditions for a location (temperature, wind, conditions).{default_info}",
                 parameters=ToolParameterSchema(
                     type="object",
                     properties={
                         "latitude": {
                             "type": "number",
-                            "description": "Latitude coordinate of the location",
+                            "description": lat_desc,
                         },
                         "longitude": {
                             "type": "number",
-                            "description": "Longitude coordinate of the location",
+                            "description": lon_desc,
                         },
                     },
-                    required=["latitude", "longitude"],
+                    required=[] if self._default_lat else ["latitude", "longitude"],
                 ),
                 category="weather",
                 cost=0.0,
@@ -142,20 +205,20 @@ class WeatherToolService:
             ),
             "weather:forecast": ToolInfo(
                 name="weather:forecast",
-                description="Get weather forecast for a location (upcoming conditions)",
+                description=f"Get weather forecast for a location (upcoming conditions).{default_info}",
                 parameters=ToolParameterSchema(
                     type="object",
                     properties={
                         "latitude": {
                             "type": "number",
-                            "description": "Latitude coordinate of the location",
+                            "description": lat_desc,
                         },
                         "longitude": {
                             "type": "number",
-                            "description": "Longitude coordinate of the location",
+                            "description": lon_desc,
                         },
                     },
-                    required=["latitude", "longitude"],
+                    required=[] if self._default_lat else ["latitude", "longitude"],
                 ),
                 category="weather",
                 cost=0.0,
@@ -163,20 +226,20 @@ class WeatherToolService:
             ),
             "weather:alerts": ToolInfo(
                 name="weather:alerts",
-                description="Get active weather alerts for a location (warnings, watches, advisories)",
+                description=f"Get active weather alerts for a location (warnings, watches, advisories).{default_info}",
                 parameters=ToolParameterSchema(
                     type="object",
                     properties={
                         "latitude": {
                             "type": "number",
-                            "description": "Latitude coordinate of the location",
+                            "description": lat_desc,
                         },
                         "longitude": {
                             "type": "number",
-                            "description": "Longitude coordinate of the location",
+                            "description": lon_desc,
                         },
                     },
-                    required=["latitude", "longitude"],
+                    required=[] if self._default_lat else ["latitude", "longitude"],
                 ),
                 category="weather",
                 cost=0.0,
@@ -466,15 +529,19 @@ class WeatherToolService:
 
     async def _execute_current(self, parameters: Dict[str, Any], correlation_id: str) -> ToolExecutionResult:
         """Execute current weather tool."""
-        lat = parameters.get("latitude")
-        lon = parameters.get("longitude")
+        lat, lon, used_defaults = self._get_coordinates_with_defaults(parameters)
 
         if lat is None or lon is None:
+            default_hint = ""
+            if self._default_location:
+                default_hint = f" (configured default '{self._default_location}' could not be parsed)"
+            else:
+                default_hint = " (no default location configured - set via adapter wizard)"
             return ToolExecutionResult(
                 tool_name="weather:current",
                 status=ToolExecutionStatus.FAILED,
                 success=False,
-                error="Missing required parameters: latitude and longitude",
+                error=f"Missing required parameters: latitude and longitude{default_hint}",
                 correlation_id=correlation_id,
             )
 
@@ -540,15 +607,19 @@ class WeatherToolService:
 
     async def _execute_forecast(self, parameters: Dict[str, Any], correlation_id: str) -> ToolExecutionResult:
         """Execute weather forecast tool."""
-        lat = parameters.get("latitude")
-        lon = parameters.get("longitude")
+        lat, lon, used_defaults = self._get_coordinates_with_defaults(parameters)
 
         if lat is None or lon is None:
+            default_hint = ""
+            if self._default_location:
+                default_hint = f" (configured default '{self._default_location}' could not be parsed)"
+            else:
+                default_hint = " (no default location configured - set via adapter wizard)"
             return ToolExecutionResult(
                 tool_name="weather:forecast",
                 status=ToolExecutionStatus.FAILED,
                 success=False,
-                error="Missing required parameters: latitude and longitude",
+                error=f"Missing required parameters: latitude and longitude{default_hint}",
                 correlation_id=correlation_id,
             )
 
@@ -619,15 +690,19 @@ class WeatherToolService:
 
     async def _execute_alerts(self, parameters: Dict[str, Any], correlation_id: str) -> ToolExecutionResult:
         """Execute weather alerts tool."""
-        lat = parameters.get("latitude")
-        lon = parameters.get("longitude")
+        lat, lon, used_defaults = self._get_coordinates_with_defaults(parameters)
 
         if lat is None or lon is None:
+            default_hint = ""
+            if self._default_location:
+                default_hint = f" (configured default '{self._default_location}' could not be parsed)"
+            else:
+                default_hint = " (no default location configured - set via adapter wizard)"
             return ToolExecutionResult(
                 tool_name="weather:alerts",
                 status=ToolExecutionStatus.FAILED,
                 success=False,
-                error="Missing required parameters: latitude and longitude",
+                error=f"Missing required parameters: latitude and longitude{default_hint}",
                 correlation_id=correlation_id,
             )
 

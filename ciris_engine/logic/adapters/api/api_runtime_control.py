@@ -282,31 +282,18 @@ class APIRuntimeControlService(Service):
         return await adapter_manager.list_adapters()
 
     async def get_adapter_info(self, adapter_id: str) -> Optional[Any]:
-        """Get detailed information about a specific adapter."""
+        """Get detailed information about a specific adapter.
+
+        Returns full AdapterInfo with all fields:
+        - status, started_at, messages_processed, error_count, last_error
+        - tools: List of tools provided by the adapter
+        - config_params: Sanitized adapter configuration
+        - services_registered: List of services registered by adapter
+        """
         adapter_manager = self._require_adapter_manager()
 
-        status = await adapter_manager.get_adapter_status(adapter_id)
-        if not status:
-            return None
-
-        # Convert AdapterStatus to AdapterInfo format expected by runtime control
-        from ciris_engine.schemas.services.core.runtime import AdapterInfo, AdapterStatus
-
-        # Map status
-        if status.is_running:
-            adapter_status = AdapterStatus.RUNNING
-        else:
-            adapter_status = AdapterStatus.STOPPED
-
-        return AdapterInfo(
-            adapter_id=status.adapter_id,
-            adapter_type=status.adapter_type,
-            status=adapter_status,
-            started_at=status.loaded_at,
-            messages_processed=status.metrics.messages_processed if status.metrics else 0,
-            error_count=status.metrics.errors_count if status.metrics else 0,
-            last_error=status.metrics.last_error if status.metrics else None,
-        )
+        # adapter_manager.get_adapter_info() returns the full AdapterInfo directly
+        return await adapter_manager.get_adapter_info(adapter_id)
 
     async def load_adapter(
         self, adapter_type: str, adapter_id: Optional[str] = None, config: Optional[Dict[str, object]] = None

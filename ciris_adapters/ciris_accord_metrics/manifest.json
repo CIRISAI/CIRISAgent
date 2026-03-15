@@ -2,7 +2,7 @@
   "module": {
     "name": "ciris_accord_metrics",
     "version": "1.0.0",
-    "description": "CIRIS Accord compliance metrics adapter - reports WBD and PDMA events to CIRISLens",
+    "description": "Sends traces at user specified level of detail to CIRISLens to support CIRIS Scoring and the Coherence Ratchet compendium",
     "author": "CIRIS L3C",
     "auto_load": false,
     "opt_in_required": true,

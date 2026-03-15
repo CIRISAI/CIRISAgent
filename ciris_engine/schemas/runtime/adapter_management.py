@@ -122,16 +122,8 @@ class ServiceRegistrationInfo(BaseModel):
     model_config = ConfigDict(defer_build=True)
 
 
-class AdapterInfo(BaseModel):
-    """Detailed information about an adapter."""
-
-    adapter_id: str = Field(..., description=ADAPTER_ID_DESC)
-    adapter_type: str = Field(..., description=ADAPTER_TYPE_DESC)
-    config: AdapterConfig = Field(..., description="Adapter configuration")
-    load_time: str = Field(..., description="ISO timestamp when loaded")
-    is_running: bool = Field(..., description=IS_RUNNING_DESC)
-
-    model_config = ConfigDict(defer_build=True)
+# NOTE: AdapterInfo was removed from here - use ciris_engine.schemas.services.core.runtime.AdapterInfo
+# which has full fields: services_registered, tools, metrics, etc.
 
 
 class CommunicationAdapterInfo(BaseModel):

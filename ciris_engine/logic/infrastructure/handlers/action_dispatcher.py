@@ -236,6 +236,18 @@ class ActionDispatcher:
         # Calculate execution time
         execution_time_ms = (self._time_service.now() - start_time).total_seconds() * 1000.0
 
+        # Determine outcome by checking the thought's final status
+        # The handler updates the thought status to FAILED if execution fails
+        outcome = "success"
+        try:
+            updated_thought = persistence.get_thought(thought.thought_id, occurrence_id=thought.agent_occurrence_id)
+            if updated_thought and updated_thought.status == ThoughtStatus.FAILED:
+                # Extract error message from follow-up info if available
+                outcome = f"failure:{action_type.value}"
+                logger.info(f"Thought {thought.thought_id} marked as FAILED, audit outcome: {outcome}")
+        except Exception as e:
+            logger.warning(f"Could not check thought status for audit outcome: {e}")
+
         # Create audit entry
         self._ensure_audit_service(action_type, "completion")
         audit_params = extract_audit_parameters(
@@ -249,9 +261,11 @@ class ActionDispatcher:
             parameters=audit_params,
         )
         audit_result = await self.audit_service.log_action(
-            action_type=action_type, context=audit_context, outcome="success"
+            action_type=action_type, context=audit_context, outcome=outcome
         )
-        logger.info(f"Created audit entry {audit_result.entry_id} for action {action_type.value}")
+        logger.info(
+            f"Created audit entry {audit_result.entry_id} for action {action_type.value} with outcome={outcome}"
+        )
 
         # Build response
         action_params_dict = self._extract_action_params_dict(final_action_result)

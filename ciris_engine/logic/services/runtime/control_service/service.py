@@ -918,6 +918,59 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         """Create AdapterInfo for a bootstrap adapter."""
         tools = await self._extract_adapter_tools(adapter, adapter_type)
 
+        # Debug: log adapter attributes
+        adapter_attrs = [a for a in dir(adapter) if not a.startswith("_")]
+        logger.info(f"[BOOTSTRAP_INFO] Adapter {adapter_type} attributes: {adapter_attrs[:20]}")
+
+        # Extract services_registered from adapter if available
+        # This includes both service types (TOOL, COMMUNICATION) and capabilities
+        services_registered: List[str] = []
+        if hasattr(adapter, "get_services_to_register"):
+            try:
+                svc_list = adapter.get_services_to_register()
+                for reg in svc_list:
+                    # Extract service_type name (e.g., "TOOL", "COMMUNICATION")
+                    if hasattr(reg, "service_type"):
+                        svc_type = reg.service_type
+                        if hasattr(svc_type, "value"):
+                            services_registered.append(str(svc_type.value).upper())
+                        else:
+                            services_registered.append(str(svc_type).upper())
+                    # Extract capabilities and add them to services_registered
+                    if hasattr(reg, "capabilities") and reg.capabilities:
+                        services_registered.extend(reg.capabilities)
+                logger.info(f"[BOOTSTRAP_INFO] Extracted services+capabilities: {services_registered}")
+            except Exception as e:
+                logger.warning(f"[BOOTSTRAP_INFO] get_services_to_register failed: {e}")
+        elif hasattr(adapter, "services_registered"):
+            services_registered = list(adapter.services_registered)
+            logger.info(f"[BOOTSTRAP_INFO] Found services_registered: {services_registered}")
+
+        # Extract config from adapter if available
+        config_params = None
+        if hasattr(adapter, "config") and adapter.config:
+            try:
+                from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+
+                cfg = adapter.config
+                logger.info(f"[BOOTSTRAP_INFO] Found config: type={type(cfg).__name__}")
+                if hasattr(cfg, "model_dump"):
+                    config_dict = cfg.model_dump()
+                    # Filter out None values and internal fields
+                    settings = {
+                        k: str(v)
+                        for k, v in config_dict.items()
+                        if v is not None
+                        and k not in ["adapter_type", "enabled", "persist", "settings", "adapter_config"]
+                    }
+                    config_params = AdapterConfig(adapter_type=adapter_type, enabled=True, settings=settings)
+                    logger.info(f"[BOOTSTRAP_INFO] Extracted config settings: {list(settings.keys())}")
+                elif isinstance(cfg, dict):
+                    settings = {k: str(v) for k, v in cfg.items() if v is not None}
+                    config_params = AdapterConfig(adapter_type=adapter_type, enabled=True, settings=settings)
+            except Exception as e:
+                logger.warning(f"[BOOTSTRAP_INFO] Could not extract config from {adapter_type}: {e}")
+
         return AdapterInfo(
             adapter_id=f"{adapter_type}_bootstrap",
             adapter_type=adapter_type,
@@ -927,31 +980,50 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             error_count=0,
             last_error=None,
             tools=tools,
+            services_registered=services_registered,
+            config_params=config_params,
         )
 
     async def _extract_adapter_tools(self, adapter: Any, adapter_type: str) -> List[ToolInfo]:
         """Extract tools from adapter tool service."""
         tools: List[ToolInfo] = []
+        tool_services = []
 
         # Check for tool_service (public) or _tool_service (private, e.g., MCP adapter)
-        tool_service = None
         if hasattr(adapter, "tool_service") and adapter.tool_service:
-            tool_service = adapter.tool_service
-        elif hasattr(adapter, "_tool_service") and adapter._tool_service:
-            tool_service = adapter._tool_service
+            tool_services.append(adapter.tool_service)
+        if hasattr(adapter, "_tool_service") and adapter._tool_service:
+            tool_services.append(adapter._tool_service)
 
-        if not tool_service:
+        # Also check service registrations for TOOL type providers
+        if hasattr(adapter, "get_services_to_register"):
+            try:
+                for reg in adapter.get_services_to_register():
+                    if hasattr(reg, "service_type"):
+                        svc_type = str(getattr(reg.service_type, "value", reg.service_type)).lower()
+                        if svc_type == "tool" and hasattr(reg, "provider") and reg.provider:
+                            tool_services.append(reg.provider)
+                            logger.info(
+                                f"[BOOTSTRAP_INFO] Found tool provider from registration: {type(reg.provider).__name__}"
+                            )
+            except Exception as e:
+                logger.debug(f"Could not check service registrations for tools: {e}")
+
+        if not tool_services:
+            logger.info(f"[BOOTSTRAP_INFO] No tool services found for {adapter_type}")
             return tools
 
-        try:
-            if hasattr(tool_service, "list_tools"):
-                tool_names = await tool_service.list_tools()
-                for tool_name in tool_names:
-                    tool_info = await self._create_tool_info(tool_service, tool_name)
-                    if tool_info:
-                        tools.append(tool_info)
-        except Exception as e:
-            logger.debug(f"Could not get tools from {adapter_type}: {e}")
+        for tool_service in tool_services:
+            try:
+                if hasattr(tool_service, "list_tools"):
+                    tool_names = await tool_service.list_tools()
+                    logger.info(f"[BOOTSTRAP_INFO] Tool service {type(tool_service).__name__} has tools: {tool_names}")
+                    for tool_name in tool_names:
+                        tool_info = await self._create_tool_info(tool_service, tool_name)
+                        if tool_info:
+                            tools.append(tool_info)
+            except Exception as e:
+                logger.debug(f"Could not get tools from {adapter_type}: {e}")
 
         return tools
 
@@ -1073,38 +1145,49 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         return tools, config_params, services_registered
 
     async def get_adapter_info(self, adapter_id: str) -> Optional[AdapterInfo]:
-        """Get detailed information about a specific adapter."""
-        if not self._ensure_adapter_manager():
-            return None
+        """Get detailed information about a specific adapter.
 
-        info = self.adapter_manager.get_adapter_info(adapter_id)  # type: ignore[union-attr]
-        if info is None:
-            return None
+        Handles both:
+        1. Regular adapters from adapter_manager (e.g., "weather", "navigation")
+        2. Bootstrap adapters with synthetic IDs (e.g., "cirisverify_bootstrap", "api_bootstrap")
 
-        # Convert adapter_management.AdapterInfo to core.runtime.AdapterInfo
-        from datetime import datetime
+        Returns the full AdapterInfo which includes:
+        - status: Current adapter status
+        - started_at: When adapter was loaded
+        - tools: List of tools provided by the adapter
+        - config_params: Sanitized adapter configuration
+        - services_registered: List of services registered by adapter
+        - metrics: messages_processed, error_count, last_error
+        """
+        # First try the adapter_manager for regular adapters
+        if self._ensure_adapter_manager():
+            result = await self.adapter_manager.get_adapter_info(adapter_id)  # type: ignore[union-attr]
+            if result:
+                return result
 
-        # Extract tools, config, and services_registered from the actual adapter instance
-        try:
-            tools, config_params, services_registered = await self._extract_adapter_instance_data(
-                adapter_id, info.adapter_type
-            )
-        except Exception as e:
-            logger.debug(f"Could not extract tools/config for adapter {adapter_id}: {e}")
-            tools, config_params, services_registered = None, None, []
+        # Check if this is a bootstrap adapter (ID ends with _bootstrap)
+        if adapter_id.endswith("_bootstrap"):
+            adapter_type_from_id = adapter_id[:-10]  # Remove "_bootstrap" suffix
+            logger.info(f"Looking up bootstrap adapter: {adapter_id} -> type={adapter_type_from_id}")
 
-        return AdapterInfo(
-            adapter_id=info.adapter_id,
-            adapter_type=info.adapter_type,
-            status=AdapterStatus.RUNNING if info.is_running else AdapterStatus.STOPPED,
-            started_at=datetime.fromisoformat(info.load_time) if info.load_time else None,
-            messages_processed=0,  # Not tracked in adapter_management.AdapterInfo
-            error_count=0,  # Not tracked in adapter_management.AdapterInfo
-            last_error=None,
-            tools=tools,
-            config_params=config_params,
-            services_registered=services_registered if services_registered else [],
-        )
+            # Search in runtime.adapters list (same as _get_bootstrap_adapters does)
+            if self.runtime and hasattr(self.runtime, "adapters"):
+                logger.info(f"Searching in runtime.adapters ({len(self.runtime.adapters)} adapters)")
+                for adapter in self.runtime.adapters:
+                    extracted_type = self._extract_adapter_type(adapter)
+                    logger.info(
+                        f"Checking adapter: class={adapter.__class__.__name__}, extracted_type={extracted_type}"
+                    )
+                    # Match either the exact type or common variants
+                    if extracted_type == adapter_type_from_id or extracted_type.replace(
+                        "_", ""
+                    ) == adapter_type_from_id.replace("_", ""):
+                        logger.info(f"Found matching bootstrap adapter: {extracted_type}")
+                        return await self._create_bootstrap_adapter_info(adapter, extracted_type)
+            else:
+                logger.warning(f"No runtime.adapters available for bootstrap adapter lookup")
+
+        return None
 
     # Configuration Management Methods
     async def get_config(self, path: Optional[str] = None, include_sensitive: bool = False) -> ConfigSnapshot:

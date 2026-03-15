@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.models.AdapterDetailsData
 import ai.ciris.mobile.shared.models.ConfigSessionData
 import ai.ciris.mobile.shared.models.ConfigStepResultData
 import ai.ciris.mobile.shared.models.DiscoveredItemData
@@ -76,6 +77,14 @@ class AdaptersViewModel(
 
     private val _operationInProgress = MutableStateFlow(false)
     val operationInProgress: StateFlow<Boolean> = _operationInProgress.asStateFlow()
+
+    // Expansion state - persists during session (not cleared on refresh)
+    private val _expandedAdapterIds = MutableStateFlow<Set<String>>(emptySet())
+    val expandedAdapterIds: StateFlow<Set<String>> = _expandedAdapterIds.asStateFlow()
+
+    // Cache adapter details to avoid re-fetching
+    private val _adapterDetails = MutableStateFlow<Map<String, AdapterDetailsData>>(emptyMap())
+    val adapterDetails: StateFlow<Map<String, AdapterDetailsData>> = _adapterDetails.asStateFlow()
 
     // Wizard state flows
     private val _showWizardDialog = MutableStateFlow(false)
@@ -312,6 +321,63 @@ class AdaptersViewModel(
                 clearStatusMessageAfterDelay()
             }
         }
+    }
+
+    /**
+     * Toggle adapter expansion state.
+     * Fetches details on first expand.
+     */
+    fun toggleExpanded(adapterId: String) {
+        val method = "toggleExpanded"
+        val current = _expandedAdapterIds.value
+        if (adapterId in current) {
+            // Collapse
+            logDebug(method, "Collapsing adapter: $adapterId")
+            _expandedAdapterIds.value = current - adapterId
+        } else {
+            // Expand - fetch details if not cached
+            logDebug(method, "Expanding adapter: $adapterId")
+            _expandedAdapterIds.value = current + adapterId
+            if (adapterId !in _adapterDetails.value) {
+                viewModelScope.launch { fetchAdapterDetails(adapterId) }
+            }
+        }
+    }
+
+    /**
+     * Check if an adapter is expanded.
+     */
+    fun isExpanded(adapterId: String): Boolean = adapterId in _expandedAdapterIds.value
+
+    /**
+     * Get cached details for an adapter.
+     */
+    fun getAdapterDetails(adapterId: String): AdapterDetailsData? = _adapterDetails.value[adapterId]
+
+    /**
+     * Fetch detailed status for a specific adapter.
+     */
+    private suspend fun fetchAdapterDetails(adapterId: String) {
+        val method = "fetchAdapterDetails"
+        logInfo(method, "Fetching details for adapter: $adapterId")
+        try {
+            val details = apiClient.getAdapterDetails(adapterId)
+            logInfo(method, "Details received: services=${details.servicesRegistered.size}, tools=${details.tools?.size ?: 0}")
+            _adapterDetails.value = _adapterDetails.value + (adapterId to details)
+        } catch (e: Exception) {
+            logException(method, e, "adapterId=$adapterId")
+            // Don't throw - just log and leave details unavailable
+        }
+    }
+
+    /**
+     * Edit adapter configuration - re-launches the wizard for the adapter type.
+     */
+    fun editAdapterConfig(adapterType: String) {
+        val method = "editAdapterConfig"
+        logInfo(method, "Editing config for adapter type: $adapterType")
+        // Re-use existing wizard flow
+        startWizard(adapterType)
     }
 
     /**

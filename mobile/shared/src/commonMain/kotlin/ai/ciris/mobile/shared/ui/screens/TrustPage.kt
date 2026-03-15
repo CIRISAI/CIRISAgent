@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -2092,6 +2093,17 @@ private fun L5Content(status: VerifyStatusResponse, onCopyDiagnostics: () -> Uni
         ok = keyOk,
         pending = keyStatus == "not_checked"
     )
+
+    // Show hint when at L4 and registry key not found - user can upgrade to L5
+    if (status.maxLevel == 4 && keyStatus.contains("not_found", ignoreCase = true)) {
+        Text(
+            text = "Re-run wizard via Settings to purchase agent identity key for possible 5/5 attestation",
+            fontSize = 10.sp,
+            color = Color(0xFF2563EB),
+            fontStyle = FontStyle.Italic,
+            modifier = Modifier.padding(start = 18.dp, top = 2.dp, bottom = 4.dp)
+        )
+    }
 
     // Audit Trail
     DetailRow(

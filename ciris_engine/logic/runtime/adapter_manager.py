@@ -29,7 +29,6 @@ from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
 from ciris_engine.schemas.infrastructure.base import ServiceRegistration
 from ciris_engine.schemas.runtime.adapter_management import (
     AdapterConfig,
-    AdapterInfo,
     AdapterMetrics,
     AdapterOperationResult,
     CommunicationAdapterInfo,
@@ -37,6 +36,7 @@ from ciris_engine.schemas.runtime.adapter_management import (
     RuntimeAdapterStatus,
 )
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.services.core.runtime import AdapterInfo, AdapterStatus
 
 logger = logging.getLogger(__name__)
 
@@ -648,32 +648,58 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             return [{"error": f"Failed to get service registrations: {e}"}]
 
     async def _get_adapter_tools_info(self, adapter_id: str, instance: AdapterInstance) -> Optional[List[Any]]:
-        """Get tool information from adapter if available - strict typing, no fallbacks."""
+        """Get tool information from adapter if available - strict typing, no fallbacks.
+
+        Checks multiple sources for tool services:
+        1. adapter.tool_service (legacy pattern)
+        2. Service registrations with service_type=TOOL
+        """
         try:
-            if not (hasattr(instance.adapter, "tool_service") and instance.adapter.tool_service):
+            tool_services: List[Any] = []
+
+            # Check legacy tool_service attribute
+            if hasattr(instance.adapter, "tool_service") and instance.adapter.tool_service:
+                tool_services.append(instance.adapter.tool_service)
+
+            # Check service registrations for TOOL type providers
+            if hasattr(instance.adapter, "get_services_to_register"):
+                try:
+                    registrations = instance.adapter.get_services_to_register()
+                    for reg in registrations:
+                        if hasattr(reg, "service_type"):
+                            svc_type = str(getattr(reg.service_type, "value", reg.service_type)).lower()
+                            if svc_type == "tool" and hasattr(reg, "provider") and reg.provider:
+                                if reg.provider not in tool_services:
+                                    tool_services.append(reg.provider)
+                except Exception as e:
+                    logger.debug(f"Error getting service registrations for tools: {e}")
+
+            if not tool_services:
                 return None
 
-            tool_service = instance.adapter.tool_service
+            # Collect tool info from all tool services
+            all_tools: List[Any] = []
+            from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 
-            if hasattr(tool_service, "get_all_tool_info"):
-                tool_infos = await tool_service.get_all_tool_info()
-                # Type checking: tool_infos should be List[ToolInfo]
-                return list(tool_infos) if tool_infos else None  # Pass ToolInfo objects directly
-            elif hasattr(tool_service, "list_tools"):
-                tool_names = await tool_service.list_tools()
-                # Convert string names to ToolInfo objects for schema compliance
-                from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
-
-                return [
-                    ToolInfo(
-                        name=name,
-                        description="",
-                        parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            for tool_service in tool_services:
+                if hasattr(tool_service, "get_all_tool_info"):
+                    tool_infos = await tool_service.get_all_tool_info()
+                    if tool_infos:
+                        all_tools.extend(tool_infos)
+                elif hasattr(tool_service, "list_tools"):
+                    tool_names = await tool_service.list_tools()
+                    all_tools.extend(
+                        [
+                            ToolInfo(
+                                name=name,
+                                description="",
+                                parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+                            )
+                            for name in tool_names
+                        ]
                     )
-                    for name in tool_names
-                ]
-            else:
-                return None
+
+            return all_tools if all_tools else None
 
         except Exception as e:
             logger.warning(f"Failed to get tools for adapter {adapter_id}: {e}")
@@ -692,6 +718,43 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             errors_count=0,  # Would need to track this in real implementation
             last_error=None,
         )
+
+    def _transform_services_for_display(self, instance: AdapterInstance) -> List[str]:
+        """Transform services_registered to clean display names.
+
+        Converts internal format like 'global:tool:WeatherToolService' to
+        clean names like 'TOOL', and also includes capabilities from
+        service registrations.
+        """
+        clean_services: List[str] = []
+
+        # First, transform the registered service strings
+        for svc_str in instance.services_registered:
+            # Format: 'global:tool:WeatherToolService'
+            # Extract the service type (middle part)
+            parts = svc_str.split(":")
+            if len(parts) >= 2:
+                # parts[1] is the service type (e.g., 'tool')
+                service_type = parts[1].upper()
+                if service_type not in clean_services:
+                    clean_services.append(service_type)
+            else:
+                # Fallback: use the whole string
+                clean_services.append(svc_str.upper())
+
+        # Then, add capabilities from service registrations
+        if hasattr(instance.adapter, "get_services_to_register"):
+            try:
+                registrations = instance.adapter.get_services_to_register()
+                for reg in registrations:
+                    if hasattr(reg, "capabilities") and reg.capabilities:
+                        for cap in reg.capabilities:
+                            if cap not in clean_services:
+                                clean_services.append(cap)
+            except Exception as e:
+                logger.debug(f"Error getting capabilities for display: {e}")
+
+        return clean_services
 
     async def get_adapter_status(self, adapter_id: str) -> Optional[RuntimeAdapterStatus]:
         """Get detailed status of a specific adapter
@@ -744,7 +807,8 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             config_params: Raw configuration parameters
 
         Returns:
-            Sanitized configuration with sensitive fields masked
+            Sanitized configuration with sensitive fields masked.
+            Settings is merged with adapter_config for flat display in UI.
         """
         if not config_params:
             return AdapterConfig(adapter_type=adapter_type, enabled=False)
@@ -753,18 +817,21 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         sensitive_patterns = SENSITIVE_FIELDS_BY_ADAPTER_TYPE.get(adapter_type, DEFAULT_SENSITIVE_PATTERNS)
 
         # Sanitize settings dict
-        sanitized_settings = _sanitize_dict(config_params.settings, sensitive_patterns)
+        sanitized_settings = (
+            _sanitize_dict(config_params.settings, sensitive_patterns) if config_params.settings else {}
+        )
 
-        # Sanitize adapter_config if present
-        sanitized_adapter_config = None
+        # Sanitize adapter_config if present and merge into settings for flat UI display
         if config_params.adapter_config:
             sanitized_adapter_config = _sanitize_dict(config_params.adapter_config, sensitive_patterns)
+            # Merge adapter_config into settings for UI display
+            sanitized_settings = {**sanitized_settings, **sanitized_adapter_config}
 
         return AdapterConfig(
             adapter_type=config_params.adapter_type,
             enabled=config_params.enabled,
             settings=sanitized_settings,
-            adapter_config=sanitized_adapter_config,
+            adapter_config=None,  # Flattened into settings
         )
 
     async def load_adapter_from_template(
@@ -904,21 +971,82 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         except Exception as e:
             logger.error(f"Error unregistering services for adapter {instance.adapter_id}: {e}", exc_info=True)
 
-    def get_adapter_info(self, adapter_id: str) -> Optional[AdapterInfo]:
-        """Get detailed information about a specific adapter."""
+    async def get_adapter_info(self, adapter_id: str) -> Optional[AdapterInfo]:
+        """Get detailed information about a specific adapter.
+
+        Returns the full AdapterInfo with all fields populated:
+        - status: Current adapter status (running, stopped, error, etc.)
+        - started_at: When the adapter was loaded
+        - messages_processed: Total messages processed (if tracked)
+        - error_count: Total errors (if tracked)
+        - last_error: Last error message (if any)
+        - tools: List of tools provided by the adapter
+        - config_params: Sanitized adapter configuration
+        - services_registered: List of services registered by the adapter
+        """
         if adapter_id not in self.loaded_adapters:
             return None
 
         try:
             instance = self.loaded_adapters[adapter_id]
+            logger.info(f"[GET_ADAPTER_INFO] Found instance for {adapter_id}: type={instance.adapter_type}")
+            logger.info(f"[GET_ADAPTER_INFO] services_registered={instance.services_registered}")
+            logger.info(f"[GET_ADAPTER_INFO] config_params={instance.config_params}")
 
-            return AdapterInfo(
+            # Determine adapter status
+            health_status, _ = await self._determine_adapter_health_status(instance)
+            if health_status == "healthy":
+                status = AdapterStatus.RUNNING
+            elif health_status == "active":
+                status = AdapterStatus.ACTIVE
+            elif health_status == "stopped":
+                status = AdapterStatus.STOPPED
+            else:
+                status = AdapterStatus.ERROR
+            logger.info(f"[GET_ADAPTER_INFO] health_status={health_status}, status={status}")
+
+            # Get tools information
+            tools = await self._get_adapter_tools_info(adapter_id, instance)
+            logger.info(f"[GET_ADAPTER_INFO] tools={tools}")
+
+            # Get metrics
+            metrics = self._create_adapter_metrics(instance, health_status)
+            logger.info(f"[GET_ADAPTER_INFO] metrics={metrics}")
+
+            # Get config from adapter's get_config() if available (live config),
+            # otherwise fall back to static instance.config_params (load-time config)
+            config_to_use = instance.config_params
+            if hasattr(instance.adapter, "get_config"):
+                try:
+                    live_config = instance.adapter.get_config()
+                    if live_config:
+                        config_to_use = live_config
+                        logger.info(f"[GET_ADAPTER_INFO] Using live config from adapter.get_config()")
+                except Exception as e:
+                    logger.debug(f"[GET_ADAPTER_INFO] Could not get live config: {e}")
+
+            # Sanitize config params
+            sanitized_config = self._sanitize_config_params(instance.adapter_type, config_to_use)
+            logger.info(f"[GET_ADAPTER_INFO] sanitized_config={sanitized_config}")
+
+            # Transform services_registered to cleaner display names
+            clean_services = self._transform_services_for_display(instance)
+            logger.info(f"[GET_ADAPTER_INFO] clean_services={clean_services}")
+
+            result = AdapterInfo(
                 adapter_id=adapter_id,
                 adapter_type=instance.adapter_type,
-                config=instance.config_params,
-                load_time=instance.loaded_at.isoformat(),
-                is_running=instance.is_running,
+                status=status,
+                started_at=instance.loaded_at,
+                messages_processed=metrics.messages_processed if metrics else 0,
+                error_count=metrics.errors_count if metrics else 0,
+                last_error=metrics.last_error if metrics else None,
+                tools=tools,
+                config_params=sanitized_config,
+                services_registered=clean_services,
             )
+            logger.info(f"[GET_ADAPTER_INFO] Returning AdapterInfo: {result.model_dump()}")
+            return result
 
         except Exception as e:
             logger.error(f"Failed to get adapter info for {adapter_id}: {e}", exc_info=True)

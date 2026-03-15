@@ -5,7 +5,8 @@
     "description": "Reference adapter demonstrating all bus types and interactive configuration",
     "author": "CIRIS Team",
     "reference": true,
-    "for_qa": true
+    "for_qa": true,
+    "internal_only": true
   },
   "services": [
     {

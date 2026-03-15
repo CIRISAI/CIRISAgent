@@ -364,12 +364,38 @@ class AdapterConfigurationService:
     def _execute_input_step(
         self, session: AdapterConfigSession, step: ConfigurationStep, step_data: Dict[str, Any]
     ) -> StepResult:
-        """Execute an input step."""
+        """Execute an input step.
+
+        Advances to next step if:
+        - step_data is not None (i.e., user submitted the form, even if empty)
+        - All required fields have values
+
+        If step_data is None, we return awaiting_input=True.
+        If step_data is {} (empty dict from optional fields), we still advance.
+        """
+        # step_data being None means no submission yet; {} means form submitted with no values
+        if step_data is None:
+            return StepResult(step_id=step.step_id, success=True, data={"awaiting_input": True})
+
+        # Check if all required fields have values
+        required_fields = []
+        if step.fields:
+            required_fields = [f.name or f.field_id for f in step.fields if f.required and (f.name or f.field_id)]
+
+        missing_required = [field for field in required_fields if not step_data.get(field)]
+
+        if missing_required:
+            logger.warning(f"[INPUT STEP] Missing required fields: {missing_required}")
+            return StepResult(
+                step_id=step.step_id, success=False, error=f"Missing required fields: {', '.join(missing_required)}"
+            )
+
+        # All validations passed - store data and advance
         if step_data:
             session.collected_config.update(step_data)
-            session.current_step_index += 1
-            return StepResult(step_id=step.step_id, success=True, next_step_index=session.current_step_index)
-        return StepResult(step_id=step.step_id, success=True, data={"awaiting_input": True})
+        session.current_step_index += 1
+        logger.info(f"[INPUT STEP] Step completed, advancing to step {session.current_step_index}")
+        return StepResult(step_id=step.step_id, success=True, next_step_index=session.current_step_index)
 
     def _execute_confirm_step(self, session: AdapterConfigSession, step: ConfigurationStep) -> StepResult:
         """Execute a confirm step."""

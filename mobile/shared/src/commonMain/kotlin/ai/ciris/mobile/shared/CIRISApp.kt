@@ -41,6 +41,8 @@ import ai.ciris.mobile.shared.viewmodels.SystemViewModel
 import ai.ciris.mobile.shared.viewmodels.TelemetryViewModel
 import ai.ciris.mobile.shared.viewmodels.UsersViewModel
 import ai.ciris.mobile.shared.viewmodels.WiseAuthorityViewModel
+import ai.ciris.mobile.shared.viewmodels.TicketsViewModel
+import ai.ciris.mobile.shared.viewmodels.SchedulerViewModel
 import ai.ciris.mobile.shared.ui.screens.graph.GraphMemoryScreen
 import androidx.compose.foundation.layout.*
 import kotlinx.coroutines.Dispatchers
@@ -459,6 +461,12 @@ fun CIRISApp(
     }
     val usersViewModel: UsersViewModel = viewModel {
         UsersViewModel(apiClient)
+    }
+    val ticketsViewModel: TicketsViewModel = viewModel {
+        TicketsViewModel(apiClient)
+    }
+    val schedulerViewModel: SchedulerViewModel = viewModel {
+        SchedulerViewModel(apiClient)
     }
 
     // Set up purchase result callback
@@ -1147,7 +1155,9 @@ fun CIRISApp(
                             onConsentClick = { currentScreen = Screen.Consent },
                             onSystemClick = { currentScreen = Screen.System },
                             onRuntimeClick = { currentScreen = Screen.Runtime },
-                            onUsersClick = { currentScreen = Screen.Users }
+                            onUsersClick = { currentScreen = Screen.Users },
+                            onTicketsClick = { currentScreen = Screen.Tickets },
+                            onSchedulerClick = { currentScreen = Screen.Scheduler }
                         )
                     }
                 ) { paddingValues ->
@@ -2046,6 +2056,62 @@ fun CIRISApp(
                 )
             }
 
+            Screen.Tickets -> {
+                val ticketsState by ticketsViewModel.state.collectAsState()
+
+                LaunchedEffect(Unit) {
+                    PlatformLogger.i(TAG, "[Screen.Tickets] Loading tickets on screen entry")
+                    ticketsViewModel.startPolling()
+                }
+
+                DisposableEffect(Unit) {
+                    onDispose {
+                        ticketsViewModel.stopPolling()
+                    }
+                }
+
+                TicketsScreen(
+                    state = ticketsState,
+                    onRefresh = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Tickets] User triggered refresh")
+                        ticketsViewModel.refresh()
+                    },
+                    onFilterChange = { filter ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Tickets] Filter changed")
+                        ticketsViewModel.updateFilter(filter)
+                    },
+                    onSelectTicket = { ticket ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Tickets] Ticket selected: ${ticket?.ticketId}")
+                        ticketsViewModel.selectTicket(ticket)
+                    },
+                    onNavigateBack = { currentScreen = Screen.Interact }
+                )
+            }
+
+            Screen.Scheduler -> {
+                val schedulerState by schedulerViewModel.state.collectAsState()
+
+                LaunchedEffect(Unit) {
+                    PlatformLogger.i(TAG, "[Screen.Scheduler] Loading scheduler data on screen entry")
+                    schedulerViewModel.startPolling()
+                }
+
+                DisposableEffect(Unit) {
+                    onDispose {
+                        schedulerViewModel.stopPolling()
+                    }
+                }
+
+                SchedulerScreen(
+                    state = schedulerState,
+                    onRefresh = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Scheduler] User triggered refresh")
+                        schedulerViewModel.refresh()
+                    },
+                    onNavigateBack = { currentScreen = Screen.Interact }
+                )
+            }
+
             Screen.Trust -> {
                 TrustPage(
                     apiClient = apiClient,
@@ -2114,7 +2180,9 @@ private fun CIRISTopBar(
     onConsentClick: () -> Unit = {},
     onSystemClick: () -> Unit = {},
     onRuntimeClick: () -> Unit = {},
-    onUsersClick: () -> Unit = {}
+    onUsersClick: () -> Unit = {},
+    onTicketsClick: () -> Unit = {},
+    onSchedulerClick: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -2205,7 +2273,7 @@ private fun CIRISTopBar(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Wise Authority") },
+                        text = { Text("Human Deferrals") },
                         onClick = {
                             showMenu = false
                             onWiseAuthorityClick()
@@ -2334,6 +2402,32 @@ private fun CIRISTopBar(
                             )
                         }
                     )
+                    DropdownMenuItem(
+                        text = { Text("Tickets") },
+                        onClick = {
+                            showMenu = false
+                            onTicketsClick()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.List,
+                                contentDescription = null
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Scheduler") },
+                        onClick = {
+                            showMenu = false
+                            onSchedulerClick()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null
+                            )
+                        }
+                    )
                 }
             }
         },
@@ -2369,4 +2463,6 @@ private sealed class Screen {
     object Runtime : Screen()
     object Users : Screen()
     object Trust : Screen()
+    object Tickets : Screen()
+    object Scheduler : Screen()
 }

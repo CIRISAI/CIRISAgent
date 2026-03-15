@@ -63,6 +63,7 @@ class WAStatusResponse(BaseModel):
     deferrals_24h: int = Field(..., description="Deferrals created in last 24 hours")
     average_resolution_time_minutes: float = Field(..., description="Average deferral resolution time")
     timestamp: datetime = Field(..., description="Status timestamp")
+    subscribers: List[str] = Field(default_factory=list, description="List of WA bus subscriber names")
 
     @field_serializer("timestamp")
     def serialize_timestamp(self, timestamp: datetime, _info: Any) -> Optional[str]:

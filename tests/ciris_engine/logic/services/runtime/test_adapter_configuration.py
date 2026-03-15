@@ -569,8 +569,8 @@ class TestAdapterConfigurationService:
         assert session.collected_config["timeout"] == 30
 
     @pytest.mark.asyncio
-    async def test_execute_step_input_empty(self) -> None:
-        """Test input step returns awaiting_input when no data provided."""
+    async def test_execute_step_input_no_submission(self) -> None:
+        """Test input step returns awaiting_input when no submission (None)."""
         input_config = InteractiveConfiguration(
             required=True,
             workflow_type="wizard",
@@ -592,10 +592,41 @@ class TestAdapterConfigurationService:
         )
 
         session = await self.service.start_session("test_input", "user_123")
-        result = await self.service.execute_step(session.session_id, {})
+        # None means no submission yet - should return awaiting_input
+        result = await self.service.execute_step(session.session_id, None)
 
         assert result.success is True
         assert result.data.get("awaiting_input") is True
+
+    @pytest.mark.asyncio
+    async def test_execute_step_input_empty_submission_advances(self) -> None:
+        """Test input step advances when empty dict submitted (form with no required fields)."""
+        input_config = InteractiveConfiguration(
+            required=True,
+            workflow_type="wizard",
+            steps=[
+                ConfigurationStep(
+                    step_id="settings",
+                    step_type="input",
+                    title="Settings",
+                    description="Enter settings",
+                ),
+            ],
+            completion_method="apply_config",
+        )
+
+        self.service.register_adapter_config(
+            adapter_type="test_input",
+            interactive_config=input_config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_input", "user_123")
+        # Empty dict means form was submitted with no values - should advance
+        result = await self.service.execute_step(session.session_id, {})
+
+        assert result.success is True
+        assert result.next_step_index == 1
 
     @pytest.mark.asyncio
     async def test_execute_step_confirm(self) -> None:

@@ -254,6 +254,7 @@ async def get_wa_status(
     - Number of active WAs
     - Number of pending deferrals
     - Service health status
+    - List of WA bus subscribers (adapters/services registered for WA events)
 
     Requires OBSERVER role or higher.
     """
@@ -267,6 +268,26 @@ async def get_wa_status(
         pending_deferrals = await wa_service.get_pending_deferrals()
         active_was = 1 if is_healthy else 0
 
+        # Get WA bus subscribers from service registry
+        subscribers: list[str] = []
+        try:
+            from ciris_engine.schemas.runtime.enums import ServiceType
+
+            if hasattr(request.app.state, "service_registry"):
+                registry = request.app.state.service_registry
+                wa_services = registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
+                for svc in wa_services:
+                    # Get human-friendly name from service
+                    svc_name = getattr(svc, "service_name", None)
+                    if not svc_name:
+                        svc_name = svc.__class__.__name__
+                    # Clean up the name
+                    svc_name = svc_name.replace("Service", "").replace("_", " ").strip()
+                    if svc_name and svc_name not in subscribers:
+                        subscribers.append(svc_name)
+        except Exception as e:
+            logger.debug(f"Could not get WA subscribers: {e}")
+
         response = WAStatusResponse(
             service_healthy=is_healthy,
             active_was=active_was,
@@ -274,6 +295,7 @@ async def get_wa_status(
             deferrals_24h=len(pending_deferrals),
             average_resolution_time_minutes=0.0,
             timestamp=datetime.now(timezone.utc),
+            subscribers=subscribers,
         )
 
         return create_wa_success_response(response)

@@ -267,6 +267,13 @@ class CIRISApiClient(
         jsonSerializer = jsonConfig
     )
 
+    private val ticketsApi = TicketsApi(
+        baseUrl = baseUrl,
+        httpClientEngine = null,
+        httpClientConfig = httpClientConfig,
+        jsonSerializer = jsonConfig
+    )
+
     init {
         logInfo("init", "CIRISApiClient initialized with baseUrl=$baseUrl")
     }
@@ -289,7 +296,8 @@ class CIRISApiClient(
             auditApi.setBearerToken(token)
             memoryApi.setBearerToken(token)
             usersApi.setBearerToken(token)
-            logInfo(method, "Bearer token set on all API instances (12 APIs)")
+            ticketsApi.setBearerToken(token)
+            logInfo(method, "Bearer token set on all API instances (13 APIs)")
         } catch (e: Exception) {
             logException(method, e, "Failed to set bearer token on API instances")
         }
@@ -2227,26 +2235,55 @@ class CIRISApiClient(
         logInfo(method, "Fetching WA status")
 
         return try {
-            val response = wiseAuthorityApi.getWaStatusV1WaStatusGet(authHeader())
-            logDebug(method, "Response: status=${response.status}")
+            // Use direct HTTP call to parse subscribers field (not in SDK yet)
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
 
-            if (!response.success) {
+            val response = client.get("$baseUrl/v1/wa/status") {
+                header("Authorization", "Bearer $accessToken")
+            }
+
+            if (response.status != HttpStatusCode.OK) {
                 logError(method, "API returned non-success status: ${response.status}")
+                client.close()
                 throw RuntimeException("API error: HTTP ${response.status}")
             }
 
-            val body = response.body()
-            val data = body.`data` ?: throw RuntimeException("API returned null data")
-            logInfo(method, "WA Status: healthy=${data.serviceHealthy}, activeWAs=${data.activeWas}, " +
-                    "pendingDeferrals=${data.pendingDeferrals}, deferrals24h=${data.deferrals24h}")
+            val jsonString = response.bodyAsText()
+            client.close()
+
+            val json = Json.parseToJsonElement(jsonString).jsonObject
+            val data = json["data"]?.jsonObject
+                ?: throw RuntimeException("API returned null data")
+
+            val serviceHealthy = data["service_healthy"]?.jsonPrimitive?.boolean ?: false
+            val activeWAs = data["active_was"]?.jsonPrimitive?.int ?: 0
+            val pendingDeferrals = data["pending_deferrals"]?.jsonPrimitive?.int ?: 0
+            val deferrals24h = data["deferrals_24h"]?.jsonPrimitive?.int ?: 0
+            val avgResolutionTime = data["average_resolution_time_minutes"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: 0.0
+            val timestamp = data["timestamp"]?.jsonPrimitive?.contentOrNull
+            val subscribers = data["subscribers"]?.jsonArray?.mapNotNull {
+                it.jsonPrimitive.contentOrNull
+            } ?: emptyList()
+
+            logInfo(method, "WA Status: healthy=$serviceHealthy, activeWAs=$activeWAs, " +
+                    "pendingDeferrals=$pendingDeferrals, deferrals24h=$deferrals24h, " +
+                    "subscribers=${subscribers.size}")
 
             WAStatusData(
-                serviceHealthy = data.serviceHealthy,
-                activeWAs = data.activeWas,
-                pendingDeferrals = data.pendingDeferrals,
-                deferrals24h = data.deferrals24h,
-                averageResolutionTimeMinutes = data.averageResolutionTimeMinutes,
-                timestamp = data.timestamp
+                serviceHealthy = serviceHealthy,
+                activeWAs = activeWAs,
+                pendingDeferrals = pendingDeferrals,
+                deferrals24h = deferrals24h,
+                averageResolutionTimeMinutes = avgResolutionTime,
+                timestamp = timestamp,
+                subscribers = subscribers
             )
         } catch (e: Exception) {
             logException(method, e)
@@ -3552,6 +3589,162 @@ class CIRISApiClient(
         }
     }
 
+    // ===== Tickets API =====
+
+    /**
+     * List all tickets with optional filtering.
+     */
+    suspend fun listTickets(
+        sop: String? = null,
+        ticketType: String? = null,
+        statusFilter: String? = null,
+        email: String? = null,
+        limit: Int? = 50
+    ): List<TicketData> {
+        val method = "listTickets"
+        logInfo(method, "Listing tickets: sop=$sop, type=$ticketType, status=$statusFilter, limit=$limit")
+
+        return try {
+            val response = ticketsApi.listAllTicketsV1TicketsGet(
+                sop = sop,
+                ticketType = ticketType,
+                statusFilter = statusFilter,
+                email = email,
+                limit = limit
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val tickets = response.body()
+            logInfo(method, "Fetched ${tickets.size} tickets")
+
+            tickets.map { ticket ->
+                TicketData(
+                    ticketId = ticket.ticketId,
+                    sop = ticket.sop,
+                    ticketType = ticket.ticketType,
+                    status = ticket.status,
+                    priority = ticket.priority,
+                    email = ticket.email,
+                    userIdentifier = ticket.userIdentifier,
+                    submittedAt = ticket.submittedAt,
+                    deadline = ticket.deadline,
+                    lastUpdated = ticket.lastUpdated,
+                    completedAt = ticket.completedAt,
+                    notes = ticket.notes,
+                    automated = ticket.automated
+                )
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Get a specific ticket by ID.
+     */
+    suspend fun getTicket(ticketId: String): TicketData {
+        val method = "getTicket"
+        logInfo(method, "Fetching ticket: $ticketId")
+
+        return try {
+            val response = ticketsApi.getTicketByIdV1TicketsTicketIdGet(ticketId)
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val ticket = response.body()
+            logInfo(method, "Ticket fetched: ${ticket.ticketId}, status=${ticket.status}")
+
+            TicketData(
+                ticketId = ticket.ticketId,
+                sop = ticket.sop,
+                ticketType = ticket.ticketType,
+                status = ticket.status,
+                priority = ticket.priority,
+                email = ticket.email,
+                userIdentifier = ticket.userIdentifier,
+                submittedAt = ticket.submittedAt,
+                deadline = ticket.deadline,
+                lastUpdated = ticket.lastUpdated,
+                completedAt = ticket.completedAt,
+                notes = ticket.notes,
+                automated = ticket.automated
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * List supported SOPs for this agent.
+     */
+    suspend fun listSupportedSops(): List<String> {
+        val method = "listSupportedSops"
+        logInfo(method, "Listing supported SOPs")
+
+        return try {
+            val response = ticketsApi.listSupportedSopsV1TicketsSopsGet()
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val sops = response.body().filterNotNull()
+            logInfo(method, "Supported SOPs: $sops")
+
+            sops
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Get ticket statistics summary.
+     */
+    suspend fun getTicketStats(): TicketStatsData {
+        val method = "getTicketStats"
+        logInfo(method, "Fetching ticket statistics")
+
+        return try {
+            // Fetch all tickets and compute stats
+            val allTickets = listTickets(limit = 1000)
+
+            val pending = allTickets.count { it.status == "pending" }
+            val inProgress = allTickets.count { it.status == "in_progress" }
+            val completed = allTickets.count { it.status == "completed" }
+            val failed = allTickets.count { it.status == "failed" || it.status == "cancelled" }
+            val urgent = allTickets.count { it.priority >= 8 }
+
+            val stats = TicketStatsData(
+                total = allTickets.size,
+                pending = pending,
+                inProgress = inProgress,
+                completed = completed,
+                failed = failed,
+                urgent = urgent
+            )
+            logInfo(method, "Ticket stats: total=${stats.total}, pending=$pending, inProgress=$inProgress, completed=$completed")
+
+            stats
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
     // ===== Play Integrity (Android Device Attestation) =====
 
     /**
@@ -3840,7 +4033,8 @@ data class WAStatusData(
     val pendingDeferrals: Int,
     val deferrals24h: Int,
     val averageResolutionTimeMinutes: Double,
-    val timestamp: String?
+    val timestamp: String?,
+    val subscribers: List<String> = emptyList()
 )
 
 data class DeferralData(
@@ -3943,4 +4137,66 @@ data class MemoryStatsApiData(
 data class GraphDataResponse(
     val nodes: List<ai.ciris.api.models.GraphNode>,
     val edges: List<ai.ciris.api.models.GraphEdge>
+)
+
+// ===== Tickets Data Models =====
+
+/**
+ * Ticket data for display in the UI.
+ */
+data class TicketData(
+    val ticketId: String,
+    val sop: String,
+    val ticketType: String,
+    val status: String,
+    val priority: Int,
+    val email: String,
+    val userIdentifier: String?,
+    val submittedAt: String,
+    val deadline: String?,
+    val lastUpdated: String,
+    val completedAt: String?,
+    val notes: String?,
+    val automated: Boolean
+) {
+    /**
+     * Check if this ticket is urgent (priority >= 8)
+     */
+    val isUrgent: Boolean get() = priority >= 8
+
+    /**
+     * Human-readable status
+     */
+    val displayStatus: String get() = when (status) {
+        "pending" -> "Pending"
+        "in_progress" -> "In Progress"
+        "completed" -> "Completed"
+        "cancelled" -> "Cancelled"
+        "failed" -> "Failed"
+        else -> status.replaceFirstChar { it.uppercase() }
+    }
+
+    /**
+     * Human-readable ticket type
+     */
+    val displayType: String get() = when (ticketType.lowercase()) {
+        "dsar" -> "DSAR"
+        "access" -> "Access Request"
+        "delete" -> "Delete Request"
+        "export" -> "Export Request"
+        "correct" -> "Correction Request"
+        else -> ticketType.replaceFirstChar { it.uppercase() }
+    }
+}
+
+/**
+ * Ticket statistics summary.
+ */
+data class TicketStatsData(
+    val total: Int,
+    val pending: Int,
+    val inProgress: Int,
+    val completed: Int,
+    val failed: Int,
+    val urgent: Int
 )

@@ -240,7 +240,9 @@ class ActionDispatcher:
         # The handler updates the thought status to FAILED if execution fails
         outcome = "success"
         try:
-            updated_thought = persistence.get_thought(thought.thought_id, occurrence_id=thought.agent_occurrence_id)
+            updated_thought = persistence.get_thought_by_id(
+                thought.thought_id, occurrence_id=thought.agent_occurrence_id
+            )
             if updated_thought and updated_thought.status == ThoughtStatus.FAILED:
                 # Extract error message from follow-up info if available
                 outcome = f"failure:{action_type.value}"

@@ -378,9 +378,13 @@ class AdapterConfigurationService:
             return StepResult(step_id=step.step_id, success=True, data={"awaiting_input": True})
 
         # Check if all required fields have values
-        required_fields = []
+        required_fields: list[str] = []
         if step.fields:
-            required_fields = [f.name or f.field_id for f in step.fields if f.required and (f.name or f.field_id)]
+            for f in step.fields:
+                if f.required:
+                    field_key = f.name or f.field_id
+                    if field_key:
+                        required_fields.append(field_key)
 
         missing_required = [field for field in required_fields if not step_data.get(field)]
 

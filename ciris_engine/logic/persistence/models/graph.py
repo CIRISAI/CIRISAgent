@@ -310,6 +310,80 @@ def get_edges_for_node(
     return edges
 
 
+def get_edges_for_nodes_batch(
+    node_ids: List[str], scope: Optional[GraphScope] = None, db_path: Optional[str] = None
+) -> List[GraphEdge]:
+    """Get edges for multiple nodes in a single query.
+
+    Args:
+        node_ids: List of node IDs to get edges for
+        scope: Optional scope filter. If None, returns edges from all scopes.
+        db_path: Optional database path
+
+    Returns:
+        List of GraphEdge objects (deduplicated)
+    """
+    if not node_ids:
+        return []
+
+    import time
+    start = time.time()
+
+    # Build placeholders for IN clause
+    placeholders = ",".join(["?" for _ in node_ids])
+
+    if scope is not None:
+        sql = f"""SELECT DISTINCT * FROM graph_edges
+                  WHERE scope = ? AND (source_node_id IN ({placeholders}) OR target_node_id IN ({placeholders}))"""
+        params = [scope.value] + node_ids + node_ids
+    else:
+        sql = f"""SELECT DISTINCT * FROM graph_edges
+                  WHERE (source_node_id IN ({placeholders}) OR target_node_id IN ({placeholders}))"""
+        params = node_ids + node_ids
+
+    edges: List[GraphEdge] = []
+    seen_edges: set = set()  # Deduplicate by (source, target, relationship)
+
+    try:
+        with get_db_connection(db_path=db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, tuple(params))
+            rows = cursor.fetchall()
+
+            for row in rows:
+                edge_key = (row["source_node_id"], row["target_node_id"], row["relationship"])
+                if edge_key in seen_edges:
+                    continue
+                seen_edges.add(edge_key)
+
+                attrs = parse_json_field(row["attributes_json"])
+                valid_attrs = {}
+                if "created_at" in attrs:
+                    valid_attrs["created_at"] = attrs["created_at"]
+                if "context" in attrs:
+                    valid_attrs["context"] = attrs["context"]
+
+                edge_scope = scope if scope is not None else GraphScope(row["scope"])
+
+                edges.append(
+                    GraphEdge(
+                        source=row["source_node_id"],
+                        target=row["target_node_id"],
+                        relationship=row["relationship"],
+                        scope=edge_scope,
+                        weight=row["weight"],
+                        attributes=GraphEdgeAttributes(**valid_attrs) if valid_attrs else GraphEdgeAttributes(),
+                    )
+                )
+
+            elapsed = (time.time() - start) * 1000
+            logger.info(f"[BATCH-EDGES] Fetched {len(edges)} edges for {len(node_ids)} nodes in {elapsed:.1f}ms")
+
+    except Exception as e:
+        logger.exception("Failed to fetch batch edges: %s", e)
+    return edges
+
+
 def get_all_graph_nodes(
     scope: Optional[GraphScope] = None,
     node_type: Optional[str] = None,

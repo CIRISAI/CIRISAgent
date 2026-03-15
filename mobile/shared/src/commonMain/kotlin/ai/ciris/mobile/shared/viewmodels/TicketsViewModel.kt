@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.api.SOPMetadataData
 import ai.ciris.mobile.shared.api.TicketData
 import ai.ciris.mobile.shared.api.TicketStatsData
 import ai.ciris.mobile.shared.platform.PlatformLogger
@@ -30,11 +31,16 @@ data class TicketsScreenState(
     val tickets: List<TicketData> = emptyList(),
     val stats: TicketStatsData? = null,
     val supportedSops: List<String> = emptyList(),
+    val sopMetadata: Map<String, SOPMetadataData> = emptyMap(),
     val filter: TicketsFilter = TicketsFilter(),
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
+    val isCreatingTicket: Boolean = false,
     val error: String? = null,
-    val selectedTicket: TicketData? = null
+    val selectedTicket: TicketData? = null,
+    val showCreateDialog: Boolean = false,
+    val selectedSopForCreate: String? = null,
+    val createTicketSuccess: Boolean = false
 )
 
 /**
@@ -235,9 +241,92 @@ class TicketsViewModel(
             logInfo(method, "Supported SOPs: $sops")
 
             _state.update { it.copy(supportedSops = sops) }
+
+            // Fetch metadata for each SOP
+            fetchSopMetadata(sops)
         } catch (e: Exception) {
             logError(method, "Failed to fetch SOPs: ${e.message}")
             // Don't set error - SOPs are optional
+        }
+    }
+
+    private suspend fun fetchSopMetadata(sops: List<String>) {
+        val method = "fetchSopMetadata"
+        logDebug(method, "Fetching metadata for ${sops.size} SOPs")
+
+        val metadataMap = mutableMapOf<String, SOPMetadataData>()
+        for (sop in sops) {
+            try {
+                val metadata = apiClient.getSopMetadata(sop)
+                metadataMap[sop] = metadata
+                logDebug(method, "Fetched metadata for $sop")
+            } catch (e: Exception) {
+                logError(method, "Failed to fetch metadata for $sop: ${e.message}")
+            }
+        }
+
+        _state.update { it.copy(sopMetadata = metadataMap) }
+        logInfo(method, "Fetched metadata for ${metadataMap.size}/${sops.size} SOPs")
+    }
+
+    /**
+     * Show the create ticket dialog for a specific SOP.
+     */
+    fun showCreateTicketDialog(sop: String) {
+        _state.update { it.copy(showCreateDialog = true, selectedSopForCreate = sop, createTicketSuccess = false) }
+    }
+
+    /**
+     * Hide the create ticket dialog.
+     */
+    fun hideCreateTicketDialog() {
+        _state.update { it.copy(showCreateDialog = false, selectedSopForCreate = null, createTicketSuccess = false) }
+    }
+
+    /**
+     * Create a new ticket from an SOP.
+     */
+    fun createTicket(
+        sop: String,
+        email: String,
+        userIdentifier: String? = null,
+        notes: String? = null
+    ) {
+        val method = "createTicket"
+        logInfo(method, "Creating ticket for SOP: $sop, email: $email")
+
+        viewModelScope.launch {
+            _state.update { it.copy(isCreatingTicket = true, error = null) }
+
+            try {
+                val ticket = apiClient.createTicket(
+                    sop = sop,
+                    email = email,
+                    userIdentifier = userIdentifier,
+                    notes = notes
+                )
+                logInfo(method, "Ticket created: ${ticket.ticketId}")
+
+                _state.update {
+                    it.copy(
+                        isCreatingTicket = false,
+                        createTicketSuccess = true,
+                        showCreateDialog = false,
+                        selectedSopForCreate = null
+                    )
+                }
+
+                // Refresh the tickets list
+                refresh()
+            } catch (e: Exception) {
+                logError(method, "Failed to create ticket: ${e.message}")
+                _state.update {
+                    it.copy(
+                        isCreatingTicket = false,
+                        error = "Failed to create ticket: ${e.message}"
+                    )
+                }
+            }
         }
     }
 

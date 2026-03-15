@@ -31,17 +31,24 @@ data class GraphNodeDisplay(
     val extra: MutableMap<String, Any> = mutableMapOf()
 ) {
     companion object {
-        fun fromGraphNode(node: GraphNode): GraphNodeDisplay {
+        fun fromGraphNode(node: GraphNode, colorByScope: Boolean = true): GraphNodeDisplay {
             val label = node.attributes.content?.take(30)
                 ?: node.attributes.description?.take(30)
                 ?: node.id.take(10)
+
+            // Use scope-based coloring for multi-scope cylinder view
+            val color = if (colorByScope) {
+                GraphColors.getScopeColor(node.scope)
+            } else {
+                GraphColors.getNodeColor(node.type)
+            }
 
             return GraphNodeDisplay(
                 id = node.id,
                 type = node.type,
                 scope = node.scope,
                 label = label,
-                color = GraphColors.getNodeColor(node.type),
+                color = color,
                 radius = GraphColors.getNodeRadius(node.type),
                 originalNode = node
             )

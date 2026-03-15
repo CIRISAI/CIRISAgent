@@ -3,6 +3,8 @@ package ai.ciris.mobile
 import android.app.Application
 import android.content.Context
 import android.util.Log
+import ai.ciris.mobile.shared.platform.ScheduledTaskBroadcastReceiver
+import ai.ciris.mobile.shared.platform.ScheduledTaskNotifications
 import ai.ciris.mobile.shared.platform.SecureStorage
 import ai.ciris.verify.CirisVerify
 import java.io.File
@@ -12,6 +14,8 @@ import java.io.File
  * Initializes global components like SecureStorage
  */
 class CIRISApplication : Application() {
+
+    private var taskBroadcastReceiver: ScheduledTaskBroadcastReceiver? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -23,8 +27,28 @@ class CIRISApplication : Application() {
         // Initialize SecureStorage with application context
         SecureStorage.setContext(this)
 
+        // Initialize notification channel for scheduled tasks
+        ScheduledTaskNotifications.initialize(this)
+
+        // Register broadcast receiver for task events from Python
+        taskBroadcastReceiver = ScheduledTaskBroadcastReceiver().also {
+            ScheduledTaskBroadcastReceiver.register(this, it)
+        }
+
         // Run migrations for version upgrades (e.g., 1.X -> 2.X)
         MigrationManager.runMigrations(this)
+    }
+
+    override fun onTerminate() {
+        // Unregister broadcast receiver
+        taskBroadcastReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (e: Exception) {
+                Log.w("CIRISApplication", "Failed to unregister receiver: ${e.message}")
+            }
+        }
+        super.onTerminate()
     }
 }
 

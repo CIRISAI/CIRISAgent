@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.api.SOPMetadataData
 import ai.ciris.mobile.shared.api.TicketData
 import ai.ciris.mobile.shared.api.TicketStatsData
 import ai.ciris.mobile.shared.platform.testable
@@ -10,10 +11,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -28,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 
 /**
  * Tickets management screen for viewing and managing workflow tickets.
@@ -46,15 +50,32 @@ fun TicketsScreen(
     onFilterChange: (TicketsFilter) -> Unit,
     onSelectTicket: (TicketData?) -> Unit,
     onNavigateBack: () -> Unit,
+    onShowCreateDialog: (String) -> Unit = {},
+    onHideCreateDialog: () -> Unit = {},
+    onCreateTicket: (sop: String, email: String, userIdentifier: String?, notes: String?) -> Unit = { _, _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
     var showFilters by remember { mutableStateOf(false) }
     var expandedTicketId by remember { mutableStateOf<String?>(null) }
 
+    // Create ticket dialog
+    if (state.showCreateDialog && state.selectedSopForCreate != null) {
+        val sopMetadata = state.sopMetadata[state.selectedSopForCreate]
+        CreateTicketDialog(
+            sop = state.selectedSopForCreate,
+            sopMetadata = sopMetadata,
+            isCreating = state.isCreatingTicket,
+            onDismiss = onHideCreateDialog,
+            onConfirm = { email, userIdentifier, notes ->
+                onCreateTicket(state.selectedSopForCreate, email, userIdentifier, notes)
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Tickets") },
+                title = { Text("Tickets & Privacy") },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -103,6 +124,14 @@ fun TicketsScreen(
             // Stats cards
             state.stats?.let { stats ->
                 TicketStatsRow(stats = stats)
+            }
+
+            // SOP Profiles section
+            if (state.sopMetadata.isNotEmpty()) {
+                SOPProfilesSection(
+                    sopMetadata = state.sopMetadata,
+                    onCreateTicket = onShowCreateDialog
+                )
             }
 
             // Filters section
@@ -567,5 +596,283 @@ private fun formatTimestamp(timestamp: String): String {
         }
     } catch (e: Exception) {
         timestamp
+    }
+}
+
+// ===== SOP Profiles Section =====
+
+@Composable
+private fun SOPProfilesSection(
+    sopMetadata: Map<String, SOPMetadataData>,
+    onCreateTicket: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = "Data Privacy Request Types",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(end = 8.dp)
+        ) {
+            items(sopMetadata.values.toList(), key = { it.sop }) { metadata ->
+                SOPCard(
+                    metadata = metadata,
+                    onCreateTicket = { onCreateTicket(metadata.sop) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SOPCard(
+    metadata: SOPMetadataData,
+    onCreateTicket: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .width(200.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            // Header with GDPR badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = metadata.displayName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            // GDPR Article badge
+            metadata.gdprArticle?.let { article ->
+                Badge(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Text(
+                        text = article,
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Description
+            Text(
+                text = metadata.description.ifEmpty { "Process ${metadata.ticketType} requests" },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Info row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Deadline
+                metadata.deadlineDays?.let { days ->
+                    Text(
+                        text = "${days}d deadline",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+                // Stages
+                Text(
+                    text = "${metadata.stageCount} stages",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Create button
+            Button(
+                onClick = onCreateTicket,
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Create", fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+// ===== Create Ticket Dialog =====
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreateTicketDialog(
+    sop: String,
+    sopMetadata: SOPMetadataData?,
+    isCreating: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (email: String, userIdentifier: String?, notes: String?) -> Unit
+) {
+    var email by remember { mutableStateOf("") }
+    var userIdentifier by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+    var emailError by remember { mutableStateOf<String?>(null) }
+
+    Dialog(onDismissRequest = { if (!isCreating) onDismiss() }) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp)
+            ) {
+                // Header
+                Text(
+                    text = "Create ${sopMetadata?.displayName ?: sop}",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
+                sopMetadata?.gdprArticle?.let { article ->
+                    Text(
+                        text = article,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Email field (required)
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = {
+                        email = it
+                        emailError = null
+                    },
+                    label = { Text("Email *") },
+                    placeholder = { Text("user@example.com") },
+                    isError = emailError != null,
+                    supportingText = emailError?.let { { Text(it) } },
+                    singleLine = true,
+                    enabled = !isCreating,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // User Identifier field (optional)
+                OutlinedTextField(
+                    value = userIdentifier,
+                    onValueChange = { userIdentifier = it },
+                    label = { Text("User Identifier") },
+                    placeholder = { Text("Optional - account ID, username, etc.") },
+                    singleLine = true,
+                    enabled = !isCreating,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Notes field (optional)
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("Notes") },
+                    placeholder = { Text("Optional - additional context") },
+                    minLines = 2,
+                    maxLines = 4,
+                    enabled = !isCreating,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Info about deadline
+                sopMetadata?.deadlineDays?.let { days ->
+                    Text(
+                        text = "This request will have a $days day deadline",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        enabled = !isCreating
+                    ) {
+                        Text("Cancel")
+                    }
+
+                    Button(
+                        onClick = {
+                            // Validate email
+                            if (email.isBlank()) {
+                                emailError = "Email is required"
+                                return@Button
+                            }
+                            if (!email.contains("@") || !email.contains(".")) {
+                                emailError = "Invalid email format"
+                                return@Button
+                            }
+                            onConfirm(
+                                email.trim(),
+                                userIdentifier.trim().ifEmpty { null },
+                                notes.trim().ifEmpty { null }
+                            )
+                        },
+                        enabled = !isCreating
+                    ) {
+                        if (isCreating) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text("Create Request")
+                    }
+                }
+            }
+        }
     }
 }

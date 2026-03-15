@@ -3335,20 +3335,20 @@ class CIRISApiClient(
          */
         suspend fun getGraphData(
             hours: Int = 24,
-            scope: String? = null,
+            scope: String? = null,  // null = ALL SCOPES (multi-scope cylinder)
             nodeType: String? = null,
             limit: Int = 100
         ): GraphDataResponse {
             val method = "getGraphData"
             val totalStart = System.currentTimeMillis()
-            logInfo(method, ">>> START: hours=$hours, scope=$scope, type=$nodeType, limit=$limit")
+            logInfo(method, ">>> START: hours=$hours, scope=${scope ?: "ALL_SCOPES"}, type=$nodeType, limit=$limit")
 
             return try {
-                // First get the timeline nodes
+                // Single API call - timeline now includes edges!
                 val timelineStart = System.currentTimeMillis()
                 val timelineResponse = memoryApi.getTimelineV1MemoryTimelineGet(
                     hours = hours,
-                    scope = scope,
+                    scope = scope,  // null = all scopes
                     type = nodeType,
                     authorization = authHeader()
                 )
@@ -3363,53 +3363,28 @@ class CIRISApiClient(
                 val timelineData = timelineBody.`data` ?: throw RuntimeException("API returned null data")
                 val nodes = timelineData.memories.take(limit)
 
-                logInfo(method, ">>> Timeline fetch: ${timelineMs}ms for ${nodes.size} nodes")
-
-                // Now get edges for all nodes
-                // Note: This could be optimized with a batch endpoint
-                val allEdges = mutableListOf<ai.ciris.api.models.GraphEdge>()
+                // Edges now included in timeline response (batch fetched on server)
+                val edges = timelineData.edges
                 val nodeIds = nodes.map { it.id }.toSet()
-                var totalEdgesFetched = 0
-                var filteredOut = 0
 
-                // Fetch edges for nodes (optimized: reduced from 50 to 20 nodes)
-                val nodesToFetchEdges = nodes.take(20)  // Reduced to minimize API calls
-                val edgeStartTime = System.currentTimeMillis()
-
-                // Sequential but with fewer nodes for now
-                // TODO: Use batch endpoint when available
-                for (node in nodesToFetchEdges) {
-                    try {
-                        val edgesResponse = memoryApi.getNodeEdgesV1MemoryNodeIdEdgesGet(node.id, authHeader())
-                        if (edgesResponse.success) {
-                            val edges = edgesResponse.body().`data` ?: emptyList()
-                            totalEdgesFetched += edges.size
-                            edges.forEach { edge ->
-                                if (nodeIds.contains(edge.source) && nodeIds.contains(edge.target)) {
-                                    if (allEdges.none { it.source == edge.source && it.target == edge.target && it.relationship == edge.relationship }) {
-                                        allEdges.add(edge)
-                                    }
-                                } else {
-                                    filteredOut++
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        logWarn(method, "Failed to get edges for node ${node.id}: ${e.message}")
-                    }
+                // Filter edges to only include those between visible nodes
+                val visibleEdges = edges.filter { edge ->
+                    nodeIds.contains(edge.source) && nodeIds.contains(edge.target)
                 }
-                val edgeTime = System.currentTimeMillis() - edgeStartTime
 
                 val totalMs = System.currentTimeMillis() - totalStart
-                logInfo(method, "<<< DONE in ${totalMs}ms (timeline=${timelineMs}ms, edges=${edgeTime}ms)")
-                logInfo(method, "    Edges: fetched=$totalEdgesFetched, filtered_out=$filteredOut, final=${allEdges.size}")
-                if (allEdges.isEmpty() && totalEdgesFetched == 0) {
-                    logInfo(method, "    WARNING: No edges found! Nodes may not have any relationships yet.")
+                logInfo(method, "<<< DONE in ${totalMs}ms (single API call)")
+                logInfo(method, "    Nodes: ${nodes.size} (${nodes.groupBy { it.scope }.mapValues { it.value.size }})")
+                logInfo(method, "    Edges: ${edges.size} total, ${visibleEdges.size} visible")
+                logInfo(method, "    Edge types: ${edges.groupBy { it.relationship }.mapValues { it.value.size }}")
+
+                if (visibleEdges.isEmpty() && edges.isEmpty()) {
+                    logInfo(method, "    INFO: No edges found - nodes may not have relationships yet")
                 }
 
                 GraphDataResponse(
                     nodes = nodes,
-                    edges = allEdges
+                    edges = visibleEdges
                 )
             } catch (e: Exception) {
                 logException(method, e)

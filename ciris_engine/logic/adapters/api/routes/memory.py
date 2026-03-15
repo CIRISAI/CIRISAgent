@@ -481,8 +481,9 @@ async def get_timeline(
     auth: AuthObserverDep,
     memory_service: MemoryServiceDep,
     hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
-    scope: Optional[str] = Query(None, description="Filter by scope"),
+    scope: Optional[str] = Query(None, description="Filter by scope (None = all scopes)"),
     type: Optional[str] = Query(None, description="Filter by node type"),
+    include_edges: bool = Query(True, description="Include edges in response"),
 ) -> SuccessResponse[TimelineResponse]:
     """
     Get a timeline view of recent memories.
@@ -532,8 +533,26 @@ async def get_timeline(
         start_time = now - timedelta(hours=hours)
         buckets = calculate_time_buckets(nodes, hours)
 
+        # Fetch edges in a single batch query if requested
+        edges: List[GraphEdge] = []
+        if include_edges and nodes:
+            import time as time_module
+
+            edge_start = time_module.time()
+            from ciris_engine.logic.persistence.models.graph import get_edges_for_nodes_batch
+
+            node_ids = [n.id for n in nodes]
+            # Parse scope for edge query (None = all scopes)
+            edge_scope = GraphScope(scope) if scope else None
+            edges = get_edges_for_nodes_batch(
+                node_ids=node_ids, scope=edge_scope, db_path=memory_service.db_path
+            )
+            edge_ms = (time_module.time() - edge_start) * 1000
+            logger.info(f"[TIMELINE] Batch edge fetch: {len(edges)} edges in {edge_ms:.1f}ms")
+
         response = TimelineResponse(
             memories=nodes,
+            edges=edges,
             buckets=buckets,
             start_time=start_time,
             end_time=now,

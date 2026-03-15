@@ -81,12 +81,13 @@ class GraphMemoryViewModel(
             _displayState.value = _displayState.value.copy(isLoading = true, error = null)
 
             try {
-                // Always pass a scope - cross-scope edges are not supported
+                // Pass null for scope to get ALL SCOPES (multi-scope cylinder)
+                // The batch edge endpoint now supports cross-scope edges
                 val graphData = apiClient.getGraphData(
                     hours = _filter.value.hours,
-                    scope = _filter.value.scope.value,
+                    scope = null,  // ALL SCOPES for multi-scope cylinder
                     nodeType = null,
-                    limit = 100
+                    limit = 200  // Increased limit for multi-scope view
                 )
 
                 val requestTime = System.currentTimeMillis() - requestStart
@@ -95,9 +96,9 @@ class GraphMemoryViewModel(
                     PlatformLogger.d(TAG, "WARNING: No edges returned from API!")
                 }
 
-                // Convert to display models
+                // Convert to display models (use scope-based coloring for multi-scope view)
                 val displayNodes = graphData.nodes.map { node ->
-                    GraphNodeDisplay.fromGraphNode(node)
+                    GraphNodeDisplay.fromGraphNode(node, colorByScope = true)
                 }
                 val displayEdges = graphData.edges.map { edge ->
                     GraphEdgeDisplay.fromGraphEdge(edge)

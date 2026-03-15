@@ -139,6 +139,35 @@ def pull_logs_command(args) -> int:
 
     bundle_id = args.package
 
+    # Auto-detect package: prefer debug over release
+    if bundle_id == "auto" and platform == "android":
+        try:
+            adb_temp = ADBHelper(adb_path=getattr(args, "adb_path", None), device_serial=getattr(args, "device", None))
+            # Check if debug package is installed
+            result = adb_temp._run_adb(["shell", "pm", "list", "packages", "ai.ciris.mobile"])
+            installed_packages = result.stdout.strip().split("\n")
+
+            debug_pkg = "ai.ciris.mobile.debug"
+            release_pkg = "ai.ciris.mobile"
+
+            has_debug = any(debug_pkg in pkg for pkg in installed_packages)
+            has_release = any(f"package:{release_pkg}" == pkg.strip() for pkg in installed_packages)
+
+            if has_debug:
+                bundle_id = debug_pkg
+                print(f"[INFO] Auto-selected DEBUG package: {debug_pkg}")
+            elif has_release:
+                bundle_id = release_pkg
+                print(f"[INFO] Auto-selected RELEASE package: {release_pkg}")
+            else:
+                bundle_id = release_pkg
+                print(f"[WARN] No CIRIS package found, defaulting to: {release_pkg}")
+        except Exception as e:
+            bundle_id = "ai.ciris.mobile"
+            print(f"[WARN] Package auto-detect failed ({e}), using: {bundle_id}")
+    elif bundle_id == "auto":
+        bundle_id = "ai.ciris.mobile"  # Default for iOS
+
     if platform == "ios":
         # Try physical device first if device_id looks like physical, or auto-detect
         helper = None
@@ -1083,8 +1112,8 @@ Examples:
     )
     pull_parser.add_argument(
         "--package",
-        default="ai.ciris.mobile",
-        help="Package/Bundle ID (default: ai.ciris.mobile)",
+        default="auto",
+        help="Package/Bundle ID (default: auto - prefers debug over release)",
     )
 
     # ========== go-screen subcommand ==========

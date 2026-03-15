@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -84,6 +85,8 @@ fun InteractScreen(
     onSessionExpired: () -> Unit = {},
     onOpenTrustPage: () -> Unit = {},
     onOpenBilling: () -> Unit = {},
+    onOpenSystem: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsState()
@@ -160,7 +163,9 @@ fun InteractScreen(
                 onShutdown = { viewModel.shutdown(emergency = false) },
                 onEmergencyStop = { viewModel.shutdown(emergency = true) },
                 onTrustShieldClick = onOpenTrustPage,
-                onCreditsClick = onOpenBilling
+                onCreditsClick = onOpenBilling,
+                onLocalClick = onOpenSystem,
+                onSettingsClick = onOpenSettings
             )
 
         // Auth error is now handled by LaunchedEffect above - navigates to login silently
@@ -293,6 +298,8 @@ private fun EnhancedStatusBar(
     onEmergencyStop: () -> Unit,
     onTrustShieldClick: () -> Unit,
     onCreditsClick: () -> Unit,
+    onLocalClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -309,28 +316,34 @@ private fun EnhancedStatusBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Connection status dot
-                Box(
+                // Connection status - tappable to System screen
+                Row(
                     modifier = Modifier
-                        .size(8.dp)
-                        .background(
-                            color = if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444),
-                            shape = CircleShape
-                        )
-                )
-
-                // Connection text - "Local Runtime" instead of "Server"
-                Text(
-                    text = if (isConnected) "Local" else "Offline",
-                    fontSize = 11.sp,
-                    color = if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444)
-                )
+                        .clickable(onClick = onLocalClick)
+                        .padding(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(
+                                color = if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444),
+                                shape = CircleShape
+                            )
+                    )
+                    Text(
+                        text = if (isConnected) "Local" else "Offline",
+                        fontSize = 11.sp,
+                        color = if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444)
+                    )
+                }
 
                 // Divider
                 Text(text = "•", fontSize = 10.sp, color = Color(0xFFD1D5DB))
 
-                // LLM health indicator
-                LlmHealthIndicator(health = llmHealth)
+                // LLM health indicator - tappable to Settings (LLM config)
+                LlmHealthIndicator(health = llmHealth, onClick = onSettingsClick)
 
                 // Credits indicator (only if CIRIS proxy) - clickable to billing
                 if (llmHealth.isCirisProxy && creditStatus.isLoaded) {
@@ -404,10 +417,13 @@ private fun EnhancedStatusBar(
 @Composable
 private fun LlmHealthIndicator(
     health: LlmHealthStatus,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier,
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp)
     ) {

@@ -46,6 +46,10 @@ import ai.ciris.mobile.shared.viewmodels.SchedulerViewModel
 import ai.ciris.mobile.shared.viewmodels.ToolsViewModel
 import ai.ciris.mobile.shared.ui.screens.graph.GraphMemoryScreen
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
@@ -60,6 +64,7 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -1154,7 +1159,7 @@ fun CIRISApp(
                             onServicesClick = { currentScreen = Screen.Services },
                             onAuditClick = { currentScreen = Screen.Audit },
                             onLogsClick = { currentScreen = Screen.Logs },
-                            onMemoryClick = { currentScreen = Screen.Memory },
+                            onMemoryClick = { currentScreen = Screen.GraphMemory },  // Default to 3D cylinder view
                             onConfigClick = { currentScreen = Screen.Config },
                             onConsentClick = { currentScreen = Screen.Consent },
                             onSystemClick = { currentScreen = Screen.System },
@@ -1188,6 +1193,14 @@ fun CIRISApp(
                         onOpenBilling = {
                             platformLog(TAG, "[INFO] Opening Billing page from credits")
                             currentScreen = Screen.Billing
+                        },
+                        onOpenSystem = {
+                            platformLog(TAG, "[INFO] Opening System page from Local status")
+                            currentScreen = Screen.System
+                        },
+                        onOpenSettings = {
+                            platformLog(TAG, "[INFO] Opening Settings page from LLM indicator")
+                            currentScreen = Screen.Settings
                         },
                         modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
                     )
@@ -1770,6 +1783,7 @@ fun CIRISApp(
                     state = graphState,
                     filter = graphFilter,
                     stats = graphStats,
+                    cylinderLayout = graphMemoryViewModel.cylinderLayout,
                     onRefresh = {
                         PlatformLogger.i("CIRISApp", "[Screen.GraphMemory] User triggered refresh")
                         graphMemoryViewModel.refresh()
@@ -1807,8 +1821,8 @@ fun CIRISApp(
                         graphMemoryViewModel.stopSimulation()
                     },
                     onNavigateBack = {
-                        PlatformLogger.i("CIRISApp", "[Screen.GraphMemory] Navigating back to Memory list")
-                        currentScreen = Screen.Memory
+                        PlatformLogger.i("CIRISApp", "[Screen.GraphMemory] Navigating back to Interact")
+                        currentScreen = Screen.Interact
                     }
                 )
             }
@@ -2089,7 +2103,19 @@ fun CIRISApp(
                         PlatformLogger.i("CIRISApp", "[Screen.Tickets] Ticket selected: ${ticket?.ticketId}")
                         ticketsViewModel.selectTicket(ticket)
                     },
-                    onNavigateBack = { currentScreen = Screen.Interact }
+                    onNavigateBack = { currentScreen = Screen.Interact },
+                    onShowCreateDialog = { sop ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Tickets] Show create dialog for SOP: $sop")
+                        ticketsViewModel.showCreateTicketDialog(sop)
+                    },
+                    onHideCreateDialog = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Tickets] Hide create dialog")
+                        ticketsViewModel.hideCreateTicketDialog()
+                    },
+                    onCreateTicket = { sop, email, userIdentifier, notes ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Tickets] Create ticket: sop=$sop, email=$email")
+                        ticketsViewModel.createTicket(sop, email, userIdentifier, notes)
+                    }
                 )
             }
 
@@ -2113,7 +2139,23 @@ fun CIRISApp(
                         PlatformLogger.i("CIRISApp", "[Screen.Scheduler] User triggered refresh")
                         schedulerViewModel.refresh()
                     },
-                    onNavigateBack = { currentScreen = Screen.Interact }
+                    onNavigateBack = { currentScreen = Screen.Interact },
+                    onShowCreateDialog = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Scheduler] Show create dialog")
+                        schedulerViewModel.showCreateTaskDialog()
+                    },
+                    onHideCreateDialog = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Scheduler] Hide create dialog")
+                        schedulerViewModel.hideCreateTaskDialog()
+                    },
+                    onCreateTask = { name, goalDescription, triggerPrompt, deferUntil, scheduleCron ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Scheduler] Create task: name=$name, recurring=${scheduleCron != null}")
+                        schedulerViewModel.createTask(name, goalDescription, triggerPrompt, deferUntil, scheduleCron)
+                    },
+                    onCancelTask = { taskId ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Scheduler] Cancel task: $taskId")
+                        schedulerViewModel.cancelTask(taskId)
+                    }
                 )
             }
 
@@ -2204,6 +2246,19 @@ private suspend fun checkFirstRunStatus(
     return null
 }
 
+/**
+ * Category-based navigation for the top bar.
+ * Categories:
+ * - Adapters & Tools: Adapters, Tools
+ * - Config & Credits: Settings, Config, Buy Credits
+ * - Data & Privacy: Memory, Sessions, Consent, Audit Trail
+ * - Governance: Human Deferrals
+ * - Advanced: Telemetry, Services, Logs, System, Runtime, Users, Tickets, Scheduler
+ */
+private enum class NavCategory {
+    NONE, ADAPTERS, CONFIG, DATA, GOVERNANCE, ADVANCED
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CIRISTopBar(
@@ -2226,262 +2281,255 @@ private fun CIRISTopBar(
     onSchedulerClick: () -> Unit = {},
     onToolsClick: () -> Unit = {}
 ) {
-    var showMenu by remember { mutableStateOf(false) }
+    var activeCategory by remember { mutableStateOf(NavCategory.NONE) }
 
     TopAppBar(
         title = {
-            Text("CIRIS")
-        },
-        actions = {
-            IconButton(
-                onClick = onSettingsClick,
-                modifier = Modifier.testableClickable("btn_settings") { onSettingsClick() }
+            // CIRIS Signet - styled "C" icon instead of text
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Settings"
-                )
-            }
-
-            Box {
-                IconButton(
-                    onClick = { showMenu = true },
-                    modifier = Modifier.testableClickable("btn_menu") { showMenu = true }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "More"
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "C",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                 }
-
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false }
+            }
+        },
+        actions = {
+            // Category 1: Adapters & Tools
+            Box {
+                IconButton(
+                    onClick = { activeCategory = if (activeCategory == NavCategory.ADAPTERS) NavCategory.NONE else NavCategory.ADAPTERS },
+                    modifier = Modifier.testableClickable("btn_adapters_menu") {
+                        activeCategory = if (activeCategory == NavCategory.ADAPTERS) NavCategory.NONE else NavCategory.ADAPTERS
+                    }
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("Buy Credits") },
-                        onClick = {
-                            showMenu = false
-                            onBillingClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null
-                            )
-                        }
+                    Icon(
+                        imageVector = Icons.Default.Build,
+                        contentDescription = "Adapters & Tools",
+                        tint = if (activeCategory == NavCategory.ADAPTERS)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onPrimaryContainer
                     )
-                    DropdownMenuItem(
-                        text = { Text("Telemetry") },
-                        onClick = {
-                            showMenu = false
-                            onTelemetryClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Sessions") },
-                        onClick = {
-                            showMenu = false
-                            onSessionsClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null
-                            )
-                        }
+                }
+                DropdownMenu(
+                    expanded = activeCategory == NavCategory.ADAPTERS,
+                    onDismissRequest = { activeCategory = NavCategory.NONE }
+                ) {
+                    Text(
+                        text = "Adapters & Tools",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                     DropdownMenuItem(
                         text = { Text("Adapters") },
-                        onClick = {
-                            showMenu = false
-                            onAdaptersClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Build,
-                                contentDescription = null
-                            )
-                        },
-                        modifier = Modifier.testableClickable("menu_adapters") {
-                            showMenu = false
-                            onAdaptersClick()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Human Deferrals") },
-                        onClick = {
-                            showMenu = false
-                            onWiseAuthorityClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Services") },
-                        onClick = {
-                            showMenu = false
-                            onServicesClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Build,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Audit Trail") },
-                        onClick = {
-                            showMenu = false
-                            onAuditClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.List,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Logs") },
-                        onClick = {
-                            showMenu = false
-                            onLogsClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.List,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Memory") },
-                        onClick = {
-                            showMenu = false
-                            onMemoryClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Config") },
-                        onClick = {
-                            showMenu = false
-                            onConfigClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Consent") },
-                        onClick = {
-                            showMenu = false
-                            onConsentClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("System") },
-                        onClick = {
-                            showMenu = false
-                            onSystemClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Runtime") },
-                        onClick = {
-                            showMenu = false
-                            onRuntimeClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Users") },
-                        onClick = {
-                            showMenu = false
-                            onUsersClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Tickets") },
-                        onClick = {
-                            showMenu = false
-                            onTicketsClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.List,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Scheduler") },
-                        onClick = {
-                            showMenu = false
-                            onSchedulerClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null
-                            )
-                        }
+                        onClick = { activeCategory = NavCategory.NONE; onAdaptersClick() },
+                        leadingIcon = { Icon(Icons.Default.Build, null) },
+                        modifier = Modifier.testableClickable("menu_adapters") { activeCategory = NavCategory.NONE; onAdaptersClick() }
                     )
                     DropdownMenuItem(
                         text = { Text("Tools") },
-                        onClick = {
-                            showMenu = false
-                            onToolsClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Build,
-                                contentDescription = null
-                            )
-                        }
+                        onClick = { activeCategory = NavCategory.NONE; onToolsClick() },
+                        leadingIcon = { Icon(Icons.Default.Build, null) }
+                    )
+                }
+            }
+
+            // Category 2: Config & Credits
+            Box {
+                IconButton(
+                    onClick = { activeCategory = if (activeCategory == NavCategory.CONFIG) NavCategory.NONE else NavCategory.CONFIG }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Config & Credits",
+                        tint = if (activeCategory == NavCategory.CONFIG)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                DropdownMenu(
+                    expanded = activeCategory == NavCategory.CONFIG,
+                    onDismissRequest = { activeCategory = NavCategory.NONE }
+                ) {
+                    Text(
+                        text = "Config & Credits",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    DropdownMenuItem(
+                        text = { Text("LLM Settings") },
+                        onClick = { activeCategory = NavCategory.NONE; onSettingsClick() },
+                        leadingIcon = { Icon(Icons.Default.Settings, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Agent Config") },
+                        onClick = { activeCategory = NavCategory.NONE; onConfigClick() },
+                        leadingIcon = { Icon(Icons.Default.Settings, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Buy Credits") },
+                        onClick = { activeCategory = NavCategory.NONE; onBillingClick() },
+                        leadingIcon = { Icon(Icons.Default.Star, null) }
+                    )
+                }
+            }
+
+            // Category 3: Data & Privacy
+            Box {
+                IconButton(
+                    onClick = { activeCategory = if (activeCategory == NavCategory.DATA) NavCategory.NONE else NavCategory.DATA }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = "Data & Privacy",
+                        tint = if (activeCategory == NavCategory.DATA)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                DropdownMenu(
+                    expanded = activeCategory == NavCategory.DATA,
+                    onDismissRequest = { activeCategory = NavCategory.NONE }
+                ) {
+                    Text(
+                        text = "Data & Privacy",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Memory") },
+                        onClick = { activeCategory = NavCategory.NONE; onMemoryClick() },
+                        leadingIcon = { Icon(Icons.Default.Star, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Sessions") },
+                        onClick = { activeCategory = NavCategory.NONE; onSessionsClick() },
+                        leadingIcon = { Icon(Icons.Default.List, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Consent") },
+                        onClick = { activeCategory = NavCategory.NONE; onConsentClick() },
+                        leadingIcon = { Icon(Icons.Default.Check, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Audit Trail") },
+                        onClick = { activeCategory = NavCategory.NONE; onAuditClick() },
+                        leadingIcon = { Icon(Icons.Default.List, null) }
+                    )
+                }
+            }
+
+            // Category 4: Governance
+            Box {
+                IconButton(
+                    onClick = { activeCategory = if (activeCategory == NavCategory.GOVERNANCE) NavCategory.NONE else NavCategory.GOVERNANCE }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "Governance",
+                        tint = if (activeCategory == NavCategory.GOVERNANCE)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                DropdownMenu(
+                    expanded = activeCategory == NavCategory.GOVERNANCE,
+                    onDismissRequest = { activeCategory = NavCategory.NONE }
+                ) {
+                    Text(
+                        text = "Governance",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Human Deferrals") },
+                        onClick = { activeCategory = NavCategory.NONE; onWiseAuthorityClick() },
+                        leadingIcon = { Icon(Icons.Default.Person, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Users") },
+                        onClick = { activeCategory = NavCategory.NONE; onUsersClick() },
+                        leadingIcon = { Icon(Icons.Default.Person, null) }
+                    )
+                }
+            }
+
+            // Category 5: Advanced (overflow for power users)
+            Box {
+                IconButton(
+                    onClick = { activeCategory = if (activeCategory == NavCategory.ADVANCED) NavCategory.NONE else NavCategory.ADVANCED },
+                    modifier = Modifier.testableClickable("btn_menu") {
+                        activeCategory = if (activeCategory == NavCategory.ADVANCED) NavCategory.NONE else NavCategory.ADVANCED
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Advanced",
+                        tint = if (activeCategory == NavCategory.ADVANCED)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                DropdownMenu(
+                    expanded = activeCategory == NavCategory.ADVANCED,
+                    onDismissRequest = { activeCategory = NavCategory.NONE }
+                ) {
+                    Text(
+                        text = "Advanced",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Telemetry") },
+                        onClick = { activeCategory = NavCategory.NONE; onTelemetryClick() },
+                        leadingIcon = { Icon(Icons.Default.Info, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Services") },
+                        onClick = { activeCategory = NavCategory.NONE; onServicesClick() },
+                        leadingIcon = { Icon(Icons.Default.Build, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Logs") },
+                        onClick = { activeCategory = NavCategory.NONE; onLogsClick() },
+                        leadingIcon = { Icon(Icons.Default.List, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("System") },
+                        onClick = { activeCategory = NavCategory.NONE; onSystemClick() },
+                        leadingIcon = { Icon(Icons.Default.Info, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Runtime") },
+                        onClick = { activeCategory = NavCategory.NONE; onRuntimeClick() },
+                        leadingIcon = { Icon(Icons.Default.PlayArrow, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Tickets") },
+                        onClick = { activeCategory = NavCategory.NONE; onTicketsClick() },
+                        leadingIcon = { Icon(Icons.Default.List, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Scheduler") },
+                        onClick = { activeCategory = NavCategory.NONE; onSchedulerClick() },
+                        leadingIcon = { Icon(Icons.Default.Check, null) }
                     )
                 }
             }

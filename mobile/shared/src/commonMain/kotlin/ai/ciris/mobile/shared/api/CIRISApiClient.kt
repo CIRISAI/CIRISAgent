@@ -2740,10 +2740,11 @@ class CIRISApiClient(
             val degradedServices = data.degradedServices ?: 0
             val cpuPercent = data.cpuPercent ?: 0.0
             val memoryMb = data.memoryMb ?: 0.0
+            val diskUsedMb = data.diskUsedMb ?: 0.0
 
             logInfo(method, "Telemetry: uptime=${data.uptimeSeconds}s, state=${data.cognitiveState}, " +
                     "services=$healthyServices/$healthyServices, " +
-                    "cpu=$cpuPercent%, memory=${memoryMb}MB")
+                    "cpu=$cpuPercent%, memory=${memoryMb}MB, disk=${diskUsedMb}MB")
 
             UnifiedTelemetryData(
                 health = if (degradedServices == 0) "healthy" else "degraded",
@@ -2752,7 +2753,7 @@ class CIRISApiClient(
                 memoryMb = memoryMb.toInt(),
                 memoryPercent = 0, // Not available from overview
                 cpuPercent = cpuPercent.toInt(),
-                diskUsedMb = 0.0, // Not available from overview
+                diskUsedMb = diskUsedMb,
                 servicesOnline = healthyServices,
                 servicesTotal = healthyServices + degradedServices,
                 services = emptyMap() // Not available from overview
@@ -2765,17 +2766,35 @@ class CIRISApiClient(
 
     suspend fun getEnvironmentalMetrics(): EnvironmentalMetricsData? {
         val method = "getEnvironmentalMetrics"
-        logInfo(method, "Fetching environmental metrics")
+        logInfo(method, "Fetching environmental metrics from telemetry overview")
 
-        // Environmental metrics endpoint may not exist - return stub data
         return try {
-            // Return stub data since the endpoint is not available
+            // Use telemetry overview which contains environmental metrics
+            val response = telemetryApi.getTelemetryOverviewV1TelemetryOverviewGet(authHeader())
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                return null
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: return null
+
+            val carbonGrams = data.carbonLastHourGrams ?: 0.0
+            val energyKwh = data.energyLastHourKwh ?: 0.0
+            val costCents = data.costLastHourCents ?: 0.0
+            val tokensLastHour = (data.tokensLastHour ?: 0.0).toInt()
+            val tokens24h = (data.tokens24h ?: 0.0).toInt()
+
+            logInfo(method, "Environmental: carbon=${carbonGrams}g, energy=${energyKwh}kWh, " +
+                    "cost=${costCents}c, tokens=$tokensLastHour/hr, tokens24h=$tokens24h")
+
             EnvironmentalMetricsData(
-                carbonGrams = 0.0,
-                energyKwh = 0.0,
-                costCents = 0.0,
-                tokensLastHour = 0,
-                tokens24h = 0
+                carbonGrams = carbonGrams,
+                energyKwh = energyKwh,
+                costCents = costCents,
+                tokensLastHour = tokensLastHour,
+                tokens24h = tokens24h
             )
         } catch (e: Exception) {
             logException(method, e)

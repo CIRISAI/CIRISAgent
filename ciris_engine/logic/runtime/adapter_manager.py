@@ -989,9 +989,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
         try:
             instance = self.loaded_adapters[adapter_id]
-            logger.info(f"[GET_ADAPTER_INFO] Found instance for {adapter_id}: type={instance.adapter_type}")
-            logger.info(f"[GET_ADAPTER_INFO] services_registered={instance.services_registered}")
-            logger.info(f"[GET_ADAPTER_INFO] config_params={instance.config_params}")
+            logger.debug(f"Getting adapter info for {adapter_id}: type={instance.adapter_type}")
 
             # Determine adapter status
             health_status, _ = await self._determine_adapter_health_status(instance)
@@ -1003,15 +1001,12 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 status = AdapterStatus.STOPPED
             else:
                 status = AdapterStatus.ERROR
-            logger.info(f"[GET_ADAPTER_INFO] health_status={health_status}, status={status}")
 
             # Get tools information
             tools = await self._get_adapter_tools_info(adapter_id, instance)
-            logger.info(f"[GET_ADAPTER_INFO] tools={tools}")
 
             # Get metrics
             metrics = self._create_adapter_metrics(instance, health_status)
-            logger.info(f"[GET_ADAPTER_INFO] metrics={metrics}")
 
             # Get config from adapter's get_config() if available (live config),
             # otherwise fall back to static instance.config_params (load-time config)
@@ -1021,17 +1016,14 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                     live_config = instance.adapter.get_config()
                     if live_config:
                         config_to_use = live_config
-                        logger.info(f"[GET_ADAPTER_INFO] Using live config from adapter.get_config()")
                 except Exception as e:
-                    logger.debug(f"[GET_ADAPTER_INFO] Could not get live config: {e}")
+                    logger.debug(f"Could not get live config for {adapter_id}: {e}")
 
             # Sanitize config params
             sanitized_config = self._sanitize_config_params(instance.adapter_type, config_to_use)
-            logger.info(f"[GET_ADAPTER_INFO] sanitized_config={sanitized_config}")
 
             # Transform services_registered to cleaner display names
             clean_services = self._transform_services_for_display(instance)
-            logger.info(f"[GET_ADAPTER_INFO] clean_services={clean_services}")
 
             result = AdapterInfo(
                 adapter_id=adapter_id,
@@ -1045,7 +1037,6 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 config_params=sanitized_config,
                 services_registered=clean_services,
             )
-            logger.info(f"[GET_ADAPTER_INFO] Returning AdapterInfo: {result.model_dump()}")
             return result
 
         except Exception as e:

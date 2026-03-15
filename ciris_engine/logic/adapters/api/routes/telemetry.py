@@ -238,6 +238,7 @@ def _create_empty_system_overview() -> SystemOverview:
         energy_24h_kwh=0.0,
         memory_mb=0.0,
         cpu_percent=0.0,
+        disk_used_mb=0.0,
         healthy_services=0,
         degraded_services=0,
         error_rate_percent=0.0,
@@ -293,6 +294,7 @@ def _update_resource_usage(overview: SystemOverview, resource_monitor: Any) -> N
         if hasattr(resource_monitor, "snapshot"):
             overview.memory_mb = float(resource_monitor.snapshot.memory_mb)
             overview.cpu_percent = float(resource_monitor.snapshot.cpu_percent)
+            overview.disk_used_mb = float(resource_monitor.snapshot.disk_used_mb)
     except Exception as e:
         logger.warning(
             f"Telemetry metric retrieval failed for resource usage: {type(e).__name__}: {str(e)} - Returning default/empty value"

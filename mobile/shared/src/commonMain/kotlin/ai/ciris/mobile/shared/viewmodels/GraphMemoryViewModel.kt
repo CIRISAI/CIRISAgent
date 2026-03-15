@@ -50,6 +50,9 @@ class GraphMemoryViewModel(
     private val simulation = ForceSimulation()
     private var simulationJob: Job? = null
 
+    // Cylinder layout
+    val cylinderLayout = CylinderLayout()
+
     // Canvas dimensions
     private var canvasWidth: Float = 800f
     private var canvasHeight: Float = 600f
@@ -71,7 +74,8 @@ class GraphMemoryViewModel(
      * Load graph data from API.
      */
     fun loadGraphData() {
-        PlatformLogger.d(TAG, "Loading graph data: hours=${_filter.value.hours}, scope=${_filter.value.scope}")
+        val requestStart = System.currentTimeMillis()
+        PlatformLogger.d(TAG, ">>> API REQUEST START: hours=${_filter.value.hours}, scope=${_filter.value.scope}")
 
         viewModelScope.launch {
             _displayState.value = _displayState.value.copy(isLoading = true, error = null)
@@ -85,7 +89,11 @@ class GraphMemoryViewModel(
                     limit = 100
                 )
 
-                PlatformLogger.d(TAG, "Loaded ${graphData.nodes.size} nodes, ${graphData.edges.size} edges")
+                val requestTime = System.currentTimeMillis() - requestStart
+                PlatformLogger.d(TAG, "<<< API REQUEST DONE in ${requestTime}ms: ${graphData.nodes.size} nodes, ${graphData.edges.size} edges")
+                if (graphData.edges.isEmpty()) {
+                    PlatformLogger.d(TAG, "WARNING: No edges returned from API!")
+                }
 
                 // Convert to display models
                 val displayNodes = graphData.nodes.map { node ->
@@ -167,6 +175,12 @@ class GraphMemoryViewModel(
             }
             GraphLayout.CIRCULAR -> {
                 ForceSimulation.applyCircularLayout(nodes, canvasWidth, canvasHeight)
+            }
+            GraphLayout.CYLINDER -> {
+                // Cylinder layout is applied by CylinderCanvas
+                // Just reset the rotation
+                cylinderLayout.reset()
+                cylinderLayout.applyLayout(nodes, canvasWidth, canvasHeight)
             }
         }
 

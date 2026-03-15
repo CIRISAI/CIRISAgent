@@ -186,6 +186,24 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return processed_node
 
+    async def get_edges(self, node_id: str, scope: Optional[GraphScope] = None) -> List[GraphEdge]:
+        """Get all edges connected to a node.
+
+        Args:
+            node_id: The node ID to get edges for
+            scope: Optional scope filter. If None, returns edges from all scopes.
+
+        Returns:
+            List of GraphEdge objects
+        """
+        self._track_request()
+        from ciris_engine.logic.persistence.models.graph import get_edges_for_node
+
+        logger.debug(f"get_edges: node_id={node_id}, scope={scope}")
+        edges = get_edges_for_node(node_id, scope=scope, db_path=self.db_path)
+        logger.debug(f"get_edges: found {len(edges)} edges for node {node_id}")
+        return edges
+
     async def forget(self, node: GraphNode) -> "MemoryOpResult[GraphNode]":
         """Forget a node and clean up any associated secrets."""
         self._track_request()

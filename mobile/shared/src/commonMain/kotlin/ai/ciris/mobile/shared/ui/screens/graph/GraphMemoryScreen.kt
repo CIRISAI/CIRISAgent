@@ -41,6 +41,7 @@ fun GraphMemoryScreen(
     state: GraphDisplayState,
     filter: GraphFilter,
     stats: GraphStats,
+    cylinderLayout: CylinderLayout,
     onRefresh: () -> Unit,
     onFilterChange: (GraphFilter) -> Unit,
     onLayoutChange: (GraphLayout) -> Unit,
@@ -62,16 +63,28 @@ fun GraphMemoryScreen(
             .fillMaxSize()
             .background(GraphColors.Background)
     ) {
-        // Main graph canvas
-        GraphCanvas(
-            state = state,
-            onViewportChange = onViewportChange,
-            onNodeSelected = onNodeSelected,
-            onNodeDragStart = onNodeDragStart,
-            onNodeDrag = onNodeDrag,
-            onNodeDragEnd = onNodeDragEnd,
-            modifier = Modifier.fillMaxSize()
-        )
+        // Main graph canvas - switch based on layout type
+        if (state.layout == GraphLayout.CYLINDER) {
+            CylinderCanvas(
+                state = state,
+                cylinderLayout = cylinderLayout,
+                onNodeSelected = onNodeSelected,
+                onLayoutApplied = { /* Layout applied by CylinderCanvas */ },
+                modifier = Modifier.fillMaxSize(),
+                autoRotate = !state.isSimulationRunning,
+                groupByType = false
+            )
+        } else {
+            GraphCanvas(
+                state = state,
+                onViewportChange = onViewportChange,
+                onNodeSelected = onNodeSelected,
+                onNodeDragStart = onNodeDragStart,
+                onNodeDrag = onNodeDrag,
+                onNodeDragEnd = onNodeDragEnd,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         // Top app bar overlay
         Surface(

@@ -3340,16 +3340,19 @@ class CIRISApiClient(
             limit: Int = 100
         ): GraphDataResponse {
             val method = "getGraphData"
-            logInfo(method, "Fetching graph data: hours=$hours, scope=$scope, type=$nodeType, limit=$limit")
+            val totalStart = System.currentTimeMillis()
+            logInfo(method, ">>> START: hours=$hours, scope=$scope, type=$nodeType, limit=$limit")
 
             return try {
                 // First get the timeline nodes
+                val timelineStart = System.currentTimeMillis()
                 val timelineResponse = memoryApi.getTimelineV1MemoryTimelineGet(
                     hours = hours,
                     scope = scope,
                     type = nodeType,
                     authorization = authHeader()
                 )
+                val timelineMs = System.currentTimeMillis() - timelineStart
 
                 if (!timelineResponse.success) {
                     logError(method, "API returned non-success status: ${timelineResponse.status}")
@@ -3360,27 +3363,34 @@ class CIRISApiClient(
                 val timelineData = timelineBody.`data` ?: throw RuntimeException("API returned null data")
                 val nodes = timelineData.memories.take(limit)
 
-                logInfo(method, "Fetched ${nodes.size} nodes")
+                logInfo(method, ">>> Timeline fetch: ${timelineMs}ms for ${nodes.size} nodes")
 
                 // Now get edges for all nodes
                 // Note: This could be optimized with a batch endpoint
                 val allEdges = mutableListOf<ai.ciris.api.models.GraphEdge>()
                 val nodeIds = nodes.map { it.id }.toSet()
+                var totalEdgesFetched = 0
+                var filteredOut = 0
 
-                // Fetch edges for each node (limit to avoid too many requests)
-                val nodesToFetchEdges = nodes.take(50)
-                nodesToFetchEdges.forEach { node ->
+                // Fetch edges for nodes (optimized: reduced from 50 to 20 nodes)
+                val nodesToFetchEdges = nodes.take(20)  // Reduced to minimize API calls
+                val edgeStartTime = System.currentTimeMillis()
+
+                // Sequential but with fewer nodes for now
+                // TODO: Use batch endpoint when available
+                for (node in nodesToFetchEdges) {
                     try {
                         val edgesResponse = memoryApi.getNodeEdgesV1MemoryNodeIdEdgesGet(node.id, authHeader())
                         if (edgesResponse.success) {
                             val edges = edgesResponse.body().`data` ?: emptyList()
-                            // Only include edges where both nodes are in our node set
-                            edges.filter { edge ->
-                                nodeIds.contains(edge.source) && nodeIds.contains(edge.target)
-                            }.forEach { edge ->
-                                // Avoid duplicates
-                                if (allEdges.none { it.source == edge.source && it.target == edge.target && it.relationship == edge.relationship }) {
-                                    allEdges.add(edge)
+                            totalEdgesFetched += edges.size
+                            edges.forEach { edge ->
+                                if (nodeIds.contains(edge.source) && nodeIds.contains(edge.target)) {
+                                    if (allEdges.none { it.source == edge.source && it.target == edge.target && it.relationship == edge.relationship }) {
+                                        allEdges.add(edge)
+                                    }
+                                } else {
+                                    filteredOut++
                                 }
                             }
                         }
@@ -3388,8 +3398,14 @@ class CIRISApiClient(
                         logWarn(method, "Failed to get edges for node ${node.id}: ${e.message}")
                     }
                 }
+                val edgeTime = System.currentTimeMillis() - edgeStartTime
 
-                logInfo(method, "Graph data complete: ${nodes.size} nodes, ${allEdges.size} edges")
+                val totalMs = System.currentTimeMillis() - totalStart
+                logInfo(method, "<<< DONE in ${totalMs}ms (timeline=${timelineMs}ms, edges=${edgeTime}ms)")
+                logInfo(method, "    Edges: fetched=$totalEdgesFetched, filtered_out=$filteredOut, final=${allEdges.size}")
+                if (allEdges.isEmpty() && totalEdgesFetched == 0) {
+                    logInfo(method, "    WARNING: No edges found! Nodes may not have any relationships yet.")
+                }
 
                 GraphDataResponse(
                     nodes = nodes,
@@ -3781,6 +3797,96 @@ class CIRISApiClient(
     }
 
     /**
+     * Get metadata for a specific SOP (stages, required fields, deadline, etc.)
+     */
+    suspend fun getSopMetadata(sop: String): SOPMetadataData {
+        val method = "getSopMetadata"
+        logInfo(method, "Fetching SOP metadata for: $sop")
+
+        return try {
+            val response = ticketsApi.getSopMetadataV1TicketsSopsSopGet(sop)
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val metadata = response.body()
+            val result = SOPMetadataData(
+                sop = metadata.sop,
+                ticketType = metadata.ticketType,
+                requiredFields = metadata.requiredFields,
+                deadlineDays = metadata.deadlineDays,
+                priorityDefault = metadata.priorityDefault,
+                description = metadata.description ?: "",
+                stageCount = metadata.stages.size
+            )
+            logInfo(method, "SOP metadata: $sop, deadline=${result.deadlineDays} days, ${result.stageCount} stages")
+
+            result
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Create a new ticket with a specific SOP.
+     */
+    suspend fun createTicket(
+        sop: String,
+        email: String,
+        userIdentifier: String? = null,
+        priority: Int? = null,
+        notes: String? = null
+    ): TicketData {
+        val method = "createTicket"
+        logInfo(method, "Creating ticket: sop=$sop, email=$email")
+
+        return try {
+            val request = ai.ciris.api.models.CreateTicketRequest(
+                sop = sop,
+                email = email,
+                userIdentifier = userIdentifier,
+                priority = priority,
+                notes = notes
+            )
+
+            val response = ticketsApi.createNewTicketV1TicketsPost(request)
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val ticket = response.body()
+            val result = TicketData(
+                ticketId = ticket.ticketId,
+                sop = ticket.sop,
+                ticketType = ticket.ticketType ?: "dsar",
+                status = ticket.status,
+                priority = ticket.priority,
+                email = ticket.email,
+                userIdentifier = ticket.userIdentifier,
+                submittedAt = ticket.submittedAt,
+                deadline = ticket.deadline,
+                lastUpdated = ticket.lastUpdated,
+                completedAt = ticket.completedAt,
+                automated = ticket.automated ?: false,
+                notes = ticket.notes
+            )
+            logInfo(method, "Created ticket: ${result.ticketId}")
+
+            result
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
      * Get ticket statistics summary.
      */
     suspend fun getTicketStats(): TicketStatsData {
@@ -3933,10 +4039,370 @@ class CIRISApiClient(
         }
     }
 
+    // ===== Scheduler Methods =====
+
+    /**
+     * List scheduled tasks.
+     */
+    suspend fun getScheduledTasks(
+        status: String? = null,
+        limit: Int = 50
+    ): ScheduledTasksListData {
+        val method = "getScheduledTasks"
+        logInfo(method, "Fetching scheduled tasks (status=$status, limit=$limit)")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 30000
+                    connectTimeoutMillis = 15000
+                    socketTimeoutMillis = 30000
+                }
+            }
+
+            val urlBuilder = StringBuilder("$baseUrl/v1/scheduler/tasks?limit=$limit")
+            if (status != null) {
+                urlBuilder.append("&status=$status")
+            }
+
+            val response = client.get(urlBuilder.toString()) {
+                headers {
+                    accessToken?.let { append(HttpHeaders.Authorization, "Bearer $it") }
+                }
+            }
+
+            client.close()
+
+            if (response.status.isSuccess()) {
+                val body = response.bodyAsText()
+                logDebug(method, "Response body: $body")
+
+                val json = Json { ignoreUnknownKeys = true }
+                val parsed = json.decodeFromString<ScheduledTasksApiResponse>(body)
+                val data = parsed.data
+
+                if (data != null) {
+                    logInfo(method, "Fetched ${data.tasks.size} tasks")
+                    data
+                } else {
+                    logWarn(method, "No data in response, returning empty list")
+                    ScheduledTasksListData(emptyList(), 0, 0, 0)
+                }
+            } else {
+                val errorBody = response.bodyAsText()
+                logError(method, "HTTP ${response.status}: $errorBody")
+                throw Exception("Failed to fetch scheduled tasks: HTTP ${response.status}")
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Get scheduler statistics.
+     */
+    suspend fun getSchedulerStats(): SchedulerStatsData {
+        val method = "getSchedulerStats"
+        logInfo(method, "Fetching scheduler stats")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 30000
+                    connectTimeoutMillis = 15000
+                    socketTimeoutMillis = 30000
+                }
+            }
+
+            val response = client.get("$baseUrl/v1/scheduler/stats") {
+                headers {
+                    accessToken?.let { append(HttpHeaders.Authorization, "Bearer $it") }
+                }
+            }
+
+            client.close()
+
+            if (response.status.isSuccess()) {
+                val body = response.bodyAsText()
+                logDebug(method, "Response body: $body")
+
+                val json = Json { ignoreUnknownKeys = true }
+                val parsed = json.decodeFromString<SchedulerStatsApiResponse>(body)
+                val data = parsed.data
+
+                if (data != null) {
+                    logInfo(method, "Stats: pending=${data.tasksPending}, completed=${data.tasksCompletedTotal}")
+                    data
+                } else {
+                    logWarn(method, "No data in response, returning defaults")
+                    SchedulerStatsData(0, 0, 0, 0, 0, 0, 0.0)
+                }
+            } else {
+                val errorBody = response.bodyAsText()
+                logError(method, "HTTP ${response.status}: $errorBody")
+                throw Exception("Failed to fetch scheduler stats: HTTP ${response.status}")
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Create a new scheduled task.
+     */
+    suspend fun createScheduledTask(
+        name: String,
+        goalDescription: String,
+        triggerPrompt: String,
+        deferUntil: String? = null,
+        scheduleCron: String? = null
+    ): ScheduledTaskData {
+        val method = "createScheduledTask"
+        logInfo(method, "Creating scheduled task: $name")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 30000
+                    connectTimeoutMillis = 15000
+                    socketTimeoutMillis = 30000
+                }
+            }
+
+            val requestBody = buildString {
+                append("{")
+                append("\"name\":\"${name.replace("\"", "\\\"")}\"")
+                append(",\"goal_description\":\"${goalDescription.replace("\"", "\\\"")}\"")
+                append(",\"trigger_prompt\":\"${triggerPrompt.replace("\"", "\\\"")}\"")
+                if (deferUntil != null) {
+                    append(",\"defer_until\":\"$deferUntil\"")
+                }
+                if (scheduleCron != null) {
+                    append(",\"schedule_cron\":\"$scheduleCron\"")
+                }
+                append("}")
+            }
+
+            val response = client.post("$baseUrl/v1/scheduler/tasks") {
+                headers {
+                    accessToken?.let { append(HttpHeaders.Authorization, "Bearer $it") }
+                }
+                contentType(ContentType.Application.Json)
+                setBody(requestBody)
+            }
+
+            client.close()
+
+            if (response.status.isSuccess()) {
+                val body = response.bodyAsText()
+                logDebug(method, "Response body: $body")
+
+                val json = Json { ignoreUnknownKeys = true }
+                val parsed = json.decodeFromString<ScheduledTaskApiResponse>(body)
+                val data = parsed.data
+
+                if (data != null) {
+                    logInfo(method, "Created task: ${data.taskId}")
+                    data
+                } else {
+                    throw Exception("No task data in response")
+                }
+            } else {
+                val errorBody = response.bodyAsText()
+                logError(method, "HTTP ${response.status}: $errorBody")
+                throw Exception("Failed to create task: $errorBody")
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Cancel a scheduled task.
+     */
+    suspend fun cancelScheduledTask(taskId: String): Boolean {
+        val method = "cancelScheduledTask"
+        logInfo(method, "Cancelling task: $taskId")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 30000
+                    connectTimeoutMillis = 15000
+                    socketTimeoutMillis = 30000
+                }
+            }
+
+            val response = client.delete("$baseUrl/v1/scheduler/tasks/$taskId") {
+                headers {
+                    accessToken?.let { append(HttpHeaders.Authorization, "Bearer $it") }
+                }
+            }
+
+            client.close()
+
+            if (response.status.isSuccess()) {
+                logInfo(method, "Task cancelled successfully")
+                true
+            } else {
+                val errorBody = response.bodyAsText()
+                logError(method, "HTTP ${response.status}: $errorBody")
+                false
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            false
+        }
+    }
+
     override fun close() {
     logInfo("close", "Closing CIRISApiClient")
     }
 }
+
+// ===== Scheduler Data Models =====
+
+@Serializable
+data class ScheduledTasksApiResponse(
+    val data: ScheduledTasksListData? = null
+)
+
+@Serializable
+data class SchedulerStatsApiResponse(
+    val data: SchedulerStatsData? = null
+)
+
+@Serializable
+data class ScheduledTaskApiResponse(
+    val data: ScheduledTaskData? = null
+)
+
+@Serializable
+data class ScheduledTasksListData(
+    val tasks: List<ScheduledTaskData> = emptyList(),
+    val total: Int = 0,
+    @SerialName("active_count")
+    val activeCount: Int = 0,
+    @SerialName("recurring_count")
+    val recurringCount: Int = 0
+)
+
+@Serializable
+data class ScheduledTaskData(
+    @SerialName("task_id")
+    val taskId: String,
+    val name: String,
+    @SerialName("goal_description")
+    val goalDescription: String,
+    val status: String,
+    @SerialName("defer_until")
+    val deferUntil: String? = null,
+    @SerialName("schedule_cron")
+    val scheduleCron: String? = null,
+    @SerialName("created_at")
+    val createdAt: String,
+    @SerialName("last_triggered_at")
+    val lastTriggeredAt: String? = null,
+    @SerialName("deferral_count")
+    val deferralCount: Int = 0,
+    @SerialName("is_recurring")
+    val isRecurring: Boolean = false
+) {
+    /**
+     * Human-friendly display of schedule.
+     */
+    val scheduleDisplay: String
+        get() = when {
+            scheduleCron != null -> cronToHumanReadable(scheduleCron)
+            deferUntil != null -> "One-time: $deferUntil"
+            else -> "No schedule"
+        }
+
+    /**
+     * Human-friendly status display.
+     */
+    val statusDisplay: String
+        get() = when (status.uppercase()) {
+            "PENDING" -> "Scheduled"
+            "ACTIVE" -> "Active"
+            "COMPLETE" -> "Completed"
+            "FAILED" -> "Failed"
+            "CANCELLED" -> "Cancelled"
+            else -> status
+        }
+
+    private fun cronToHumanReadable(cron: String): String {
+        // Simple cron parsing for common patterns
+        val parts = cron.split(" ")
+        if (parts.size < 5) return cron
+
+        val minute = parts[0]
+        val hour = parts[1]
+        val dayOfMonth = parts[2]
+        val month = parts[3]
+        val dayOfWeek = parts[4]
+
+        return when {
+            // Daily at specific time
+            minute != "*" && hour != "*" && dayOfMonth == "*" && month == "*" && dayOfWeek == "*" ->
+                "Daily at $hour:${minute.padStart(2, '0')}"
+            // Weekly on specific day
+            minute != "*" && hour != "*" && dayOfWeek != "*" ->
+                "Weekly on ${dayOfWeekName(dayOfWeek)} at $hour:${minute.padStart(2, '0')}"
+            // Every N minutes
+            minute.startsWith("*/") && hour == "*" ->
+                "Every ${minute.removePrefix("*/")} minutes"
+            // Every N hours
+            minute == "0" && hour.startsWith("*/") ->
+                "Every ${hour.removePrefix("*/")} hours"
+            else -> cron
+        }
+    }
+
+    private fun dayOfWeekName(day: String): String = when (day) {
+        "0", "7" -> "Sunday"
+        "1" -> "Monday"
+        "2" -> "Tuesday"
+        "3" -> "Wednesday"
+        "4" -> "Thursday"
+        "5" -> "Friday"
+        "6" -> "Saturday"
+        else -> day
+    }
+}
+
+@Serializable
+data class SchedulerStatsData(
+    @SerialName("tasks_scheduled_total")
+    val tasksScheduledTotal: Int = 0,
+    @SerialName("tasks_completed_total")
+    val tasksCompletedTotal: Int = 0,
+    @SerialName("tasks_failed_total")
+    val tasksFailedTotal: Int = 0,
+    @SerialName("tasks_pending")
+    val tasksPending: Int = 0,
+    @SerialName("recurring_tasks")
+    val recurringTasks: Int = 0,
+    @SerialName("oneshot_tasks")
+    val oneshotTasks: Int = 0,
+    @SerialName("scheduler_uptime_seconds")
+    val schedulerUptimeSeconds: Double = 0.0
+)
 
 // ===== Play Integrity Data Models =====
 
@@ -4269,6 +4735,43 @@ data class TicketStatsData(
     val failed: Int,
     val urgent: Int
 )
+
+/**
+ * SOP (Standard Operating Procedure) metadata.
+ */
+data class SOPMetadataData(
+    val sop: String,
+    val ticketType: String,
+    val requiredFields: List<String>,
+    val deadlineDays: Int?,
+    val priorityDefault: Int,
+    val description: String,
+    val stageCount: Int
+) {
+    /**
+     * Human-friendly display name for the SOP.
+     */
+    val displayName: String
+        get() = when (sop) {
+            "DSAR_ACCESS" -> "Data Access Request"
+            "DSAR_DELETE" -> "Data Deletion Request"
+            "DSAR_EXPORT" -> "Data Export Request"
+            "DSAR_RECTIFY" -> "Data Rectification Request"
+            else -> sop.replace("_", " ")
+        }
+
+    /**
+     * Short description of the GDPR article.
+     */
+    val gdprArticle: String?
+        get() = when (sop) {
+            "DSAR_ACCESS" -> "GDPR Article 15"
+            "DSAR_DELETE" -> "GDPR Article 17"
+            "DSAR_EXPORT" -> "GDPR Article 20"
+            "DSAR_RECTIFY" -> "GDPR Article 16"
+            else -> null
+        }
+}
 
 // ===== Tools Data Models =====
 

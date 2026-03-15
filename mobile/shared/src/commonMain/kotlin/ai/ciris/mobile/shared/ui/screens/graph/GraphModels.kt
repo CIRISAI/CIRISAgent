@@ -26,7 +26,9 @@ data class GraphNodeDisplay(
     // Fixed position (if user pinned the node)
     var fixed: Boolean = false,
     // Original data for details panel
-    val originalNode: GraphNode? = null
+    val originalNode: GraphNode? = null,
+    // Extra storage for layout-specific data (e.g., cylinder coordinates)
+    val extra: MutableMap<String, Any> = mutableMapOf()
 ) {
     companion object {
         fun fromGraphNode(node: GraphNode): GraphNodeDisplay {
@@ -96,7 +98,8 @@ enum class GraphLayout(val displayName: String) {
     FORCE("Force-Directed"),
     TIMELINE("Timeline"),
     HIERARCHY("Hierarchy"),
-    CIRCULAR("Circular")
+    CIRCULAR("Circular"),
+    CYLINDER("3D Cylinder")
 }
 
 /**
@@ -107,7 +110,7 @@ data class GraphDisplayState(
     val edges: List<GraphEdgeDisplay> = emptyList(),
     val viewport: GraphViewport = GraphViewport(),
     val selectedNodeId: String? = null,
-    val layout: GraphLayout = GraphLayout.FORCE,
+    val layout: GraphLayout = GraphLayout.CYLINDER,
     val isSimulationRunning: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null

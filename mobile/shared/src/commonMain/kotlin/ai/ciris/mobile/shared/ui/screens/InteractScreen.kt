@@ -151,13 +151,17 @@ fun InteractScreen(
     ) {
         // Live animated memory graph background (when enabled)
         // Event trigger: timeline events trigger organic graph refreshes
+        ai.ciris.mobile.shared.platform.PlatformLogger.i("InteractScreen", ">>> LIVE BG CHECK: enabled=$liveBackgroundEnabled, apiClient=${if (apiClient != null) "present" else "NULL"}")
         if (liveBackgroundEnabled && apiClient != null) {
+            ai.ciris.mobile.shared.platform.PlatformLogger.i("InteractScreen", ">>> RENDERING LiveGraphBackground (timelineEvents=${timelineEvents.size})")
             LiveGraphBackground(
                 apiClient = apiClient,
                 modifier = Modifier.fillMaxSize(),
                 baseOpacity = 0.25f,  // Subtle background
                 eventTrigger = timelineEvents.size  // New events trigger refresh
             )
+        } else {
+            ai.ciris.mobile.shared.platform.PlatformLogger.w("InteractScreen", ">>> SKIPPING LiveGraphBackground: enabled=$liveBackgroundEnabled, apiClient=${if (apiClient != null) "present" else "NULL"}")
         }
 
         // Main content column with platform-specific keyboard padding

@@ -139,13 +139,20 @@ class SettingsViewModel(
     private fun loadDisplaySettings() {
         viewModelScope.launch {
             try {
+                logInfo("loadDisplaySettings", ">>> Loading live_background_enabled from secure storage...")
                 secureStorage.get("live_background_enabled").onSuccess { value ->
                     // Default to true if not set
-                    _liveBackgroundEnabled.value = value?.toBooleanStrictOrNull() ?: true
-                    logDebug("loadDisplaySettings", "Live background enabled: ${_liveBackgroundEnabled.value}")
+                    val newValue = value?.toBooleanStrictOrNull() ?: true
+                    logInfo("loadDisplaySettings", ">>> Raw value='$value', parsed=$newValue")
+                    _liveBackgroundEnabled.value = newValue
+                    logInfo("loadDisplaySettings", ">>> Live background state set to: ${_liveBackgroundEnabled.value}")
+                }.onFailure { error ->
+                    logWarn("loadDisplaySettings", ">>> Storage get failed: ${error.message}, defaulting to true")
+                    _liveBackgroundEnabled.value = true
                 }
             } catch (e: Exception) {
-                logWarn("loadDisplaySettings", "Failed to load display settings: ${e.message}")
+                logWarn("loadDisplaySettings", ">>> Exception loading display settings: ${e.message}, defaulting to true")
+                _liveBackgroundEnabled.value = true
             }
         }
     }

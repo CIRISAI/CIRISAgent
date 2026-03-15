@@ -1175,6 +1175,7 @@ fun CIRISApp(
                     // bottom insets (keyboard + nav bar) via windowInsetsPadding
                     // Live background state from settings
                     val liveBackgroundEnabled by settingsViewModel.liveBackgroundEnabled.collectAsState()
+                    platformLog(TAG, "[CIRISApp] >>> liveBackgroundEnabled=$liveBackgroundEnabled, apiClient=${if (apiClient != null) "present" else "NULL"}")
 
                     InteractScreen(
                         viewModel = interactViewModel,

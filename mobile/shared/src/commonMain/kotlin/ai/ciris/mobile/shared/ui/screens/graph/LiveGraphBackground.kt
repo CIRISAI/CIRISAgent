@@ -56,6 +56,9 @@ fun LiveGraphBackground(
     baseOpacity: Float = 0.25f,  // Low opacity for background
     eventTrigger: Int = 0  // Incremented when SSE events occur (speak, tool, etc.)
 ) {
+    // Log when composable is first called
+    PlatformLogger.i(TAG, ">>> LiveGraphBackground COMPOSING (eventTrigger=$eventTrigger, opacity=$baseOpacity)")
+
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var nodes by remember { mutableStateOf<List<BackgroundNode>>(emptyList()) }
     var edges by remember { mutableStateOf<List<BackgroundEdge>>(emptyList()) }
@@ -182,20 +185,32 @@ fun LiveGraphBackground(
             knownNodeIds = newNodeIds
 
             val newCount = if (isFirstLoad) 0 else nodes.count { it.birthTimeMs > 0 }
-            PlatformLogger.d(TAG, "Loaded ${nodes.size} nodes ($newCount new), ${edges.size} edges")
+            PlatformLogger.i(TAG, ">>> DATA LOADED: ${nodes.size} nodes ($newCount new), ${edges.size} edges, setting isLoading=false")
             isLoading = false
         } catch (e: Exception) {
-            PlatformLogger.w(TAG, "Failed to load background data: ${e.message}")
+            PlatformLogger.e(TAG, ">>> LOAD FAILED: ${e.message}")
+            e.printStackTrace()
             isLoading = false
         }
     }
 
+    // Log render state on every recomposition
+    PlatformLogger.d(TAG, ">>> RENDER CHECK: isLoading=$isLoading, nodes=${nodes.size}, canvasSize=${canvasSize.width}x${canvasSize.height}")
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .onSizeChanged { canvasSize = it }
+            .onSizeChanged { newSize ->
+                PlatformLogger.i(TAG, ">>> CANVAS SIZE CHANGED: ${newSize.width}x${newSize.height}")
+                canvasSize = newSize
+            }
     ) {
-        if (!isLoading && nodes.isNotEmpty() && canvasSize.width > 0) {
+        // Log whether we're rendering or not
+        val shouldRender = !isLoading && nodes.isNotEmpty() && canvasSize.width > 0
+        PlatformLogger.d(TAG, ">>> SHOULD RENDER: $shouldRender (isLoading=$isLoading, nodes=${nodes.size}, width=${canvasSize.width})")
+
+        if (shouldRender) {
+            PlatformLogger.i(TAG, ">>> RENDERING CANVAS with ${nodes.size} nodes")
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val centerX = size.width / 2
                 val centerY = size.height / 2

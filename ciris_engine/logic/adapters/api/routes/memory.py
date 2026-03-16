@@ -480,11 +480,11 @@ async def get_timeline(
     request: Request,
     auth: AuthObserverDep,
     memory_service: MemoryServiceDep,
-    hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
-    scope: Optional[str] = Query(None, description="Filter by scope (None = all scopes)"),
-    type: Optional[str] = Query(None, description="Filter by node type"),
-    include_edges: bool = Query(True, description="Include edges in response"),
-    include_metrics: bool = Query(False, description="Include metric/tsdb nodes"),
+    hours: Annotated[int, Query(ge=1, le=168, description="Hours to look back")] = 24,
+    scope: Annotated[Optional[str], Query(description="Filter by scope (None = all scopes)")] = None,
+    type: Annotated[Optional[str], Query(description="Filter by node type")] = None,
+    include_edges: Annotated[bool, Query(description="Include edges in response")] = True,
+    include_metrics: Annotated[bool, Query(description="Include metric/tsdb nodes")] = False,
 ) -> SuccessResponse[TimelineResponse]:
     """
     Get a timeline view of recent memories.

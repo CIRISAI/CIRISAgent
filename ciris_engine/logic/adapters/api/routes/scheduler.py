@@ -7,7 +7,7 @@ Provides access to scheduled tasks and task scheduling functionality.
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Annotated, Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -117,8 +117,8 @@ def _convert_to_response(task_info: ScheduledTaskInfo) -> ScheduledTaskResponse:
 async def list_scheduled_tasks(
     request: Request,
     auth: AuthObserverDep,
-    status: Optional[str] = Query(None, description="Filter by status: PENDING, ACTIVE, COMPLETE, FAILED, CANCELLED"),
-    limit: int = Query(50, ge=1, le=200, description="Maximum tasks to return"),
+    status: Annotated[Optional[str], Query(description="Filter by status: PENDING, ACTIVE, COMPLETE, FAILED, CANCELLED")] = None,
+    limit: Annotated[int, Query(ge=1, le=200, description="Maximum tasks to return")] = 50,
 ) -> SuccessResponse[ScheduledTasksListResponse]:
     """
     List all scheduled tasks.

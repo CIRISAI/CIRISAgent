@@ -260,6 +260,41 @@ class TokenManager(
     }
 
     /**
+     * Ensure a valid token is available, refreshing silently if needed.
+     * Returns the valid token, or null if refresh fails and interactive login is required.
+     *
+     * Use this before operations that require a token (e.g., purchases).
+     */
+    suspend fun ensureValidToken(): String? {
+        val method = "ensureValidToken"
+
+        // Fast path: token exists and is valid
+        val current = _currentToken.value
+        if (current != null) {
+            val expiry = getTokenExpiry(current)
+            val remaining = expiry?.let { it - currentTimeSeconds() }
+            if (remaining != null && remaining > MIN_TOKEN_VALIDITY_SECONDS) {
+                logDebug(method, "Token valid (${remaining}s remaining)")
+                return current
+            }
+            logInfo(method, "Token expired or expiring soon (${remaining}s remaining), refreshing...")
+        } else {
+            logInfo(method, "No token available, attempting silent refresh...")
+        }
+
+        // Attempt silent refresh
+        val refreshed = attemptSilentRefresh()
+        if (refreshed) {
+            val newToken = _currentToken.value
+            logInfo(method, "Silent refresh succeeded, token available=${newToken != null}")
+            return newToken
+        }
+
+        logWarn(method, "Silent refresh failed - interactive login required")
+        return null
+    }
+
+    /**
      * Start periodic token refresh.
      */
     private fun startPeriodicRefresh() {

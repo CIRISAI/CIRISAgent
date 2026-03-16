@@ -1321,13 +1321,15 @@ fun CIRISApp(
                             PlatformLogger.i("CIRISApp", "[Screen.Billing] Launching purchase for: ${selectedProduct.productId}")
                             if (purchaseLauncher != null) {
                                 billingViewModel.onPurchaseStarted(selectedProduct.productId)
-                                // Use the Apple/Google OAuth ID token (not the CIRIS API token)
-                                val oauthToken = tokenManager.currentToken.value
-                                if (oauthToken != null) {
-                                    purchaseLauncher.launchPurchaseWithAuth(selectedProduct.productId, oauthToken)
-                                } else {
-                                    PlatformLogger.w("CIRISApp", "[Screen.Billing] No OAuth ID token available for purchase")
-                                    billingViewModel.onPurchaseError("Please sign in again to make purchases")
+                                // Ensure valid token before purchase (silent refresh if needed)
+                                coroutineScope.launch {
+                                    val oauthToken = tokenManager.ensureValidToken()
+                                    if (oauthToken != null) {
+                                        purchaseLauncher.launchPurchaseWithAuth(selectedProduct.productId, oauthToken)
+                                    } else {
+                                        PlatformLogger.w("CIRISApp", "[Screen.Billing] Token refresh failed - sign in required")
+                                        billingViewModel.onPurchaseError("Please sign in to make purchases")
+                                    }
                                 }
                             } else {
                                 PlatformLogger.w("CIRISApp", "[Screen.Billing] No purchase launcher available")

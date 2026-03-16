@@ -97,9 +97,7 @@ class AccordMetricsAdapter(Service):
         logger.info("=" * 70)
         logger.info("📊 ACCORD METRICS ADAPTER INITIALIZING")
         logger.info(f"   Config consent_given: {adapter_config.get('consent_given', False)}")
-        logger.info(
-            f"   Env CIRIS_ACCORD_METRICS_CONSENT: {os.environ.get('CIRIS_ACCORD_METRICS_CONSENT', 'not set')}"
-        )
+        logger.info(f"   Env CIRIS_ACCORD_METRICS_CONSENT: {os.environ.get('CIRIS_ACCORD_METRICS_CONSENT', 'not set')}")
         logger.info(
             f"   Env CIRIS_ACCORD_METRICS_ENDPOINT: {os.environ.get('CIRIS_ACCORD_METRICS_ENDPOINT', 'not set')}"
         )
@@ -250,6 +248,7 @@ class AccordMetricsAdapter(Service):
             adapter_type="ciris_accord_metrics",
             enabled=self._running and self._consent_given,
             settings={
+                "trace_level": metrics.get("trace_level", "generic"),
                 "consent_given": self._consent_given,
                 "consent_timestamp": self._consent_timestamp,
                 "events_received": metrics.get("events_received", 0),

@@ -39,6 +39,7 @@ import kotlinx.serialization.encoding.*
  * @param energy24hKwh Total energy in last 24 hours (kWh)
  * @param memoryMb Current memory usage
  * @param cpuPercent Current CPU usage
+ * @param diskUsedMb Disk space used in MB
  * @param healthyServices Number of healthy services
  * @param degradedServices Number of degraded services
  * @param errorRatePercent System error rate
@@ -102,6 +103,9 @@ data class SystemOverview (
 
     /* Current CPU usage */
     @SerialName(value = "cpu_percent") val cpuPercent: kotlin.Double? = (0.0).toDouble(),
+
+    /* Disk space used in MB */
+    @SerialName(value = "disk_used_mb") val diskUsedMb: kotlin.Double? = (0.0).toDouble(),
 
     /* Number of healthy services */
     @SerialName(value = "healthy_services") val healthyServices: kotlin.Int? = 0,

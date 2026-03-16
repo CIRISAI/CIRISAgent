@@ -14,6 +14,7 @@ import ai.ciris.mobile.shared.viewmodels.TrustStatus
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,6 +24,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.isActive
+import kotlin.math.abs
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -62,6 +67,11 @@ import androidx.compose.ui.zIndex
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.ui.screens.graph.GraphColors
+import ai.ciris.mobile.shared.ui.screens.graph.LiveGraphBackground
+import ai.ciris.mobile.shared.ui.theme.ColorTheme
+import ai.ciris.mobile.shared.ui.theme.InteractTheme
 
 /**
  * Chat interface screen
@@ -84,6 +94,12 @@ fun InteractScreen(
     onSessionExpired: () -> Unit = {},
     onOpenTrustPage: () -> Unit = {},
     onOpenBilling: () -> Unit = {},
+    onOpenSystem: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    apiClient: CIRISApiClient? = null,  // For live background
+    liveBackgroundEnabled: Boolean = false,  // From settings
+    colorTheme: ColorTheme = ColorTheme.DEFAULT,  // Color theme from settings
+    isDarkMode: Boolean = true,  // From brightness preference
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsState()
@@ -135,13 +151,84 @@ fun InteractScreen(
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
+    // Create theme based on live background state, color theme, and brightness preference
+    // All colors defined in LiveBackgroundTheme.kt, accent colors from ColorTheme
+    val theme = remember(liveBackgroundEnabled, colorTheme, isDarkMode) {
+        // Also update GraphColors to use the selected theme for graph node colors
+        GraphColors.setTheme(colorTheme)
+        InteractTheme.forLiveBackground(liveBackgroundEnabled, colorTheme, isDarkMode)
+    }
+
+    // Cylinder rotation state for swipe-to-spin
+    var cylinderRotation by remember { mutableStateOf(0f) }
+    var rotationVelocity by remember { mutableStateOf(0f) }
+    var isDraggingHorizontal by remember { mutableStateOf(false) }
+
+    // Spin energy system - builds up over multiple fast flicks
+    var spinEnergy by remember { mutableStateOf(0f) }
+    val spinEnergyThreshold = 800f  // Need to build up this much energy to trigger spin apart (requires ~5-7 fast flicks)
+    val energyDecayRate = 0.92f  // Energy decays faster when not spinning fast
+    val energyGainMultiplier = 0.15f  // How much velocity contributes to energy (reduced for more flicks needed)
+
+    // Momentum animation loop for cylinder spin
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            kotlinx.coroutines.delay(16)  // ~60 FPS
+
+            // Always apply momentum (even during touch - only actual drag changes velocity)
+            if (abs(rotationVelocity) > 0.1f) {
+                cylinderRotation += rotationVelocity
+
+                // Build up spin energy from fast spinning (only fast flicks count)
+                if (abs(rotationVelocity) > 8f) {
+                    spinEnergy += abs(rotationVelocity) * energyGainMultiplier
+                } else {
+                    // Decay energy when spinning slowly
+                    spinEnergy *= energyDecayRate
+                }
+
+                // Only apply damping when not actively dragging
+                if (!isDraggingHorizontal) {
+                    rotationVelocity *= 0.97f  // Damping - slower decay for satisfying spin
+                }
+
+                // Normalize rotation
+                while (cylinderRotation > 360f) cylinderRotation -= 360f
+                while (cylinderRotation < -360f) cylinderRotation += 360f
+            } else {
+                // Faster energy decay when stopped
+                spinEnergy *= 0.95f
+            }
+
+            // Clamp energy
+            if (spinEnergy < 0.1f) spinEnergy = 0f
+        }
+    }
+
     // Note: CIRISApp wraps this screen in a Scaffold with TopAppBar,
     // so we don't need our own Scaffold here. Use Box for bubble overlay.
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFFAFAFA))
+            .background(theme.background)
     ) {
+        // Live animated memory graph background (when enabled)
+        // Event trigger: timeline events trigger organic graph refreshes
+        if (liveBackgroundEnabled && apiClient != null) {
+            LiveGraphBackground(
+                apiClient = apiClient,
+                modifier = Modifier.fillMaxSize(),
+                eventTrigger = timelineEvents.size,  // New events trigger refresh
+                externalRotation = cylinderRotation,
+                spinEnergy = spinEnergy,
+                spinEnergyThreshold = spinEnergyThreshold,
+                onSpinApartTriggered = {
+                    // Reset energy after explosion
+                    spinEnergy = 0f
+                }
+            )
+        }
+
         // Main content column with platform-specific keyboard padding
         // Android: Uses imePadding() for proper keyboard avoidance
         // iOS: No-op - native keyboard avoidance handles this automatically
@@ -160,18 +247,22 @@ fun InteractScreen(
                 onShutdown = { viewModel.shutdown(emergency = false) },
                 onEmergencyStop = { viewModel.shutdown(emergency = true) },
                 onTrustShieldClick = onOpenTrustPage,
-                onCreditsClick = onOpenBilling
+                onCreditsClick = onOpenBilling,
+                onLocalClick = onOpenSystem,
+                onSettingsClick = onOpenSettings,
+                theme = theme
             )
 
         // Auth error is now handled by LaunchedEffect above - navigates to login silently
 
         // AI Warning banner (from fragment_interact.xml:65-76)
-        AIWarningBanner()
+        AIWarningBanner(theme = theme)
 
         // Bubble Net - timeline of events (expandable)
         BubbleNet(
             events = timelineEvents,
             isExpanded = showTimeline,
+            theme = theme,
             onToggle = { viewModel.toggleTimeline() },
             onClear = { viewModel.clearTimeline() }
         )
@@ -198,15 +289,41 @@ fun InteractScreen(
         }
 
         // Chat messages container with empty state (from fragment_interact.xml:127-190)
+        // Horizontal swipe rotates the background cylinder (fidget spin!)
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                .pointerInput(liveBackgroundEnabled) {
+                    if (liveBackgroundEnabled) {
+                        detectHorizontalDragGestures(
+                            onDragStart = {
+                                isDraggingHorizontal = true
+                                // Don't zero velocity here - let momentum continue until actual drag
+                            },
+                            onDragEnd = {
+                                isDraggingHorizontal = false
+                            },
+                            onDragCancel = {
+                                isDraggingHorizontal = false
+                            },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                // Horizontal drag rotates the cylinder
+                                val rotationSensitivity = 0.5f  // Degrees per pixel
+                                val deltaRotation = dragAmount * rotationSensitivity
+                                cylinderRotation += deltaRotation
+                                // Blend new velocity with existing momentum for smoother feel
+                                rotationVelocity = rotationVelocity * 0.3f + deltaRotation * 0.7f
+                            }
+                        )
+                    }
+                }
         ) {
             if (messages.isEmpty() && !isLoading) {
-                EmptyStateView()
+                EmptyStateView(transparentBackground = liveBackgroundEnabled)
             } else {
-                ChatMessageList(messages = messages)
+                ChatMessageList(messages = messages, transparentBackground = liveBackgroundEnabled)
             }
         }
 
@@ -216,10 +333,10 @@ fun InteractScreen(
                 text = "Showing last ${messages.size} messages",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.White)
+                    .background(theme.messageCountBackground)
                     .padding(horizontal = 12.dp, vertical = 4.dp),
                 fontSize = 11.sp,
-                color = Color(0xFF9CA3AF),
+                color = theme.messageCountText,
                 textAlign = TextAlign.Center
             )
         }
@@ -241,6 +358,7 @@ fun InteractScreen(
                 attachedFiles = attachedFiles,
                 onAttach = { showFilePicker = true },
                 onRemoveAttachment = { viewModel.removeAttachment(it) },
+                theme = theme,
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
@@ -293,11 +411,14 @@ private fun EnhancedStatusBar(
     onEmergencyStop: () -> Unit,
     onTrustShieldClick: () -> Unit,
     onCreditsClick: () -> Unit,
+    onLocalClick: () -> Unit,
+    onSettingsClick: () -> Unit,
+    theme: InteractTheme,
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = Color.White,
-        shadowElevation = 2.dp,
+        color = theme.surface,
+        shadowElevation = if (theme.isDark) 0.dp else 2.dp,
         modifier = modifier.fillMaxWidth()
     ) {
         Column {
@@ -309,33 +430,39 @@ private fun EnhancedStatusBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Connection status dot
-                Box(
+                // Connection status - tappable to System screen
+                Row(
                     modifier = Modifier
-                        .size(8.dp)
-                        .background(
-                            color = if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444),
-                            shape = CircleShape
-                        )
-                )
-
-                // Connection text - "Local Runtime" instead of "Server"
-                Text(
-                    text = if (isConnected) "Local" else "Offline",
-                    fontSize = 11.sp,
-                    color = if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444)
-                )
+                        .clickable(onClick = onLocalClick)
+                        .padding(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(
+                                color = if (isConnected) theme.statusConnected else theme.statusDisconnected,
+                                shape = CircleShape
+                            )
+                    )
+                    Text(
+                        text = if (isConnected) "Local" else "Offline",
+                        fontSize = 11.sp,
+                        color = if (isConnected) theme.statusConnected else theme.statusDisconnected
+                    )
+                }
 
                 // Divider
-                Text(text = "•", fontSize = 10.sp, color = Color(0xFFD1D5DB))
+                Text(text = "•", fontSize = 10.sp, color = theme.textMuted)
 
-                // LLM health indicator
-                LlmHealthIndicator(health = llmHealth)
+                // LLM health indicator - tappable to Settings (LLM config)
+                LlmHealthIndicator(health = llmHealth, onClick = onSettingsClick, theme = theme)
 
                 // Credits indicator (only if CIRIS proxy) - clickable to billing
                 if (llmHealth.isCirisProxy && creditStatus.isLoaded) {
-                    Text(text = "•", fontSize = 10.sp, color = Color(0xFFD1D5DB))
-                    CreditsIndicator(credits = creditStatus, onClick = onCreditsClick)
+                    Text(text = "•", fontSize = 10.sp, color = theme.textMuted)
+                    CreditsIndicator(credits = creditStatus, onClick = onCreditsClick, theme = theme)
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -343,7 +470,8 @@ private fun EnhancedStatusBar(
                 // Trust shield
                 TrustShield(
                     trustStatus = trustStatus,
-                    onClick = onTrustShieldClick
+                    onClick = onTrustShieldClick,
+                    theme = theme
                 )
             }
 
@@ -360,7 +488,7 @@ private fun EnhancedStatusBar(
                 Text(
                     text = status,
                     fontSize = 10.sp,
-                    color = Color(0xFF6B7280),
+                    color = theme.textSecondary,
                     modifier = Modifier.weight(1f)
                 )
 
@@ -371,7 +499,7 @@ private fun EnhancedStatusBar(
                         .height(26.dp)
                         .testableClickable("btn_shutdown") { onShutdown() },
                     colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color(0xFFEF4444)
+                        contentColor = theme.shutdownOutline
                     ),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
@@ -404,10 +532,14 @@ private fun EnhancedStatusBar(
 @Composable
 private fun LlmHealthIndicator(
     health: LlmHealthStatus,
+    onClick: () -> Unit,
+    theme: InteractTheme,
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier,
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp)
     ) {
@@ -419,9 +551,9 @@ private fun LlmHealthIndicator(
                 .size(6.dp)
                 .background(
                     color = when {
-                        isMockLlm -> Color(0xFFDC2626)
-                        health.isHealthy -> Color(0xFF10B981)
-                        else -> Color(0xFFD97706)
+                        isMockLlm -> theme.statusDisconnected
+                        health.isHealthy -> theme.statusConnected
+                        else -> theme.statusWarning
                     },
                     shape = CircleShape
                 )
@@ -452,7 +584,11 @@ private fun LlmHealthIndicator(
             text = displayName,
             fontSize = if (isMockLlm) 11.sp else 10.sp,
             fontWeight = if (isMockLlm) FontWeight.Bold else FontWeight.Normal,
-            color = if (isMockLlm) Color(0xFFDC2626) else if (health.isHealthy) Color(0xFF059669) else Color(0xFFD97706)
+            color = when {
+                isMockLlm -> theme.statusDisconnected
+                health.isHealthy -> theme.statusConnected
+                else -> theme.statusWarning
+            }
         )
     }
 }
@@ -464,6 +600,7 @@ private fun LlmHealthIndicator(
 private fun CreditsIndicator(
     credits: CreditStatus,
     onClick: () -> Unit,
+    theme: InteractTheme,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -476,8 +613,8 @@ private fun CreditsIndicator(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
         ) {
-            // Coin emoji for credits
-            Text(text = "💰", fontSize = 10.sp)
+            // Fire emoji for credits
+            Text(text = "🔥", fontSize = 10.sp)
 
             // Credits count
             val creditsText = when {
@@ -486,10 +623,10 @@ private fun CreditsIndicator(
                 else -> "0"
             }
             val creditsColor = when {
-                credits.creditsRemaining > 10 -> Color(0xFF059669)
-                credits.creditsRemaining > 0 -> Color(0xFFD97706)
-                credits.freeUsesRemaining > 0 -> Color(0xFF2563EB)
-                else -> Color(0xFFDC2626)
+                credits.creditsRemaining > 10 -> theme.statusConnected
+                credits.creditsRemaining > 0 -> theme.statusWarning
+                credits.freeUsesRemaining > 0 -> theme.textAccent
+                else -> theme.statusDisconnected
             }
             Text(
                 text = creditsText,
@@ -509,21 +646,22 @@ private fun CreditsIndicator(
 private fun TrustShield(
     trustStatus: TrustStatus,
     onClick: () -> Unit,
+    theme: InteractTheme,
     modifier: Modifier = Modifier
 ) {
     // TrustStatus.maxLevel now contains actual achieved level (calculated in ViewModel)
     val level = trustStatus.maxLevel
     val shieldColor = when {
-        level >= 5 -> Color(0xFF059669)  // Identity Validated - green
-        level == 4 -> Color(0xFFD97706)  // Agent Validated - amber
-        level >= 1 -> Color(0xFFDC2626)  // Issues Detected (L1-3) - red
-        else -> Color(0xFF6B7280)        // Not started - gray
+        level >= 5 -> theme.trustLevel5  // Identity Validated - green
+        level == 4 -> theme.trustLevel4  // Agent Validated - amber
+        level >= 1 -> theme.trustLevelLow  // Issues Detected (L1-3) - red
+        else -> theme.trustDefault        // Not started - gray
     }
 
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(4.dp),
-        color = shieldColor.copy(alpha = 0.1f),
+        color = shieldColor.copy(alpha = 0.15f),
         modifier = modifier.testableClickable("btn_trust_shield") { onClick() }
     ) {
         Row(
@@ -663,15 +801,18 @@ private fun AuthErrorBanner(
  * From fragment_interact.xml:65-76
  */
 @Composable
-private fun AIWarningBanner(modifier: Modifier = Modifier) {
+private fun AIWarningBanner(
+    theme: InteractTheme,
+    modifier: Modifier = Modifier
+) {
     Text(
         text = "⚠️ AI HALLUCINATES - CHECK FACTS",
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFFFEF3C7))
+            .background(theme.warningBackground)
             .padding(horizontal = 12.dp, vertical = 4.dp),
         fontSize = 11.sp,
-        color = Color(0xFFB45309),
+        color = theme.warningText,
         textAlign = TextAlign.Center
     )
 }
@@ -736,11 +877,14 @@ private fun getStatusEmoji(status: String): String {
  * From fragment_interact.xml:142-188
  */
 @Composable
-private fun EmptyStateView(modifier: Modifier = Modifier) {
+private fun EmptyStateView(
+    modifier: Modifier = Modifier,
+    transparentBackground: Boolean = false
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFF3F4F6))
+            .then(if (transparentBackground) Modifier else Modifier.background(Color(0xFFF3F4F6)))
             .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -757,7 +901,7 @@ private fun EmptyStateView(modifier: Modifier = Modifier) {
             text = "Welcome to Ally",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF1F2937),
+            color = if (transparentBackground) Color.White else Color(0xFF1F2937),
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
@@ -765,7 +909,7 @@ private fun EmptyStateView(modifier: Modifier = Modifier) {
         Text(
             text = "Your personal thriving assistant",
             fontSize = 14.sp,
-            color = Color(0xFF6B7280),
+            color = if (transparentBackground) Color.White.copy(alpha = 0.7f) else Color(0xFF6B7280),
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
@@ -773,7 +917,7 @@ private fun EmptyStateView(modifier: Modifier = Modifier) {
         Text(
             text = "Ask Ally how it can help with tasks, scheduling, decisions, or wellbeing — or ask how CIRIS works!",
             fontSize = 14.sp,
-            color = Color(0xFF419CA0),
+            color = if (transparentBackground) Color(0xFF7DD3FC) else Color(0xFF419CA0),  // Lighter cyan on dark
             textAlign = TextAlign.Center,
             lineHeight = 18.sp,
             modifier = Modifier.padding(horizontal = 16.dp)
@@ -788,7 +932,8 @@ private fun EmptyStateView(modifier: Modifier = Modifier) {
 @Composable
 private fun ChatMessageList(
     messages: List<ChatMessage>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    transparentBackground: Boolean = false
 ) {
     val listState = rememberLazyListState()
 
@@ -796,7 +941,7 @@ private fun ChatMessageList(
         state = listState,
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFF3F4F6))
+            .then(if (transparentBackground) Modifier else Modifier.background(Color(0xFFF3F4F6)))
             .padding(8.dp),
         reverseLayout = true,
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1319,12 +1464,13 @@ private fun ChatInputBarWithBubbles(
     attachedFiles: List<PickedFile> = emptyList(),
     onAttach: () -> Unit = {},
     onRemoveAttachment: (Int) -> Unit = {},
+    theme: InteractTheme = InteractTheme.forLiveBackground(false),
     modifier: Modifier = Modifier
 ) {
     val hasContent = text.isNotBlank() || attachedFiles.isNotEmpty()
 
     Surface(
-        color = Color.White,
+        color = theme.inputBackground,
         shadowElevation = 4.dp,
         modifier = modifier
     ) {
@@ -1365,7 +1511,7 @@ private fun ChatInputBarWithBubbles(
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Attach file",
-                        tint = if (enabled) Color(0xFF6B7280) else Color(0xFFD1D5DB),
+                        tint = if (enabled) theme.textSecondary else theme.inputButtonDisabled,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -1389,13 +1535,16 @@ private fun ChatInputBarWithBubbles(
                                 onFocused()
                             }
                         },
-                    placeholder = { Text("Type your message...") },
+                    placeholder = { Text("Type your message...", color = theme.inputPlaceholder) },
                     enabled = enabled,
                     singleLine = false,
                     maxLines = 3,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF419CA0),
-                        unfocusedBorderColor = Color(0xFFE5E7EB)
+                        focusedTextColor = theme.inputText,
+                        unfocusedTextColor = theme.inputText,
+                        focusedBorderColor = theme.inputButtonEnabled,
+                        unfocusedBorderColor = theme.inputBorder,
+                        cursorColor = theme.inputButtonEnabled
                     )
                 )
 
@@ -1407,9 +1556,9 @@ private fun ChatInputBarWithBubbles(
                         .size(48.dp)
                         .background(
                             color = if (enabled && hasContent) {
-                                Color(0xFF419CA0)
+                                theme.inputButtonEnabled
                             } else {
-                                Color(0xFFE5E7EB)
+                                theme.inputButtonDisabled
                             },
                             shape = CircleShape
                         )
@@ -1716,6 +1865,7 @@ private fun FullScreenFloatingBubble(
 private fun BubbleNet(
     events: List<TimelineEvent>,
     isExpanded: Boolean,
+    theme: InteractTheme,
     onToggle: () -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier
@@ -1724,7 +1874,7 @@ private fun BubbleNet(
 
     Surface(
         onClick = onToggle,
-        color = Color(0xFFF0FDF4), // Light green background
+        color = theme.timelineBackground,
         modifier = modifier.fillMaxWidth().testableClickable("btn_toggle_timeline") { onToggle() }
     ) {
         Column {
@@ -1756,12 +1906,12 @@ private fun BubbleNet(
                     Text(
                         text = "${events.size}",
                         fontSize = 11.sp,
-                        color = Color(0xFF059669)
+                        color = theme.timelineText
                     )
                     Text(
                         text = if (isExpanded) "▲" else "▼",
                         fontSize = 10.sp,
-                        color = Color(0xFF059669)
+                        color = theme.timelineText
                     )
                 }
             }

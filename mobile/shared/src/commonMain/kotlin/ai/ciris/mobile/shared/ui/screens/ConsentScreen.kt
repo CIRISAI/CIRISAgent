@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.unit.dp
 
 /**
@@ -279,7 +280,7 @@ private fun CurrentConsentBanner(
                     Text(
                         text = "Partnership request pending...",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFF59E0B)
+                        color = SemanticColors.Default.warning
                     )
                 }
             }
@@ -292,7 +293,7 @@ private fun NoConsentNotice(modifier: Modifier = Modifier) {
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFFEF3C7)
+            containerColor = SemanticColors.Default.surfaceWarning
         )
     ) {
         Column(
@@ -304,13 +305,13 @@ private fun NoConsentNotice(modifier: Modifier = Modifier) {
                 text = "Consent Record Not Yet Created",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF92400E)
+                color = SemanticColors.Default.onWarning
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Your consent record will be automatically created after your first interaction with CIRIS. This ensures meaningful engagement before establishing a consent relationship.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFB45309)
+                color = SemanticColors.Default.onWarning
             )
         }
     }
@@ -321,7 +322,7 @@ private fun PartnershipPendingBanner(modifier: Modifier = Modifier) {
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFDCFCE7)
+            containerColor = SemanticColors.Default.surfaceSuccess
         )
     ) {
         Column(
@@ -333,13 +334,13 @@ private fun PartnershipPendingBanner(modifier: Modifier = Modifier) {
                 text = "Partnership Request Pending",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF166534)
+                color = SemanticColors.Default.onSuccess
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Your partnership request is being reviewed. You will be notified when a decision is made.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF15803D)
+                color = SemanticColors.Default.onSuccess
             )
         }
     }
@@ -453,7 +454,7 @@ private fun StreamCard(
                 Text(
                     text = "Requires agent approval",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFFF59E0B)
+                    color = SemanticColors.Default.warning
                 )
             }
 
@@ -517,17 +518,17 @@ private fun ImpactDashboardCard(
                 ImpactMetric(
                     value = impact.patternsContributed.toString(),
                     label = "Patterns",
-                    color = Color(0xFF10B981)
+                    color = SemanticColors.Default.success
                 )
                 ImpactMetric(
                     value = impact.usersHelped.toString(),
                     label = "Users Helped",
-                    color = Color(0xFF3B82F6)
+                    color = SemanticColors.Default.info
                 )
                 ImpactMetric(
                     value = "${((impact.impactScore * 10).toInt() / 10.0)}",
                     label = "Score",
-                    color = Color(0xFF8B5CF6)
+                    color = SemanticColors.Default.accentSecondary
                 )
             }
         }
@@ -614,10 +615,10 @@ private fun AuditTrailCard(
 // Helper functions
 private fun getStreamColor(stream: String?): Color {
     return when (stream?.lowercase()) {
-        "temporary" -> Color(0xFFF59E0B) // Yellow
-        "partnered" -> Color(0xFF10B981) // Green
-        "anonymous" -> Color(0xFF3B82F6) // Blue
-        else -> Color.Gray
+        "temporary" -> SemanticColors.Default.warning // Yellow/Amber
+        "partnered" -> SemanticColors.Default.success // Green
+        "anonymous" -> SemanticColors.Default.info // Blue
+        else -> SemanticColors.Default.inactive // Gray
     }
 }
 

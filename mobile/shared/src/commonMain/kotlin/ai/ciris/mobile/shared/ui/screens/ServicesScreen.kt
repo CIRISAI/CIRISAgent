@@ -2,13 +2,22 @@ package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
+import ai.ciris.mobile.shared.utils.DisplayNames
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -16,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -37,6 +47,8 @@ import androidx.compose.ui.unit.dp
 fun ServicesScreen(
     servicesData: ServicesData,
     isLoading: Boolean,
+    expandedServiceIds: Set<String> = emptySet(),
+    onToggleServiceExpanded: (String) -> Unit = {},
     onRefresh: () -> Unit,
     onDiagnose: () -> Unit,
     onResetCircuitBreakers: (serviceType: String?) -> Unit,
@@ -147,7 +159,9 @@ fun ServicesScreen(
                             ServiceTypeCard(
                                 serviceType = serviceType,
                                 providers = providers,
-                                scope = "global"
+                                scope = "global",
+                                expandedServiceIds = expandedServiceIds,
+                                onToggleServiceExpanded = onToggleServiceExpanded
                             )
                         }
                     }
@@ -167,7 +181,9 @@ fun ServicesScreen(
                         item {
                             HandlerServicesCard(
                                 handler = handler,
-                                serviceTypes = serviceTypes
+                                serviceTypes = serviceTypes,
+                                expandedServiceIds = expandedServiceIds,
+                                onToggleServiceExpanded = onToggleServiceExpanded
                             )
                         }
                     }
@@ -252,6 +268,7 @@ private fun ServiceHealthOverviewCard(
     unhealthyServices: Int,
     modifier: Modifier = Modifier
 ) {
+    val semantic = SemanticColors.Default
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -279,9 +296,9 @@ private fun ServiceHealthOverviewCard(
                     label = "Overall Health",
                     value = overallHealth.uppercase(),
                     color = when (overallHealth.lowercase()) {
-                        "healthy" -> Color(0xFF10B981)
-                        "degraded" -> Color(0xFFF59E0B)
-                        else -> Color(0xFFEF4444)
+                        "healthy" -> semantic.success
+                        "degraded" -> semantic.warning
+                        else -> semantic.error
                     }
                 )
 
@@ -296,14 +313,14 @@ private fun ServiceHealthOverviewCard(
                 HealthMetricItem(
                     label = "Healthy",
                     value = healthyServices.toString(),
-                    color = Color(0xFF10B981)
+                    color = semantic.success
                 )
 
                 // Unhealthy Services
                 HealthMetricItem(
                     label = "Unhealthy",
                     value = unhealthyServices.toString(),
-                    color = if (unhealthyServices > 0) Color(0xFFEF4444) else Color(0xFF10B981)
+                    color = if (unhealthyServices > 0) semantic.error else semantic.success
                 )
             }
         }
@@ -412,13 +429,14 @@ private fun DiagnosticsCard(
     diagnostics: ServiceDiagnostics,
     modifier: Modifier = Modifier
 ) {
+    val semantic = SemanticColors.Default
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = when (diagnostics.overallHealth.lowercase()) {
-                "healthy" -> Color(0xFF10B981).copy(alpha = 0.1f)
-                "degraded" -> Color(0xFFF59E0B).copy(alpha = 0.1f)
-                else -> Color(0xFFEF4444).copy(alpha = 0.1f)
+                "healthy" -> semantic.surfaceSuccess
+                "degraded" -> semantic.surfaceWarning
+                else -> semantic.surfaceError
             }
         )
     ) {
@@ -442,7 +460,7 @@ private fun DiagnosticsCard(
                 Text(
                     text = "${diagnostics.issuesFound} issues found",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (diagnostics.issuesFound > 0) Color(0xFFEF4444) else Color(0xFF10B981),
+                    color = if (diagnostics.issuesFound > 0) semantic.error else semantic.success,
                     fontWeight = FontWeight.Medium
                 )
             }
@@ -458,7 +476,7 @@ private fun DiagnosticsCard(
                     Text(
                         text = "- $issue",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFEF4444)
+                        color = semantic.error
                     )
                 }
             }
@@ -474,7 +492,7 @@ private fun DiagnosticsCard(
                     Text(
                         text = "- $rec",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF3B82F6)
+                        color = semantic.info
                     )
                 }
             }
@@ -487,6 +505,8 @@ private fun ServiceTypeCard(
     serviceType: String,
     providers: List<ServiceProvider>,
     scope: String,
+    expandedServiceIds: Set<String>,
+    onToggleServiceExpanded: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
@@ -502,7 +522,7 @@ private fun ServiceTypeCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = serviceType.uppercase(),
+                    text = DisplayNames.humanizeCategory(serviceType),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -514,7 +534,12 @@ private fun ServiceTypeCard(
             }
 
             providers.forEach { provider ->
-                ServiceProviderRow(provider = provider)
+                val serviceId = "${serviceType}_${provider.name}"
+                ServiceProviderRow(
+                    provider = provider,
+                    isExpanded = serviceId in expandedServiceIds,
+                    onToggleExpand = { onToggleServiceExpanded(serviceId) }
+                )
             }
         }
     }
@@ -523,67 +548,161 @@ private fun ServiceTypeCard(
 @Composable
 private fun ServiceProviderRow(
     provider: ServiceProvider,
+    isExpanded: Boolean = false,
+    onToggleExpand: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    val rotationAngle by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        label = "chevron_rotation"
+    )
+
+    val semantic = SemanticColors.Default
+    val statusColor = when (provider.circuitBreakerState.lowercase()) {
+        "closed" -> semantic.success
+        "half_open" -> semantic.warning
+        else -> semantic.error
+    }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        // Header row (clickable to expand)
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggleExpand() }
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Circuit breaker status dot
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(
-                        when (provider.circuitBreakerState.lowercase()) {
-                            "closed" -> Color(0xFF10B981)
-                            "half_open" -> Color(0xFFF59E0B)
-                            else -> Color(0xFFEF4444)
-                        }
-                    )
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                // Circuit breaker status dot
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(statusColor)
+                )
 
-            Column {
+                // Human-friendly service name
                 Text(
-                    text = provider.name,
+                    text = DisplayNames.humanizeServiceName(provider.name),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
                 )
-                Text(
-                    text = "Priority: ${provider.priority} | Group: ${provider.priorityGroup} | ${provider.strategy}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Human-friendly status badge
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = statusColor.copy(alpha = 0.2f)
+                ) {
+                    Text(
+                        text = DisplayNames.humanizeStatus(provider.circuitBreakerState),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = statusColor
+                    )
+                }
+
+                // Expand chevron
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                    modifier = Modifier
+                        .size(20.dp)
+                        .rotate(rotationAngle),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
-        // Circuit breaker state badge
-        Surface(
-            shape = MaterialTheme.shapes.small,
-            color = when (provider.circuitBreakerState.lowercase()) {
-                "closed" -> Color(0xFF10B981).copy(alpha = 0.2f)
-                "half_open" -> Color(0xFFF59E0B).copy(alpha = 0.2f)
-                else -> Color(0xFFEF4444).copy(alpha = 0.2f)
-            }
+        // Expandable details section
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = expandVertically(),
+            exit = shrinkVertically()
         ) {
-            Text(
-                text = provider.circuitBreakerState.uppercase(),
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = when (provider.circuitBreakerState.lowercase()) {
-                    "closed" -> Color(0xFF10B981)
-                    "half_open" -> Color(0xFFF59E0B)
-                    else -> Color(0xFFEF4444)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Priority info
+                DetailRow(label = "Priority", value = provider.priority)
+
+                // Priority group (only show if non-zero)
+                if (provider.priorityGroup > 0) {
+                    DetailRow(label = "Priority Group", value = provider.priorityGroup.toString())
                 }
-            )
+
+                // Strategy
+                DetailRow(label = "Strategy", value = DisplayNames.humanizeStrategy(provider.strategy))
+
+                // Capabilities (if any)
+                if (provider.capabilities.isNotEmpty()) {
+                    Text(
+                        text = "Capabilities",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        provider.capabilities.take(4).forEach { capability ->
+                            SuggestionChip(
+                                onClick = {},
+                                label = {
+                                    Text(
+                                        text = capability,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            )
+                        }
+                        if (provider.capabilities.size > 4) {
+                            Text(
+                                text = "+${provider.capabilities.size - 4}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun DetailRow(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall
+        )
     }
 }
 
@@ -591,6 +710,8 @@ private fun ServiceProviderRow(
 private fun HandlerServicesCard(
     handler: String,
     serviceTypes: Map<String, List<ServiceProvider>>,
+    expandedServiceIds: Set<String>,
+    onToggleServiceExpanded: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -614,13 +735,18 @@ private fun HandlerServicesCard(
             serviceTypes.forEach { (serviceType, providers) ->
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = serviceType.uppercase(),
+                        text = DisplayNames.humanizeCategory(serviceType),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
 
                     providers.forEach { provider ->
-                        ServiceProviderRow(provider = provider)
+                        val serviceId = "${handler}_${serviceType}_${provider.name}"
+                        ServiceProviderRow(
+                            provider = provider,
+                            isExpanded = serviceId in expandedServiceIds,
+                            onToggleExpand = { onToggleServiceExpanded(serviceId) }
+                        )
                     }
                 }
 

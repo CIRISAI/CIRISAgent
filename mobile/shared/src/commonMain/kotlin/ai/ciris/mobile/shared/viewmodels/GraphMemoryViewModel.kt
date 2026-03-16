@@ -50,6 +50,9 @@ class GraphMemoryViewModel(
     private val simulation = ForceSimulation()
     private var simulationJob: Job? = null
 
+    // Cylinder layout
+    val cylinderLayout = CylinderLayout()
+
     // Canvas dimensions
     private var canvasWidth: Float = 800f
     private var canvasHeight: Float = 600f
@@ -71,25 +74,32 @@ class GraphMemoryViewModel(
      * Load graph data from API.
      */
     fun loadGraphData() {
-        PlatformLogger.d(TAG, "Loading graph data: hours=${_filter.value.hours}, scope=${_filter.value.scope}")
+        val requestStart = System.currentTimeMillis()
+        PlatformLogger.d(TAG, ">>> API REQUEST START: hours=${_filter.value.hours}, scope=${_filter.value.scope}")
 
         viewModelScope.launch {
             _displayState.value = _displayState.value.copy(isLoading = true, error = null)
 
             try {
-                // Always pass a scope - cross-scope edges are not supported
+                // Pass null for scope to get ALL SCOPES (multi-scope cylinder)
+                // The batch edge endpoint now supports cross-scope edges
                 val graphData = apiClient.getGraphData(
                     hours = _filter.value.hours,
-                    scope = _filter.value.scope.value,
+                    scope = null,  // ALL SCOPES for multi-scope cylinder
                     nodeType = null,
-                    limit = 100
+                    limit = 1000,  // High limit for multi-scope cylinder view
+                    includeMetrics = _filter.value.includeTelemetry  // Toggle telemetry nodes
                 )
 
-                PlatformLogger.d(TAG, "Loaded ${graphData.nodes.size} nodes, ${graphData.edges.size} edges")
+                val requestTime = System.currentTimeMillis() - requestStart
+                PlatformLogger.d(TAG, "<<< API REQUEST DONE in ${requestTime}ms: ${graphData.nodes.size} nodes, ${graphData.edges.size} edges")
+                if (graphData.edges.isEmpty()) {
+                    PlatformLogger.d(TAG, "WARNING: No edges returned from API!")
+                }
 
-                // Convert to display models
+                // Convert to display models (use scope-based coloring for multi-scope view)
                 val displayNodes = graphData.nodes.map { node ->
-                    GraphNodeDisplay.fromGraphNode(node)
+                    GraphNodeDisplay.fromGraphNode(node, colorByScope = true)
                 }
                 val displayEdges = graphData.edges.map { edge ->
                     GraphEdgeDisplay.fromGraphEdge(edge)
@@ -115,7 +125,8 @@ class GraphMemoryViewModel(
                     nodes = displayNodes,
                     edges = displayEdges,
                     isLoading = false,
-                    error = null
+                    error = null,
+                    dataVersion = _displayState.value.dataVersion + 1  // Increment to trigger re-layout
                 )
 
                 // Start simulation
@@ -167,6 +178,12 @@ class GraphMemoryViewModel(
             }
             GraphLayout.CIRCULAR -> {
                 ForceSimulation.applyCircularLayout(nodes, canvasWidth, canvasHeight)
+            }
+            GraphLayout.CYLINDER -> {
+                // Cylinder layout is applied by CylinderCanvas
+                // Just reset the rotation
+                cylinderLayout.reset()
+                cylinderLayout.applyLayout(nodes, canvasWidth, canvasHeight)
             }
         }
 
@@ -234,8 +251,15 @@ class GraphMemoryViewModel(
      * Start force simulation.
      */
     fun startSimulation() {
-        if (simulationJob?.isActive == true) return
-        if (_displayState.value.layout != GraphLayout.FORCE) return
+        PlatformLogger.d(TAG, "startSimulation() called, layout=${_displayState.value.layout}, nodes=${_displayState.value.nodes.size}")
+        if (simulationJob?.isActive == true) {
+            PlatformLogger.d(TAG, "startSimulation(): already running, returning")
+            return
+        }
+        if (_displayState.value.layout != GraphLayout.FORCE) {
+            PlatformLogger.d(TAG, "startSimulation(): layout is not FORCE (${_displayState.value.layout}), returning")
+            return
+        }
 
         PlatformLogger.d(TAG, "Starting force simulation")
         simulation.restart()

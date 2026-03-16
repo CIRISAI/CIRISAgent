@@ -22,8 +22,21 @@ from typing import List, Optional, Tuple
 
 # Constants to avoid string duplication (SonarCloud S1192)
 PYDANTIC_CORE_SO_PATTERN = "_pydantic_core*.so"
-CHAQUOPY_BASE_PATH = "/data/data/ai.ciris.mobile/files/chaquopy"
-ANDROID_PACKAGE_NAME = "ai.ciris.mobile"
+
+
+# Dynamically detect package name from current path (supports .debug suffix)
+def _detect_package_name() -> str:
+    """Detect Android package name from the current Python path."""
+    # Path looks like: /data/data/ai.ciris.mobile.debug/files/chaquopy/...
+    current_file = Path(__file__).resolve()
+    for part in current_file.parts:
+        if part.startswith("ai.ciris.mobile"):
+            return part
+    return "ai.ciris.mobile"  # Fallback
+
+
+ANDROID_PACKAGE_NAME = _detect_package_name()
+CHAQUOPY_BASE_PATH = f"/data/data/{ANDROID_PACKAGE_NAME}/files/chaquopy"
 
 # Configure logging for Android (logcat-friendly)
 logging.basicConfig(
@@ -838,7 +851,7 @@ def setup_android_environment():
     # Step 1: Set CIRIS_HOME (the only env var we set manually)
     # This is the root for path_resolution.py to build all other paths
     android_data = Path(os.environ["ANDROID_DATA"])
-    ciris_home = android_data / "data" / "ai.ciris.mobile" / "files" / "ciris"
+    ciris_home = android_data / "data" / ANDROID_PACKAGE_NAME / "files" / "ciris"
     os.environ.setdefault("CIRIS_HOME", str(ciris_home))
 
     # Step 2: Import path_resolution and use it for all paths

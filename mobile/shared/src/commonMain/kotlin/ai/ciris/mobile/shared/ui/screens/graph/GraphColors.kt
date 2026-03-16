@@ -2,13 +2,31 @@ package ai.ciris.mobile.shared.ui.screens.graph
 
 import ai.ciris.api.models.NodeType
 import ai.ciris.api.models.GraphScope
+import ai.ciris.mobile.shared.ui.theme.ColorTheme
 import androidx.compose.ui.graphics.Color
 
 /**
  * Color configuration for graph visualization.
  * Colors match the backend memory_visualization.py exactly.
+ * Supports dynamic theming via ColorTheme.
  */
 object GraphColors {
+    // Current active theme (can be updated)
+    private var activeTheme: ColorTheme = ColorTheme.DEFAULT
+
+    /**
+     * Set the active color theme.
+     * This affects scope colors in the graph visualization.
+     */
+    fun setTheme(theme: ColorTheme) {
+        activeTheme = theme
+    }
+
+    /**
+     * Get the current active theme.
+     */
+    fun getTheme(): ColorTheme = activeTheme
+
     // Background color (dark navy)
     val Background = Color(0xFF1A1A2E)
     val BackgroundLight = Color(0xFF242438)
@@ -38,8 +56,8 @@ object GraphColors {
         NodeType.SAFETY_SCORE to Color(0xFFEF4444) // Red
     )
 
-    // Scope colors
-    private val scopeColors = mapOf(
+    // Default scope colors (used when no theme is set)
+    private val defaultScopeColors = mapOf(
         GraphScope.LOCAL to Color(0xFF3B82F6),      // Blue
         GraphScope.IDENTITY to Color(0xFF06B6D4),   // Cyan
         GraphScope.ENVIRONMENT to Color(0xFF10B981), // Green
@@ -88,10 +106,29 @@ object GraphColors {
     }
 
     /**
-     * Get color for a scope.
+     * Get color for a scope based on the active theme.
+     * Maps scopes to theme colors:
+     * - LOCAL -> primary
+     * - IDENTITY -> secondary
+     * - ENVIRONMENT -> tertiary
+     * - COMMUNITY -> primary (darker)
      */
     fun getScopeColor(scope: GraphScope): Color {
-        return scopeColors[scope] ?: DefaultNodeColor
+        // Use themed colors based on active theme
+        return when (scope) {
+            GraphScope.LOCAL -> activeTheme.primary
+            GraphScope.IDENTITY -> activeTheme.secondary
+            GraphScope.ENVIRONMENT -> activeTheme.tertiary
+            GraphScope.COMMUNITY -> darken(activeTheme.primary, 0.15f)
+            else -> defaultScopeColors[scope] ?: DefaultNodeColor
+        }
+    }
+
+    /**
+     * Get color for a scope using default colors (ignores theme).
+     */
+    fun getDefaultScopeColor(scope: GraphScope): Color {
+        return defaultScopeColors[scope] ?: DefaultNodeColor
     }
 
     /**

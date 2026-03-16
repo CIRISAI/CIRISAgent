@@ -67,6 +67,27 @@ class ServicesViewModel(
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
 
+    // Expansion state - tracks which services are expanded (persists during session)
+    private val _expandedServiceIds = MutableStateFlow<Set<String>>(emptySet())
+    val expandedServiceIds: StateFlow<Set<String>> = _expandedServiceIds.asStateFlow()
+
+    /**
+     * Toggle service expansion state.
+     */
+    fun toggleServiceExpanded(serviceId: String) {
+        val current = _expandedServiceIds.value
+        _expandedServiceIds.value = if (serviceId in current) {
+            current - serviceId
+        } else {
+            current + serviceId
+        }
+    }
+
+    /**
+     * Check if a service is expanded.
+     */
+    fun isServiceExpanded(serviceId: String): Boolean = serviceId in _expandedServiceIds.value
+
     // Polling job
     private var pollingJob: Job? = null
     private var isFirstLoad = true

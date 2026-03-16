@@ -229,6 +229,8 @@ class LoadableAdapterInfo(BaseModel):
     external_dependencies: List[str] = Field(default_factory=list, description="Required CLI tools or binaries")
     dependencies_available: bool = Field(True, description="Whether all external dependencies are available")
     missing_dependencies: List[str] = Field(default_factory=list, description="List of missing dependencies")
+    # Loaded instance tracking
+    loaded_instances: int = Field(0, description="Number of instances currently loaded for this adapter type")
 
 
 class LoadableAdaptersResponse(BaseModel):

@@ -1,6 +1,8 @@
 package ai.ciris.mobile.shared.viewmodels
 
-import ai.ciris.mobile.shared.api.CIRISApiClientProtocol
+import ai.ciris.api.models.DocumentPayload
+import ai.ciris.api.models.ImagePayload
+import ai.ciris.mobile.shared.api.*
 import ai.ciris.mobile.shared.models.*
 import ai.ciris.mobile.shared.platform.PythonRuntimeProtocol
 import kotlinx.coroutines.Dispatchers
@@ -299,7 +301,12 @@ class FakeCIRISApiClient : CIRISApiClientProtocol {
         this.token = token
     }
 
-    override suspend fun sendMessage(message: String, channelId: String): InteractResponse {
+    override suspend fun sendMessage(
+        message: String,
+        channelId: String,
+        images: List<ImagePayload>?,
+        documents: List<DocumentPayload>?
+    ): InteractResponse {
         return InteractResponse(response = "Test response", message_id = "test-id")
     }
 
@@ -318,12 +325,14 @@ class FakeCIRISApiClient : CIRISApiClientProtocol {
 
     override suspend fun getTelemetry(): TelemetryResponse {
         return TelemetryResponse(
-            agent_id = "test-agent",
-            uptime_seconds = 100.0,
-            cognitive_state = "WORK",
-            services_online = 22,
-            services_total = 22,
-            services = emptyMap()
+            data = TelemetryData(
+                agent_id = "test-agent",
+                uptime_seconds = 100.0,
+                cognitive_state = "WORK",
+                services_online = 22,
+                services_total = 22,
+                services = emptyMap()
+            )
         )
     }
 
@@ -336,6 +345,14 @@ class FakeCIRISApiClient : CIRISApiClientProtocol {
     }
 
     override suspend fun googleAuth(idToken: String, userId: String?): AuthResponse {
+        return AuthResponse(
+            access_token = "test-token",
+            token_type = "bearer",
+            user = UserInfo(user_id = "test-user", email = "test@example.com")
+        )
+    }
+
+    override suspend fun appleAuth(idToken: String, userId: String?): AuthResponse {
         return AuthResponse(
             access_token = "test-token",
             token_type = "bearer",
@@ -363,6 +380,111 @@ class FakeCIRISApiClient : CIRISApiClientProtocol {
 
     override suspend fun completeSetup(request: CompleteSetupRequest): SetupCompletionResult {
         return SetupCompletionResult(success = true, message = "Setup complete")
+    }
+
+    override suspend fun nativeAuth(idToken: String, userId: String?, provider: String): AuthResponse {
+        return AuthResponse(
+            access_token = "test-token",
+            token_type = "bearer",
+            user = UserInfo(user_id = "test-user", email = "test@example.com")
+        )
+    }
+
+    override suspend fun transitionCognitiveState(targetState: String, reason: String?): StateTransitionResult {
+        return StateTransitionResult(
+            success = true,
+            message = "Transitioned to $targetState",
+            currentState = targetState,
+            previousState = "WORK"
+        )
+    }
+
+    override suspend fun getLlmConfig(): LlmConfigData {
+        return LlmConfigData(
+            provider = "mock",
+            baseUrl = null,
+            model = "mock-model",
+            apiKeySet = false,
+            isCirisProxy = true,
+            backupBaseUrl = null,
+            backupModel = null,
+            backupApiKeySet = false
+        )
+    }
+
+    override suspend fun getCredits(): CreditStatusData {
+        return CreditStatusData(
+            hasCredit = true,
+            creditsRemaining = 100,
+            freeUsesRemaining = 10,
+            dailyFreeUsesRemaining = 5,
+            totalUses = 50,
+            planName = "Test Plan",
+            purchaseRequired = false
+        )
+    }
+
+    override suspend fun listAdapters(): AdaptersListData {
+        return AdaptersListData(
+            adapters = emptyList(),
+            totalCount = 0,
+            runningCount = 0
+        )
+    }
+
+    override suspend fun reloadAdapter(adapterId: String): AdapterActionData {
+        return AdapterActionData(
+            adapterId = adapterId,
+            success = true,
+            message = "Reloaded"
+        )
+    }
+
+    override suspend fun removeAdapter(adapterId: String): AdapterActionData {
+        return AdapterActionData(
+            adapterId = adapterId,
+            success = true,
+            message = "Removed"
+        )
+    }
+
+    override suspend fun getServices(): ServicesResponse {
+        return ServicesResponse(
+            globalServices = emptyMap(),
+            handlers = emptyMap()
+        )
+    }
+
+    override suspend fun getRuntimeState(): RuntimeStateResponse {
+        return RuntimeStateResponse(
+            processorState = "RUNNING",
+            cognitiveState = "WORK",
+            queueDepth = 0,
+            activeTasks = emptyList()
+        )
+    }
+
+    override suspend fun pauseRuntime(): RuntimeControlResponse {
+        return RuntimeControlResponse(
+            processorState = "PAUSED",
+            message = "Paused"
+        )
+    }
+
+    override suspend fun resumeRuntime(): RuntimeControlResponse {
+        return RuntimeControlResponse(
+            processorState = "RUNNING",
+            message = "Resumed"
+        )
+    }
+
+    override suspend fun singleStepProcessor(): SingleStepResponse {
+        return SingleStepResponse(
+            stepPoint = "test",
+            message = "Step completed",
+            processingTimeMs = 100L,
+            tokensUsed = 10
+        )
     }
 
     override fun close() {

@@ -15,6 +15,7 @@
 
 package ai.ciris.api.models
 
+import ai.ciris.api.models.GraphEdge
 import ai.ciris.api.models.GraphNode
 import ai.ciris.api.models.ResponseGetSystemStatusV1TransparencyStatusGetValue
 
@@ -26,6 +27,7 @@ import kotlinx.serialization.encoding.*
  * Response containing timeline of memories.
  *
  * @param memories List of memory nodes
+ * @param edges Edges between memory nodes (batch fetched)
  * @param startTime
  * @param endTime
  * @param total Total number of memories
@@ -37,6 +39,9 @@ data class TimelineResponse (
 
     /* List of memory nodes */
     @SerialName(value = "memories") @Required val memories: kotlin.collections.List<GraphNode>,
+
+    /* Edges between memory nodes */
+    @SerialName(value = "edges") val edges: kotlin.collections.List<GraphEdge> = emptyList(),
 
     @SerialName(value = "start_time") @Required val startTime: kotlin.String?,
 

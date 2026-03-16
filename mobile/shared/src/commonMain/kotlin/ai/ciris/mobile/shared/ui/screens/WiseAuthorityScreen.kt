@@ -7,10 +7,14 @@ import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -23,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -53,7 +58,7 @@ fun WiseAuthorityScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Wise Authority") },
+                title = { Text("Human Deferrals") },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -212,9 +217,9 @@ private fun WAStatusCard(
                             .clip(CircleShape)
                             .background(
                                 if (waStatus?.serviceHealthy == true)
-                                    Color(0xFF10B981) // Green
+                                    SemanticColors.Default.success
                                 else
-                                    Color(0xFFEF4444) // Red
+                                    SemanticColors.Default.error
                             )
                     )
                     Text(
@@ -235,20 +240,20 @@ private fun WAStatusCard(
                 StatItem(
                     label = "Active WAs",
                     value = waStatus?.activeWAs?.toString() ?: "-",
-                    color = Color(0xFF3B82F6) // Blue
+                    color = SemanticColors.Default.info
                 )
                 StatItem(
                     label = "Pending",
                     value = waStatus?.pendingDeferrals?.toString() ?: "-",
                     color = if ((waStatus?.pendingDeferrals ?: 0) > 0)
-                        Color(0xFFF59E0B) // Yellow
+                        SemanticColors.Default.warning
                     else
-                        Color(0xFF10B981) // Green
+                        SemanticColors.Default.success
                 )
                 StatItem(
                     label = "24h Total",
                     value = waStatus?.deferrals24h?.toString() ?: "-",
-                    color = Color(0xFF8B5CF6) // Purple
+                    color = Color(0xFF8B5CF6) // Purple - theme accent
                 )
             }
 
@@ -259,6 +264,43 @@ private fun WAStatusCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                 )
+            }
+
+            // Subscribers Section
+            if (waStatus != null && waStatus.subscribers.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "Bus Subscribers",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Display subscribers as chips in a flow row
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    waStatus.subscribers.forEach { subscriber ->
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = subscriber,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -296,9 +338,9 @@ private fun DeferralCard(
     modifier: Modifier = Modifier
 ) {
     val priorityColor = when (deferral.priority.lowercase()) {
-        "high", "critical" -> Color(0xFFEF4444) // Red
-        "medium" -> Color(0xFFF59E0B) // Yellow
-        else -> Color(0xFF10B981) // Green
+        "high", "critical" -> SemanticColors.Default.error
+        "medium" -> SemanticColors.Default.warning
+        else -> SemanticColors.Default.success
     }
 
     Card(
@@ -376,8 +418,8 @@ private fun DeferralCard(
                     text = "Status: ${deferral.status}",
                     style = MaterialTheme.typography.bodySmall,
                     color = when (deferral.status) {
-                        "resolved" -> Color(0xFF10B981)
-                        "rejected" -> Color(0xFFEF4444)
+                        "resolved" -> SemanticColors.Default.success
+                        "rejected" -> SemanticColors.Default.error
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
                 )
@@ -403,7 +445,10 @@ private fun ResolveDeferralDialog(
         },
         text = {
             Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Question/Reason
                 Text(
@@ -439,80 +484,116 @@ private fun ResolveDeferralDialog(
                     }
                 }
 
-                Divider()
+                HorizontalDivider()
 
-                // Resolution options
+                // Guidance input FIRST (so buttons stay visible when keyboard opens)
                 Text(
-                    text = "Resolution",
+                    text = "Wisdom Guidance",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold
                 )
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = selectedResolution == "approve",
-                        onClick = { selectedResolution = "approve" },
-                        label = { Text("Approve") },
-                        leadingIcon = if (selectedResolution == "approve") {
-                            { Icon(Icons.Filled.Check, contentDescription = null, Modifier.size(16.dp)) }
-                        } else null,
-                        modifier = Modifier.testableClickable("btn_resolution_approve") { selectedResolution = "approve" }
-                    )
-                    FilterChip(
-                        selected = selectedResolution == "reject",
-                        onClick = { selectedResolution = "reject" },
-                        label = { Text("Reject") },
-                        leadingIcon = if (selectedResolution == "reject") {
-                            { Icon(Icons.Filled.Close, contentDescription = null, Modifier.size(16.dp)) }
-                        } else null,
-                        modifier = Modifier.testableClickable("btn_resolution_reject") { selectedResolution = "reject" }
-                    )
-                    FilterChip(
-                        selected = selectedResolution == "modify",
-                        onClick = { selectedResolution = "modify" },
-                        label = { Text("Modify") },
-                        modifier = Modifier.testableClickable("btn_resolution_modify") { selectedResolution = "modify" }
-                    )
-                }
-
-                // Guidance input
                 OutlinedTextField(
                     value = guidance,
                     onValueChange = { guidance = it },
-                    label = { Text("Wisdom Guidance") },
                     placeholder = { Text("Provide guidance for this decision...") },
                     modifier = Modifier.fillMaxWidth().testable("input_wisdom_guidance"),
-                    minLines = 3,
+                    minLines = 2,
+                    maxLines = 4,
                     enabled = !isResolving
                 )
+
+                HorizontalDivider()
+
+                // Resolution options - NOW BELOW text field
+                Text(
+                    text = "Decision",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                // Use Column instead of Row for better visibility
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Button(
+                            onClick = {
+                                if (guidance.isNotBlank()) {
+                                    onResolve("approve", guidance)
+                                }
+                            },
+                            enabled = guidance.isNotBlank() && !isResolving,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SemanticColors.Default.success
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testableClickable("btn_resolution_approve") {
+                                    if (guidance.isNotBlank()) onResolve("approve", guidance)
+                                }
+                        ) {
+                            Icon(Icons.Filled.Check, contentDescription = null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Approve")
+                        }
+                        Button(
+                            onClick = {
+                                if (guidance.isNotBlank()) {
+                                    onResolve("reject", guidance)
+                                }
+                            },
+                            enabled = guidance.isNotBlank() && !isResolving,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SemanticColors.Default.error
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testableClickable("btn_resolution_reject") {
+                                    if (guidance.isNotBlank()) onResolve("reject", guidance)
+                                }
+                        ) {
+                            Icon(Icons.Filled.Close, contentDescription = null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Reject")
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            if (guidance.isNotBlank()) {
+                                onResolve("modify", guidance)
+                            }
+                        },
+                        enabled = guidance.isNotBlank() && !isResolving,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testableClickable("btn_resolution_modify") {
+                                if (guidance.isNotBlank()) onResolve("modify", guidance)
+                            }
+                    ) {
+                        Text("Modify & Continue")
+                    }
+                }
+
+                if (isResolving) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    selectedResolution?.let { resolution ->
-                        onResolve(resolution, guidance)
-                    }
-                },
-                enabled = selectedResolution != null && guidance.isNotBlank() && !isResolving,
-                modifier = Modifier.testableClickable("btn_resolve_confirm") {
-                    selectedResolution?.let { resolution ->
-                        onResolve(resolution, guidance)
-                    }
-                }
-            ) {
-                if (isResolving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    Text("Resolve")
-                }
-            }
+            // Empty - buttons are now inline
         },
         dismissButton = {
             TextButton(

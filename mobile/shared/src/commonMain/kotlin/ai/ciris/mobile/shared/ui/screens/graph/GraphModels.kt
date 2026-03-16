@@ -26,20 +26,29 @@ data class GraphNodeDisplay(
     // Fixed position (if user pinned the node)
     var fixed: Boolean = false,
     // Original data for details panel
-    val originalNode: GraphNode? = null
+    val originalNode: GraphNode? = null,
+    // Extra storage for layout-specific data (e.g., cylinder coordinates)
+    val extra: MutableMap<String, Any> = mutableMapOf()
 ) {
     companion object {
-        fun fromGraphNode(node: GraphNode): GraphNodeDisplay {
+        fun fromGraphNode(node: GraphNode, colorByScope: Boolean = true): GraphNodeDisplay {
             val label = node.attributes.content?.take(30)
                 ?: node.attributes.description?.take(30)
                 ?: node.id.take(10)
+
+            // Use scope-based coloring for multi-scope cylinder view
+            val color = if (colorByScope) {
+                GraphColors.getScopeColor(node.scope)
+            } else {
+                GraphColors.getNodeColor(node.type)
+            }
 
             return GraphNodeDisplay(
                 id = node.id,
                 type = node.type,
                 scope = node.scope,
                 label = label,
-                color = GraphColors.getNodeColor(node.type),
+                color = color,
                 radius = GraphColors.getNodeRadius(node.type),
                 originalNode = node
             )
@@ -96,7 +105,8 @@ enum class GraphLayout(val displayName: String) {
     FORCE("Force-Directed"),
     TIMELINE("Timeline"),
     HIERARCHY("Hierarchy"),
-    CIRCULAR("Circular")
+    CIRCULAR("Circular"),
+    CYLINDER("3D Cylinder")
 }
 
 /**
@@ -107,10 +117,11 @@ data class GraphDisplayState(
     val edges: List<GraphEdgeDisplay> = emptyList(),
     val viewport: GraphViewport = GraphViewport(),
     val selectedNodeId: String? = null,
-    val layout: GraphLayout = GraphLayout.FORCE,
+    val layout: GraphLayout = GraphLayout.CYLINDER,
     val isSimulationRunning: Boolean = false,
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val dataVersion: Int = 0  // Increments each time data is loaded to trigger re-layout
 ) {
     val selectedNode: GraphNodeDisplay?
         get() = selectedNodeId?.let { id -> nodes.find { it.id == id } }
@@ -129,7 +140,8 @@ data class GraphFilter(
     val scope: GraphScope = GraphScope.LOCAL,
     val nodeTypes: Set<NodeType> = emptySet(),
     val hours: Int = 24,
-    val searchQuery: String = ""
+    val searchQuery: String = "",
+    val includeTelemetry: Boolean = false  // Exclude tsdb_data by default for performance
 )
 
 /**

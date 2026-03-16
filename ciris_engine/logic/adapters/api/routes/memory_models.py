@@ -100,6 +100,7 @@ class TimelineResponse(BaseModel):
     """Response containing timeline of memories."""
 
     memories: List[GraphNode] = Field(..., description="List of memory nodes")
+    edges: List[GraphEdge] = Field(default_factory=list, description="Edges between memory nodes")
     buckets: JSONDict = Field(default_factory=dict, description="Time buckets with counts")
     start_time: datetime = Field(..., description="Start of time range")
     end_time: datetime = Field(..., description="End of time range")

@@ -156,7 +156,9 @@ data class LoadableAdapterData(
     // CLI dependency info
     val externalDependencies: List<String> = emptyList(),
     val dependenciesAvailable: Boolean = true,
-    val missingDependencies: List<String> = emptyList()
+    val missingDependencies: List<String> = emptyList(),
+    // Loaded instance tracking
+    val loadedInstances: Int = 0
 )
 
 /**

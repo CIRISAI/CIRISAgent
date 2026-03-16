@@ -380,21 +380,26 @@ def _try_load_service_manifest(service_name: str, apply_filter: bool = True) -> 
     try:
         submodule = importlib.import_module(f"ciris_adapters.{service_name}")
         if not hasattr(submodule, "__path__"):
+            logger.info("[ADAPTER_DISCOVERY]   %s: no __path__ attribute", service_name)
             return None
         manifest_file = Path(submodule.__path__[0]) / MANIFEST_FILENAME
         if not manifest_file.exists():
+            logger.info("[ADAPTER_DISCOVERY]   %s: no manifest.json", service_name)
             return None
         with open(manifest_file) as f:
             manifest_data = json.load(f)
 
         # Filter out mock/common/library modules from public listings
         if apply_filter and _should_filter_adapter(manifest_data):
-            logger.debug("Filtering adapter %s from listings (mock/common/library)", service_name)
+            logger.info("[ADAPTER_DISCOVERY]   %s: FILTERED (mock/common/library/platform)", service_name)
             return None
 
-        return _parse_manifest_to_module_info(manifest_data, service_name)
+        result = _parse_manifest_to_module_info(manifest_data, service_name)
+        logger.info("[ADAPTER_DISCOVERY]   %s: OK (services=%s, platform_available=%s)",
+                    service_name, result.service_types, result.platform_available)
+        return result
     except Exception as e:
-        logger.debug("Service %s not available: %s", service_name, e)
+        logger.info("[ADAPTER_DISCOVERY]   %s: IMPORT ERROR: %s", service_name, e)
         return None
 
 
@@ -402,15 +407,21 @@ async def _discover_services_from_directory(services_base: Path) -> List[ModuleT
     """Discover modular services by iterating the services directory."""
     adapters: List[ModuleTypeInfo] = []
 
-    for item in services_base.iterdir():
+    logger.info("[ADAPTER_DISCOVERY] Scanning directory: %s", services_base)
+    dir_items = list(services_base.iterdir())
+    logger.info("[ADAPTER_DISCOVERY] Found %d items in directory", len(dir_items))
+
+    for item in dir_items:
         if not item.is_dir() or item.name.startswith("_"):
             continue
+
+        logger.info("[ADAPTER_DISCOVERY] Checking adapter: %s", item.name)
 
         # Try importlib-based loading first (Android compatibility)
         module_info = _try_load_service_manifest(item.name)
         if module_info:
             adapters.append(module_info)
-            logger.debug("Discovered modular service: %s", item.name)
+            logger.info("[ADAPTER_DISCOVERY] ✓ Loaded via importlib: %s (platform_available=%s)", item.name, module_info.platform_available)
             continue
 
         # Fallback to direct file access
@@ -419,13 +430,16 @@ async def _discover_services_from_directory(services_base: Path) -> List[ModuleT
         if manifest_data:
             # Apply filter for direct file access path
             if _should_filter_adapter(manifest_data):
-                logger.debug("Filtering adapter %s from listings (mock/common/library)", item.name)
+                logger.info("[ADAPTER_DISCOVERY] ✗ Filtered out: %s (mock/common/library/platform)", item.name)
                 continue
 
             module_info = _parse_manifest_to_module_info(manifest_data, item.name)
             adapters.append(module_info)
-            logger.debug("Discovered modular service (direct): %s", item.name)
+            logger.info("[ADAPTER_DISCOVERY] ✓ Loaded via direct file: %s", item.name)
+        else:
+            logger.info("[ADAPTER_DISCOVERY] ✗ No manifest found: %s", item.name)
 
+    logger.info("[ADAPTER_DISCOVERY] Total discovered: %d adapters", len(adapters))
     return adapters
 
 
@@ -979,6 +993,8 @@ async def list_loadable_adapters(
     1. Support interactive configuration (wizard workflow)
     2. Can be loaded directly without configuration (platform available, no required config)
 
+    Includes count of currently loaded instances for each adapter type.
+
     Requires ADMIN role.
     """
     try:
@@ -987,6 +1003,48 @@ async def list_loadable_adapters(
 
         # Get all discovered adapters
         all_adapters = await _discover_adapters()
+
+        # Count loaded instances by adapter type
+        # Note: adapter_type from running instances is derived from class name (e.g., "accordmetrics")
+        # while module_id from manifest may differ (e.g., "ciris_accord_metrics")
+        # We store both the raw type and a normalized version for matching
+        loaded_counts: Dict[str, int] = {}
+        runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
+        if not runtime_control:
+            runtime_control = getattr(request.app.state, "runtime_control_service", None)
+        if runtime_control:
+            adapter_manager = getattr(runtime_control, "adapter_manager", None)
+            if adapter_manager and hasattr(adapter_manager, "loaded_adapters"):
+                for _adapter_id, instance in adapter_manager.loaded_adapters.items():
+                    adapter_type = getattr(instance, "adapter_type", None)
+                    if adapter_type:
+                        loaded_counts[adapter_type] = loaded_counts.get(adapter_type, 0) + 1
+
+        def _normalize_module_id(module_id: str) -> str:
+            """Normalize module_id to match adapter_type derived from class names.
+
+            Handles cases like:
+            - ciris_accord_metrics -> accordmetrics
+            - navigation -> navigation
+            """
+            normalized = module_id.lower()
+            # Remove common prefixes
+            for prefix in ["ciris_", "ciris-"]:
+                if normalized.startswith(prefix):
+                    normalized = normalized[len(prefix) :]
+                    break
+            # Remove underscores to match class-name-derived types
+            normalized = normalized.replace("_", "")
+            return normalized
+
+        def _get_loaded_count(module_id: str) -> int:
+            """Get loaded instance count, trying both exact and normalized matches."""
+            # Try exact match first
+            if module_id in loaded_counts:
+                return loaded_counts[module_id]
+            # Try normalized match
+            normalized = _normalize_module_id(module_id)
+            return loaded_counts.get(normalized, 0)
 
         # Build the combined list
         loadable_adapters: List[LoadableAdapterInfo] = []
@@ -1039,6 +1097,7 @@ async def list_loadable_adapters(
                             external_dependencies=cli_deps,
                             dependencies_available=deps_available,
                             missing_dependencies=missing_cli_deps,
+                            loaded_instances=_get_loaded_count(adapter.module_id),
                         )
                     )
                     configurable_count += 1
@@ -1063,6 +1122,7 @@ async def list_loadable_adapters(
                             external_dependencies=cli_deps,
                             dependencies_available=deps_available,
                             missing_dependencies=missing_cli_deps,
+                            loaded_instances=_get_loaded_count(adapter.module_id),
                         )
                     )
                     direct_count += 1
@@ -1099,14 +1159,19 @@ async def get_adapter_status(
         raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
 
     try:
+        logger.info(f"[ADAPTER_STATUS_ROUTE] Getting info for adapter: {adapter_id}")
         # Get adapter info from runtime control service
         adapter_info = await runtime_control.get_adapter_info(adapter_id)
 
         if not adapter_info:
+            logger.warning(f"[ADAPTER_STATUS_ROUTE] Adapter not found: {adapter_id}")
             raise HTTPException(status_code=404, detail=f"Adapter '{adapter_id}' not found")
 
         # Debug logging
-        logger.info(f"Adapter info type: {type(adapter_info)}, value: {adapter_info}")
+        logger.info(f"[ADAPTER_STATUS_ROUTE] Got adapter_info: type={type(adapter_info).__name__}")
+        logger.info(f"[ADAPTER_STATUS_ROUTE] services_registered={adapter_info.services_registered}")
+        logger.info(f"[ADAPTER_STATUS_ROUTE] tools={adapter_info.tools}")
+        logger.info(f"[ADAPTER_STATUS_ROUTE] config_params={adapter_info.config_params}")
 
         # Convert to response format
         metrics_dict = None

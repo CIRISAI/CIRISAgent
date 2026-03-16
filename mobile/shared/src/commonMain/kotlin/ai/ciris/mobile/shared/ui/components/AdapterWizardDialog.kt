@@ -303,12 +303,28 @@ private fun AdapterTypeCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // Show workflow type / service types and OAuth requirement
+            // Show workflow type / service types, OAuth requirement, and loaded instance count
             Row(
                 modifier = Modifier.padding(top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Show loaded instance count badge
+                if (adapter.loadedInstances > 0) {
+                    SuggestionChip(
+                        onClick = {},
+                        label = {
+                            Text(
+                                "${adapter.loadedInstances} loaded",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        },
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    )
+                }
                 if (adapter.requiresConfiguration && adapter.workflowType != null) {
                     SuggestionChip(
                         onClick = {},
@@ -702,41 +718,139 @@ private fun DiscoveredItemCard(
     }
 }
 
+/**
+ * Renders a configuration field based on its type.
+ *
+ * Supports:
+ * - boolean: Switch component
+ * - select: Radio buttons for options
+ * - string, integer, password, etc: Text field
+ */
 @Composable
 private fun ConfigField(
     field: ConfigFieldData,
     value: String,
     onValueChange: (String) -> Unit
 ) {
-    val isPassword = field.fieldType == "password" || field.name.contains("secret", ignoreCase = true)
-
     Column(
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            label = {
-                Row {
-                    Text(field.label)
-                    if (field.required) {
-                        Text(" *", color = MaterialTheme.colorScheme.error)
+        // Label with required indicator
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = field.label,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            if (field.required) {
+                Text(" *", color = MaterialTheme.colorScheme.error)
+            }
+        }
+
+        when (field.fieldType) {
+            "boolean" -> {
+                // Boolean field: Switch
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onValueChange(if (value == "true") "false" else "true") }
+                        .padding(vertical = 8.dp)
+                        .testable("input_config_${field.name}"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    field.helpText?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
+                    Switch(
+                        checked = value == "true",
+                        onCheckedChange = { onValueChange(it.toString()) }
+                    )
                 }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .testable("input_config_${field.name}"),
-            singleLine = field.fieldType != "textarea",
-            visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = when (field.fieldType) {
-                "number" -> KeyboardOptions(keyboardType = KeyboardType.Number)
-                "email" -> KeyboardOptions(keyboardType = KeyboardType.Email)
-                "url" -> KeyboardOptions(keyboardType = KeyboardType.Uri)
-                else -> KeyboardOptions.Default
-            },
-            supportingText = field.helpText?.let { { Text(it) } }
-        )
+            }
+            "select" -> {
+                // Select field: Radio buttons for each option
+                if (field.options.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier.testable("input_config_${field.name}"),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        field.helpText?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        field.options.forEach { option ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onValueChange(option.value) }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                RadioButton(
+                                    selected = value == option.value,
+                                    onClick = { onValueChange(option.value) }
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = option.label,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    option.description?.let { desc ->
+                                        Text(
+                                            text = desc,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Fallback to text field if no options provided
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testable("input_config_${field.name}"),
+                        singleLine = true,
+                        supportingText = field.helpText?.let { { Text(it) } }
+                    )
+                }
+            }
+            else -> {
+                // Default: Text field for string, integer, password, etc.
+                val isPassword = field.fieldType == "password" || field.name.contains("secret", ignoreCase = true)
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testable("input_config_${field.name}"),
+                    singleLine = field.fieldType != "textarea",
+                    visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+                    keyboardOptions = when (field.fieldType) {
+                        "number", "integer" -> KeyboardOptions(keyboardType = KeyboardType.Number)
+                        "email" -> KeyboardOptions(keyboardType = KeyboardType.Email)
+                        "url" -> KeyboardOptions(keyboardType = KeyboardType.Uri)
+                        else -> KeyboardOptions.Default
+                    },
+                    supportingText = field.helpText?.let { { Text(it) } }
+                )
+            }
+        }
     }
 }
 

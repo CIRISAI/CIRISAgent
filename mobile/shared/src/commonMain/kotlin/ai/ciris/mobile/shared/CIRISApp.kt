@@ -20,6 +20,7 @@ import ai.ciris.mobile.shared.platform.getOAuthProviderName
 import ai.ciris.mobile.shared.platform.getOAuthProviderId
 import ai.ciris.mobile.shared.platform.platformLog
 import ai.ciris.mobile.shared.ui.components.AdapterWizardDialog
+import ai.ciris.mobile.shared.ui.components.CIRISSignet
 import ai.ciris.mobile.shared.ui.screens.*
 import ai.ciris.mobile.shared.viewmodels.AdaptersViewModel
 import ai.ciris.mobile.shared.viewmodels.AuditViewModel
@@ -41,8 +42,22 @@ import ai.ciris.mobile.shared.viewmodels.SystemViewModel
 import ai.ciris.mobile.shared.viewmodels.TelemetryViewModel
 import ai.ciris.mobile.shared.viewmodels.UsersViewModel
 import ai.ciris.mobile.shared.viewmodels.WiseAuthorityViewModel
+import ai.ciris.mobile.shared.viewmodels.TicketsViewModel
+import ai.ciris.mobile.shared.viewmodels.SchedulerViewModel
+import ai.ciris.mobile.shared.viewmodels.ToolsViewModel
 import ai.ciris.mobile.shared.ui.screens.graph.GraphMemoryScreen
+import ai.ciris.mobile.shared.ui.theme.BrightnessPreference
+import ai.ciris.mobile.shared.ui.theme.ColorTheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
@@ -60,6 +75,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CoroutineScope
 
@@ -460,6 +476,15 @@ fun CIRISApp(
     val usersViewModel: UsersViewModel = viewModel {
         UsersViewModel(apiClient)
     }
+    val ticketsViewModel: TicketsViewModel = viewModel {
+        TicketsViewModel(apiClient)
+    }
+    val schedulerViewModel: SchedulerViewModel = viewModel {
+        SchedulerViewModel(apiClient)
+    }
+    val toolsViewModel: ToolsViewModel = viewModel {
+        ToolsViewModel(apiClient)
+    }
 
     // Set up purchase result callback
     LaunchedEffect(purchaseLauncher) {
@@ -775,7 +800,23 @@ fun CIRISApp(
         }
     }
 
-    MaterialTheme {
+    // Collect brightness preference for theme
+    val brightnessPreference by settingsViewModel.brightnessPreference.collectAsState()
+    val systemInDarkTheme = isSystemInDarkTheme()
+    val isDarkMode = when (brightnessPreference) {
+        BrightnessPreference.LIGHT -> false
+        BrightnessPreference.DARK -> true
+        BrightnessPreference.SYSTEM -> systemInDarkTheme
+    }
+
+    // Apply appropriate color scheme based on brightness preference
+    val colorScheme = if (isDarkMode) {
+        darkColorScheme()
+    } else {
+        lightColorScheme()
+    }
+
+    MaterialTheme(colorScheme = colorScheme) {
         when (currentScreen) {
             Screen.Startup -> {
                 StartupScreen(viewModel = startupViewModel)
@@ -1130,6 +1171,11 @@ fun CIRISApp(
             }
 
             Screen.Interact -> {
+                // Live background state from settings (collect before Scaffold for top bar)
+                val liveBackgroundEnabled by settingsViewModel.liveBackgroundEnabled.collectAsState()
+                val colorTheme by settingsViewModel.colorTheme.collectAsState()
+                platformLog(TAG, "[CIRISApp] >>> liveBackgroundEnabled=$liveBackgroundEnabled, apiClient=${if (apiClient != null) "present" else "NULL"}")
+
                 Scaffold(
                     topBar = {
                         CIRISTopBar(
@@ -1142,17 +1188,27 @@ fun CIRISApp(
                             onServicesClick = { currentScreen = Screen.Services },
                             onAuditClick = { currentScreen = Screen.Audit },
                             onLogsClick = { currentScreen = Screen.Logs },
-                            onMemoryClick = { currentScreen = Screen.Memory },
+                            onMemoryClick = { currentScreen = Screen.GraphMemory },  // Default to 3D cylinder view
                             onConfigClick = { currentScreen = Screen.Config },
                             onConsentClick = { currentScreen = Screen.Consent },
                             onSystemClick = { currentScreen = Screen.System },
                             onRuntimeClick = { currentScreen = Screen.Runtime },
-                            onUsersClick = { currentScreen = Screen.Users }
+                            onUsersClick = { currentScreen = Screen.Users },
+                            onTicketsClick = { currentScreen = Screen.Tickets },
+                            onSchedulerClick = { currentScreen = Screen.Scheduler },
+                            onToolsClick = { currentScreen = Screen.Tools },
+                            darkMode = isDarkMode,
+                            // Theme picker
+                            colorTheme = colorTheme,
+                            brightnessPreference = brightnessPreference,
+                            onColorThemeChange = { settingsViewModel.setColorTheme(it) },
+                            onBrightnessChange = { settingsViewModel.setBrightnessPreference(it) }
                         )
                     }
                 ) { paddingValues ->
                     // Only apply top padding from Scaffold - InteractScreen handles
                     // bottom insets (keyboard + nav bar) via windowInsetsPadding
+
                     InteractScreen(
                         viewModel = interactViewModel,
                         onNavigateBack = { /* Already at root */ },
@@ -1174,6 +1230,18 @@ fun CIRISApp(
                             platformLog(TAG, "[INFO] Opening Billing page from credits")
                             currentScreen = Screen.Billing
                         },
+                        onOpenSystem = {
+                            platformLog(TAG, "[INFO] Opening System page from Local status")
+                            currentScreen = Screen.System
+                        },
+                        onOpenSettings = {
+                            platformLog(TAG, "[INFO] Opening Settings page from LLM indicator")
+                            currentScreen = Screen.Settings
+                        },
+                        apiClient = apiClient,
+                        liveBackgroundEnabled = liveBackgroundEnabled,
+                        colorTheme = colorTheme,
+                        isDarkMode = isDarkMode,
                         modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
                     )
                 }
@@ -1369,6 +1437,9 @@ fun CIRISApp(
                 val wizardLoading by adaptersViewModel.wizardLoading.collectAsState()
                 val discoveredItems by adaptersViewModel.discoveredItems.collectAsState()
                 val discoveryExecuted by adaptersViewModel.discoveryExecuted.collectAsState()
+                // Expansion state
+                val expandedAdapterIds by adaptersViewModel.expandedAdapterIds.collectAsState()
+                val adapterDetails by adaptersViewModel.adapterDetails.collectAsState()
 
                 PlatformLogger.d("CIRISApp", "[Screen.Adapters] Rendering adapters screen: " +
                         "adapters=${adaptersList.size}, connected=$isAdaptersConnected, " +
@@ -1396,6 +1467,16 @@ fun CIRISApp(
                     adapters = adaptersList,
                     isConnected = isAdaptersConnected,
                     isLoading = isAdaptersLoading || adaptersOperationInProgress,
+                    expandedAdapterIds = expandedAdapterIds,
+                    adapterDetails = adapterDetails,
+                    onToggleExpanded = { adapterId ->
+                        PlatformLogger.d("CIRISApp", "[Screen.Adapters] Toggling expansion for: $adapterId")
+                        adaptersViewModel.toggleExpanded(adapterId)
+                    },
+                    onEditConfig = { adapterType ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Adapters] Edit config for: $adapterType")
+                        adaptersViewModel.editAdapterConfig(adapterType)
+                    },
                     onReloadAdapter = { adapterId ->
                         PlatformLogger.i("CIRISApp", "[Screen.Adapters] Reloading adapter: $adapterId")
                         adaptersViewModel.reloadAdapter(adapterId)
@@ -1536,6 +1617,7 @@ fun CIRISApp(
                 val servicesData by servicesViewModel.servicesData.collectAsState()
                 val isServicesLoading by servicesViewModel.isLoading.collectAsState()
                 val servicesError by servicesViewModel.error.collectAsState()
+                val expandedServiceIds by servicesViewModel.expandedServiceIds.collectAsState()
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
@@ -1560,6 +1642,11 @@ fun CIRISApp(
                 ServicesScreen(
                     servicesData = servicesData,
                     isLoading = isServicesLoading,
+                    expandedServiceIds = expandedServiceIds,
+                    onToggleServiceExpanded = { serviceId ->
+                        PlatformLogger.d("CIRISApp", "[Screen.Services] Toggle expansion: $serviceId")
+                        servicesViewModel.toggleServiceExpanded(serviceId)
+                    },
                     onRefresh = {
                         PlatformLogger.i("CIRISApp", "[Screen.Services] User triggered refresh")
                         servicesViewModel.refresh()
@@ -1736,6 +1823,7 @@ fun CIRISApp(
                     state = graphState,
                     filter = graphFilter,
                     stats = graphStats,
+                    cylinderLayout = graphMemoryViewModel.cylinderLayout,
                     onRefresh = {
                         PlatformLogger.i("CIRISApp", "[Screen.GraphMemory] User triggered refresh")
                         graphMemoryViewModel.refresh()
@@ -2027,6 +2115,126 @@ fun CIRISApp(
                 )
             }
 
+            Screen.Tickets -> {
+                val ticketsState by ticketsViewModel.state.collectAsState()
+
+                LaunchedEffect(Unit) {
+                    PlatformLogger.i(TAG, "[Screen.Tickets] Loading tickets on screen entry")
+                    ticketsViewModel.startPolling()
+                }
+
+                DisposableEffect(Unit) {
+                    onDispose {
+                        ticketsViewModel.stopPolling()
+                    }
+                }
+
+                TicketsScreen(
+                    state = ticketsState,
+                    onRefresh = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Tickets] User triggered refresh")
+                        ticketsViewModel.refresh()
+                    },
+                    onFilterChange = { filter ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Tickets] Filter changed")
+                        ticketsViewModel.updateFilter(filter)
+                    },
+                    onSelectTicket = { ticket ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Tickets] Ticket selected: ${ticket?.ticketId}")
+                        ticketsViewModel.selectTicket(ticket)
+                    },
+                    onNavigateBack = { currentScreen = Screen.Interact },
+                    onShowCreateDialog = { sop ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Tickets] Show create dialog for SOP: $sop")
+                        ticketsViewModel.showCreateTicketDialog(sop)
+                    },
+                    onHideCreateDialog = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Tickets] Hide create dialog")
+                        ticketsViewModel.hideCreateTicketDialog()
+                    },
+                    onCreateTicket = { sop, email, userIdentifier, notes ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Tickets] Create ticket: sop=$sop, email=$email")
+                        ticketsViewModel.createTicket(sop, email, userIdentifier, notes)
+                    }
+                )
+            }
+
+            Screen.Scheduler -> {
+                val schedulerState by schedulerViewModel.state.collectAsState()
+
+                LaunchedEffect(Unit) {
+                    PlatformLogger.i(TAG, "[Screen.Scheduler] Loading scheduler data on screen entry")
+                    schedulerViewModel.startPolling()
+                }
+
+                DisposableEffect(Unit) {
+                    onDispose {
+                        schedulerViewModel.stopPolling()
+                    }
+                }
+
+                SchedulerScreen(
+                    state = schedulerState,
+                    onRefresh = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Scheduler] User triggered refresh")
+                        schedulerViewModel.refresh()
+                    },
+                    onNavigateBack = { currentScreen = Screen.Interact },
+                    onShowCreateDialog = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Scheduler] Show create dialog")
+                        schedulerViewModel.showCreateTaskDialog()
+                    },
+                    onHideCreateDialog = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Scheduler] Hide create dialog")
+                        schedulerViewModel.hideCreateTaskDialog()
+                    },
+                    onCreateTask = { name, goalDescription, triggerPrompt, deferUntil, scheduleCron ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Scheduler] Create task: name=$name, recurring=${scheduleCron != null}")
+                        schedulerViewModel.createTask(name, goalDescription, triggerPrompt, deferUntil, scheduleCron)
+                    },
+                    onCancelTask = { taskId ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Scheduler] Cancel task: $taskId")
+                        schedulerViewModel.cancelTask(taskId)
+                    }
+                )
+            }
+
+            Screen.Tools -> {
+                val toolsState by toolsViewModel.state.collectAsState()
+
+                LaunchedEffect(Unit) {
+                    PlatformLogger.i(TAG, "[Screen.Tools] Loading tools on screen entry")
+                    toolsViewModel.startPolling()
+                }
+
+                DisposableEffect(Unit) {
+                    onDispose {
+                        toolsViewModel.stopPolling()
+                    }
+                }
+
+                ToolsScreen(
+                    state = toolsState,
+                    filteredTools = toolsViewModel.getFilteredTools(),
+                    categories = toolsViewModel.getCategories(),
+                    providers = toolsViewModel.getProviders(),
+                    onRefresh = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Tools] User triggered refresh")
+                        toolsViewModel.refresh()
+                    },
+                    onSearchQueryChange = { query ->
+                        toolsViewModel.updateSearchQuery(query)
+                    },
+                    onCategoryFilter = { category ->
+                        toolsViewModel.filterByCategory(category)
+                    },
+                    onProviderFilter = { provider ->
+                        toolsViewModel.filterByProvider(provider)
+                    },
+                    onNavigateBack = { currentScreen = Screen.Interact }
+                )
+            }
+
             Screen.Trust -> {
                 TrustPage(
                     apiClient = apiClient,
@@ -2078,6 +2286,19 @@ private suspend fun checkFirstRunStatus(
     return null
 }
 
+/**
+ * Category-based navigation for the top bar.
+ * Categories:
+ * - Adapters & Tools: Adapters, Tools
+ * - Config & Credits: Settings, Config, Buy Credits
+ * - Data & Privacy: Memory, Sessions, Consent, Audit Trail
+ * - Governance: Human Deferrals
+ * - Advanced: Telemetry, Services, Logs, System, Runtime, Users, Tickets, Scheduler
+ */
+private enum class NavCategory {
+    NONE, ADAPTERS, CONFIG, DATA, GOVERNANCE, ADVANCED
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CIRISTopBar(
@@ -2095,232 +2316,278 @@ private fun CIRISTopBar(
     onConsentClick: () -> Unit = {},
     onSystemClick: () -> Unit = {},
     onRuntimeClick: () -> Unit = {},
-    onUsersClick: () -> Unit = {}
+    onUsersClick: () -> Unit = {},
+    onTicketsClick: () -> Unit = {},
+    onSchedulerClick: () -> Unit = {},
+    onToolsClick: () -> Unit = {},
+    darkMode: Boolean = false,
+    // Theme picker
+    colorTheme: ColorTheme = ColorTheme.DEFAULT,
+    brightnessPreference: BrightnessPreference = BrightnessPreference.SYSTEM,
+    onColorThemeChange: (ColorTheme) -> Unit = {},
+    onBrightnessChange: (BrightnessPreference) -> Unit = {}
 ) {
-    var showMenu by remember { mutableStateOf(false) }
+    var activeCategory by remember { mutableStateOf(NavCategory.NONE) }
+    var showThemePicker by remember { mutableStateOf(false) }
+
+    // Theme picker dialog
+    if (showThemePicker) {
+        ThemePickerDialog(
+            currentTheme = colorTheme,
+            currentBrightness = brightnessPreference,
+            onThemeSelected = onColorThemeChange,
+            onBrightnessSelected = onBrightnessChange,
+            onDismiss = { showThemePicker = false }
+        )
+    }
+
+    // Dark mode colors for live background
+    val containerColor = if (darkMode) Color(0xFF0D1117) else MaterialTheme.colorScheme.primaryContainer
+    val contentColor = if (darkMode) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
+    val accentColor = if (darkMode) Color(0xFF7DD3FC) else MaterialTheme.colorScheme.primary
 
     TopAppBar(
         title = {
-            Text("CIRIS")
+            // CIRIS Signet - geometric brand mark
+            CIRISSignet(
+                modifier = Modifier.size(32.dp),
+                tintColor = if (darkMode) Color.White else MaterialTheme.colorScheme.primary
+            )
         },
         actions = {
-            IconButton(
-                onClick = onSettingsClick,
-                modifier = Modifier.testableClickable("btn_settings") { onSettingsClick() }
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Settings"
-                )
-            }
-
+            // Category 1: Adapters & Tools
             Box {
                 IconButton(
-                    onClick = { showMenu = true },
-                    modifier = Modifier.testableClickable("btn_menu") { showMenu = true }
+                    onClick = { activeCategory = if (activeCategory == NavCategory.ADAPTERS) NavCategory.NONE else NavCategory.ADAPTERS },
+                    modifier = Modifier.testableClickable("btn_adapters_menu") {
+                        activeCategory = if (activeCategory == NavCategory.ADAPTERS) NavCategory.NONE else NavCategory.ADAPTERS
+                    }
                 ) {
                     Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "More"
+                        imageVector = Icons.Default.Build,
+                        contentDescription = "Adapters & Tools",
+                        tint = if (activeCategory == NavCategory.ADAPTERS) accentColor else contentColor
                     )
                 }
-
                 DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false }
+                    expanded = activeCategory == NavCategory.ADAPTERS,
+                    onDismissRequest = { activeCategory = NavCategory.NONE }
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("Buy Credits") },
-                        onClick = {
-                            showMenu = false
-                            onBillingClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Telemetry") },
-                        onClick = {
-                            showMenu = false
-                            onTelemetryClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Sessions") },
-                        onClick = {
-                            showMenu = false
-                            onSessionsClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null
-                            )
-                        }
+                    Text(
+                        text = "Adapters & Tools",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                     DropdownMenuItem(
                         text = { Text("Adapters") },
-                        onClick = {
-                            showMenu = false
-                            onAdaptersClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Build,
-                                contentDescription = null
-                            )
-                        },
-                        modifier = Modifier.testableClickable("menu_adapters") {
-                            showMenu = false
-                            onAdaptersClick()
-                        }
+                        onClick = { activeCategory = NavCategory.NONE; onAdaptersClick() },
+                        leadingIcon = { Icon(Icons.Default.Build, null) },
+                        modifier = Modifier.testableClickable("menu_adapters") { activeCategory = NavCategory.NONE; onAdaptersClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Wise Authority") },
-                        onClick = {
-                            showMenu = false
-                            onWiseAuthorityClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null
-                            )
-                        }
+                        text = { Text("Tools") },
+                        onClick = { activeCategory = NavCategory.NONE; onToolsClick() },
+                        leadingIcon = { Icon(Icons.Default.Build, null) }
+                    )
+                }
+            }
+
+            // Category 2: Config & Credits
+            Box {
+                IconButton(
+                    onClick = { activeCategory = if (activeCategory == NavCategory.CONFIG) NavCategory.NONE else NavCategory.CONFIG }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Config & Credits",
+                        tint = if (activeCategory == NavCategory.CONFIG) accentColor else contentColor
+                    )
+                }
+                DropdownMenu(
+                    expanded = activeCategory == NavCategory.CONFIG,
+                    onDismissRequest = { activeCategory = NavCategory.NONE }
+                ) {
+                    Text(
+                        text = "Config & Credits",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                     DropdownMenuItem(
-                        text = { Text("Services") },
-                        onClick = {
-                            showMenu = false
-                            onServicesClick()
-                        },
+                        text = { Text("App Theme") },
+                        onClick = { activeCategory = NavCategory.NONE; showThemePicker = true },
                         leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Build,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Audit Trail") },
-                        onClick = {
-                            showMenu = false
-                            onAuditClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.List,
-                                contentDescription = null
+                            // Show current theme color as icon
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .background(colorTheme.primary, CircleShape)
                             )
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Logs") },
-                        onClick = {
-                            showMenu = false
-                            onLogsClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.List,
-                                contentDescription = null
-                            )
-                        }
+                        text = { Text("LLM Settings") },
+                        onClick = { activeCategory = NavCategory.NONE; onSettingsClick() },
+                        leadingIcon = { Icon(Icons.Default.Settings, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Agent Config") },
+                        onClick = { activeCategory = NavCategory.NONE; onConfigClick() },
+                        leadingIcon = { Icon(Icons.Default.Settings, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Buy Credits") },
+                        onClick = { activeCategory = NavCategory.NONE; onBillingClick() },
+                        leadingIcon = { Icon(Icons.Default.Star, null) }
+                    )
+                }
+            }
+
+            // Category 3: Data & Privacy
+            Box {
+                IconButton(
+                    onClick = { activeCategory = if (activeCategory == NavCategory.DATA) NavCategory.NONE else NavCategory.DATA }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "Data & Privacy",
+                        tint = if (activeCategory == NavCategory.DATA) accentColor else contentColor
+                    )
+                }
+                DropdownMenu(
+                    expanded = activeCategory == NavCategory.DATA,
+                    onDismissRequest = { activeCategory = NavCategory.NONE }
+                ) {
+                    Text(
+                        text = "Data & Privacy",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                     DropdownMenuItem(
                         text = { Text("Memory") },
-                        onClick = {
-                            showMenu = false
-                            onMemoryClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null
-                            )
-                        }
+                        onClick = { activeCategory = NavCategory.NONE; onMemoryClick() },
+                        leadingIcon = { Icon(Icons.Default.Star, null) }
                     )
                     DropdownMenuItem(
-                        text = { Text("Config") },
-                        onClick = {
-                            showMenu = false
-                            onConfigClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = null
-                            )
-                        }
+                        text = { Text("Sessions") },
+                        onClick = { activeCategory = NavCategory.NONE; onSessionsClick() },
+                        leadingIcon = { Icon(Icons.Default.List, null) }
                     )
                     DropdownMenuItem(
                         text = { Text("Consent") },
-                        onClick = {
-                            showMenu = false
-                            onConsentClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null
-                            )
-                        }
+                        onClick = { activeCategory = NavCategory.NONE; onConsentClick() },
+                        leadingIcon = { Icon(Icons.Default.Check, null) }
                     )
                     DropdownMenuItem(
-                        text = { Text("System") },
-                        onClick = {
-                            showMenu = false
-                            onSystemClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null
-                            )
-                        }
+                        text = { Text("Audit Trail") },
+                        onClick = { activeCategory = NavCategory.NONE; onAuditClick() },
+                        leadingIcon = { Icon(Icons.Default.List, null) }
+                    )
+                }
+            }
+
+            // Category 4: Governance
+            Box {
+                IconButton(
+                    onClick = { activeCategory = if (activeCategory == NavCategory.GOVERNANCE) NavCategory.NONE else NavCategory.GOVERNANCE }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "Governance",
+                        tint = if (activeCategory == NavCategory.GOVERNANCE) accentColor else contentColor
+                    )
+                }
+                DropdownMenu(
+                    expanded = activeCategory == NavCategory.GOVERNANCE,
+                    onDismissRequest = { activeCategory = NavCategory.NONE }
+                ) {
+                    Text(
+                        text = "Governance",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                     DropdownMenuItem(
-                        text = { Text("Runtime") },
-                        onClick = {
-                            showMenu = false
-                            onRuntimeClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = null
-                            )
-                        }
+                        text = { Text("Human Deferrals") },
+                        onClick = { activeCategory = NavCategory.NONE; onWiseAuthorityClick() },
+                        leadingIcon = { Icon(Icons.Default.Person, null) }
                     )
                     DropdownMenuItem(
                         text = { Text("Users") },
-                        onClick = {
-                            showMenu = false
-                            onUsersClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null
-                            )
-                        }
+                        onClick = { activeCategory = NavCategory.NONE; onUsersClick() },
+                        leadingIcon = { Icon(Icons.Default.Person, null) }
+                    )
+                }
+            }
+
+            // Category 5: Advanced (overflow for power users)
+            Box {
+                IconButton(
+                    onClick = { activeCategory = if (activeCategory == NavCategory.ADVANCED) NavCategory.NONE else NavCategory.ADVANCED },
+                    modifier = Modifier.testableClickable("btn_menu") {
+                        activeCategory = if (activeCategory == NavCategory.ADVANCED) NavCategory.NONE else NavCategory.ADVANCED
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Advanced",
+                        tint = if (activeCategory == NavCategory.ADVANCED) accentColor else contentColor
+                    )
+                }
+                DropdownMenu(
+                    expanded = activeCategory == NavCategory.ADVANCED,
+                    onDismissRequest = { activeCategory = NavCategory.NONE }
+                ) {
+                    Text(
+                        text = "Advanced",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Telemetry") },
+                        onClick = { activeCategory = NavCategory.NONE; onTelemetryClick() },
+                        leadingIcon = { Icon(Icons.Default.Info, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Services") },
+                        onClick = { activeCategory = NavCategory.NONE; onServicesClick() },
+                        leadingIcon = { Icon(Icons.Default.Build, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Logs") },
+                        onClick = { activeCategory = NavCategory.NONE; onLogsClick() },
+                        leadingIcon = { Icon(Icons.Default.List, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("System") },
+                        onClick = { activeCategory = NavCategory.NONE; onSystemClick() },
+                        leadingIcon = { Icon(Icons.Default.Info, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Runtime") },
+                        onClick = { activeCategory = NavCategory.NONE; onRuntimeClick() },
+                        leadingIcon = { Icon(Icons.Default.PlayArrow, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Tickets") },
+                        onClick = { activeCategory = NavCategory.NONE; onTicketsClick() },
+                        leadingIcon = { Icon(Icons.Default.List, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Scheduler") },
+                        onClick = { activeCategory = NavCategory.NONE; onSchedulerClick() },
+                        leadingIcon = { Icon(Icons.Default.Check, null) }
                     )
                 }
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            containerColor = containerColor,
+            titleContentColor = contentColor,
+            actionIconContentColor = contentColor
         )
     )
 }
@@ -2350,4 +2617,139 @@ private sealed class Screen {
     object Runtime : Screen()
     object Users : Screen()
     object Trust : Screen()
+    object Tickets : Screen()
+    object Scheduler : Screen()
+    object Tools : Screen()
+}
+
+/**
+ * Theme picker dialog - accessible from top bar gear menu.
+ */
+@Composable
+private fun ThemePickerDialog(
+    currentTheme: ColorTheme,
+    currentBrightness: BrightnessPreference,
+    onThemeSelected: (ColorTheme) -> Unit,
+    onBrightnessSelected: (BrightnessPreference) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("App Theme") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Brightness selection
+                Text(
+                    text = "Brightness",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    BrightnessPreference.entries.forEach { pref ->
+                        FilterChip(
+                            selected = currentBrightness == pref,
+                            onClick = { onBrightnessSelected(pref) },
+                            label = { Text(pref.displayName) }
+                        )
+                    }
+                }
+
+                // Color theme grid
+                Text(
+                    text = "Color Theme",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+
+                val themes = ColorTheme.entries.toList()
+                val chunkedThemes = themes.chunked(4)
+
+                chunkedThemes.forEach { row ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        row.forEach { theme ->
+                            ThemeColorChip(
+                                theme = theme,
+                                isSelected = currentTheme == theme,
+                                onClick = { onThemeSelected(theme) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        // Fill remaining space
+                        repeat(4 - row.size) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done")
+            }
+        }
+    )
+}
+
+/**
+ * Compact theme color chip for the dialog.
+ */
+@Composable
+private fun ThemeColorChip(
+    theme: ColorTheme,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+               else MaterialTheme.colorScheme.surface,
+        modifier = modifier
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) MaterialTheme.colorScheme.primary
+                       else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(8.dp)
+            )
+            .clickable { onClick() }
+    ) {
+        Column(
+            modifier = Modifier.padding(6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Color dots
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(theme.primary, CircleShape)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(theme.secondary, CircleShape)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(theme.tertiary, CircleShape)
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = theme.displayName,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1
+            )
+        }
+    }
 }

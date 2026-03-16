@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -202,15 +203,16 @@ private fun PipelineControlCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val colors = SemanticColors.Default
                     Box(
                         modifier = Modifier
                             .size(12.dp)
                             .clip(CircleShape)
                             .background(
                                 when {
-                                    isPaused -> Color(0xFFF59E0B) // Yellow
-                                    isRunning -> Color(0xFF10B981) // Green
-                                    else -> Color.Gray
+                                    isPaused -> colors.warning
+                                    isRunning -> colors.success
+                                    else -> colors.inactive
                                 }
                             )
                     )
@@ -219,15 +221,16 @@ private fun PipelineControlCard(
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                         color = when {
-                            isPaused -> Color(0xFFF59E0B)
-                            isRunning -> Color(0xFF10B981)
-                            else -> Color.Gray
+                            isPaused -> colors.warning
+                            isRunning -> colors.success
+                            else -> colors.inactive
                         }
                     )
                 }
             }
 
             // Control buttons
+            val colors = SemanticColors.Default
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -239,7 +242,7 @@ private fun PipelineControlCard(
                         .weight(1f)
                         .testableClickable("btn_pipeline_pause") { onPause() },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFF59E0B)
+                        containerColor = colors.warning
                     )
                 ) {
                     Text("Pause")
@@ -252,7 +255,7 @@ private fun PipelineControlCard(
                         .weight(1f)
                         .testableClickable("btn_pipeline_resume") { onResume() },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF10B981)
+                        containerColor = colors.success
                     )
                 ) {
                     Text("Resume")
@@ -265,7 +268,7 @@ private fun PipelineControlCard(
                         .weight(1f)
                         .testableClickable("btn_pipeline_step") { onSingleStep() },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF3B82F6)
+                        containerColor = colors.info
                     )
                 ) {
                     Icon(
@@ -303,6 +306,7 @@ private fun PipelineStatusCard(
                 fontWeight = FontWeight.Bold
             )
 
+            val colors = SemanticColors.Default
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -330,21 +334,21 @@ private fun PipelineStatusCard(
                 StatusMetric(
                     label = "Current Step",
                     value = currentStepPoint?.let { getStepDisplayName(it) } ?: "None",
-                    color = Color(0xFF3B82F6)
+                    color = colors.info
                 )
 
                 // Step Time
                 StatusMetric(
                     label = "Step Time",
                     value = lastStepTime?.let { "${it}ms" } ?: "N/A",
-                    color = Color(0xFF10B981)
+                    color = colors.success
                 )
 
                 // Tokens
                 StatusMetric(
                     label = "Tokens",
                     value = tokensUsed?.toString() ?: "N/A",
-                    color = Color(0xFF8B5CF6)
+                    color = colors.accent
                 )
             }
         }
@@ -383,13 +387,12 @@ private fun StreamStatusCard(
     updatesReceived: Int,
     modifier: Modifier = Modifier
 ) {
+    val colors = SemanticColors.Default
+    val statusColor = if (isConnected) colors.success else colors.error
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (isConnected)
-                Color(0xFF10B981).copy(alpha = 0.1f)
-            else
-                Color(0xFFEF4444).copy(alpha = 0.1f)
+            containerColor = statusColor.copy(alpha = 0.1f)
         )
     ) {
         Row(
@@ -413,13 +416,13 @@ private fun StreamStatusCard(
                     modifier = Modifier
                         .size(10.dp)
                         .clip(CircleShape)
-                        .background(if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444))
+                        .background(statusColor)
                 )
 
                 Text(
                     text = if (isConnected) "CONNECTED" else "DISCONNECTED",
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444)
+                    color = statusColor
                 )
             }
 
@@ -438,6 +441,7 @@ private fun H3EREPipelineCard(
     completedSteps: List<String>,
     modifier: Modifier = Modifier
 ) {
+    val colors = SemanticColors.Default
     Card(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -476,8 +480,8 @@ private fun H3EREPipelineCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                if (isCurrent) Color(0xFF3B82F6).copy(alpha = 0.2f)
-                                else if (isCompleted) Color(0xFF10B981).copy(alpha = 0.1f)
+                                if (isCurrent) colors.info.copy(alpha = 0.2f)
+                                else if (isCompleted) colors.success.copy(alpha = 0.1f)
                                 else Color.Transparent,
                                 shape = RoundedCornerShape(4.dp)
                             )
@@ -492,9 +496,9 @@ private fun H3EREPipelineCard(
                                 .clip(CircleShape)
                                 .background(
                                     when {
-                                        isCurrent -> Color(0xFF3B82F6)
-                                        isCompleted -> Color(0xFF10B981)
-                                        else -> Color.LightGray
+                                        isCurrent -> colors.info
+                                        isCompleted -> colors.success
+                                        else -> colors.inactive
                                     }
                                 )
                         )
@@ -505,8 +509,8 @@ private fun H3EREPipelineCard(
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
                             color = when {
-                                isCurrent -> Color(0xFF3B82F6)
-                                isCompleted -> Color(0xFF10B981)
+                                isCurrent -> colors.info
+                                isCompleted -> colors.success
                                 else -> MaterialTheme.colorScheme.onSurfaceVariant
                             }
                         )
@@ -515,13 +519,13 @@ private fun H3EREPipelineCard(
                         if (isRecursive) {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = Color(0xFFF97316).copy(alpha = 0.2f)
+                                color = colors.warning.copy(alpha = 0.2f)
                             ) {
                                 Text(
                                     text = "conditional",
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFF97316)
+                                    color = colors.warning
                                 )
                             }
                         }
@@ -542,10 +546,11 @@ private fun H3EREPipelineCard(
 private fun AdminWarningCard(
     modifier: Modifier = Modifier
 ) {
+    val colors = SemanticColors.Default
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFF59E0B).copy(alpha = 0.1f)
+            containerColor = colors.warning.copy(alpha = 0.1f)
         )
     ) {
         Row(
@@ -558,19 +563,19 @@ private fun AdminWarningCard(
             Icon(
                 imageVector = Icons.Filled.PlayArrow,
                 contentDescription = null,
-                tint = Color(0xFFF59E0B)
+                tint = colors.warning
             )
             Column {
                 Text(
                     text = "Admin Access Required",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFF59E0B)
+                    color = colors.warning
                 )
                 Text(
                     text = "Runtime control operations require Administrator privileges. You can view the current state but cannot modify runtime execution.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFF59E0B).copy(alpha = 0.8f)
+                    color = colors.warning.copy(alpha = 0.8f)
                 )
             }
         }
@@ -582,6 +587,7 @@ private fun TaskCard(
     task: TrackedTask,
     modifier: Modifier = Modifier
 ) {
+    val colors = SemanticColors.Default
     Card(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -600,25 +606,21 @@ private fun TaskCard(
                     fontWeight = FontWeight.Bold
                 )
 
+                val statusColor = when (task.status) {
+                    "completed" -> colors.success
+                    "processing" -> colors.info
+                    "failed" -> colors.error
+                    else -> colors.inactive
+                }
                 Surface(
                     shape = MaterialTheme.shapes.small,
-                    color = when (task.status) {
-                        "completed" -> Color(0xFF10B981).copy(alpha = 0.2f)
-                        "processing" -> Color(0xFF3B82F6).copy(alpha = 0.2f)
-                        "failed" -> Color(0xFFEF4444).copy(alpha = 0.2f)
-                        else -> Color.Gray.copy(alpha = 0.2f)
-                    }
+                    color = statusColor.copy(alpha = 0.2f)
                 ) {
                     Text(
                         text = task.status.uppercase(),
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelSmall,
-                        color = when (task.status) {
-                            "completed" -> Color(0xFF10B981)
-                            "processing" -> Color(0xFF3B82F6)
-                            "failed" -> Color(0xFFEF4444)
-                            else -> Color.Gray
-                        }
+                        color = statusColor
                     )
                 }
             }
@@ -638,6 +640,7 @@ private fun StepDetailsCard(
     currentStep: String?,
     modifier: Modifier = Modifier
 ) {
+    val colors = SemanticColors.Default
     Card(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -659,13 +662,13 @@ private fun StepDetailsCard(
                 currentStep?.let { step ->
                     Surface(
                         shape = RoundedCornerShape(4.dp),
-                        color = Color(0xFF3B82F6).copy(alpha = 0.2f)
+                        color = colors.info.copy(alpha = 0.2f)
                     ) {
                         Text(
                             text = getStepDisplayName(step),
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF3B82F6)
+                            color = colors.info
                         )
                     }
                 }
@@ -687,14 +690,14 @@ private fun StepDetailsCard(
                         Text(
                             text = "Time: ${time}ms",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF10B981)
+                            color = colors.success
                         )
                     }
                     stepResult.tokensUsed?.let { tokens ->
                         Text(
                             text = "Tokens: $tokens",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF8B5CF6)
+                            color = colors.accent
                         )
                     }
                 }
@@ -707,10 +710,11 @@ private fun StepDetailsCard(
 private fun InstructionsCard(
     modifier: Modifier = Modifier
 ) {
+    val colors = SemanticColors.Default
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF3B82F6).copy(alpha = 0.1f)
+            containerColor = colors.info.copy(alpha = 0.1f)
         )
     ) {
         Column(
@@ -723,7 +727,7 @@ private fun InstructionsCard(
                 text = "How to use Runtime Control",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF3B82F6)
+                color = colors.info
             )
 
             val instructions = listOf(
@@ -738,7 +742,7 @@ private fun InstructionsCard(
                 Text(
                     text = "${index + 1}. $instruction",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF3B82F6).copy(alpha = 0.8f)
+                    color = colors.info.copy(alpha = 0.8f)
                 )
             }
         }
@@ -748,12 +752,13 @@ private fun InstructionsCard(
 // Helper functions
 
 private fun getCognitiveStateColor(state: String): Color {
+    val colors = SemanticColors.Default
     return when (state.uppercase()) {
-        "WORK" -> Color(0xFF10B981) // Green
-        "PLAY" -> Color(0xFF3B82F6) // Blue
-        "SOLITUDE", "DREAM" -> Color(0xFFF59E0B) // Yellow
-        "WAKEUP", "SHUTDOWN" -> Color(0xFFF97316) // Orange
-        else -> Color.Gray
+        "WORK" -> colors.success
+        "PLAY" -> colors.info
+        "SOLITUDE", "DREAM" -> colors.warning
+        "WAKEUP", "SHUTDOWN" -> colors.warning
+        else -> colors.inactive
     }
 }
 

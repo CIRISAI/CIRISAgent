@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -41,6 +42,7 @@ fun GraphMemoryScreen(
     state: GraphDisplayState,
     filter: GraphFilter,
     stats: GraphStats,
+    cylinderLayout: CylinderLayout,
     onRefresh: () -> Unit,
     onFilterChange: (GraphFilter) -> Unit,
     onLayoutChange: (GraphLayout) -> Unit,
@@ -62,16 +64,28 @@ fun GraphMemoryScreen(
             .fillMaxSize()
             .background(GraphColors.Background)
     ) {
-        // Main graph canvas
-        GraphCanvas(
-            state = state,
-            onViewportChange = onViewportChange,
-            onNodeSelected = onNodeSelected,
-            onNodeDragStart = onNodeDragStart,
-            onNodeDrag = onNodeDrag,
-            onNodeDragEnd = onNodeDragEnd,
-            modifier = Modifier.fillMaxSize()
-        )
+        // Main graph canvas - switch based on layout type
+        if (state.layout == GraphLayout.CYLINDER) {
+            CylinderCanvas(
+                state = state,
+                cylinderLayout = cylinderLayout,
+                onNodeSelected = onNodeSelected,
+                onLayoutApplied = { /* Layout applied by CylinderCanvas */ },
+                modifier = Modifier.fillMaxSize(),
+                autoRotate = !state.isSimulationRunning,
+                groupByType = false
+            )
+        } else {
+            GraphCanvas(
+                state = state,
+                onViewportChange = onViewportChange,
+                onNodeSelected = onNodeSelected,
+                onNodeDragStart = onNodeDragStart,
+                onNodeDrag = onNodeDrag,
+                onNodeDragEnd = onNodeDragEnd,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         // Top app bar overlay
         Surface(
@@ -88,12 +102,23 @@ fun GraphMemoryScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(
-                        imageVector = Icons.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = GraphColors.LabelColor
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = GraphColors.LabelColor
+                        )
+                    }
+
+                    // List view button
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.Filled.List,
+                            contentDescription = "List View",
+                            tint = GraphColors.LabelColor
+                        )
+                    }
                 }
 
                 Text(
@@ -401,6 +426,30 @@ private fun GraphFiltersPanel(
                     label = { Text(label) }
                 )
             }
+        }
+
+        // Telemetry toggle (disabled by default for performance)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Show Telemetry",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = GraphColors.LabelColorMuted
+                )
+                Text(
+                    text = "Include metric nodes",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = GraphColors.LabelColorMuted.copy(alpha = 0.7f)
+                )
+            }
+            Switch(
+                checked = filter.includeTelemetry,
+                onCheckedChange = { onFilterChange(filter.copy(includeTelemetry = it)) }
+            )
         }
     }
 }

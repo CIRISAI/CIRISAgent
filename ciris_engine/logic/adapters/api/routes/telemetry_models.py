@@ -59,6 +59,7 @@ class SystemOverview(BaseModel):
     energy_24h_kwh: float = Field(0.0, description="Total energy in last 24 hours (kWh)")
     memory_mb: float = Field(0.0, description="Current memory usage")
     cpu_percent: float = Field(0.0, description="Current CPU usage")
+    disk_used_mb: float = Field(0.0, description="Disk space used in MB")
 
     # Service health
     healthy_services: int = Field(0, description="Number of healthy services")

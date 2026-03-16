@@ -1450,9 +1450,10 @@ class TestSanitizeConfigParamsRefactored:
 
         result = adapter_manager._sanitize_config_params("api", config)
 
-        assert result.adapter_config is not None
-        assert result.adapter_config["api_key"] == MASKED_VALUE
-        assert result.adapter_config["endpoint"] == "https://api.example.com"
+        # adapter_config is now flattened into settings
+        assert result.adapter_config is None
+        assert result.settings["api_key"] == MASKED_VALUE
+        assert result.settings["endpoint"] == "https://api.example.com"
 
     def test_sanitize_config_params_uses_default_patterns(self, adapter_manager):
         """Test unknown adapter types use default patterns."""

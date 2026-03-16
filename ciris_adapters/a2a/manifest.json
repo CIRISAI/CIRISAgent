@@ -22,29 +22,89 @@
     "a2a:ethical_reasoning",
     "benchmark:he300"
   ],
+  "interactive_config": {
+    "required": false,
+    "workflow_type": "simple_config",
+    "steps": [
+      {
+        "step_id": "server_config",
+        "step_type": "input",
+        "title": "Server Configuration",
+        "description": "Configure the A2A server endpoint settings",
+        "required": false,
+        "fields": [
+          {
+            "name": "host",
+            "label": "Host Address",
+            "type": "string",
+            "required": false,
+            "default": "0.0.0.0",
+            "description": "Network interface to bind (0.0.0.0 for all interfaces)"
+          },
+          {
+            "name": "port",
+            "label": "Port",
+            "type": "integer",
+            "required": false,
+            "default": 8100,
+            "description": "Port number for the A2A server"
+          }
+        ]
+      },
+      {
+        "step_id": "performance_config",
+        "step_type": "input",
+        "title": "Performance Settings",
+        "description": "Configure timeout and performance options",
+        "required": false,
+        "optional": true,
+        "fields": [
+          {
+            "name": "timeout",
+            "label": "Pipeline Timeout (seconds)",
+            "type": "integer",
+            "required": false,
+            "default": 60,
+            "description": "Maximum time for processing A2A requests"
+          }
+        ]
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Confirm Configuration",
+        "description": "Review and apply your A2A server configuration"
+      }
+    ],
+    "completion_method": "apply_config"
+  },
   "configuration": {
     "host": {
       "type": "string",
       "env": "CIRIS_A2A_HOST",
       "default": "0.0.0.0",
-      "description": "Host to bind the A2A server to"
+      "description": "Host to bind the A2A server to",
+      "required": false
     },
     "port": {
       "type": "integer",
       "env": "CIRIS_A2A_PORT",
       "default": 8100,
-      "description": "Port for the A2A server"
+      "description": "Port for the A2A server",
+      "required": false
     },
     "timeout": {
       "type": "integer",
       "env": "CIRIS_A2A_TIMEOUT",
       "default": 60,
-      "description": "Timeout for pipeline processing in seconds"
+      "description": "Timeout for pipeline processing in seconds",
+      "required": false
     }
   },
   "dependencies": {
     "protocols": [
-      "ciris_engine.protocols.services.CommunicationService"
+      "ciris_engine.protocols.services.CommunicationService",
+      "ciris_engine.protocols.adapters.configurable.ConfigurableAdapterProtocol"
     ],
     "schemas": [
       "ciris_engine.schemas.runtime.messages"
@@ -52,7 +112,8 @@
   },
   "exports": {
     "adapter": "a2a.adapter.A2AAdapter",
-    "service": "a2a.services.A2AService"
+    "service": "a2a.services.A2AService",
+    "configurable": "a2a.configurable.A2AConfigurableAdapter"
   },
   "metadata": {
     "benchmark": true,

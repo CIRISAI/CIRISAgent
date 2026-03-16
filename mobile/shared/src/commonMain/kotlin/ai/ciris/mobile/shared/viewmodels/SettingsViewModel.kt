@@ -1,6 +1,8 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.ui.theme.BrightnessPreference
+import ai.ciris.mobile.shared.ui.theme.ColorTheme
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.api.LlmConfigData
 import ai.ciris.mobile.shared.platform.AppRestarter
@@ -89,6 +91,18 @@ class SettingsViewModel(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    // Live background setting (persisted)
+    private val _liveBackgroundEnabled = MutableStateFlow(true)  // Default enabled
+    val liveBackgroundEnabled: StateFlow<Boolean> = _liveBackgroundEnabled.asStateFlow()
+
+    // Color theme setting (persisted) - Vapor (pink/cyan/plum) is default
+    private val _colorTheme = MutableStateFlow(ColorTheme.DEFAULT)
+    val colorTheme: StateFlow<ColorTheme> = _colorTheme.asStateFlow()
+
+    // Brightness preference (persisted) - System is default
+    private val _brightnessPreference = MutableStateFlow(BrightnessPreference.SYSTEM)
+    val brightnessPreference: StateFlow<BrightnessPreference> = _brightnessPreference.asStateFlow()
+
     // Available LLM providers for BYOK mode
     val availableProviders = listOf(
         "openai" to "OpenAI",
@@ -124,6 +138,49 @@ class SettingsViewModel(
         // Don't auto-load here - wait for refresh() to be called when screen is shown
         // This avoids making API calls before authentication is complete
         logDebug("init", "SettingsViewModel created, waiting for refresh() call")
+
+        // Load persisted display settings immediately (no auth needed)
+        loadDisplaySettings()
+    }
+
+    /**
+     * Load display-related settings that don't require authentication.
+     */
+    private fun loadDisplaySettings() {
+        viewModelScope.launch {
+            try {
+                logInfo("loadDisplaySettings", ">>> Loading live_background_enabled from secure storage...")
+                secureStorage.get("live_background_enabled").onSuccess { value ->
+                    // Default to true if not set
+                    val newValue = value?.toBooleanStrictOrNull() ?: true
+                    logInfo("loadDisplaySettings", ">>> Raw value='$value', parsed=$newValue")
+                    _liveBackgroundEnabled.value = newValue
+                    logInfo("loadDisplaySettings", ">>> Live background state set to: ${_liveBackgroundEnabled.value}")
+                }.onFailure { error ->
+                    logWarn("loadDisplaySettings", ">>> Storage get failed: ${error.message}, defaulting to true")
+                    _liveBackgroundEnabled.value = true
+                }
+
+                // Load color theme
+                secureStorage.get("color_theme").onSuccess { value ->
+                    _colorTheme.value = ColorTheme.fromString(value)
+                    logInfo("loadDisplaySettings", ">>> Color theme loaded: ${_colorTheme.value}")
+                }.onFailure {
+                    _colorTheme.value = ColorTheme.DEFAULT
+                }
+
+                // Load brightness preference
+                secureStorage.get("brightness_preference").onSuccess { value ->
+                    _brightnessPreference.value = BrightnessPreference.fromString(value)
+                    logInfo("loadDisplaySettings", ">>> Brightness preference loaded: ${_brightnessPreference.value}")
+                }.onFailure {
+                    _brightnessPreference.value = BrightnessPreference.SYSTEM
+                }
+            } catch (e: Exception) {
+                logWarn("loadDisplaySettings", ">>> Exception loading display settings: ${e.message}, defaulting to true")
+                _liveBackgroundEnabled.value = true
+            }
+        }
     }
 
     /**
@@ -559,5 +616,67 @@ class SettingsViewModel(
      */
     fun getProviderDisplayName(provider: String): String {
         return availableProviders.find { it.first == provider }?.second ?: provider
+    }
+
+    // ========== Display Settings ==========
+
+    /**
+     * Toggle live background on/off.
+     * Persists to secure storage immediately.
+     */
+    fun toggleLiveBackground(enabled: Boolean) {
+        val method = "toggleLiveBackground"
+        logInfo(method, "Setting live background to: $enabled")
+
+        _liveBackgroundEnabled.value = enabled
+
+        viewModelScope.launch {
+            try {
+                secureStorage.save("live_background_enabled", enabled.toString()).getOrThrow()
+                logDebug(method, "Live background setting persisted")
+            } catch (e: Exception) {
+                logWarn(method, "Failed to persist live background setting: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Set color theme.
+     * Persists to secure storage immediately.
+     */
+    fun setColorTheme(theme: ColorTheme) {
+        val method = "setColorTheme"
+        logInfo(method, "Setting color theme to: $theme")
+
+        _colorTheme.value = theme
+
+        viewModelScope.launch {
+            try {
+                secureStorage.save("color_theme", theme.name).getOrThrow()
+                logDebug(method, "Color theme setting persisted")
+            } catch (e: Exception) {
+                logWarn(method, "Failed to persist color theme setting: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Set brightness preference (Dark, Light, or System).
+     * Persists to secure storage immediately.
+     */
+    fun setBrightnessPreference(brightness: BrightnessPreference) {
+        val method = "setBrightnessPreference"
+        logInfo(method, "Setting brightness preference to: $brightness")
+
+        _brightnessPreference.value = brightness
+
+        viewModelScope.launch {
+            try {
+                secureStorage.save("brightness_preference", brightness.name).getOrThrow()
+                logDebug(method, "Brightness preference setting persisted")
+            } catch (e: Exception) {
+                logWarn(method, "Failed to persist brightness preference: ${e.message}")
+            }
+        }
     }
 }

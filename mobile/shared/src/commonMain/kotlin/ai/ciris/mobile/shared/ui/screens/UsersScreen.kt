@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -460,8 +461,8 @@ private fun UserListItem(
                     .size(12.dp)
                     .clip(CircleShape)
                     .background(
-                        if (user.isActive == true) Color(0xFF10B981)
-                        else Color(0xFFEF4444)
+                        if (user.isActive == true) SemanticColors.Default.success
+                        else SemanticColors.Default.error
                     )
             )
         }
@@ -782,28 +783,28 @@ private fun hasActiveFilters(filter: UsersFilter): Boolean {
 
 private fun getAuthTypeColor(authType: String): Color {
     return when (authType) {
-        "oauth" -> Color(0xFF3B82F6) // Blue
-        "password" -> Color(0xFF10B981) // Green
-        "api_key" -> Color(0xFFF59E0B) // Amber
-        else -> Color(0xFF6B7280) // Gray
+        "oauth" -> SemanticColors.Default.info // Blue
+        "password" -> SemanticColors.Default.success // Green
+        "api_key" -> SemanticColors.Default.warning // Amber
+        else -> SemanticColors.Default.inactive // Gray
     }
 }
 
 private fun getApiRoleColor(role: APIRole): Color {
     return when (role) {
-        APIRole.SYSTEM_ADMIN -> Color(0xFFEF4444) // Red
-        APIRole.AUTHORITY -> Color(0xFF8B5CF6) // Purple
-        APIRole.ADMIN -> Color(0xFFF59E0B) // Amber
-        APIRole.OBSERVER -> Color(0xFF10B981) // Green
-        APIRole.SERVICE_ACCOUNT -> Color(0xFF6B7280) // Gray
+        APIRole.SYSTEM_ADMIN -> SemanticColors.Default.error // Red
+        APIRole.AUTHORITY -> Color(0xFF8B5CF6) // Purple - special role color
+        APIRole.ADMIN -> SemanticColors.Default.warning // Amber
+        APIRole.OBSERVER -> SemanticColors.Default.success // Green
+        APIRole.SERVICE_ACCOUNT -> SemanticColors.Default.inactive // Gray
     }
 }
 
 private fun getWaRoleColor(role: WARole): Color {
     return when (role) {
-        WARole.ROOT -> Color(0xFFEF4444) // Red
-        WARole.AUTHORITY -> Color(0xFF8B5CF6) // Purple
-        WARole.OBSERVER -> Color(0xFF10B981) // Green
+        WARole.ROOT -> SemanticColors.Default.error // Red
+        WARole.AUTHORITY -> Color(0xFF8B5CF6) // Purple - special role color
+        WARole.OBSERVER -> SemanticColors.Default.success // Green
     }
 }
 

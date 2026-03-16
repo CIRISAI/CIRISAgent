@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 
 /**
  * View mode for memory exploration.
@@ -625,14 +626,15 @@ private fun NodeInfoRow(
 
 // Helper function
 private fun getNodeTypeColor(type: String): Color {
+    val colors = SemanticColors.Default
     return when (type.lowercase()) {
-        "concept" -> Color(0xFFF97316) // Orange
-        "observation" -> Color(0xFFEC4899) // Pink
-        "identity" -> Color(0xFF6366F1) // Indigo
-        "config" -> Color(0xFFF59E0B) // Amber
-        "tsdb_data" -> Color(0xFF06B6D4) // Cyan
-        "audit_entry" -> Color(0xFF6B7280) // Gray
-        else -> Color(0xFF6B7280) // Gray
+        "concept" -> colors.warning // Orange-like
+        "observation" -> colors.accentSecondary // From theme
+        "identity" -> colors.accent // From theme primary
+        "config" -> colors.warning // Amber
+        "tsdb_data" -> colors.info // Cyan-like
+        "audit_entry" -> colors.inactive // Gray
+        else -> colors.inactive // Gray
     }
 }
 

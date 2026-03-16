@@ -83,7 +83,7 @@ CIRISVerify is a Rust FFI library providing cryptographic attestation of agent i
 
 ### Three Components
 
-1. **Identity** — An Ed25519 signing key stored in secure hardware (TPM, Secure Enclave, Android Keystore). Hardware-backed keys cannot be forged or transferred. Software-only environments receive community-tier restrictions.
+1. **Identity** — An Ed25519 signing key stored in secure hardware (TPM, Secure Enclave, Android Keystore). Keys are auto-generated at first launch. Hardware-backed keys cannot be forged or transferred. Software-only environments receive community-tier restrictions. Users can purchase a registered key by re-running the setup wizard from LLM Settings, upgrading from ephemeral to portal-active status.
 
 2. **Integrity** — Build manifests containing SHA-256 hashes of all distributed files (900+ per build). Runtime validation checks files against these hashes. Any modification is detected. Full verification runs at startup; spot checks run during operation.
 
@@ -159,6 +159,24 @@ The agent sees its own attestation level during every decision. A low level does
 ### Platform Support
 
 Linux (x86_64, ARM64), macOS (Apple Silicon, Intel), Windows (x86_64), Android (ARM64, ARM32, x86_64), iOS (ARM64). Python bindings available via PyPI for Python 3.10-3.13.
+
+---
+
+## App Interface (Mobile & Desktop)
+
+The CIRIS client app provides a cross-platform interface running on Android, iOS, Windows, macOS, and Linux.
+
+### Memory Visualization
+
+The app features a live animated background showing the agent's memory graph as a 3D cylinder. Each horizontal slice represents a consolidation period (from DREAM state processing). Nodes are memory entries; edges show relationships. The cylinder rotates and can be explored interactively via the Memory Graph screen with filtering by time range, node type, and scope.
+
+### Key Screens
+
+- **Chat**: Primary interaction with the agent via the H3ERE pipeline
+- **Memory Graph**: Interactive 3D cylinder visualization of agent memory with filtering
+- **Trust Page**: Live attestation status across all 5 verification levels with diagnostic detail
+- **Settings**: LLM configuration (CIRIS Proxy vs BYOK), setup wizard re-run, identity management
+- **Transparency Feed**: Public statistics about agent operation
 
 ---
 
@@ -445,7 +463,7 @@ Each instance processes only its own tasks but contributes to shared memory and 
 - `GET /v1/telemetry/otlp/metrics` — OpenTelemetry export
 
 ### Transparency & Privacy
-- `GET /v1/transparency/feed` — Public statistics (no auth required)
+- `GET /v1/transparency/feed` — Public statistics
 - `POST /v1/dsr` — Data Subject Access Requests
 - `GET /v1/consent/status` — User consent status
 - `POST /v1/consent/partnership/request` — Partnership requests

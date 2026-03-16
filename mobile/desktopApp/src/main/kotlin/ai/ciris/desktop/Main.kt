@@ -23,6 +23,14 @@ fun main() {
     // Set macOS application name (menu bar + dock)
     System.setProperty("apple.awt.application.name", "CIRIS Agent")
 
+    // Create the runtime early so we can shut it down on exit
+    val pythonRuntime = createPythonRuntime()
+
+    // Register JVM shutdown hook to kill server process if we launched one
+    Runtime.getRuntime().addShutdownHook(Thread {
+        pythonRuntime.shutdown()
+    })
+
     application {
     val windowState = rememberWindowState(width = 1200.dp, height = 800.dp)
 
@@ -49,6 +57,7 @@ fun main() {
     Window(
         onCloseRequest = {
             testServer?.stop()
+            pythonRuntime.shutdown()
             exitApplication()
         },
         title = "CIRIS Agent",
@@ -81,7 +90,7 @@ fun main() {
                 CIRISApp(
                     accessToken = accessToken,
                     baseUrl = System.getenv("CIRIS_API_URL") ?: "http://localhost:8080",
-                    pythonRuntime = createPythonRuntime(),
+                    pythonRuntime = pythonRuntime,
                     secureStorage = createSecureStorage(),
                     envFileUpdater = createEnvFileUpdater(),
                     googleSignInCallback = null,  // Not supported on desktop

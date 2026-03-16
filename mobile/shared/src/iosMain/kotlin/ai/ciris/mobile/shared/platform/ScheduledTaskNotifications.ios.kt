@@ -1,9 +1,7 @@
 package ai.ciris.mobile.shared.platform
 
-import kotlinx.cinterop.*
 import platform.Foundation.*
 import platform.UserNotifications.*
-import platform.EventKit.*
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -12,13 +10,18 @@ import kotlin.coroutines.resume
  * - UNUserNotificationCenter for notifications
  * - EventKit for calendar events
  *
- * TODO: Test this implementation on actual iOS device/simulator
+ * NOTE: EventKit calendar event creation/deletion requires EKEntityTypeEvent,
+ * EKSpanThisEvent, and EKRecurrenceFrequency* constants which do not resolve
+ * in Kotlin/Native cinterop as of KMP 2.1.20. The prior implementation on main
+ * also failed to compile for this reason. Calendar methods return graceful errors
+ * until cinterop bindings are fixed. Notification scheduling works fully.
+ *
+ * Tracked: EventKit cinterop fix needed for addCalendarEvent/removeCalendarEvent
  */
-@OptIn(ExperimentalForeignApi::class)
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 actual object ScheduledTaskNotifications {
 
     private val notificationCenter = UNUserNotificationCenter.currentNotificationCenter()
-    private val eventStore = EKEventStore()
     private val taskIdToNotificationId = mutableMapOf<String, String>()
     private val taskIdToEventId = mutableMapOf<String, String>()
 
@@ -42,17 +45,15 @@ actual object ScheduledTaskNotifications {
         return hasPermission
     }
 
-    actual suspend fun requestCalendarPermission(): Boolean = suspendCancellableCoroutine { cont ->
-        eventStore.requestAccessToEntityType(EKEntityTypeEvent) { granted, error ->
-            if (error != null) {
-                PlatformLogger.e("ScheduledTaskNotifications", "Calendar permission error: ${error?.localizedDescription}")
-            }
-            cont.resume(granted)
-        }
+    actual suspend fun requestCalendarPermission(): Boolean {
+        // TODO: Implement with EventKit once cinterop bindings are fixed
+        PlatformLogger.w("ScheduledTaskNotifications", "Calendar permission not yet implemented on iOS")
+        return false
     }
 
     actual fun hasCalendarPermission(): Boolean {
-        return EKEventStore.authorizationStatusForEntityType(EKEntityTypeEvent) == EKAuthorizationStatusAuthorized
+        // TODO: Implement with EventKit once cinterop bindings are fixed
+        return false
     }
 
     actual suspend fun scheduleNotification(notification: TaskNotification): ScheduleResult {
@@ -185,155 +186,17 @@ actual object ScheduledTaskNotifications {
         notification: TaskNotification,
         reminderMinutes: Int
     ): ScheduleResult {
-        return try {
-            if (!hasCalendarPermission()) {
-                val granted = requestCalendarPermission()
-                if (!granted) {
-                    return ScheduleResult(success = false, error = "Calendar permission denied")
-                }
-            }
-
-            val calendar = eventStore.defaultCalendarForNewEvents
-            if (calendar == null) {
-                return ScheduleResult(success = false, error = "No default calendar available")
-            }
-
-            val event = EKEvent.eventWithEventStore(eventStore).apply {
-                setTitle("CIRIS: ${notification.title}")
-                setNotes(notification.description)
-                setCalendar(calendar)
-
-                val startDate = NSDate.dateWithTimeIntervalSince1970(
-                    notification.triggerTimeMillis / 1000.0
-                )
-                setStartDate(startDate)
-                setEndDate(NSDate.dateWithTimeIntervalSince1970(
-                    (notification.triggerTimeMillis + 3600000) / 1000.0 // 1 hour later
-                ))
-
-                // Add recurrence rule if recurring
-                notification.cronExpression?.let { cron ->
-                    createRecurrenceRule(cron)?.let { rule ->
-                        setRecurrenceRules(listOf(rule))
-                    }
-                }
-
-                // Add alarm/reminder
-                if (reminderMinutes > 0) {
-                    val alarm = EKAlarm.alarmWithRelativeOffset((-reminderMinutes * 60).toDouble())
-                    setAlarms(listOf(alarm))
-                }
-            }
-
-            var saveError: NSError? = null
-            val success = eventStore.saveEvent(event, EKSpanThisEvent, saveError.ptr)
-
-            if (success && saveError == null) {
-                val eventId = event.eventIdentifier
-                taskIdToEventId[notification.taskId] = eventId
-                PlatformLogger.i("ScheduledTaskNotifications", "Created calendar event: $eventId")
-                ScheduleResult(success = true, calendarEventId = eventId.hashCode().toLong())
-            } else {
-                ScheduleResult(success = false, error = saveError?.localizedDescription ?: "Failed to save event")
-            }
-
-        } catch (e: Exception) {
-            PlatformLogger.e("ScheduledTaskNotifications", "Exception adding calendar event: ${e.message}")
-            ScheduleResult(success = false, error = e.message)
-        }
-    }
-
-    private fun createRecurrenceRule(cron: String): EKRecurrenceRule? {
-        val parts = cron.split(" ")
-        if (parts.size < 5) return null
-
-        val minute = parts[0]
-        val hour = parts[1]
-        val dayOfMonth = parts[2]
-        val month = parts[3]
-        val dayOfWeek = parts[4]
-
-        return when {
-            // Daily
-            dayOfMonth == "*" && month == "*" && dayOfWeek == "*" ->
-                EKRecurrenceRule(
-                    EKRecurrenceFrequencyDaily,
-                    interval = 1,
-                    end = null
-                )
-
-            // Weekly on specific day
-            dayOfWeek != "*" && dayOfMonth == "*" -> {
-                val dow = dayOfWeek.toIntOrNull() ?: return null
-                // EKWeekday: 1=Sunday, 2=Monday... Cron: 0/7=Sunday, 1=Monday
-                val ekDay = if (dow == 0 || dow == 7) EKWeekdaySunday else (dow + 1).toLong()
-                val weekday = EKRecurrenceDayOfWeek.dayOfWeek(ekDay)
-                EKRecurrenceRule(
-                    EKRecurrenceFrequencyWeekly,
-                    interval = 1,
-                    daysOfTheWeek = listOf(weekday),
-                    daysOfTheMonth = null,
-                    monthsOfTheYear = null,
-                    weeksOfTheYear = null,
-                    daysOfTheYear = null,
-                    setPositions = null,
-                    end = null
-                )
-            }
-
-            // Monthly on specific day
-            dayOfMonth != "*" && month == "*" -> {
-                val day = dayOfMonth.toIntOrNull() ?: return null
-                EKRecurrenceRule(
-                    EKRecurrenceFrequencyMonthly,
-                    interval = 1,
-                    daysOfTheWeek = null,
-                    daysOfTheMonth = listOf(day),
-                    monthsOfTheYear = null,
-                    weeksOfTheYear = null,
-                    daysOfTheYear = null,
-                    setPositions = null,
-                    end = null
-                )
-            }
-
-            // Hourly
-            minute == "0" && hour.startsWith("*/") -> {
-                val interval = hour.removePrefix("*/").toIntOrNull() ?: return null
-                EKRecurrenceRule(
-                    EKRecurrenceFrequencyHourly,
-                    interval = interval,
-                    end = null
-                )
-            }
-
-            else -> null
-        }
+        // TODO: Implement with EventKit once cinterop bindings are fixed
+        // EventKit constants (EKEntityTypeEvent, EKSpanThisEvent, EKRecurrenceFrequency*)
+        // are not resolving properly in Kotlin/Native cinterop
+        PlatformLogger.w("ScheduledTaskNotifications", "Calendar events not yet implemented on iOS (EventKit cinterop pending)")
+        return ScheduleResult(success = false, error = "Calendar integration not yet available on iOS")
     }
 
     actual suspend fun removeCalendarEvent(calendarEventId: Long): Boolean {
-        return try {
-            // Find event by searching through known events
-            val eventIdentifier = taskIdToEventId.values.find {
-                it.hashCode().toLong() == calendarEventId
-            }
-
-            if (eventIdentifier != null) {
-                val event = eventStore.eventWithIdentifier(eventIdentifier)
-                if (event != null) {
-                    var error: NSError? = null
-                    val success = eventStore.removeEvent(event, EKSpanThisEvent, error.ptr)
-                    if (success) {
-                        taskIdToEventId.entries.removeAll { it.value == eventIdentifier }
-                    }
-                    return success
-                }
-            }
-            false
-        } catch (e: Exception) {
-            PlatformLogger.e("ScheduledTaskNotifications", "Exception removing calendar event: ${e.message}")
-            false
-        }
+        // TODO: Implement with EventKit once cinterop bindings are fixed
+        PlatformLogger.w("ScheduledTaskNotifications", "Calendar event removal not yet implemented on iOS")
+        return false
     }
 
     actual suspend fun scheduleBackgroundWork(notification: TaskNotification): ScheduleResult {

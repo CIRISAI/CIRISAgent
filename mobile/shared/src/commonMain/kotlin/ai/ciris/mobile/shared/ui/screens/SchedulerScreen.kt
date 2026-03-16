@@ -591,12 +591,10 @@ private fun CreateTaskDialog(
                     val deferUntilValue = if (!isRecurring && deferHours.isNotEmpty()) {
                         // Calculate ISO timestamp for N hours from now
                         val hours = deferHours.toIntOrNull() ?: 1
-                        val currentTimeMs = System.currentTimeMillis()
+                        val currentTimeMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                         val futureTimeMs = currentTimeMs + (hours * 60 * 60 * 1000L)
-                        // Simple ISO format
-                        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply {
-                            timeZone = java.util.TimeZone.getTimeZone("UTC")
-                        }.format(java.util.Date(futureTimeMs))
+                        // Convert to ISO format via kotlinx.datetime.Instant
+                        kotlinx.datetime.Instant.fromEpochMilliseconds(futureTimeMs).toString()
                     } else null
 
                     val cronValue = if (isRecurring && scheduleCron.isNotBlank()) scheduleCron else null

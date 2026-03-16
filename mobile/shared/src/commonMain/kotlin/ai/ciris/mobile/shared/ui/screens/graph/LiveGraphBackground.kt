@@ -97,7 +97,7 @@ fun LiveGraphBackground(
         if (spinEnergy >= spinEnergyThreshold && !isSpinningApart) {
             PlatformLogger.i(TAG, ">>> SPIN APART TRIGGERED! energy=$spinEnergy threshold=$spinEnergyThreshold")
             isSpinningApart = true
-            spinApartStartTime = System.currentTimeMillis()
+            spinApartStartTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
             onSpinApartTriggered()
         }
     }
@@ -107,7 +107,7 @@ fun LiveGraphBackground(
         if (isSpinningApart) {
             while (isActive && isSpinningApart) {
                 delay(16)  // ~60 FPS
-                val elapsed = System.currentTimeMillis() - spinApartStartTime
+                val elapsed = kotlinx.datetime.Clock.System.now().toEpochMilliseconds() - spinApartStartTime
                 spinApartProgress = (elapsed.toFloat() / SPIN_APART_DURATION_MS).coerceIn(0f, 1f)
 
                 if (spinApartProgress >= 1f) {
@@ -162,7 +162,7 @@ fun LiveGraphBackground(
     // Event-triggered refresh with debouncing
     LaunchedEffect(eventTrigger) {
         if (eventTrigger > 0) {
-            val now = System.currentTimeMillis()
+            val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
             val timeSinceLastRefresh = now - lastRefreshTime
 
             if (timeSinceLastRefresh < MIN_REFRESH_INTERVAL_MS) {
@@ -175,7 +175,7 @@ fun LiveGraphBackground(
             }
 
             pendingRefresh = false
-            lastRefreshTime = System.currentTimeMillis()
+            lastRefreshTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
         }
     }
 
@@ -198,7 +198,7 @@ fun LiveGraphBackground(
                 includeMetrics = false  // Exclude telemetry
             )
 
-            val currentTime = System.currentTimeMillis()
+            val currentTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
             val newNodeIds = graphData.nodes.map { it.id }.toSet()
             val previousIds = knownNodeIds
 
@@ -303,7 +303,7 @@ fun LiveGraphBackground(
                 }
 
                 // Draw nodes sorted by depth (furthest first)
-                val currentTimeMs = System.currentTimeMillis()
+                val currentTimeMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                 projectedNodes.sortedByDescending { it.depth }.forEach { projected ->
                     // Calculate birth animation progress (0 = just born, 1 = mature)
                     val birthProgress = if (projected.birthTimeMs > 0) {
@@ -376,7 +376,7 @@ private fun projectNode(
     totalNodes: Int = 1
 ): ProjectedNode {
     // Apply Y rotation (horizontal spin)
-    val rotatedTheta = node.theta + Math.toRadians(rotationY.toDouble()).toFloat()
+    val rotatedTheta = node.theta + (rotationY.toDouble() * PI / 180.0).toFloat()
 
     // 3D position on cylinder
     var x3d = cos(rotatedTheta) * cylinderRadius
@@ -409,7 +409,7 @@ private fun projectNode(
     }
 
     // Apply X rotation (tilt)
-    val rotX = Math.toRadians(rotationX.toDouble())
+    val rotX = rotationX.toDouble() * PI / 180.0
     val y3dRotated = (y3d * cos(rotX) - z3d * sin(rotX)).toFloat()
     val z3dRotated = (y3d * sin(rotX) + z3d * cos(rotX)).toFloat()
 

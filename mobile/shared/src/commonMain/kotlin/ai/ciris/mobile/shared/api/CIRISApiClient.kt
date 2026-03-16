@@ -3341,13 +3341,13 @@ class CIRISApiClient(
             includeMetrics: Boolean = false  // Exclude telemetry by default for performance
         ): GraphDataResponse {
             val method = "getGraphData"
-            val totalStart = System.currentTimeMillis()
+            val totalStart = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
             logInfo(method, ">>> START: hours=$hours, scope=${scope ?: "ALL_SCOPES"}, type=$nodeType, limit=$limit")
 
             return try {
                 // Single API call - timeline now includes edges!
                 // Note: include_metrics=true to get all nodes including telemetry
-                val timelineStart = System.currentTimeMillis()
+                val timelineStart = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                 val timelineUrl = buildString {
                     append("$baseUrl/v1/memory/timeline?hours=$hours&include_edges=true&include_metrics=$includeMetrics")
                     scope?.let { append("&scope=$it") }
@@ -3364,7 +3364,7 @@ class CIRISApiClient(
                     }
                 }
                 client.close()
-                val timelineMs = System.currentTimeMillis() - timelineStart
+                val timelineMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds() - timelineStart
 
                 if (!timelineResponse.status.isSuccess()) {
                     logError(method, "API returned non-success status: ${timelineResponse.status}")
@@ -3384,7 +3384,7 @@ class CIRISApiClient(
                     nodeIds.contains(edge.source) && nodeIds.contains(edge.target)
                 }
 
-                val totalMs = System.currentTimeMillis() - totalStart
+                val totalMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds() - totalStart
                 logInfo(method, "<<< DONE in ${totalMs}ms (single API call)")
                 logInfo(method, "    Nodes: ${nodes.size} (${nodes.groupBy { it.scope }.mapValues { it.value.size }})")
                 logInfo(method, "    Edges: ${edges.size} total, ${visibleEdges.size} visible")

@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
+import kotlinx.datetime.toLocalDateTime
 
 /**
  * Options for local notifications/calendar when creating tasks.
@@ -249,11 +250,11 @@ class SchedulerViewModel(
                             Instant.parse(deferUntil).toEpochMilliseconds()
                         } catch (e: Exception) {
                             logError(method, "Failed to parse deferUntil: $deferUntil")
-                            System.currentTimeMillis() + 3600000 // Default 1 hour
+                            kotlinx.datetime.Clock.System.now().toEpochMilliseconds() + 3600000 // Default 1 hour
                         }
                     }
                     scheduleCron != null -> calculateNextCronTrigger(scheduleCron)
-                    else -> System.currentTimeMillis() + 3600000 // Default 1 hour
+                    else -> kotlinx.datetime.Clock.System.now().toEpochMilliseconds() + 3600000 // Default 1 hour
                 }
 
                 val taskNotification = TaskNotification(
@@ -323,26 +324,32 @@ class SchedulerViewModel(
      */
     private fun calculateNextCronTrigger(cron: String): Long {
         val parts = cron.split(" ")
-        if (parts.size < 5) return System.currentTimeMillis() + 3600000
+        val nowMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+        if (parts.size < 5) return nowMs + 3600000
 
         val minute = parts[0].toIntOrNull() ?: 0
         val hour = parts[1].toIntOrNull() ?: 9
 
         // Calculate next occurrence (simplified - daily at specified time)
-        val now = System.currentTimeMillis()
-        val calendar = java.util.Calendar.getInstance()
-        calendar.timeInMillis = now
-        calendar.set(java.util.Calendar.HOUR_OF_DAY, hour)
-        calendar.set(java.util.Calendar.MINUTE, minute)
-        calendar.set(java.util.Calendar.SECOND, 0)
-        calendar.set(java.util.Calendar.MILLISECOND, 0)
+        // Use kotlinx.datetime to get current local time, then compute offset
+        val now = kotlinx.datetime.Clock.System.now()
+        val tz = kotlinx.datetime.TimeZone.currentSystemDefault()
+        val localNow = now.toLocalDateTime(tz)
+        val currentHour = localNow.hour
+        val currentMinute = localNow.minute
 
-        // If time already passed today, schedule for tomorrow
-        if (calendar.timeInMillis <= now) {
-            calendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        // Calculate milliseconds until target time today
+        val targetMinutesFromMidnight = hour * 60L + minute
+        val currentMinutesFromMidnight = currentHour * 60L + currentMinute
+        val diffMinutes = targetMinutesFromMidnight - currentMinutesFromMidnight
+
+        return if (diffMinutes > 0) {
+            // Target is later today
+            nowMs + (diffMinutes * 60 * 1000)
+        } else {
+            // Target already passed today, schedule for tomorrow
+            nowMs + ((diffMinutes + 24 * 60) * 60 * 1000)
         }
-
-        return calendar.timeInMillis
     }
 
     /**

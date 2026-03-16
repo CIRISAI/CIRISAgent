@@ -71,7 +71,7 @@ fun CylinderCanvas(
         LaunchedEffect(state.dataVersion, canvasWidth, canvasHeight) {
             if (state.nodes.isNotEmpty() && canvasWidth > 0 && canvasHeight > 0) {
                 layoutComplete = false
-                val layoutStart = System.currentTimeMillis()
+                val layoutStart = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                 PlatformLogger.d(TAG, ">>> Layout START: ${state.nodes.size} nodes, ${state.edges.size} edges")
 
                 cylinderLayout.applyLayout(
@@ -81,7 +81,7 @@ fun CylinderCanvas(
                     groupByType = groupByType
                 )
 
-                val layoutTime = System.currentTimeMillis() - layoutStart
+                val layoutTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds() - layoutStart
                 PlatformLogger.d(TAG, "<<< Layout DONE in ${layoutTime}ms: ${cylinderLayout.timeRings.size} rings created")
                 cylinderLayout.timeRings.forEach { ring ->
                     PlatformLogger.d(TAG, "  Ring: ${ring.label} @ x=${ring.xPosition.toInt()}, ${ring.nodeCount} nodes")
@@ -162,7 +162,7 @@ private fun CylinderCanvasContent(
 
                     // Auto-rotate if enabled and idle
                     if (autoRotate) {
-                        val now = System.currentTimeMillis()
+                        val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                         if (now - lastInteractionTime > autoRotationDelay) {
                             rotation += CylinderLayout.AUTO_ROTATION_SPEED
                         }
@@ -204,11 +204,11 @@ private fun CylinderCanvasContent(
                     },
                     onDragEnd = {
                         isDragging = false
-                        lastInteractionTime = System.currentTimeMillis()
+                        lastInteractionTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                     },
                     onDragCancel = {
                         isDragging = false
-                        lastInteractionTime = System.currentTimeMillis()
+                        lastInteractionTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
@@ -228,7 +228,7 @@ private fun CylinderCanvasContent(
             }
             .pointerInput(state.nodes) {
                 detectTapGestures { offset ->
-                    lastInteractionTime = System.currentTimeMillis()
+                    lastInteractionTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
 
                     // Find node at tap position
                     val hitNode = findNodeAtPosition3D(

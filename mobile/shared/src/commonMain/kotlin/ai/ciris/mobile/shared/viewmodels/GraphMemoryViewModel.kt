@@ -74,7 +74,7 @@ class GraphMemoryViewModel(
      * Load graph data from API.
      */
     fun loadGraphData() {
-        val requestStart = System.currentTimeMillis()
+        val requestStart = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
         PlatformLogger.d(TAG, ">>> API REQUEST START: hours=${_filter.value.hours}, scope=${_filter.value.scope}")
 
         viewModelScope.launch {
@@ -91,7 +91,7 @@ class GraphMemoryViewModel(
                     includeMetrics = _filter.value.includeTelemetry  // Toggle telemetry nodes
                 )
 
-                val requestTime = System.currentTimeMillis() - requestStart
+                val requestTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds() - requestStart
                 PlatformLogger.d(TAG, "<<< API REQUEST DONE in ${requestTime}ms: ${graphData.nodes.size} nodes, ${graphData.edges.size} edges")
                 if (graphData.edges.isEmpty()) {
                     PlatformLogger.d(TAG, "WARNING: No edges returned from API!")

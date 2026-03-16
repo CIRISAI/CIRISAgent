@@ -139,7 +139,7 @@ data class GraphDisplayState(
 data class GraphFilter(
     val scope: GraphScope = GraphScope.LOCAL,
     val nodeTypes: Set<NodeType> = emptySet(),
-    val hours: Int = 24,
+    val hours: Int = 168,  // 1 week default
     val searchQuery: String = "",
     val includeTelemetry: Boolean = false  // Exclude tsdb_data by default for performance
 )

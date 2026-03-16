@@ -8,9 +8,15 @@ import kotlin.coroutines.resume
 /**
  * iOS implementation of scheduled task notifications using:
  * - UNUserNotificationCenter for notifications
- * - EventKit for calendar events (stubbed - requires EventKit cinterop fixes)
+ * - EventKit for calendar events
  *
- * TODO: Fix EventKit cinterop bindings for calendar integration
+ * NOTE: EventKit calendar event creation/deletion requires EKEntityTypeEvent,
+ * EKSpanThisEvent, and EKRecurrenceFrequency* constants which do not resolve
+ * in Kotlin/Native cinterop as of KMP 2.1.20. The prior implementation on main
+ * also failed to compile for this reason. Calendar methods return graceful errors
+ * until cinterop bindings are fixed. Notification scheduling works fully.
+ *
+ * Tracked: EventKit cinterop fix needed for addCalendarEvent/removeCalendarEvent
  */
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 actual object ScheduledTaskNotifications {

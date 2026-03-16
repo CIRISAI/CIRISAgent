@@ -119,11 +119,18 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
     }
 
     private fun findExecutable(name: String): String? {
-        // Check PATH
+        val isWindows = System.getProperty("os.name", "").lowercase().contains("win")
+        val candidates = if (isWindows && !name.contains('.')) {
+            listOf("$name.exe", "$name.cmd", "$name.bat", name)
+        } else {
+            listOf(name)
+        }
         val pathDirs = System.getenv("PATH")?.split(java.io.File.pathSeparator) ?: emptyList()
         for (dir in pathDirs) {
-            val f = java.io.File(dir, name)
-            if (f.exists() && f.canExecute()) return f.absolutePath
+            for (candidate in candidates) {
+                val f = java.io.File(dir, candidate)
+                if (f.exists() && f.canExecute()) return f.absolutePath
+            }
         }
         return null
     }

@@ -566,9 +566,23 @@ def extract_audit_parameters(
         params["error"] = str(error)
         params["error_type"] = type(error).__name__
 
-    # Extract tool-specific info for TOOL actions
-    if action_type == HandlerActionType.TOOL:
-        _extract_tool_audit_params(action_params, params)
+    # Extract action-specific parameters for audit
+    extractors = {
+        HandlerActionType.TOOL: _extract_tool_audit_params,
+        HandlerActionType.PONDER: _extract_ponder_audit_params,
+        HandlerActionType.SPEAK: _extract_speak_audit_params,
+        HandlerActionType.OBSERVE: _extract_observe_audit_params,
+        HandlerActionType.MEMORIZE: _extract_memorize_audit_params,
+        HandlerActionType.RECALL: _extract_recall_audit_params,
+        HandlerActionType.FORGET: _extract_forget_audit_params,
+        HandlerActionType.REJECT: _extract_reject_audit_params,
+        HandlerActionType.DEFER: _extract_defer_audit_params,
+        HandlerActionType.TASK_COMPLETE: _extract_task_complete_audit_params,
+    }
+
+    extractor = extractors.get(action_type)
+    if extractor:
+        extractor(action_params, params)
 
     return params
 
@@ -604,3 +618,100 @@ def _extract_tool_audit_params(action_params: Any, params: Dict[str, str]) -> No
         else:
             # Fallback for dict-like params
             params["tool_name"] = str(getattr(action_params, "name", "unknown"))
+
+
+def _extract_ponder_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract ponder questions for audit."""
+    if hasattr(action_params, "questions"):
+        questions = action_params.questions
+        if questions:
+            params["ponder_questions"] = json.dumps(questions)
+            params["question_count"] = str(len(questions))
+
+
+def _extract_speak_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract speak content for audit (truncated for privacy)."""
+    if hasattr(action_params, "content"):
+        content = action_params.content or ""
+        # Truncate long content but show length
+        if len(content) > 200:
+            params["content_preview"] = content[:200] + "..."
+            params["content_length"] = str(len(content))
+        else:
+            params["content"] = content
+
+
+def _extract_observe_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract observe parameters for audit."""
+    if hasattr(action_params, "channel_id") and action_params.channel_id:
+        params["observe_channel"] = action_params.channel_id
+    if hasattr(action_params, "active"):
+        params["observe_active"] = str(action_params.active)
+    if hasattr(action_params, "context") and action_params.context:
+        params["observe_context"] = json.dumps(action_params.context)
+
+
+def _extract_memorize_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract memorize node info for audit."""
+    if hasattr(action_params, "node"):
+        node = action_params.node
+        if hasattr(node, "id"):
+            params["node_id"] = node.id
+        if hasattr(node, "type"):
+            params["node_type"] = str(node.type.value if hasattr(node.type, "value") else node.type)
+        if hasattr(node, "scope"):
+            params["node_scope"] = str(node.scope.value if hasattr(node.scope, "value") else node.scope)
+
+
+def _extract_recall_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract recall query info for audit."""
+    if hasattr(action_params, "query") and action_params.query:
+        params["recall_query"] = action_params.query
+    if hasattr(action_params, "node_id") and action_params.node_id:
+        params["recall_node_id"] = action_params.node_id
+    if hasattr(action_params, "node_type") and action_params.node_type:
+        params["recall_node_type"] = str(action_params.node_type)
+    if hasattr(action_params, "scope") and action_params.scope:
+        params["recall_scope"] = str(action_params.scope)
+    if hasattr(action_params, "limit") and action_params.limit:
+        params["recall_limit"] = str(action_params.limit)
+
+
+def _extract_forget_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract forget node and reason for audit."""
+    if hasattr(action_params, "node"):
+        node = action_params.node
+        if hasattr(node, "id"):
+            params["forget_node_id"] = node.id
+        if hasattr(node, "type"):
+            params["forget_node_type"] = str(node.type.value if hasattr(node.type, "value") else node.type)
+    if hasattr(action_params, "reason") and action_params.reason:
+        params["forget_reason"] = action_params.reason
+
+
+def _extract_reject_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract reject reason and filter info for audit."""
+    if hasattr(action_params, "reason") and action_params.reason:
+        params["reject_reason"] = action_params.reason
+    if hasattr(action_params, "create_filter") and action_params.create_filter:
+        params["creates_filter"] = "true"
+        if hasattr(action_params, "filter_pattern") and action_params.filter_pattern:
+            params["filter_pattern"] = action_params.filter_pattern
+        if hasattr(action_params, "filter_type") and action_params.filter_type:
+            params["filter_type"] = action_params.filter_type
+
+
+def _extract_defer_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract defer reason and context for audit."""
+    if hasattr(action_params, "reason") and action_params.reason:
+        params["defer_reason"] = action_params.reason
+    if hasattr(action_params, "context") and action_params.context:
+        params["defer_context"] = json.dumps(action_params.context)
+    if hasattr(action_params, "defer_until") and action_params.defer_until:
+        params["defer_until"] = action_params.defer_until
+
+
+def _extract_task_complete_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract task completion reason for audit."""
+    if hasattr(action_params, "completion_reason") and action_params.completion_reason:
+        params["completion_reason"] = action_params.completion_reason

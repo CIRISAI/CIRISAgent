@@ -18,6 +18,15 @@ from ciris_engine.logic.infrastructure.handlers.shared_helpers import (
     MANAGED_USER_ATTRIBUTES,
     _add_consent_metadata_to_node,
     _add_default_consent_metadata,
+    _extract_defer_audit_params,
+    _extract_forget_audit_params,
+    _extract_memorize_audit_params,
+    _extract_observe_audit_params,
+    _extract_ponder_audit_params,
+    _extract_recall_audit_params,
+    _extract_reject_audit_params,
+    _extract_speak_audit_params,
+    _extract_task_complete_audit_params,
     _extract_tool_audit_params,
     build_recalled_node_info,
     check_managed_attributes,
@@ -771,6 +780,283 @@ class TestAuditParameterHelpers:
 
         assert result["tool_name"] == "custom_tool"
         assert "tool_adapter" not in result
+
+    # PONDER action tests
+    def test_extract_ponder_audit_params_with_questions(self):
+        """Test _extract_ponder_audit_params extracts questions."""
+        from ciris_engine.schemas.actions.parameters import PonderParams
+
+        ponder_params = PonderParams(questions=["What is the ethical implication?", "Is this safe?"])
+        result = extract_audit_parameters(HandlerActionType.PONDER, ponder_params)
+
+        assert "ponder_questions" in result
+        assert "What is the ethical implication?" in result["ponder_questions"]
+        assert result["question_count"] == "2"
+
+    def test_extract_ponder_audit_params_empty_questions(self):
+        """Test _extract_ponder_audit_params with empty questions."""
+        from ciris_engine.schemas.actions.parameters import PonderParams
+
+        ponder_params = PonderParams(questions=[])
+        result = extract_audit_parameters(HandlerActionType.PONDER, ponder_params)
+
+        assert "ponder_questions" not in result
+
+    def test_extract_ponder_audit_params_direct(self):
+        """Test _extract_ponder_audit_params directly."""
+        params: Dict[str, str] = {}
+        mock_action = MagicMock()
+        mock_action.questions = ["Question 1", "Question 2", "Question 3"]
+
+        _extract_ponder_audit_params(mock_action, params)
+
+        assert params["question_count"] == "3"
+        assert "Question 1" in params["ponder_questions"]
+
+    # SPEAK action tests
+    def test_extract_speak_audit_params_short_content(self):
+        """Test _extract_speak_audit_params with short content."""
+        from ciris_engine.schemas.actions.parameters import SpeakParams
+
+        speak_params = SpeakParams(content="Hello, world!")
+        result = extract_audit_parameters(HandlerActionType.SPEAK, speak_params)
+
+        assert result["content"] == "Hello, world!"
+        assert "content_length" not in result
+
+    def test_extract_speak_audit_params_long_content(self):
+        """Test _extract_speak_audit_params truncates long content."""
+        from ciris_engine.schemas.actions.parameters import SpeakParams
+
+        long_content = "A" * 500
+        speak_params = SpeakParams(content=long_content)
+        result = extract_audit_parameters(HandlerActionType.SPEAK, speak_params)
+
+        assert result["content_preview"].endswith("...")
+        assert len(result["content_preview"]) == 203  # 200 + "..."
+        assert result["content_length"] == "500"
+
+    def test_extract_speak_audit_params_direct(self):
+        """Test _extract_speak_audit_params directly."""
+        params: Dict[str, str] = {}
+        mock_action = MagicMock()
+        mock_action.content = "Test message"
+
+        _extract_speak_audit_params(mock_action, params)
+
+        assert params["content"] == "Test message"
+
+    # OBSERVE action tests
+    def test_extract_observe_audit_params_with_channel(self):
+        """Test _extract_observe_audit_params extracts channel."""
+        from ciris_engine.schemas.actions.parameters import ObserveParams
+
+        observe_params = ObserveParams(channel_id="discord_123", active=True, context={"key": "value"})
+        result = extract_audit_parameters(HandlerActionType.OBSERVE, observe_params)
+
+        assert result["observe_channel"] == "discord_123"
+        assert result["observe_active"] == "True"
+        assert "observe_context" in result
+
+    def test_extract_observe_audit_params_direct(self):
+        """Test _extract_observe_audit_params directly."""
+        params: Dict[str, str] = {}
+        mock_action = MagicMock()
+        mock_action.channel_id = "api_456"
+        mock_action.active = False
+        mock_action.context = None
+
+        _extract_observe_audit_params(mock_action, params)
+
+        assert params["observe_channel"] == "api_456"
+        assert params["observe_active"] == "False"
+
+    # MEMORIZE action tests
+    def test_extract_memorize_audit_params_with_node(self):
+        """Test _extract_memorize_audit_params extracts node info."""
+        from ciris_engine.schemas.actions.parameters import MemorizeParams
+
+        node = GraphNode(id="user/test", type=NodeType.USER, scope=GraphScope.ENVIRONMENT, attributes={})
+        memorize_params = MemorizeParams(node=node)
+        result = extract_audit_parameters(HandlerActionType.MEMORIZE, memorize_params)
+
+        assert result["node_id"] == "user/test"
+        assert "user" in result["node_type"].lower()  # Case-insensitive check
+        assert "environment" in result["node_scope"].lower()
+
+    def test_extract_memorize_audit_params_direct(self):
+        """Test _extract_memorize_audit_params directly."""
+        params: Dict[str, str] = {}
+        mock_node = MagicMock()
+        mock_node.id = "concept/topic"
+        mock_node.type = NodeType.CONCEPT
+        mock_node.scope = GraphScope.LOCAL
+
+        mock_action = MagicMock()
+        mock_action.node = mock_node
+
+        _extract_memorize_audit_params(mock_action, params)
+
+        assert params["node_id"] == "concept/topic"
+
+    # RECALL action tests
+    def test_extract_recall_audit_params_with_query(self):
+        """Test _extract_recall_audit_params extracts query info."""
+        from ciris_engine.schemas.actions.parameters import RecallParams
+
+        recall_params = RecallParams(query="find user preferences", node_type=NodeType.USER, limit=10)
+        result = extract_audit_parameters(HandlerActionType.RECALL, recall_params)
+
+        assert result["recall_query"] == "find user preferences"
+        assert result["recall_limit"] == "10"
+
+    def test_extract_recall_audit_params_direct(self):
+        """Test _extract_recall_audit_params directly."""
+        params: Dict[str, str] = {}
+        mock_action = MagicMock()
+        mock_action.query = "search query"
+        mock_action.node_id = "specific_node"
+        mock_action.node_type = "USER"
+        mock_action.scope = "LOCAL"
+        mock_action.limit = 5
+
+        _extract_recall_audit_params(mock_action, params)
+
+        assert params["recall_query"] == "search query"
+        assert params["recall_node_id"] == "specific_node"
+        assert params["recall_limit"] == "5"
+
+    # FORGET action tests
+    def test_extract_forget_audit_params_with_reason(self):
+        """Test _extract_forget_audit_params extracts node and reason."""
+        from ciris_engine.schemas.actions.parameters import ForgetParams
+
+        node = GraphNode(id="outdated/data", type=NodeType.CONCEPT, scope=GraphScope.LOCAL, attributes={})
+        forget_params = ForgetParams(node=node, reason="Data is outdated and no longer relevant")
+        result = extract_audit_parameters(HandlerActionType.FORGET, forget_params)
+
+        assert result["forget_node_id"] == "outdated/data"
+        assert result["forget_reason"] == "Data is outdated and no longer relevant"
+
+    def test_extract_forget_audit_params_direct(self):
+        """Test _extract_forget_audit_params directly."""
+        params: Dict[str, str] = {}
+        mock_node = MagicMock()
+        mock_node.id = "node_to_forget"
+        mock_node.type = NodeType.CONCEPT
+
+        mock_action = MagicMock()
+        mock_action.node = mock_node
+        mock_action.reason = "GDPR deletion request"
+
+        _extract_forget_audit_params(mock_action, params)
+
+        assert params["forget_node_id"] == "node_to_forget"
+        assert params["forget_reason"] == "GDPR deletion request"
+
+    # REJECT action tests
+    def test_extract_reject_audit_params_with_filter(self):
+        """Test _extract_reject_audit_params extracts reject info and filter."""
+        from ciris_engine.schemas.actions.parameters import RejectParams
+
+        reject_params = RejectParams(
+            reason="Request violates safety guidelines",
+            create_filter=True,
+            filter_pattern="harmful_pattern",
+            filter_type="regex",
+        )
+        result = extract_audit_parameters(HandlerActionType.REJECT, reject_params)
+
+        assert result["reject_reason"] == "Request violates safety guidelines"
+        assert result["creates_filter"] == "true"
+        assert result["filter_pattern"] == "harmful_pattern"
+        assert result["filter_type"] == "regex"
+
+    def test_extract_reject_audit_params_without_filter(self):
+        """Test _extract_reject_audit_params without creating filter."""
+        from ciris_engine.schemas.actions.parameters import RejectParams
+
+        reject_params = RejectParams(reason="Not appropriate", create_filter=False)
+        result = extract_audit_parameters(HandlerActionType.REJECT, reject_params)
+
+        assert result["reject_reason"] == "Not appropriate"
+        assert "creates_filter" not in result
+
+    def test_extract_reject_audit_params_direct(self):
+        """Test _extract_reject_audit_params directly."""
+        params: Dict[str, str] = {}
+        mock_action = MagicMock()
+        mock_action.reason = "Safety violation"
+        mock_action.create_filter = True
+        mock_action.filter_pattern = "bad_pattern"
+        mock_action.filter_type = "exact"
+
+        _extract_reject_audit_params(mock_action, params)
+
+        assert params["reject_reason"] == "Safety violation"
+        assert params["creates_filter"] == "true"
+        assert params["filter_pattern"] == "bad_pattern"
+
+    # DEFER action tests
+    def test_extract_defer_audit_params_with_context(self):
+        """Test _extract_defer_audit_params extracts defer info."""
+        from ciris_engine.schemas.actions.parameters import DeferParams
+
+        defer_params = DeferParams(
+            reason="Need human approval for this action",
+            context={"urgency": "high", "category": "financial"},
+            defer_until="2025-01-20T10:00:00Z",
+        )
+        result = extract_audit_parameters(HandlerActionType.DEFER, defer_params)
+
+        assert result["defer_reason"] == "Need human approval for this action"
+        assert "defer_context" in result
+        assert "urgency" in result["defer_context"]
+        assert result["defer_until"] == "2025-01-20T10:00:00Z"
+
+    def test_extract_defer_audit_params_direct(self):
+        """Test _extract_defer_audit_params directly."""
+        params: Dict[str, str] = {}
+        mock_action = MagicMock()
+        mock_action.reason = "Requires WA approval"
+        mock_action.context = {"type": "sensitive"}
+        mock_action.defer_until = None
+
+        _extract_defer_audit_params(mock_action, params)
+
+        assert params["defer_reason"] == "Requires WA approval"
+        assert "defer_context" in params
+        assert "defer_until" not in params
+
+    # TASK_COMPLETE action tests
+    def test_extract_task_complete_audit_params_with_reason(self):
+        """Test _extract_task_complete_audit_params extracts completion reason."""
+        from ciris_engine.schemas.actions.parameters import TaskCompleteParams
+
+        complete_params = TaskCompleteParams(completion_reason="Successfully processed user request")
+        result = extract_audit_parameters(HandlerActionType.TASK_COMPLETE, complete_params)
+
+        assert result["completion_reason"] == "Successfully processed user request"
+
+    def test_extract_task_complete_audit_params_default_reason(self):
+        """Test _extract_task_complete_audit_params with default reason."""
+        from ciris_engine.schemas.actions.parameters import TaskCompleteParams
+
+        # TaskCompleteParams has a default completion_reason
+        complete_params = TaskCompleteParams()
+        result = extract_audit_parameters(HandlerActionType.TASK_COMPLETE, complete_params)
+
+        assert result["completion_reason"] == "Task completed successfully"
+
+    def test_extract_task_complete_audit_params_direct(self):
+        """Test _extract_task_complete_audit_params directly."""
+        params: Dict[str, str] = {}
+        mock_action = MagicMock()
+        mock_action.completion_reason = "Task finished"
+
+        _extract_task_complete_audit_params(mock_action, params)
+
+        assert params["completion_reason"] == "Task finished"
 
 
 class TestIntegration:

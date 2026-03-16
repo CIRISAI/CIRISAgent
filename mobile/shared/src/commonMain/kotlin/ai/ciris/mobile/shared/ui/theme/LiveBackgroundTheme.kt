@@ -66,49 +66,66 @@ object LiveBackgroundTheme {
 
 /**
  * Standard light theme colors (for when live background is disabled).
- * Mirrors the original InteractScreen colors.
+ * Uses softer off-white backgrounds to reduce harshness with bright accent colors.
  */
 object LightTheme {
-    val background = Color(0xFFFAFAFA)
-    val surface = Color.White
-    val surfaceBorder = Color(0xFFE5E7EB)
+    // Softer cream/warm gray backgrounds instead of pure white
+    val background = Color(0xFFF5F3F0)      // Warm cream
+    val surface = Color(0xFFFAF9F7)          // Soft off-white
+    val surfaceBorder = Color(0xFFDDD9D4)    // Warm gray border
 
-    val textPrimary = Color(0xFF1F2937)
-    val textSecondary = Color(0xFF6B7280)
-    val textMuted = Color(0xFF9CA3AF)
-    val textAccent = Color(0xFF419CA0)
+    val textPrimary = Color(0xFF2D2A26)      // Warm dark brown
+    val textSecondary = Color(0xFF5C5650)    // Warm gray
+    val textMuted = Color(0xFF8A857D)        // Muted warm gray
+    val textAccent = Color(0xFF2D7A7E)       // Darker teal
 
-    val statusConnected = Color(0xFF10B981)
-    val statusDisconnected = Color(0xFFEF4444)
-    val statusWarning = Color(0xFFD97706)
+    // Slightly muted status colors for light mode
+    val statusConnected = Color(0xFF0D9668)  // Darker green
+    val statusDisconnected = Color(0xFFDC3545) // Slightly muted red
+    val statusWarning = Color(0xFFBF6A00)    // Darker amber
 
     val warningBackground = Color(0xFFFEF3C7)
     val warningText = Color(0xFFB45309)
 
-    val timelineBackground = Color(0xFFF0FDF4)
-    val timelineText = Color(0xFF059669)
+    val timelineBackground = Color(0xFFEDF5F0)  // Soft sage
+    val timelineText = Color(0xFF047857)        // Dark emerald
 
-    val inputBackground = Color.White
-    val inputBorder = Color(0xFFE5E7EB)
+    val inputBackground = surface
+    val inputBorder = surfaceBorder
     val inputText = textPrimary
     val inputPlaceholder = textMuted
-    val inputButtonEnabled = Color(0xFF419CA0)
-    val inputButtonDisabled = Color(0xFFE5E7EB)
+    val inputButtonEnabled = Color(0xFF2D7A7E)  // Darker teal
+    val inputButtonDisabled = Color(0xFFDDD9D4)
 
-    val userBubble = Color(0xFF2563EB)
-    val agentBubble = Color.White
-    val agentBubbleText = Color(0xFF1F2937)
+    val userBubble = Color(0xFF1E4FD9)       // Darker blue
+    val agentBubble = surface
+    val agentBubbleText = textPrimary
 
-    val messageCountBackground = Color.White
-    val messageCountText = Color(0xFF9CA3AF)
+    val messageCountBackground = surface
+    val messageCountText = textMuted
 
-    val shutdownOutline = Color(0xFFEF4444)
-    val stopBackground = Color(0xFFEF4444)
+    val shutdownOutline = Color(0xFFDC3545)
+    val stopBackground = Color(0xFFDC3545)
 
-    val trustLevel5 = Color(0xFF059669)
-    val trustLevel4 = Color(0xFFD97706)
-    val trustLevelLow = Color(0xFFDC2626)
-    val trustDefault = Color(0xFF6B7280)
+    val trustLevel5 = Color(0xFF047857)
+    val trustLevel4 = Color(0xFFBF6A00)
+    val trustLevelLow = Color(0xFFBE2D3A)
+    val trustDefault = textMuted
+}
+
+/**
+ * Create a muted/darkened version of a color for use on light backgrounds.
+ * Reduces saturation and darkens the color for better contrast on cream backgrounds.
+ */
+fun Color.mutedForLightMode(): Color {
+    // Blend the color with a dark gray to darken and slightly desaturate
+    val darkGray = Color(0xFF3D3D3D)
+    return Color(
+        red = this.red * 0.7f + darkGray.red * 0.3f,
+        green = this.green * 0.7f + darkGray.green * 0.3f,
+        blue = this.blue * 0.7f + darkGray.blue * 0.3f,
+        alpha = this.alpha
+    )
 }
 
 /**
@@ -202,6 +219,10 @@ data class InteractTheme(
                     colorTheme = colorTheme
                 )
             } else {
+                // Muted versions of theme colors for light mode
+                val mutedPrimary = colorTheme.primary.mutedForLightMode()
+                val mutedTertiary = colorTheme.tertiary.mutedForLightMode()
+
                 InteractTheme(
                     background = LightTheme.background,
                     surface = LightTheme.surface,
@@ -210,21 +231,21 @@ data class InteractTheme(
                     textPrimary = LightTheme.textPrimary,
                     textSecondary = LightTheme.textSecondary,
                     textMuted = LightTheme.textMuted,
-                    textAccent = colorTheme.primary,  // Use theme primary as accent
+                    textAccent = mutedPrimary,  // Muted for light backgrounds
                     statusConnected = LightTheme.statusConnected,
                     statusDisconnected = LightTheme.statusDisconnected,
                     statusWarning = LightTheme.statusWarning,
                     warningBackground = LightTheme.warningBackground,
                     warningText = LightTheme.warningText,
-                    timelineBackground = colorTheme.tertiary.copy(alpha = 0.1f),  // Lighter for light mode
-                    timelineText = colorTheme.tertiary,
+                    timelineBackground = mutedTertiary.copy(alpha = 0.15f),
+                    timelineText = mutedTertiary,
                     inputBackground = LightTheme.inputBackground,
                     inputBorder = LightTheme.inputBorder,
                     inputText = LightTheme.inputText,
                     inputPlaceholder = LightTheme.inputPlaceholder,
-                    inputButtonEnabled = colorTheme.primary,  // Use theme primary for buttons
+                    inputButtonEnabled = mutedPrimary,
                     inputButtonDisabled = LightTheme.inputButtonDisabled,
-                    userBubble = colorTheme.primary,  // Use theme primary for user bubbles
+                    userBubble = mutedPrimary,  // Muted for light backgrounds
                     agentBubble = LightTheme.agentBubble,
                     agentBubbleText = LightTheme.agentBubbleText,
                     messageCountBackground = LightTheme.messageCountBackground,

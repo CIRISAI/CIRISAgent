@@ -138,14 +138,21 @@ copy_runtime_guide() {
     log_info "Copying runtime guide to Python sources..."
 
     PYTHON_DIR="$ANDROID_DIR/app/src/main/python"
+
+    # Mobile guide (preferred)
+    MOBILE_GUIDE="$CIRISAGENT_DIR/CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md"
+    if [ -f "$MOBILE_GUIDE" ]; then
+        cp "$MOBILE_GUIDE" "$PYTHON_DIR/CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md"
+        log_info "Copied mobile guide to $PYTHON_DIR"
+    fi
+
+    # Legacy Android guide (fallback)
     GUIDE_SOURCE="$CIRISAGENT_DIR/CIRIS_COMPREHENSIVE_GUIDE_ANDROID.md"
     GUIDE_DEST="$PYTHON_DIR/CIRIS_COMPREHENSIVE_GUIDE_ANDROID.md"
 
     if [ -f "$GUIDE_SOURCE" ]; then
         cp "$GUIDE_SOURCE" "$GUIDE_DEST"
-        log_info "Copied Android guide to $GUIDE_DEST"
-    else
-        log_warn "Android guide not found at $GUIDE_SOURCE"
+        log_info "Copied legacy Android guide to $GUIDE_DEST"
     fi
 
     # Also copy standard guide as fallback

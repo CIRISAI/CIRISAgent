@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 
 from ciris_engine.logic.config.env_utils import get_env_var
-from ciris_engine.logic.utils.path_resolution import is_android
+from ciris_engine.logic.utils.path_resolution import is_android, is_ios
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +19,8 @@ WA_API_USER = get_env_var("WA_API_USER", "somecomputerguy")  # API username for 
 def _load_platform_guide(base_path: Path) -> str:
     """Load the appropriate runtime guide based on platform.
 
-    On Android, tries to load CIRIS_COMPREHENSIVE_GUIDE_ANDROID.md first,
-    falls back to the standard guide if not available.
+    On mobile (Android/iOS), tries to load CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md first,
+    falls back to the legacy Android guide, then the standard guide.
 
     Args:
         base_path: The base directory containing the guide files
@@ -30,10 +30,12 @@ def _load_platform_guide(base_path: Path) -> str:
     """
     guide_files = []
 
-    # Platform-specific guide takes priority
-    if is_android():
+    # Platform-specific guide takes priority on mobile
+    if is_android() or is_ios():
+        guide_files.append(base_path / "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md")
+        # Legacy fallback for older Android builds
         guide_files.append(base_path / "CIRIS_COMPREHENSIVE_GUIDE_ANDROID.md")
-        logger.debug("Android platform detected, will try Android-specific guide first")
+        logger.debug("Mobile platform detected, will try mobile-specific guide first")
 
     # Standard guide as fallback
     guide_files.append(base_path / "CIRIS_COMPREHENSIVE_GUIDE.md")

@@ -341,9 +341,13 @@ if [[ "$SKIP_PYTHON" != "true" && "$SKIP_BUILD" != "true" ]]; then
     fi
 
     # Copy runtime guides
+    if [[ -f "$PROJECT_ROOT/CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md" ]]; then
+        cp "$PROJECT_ROOT/CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md" "$PYTHON_SRC_DIR/"
+        log_info "  -> Mobile runtime guide copied"
+    fi
     if [[ -f "$PROJECT_ROOT/CIRIS_COMPREHENSIVE_GUIDE_ANDROID.md" ]]; then
         cp "$PROJECT_ROOT/CIRIS_COMPREHENSIVE_GUIDE_ANDROID.md" "$PYTHON_SRC_DIR/"
-        log_info "  -> Android runtime guide copied"
+        log_info "  -> Legacy Android runtime guide copied"
     fi
     if [[ -f "$PROJECT_ROOT/CIRIS_COMPREHENSIVE_GUIDE.md" ]]; then
         cp "$PROJECT_ROOT/CIRIS_COMPREHENSIVE_GUIDE.md" "$PYTHON_SRC_DIR/"

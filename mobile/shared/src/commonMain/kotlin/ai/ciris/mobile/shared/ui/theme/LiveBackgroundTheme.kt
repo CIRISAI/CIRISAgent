@@ -157,6 +157,7 @@ data class InteractTheme(
          * @param colorTheme The selected color theme for accents
          * @param isDark Whether to use dark mode colors (from brightness preference)
          */
+        @Suppress("UNUSED_PARAMETER")
         fun forLiveBackground(
             enabled: Boolean,
             colorTheme: ColorTheme = ColorTheme.DEFAULT,

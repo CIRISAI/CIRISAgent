@@ -1,6 +1,10 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.models.ExportDestination
+import ai.ciris.mobile.shared.models.ExportDestinationCreate
+import ai.ciris.mobile.shared.models.ExportDestinationUpdate
+import ai.ciris.mobile.shared.models.TestResult
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.ui.screens.ServiceHealthItem
 import ai.ciris.mobile.shared.ui.screens.TelemetryData
@@ -65,6 +69,32 @@ class TelemetryViewModel(
     // Connection state
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
+
+    // ===== Export Destinations State =====
+
+    // List of export destinations
+    private val _exportDestinations = MutableStateFlow<List<ExportDestination>>(emptyList())
+    val exportDestinations: StateFlow<List<ExportDestination>> = _exportDestinations.asStateFlow()
+
+    // Loading state for destinations
+    private val _destinationsLoading = MutableStateFlow(false)
+    val destinationsLoading: StateFlow<Boolean> = _destinationsLoading.asStateFlow()
+
+    // Error state for destinations
+    private val _destinationError = MutableStateFlow<String?>(null)
+    val destinationError: StateFlow<String?> = _destinationError.asStateFlow()
+
+    // Dialog visibility
+    private val _showDestinationDialog = MutableStateFlow(false)
+    val showDestinationDialog: StateFlow<Boolean> = _showDestinationDialog.asStateFlow()
+
+    // Destination being edited (null = creating new)
+    private val _editingDestination = MutableStateFlow<ExportDestination?>(null)
+    val editingDestination: StateFlow<ExportDestination?> = _editingDestination.asStateFlow()
+
+    // Test result (null = no test in progress)
+    private val _testResult = MutableStateFlow<Pair<String, TestResult>?>(null)
+    val testResult: StateFlow<Pair<String, TestResult>?> = _testResult.asStateFlow()
 
     // Polling job
     private var pollingJob: Job? = null
@@ -293,6 +323,200 @@ class TelemetryViewModel(
         val method = "clearError"
         logDebug(method, "Clearing error state")
         _error.value = null
+    }
+
+    // ===== Export Destinations Actions =====
+
+    /**
+     * Load export destinations from API.
+     */
+    fun loadExportDestinations() {
+        val method = "loadExportDestinations"
+        logInfo(method, "Loading export destinations")
+
+        viewModelScope.launch {
+            _destinationsLoading.value = true
+            _destinationError.value = null
+
+            try {
+                val destinations = apiClient.getExportDestinations()
+                _exportDestinations.value = destinations
+                logInfo(method, "Loaded ${destinations.size} export destinations")
+            } catch (e: Exception) {
+                logError(method, "Failed to load destinations: ${e.message}")
+                _destinationError.value = "Failed to load destinations: ${e.message}"
+            } finally {
+                _destinationsLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Show dialog to add new destination.
+     */
+    fun showAddDestinationDialog() {
+        val method = "showAddDestinationDialog"
+        logInfo(method, "Showing add destination dialog")
+        _editingDestination.value = null
+        _showDestinationDialog.value = true
+    }
+
+    /**
+     * Show dialog to edit existing destination.
+     */
+    fun showEditDestinationDialog(destination: ExportDestination) {
+        val method = "showEditDestinationDialog"
+        logInfo(method, "Showing edit dialog for destination: ${destination.id}")
+        _editingDestination.value = destination
+        _showDestinationDialog.value = true
+    }
+
+    /**
+     * Dismiss the destination dialog.
+     */
+    fun dismissDestinationDialog() {
+        val method = "dismissDestinationDialog"
+        logDebug(method, "Dismissing destination dialog")
+        _showDestinationDialog.value = false
+        _editingDestination.value = null
+    }
+
+    /**
+     * Save destination (create or update).
+     */
+    fun saveDestination(destination: ExportDestinationCreate) {
+        val method = "saveDestination"
+        val editing = _editingDestination.value
+
+        viewModelScope.launch {
+            _destinationsLoading.value = true
+            _destinationError.value = null
+
+            try {
+                if (editing != null) {
+                    // Update existing
+                    logInfo(method, "Updating destination: ${editing.id}")
+                    val update = ExportDestinationUpdate(
+                        name = destination.name,
+                        endpoint = destination.endpoint,
+                        format = destination.format,
+                        signals = destination.signals,
+                        authType = destination.authType,
+                        authValue = destination.authValue,
+                        authHeader = destination.authHeader,
+                        intervalSeconds = destination.intervalSeconds,
+                        enabled = destination.enabled
+                    )
+                    apiClient.updateExportDestination(editing.id, update)
+                    logInfo(method, "Destination updated successfully")
+                } else {
+                    // Create new
+                    logInfo(method, "Creating new destination: ${destination.name}")
+                    apiClient.createExportDestination(destination)
+                    logInfo(method, "Destination created successfully")
+                }
+
+                // Refresh list and close dialog
+                loadExportDestinations()
+                dismissDestinationDialog()
+            } catch (e: Exception) {
+                logError(method, "Failed to save destination: ${e.message}")
+                _destinationError.value = "Failed to save destination: ${e.message}"
+            } finally {
+                _destinationsLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Delete a destination.
+     */
+    fun deleteDestination(destinationId: String) {
+        val method = "deleteDestination"
+        logInfo(method, "Deleting destination: $destinationId")
+
+        viewModelScope.launch {
+            _destinationsLoading.value = true
+            _destinationError.value = null
+
+            try {
+                val success = apiClient.deleteExportDestination(destinationId)
+                if (success) {
+                    logInfo(method, "Destination deleted successfully")
+                    loadExportDestinations()
+                } else {
+                    logError(method, "Failed to delete destination")
+                    _destinationError.value = "Failed to delete destination"
+                }
+            } catch (e: Exception) {
+                logError(method, "Failed to delete destination: ${e.message}")
+                _destinationError.value = "Failed to delete destination: ${e.message}"
+            } finally {
+                _destinationsLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Toggle destination enabled/disabled.
+     */
+    fun toggleDestinationEnabled(destinationId: String) {
+        val method = "toggleDestinationEnabled"
+        logInfo(method, "Toggling enabled for destination: $destinationId")
+
+        val destination = _exportDestinations.value.find { it.id == destinationId } ?: return
+
+        viewModelScope.launch {
+            try {
+                val update = ExportDestinationUpdate(enabled = !destination.enabled)
+                apiClient.updateExportDestination(destinationId, update)
+                logInfo(method, "Destination toggled: enabled=${!destination.enabled}")
+                loadExportDestinations()
+            } catch (e: Exception) {
+                logError(method, "Failed to toggle destination: ${e.message}")
+                _destinationError.value = "Failed to update destination: ${e.message}"
+            }
+        }
+    }
+
+    /**
+     * Test connectivity to a destination.
+     */
+    fun testDestination(destinationId: String) {
+        val method = "testDestination"
+        logInfo(method, "Testing destination: $destinationId")
+
+        viewModelScope.launch {
+            _testResult.value = null
+
+            try {
+                val result = apiClient.testExportDestination(destinationId)
+                logInfo(method, "Test result: success=${result.success}, message=${result.message}")
+                _testResult.value = Pair(destinationId, result)
+            } catch (e: Exception) {
+                logError(method, "Test failed: ${e.message}")
+                _testResult.value = Pair(destinationId, TestResult(
+                    success = false,
+                    statusCode = null,
+                    message = "Test failed: ${e.message}",
+                    latencyMs = null
+                ))
+            }
+        }
+    }
+
+    /**
+     * Clear test result.
+     */
+    fun clearTestResult() {
+        _testResult.value = null
+    }
+
+    /**
+     * Clear destination error.
+     */
+    fun clearDestinationError() {
+        _destinationError.value = null
     }
 
     override fun onCleared() {

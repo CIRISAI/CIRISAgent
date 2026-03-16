@@ -267,15 +267,6 @@ fun InteractScreen(
             onClear = { viewModel.clearTimeline() }
         )
 
-        // Processing status (from fragment_interact.xml:78-117)
-        AnimatedVisibility(
-            visible = processingStatus.isNotEmpty(),
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            ProcessingStatusBar(status = processingStatus)
-        }
-
         // Loading indicator (from fragment_interact.xml:119-125)
         if (isLoading) {
             Box(
@@ -815,61 +806,6 @@ private fun AIWarningBanner(
         color = theme.warningText,
         textAlign = TextAlign.Center
     )
-}
-
-/**
- * Processing status indicator
- * From fragment_interact.xml:78-117
- */
-@Composable
-private fun ProcessingStatusBar(
-    status: String,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        color = Color(0xFFF0F9FF),
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = getStatusEmoji(status),
-                fontSize = 16.sp
-            )
-            Text(
-                text = status,
-                modifier = Modifier.weight(1f),
-                fontSize = 12.sp,
-                color = Color(0xFF0369A1),
-                maxLines = 1
-            )
-        }
-    }
-}
-
-/**
- * Get emoji for processing status
- * Based on InteractFragment.kt:525-562
- */
-private fun getStatusEmoji(status: String): String {
-    return when {
-        status.contains("Thinking") -> "🤔"
-        status.contains("context") -> "📋"
-        status.contains("Evaluating") -> "⚖️"
-        status.contains("Selecting action") -> "🎯"
-        status.contains("ethics") -> "🧭"
-        status.contains("Speaking") -> "💬"
-        status.contains("Complete") -> "✅"
-        status.contains("memory") -> "💾"
-        status.contains("Recalling") -> "🔍"
-        status.contains("tool") -> "🔧"
-        status.contains("Pondering") -> "💭"
-        status.contains("Deferred") -> "⏸️"
-        else -> "⏳"
-    }
 }
 
 /**

@@ -207,7 +207,10 @@ class AdaptersViewModel(
         try {
             logDebug(method, "Calling apiClient.listAdapters()")
             val data = apiClient.listAdapters()
-            logInfo(method, "Fetched ${data.totalCount} adapters (${data.runningCount} running)")
+            logInfo(method, "Fetched ${data.totalCount} adapters (${data.runningCount} running), raw list size=${data.adapters.size}")
+            data.adapters.forEachIndexed { index, adapter ->
+                logInfo(method, "  [$index] id=${adapter.adapterId}, type=${adapter.adapterType}, running=${adapter.isRunning}")
+            }
 
             val adapterItems = data.adapters.map { adapterStatus ->
                 val statusText = if (adapterStatus.isRunning) "running" else "stopped"

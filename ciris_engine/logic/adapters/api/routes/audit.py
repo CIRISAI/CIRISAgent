@@ -290,24 +290,46 @@ async def _query_jsonl_audit(
     return await loop.run_in_executor(None, _sync_query_jsonl_audit, jsonl_path, start_time, end_time, limit, offset)
 
 
-def _process_graph_entries(merged: Dict[str, _MergedAuditEntry], graph_entries: List[AuditEntry]) -> None:
-    """Process graph entries and add them to merged results."""
+def _process_graph_entries(
+    merged: Dict[str, _MergedAuditEntry], graph_entries: List[AuditEntry], seen_timestamps: set[str]
+) -> None:
+    """Process graph entries and add them to merged results.
+
+    Skip entries that already exist in SQLite (matched by timestamp + action).
+    SQLite entries are preferred as they contain the authoritative hash chain.
+    """
     for entry in graph_entries:
+        # Create a dedup key based on timestamp + action to match SQLite entries
+        dedup_key = f"{entry.timestamp.isoformat()}_{entry.action}"
+        if dedup_key in seen_timestamps:
+            # Skip - this entry already exists from SQLite with better metadata
+            continue
+
         entry_id = getattr(entry, "id", f"audit_{entry.timestamp.isoformat()}_{entry.actor}")
         if entry_id not in merged:
             merged[entry_id] = _MergedAuditEntry(entry=_convert_audit_entry(entry), sources=["graph"])
+            seen_timestamps.add(dedup_key)
         else:
             merged[entry_id].sources.append("graph")
 
 
 def _process_sqlite_entries(
-    merged: Dict[str, _MergedAuditEntry], sqlite_entries: list[dict[str, object]]
+    merged: Dict[str, _MergedAuditEntry], sqlite_entries: list[dict[str, object]], seen_timestamps: set[str]
 ) -> None:  # SERIALIZATION BOUNDARY - SQLite query results
-    """Process SQLite entries and add them to merged results."""
+    """Process SQLite entries and add them to merged results.
+
+    SQLite entries are the authoritative source with the hash chain.
+    Track timestamps for deduplication with graph entries.
+    """
     for sqlite_entry in sqlite_entries:
         event_timestamp = get_str(sqlite_entry, "event_timestamp", "")
         originator_id = get_str(sqlite_entry, "originator_id", "unknown")
+        event_type = get_str(sqlite_entry, "event_type", "unknown")
         entry_id = get_str_optional(sqlite_entry, "event_id") or f"audit_{event_timestamp}_{originator_id}"
+
+        # Track timestamp + action for deduplication with graph entries
+        dedup_key = f"{event_timestamp}_{event_type}"
+        seen_timestamps.add(dedup_key)
 
         if entry_id not in merged:
             # Convert SQLite entry to AuditEntryResponse format
@@ -321,10 +343,49 @@ def _process_sqlite_entries(
                     outcome = "failure"
                 else:
                     outcome = "success"
+
+            # Parse event_payload JSON to extract metadata and parameters
+            event_payload_str = get_str_optional(sqlite_entry, "event_payload")
+            metadata: Dict[str, Any] = {}
+            description = event_payload_str
+
+            if event_payload_str:
+                try:
+                    payload = json.loads(event_payload_str)
+                    if isinstance(payload, dict):
+                        # Extract parameters (may contain defer_reason, tool_name, etc.)
+                        params_str = payload.get("parameters", "{}")
+                        if isinstance(params_str, str):
+                            try:
+                                params = json.loads(params_str)
+                                if isinstance(params, dict):
+                                    # Copy key fields to metadata for mobile app
+                                    if "defer_reason" in params:
+                                        metadata["defer_reason"] = params["defer_reason"]
+                                    if "defer_until" in params:
+                                        metadata["defer_until"] = params["defer_until"]
+                                    if "tool_name" in params:
+                                        metadata["tool_name"] = params["tool_name"]
+                                    if "content" in params:
+                                        metadata["content"] = params["content"]
+                            except json.JSONDecodeError:
+                                pass
+
+                        # Also include direct payload fields in metadata
+                        for key in ["thought_id", "task_id", "handler_name", "action_type"]:
+                            if key in payload:
+                                metadata[key] = payload[key]
+
+                        # Use action_type or handler for description
+                        description = payload.get("action_type") or payload.get("handler_name") or event_payload_str
+                except json.JSONDecodeError:
+                    pass
+
             context = AuditContext(
-                description=get_str_optional(sqlite_entry, "event_payload"),
+                description=description,
                 entity_id=get_str_optional(sqlite_entry, "originator_id"),
                 outcome=outcome,
+                metadata=metadata if metadata else None,
             )
 
             merged[entry_id] = _MergedAuditEntry(
@@ -397,13 +458,25 @@ async def _merge_audit_sources(
     sqlite_entries: list[dict[str, object]],
     jsonl_entries: list[dict[str, object]],
 ) -> List[AuditEntryResponse]:  # SERIALIZATION BOUNDARY - Raw database results
-    """Merge audit entries from all sources and track storage locations."""
-    merged: Dict[str, _MergedAuditEntry] = {}  # Track entries by ID with their sources
+    """Merge audit entries from all sources and track storage locations.
 
-    # Process entries from all sources
-    _process_graph_entries(merged, graph_entries)
-    _process_sqlite_entries(merged, sqlite_entries)
-    _process_jsonl_entries(merged, jsonl_entries)
+    SQLite entries are the authoritative source with the hash chain and
+    complete metadata. When SQLite entries exist, we skip graph entries
+    entirely to avoid duplicates (timestamp precision differences make
+    exact matching unreliable).
+    """
+    merged: Dict[str, _MergedAuditEntry] = {}  # Track entries by ID with their sources
+    seen_timestamps: set[str] = set()  # Track timestamp+action for deduplication
+
+    # Process SQLite entries FIRST (authoritative source with hash chain)
+    _process_sqlite_entries(merged, sqlite_entries, seen_timestamps)
+
+    # Only process graph and JSONL entries if NO SQLite entries exist
+    # SQLite is the authoritative source with the hash chain - it contains
+    # complete data. Graph and JSONL are secondary copies with less metadata.
+    if not sqlite_entries:
+        _process_graph_entries(merged, graph_entries, seen_timestamps)
+        _process_jsonl_entries(merged, jsonl_entries)
 
     # Update storage_sources for all merged entries and build result
     result = []
@@ -465,14 +538,28 @@ async def query_audit_entries(
     )
 
     try:
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         # Query all 3 audit sources concurrently
 
         # Query graph memory (existing functionality)
         graph_entries = await audit_service.query_audit_trail(query)
+        logger.info(f"[AUDIT API] Graph entries returned: {len(graph_entries)}")
 
-        # Query SQLite database directly (hardcoded paths for now - should be configurable)
+        # Get the proper data directory for SQLite path
+        from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+        data_dir = get_data_dir()
+        sqlite_path = str(data_dir / "ciris_audit.db")
+        jsonl_path = str(data_dir / "audit_logs.jsonl")
+        logger.info(f"[AUDIT API] SQLite path: {sqlite_path}, exists: {Path(sqlite_path).exists()}")
+        logger.info(f"[AUDIT API] JSONL path: {jsonl_path}, exists: {Path(jsonl_path).exists()}")
+
+        # Query SQLite database directly
         sqlite_task = _query_sqlite_audit(
-            "data/ciris_audit.db",  # Default SQLite path
+            sqlite_path,
             start_time=start_time,
             end_time=end_time,
             limit=limit * 3,  # Get more to account for merging
@@ -481,7 +568,7 @@ async def query_audit_entries(
 
         # Query JSONL file directly
         jsonl_task = _query_jsonl_audit(
-            "audit_logs.jsonl",  # Default JSONL path
+            jsonl_path,
             start_time=start_time,
             end_time=end_time,
             limit=limit * 3,  # Get more to account for merging
@@ -490,13 +577,25 @@ async def query_audit_entries(
 
         # Execute SQLite and JSONL queries concurrently
         sqlite_entries, jsonl_entries = await asyncio.gather(sqlite_task, jsonl_task)
+        logger.info(f"[AUDIT API] SQLite entries returned: {len(sqlite_entries)}")
+        logger.info(f"[AUDIT API] JSONL entries returned: {len(jsonl_entries)}")
+
+        # Log sample of SQLite entries to debug
+        for i, entry in enumerate(sqlite_entries[:3]):
+            logger.info(
+                f"[AUDIT API] SQLite entry {i}: event_type={entry.get('event_type')}, timestamp={entry.get('event_timestamp')}"
+            )
 
         # Merge all sources and track storage locations
         response_entries = await _merge_audit_sources(graph_entries, sqlite_entries, jsonl_entries)
+        logger.info(f"[AUDIT API] After merge: {len(response_entries)} total entries")
 
         # Apply final pagination after merging
         paginated_entries = response_entries[offset : offset + limit]
         total = len(response_entries)
+        logger.info(
+            f"[AUDIT API] Returning {len(paginated_entries)} entries (offset={offset}, limit={limit}, total={total})"
+        )
 
         return SuccessResponse(
             data=AuditEntriesResponse(entries=paginated_entries, total=total, offset=offset, limit=limit),

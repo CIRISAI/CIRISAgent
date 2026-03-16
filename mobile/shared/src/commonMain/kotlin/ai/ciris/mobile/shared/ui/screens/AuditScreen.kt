@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -541,32 +542,32 @@ private fun getEntryBackgroundColor(outcome: String, action: String): Color {
         action.uppercase().contains("EMERGENCY") || action.uppercase().contains("SHUTDOWN") ->
             MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
         action.uppercase().contains("CONFIG") || action.uppercase().contains("RESTORE") ->
-            Color(0xFFFFF3CD).copy(alpha = 0.3f)
+            SemanticColors.Default.surfaceWarning.copy(alpha = 0.3f)
         outcome.lowercase() == "start" ->
-            Color(0xFFDBEAFE).copy(alpha = 0.3f)
+            SemanticColors.Default.surfaceInfo.copy(alpha = 0.3f)
         else -> MaterialTheme.colorScheme.surface
     }
 }
 
 private fun getActionBadgeColor(action: String): Color {
     return when {
-        action.uppercase().contains("LOGIN") || action.uppercase().contains("LOGOUT") -> Color(0xFF6366F1) // Indigo
-        action.uppercase().contains("CONFIG") -> Color(0xFFF59E0B) // Amber
-        action.uppercase().contains("EMERGENCY") || action.uppercase().contains("SHUTDOWN") -> Color(0xFFEF4444) // Red
-        action.uppercase().contains("PAUSE") || action.uppercase().contains("RESUME") -> Color(0xFF3B82F6) // Blue
-        action.uppercase().contains("MEMORIZE") || action.uppercase().contains("RECALL") -> Color(0xFF8B5CF6) // Purple
-        action.uppercase().contains("SPEAK") -> Color(0xFF10B981) // Green
-        action.uppercase().contains("FORGET") -> Color(0xFFF97316) // Orange
-        else -> Color(0xFF6B7280) // Gray
+        action.uppercase().contains("LOGIN") || action.uppercase().contains("LOGOUT") -> SemanticColors.Default.accentTertiary // Indigo/Purple
+        action.uppercase().contains("CONFIG") -> SemanticColors.Default.warning // Amber
+        action.uppercase().contains("EMERGENCY") || action.uppercase().contains("SHUTDOWN") -> SemanticColors.Default.error // Red
+        action.uppercase().contains("PAUSE") || action.uppercase().contains("RESUME") -> SemanticColors.Default.info // Blue
+        action.uppercase().contains("MEMORIZE") || action.uppercase().contains("RECALL") -> SemanticColors.Default.accentSecondary // Purple
+        action.uppercase().contains("SPEAK") -> SemanticColors.Default.success // Green
+        action.uppercase().contains("FORGET") -> Color(0xFFF97316) // Orange (keep as-is, no direct semantic equivalent)
+        else -> SemanticColors.Default.inactive // Gray
     }
 }
 
 private fun getOutcomeColor(outcome: String): Color {
     return when (outcome.lowercase()) {
-        "success" -> Color(0xFF10B981) // Green
-        "start" -> Color(0xFF3B82F6) // Blue
-        "error", "failure", "failed" -> Color(0xFFEF4444) // Red
-        else -> Color(0xFF6B7280) // Gray
+        "success" -> SemanticColors.Default.success // Green
+        "start" -> SemanticColors.Default.info // Blue
+        "error", "failure", "failed" -> SemanticColors.Default.error // Red
+        else -> SemanticColors.Default.inactive // Gray
     }
 }
 

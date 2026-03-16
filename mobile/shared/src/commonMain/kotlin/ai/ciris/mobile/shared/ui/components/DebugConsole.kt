@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -45,8 +46,8 @@ fun DebugIndicator(
         onClick = onTap,
         shape = RoundedCornerShape(20.dp),
         color = when {
-            errorCount > 0 -> Color(0xFFFEE2E2)
-            else -> Color(0xFFF3F4F6)
+            errorCount > 0 -> SemanticColors.Default.surfaceError
+            else -> MaterialTheme.colorScheme.surfaceVariant
         },
         modifier = modifier.height(36.dp)
     ) {
@@ -62,12 +63,12 @@ fun DebugIndicator(
             Text(
                 text = "${entries.size}",
                 fontSize = 12.sp,
-                color = if (errorCount > 0) Color(0xFFDC2626) else Color(0xFF6B7280)
+                color = if (errorCount > 0) SemanticColors.Default.error else MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (errorCount > 0) {
                 Surface(
                     shape = CircleShape,
-                    color = Color(0xFFDC2626)
+                    color = SemanticColors.Default.error
                 ) {
                     Text(
                         text = "$errorCount",
@@ -98,7 +99,7 @@ fun ErrorToast(
     ) {
         Surface(
             shape = RoundedCornerShape(8.dp),
-            color = Color(0xFFFEE2E2),
+            color = SemanticColors.Default.surfaceError,
             shadowElevation = 4.dp,
             modifier = Modifier
                 .fillMaxWidth()
@@ -114,7 +115,7 @@ fun ErrorToast(
                 Text(
                     text = latestError ?: "",
                     fontSize = 12.sp,
-                    color = Color(0xFFDC2626),
+                    color = SemanticColors.Default.error,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
@@ -122,7 +123,7 @@ fun ErrorToast(
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "Dismiss",
-                    tint = Color(0xFFDC2626),
+                    tint = SemanticColors.Default.error,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -194,12 +195,12 @@ fun DebugConsole(
                         if (errorCount > 0) {
                             Surface(
                                 shape = CircleShape,
-                                color = Color(0xFFDC2626)
+                                color = SemanticColors.Default.error
                             ) {
                                 Text(
                                     text = "$errorCount errors",
                                     fontSize = 10.sp,
-                                    color = Color.White,
+                                    color = SemanticColors.Default.onError,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }

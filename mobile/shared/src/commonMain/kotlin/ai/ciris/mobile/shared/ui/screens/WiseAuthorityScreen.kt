@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -216,9 +217,9 @@ private fun WAStatusCard(
                             .clip(CircleShape)
                             .background(
                                 if (waStatus?.serviceHealthy == true)
-                                    Color(0xFF10B981) // Green
+                                    SemanticColors.Default.success
                                 else
-                                    Color(0xFFEF4444) // Red
+                                    SemanticColors.Default.error
                             )
                     )
                     Text(
@@ -239,20 +240,20 @@ private fun WAStatusCard(
                 StatItem(
                     label = "Active WAs",
                     value = waStatus?.activeWAs?.toString() ?: "-",
-                    color = Color(0xFF3B82F6) // Blue
+                    color = SemanticColors.Default.info
                 )
                 StatItem(
                     label = "Pending",
                     value = waStatus?.pendingDeferrals?.toString() ?: "-",
                     color = if ((waStatus?.pendingDeferrals ?: 0) > 0)
-                        Color(0xFFF59E0B) // Yellow
+                        SemanticColors.Default.warning
                     else
-                        Color(0xFF10B981) // Green
+                        SemanticColors.Default.success
                 )
                 StatItem(
                     label = "24h Total",
                     value = waStatus?.deferrals24h?.toString() ?: "-",
-                    color = Color(0xFF8B5CF6) // Purple
+                    color = Color(0xFF8B5CF6) // Purple - theme accent
                 )
             }
 
@@ -337,9 +338,9 @@ private fun DeferralCard(
     modifier: Modifier = Modifier
 ) {
     val priorityColor = when (deferral.priority.lowercase()) {
-        "high", "critical" -> Color(0xFFEF4444) // Red
-        "medium" -> Color(0xFFF59E0B) // Yellow
-        else -> Color(0xFF10B981) // Green
+        "high", "critical" -> SemanticColors.Default.error
+        "medium" -> SemanticColors.Default.warning
+        else -> SemanticColors.Default.success
     }
 
     Card(
@@ -417,8 +418,8 @@ private fun DeferralCard(
                     text = "Status: ${deferral.status}",
                     style = MaterialTheme.typography.bodySmall,
                     color = when (deferral.status) {
-                        "resolved" -> Color(0xFF10B981)
-                        "rejected" -> Color(0xFFEF4444)
+                        "resolved" -> SemanticColors.Default.success
+                        "rejected" -> SemanticColors.Default.error
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
                 )
@@ -527,7 +528,7 @@ private fun ResolveDeferralDialog(
                             },
                             enabled = guidance.isNotBlank() && !isResolving,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF10B981)
+                                containerColor = SemanticColors.Default.success
                             ),
                             modifier = Modifier
                                 .weight(1f)
@@ -547,7 +548,7 @@ private fun ResolveDeferralDialog(
                             },
                             enabled = guidance.isNotBlank() && !isResolving,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFEF4444)
+                                containerColor = SemanticColors.Default.error
                             ),
                             modifier = Modifier
                                 .weight(1f)

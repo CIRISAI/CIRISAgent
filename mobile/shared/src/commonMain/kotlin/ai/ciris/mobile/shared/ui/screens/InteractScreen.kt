@@ -14,6 +14,7 @@ import ai.ciris.mobile.shared.viewmodels.TrustStatus
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,6 +25,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.isActive
+import kotlin.math.abs
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -64,7 +68,9 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.ui.screens.graph.GraphColors
 import ai.ciris.mobile.shared.ui.screens.graph.LiveGraphBackground
+import ai.ciris.mobile.shared.ui.theme.ColorTheme
 import ai.ciris.mobile.shared.ui.theme.InteractTheme
 
 /**
@@ -92,6 +98,8 @@ fun InteractScreen(
     onOpenSettings: () -> Unit = {},
     apiClient: CIRISApiClient? = null,  // For live background
     liveBackgroundEnabled: Boolean = false,  // From settings
+    colorTheme: ColorTheme = ColorTheme.DEFAULT,  // Color theme from settings
+    isDarkMode: Boolean = true,  // From brightness preference
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsState()
@@ -143,8 +151,59 @@ fun InteractScreen(
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // Create theme based on live background state - all colors defined in LiveBackgroundTheme.kt
-    val theme = remember(liveBackgroundEnabled) { InteractTheme.forLiveBackground(liveBackgroundEnabled) }
+    // Create theme based on live background state, color theme, and brightness preference
+    // All colors defined in LiveBackgroundTheme.kt, accent colors from ColorTheme
+    val theme = remember(liveBackgroundEnabled, colorTheme, isDarkMode) {
+        // Also update GraphColors to use the selected theme for graph node colors
+        GraphColors.setTheme(colorTheme)
+        InteractTheme.forLiveBackground(liveBackgroundEnabled, colorTheme, isDarkMode)
+    }
+
+    // Cylinder rotation state for swipe-to-spin
+    var cylinderRotation by remember { mutableStateOf(0f) }
+    var rotationVelocity by remember { mutableStateOf(0f) }
+    var isDraggingHorizontal by remember { mutableStateOf(false) }
+
+    // Spin energy system - builds up over multiple fast flicks
+    var spinEnergy by remember { mutableStateOf(0f) }
+    val spinEnergyThreshold = 800f  // Need to build up this much energy to trigger spin apart (requires ~5-7 fast flicks)
+    val energyDecayRate = 0.92f  // Energy decays faster when not spinning fast
+    val energyGainMultiplier = 0.15f  // How much velocity contributes to energy (reduced for more flicks needed)
+
+    // Momentum animation loop for cylinder spin
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            kotlinx.coroutines.delay(16)  // ~60 FPS
+
+            // Always apply momentum (even during touch - only actual drag changes velocity)
+            if (abs(rotationVelocity) > 0.1f) {
+                cylinderRotation += rotationVelocity
+
+                // Build up spin energy from fast spinning (only fast flicks count)
+                if (abs(rotationVelocity) > 8f) {
+                    spinEnergy += abs(rotationVelocity) * energyGainMultiplier
+                } else {
+                    // Decay energy when spinning slowly
+                    spinEnergy *= energyDecayRate
+                }
+
+                // Only apply damping when not actively dragging
+                if (!isDraggingHorizontal) {
+                    rotationVelocity *= 0.97f  // Damping - slower decay for satisfying spin
+                }
+
+                // Normalize rotation
+                while (cylinderRotation > 360f) cylinderRotation -= 360f
+                while (cylinderRotation < -360f) cylinderRotation += 360f
+            } else {
+                // Faster energy decay when stopped
+                spinEnergy *= 0.95f
+            }
+
+            // Clamp energy
+            if (spinEnergy < 0.1f) spinEnergy = 0f
+        }
+    }
 
     // Note: CIRISApp wraps this screen in a Scaffold with TopAppBar,
     // so we don't need our own Scaffold here. Use Box for bubble overlay.
@@ -159,7 +218,14 @@ fun InteractScreen(
             LiveGraphBackground(
                 apiClient = apiClient,
                 modifier = Modifier.fillMaxSize(),
-                eventTrigger = timelineEvents.size  // New events trigger refresh
+                eventTrigger = timelineEvents.size,  // New events trigger refresh
+                externalRotation = cylinderRotation,
+                spinEnergy = spinEnergy,
+                spinEnergyThreshold = spinEnergyThreshold,
+                onSpinApartTriggered = {
+                    // Reset energy after explosion
+                    spinEnergy = 0f
+                }
             )
         }
 
@@ -223,10 +289,36 @@ fun InteractScreen(
         }
 
         // Chat messages container with empty state (from fragment_interact.xml:127-190)
+        // Horizontal swipe rotates the background cylinder (fidget spin!)
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                .pointerInput(liveBackgroundEnabled) {
+                    if (liveBackgroundEnabled) {
+                        detectHorizontalDragGestures(
+                            onDragStart = {
+                                isDraggingHorizontal = true
+                                // Don't zero velocity here - let momentum continue until actual drag
+                            },
+                            onDragEnd = {
+                                isDraggingHorizontal = false
+                            },
+                            onDragCancel = {
+                                isDraggingHorizontal = false
+                            },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                // Horizontal drag rotates the cylinder
+                                val rotationSensitivity = 0.5f  // Degrees per pixel
+                                val deltaRotation = dragAmount * rotationSensitivity
+                                cylinderRotation += deltaRotation
+                                // Blend new velocity with existing momentum for smoother feel
+                                rotationVelocity = rotationVelocity * 0.3f + deltaRotation * 0.7f
+                            }
+                        )
+                    }
+                }
         ) {
             if (messages.isEmpty() && !isLoading) {
                 EmptyStateView(transparentBackground = liveBackgroundEnabled)
@@ -266,6 +358,7 @@ fun InteractScreen(
                 attachedFiles = attachedFiles,
                 onAttach = { showFilePicker = true },
                 onRemoveAttachment = { viewModel.removeAttachment(it) },
+                theme = theme,
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
@@ -1371,12 +1464,13 @@ private fun ChatInputBarWithBubbles(
     attachedFiles: List<PickedFile> = emptyList(),
     onAttach: () -> Unit = {},
     onRemoveAttachment: (Int) -> Unit = {},
+    theme: InteractTheme = InteractTheme.forLiveBackground(false),
     modifier: Modifier = Modifier
 ) {
     val hasContent = text.isNotBlank() || attachedFiles.isNotEmpty()
 
     Surface(
-        color = Color.White,
+        color = theme.inputBackground,
         shadowElevation = 4.dp,
         modifier = modifier
     ) {
@@ -1417,7 +1511,7 @@ private fun ChatInputBarWithBubbles(
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Attach file",
-                        tint = if (enabled) Color(0xFF6B7280) else Color(0xFFD1D5DB),
+                        tint = if (enabled) theme.textSecondary else theme.inputButtonDisabled,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -1441,13 +1535,16 @@ private fun ChatInputBarWithBubbles(
                                 onFocused()
                             }
                         },
-                    placeholder = { Text("Type your message...") },
+                    placeholder = { Text("Type your message...", color = theme.inputPlaceholder) },
                     enabled = enabled,
                     singleLine = false,
                     maxLines = 3,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF419CA0),
-                        unfocusedBorderColor = Color(0xFFE5E7EB)
+                        focusedTextColor = theme.inputText,
+                        unfocusedTextColor = theme.inputText,
+                        focusedBorderColor = theme.inputButtonEnabled,
+                        unfocusedBorderColor = theme.inputBorder,
+                        cursorColor = theme.inputButtonEnabled
                     )
                 )
 
@@ -1459,9 +1556,9 @@ private fun ChatInputBarWithBubbles(
                         .size(48.dp)
                         .background(
                             color = if (enabled && hasContent) {
-                                Color(0xFF419CA0)
+                                theme.inputButtonEnabled
                             } else {
-                                Color(0xFFE5E7EB)
+                                theme.inputButtonDisabled
                             },
                             shape = CircleShape
                         )

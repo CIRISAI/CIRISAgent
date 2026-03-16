@@ -321,10 +321,12 @@ private fun DrawScope.drawTimeRings(
     textMeasurer: androidx.compose.ui.text.TextMeasurer,
     highlightIndex: Int = -1
 ) {
-    val ringColor = Color(0xFF4A5568)  // Subtle gray
-    val ringFillColor = Color(0xFF2D3748)  // Darker fill
-    val labelColor = Color(0xFF718096)
-    val highlightColor = Color(0xFF63B3ED)  // Blue highlight for current period
+    // Use theme colors - primary for highlight, grays for rings
+    val theme = GraphColors.getTheme()
+    val ringColor = theme.grayBase  // Subtle gray
+    val ringFillColor = GraphColors.darken(theme.grayBase, 0.3f)  // Darker fill
+    val labelColor = GraphColors.lighten(theme.grayBase, 0.2f)  // Lighter for labels
+    val highlightColor = theme.primary  // Theme primary for current period
 
     // Make slices very acute (narrow) so more rings fit
     val sliceHeight = 140f  // Vertical height
@@ -419,7 +421,7 @@ private fun DrawScope.drawTimeRingToNodeEdges(
     centerX: Float,
     centerY: Float
 ) {
-    val lineColor = Color(0xFF63B3ED)  // Blue to match highlight color
+    val lineColor = GraphColors.getTheme().primary  // Theme primary to match highlight color
     val sliceHeight = 140f  // Match the slice height from drawTimeRings
 
     // Group projected nodes by their ring (using cylinderX to match ring xPosition)

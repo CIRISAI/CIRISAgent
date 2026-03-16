@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -226,14 +227,15 @@ fun SchedulerScreen(
 
 @Composable
 private fun CognitiveStateCard(state: String) {
+    val semantic = SemanticColors.Default
     val (color, description) = when (state.uppercase()) {
-        "WORK" -> Pair(Color(0xFF4CAF50), "Processing tasks normally")
-        "PLAY" -> Pair(Color(0xFF9C27B0), "Creative/exploratory mode")
-        "SOLITUDE" -> Pair(Color(0xFF607D8B), "Reflection mode")
-        "DREAM" -> Pair(Color(0xFF3F51B5), "Deep introspection")
-        "WAKEUP" -> Pair(Color(0xFFFFA000), "Starting up")
-        "SHUTDOWN" -> Pair(Color(0xFFF44336), "Shutting down")
-        else -> Pair(Color(0xFF9E9E9E), "Unknown state")
+        "WORK" -> Pair(semantic.success, "Processing tasks normally")
+        "PLAY" -> Pair(semantic.accentTertiary, "Creative/exploratory mode")
+        "SOLITUDE" -> Pair(semantic.inactive, "Reflection mode")
+        "DREAM" -> Pair(semantic.info, "Deep introspection")
+        "WAKEUP" -> Pair(semantic.warning, "Starting up")
+        "SHUTDOWN" -> Pair(semantic.error, "Shutting down")
+        else -> Pair(semantic.inactive, "Unknown state")
     }
 
     Card(
@@ -279,6 +281,7 @@ private fun CognitiveStateCard(state: String) {
 
 @Composable
 private fun SchedulerStatsRow(overview: SchedulerOverviewData) {
+    val semantic = SemanticColors.Default
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -287,21 +290,21 @@ private fun SchedulerStatsRow(overview: SchedulerOverviewData) {
             icon = Icons.Filled.DateRange,
             label = "Pending",
             value = overview.pendingCount.toString(),
-            color = if (overview.pendingCount > 0) Color(0xFFFFA000) else Color(0xFF4CAF50),
+            color = if (overview.pendingCount > 0) semantic.warning else semantic.success,
             modifier = Modifier.weight(1f)
         )
         SchedulerStatCard(
             icon = Icons.Filled.Refresh,
             label = "Recurring",
             value = overview.recurringCount.toString(),
-            color = Color(0xFF2196F3),
+            color = semantic.info,
             modifier = Modifier.weight(1f)
         )
         SchedulerStatCard(
             icon = Icons.Filled.CheckCircle,
             label = "Completed",
             value = overview.completedTotal.toString(),
-            color = Color(0xFF4CAF50),
+            color = semantic.success,
             modifier = Modifier.weight(1f)
         )
     }
@@ -354,13 +357,14 @@ private fun ScheduledTaskCard(
     task: ScheduledTaskData,
     onCancel: () -> Unit
 ) {
+    val semantic = SemanticColors.Default
     val statusColor = when (task.status.uppercase()) {
-        "PENDING" -> Color(0xFFFFA000)
-        "ACTIVE" -> Color(0xFF2196F3)
-        "COMPLETE" -> Color(0xFF4CAF50)
-        "FAILED" -> Color(0xFFF44336)
-        "CANCELLED" -> Color(0xFF9E9E9E)
-        else -> Color(0xFF9E9E9E)
+        "PENDING" -> semantic.warning
+        "ACTIVE" -> semantic.info
+        "COMPLETE" -> semantic.success
+        "FAILED" -> semantic.error
+        "CANCELLED" -> semantic.inactive
+        else -> semantic.inactive
     }
 
     Card(

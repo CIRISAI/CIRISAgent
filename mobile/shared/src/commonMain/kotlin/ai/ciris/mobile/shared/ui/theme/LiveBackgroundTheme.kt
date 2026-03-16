@@ -112,7 +112,7 @@ object LightTheme {
 }
 
 /**
- * Helper to pick theme based on live background state.
+ * Helper to pick theme based on live background state and color theme.
  */
 data class InteractTheme(
     val background: Color,
@@ -147,11 +147,23 @@ data class InteractTheme(
     val trustLevel4: Color,
     val trustLevelLow: Color,
     val trustDefault: Color,
-    val isDark: Boolean
+    val isDark: Boolean,
+    val colorTheme: ColorTheme
 ) {
     companion object {
-        fun forLiveBackground(enabled: Boolean): InteractTheme {
-            return if (enabled) {
+        /**
+         * Create theme for live background mode with color theme support.
+         * @param enabled Whether live background is enabled
+         * @param colorTheme The selected color theme for accents
+         * @param isDark Whether to use dark mode colors (from brightness preference)
+         */
+        fun forLiveBackground(
+            enabled: Boolean,
+            colorTheme: ColorTheme = ColorTheme.DEFAULT,
+            isDark: Boolean = true
+        ): InteractTheme {
+            // Respect user's brightness preference - they control dark/light mode
+            return if (isDark) {
                 InteractTheme(
                     background = LiveBackgroundTheme.background,
                     surface = LiveBackgroundTheme.surface,
@@ -160,21 +172,21 @@ data class InteractTheme(
                     textPrimary = LiveBackgroundTheme.textPrimary,
                     textSecondary = LiveBackgroundTheme.textSecondary,
                     textMuted = LiveBackgroundTheme.textMuted,
-                    textAccent = LiveBackgroundTheme.textAccent,
+                    textAccent = colorTheme.primary,  // Use theme primary as accent
                     statusConnected = LiveBackgroundTheme.statusConnected,
                     statusDisconnected = LiveBackgroundTheme.statusDisconnected,
                     statusWarning = LiveBackgroundTheme.statusWarning,
                     warningBackground = LiveBackgroundTheme.warningBackground,
                     warningText = LiveBackgroundTheme.warningText,
-                    timelineBackground = LiveBackgroundTheme.timelineBackground,
-                    timelineText = LiveBackgroundTheme.timelineText,
+                    timelineBackground = colorTheme.tertiary.copy(alpha = 0.3f),  // Use theme tertiary
+                    timelineText = colorTheme.tertiary,
                     inputBackground = LiveBackgroundTheme.inputBackground,
                     inputBorder = LiveBackgroundTheme.inputBorder,
                     inputText = LiveBackgroundTheme.inputText,
                     inputPlaceholder = LiveBackgroundTheme.inputPlaceholder,
-                    inputButtonEnabled = LiveBackgroundTheme.inputButtonEnabled,
+                    inputButtonEnabled = colorTheme.primary,  // Use theme primary for buttons
                     inputButtonDisabled = LiveBackgroundTheme.inputButtonDisabled,
-                    userBubble = LiveBackgroundTheme.userBubble,
+                    userBubble = colorTheme.primary,  // Use theme primary for user bubbles
                     agentBubble = LiveBackgroundTheme.agentBubble,
                     agentBubbleText = LiveBackgroundTheme.agentBubbleText,
                     messageCountBackground = LiveBackgroundTheme.messageCountBackground,
@@ -185,7 +197,8 @@ data class InteractTheme(
                     trustLevel4 = LiveBackgroundTheme.trustLevel4,
                     trustLevelLow = LiveBackgroundTheme.trustLevelLow,
                     trustDefault = LiveBackgroundTheme.trustDefault,
-                    isDark = true
+                    isDark = true,
+                    colorTheme = colorTheme
                 )
             } else {
                 InteractTheme(
@@ -196,21 +209,21 @@ data class InteractTheme(
                     textPrimary = LightTheme.textPrimary,
                     textSecondary = LightTheme.textSecondary,
                     textMuted = LightTheme.textMuted,
-                    textAccent = LightTheme.textAccent,
+                    textAccent = colorTheme.primary,  // Use theme primary as accent
                     statusConnected = LightTheme.statusConnected,
                     statusDisconnected = LightTheme.statusDisconnected,
                     statusWarning = LightTheme.statusWarning,
                     warningBackground = LightTheme.warningBackground,
                     warningText = LightTheme.warningText,
-                    timelineBackground = LightTheme.timelineBackground,
-                    timelineText = LightTheme.timelineText,
+                    timelineBackground = colorTheme.tertiary.copy(alpha = 0.1f),  // Lighter for light mode
+                    timelineText = colorTheme.tertiary,
                     inputBackground = LightTheme.inputBackground,
                     inputBorder = LightTheme.inputBorder,
                     inputText = LightTheme.inputText,
                     inputPlaceholder = LightTheme.inputPlaceholder,
-                    inputButtonEnabled = LightTheme.inputButtonEnabled,
+                    inputButtonEnabled = colorTheme.primary,  // Use theme primary for buttons
                     inputButtonDisabled = LightTheme.inputButtonDisabled,
-                    userBubble = LightTheme.userBubble,
+                    userBubble = colorTheme.primary,  // Use theme primary for user bubbles
                     agentBubble = LightTheme.agentBubble,
                     agentBubbleText = LightTheme.agentBubbleText,
                     messageCountBackground = LightTheme.messageCountBackground,
@@ -221,7 +234,8 @@ data class InteractTheme(
                     trustLevel4 = LightTheme.trustLevel4,
                     trustLevelLow = LightTheme.trustLevelLow,
                     trustDefault = LightTheme.trustDefault,
-                    isDark = false
+                    isDark = false,
+                    colorTheme = colorTheme
                 )
             }
         }

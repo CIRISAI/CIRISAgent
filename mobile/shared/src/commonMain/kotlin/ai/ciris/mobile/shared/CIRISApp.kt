@@ -20,6 +20,7 @@ import ai.ciris.mobile.shared.platform.getOAuthProviderName
 import ai.ciris.mobile.shared.platform.getOAuthProviderId
 import ai.ciris.mobile.shared.platform.platformLog
 import ai.ciris.mobile.shared.ui.components.AdapterWizardDialog
+import ai.ciris.mobile.shared.ui.components.CIRISSignet
 import ai.ciris.mobile.shared.ui.screens.*
 import ai.ciris.mobile.shared.viewmodels.AdaptersViewModel
 import ai.ciris.mobile.shared.viewmodels.AuditViewModel
@@ -45,8 +46,15 @@ import ai.ciris.mobile.shared.viewmodels.TicketsViewModel
 import ai.ciris.mobile.shared.viewmodels.SchedulerViewModel
 import ai.ciris.mobile.shared.viewmodels.ToolsViewModel
 import ai.ciris.mobile.shared.ui.screens.graph.GraphMemoryScreen
+import ai.ciris.mobile.shared.ui.theme.BrightnessPreference
+import ai.ciris.mobile.shared.ui.theme.ColorTheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
@@ -67,6 +75,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CoroutineScope
 
@@ -791,7 +800,23 @@ fun CIRISApp(
         }
     }
 
-    MaterialTheme {
+    // Collect brightness preference for theme
+    val brightnessPreference by settingsViewModel.brightnessPreference.collectAsState()
+    val systemInDarkTheme = isSystemInDarkTheme()
+    val isDarkMode = when (brightnessPreference) {
+        BrightnessPreference.LIGHT -> false
+        BrightnessPreference.DARK -> true
+        BrightnessPreference.SYSTEM -> systemInDarkTheme
+    }
+
+    // Apply appropriate color scheme based on brightness preference
+    val colorScheme = if (isDarkMode) {
+        darkColorScheme()
+    } else {
+        lightColorScheme()
+    }
+
+    MaterialTheme(colorScheme = colorScheme) {
         when (currentScreen) {
             Screen.Startup -> {
                 StartupScreen(viewModel = startupViewModel)
@@ -1146,6 +1171,11 @@ fun CIRISApp(
             }
 
             Screen.Interact -> {
+                // Live background state from settings (collect before Scaffold for top bar)
+                val liveBackgroundEnabled by settingsViewModel.liveBackgroundEnabled.collectAsState()
+                val colorTheme by settingsViewModel.colorTheme.collectAsState()
+                platformLog(TAG, "[CIRISApp] >>> liveBackgroundEnabled=$liveBackgroundEnabled, apiClient=${if (apiClient != null) "present" else "NULL"}")
+
                 Scaffold(
                     topBar = {
                         CIRISTopBar(
@@ -1166,15 +1196,18 @@ fun CIRISApp(
                             onUsersClick = { currentScreen = Screen.Users },
                             onTicketsClick = { currentScreen = Screen.Tickets },
                             onSchedulerClick = { currentScreen = Screen.Scheduler },
-                            onToolsClick = { currentScreen = Screen.Tools }
+                            onToolsClick = { currentScreen = Screen.Tools },
+                            darkMode = isDarkMode,
+                            // Theme picker
+                            colorTheme = colorTheme,
+                            brightnessPreference = brightnessPreference,
+                            onColorThemeChange = { settingsViewModel.setColorTheme(it) },
+                            onBrightnessChange = { settingsViewModel.setBrightnessPreference(it) }
                         )
                     }
                 ) { paddingValues ->
                     // Only apply top padding from Scaffold - InteractScreen handles
                     // bottom insets (keyboard + nav bar) via windowInsetsPadding
-                    // Live background state from settings
-                    val liveBackgroundEnabled by settingsViewModel.liveBackgroundEnabled.collectAsState()
-                    platformLog(TAG, "[CIRISApp] >>> liveBackgroundEnabled=$liveBackgroundEnabled, apiClient=${if (apiClient != null) "present" else "NULL"}")
 
                     InteractScreen(
                         viewModel = interactViewModel,
@@ -1207,6 +1240,8 @@ fun CIRISApp(
                         },
                         apiClient = apiClient,
                         liveBackgroundEnabled = liveBackgroundEnabled,
+                        colorTheme = colorTheme,
+                        isDarkMode = isDarkMode,
                         modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
                     )
                 }
@@ -2284,27 +2319,40 @@ private fun CIRISTopBar(
     onUsersClick: () -> Unit = {},
     onTicketsClick: () -> Unit = {},
     onSchedulerClick: () -> Unit = {},
-    onToolsClick: () -> Unit = {}
+    onToolsClick: () -> Unit = {},
+    darkMode: Boolean = false,
+    // Theme picker
+    colorTheme: ColorTheme = ColorTheme.DEFAULT,
+    brightnessPreference: BrightnessPreference = BrightnessPreference.SYSTEM,
+    onColorThemeChange: (ColorTheme) -> Unit = {},
+    onBrightnessChange: (BrightnessPreference) -> Unit = {}
 ) {
     var activeCategory by remember { mutableStateOf(NavCategory.NONE) }
+    var showThemePicker by remember { mutableStateOf(false) }
+
+    // Theme picker dialog
+    if (showThemePicker) {
+        ThemePickerDialog(
+            currentTheme = colorTheme,
+            currentBrightness = brightnessPreference,
+            onThemeSelected = onColorThemeChange,
+            onBrightnessSelected = onBrightnessChange,
+            onDismiss = { showThemePicker = false }
+        )
+    }
+
+    // Dark mode colors for live background
+    val containerColor = if (darkMode) Color(0xFF0D1117) else MaterialTheme.colorScheme.primaryContainer
+    val contentColor = if (darkMode) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
+    val accentColor = if (darkMode) Color(0xFF7DD3FC) else MaterialTheme.colorScheme.primary
 
     TopAppBar(
         title = {
-            // CIRIS Signet - styled "C" icon instead of text
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "C",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
-            }
+            // CIRIS Signet - geometric brand mark
+            CIRISSignet(
+                modifier = Modifier.size(32.dp),
+                tintColor = if (darkMode) Color.White else MaterialTheme.colorScheme.primary
+            )
         },
         actions = {
             // Category 1: Adapters & Tools
@@ -2318,10 +2366,7 @@ private fun CIRISTopBar(
                     Icon(
                         imageVector = Icons.Default.Build,
                         contentDescription = "Adapters & Tools",
-                        tint = if (activeCategory == NavCategory.ADAPTERS)
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onPrimaryContainer
+                        tint = if (activeCategory == NavCategory.ADAPTERS) accentColor else contentColor
                     )
                 }
                 DropdownMenu(
@@ -2356,10 +2401,7 @@ private fun CIRISTopBar(
                     Icon(
                         imageVector = Icons.Default.Settings,
                         contentDescription = "Config & Credits",
-                        tint = if (activeCategory == NavCategory.CONFIG)
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onPrimaryContainer
+                        tint = if (activeCategory == NavCategory.CONFIG) accentColor else contentColor
                     )
                 }
                 DropdownMenu(
@@ -2371,6 +2413,18 @@ private fun CIRISTopBar(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    DropdownMenuItem(
+                        text = { Text("App Theme") },
+                        onClick = { activeCategory = NavCategory.NONE; showThemePicker = true },
+                        leadingIcon = {
+                            // Show current theme color as icon
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .background(colorTheme.primary, CircleShape)
+                            )
+                        }
                     )
                     DropdownMenuItem(
                         text = { Text("LLM Settings") },
@@ -2398,10 +2452,7 @@ private fun CIRISTopBar(
                     Icon(
                         imageVector = Icons.Default.Info,
                         contentDescription = "Data & Privacy",
-                        tint = if (activeCategory == NavCategory.DATA)
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onPrimaryContainer
+                        tint = if (activeCategory == NavCategory.DATA) accentColor else contentColor
                     )
                 }
                 DropdownMenu(
@@ -2445,10 +2496,7 @@ private fun CIRISTopBar(
                     Icon(
                         imageVector = Icons.Default.Person,
                         contentDescription = "Governance",
-                        tint = if (activeCategory == NavCategory.GOVERNANCE)
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onPrimaryContainer
+                        tint = if (activeCategory == NavCategory.GOVERNANCE) accentColor else contentColor
                     )
                 }
                 DropdownMenu(
@@ -2485,10 +2533,7 @@ private fun CIRISTopBar(
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = "Advanced",
-                        tint = if (activeCategory == NavCategory.ADVANCED)
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onPrimaryContainer
+                        tint = if (activeCategory == NavCategory.ADVANCED) accentColor else contentColor
                     )
                 }
                 DropdownMenu(
@@ -2540,8 +2585,9 @@ private fun CIRISTopBar(
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            containerColor = containerColor,
+            titleContentColor = contentColor,
+            actionIconContentColor = contentColor
         )
     )
 }
@@ -2574,4 +2620,136 @@ private sealed class Screen {
     object Tickets : Screen()
     object Scheduler : Screen()
     object Tools : Screen()
+}
+
+/**
+ * Theme picker dialog - accessible from top bar gear menu.
+ */
+@Composable
+private fun ThemePickerDialog(
+    currentTheme: ColorTheme,
+    currentBrightness: BrightnessPreference,
+    onThemeSelected: (ColorTheme) -> Unit,
+    onBrightnessSelected: (BrightnessPreference) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("App Theme") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Brightness selection
+                Text(
+                    text = "Brightness",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    BrightnessPreference.entries.forEach { pref ->
+                        FilterChip(
+                            selected = currentBrightness == pref,
+                            onClick = { onBrightnessSelected(pref) },
+                            label = { Text(pref.displayName) }
+                        )
+                    }
+                }
+
+                // Color theme grid
+                Text(
+                    text = "Color Theme",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+
+                val themes = ColorTheme.entries.toList()
+                val chunkedThemes = themes.chunked(4)
+
+                chunkedThemes.forEach { row ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        row.forEach { theme ->
+                            ThemeColorChip(
+                                theme = theme,
+                                isSelected = currentTheme == theme,
+                                onClick = { onThemeSelected(theme) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        // Fill remaining space
+                        repeat(4 - row.size) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done")
+            }
+        }
+    )
+}
+
+/**
+ * Compact theme color chip for the dialog.
+ */
+@Composable
+private fun ThemeColorChip(
+    theme: ColorTheme,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+               else MaterialTheme.colorScheme.surface,
+        modifier = modifier
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) MaterialTheme.colorScheme.primary
+                       else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(8.dp)
+            )
+            .clickable { onClick() }
+    ) {
+        Column(
+            modifier = Modifier.padding(6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Color dots
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(theme.primary, CircleShape)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(theme.secondary, CircleShape)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(theme.tertiary, CircleShape)
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = theme.displayName,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1
+            )
+        }
+    }
 }

@@ -49,6 +49,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ai.ciris.mobile.shared.ui.theme.ColorTheme
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 
 private const val TAG = "SetupScreen"
 
@@ -62,28 +64,33 @@ private const val TAG = "SetupScreen"
  * - info_light: #DBEAFE, info_dark: #1E40AF, info_text: #1D4ED8
  */
 
-// Colors from android/app/src/main/res/values/colors.xml
+// Colors for light-themed setup wizard
+// Uses SemanticColors for status indicators (success/error/warning/info)
+// while maintaining the light background design
 private object SetupColors {
+    // Get semantic colors for light mode
+    private val semantic = SemanticColors.forTheme(ColorTheme.DEFAULT, isDark = false)
+
     val Background = Color.White
     val TextPrimary = Color(0xFF1F2937)
     val TextSecondary = Color(0xFF6B7280)
 
-    // Success (green) - for Google ready card
-    val SuccessLight = Color(0xFFD1FAE5)
+    // Success (green) - derived from SemanticColors light mode
+    val SuccessLight = semantic.surfaceSuccess
     val SuccessBorder = Color(0xFF6EE7B7)
-    val SuccessDark = Color(0xFF065F46)
-    val SuccessText = Color(0xFF047857)
+    val SuccessDark = semantic.onSuccess
+    val SuccessText = semantic.success
 
-    // Info (blue) - for setup required card
-    val InfoLight = Color(0xFFDBEAFE)
+    // Info (blue) - derived from SemanticColors light mode
+    val InfoLight = semantic.surfaceInfo
     val InfoBorder = Color(0xFF93C5FD)
-    val InfoDark = Color(0xFF1E40AF)
-    val InfoText = Color(0xFF1D4ED8)
+    val InfoDark = semantic.onInfo
+    val InfoText = semantic.info
 
-    // Error (red) - for validation failures
-    val ErrorLight = Color(0xFFFEE2E2)
-    val ErrorDark = Color(0xFFB91C1C)
-    val ErrorText = Color(0xFFDC2626)
+    // Error (red) - derived from SemanticColors light mode
+    val ErrorLight = semantic.surfaceError
+    val ErrorDark = semantic.onError
+    val ErrorText = semantic.error
 
     // Gray for cards
     val GrayLight = Color(0xFFF3F4F6)
@@ -103,6 +110,7 @@ fun SetupScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val coroutineScope = rememberCoroutineScope()
+    val semantic = SemanticColors.forTheme(ColorTheme.DEFAULT, isDark = false)
 
     // Load adapters and templates when entering OPTIONAL_FEATURES step
     LaunchedEffect(state.currentStep) {
@@ -173,19 +181,19 @@ fun SetupScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(if (isAlreadyConfigured) Color(0xFFFFF3CD) else Color(0xFFF8D7DA))
+                        .background(if (isAlreadyConfigured) semantic.surfaceWarning else SetupColors.ErrorLight)
                         .padding(16.dp)
                 ) {
                     Text(
                         text = if (isAlreadyConfigured) "Setup Already Complete" else "Setup Error",
                         fontWeight = FontWeight.Bold,
-                        color = if (isAlreadyConfigured) Color(0xFF856404) else Color(0xFF721C24)
+                        color = if (isAlreadyConfigured) semantic.onWarning else SetupColors.ErrorDark
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = error,
                         fontSize = 14.sp,
-                        color = if (isAlreadyConfigured) Color(0xFF856404) else Color(0xFF721C24)
+                        color = if (isAlreadyConfigured) semantic.onWarning else SetupColors.ErrorDark
                     )
                     if (isAlreadyConfigured) {
                         Spacer(modifier = Modifier.height(12.dp))
@@ -390,11 +398,11 @@ private fun WelcomeStep(
         // Register Your Agent card — always visible, above the fold
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = Color(0xFFF0FDF4), // Light green
+            color = SetupColors.SuccessLight,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 16.dp)
-                .border(1.dp, Color(0xFF86EFAC), RoundedCornerShape(12.dp))
+                .border(1.dp, SetupColors.SuccessBorder, RoundedCornerShape(12.dp))
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
@@ -409,7 +417,7 @@ private fun WelcomeStep(
                     )
                     Surface(
                         shape = RoundedCornerShape(4.dp),
-                        color = Color(0xFFD1FAE5)
+                        color = SetupColors.SuccessLight
                     ) {
                         Text(
                             text = "OPTIONAL",
@@ -484,7 +492,7 @@ private fun WelcomeStep(
                 // Skip option
                 Text(
                     text = "Skip for now - you can register later in Settings",
-                    color = Color(0xFF9CA3AF),  // Lighter gray for tertiary
+                    color = SetupColors.TextSecondary,
                     fontSize = 11.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
@@ -963,20 +971,20 @@ private fun NodeAuthStep(
             DeviceAuthStatus.ERROR -> {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFFFEE2E2),
+                    color = SetupColors.ErrorLight,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text(
                             text = "Connection Failed",
-                            color = Color(0xFF991B1B),
+                            color = SetupColors.ErrorDark,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                         Text(
                             text = deviceAuth.error ?: "Unknown error",
-                            color = Color(0xFFDC2626),
+                            color = SetupColors.ErrorText,
                             fontSize = 14.sp
                         )
                     }
@@ -1844,11 +1852,11 @@ private fun AdapterToggleItem(
                         Spacer(modifier = Modifier.width(8.dp))
                         Surface(
                             shape = RoundedCornerShape(4.dp),
-                            color = Color(0xFFFFF3CD)
+                            color = SemanticColors.forTheme(ColorTheme.DEFAULT, isDark = false).surfaceWarning
                         ) {
                             Text(
                                 text = "Needs Config",
-                                color = Color(0xFF856404),
+                                color = SemanticColors.forTheme(ColorTheme.DEFAULT, isDark = false).onWarning,
                                 fontSize = 10.sp,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
@@ -1864,7 +1872,7 @@ private fun AdapterToggleItem(
                 if (requiresConfig && configFields.isNotEmpty() && isEnabled) {
                     Text(
                         text = "Required: ${configFields.joinToString(", ")}",
-                        color = Color(0xFF856404),
+                        color = SemanticColors.forTheme(ColorTheme.DEFAULT, isDark = false).onWarning,
                         fontSize = 11.sp,
                         modifier = Modifier.padding(top = 4.dp)
                     )
@@ -2032,7 +2040,7 @@ private fun AccountConfirmationStep(
             if (state.userPassword.isNotEmpty() && state.userPassword.length < 8) {
                 Text(
                     text = "Password must be at least 8 characters",
-                    color = Color(0xFFDC2626),
+                    color = SetupColors.ErrorText,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(start = 4.dp, top = 4.dp)
                 )
@@ -2129,7 +2137,7 @@ private fun NavigationButtons(
         // Show validation error if present
         if (validationError != null && !canProceed) {
             Surface(
-                color = Color(0xFFFEE2E2),
+                color = SetupColors.ErrorLight,
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2137,7 +2145,7 @@ private fun NavigationButtons(
             ) {
                 Text(
                     text = validationError,
-                    color = Color(0xFFDC2626),
+                    color = SetupColors.ErrorText,
                     fontSize = 14.sp,
                     modifier = Modifier.padding(12.dp)
                 )

@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -302,12 +303,12 @@ private fun ToolsStatsCard(
             StatColumn(
                 label = "Total Tools",
                 value = metadata.totalTools.toString(),
-                color = Color(0xFF4CAF50)
+                color = SemanticColors.Default.success
             )
             StatColumn(
                 label = "Providers",
                 value = metadata.providerCount.toString(),
-                color = Color(0xFF2196F3)
+                color = SemanticColors.Default.info
             )
         }
     }
@@ -346,12 +347,12 @@ private fun ToolCard(
     modifier: Modifier = Modifier
 ) {
     val categoryColor = when (tool.category.lowercase()) {
-        "secrets" -> Color(0xFFE91E63)
-        "memory" -> Color(0xFF9C27B0)
-        "communication" -> Color(0xFF2196F3)
-        "system" -> Color(0xFF607D8B)
-        "general" -> Color(0xFF4CAF50)
-        else -> Color(0xFF795548)
+        "secrets" -> Color(0xFFE91E63)      // Pink - special/sensitive
+        "memory" -> Color(0xFF9C27B0)        // Purple - cognitive
+        "communication" -> SemanticColors.Default.info  // Blue
+        "system" -> Color(0xFF607D8B)        // Blue-gray - system
+        "general" -> SemanticColors.Default.success    // Green
+        else -> Color(0xFF795548)            // Brown - other
     }
 
     Card(
@@ -455,7 +456,7 @@ private fun ToolCard(
                             Text(
                                 text = "${tool.cost} credits",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFFFFA000)
+                                color = SemanticColors.Default.warning
                             )
                         }
                     }

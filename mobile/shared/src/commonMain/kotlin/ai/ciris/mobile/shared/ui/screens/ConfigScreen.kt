@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -389,14 +390,14 @@ private fun ConfigItemRow(
                     )
                     if (item.isSensitive) {
                         Surface(
-                            color = Color(0xFFF59E0B).copy(alpha = 0.2f),
+                            color = SemanticColors.Default.warning.copy(alpha = 0.2f),
                             shape = RoundedCornerShape(4.dp)
                         ) {
                             Text(
                                 text = "Sensitive",
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFFF59E0B)
+                                color = SemanticColors.Default.warning
                             )
                         }
                     }
@@ -523,11 +524,11 @@ data class ConfigCategory(
 )
 
 val CONFIG_CATEGORIES = listOf(
-    ConfigCategory("adapters", "Adapters", "Communication adapter configurations", Color(0xFF8B5CF6)),
-    ConfigCategory("services", "Services", "Service-specific settings", Color(0xFF3B82F6)),
-    ConfigCategory("security", "Security", "Security and authentication settings", Color(0xFFEF4444)),
-    ConfigCategory("database", "Database", "Database connection settings", Color(0xFF10B981)),
-    ConfigCategory("limits", "Limits", "Rate limits and constraints", Color(0xFFF59E0B)),
-    ConfigCategory("workflow", "Workflow", "Task and workflow settings", Color(0xFF6366F1)),
-    ConfigCategory("telemetry", "Telemetry", "Monitoring and telemetry", Color(0xFFF97316))
+    ConfigCategory("adapters", "Adapters", "Communication adapter configurations", SemanticColors.Default.accentSecondary),
+    ConfigCategory("services", "Services", "Service-specific settings", SemanticColors.Default.info),
+    ConfigCategory("security", "Security", "Security and authentication settings", SemanticColors.Default.error),
+    ConfigCategory("database", "Database", "Database connection settings", SemanticColors.Default.success),
+    ConfigCategory("limits", "Limits", "Rate limits and constraints", SemanticColors.Default.warning),
+    ConfigCategory("workflow", "Workflow", "Task and workflow settings", SemanticColors.Default.accentTertiary),
+    ConfigCategory("telemetry", "Telemetry", "Monitoring and telemetry", Color(0xFFF97316)) // Orange - no direct semantic equivalent
 )

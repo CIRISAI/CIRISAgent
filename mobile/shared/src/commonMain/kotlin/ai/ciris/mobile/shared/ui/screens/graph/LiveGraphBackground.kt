@@ -19,7 +19,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
@@ -28,6 +30,14 @@ import kotlin.math.sqrt
 private const val TAG = "LiveGraphBackground"
 private const val BIRTH_ANIMATION_DURATION_MS = 2000L  // 2 seconds for new node animation
 private const val EVENT_REFRESH_DELAY_MS = 1500L  // Delay after event before refresh (let DB settle)
+
+/**
+ * Safe color copy that clamps alpha to valid range [0, 1].
+ * Prevents crashes from invalid color values in animations.
+ */
+private fun Color.safeAlpha(alpha: Float): Color {
+    return this.copy(alpha = alpha.coerceIn(0f, 1f))
+}
 private const val MIN_REFRESH_INTERVAL_MS = 5000L  // Minimum time between refreshes
 
 /**
@@ -49,12 +59,18 @@ private const val MIN_REFRESH_INTERVAL_MS = 5000L  // Minimum time between refre
  * - Lightweight animations (alpha + scale only)
  * - Debounced refresh to avoid resource contention
  */
+private const val SPIN_APART_DURATION_MS = 1500L  // Animation duration
+
 @Composable
 fun LiveGraphBackground(
     apiClient: CIRISApiClient,
     modifier: Modifier = Modifier,
     baseOpacity: Float = 0.85f,  // Near-solid for sharp nodes
-    eventTrigger: Int = 0  // Incremented when SSE events occur (speak, tool, etc.)
+    eventTrigger: Int = 0,  // Incremented when SSE events occur (speak, tool, etc.)
+    externalRotation: Float = 0f,  // External rotation from swipe gestures (degrees)
+    spinEnergy: Float = 0f,  // Accumulated spin energy from multiple flicks
+    spinEnergyThreshold: Float = 100f,  // Energy threshold to trigger spin apart
+    onSpinApartTriggered: () -> Unit = {}  // Callback when spin apart animation starts
 ) {
     // Log when composable is first called
     PlatformLogger.i(TAG, ">>> LiveGraphBackground COMPOSING (eventTrigger=$eventTrigger, opacity=$baseOpacity)")
@@ -71,11 +87,44 @@ fun LiveGraphBackground(
     var lastRefreshTime by remember { mutableStateOf(0L) }
     var pendingRefresh by remember { mutableStateOf(false) }
 
-    // Continuous rotation animation
+    // Spin apart animation state
+    var isSpinningApart by remember { mutableStateOf(false) }
+    var spinApartProgress by remember { mutableStateOf(0f) }
+    var spinApartStartTime by remember { mutableStateOf(0L) }
+
+    // Detect spin apart trigger - requires building up energy over multiple flicks
+    LaunchedEffect(spinEnergy) {
+        if (spinEnergy >= spinEnergyThreshold && !isSpinningApart) {
+            PlatformLogger.i(TAG, ">>> SPIN APART TRIGGERED! energy=$spinEnergy threshold=$spinEnergyThreshold")
+            isSpinningApart = true
+            spinApartStartTime = System.currentTimeMillis()
+            onSpinApartTriggered()
+        }
+    }
+
+    // Spin apart animation loop
+    LaunchedEffect(isSpinningApart) {
+        if (isSpinningApart) {
+            while (isActive && isSpinningApart) {
+                delay(16)  // ~60 FPS
+                val elapsed = System.currentTimeMillis() - spinApartStartTime
+                spinApartProgress = (elapsed.toFloat() / SPIN_APART_DURATION_MS).coerceIn(0f, 1f)
+
+                if (spinApartProgress >= 1f) {
+                    // Animation complete - reset
+                    isSpinningApart = false
+                    spinApartProgress = 0f
+                    PlatformLogger.i(TAG, ">>> SPIN APART COMPLETE - reforming")
+                }
+            }
+        }
+    }
+
+    // Continuous rotation animation (base automatic rotation)
     val infiniteTransition = rememberInfiniteTransition(label = "rotation")
 
-    // Primary rotation around Y-axis (horizontal spin)
-    val rotationY by infiniteTransition.animateFloat(
+    // Primary rotation around Y-axis (horizontal spin) - automatic
+    val autoRotationY by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
@@ -84,6 +133,9 @@ fun LiveGraphBackground(
         ),
         label = "rotationY"
     )
+
+    // Combined rotation: auto + external (swipe) rotation
+    val rotationY = autoRotationY + externalRotation
 
     // Secondary tilt on X-axis (gentle rocking)
     val rotationX by infiniteTransition.animateFloat(
@@ -217,8 +269,8 @@ fun LiveGraphBackground(
                 val cylinderRadius = minOf(size.width, size.height) * 0.35f
                 val cylinderHeight = size.height * 0.6f
 
-                // Project and draw nodes
-                val projectedNodes = nodes.map { node ->
+                // Project and draw nodes (with optional spin apart explosion)
+                val projectedNodes = nodes.mapIndexed { index, node ->
                     projectNode(
                         node = node,
                         rotationY = rotationY,
@@ -226,7 +278,10 @@ fun LiveGraphBackground(
                         centerX = centerX,
                         centerY = centerY,
                         cylinderRadius = cylinderRadius,
-                        cylinderHeight = cylinderHeight
+                        cylinderHeight = cylinderHeight,
+                        spinApartProgress = spinApartProgress,
+                        nodeIndex = index,
+                        totalNodes = nodes.size
                     )
                 }
 
@@ -306,6 +361,7 @@ private data class ProjectedNode(
 
 /**
  * Project a 3D cylinder node to 2D screen coordinates.
+ * Includes "spin apart" explosion effect when spinApartProgress > 0.
  */
 private fun projectNode(
     node: BackgroundNode,
@@ -314,15 +370,43 @@ private fun projectNode(
     centerX: Float,
     centerY: Float,
     cylinderRadius: Float,
-    cylinderHeight: Float
+    cylinderHeight: Float,
+    spinApartProgress: Float = 0f,
+    nodeIndex: Int = 0,
+    totalNodes: Int = 1
 ): ProjectedNode {
     // Apply Y rotation (horizontal spin)
     val rotatedTheta = node.theta + Math.toRadians(rotationY.toDouble()).toFloat()
 
     // 3D position on cylinder
-    val x3d = cos(rotatedTheta) * cylinderRadius
-    val z3d = sin(rotatedTheta) * cylinderRadius
-    val y3d = node.heightOffset * cylinderHeight / 2
+    var x3d = cos(rotatedTheta) * cylinderRadius
+    var z3d = sin(rotatedTheta) * cylinderRadius
+    var y3d = node.heightOffset * cylinderHeight / 2
+
+    // Spin apart explosion effect
+    if (spinApartProgress > 0f) {
+        // Phase 1 (0-0.5): Explosion - nodes fly outward
+        // Phase 2 (0.5-1.0): Reform - nodes return to cylinder
+        val explosionPhase = if (spinApartProgress < 0.5f) {
+            // Ease out for explosion
+            val t = spinApartProgress * 2f
+            t * t  // Quadratic ease in
+        } else {
+            // Ease in for reform
+            val t = (1f - spinApartProgress) * 2f
+            t * t  // Quadratic ease in (reversed)
+        }
+
+        // Each node gets a unique explosion direction based on its index
+        val explosionAngle = (nodeIndex.toFloat() / totalNodes) * 2 * PI.toFloat()
+        val explosionRadius = cylinderRadius * 3f * explosionPhase  // Fly out 3x the cylinder radius
+
+        // Add explosion offset to position
+        x3d += cos(explosionAngle) * explosionRadius
+        z3d += sin(explosionAngle) * explosionRadius
+        // Vertical scatter
+        y3d += sin(explosionAngle * 2.7f) * cylinderHeight * 0.5f * explosionPhase
+    }
 
     // Apply X rotation (tilt)
     val rotX = Math.toRadians(rotationX.toDouble())
@@ -336,8 +420,14 @@ private fun projectNode(
     val screenX = centerX + x3d * scale
     val screenY = centerY + y3dRotated * scale
 
-    // Full opacity - no depth-based fading
-    val alpha = 1.0f
+    // Alpha: fade during explosion, solid during reform
+    val alpha = if (spinApartProgress > 0f && spinApartProgress < 0.5f) {
+        1f - spinApartProgress  // Fade out during explosion
+    } else if (spinApartProgress >= 0.5f) {
+        spinApartProgress  // Fade in during reform
+    } else {
+        1.0f
+    }
 
     return ProjectedNode(
         x = screenX,
@@ -374,18 +464,39 @@ private fun DrawScope.drawBackgroundNode(
 
     if (scaledRadius < 0.5f) return  // Skip nearly invisible nodes
 
-    // Main node - solid, no blur/glow
+    // Pulsing outer ring for new nodes (very noticeable)
+    if (birthProgress < 1f) {
+        val pulseScale = 1f + birthPulse * 0.5f  // Pulse between 1x and 1.5x
+        val ringAlpha = (1f - birthProgress) * 0.8f  // Fade out as node matures
+
+        // Bright pulsing ring - use safeAlpha to prevent crash
+        drawCircle(
+            color = Color.White.safeAlpha(ringAlpha * pulseScale),
+            radius = scaledRadius * 2.5f * pulseScale,
+            center = Offset(projected.x, projected.y),
+            style = Stroke(width = 3f)
+        )
+
+        // Inner glow
+        drawCircle(
+            color = projected.color.safeAlpha(ringAlpha * 0.6f),
+            radius = scaledRadius * 1.8f,
+            center = Offset(projected.x, projected.y)
+        )
+    }
+
+    // Main node - solid
     drawCircle(
-        color = projected.color.copy(alpha = effectiveAlpha),
+        color = projected.color.safeAlpha(effectiveAlpha),
         radius = scaledRadius,
         center = Offset(projected.x, projected.y)
     )
 
-    // Subtle highlight for new nodes only
+    // Bright center highlight for new nodes
     if (birthProgress < 1f) {
         drawCircle(
-            color = Color.White.copy(alpha = effectiveAlpha * 0.3f * (1f - birthProgress)),
-            radius = scaledRadius * 0.5f,
+            color = Color.White.safeAlpha((1f - birthProgress) * 0.9f),
+            radius = scaledRadius * 0.4f,
             center = Offset(projected.x, projected.y)
         )
     }
@@ -420,7 +531,7 @@ private fun DrawScope.drawBackgroundEdge(
 
     drawPath(
         path = path,
-        color = Color.White.copy(alpha = avgAlpha),
+        color = Color.White.safeAlpha(avgAlpha),
         style = Stroke(
             width = 1f,
             cap = StrokeCap.Round,

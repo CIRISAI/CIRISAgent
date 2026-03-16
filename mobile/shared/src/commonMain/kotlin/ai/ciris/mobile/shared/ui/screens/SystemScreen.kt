@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 
 /**
  * System management and control screen
@@ -354,7 +355,7 @@ private fun ResourceUsageCard(
                 Text(
                     text = diskDisplay,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF10B981)
+                    color = SemanticColors.Default.success
                 )
             }
         }
@@ -435,7 +436,7 @@ private fun EnvironmentalImpactCard(
                     icon = "\uD83C\uDF0D", // Earth
                     value = "${formatDecimal(carbonGrams / 1000, 3)} kg",
                     label = "CO2 Last Hour",
-                    color = Color(0xFF10B981)
+                    color = SemanticColors.Default.success
                 )
 
                 // Energy
@@ -443,7 +444,7 @@ private fun EnvironmentalImpactCard(
                     icon = "\u26A1", // Lightning
                     value = "${formatDecimal(energyKwh, 4)} kWh",
                     label = "Energy Last Hour",
-                    color = Color(0xFF3B82F6)
+                    color = SemanticColors.Default.info
                 )
 
                 // Cost
@@ -451,7 +452,7 @@ private fun EnvironmentalImpactCard(
                     icon = "\uD83D\uDCB2", // Dollar
                     value = "$${formatDecimal(costCents / 100, 2)}",
                     label = "Cost Last Hour",
-                    color = Color(0xFF8B5CF6)
+                    color = SemanticColors.Default.accentTertiary
                 )
             }
 
@@ -562,8 +563,9 @@ private fun ProcessorControlCard(
             ) {
                 // Status
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    val statusColor = if (isPaused) SemanticColors.Default.warning else SemanticColors.Default.success
                     Surface(
-                        color = if (isPaused) Color(0xFFF59E0B).copy(alpha = 0.2f) else Color(0xFF10B981).copy(alpha = 0.2f),
+                        color = statusColor.copy(alpha = 0.2f),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
@@ -571,7 +573,7 @@ private fun ProcessorControlCard(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = if (isPaused) Color(0xFFF59E0B) else Color(0xFF10B981)
+                            color = statusColor
                         )
                     }
                     Text(
@@ -620,7 +622,7 @@ private fun ProcessorControlCard(
                         if (isPaused) onResume() else onPause()
                     },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isPaused) Color(0xFF10B981) else Color(0xFFF59E0B)
+                    containerColor = if (isPaused) SemanticColors.Default.success else SemanticColors.Default.warning
                 )
             ) {
                 Text(if (isPaused) "Resume Runtime" else "Pause Runtime")
@@ -628,14 +630,14 @@ private fun ProcessorControlCard(
 
             // Info note
             Surface(
-                color = Color(0xFF3B82F6).copy(alpha = 0.1f),
+                color = SemanticColors.Default.surfaceInfo,
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text(
                     text = "The CIRIS system has one main processor that cycles through cognitive states. Pausing affects the entire processor.",
                     modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF1E40AF)
+                    color = SemanticColors.Default.onInfo
                 )
             }
         }
@@ -659,9 +661,9 @@ private fun ServicesHealthGrid(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                StatusLegendItem(color = Color(0xFF10B981), label = "Healthy")
-                StatusLegendItem(color = Color(0xFFF59E0B), label = "Degraded")
-                StatusLegendItem(color = Color(0xFFEF4444), label = "Unhealthy")
+                StatusLegendItem(color = SemanticColors.Default.success, label = "Healthy")
+                StatusLegendItem(color = SemanticColors.Default.warning, label = "Degraded")
+                StatusLegendItem(color = SemanticColors.Default.error, label = "Unhealthy")
             }
 
             HorizontalDivider()
@@ -719,10 +721,11 @@ private fun ServiceChip(
     service: SystemServiceInfo,
     modifier: Modifier = Modifier
 ) {
+    val semantic = SemanticColors.Default
     val color = when {
-        service.healthy -> Color(0xFF10B981)
-        service.available -> Color(0xFFF59E0B)
-        else -> Color(0xFFEF4444)
+        service.healthy -> semantic.success
+        service.available -> semantic.warning
+        else -> semantic.error
     }
 
     Surface(
@@ -797,7 +800,7 @@ private fun ChannelCard(
                 modifier = Modifier
                     .size(12.dp)
                     .clip(CircleShape)
-                    .background(if (channel.isActive) Color(0xFF10B981) else Color.Gray)
+                    .background(if (channel.isActive) SemanticColors.Default.online else SemanticColors.Default.inactive)
             )
         }
     }
@@ -805,10 +808,11 @@ private fun ChannelCard(
 
 // Helper functions
 private fun getHealthColor(health: String?): Color {
+    val semantic = SemanticColors.Default
     return when (health?.lowercase()) {
-        "healthy" -> Color(0xFF10B981)
-        "degraded" -> Color(0xFFF59E0B)
-        "unhealthy" -> Color(0xFFEF4444)
+        "healthy" -> semantic.success
+        "degraded" -> semantic.warning
+        "unhealthy" -> semantic.error
         else -> Color.Gray
     }
 }
@@ -823,19 +827,21 @@ private fun getHealthIcon(health: String?): String {
 }
 
 private fun getUsageColor(percent: Int): Color {
+    val semantic = SemanticColors.Default
     return when {
-        percent < 50 -> Color(0xFF10B981)
-        percent < 80 -> Color(0xFFF59E0B)
-        else -> Color(0xFFEF4444)
+        percent < 50 -> semantic.success
+        percent < 80 -> semantic.warning
+        else -> semantic.error
     }
 }
 
 private fun getCognitiveStateColor(state: String): Color {
+    val semantic = SemanticColors.Default
     return when (state.uppercase()) {
-        "WORK" -> Color(0xFF10B981)
-        "PLAY" -> Color(0xFF3B82F6)
-        "SOLITUDE", "DREAM" -> Color(0xFFF59E0B)
-        "WAKEUP", "SHUTDOWN" -> Color(0xFFF97316)
+        "WORK" -> semantic.success
+        "PLAY" -> semantic.info
+        "SOLITUDE", "DREAM" -> semantic.warning
+        "WAKEUP", "SHUTDOWN" -> Color(0xFFF97316) // Orange for transitional states
         else -> Color.Gray
     }
 }

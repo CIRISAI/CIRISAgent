@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 
 /**
  * Telemetry screen for system metrics and service health
@@ -172,9 +173,9 @@ private fun ServicesOverviewCard(
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = if (healthyServices == totalServices)
-                        Color(0xFF10B981) // Green
+                        SemanticColors.Default.success
                     else
-                        Color(0xFFF59E0B) // Yellow
+                        SemanticColors.Default.warning
                 )
                 Text(
                     text = "Services Online",
@@ -311,7 +312,7 @@ private fun ActivityMetricsCard(
             MetricRow(
                 "Errors",
                 errors.toString(),
-                valueColor = if (errors > 0) Color(0xFFEF4444) else Color.Unspecified
+                valueColor = if (errors > 0) SemanticColors.Default.error else Color.Unspecified
             )
         }
     }
@@ -361,7 +362,7 @@ private fun ServiceHealthRow(
                     .size(12.dp)
                     .clip(CircleShape)
                     .background(
-                        if (item.healthy) Color(0xFF10B981) else Color(0xFFEF4444)
+                        if (item.healthy) SemanticColors.Default.success else SemanticColors.Default.error
                     )
             )
 
@@ -378,9 +379,9 @@ private fun ServiceHealthRow(
                 text = item.status,
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (item.healthy)
-                    Color(0xFF10B981)
+                    SemanticColors.Default.success
                 else
-                    Color(0xFFEF4444)
+                    SemanticColors.Default.error
             )
         }
     }
@@ -389,20 +390,22 @@ private fun ServiceHealthRow(
 // Helper functions
 
 private fun getCognitiveStateColor(state: String): Color {
+    val semantic = SemanticColors.Default
     return when (state.uppercase()) {
-        "WORK" -> Color(0xFF10B981) // Green
-        "PLAY" -> Color(0xFF3B82F6) // Blue
-        "SOLITUDE", "DREAM" -> Color(0xFFF59E0B) // Yellow
-        "WAKEUP", "SHUTDOWN" -> Color(0xFFF97316) // Orange
+        "WORK" -> semantic.success
+        "PLAY" -> semantic.info
+        "SOLITUDE", "DREAM" -> semantic.warning
+        "WAKEUP", "SHUTDOWN" -> Color(0xFFF97316) // Orange for transitional states
         else -> Color.Gray
     }
 }
 
 private fun getUsageColor(percent: Int): Color {
+    val semantic = SemanticColors.Default
     return when {
-        percent < 50 -> Color(0xFF10B981) // Green
-        percent < 80 -> Color(0xFFF59E0B) // Yellow
-        else -> Color(0xFFEF4444) // Red
+        percent < 50 -> semantic.success
+        percent < 80 -> semantic.warning
+        else -> semantic.error
     }
 }
 

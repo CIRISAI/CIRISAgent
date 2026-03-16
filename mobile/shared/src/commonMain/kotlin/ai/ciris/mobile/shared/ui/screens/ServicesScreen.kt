@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import ai.ciris.mobile.shared.utils.DisplayNames
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -267,6 +268,7 @@ private fun ServiceHealthOverviewCard(
     unhealthyServices: Int,
     modifier: Modifier = Modifier
 ) {
+    val semantic = SemanticColors.Default
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -294,9 +296,9 @@ private fun ServiceHealthOverviewCard(
                     label = "Overall Health",
                     value = overallHealth.uppercase(),
                     color = when (overallHealth.lowercase()) {
-                        "healthy" -> Color(0xFF10B981)
-                        "degraded" -> Color(0xFFF59E0B)
-                        else -> Color(0xFFEF4444)
+                        "healthy" -> semantic.success
+                        "degraded" -> semantic.warning
+                        else -> semantic.error
                     }
                 )
 
@@ -311,14 +313,14 @@ private fun ServiceHealthOverviewCard(
                 HealthMetricItem(
                     label = "Healthy",
                     value = healthyServices.toString(),
-                    color = Color(0xFF10B981)
+                    color = semantic.success
                 )
 
                 // Unhealthy Services
                 HealthMetricItem(
                     label = "Unhealthy",
                     value = unhealthyServices.toString(),
-                    color = if (unhealthyServices > 0) Color(0xFFEF4444) else Color(0xFF10B981)
+                    color = if (unhealthyServices > 0) semantic.error else semantic.success
                 )
             }
         }
@@ -427,13 +429,14 @@ private fun DiagnosticsCard(
     diagnostics: ServiceDiagnostics,
     modifier: Modifier = Modifier
 ) {
+    val semantic = SemanticColors.Default
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = when (diagnostics.overallHealth.lowercase()) {
-                "healthy" -> Color(0xFF10B981).copy(alpha = 0.1f)
-                "degraded" -> Color(0xFFF59E0B).copy(alpha = 0.1f)
-                else -> Color(0xFFEF4444).copy(alpha = 0.1f)
+                "healthy" -> semantic.surfaceSuccess
+                "degraded" -> semantic.surfaceWarning
+                else -> semantic.surfaceError
             }
         )
     ) {
@@ -457,7 +460,7 @@ private fun DiagnosticsCard(
                 Text(
                     text = "${diagnostics.issuesFound} issues found",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (diagnostics.issuesFound > 0) Color(0xFFEF4444) else Color(0xFF10B981),
+                    color = if (diagnostics.issuesFound > 0) semantic.error else semantic.success,
                     fontWeight = FontWeight.Medium
                 )
             }
@@ -473,7 +476,7 @@ private fun DiagnosticsCard(
                     Text(
                         text = "- $issue",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFEF4444)
+                        color = semantic.error
                     )
                 }
             }
@@ -489,7 +492,7 @@ private fun DiagnosticsCard(
                     Text(
                         text = "- $rec",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF3B82F6)
+                        color = semantic.info
                     )
                 }
             }
@@ -554,10 +557,11 @@ private fun ServiceProviderRow(
         label = "chevron_rotation"
     )
 
+    val semantic = SemanticColors.Default
     val statusColor = when (provider.circuitBreakerState.lowercase()) {
-        "closed" -> Color(0xFF10B981)
-        "half_open" -> Color(0xFFF59E0B)
-        else -> Color(0xFFEF4444)
+        "closed" -> semantic.success
+        "half_open" -> semantic.warning
+        else -> semantic.error
     }
 
     Column(modifier = modifier.fillMaxWidth()) {

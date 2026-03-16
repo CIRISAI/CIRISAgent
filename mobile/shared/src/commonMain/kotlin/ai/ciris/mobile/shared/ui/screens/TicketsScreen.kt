@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -225,6 +226,7 @@ fun TicketsScreen(
 
 @Composable
 private fun TicketStatsRow(stats: TicketStatsData) {
+    val semantic = SemanticColors.Default
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -234,26 +236,26 @@ private fun TicketStatsRow(stats: TicketStatsData) {
         StatCard(
             label = "Pending",
             value = stats.pending.toString(),
-            color = Color(0xFFFFA000),
+            color = semantic.pending,
             modifier = Modifier.weight(1f)
         )
         StatCard(
             label = "In Progress",
             value = stats.inProgress.toString(),
-            color = Color(0xFF2196F3),
+            color = semantic.info,
             modifier = Modifier.weight(1f)
         )
         StatCard(
             label = "Completed",
             value = stats.completed.toString(),
-            color = Color(0xFF4CAF50),
+            color = semantic.success,
             modifier = Modifier.weight(1f)
         )
         if (stats.urgent > 0) {
             StatCard(
                 label = "Urgent",
                 value = stats.urgent.toString(),
-                color = Color(0xFFF44336),
+                color = semantic.error,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -425,7 +427,7 @@ private fun TicketCard(
                     // Urgent badge
                     if (ticket.isUrgent) {
                         Badge(
-                            containerColor = Color(0xFFF44336)
+                            containerColor = SemanticColors.Default.error
                         ) {
                             Text("URGENT", fontSize = 10.sp)
                         }
@@ -548,13 +550,14 @@ private fun TicketCard(
 
 @Composable
 private fun StatusBadge(status: String) {
+    val semantic = SemanticColors.Default
     val (color, text) = when (status) {
-        "pending" -> Pair(Color(0xFFFFA000), "Pending")
-        "in_progress" -> Pair(Color(0xFF2196F3), "In Progress")
-        "completed" -> Pair(Color(0xFF4CAF50), "Completed")
-        "failed" -> Pair(Color(0xFFF44336), "Failed")
-        "cancelled" -> Pair(Color(0xFF9E9E9E), "Cancelled")
-        else -> Pair(Color(0xFF9E9E9E), status.replaceFirstChar { it.uppercase() })
+        "pending" -> Pair(semantic.pending, "Pending")
+        "in_progress" -> Pair(semantic.info, "In Progress")
+        "completed" -> Pair(semantic.success, "Completed")
+        "failed" -> Pair(semantic.error, "Failed")
+        "cancelled" -> Pair(semantic.inactive, "Cancelled")
+        else -> Pair(semantic.inactive, status.replaceFirstChar { it.uppercase() })
     }
 
     Badge(containerColor = color) {

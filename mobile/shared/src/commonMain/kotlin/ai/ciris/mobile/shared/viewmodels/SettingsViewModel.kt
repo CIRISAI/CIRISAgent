@@ -1,6 +1,8 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.ui.theme.BrightnessPreference
+import ai.ciris.mobile.shared.ui.theme.ColorTheme
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.api.LlmConfigData
 import ai.ciris.mobile.shared.platform.AppRestarter
@@ -93,6 +95,14 @@ class SettingsViewModel(
     private val _liveBackgroundEnabled = MutableStateFlow(true)  // Default enabled
     val liveBackgroundEnabled: StateFlow<Boolean> = _liveBackgroundEnabled.asStateFlow()
 
+    // Color theme setting (persisted) - Vapor (pink/cyan/plum) is default
+    private val _colorTheme = MutableStateFlow(ColorTheme.DEFAULT)
+    val colorTheme: StateFlow<ColorTheme> = _colorTheme.asStateFlow()
+
+    // Brightness preference (persisted) - System is default
+    private val _brightnessPreference = MutableStateFlow(BrightnessPreference.SYSTEM)
+    val brightnessPreference: StateFlow<BrightnessPreference> = _brightnessPreference.asStateFlow()
+
     // Available LLM providers for BYOK mode
     val availableProviders = listOf(
         "openai" to "OpenAI",
@@ -149,6 +159,22 @@ class SettingsViewModel(
                 }.onFailure { error ->
                     logWarn("loadDisplaySettings", ">>> Storage get failed: ${error.message}, defaulting to true")
                     _liveBackgroundEnabled.value = true
+                }
+
+                // Load color theme
+                secureStorage.get("color_theme").onSuccess { value ->
+                    _colorTheme.value = ColorTheme.fromString(value)
+                    logInfo("loadDisplaySettings", ">>> Color theme loaded: ${_colorTheme.value}")
+                }.onFailure {
+                    _colorTheme.value = ColorTheme.DEFAULT
+                }
+
+                // Load brightness preference
+                secureStorage.get("brightness_preference").onSuccess { value ->
+                    _brightnessPreference.value = BrightnessPreference.fromString(value)
+                    logInfo("loadDisplaySettings", ">>> Brightness preference loaded: ${_brightnessPreference.value}")
+                }.onFailure {
+                    _brightnessPreference.value = BrightnessPreference.SYSTEM
                 }
             } catch (e: Exception) {
                 logWarn("loadDisplaySettings", ">>> Exception loading display settings: ${e.message}, defaulting to true")
@@ -610,6 +636,46 @@ class SettingsViewModel(
                 logDebug(method, "Live background setting persisted")
             } catch (e: Exception) {
                 logWarn(method, "Failed to persist live background setting: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Set color theme.
+     * Persists to secure storage immediately.
+     */
+    fun setColorTheme(theme: ColorTheme) {
+        val method = "setColorTheme"
+        logInfo(method, "Setting color theme to: $theme")
+
+        _colorTheme.value = theme
+
+        viewModelScope.launch {
+            try {
+                secureStorage.save("color_theme", theme.name).getOrThrow()
+                logDebug(method, "Color theme setting persisted")
+            } catch (e: Exception) {
+                logWarn(method, "Failed to persist color theme setting: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Set brightness preference (Dark, Light, or System).
+     * Persists to secure storage immediately.
+     */
+    fun setBrightnessPreference(brightness: BrightnessPreference) {
+        val method = "setBrightnessPreference"
+        logInfo(method, "Setting brightness preference to: $brightness")
+
+        _brightnessPreference.value = brightness
+
+        viewModelScope.launch {
+            try {
+                secureStorage.save("brightness_preference", brightness.name).getOrThrow()
+                logDebug(method, "Brightness preference setting persisted")
+            } catch (e: Exception) {
+                logWarn(method, "Failed to persist brightness preference: ${e.message}")
             }
         }
     }

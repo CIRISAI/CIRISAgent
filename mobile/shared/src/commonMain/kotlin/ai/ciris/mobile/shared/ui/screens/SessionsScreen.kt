@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import ai.ciris.mobile.shared.platform.testableClickable
 
 /**
@@ -87,10 +88,11 @@ fun SessionsScreen(
             CurrentStateBanner(currentState = currentState)
 
             // Experimental warning
+            val semantic = SemanticColors.Default
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFFEF3C7)  // Amber-100
+                    containerColor = semantic.surfaceWarning
                 )
             ) {
                 Row(
@@ -101,20 +103,22 @@ fun SessionsScreen(
                     verticalAlignment = Alignment.Top
                 ) {
                     Text(
-                        text = "⚠️",
-                        style = MaterialTheme.typography.bodyMedium
+                        text = "!",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = semantic.warning
                     )
                     Column {
                         Text(
                             text = "Experimental Feature",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF92400E)  // Amber-800
+                            color = semantic.onWarning
                         )
                         Text(
                             text = "Cognitive sessions can consume significant thoughts and tasks. Use sparingly during testing.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFB45309)  // Amber-700
+                            color = semantic.onWarning
                         )
                     }
                 }
@@ -236,6 +240,7 @@ private fun SessionCard(
     onInitiate: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val semantic = SemanticColors.Default
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = if (isActive) {
@@ -264,7 +269,7 @@ private fun SessionCard(
                         .size(12.dp)
                         .clip(CircleShape)
                         .background(
-                            if (isActive) Color(0xFF10B981) else Color.LightGray
+                            if (isActive) semantic.online else semantic.inactive
                         )
                 )
 
@@ -282,14 +287,14 @@ private fun SessionCard(
                         )
                         if (isActive) {
                             Surface(
-                                color = Color(0xFF10B981),
+                                color = semantic.success,
                                 shape = MaterialTheme.shapes.small
                             ) {
                                 Text(
                                     text = "ACTIVE",
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White
+                                    color = semantic.onSuccess
                                 )
                             }
                         }
@@ -353,13 +358,14 @@ private fun ConfirmSessionDialog(
 // Helper functions
 
 private fun getCurrentStateColor(state: String): Color {
+    val semantic = SemanticColors.Default
     return when (state.uppercase()) {
-        "WORK" -> Color(0xFF3B82F6) // Blue
-        "DREAM" -> Color(0xFF8B5CF6) // Purple
-        "PLAY" -> Color(0xFFF59E0B) // Yellow
-        "SOLITUDE" -> Color(0xFF06B6D4) // Cyan
-        "WAKEUP" -> Color(0xFFF97316) // Orange
-        "SHUTDOWN" -> Color(0xFFEF4444) // Red
-        else -> Color.Gray
+        "WORK" -> semantic.info           // Blue (info)
+        "DREAM" -> semantic.accentTertiary // Purple (theme tertiary)
+        "PLAY" -> semantic.warning         // Amber/Yellow
+        "SOLITUDE" -> semantic.accentSecondary // Cyan (theme secondary)
+        "WAKEUP" -> semantic.pending       // Orange/Amber
+        "SHUTDOWN" -> semantic.error       // Red
+        else -> semantic.inactive
     }
 }

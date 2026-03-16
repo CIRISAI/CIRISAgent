@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -196,7 +197,7 @@ fun TrustPage(
                     Text(
                         text = "Learn more about CIRISVerify",
                         fontSize = 14.sp,
-                        color = Color(0xFF2563EB),
+                        color = SemanticColors.Default.info,
                         textDecoration = TextDecoration.Underline,
                         modifier = Modifier
                             .testableClickable("btn_learn_more") { uriHandler.openUri("https://ciris.ai/trust") }
@@ -243,8 +244,8 @@ private fun LoadingCard() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            CircularProgressIndicator(color = Color(0xFF059669))
-            Text("Running attestation checks...", color = Color(0xFF6B7280))
+            CircularProgressIndicator(color = SemanticColors.Default.success)
+            Text("Running attestation checks...", color = SemanticColors.Default.inactive)
         }
     }
 }
@@ -253,7 +254,7 @@ private fun LoadingCard() {
 private fun ErrorCard(error: String, onRetry: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFEE2E2))
+        colors = CardDefaults.cardColors(containerColor = SemanticColors.Default.surfaceError)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -262,17 +263,17 @@ private fun ErrorCard(error: String, onRetry: () -> Unit) {
             Text(
                 text = "Attestation Failed",
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFFDC2626)
+                color = SemanticColors.Default.error
             )
             Text(
                 text = error,
                 fontSize = 14.sp,
-                color = Color(0xFF991B1B)
+                color = SemanticColors.Default.onError
             )
             Button(
                 onClick = onRetry,
                 modifier = Modifier.testableClickable("btn_trust_retry") { onRetry() },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                colors = ButtonDefaults.buttonColors(containerColor = SemanticColors.Default.error)
             ) {
                 Text("Retry")
             }
@@ -300,16 +301,16 @@ private fun TrustSummaryCard(
 
     val notAttempted = level == 0 && status.attestationStatus == "not_attempted"
     val bgColor = when {
-        level >= 5 -> Color(0xFFD1FAE5)  // Green - Identity Validated
-        level == 4 -> Color(0xFFFEF3C7)  // Amber - Agent Validated
+        level >= 5 -> SemanticColors.Default.surfaceSuccess  // Green - Identity Validated
+        level == 4 -> SemanticColors.Default.surfaceWarning  // Amber - Agent Validated
         notAttempted -> Color(0xFFF5F5F5)  // Gray - Not yet started
-        else -> Color(0xFFFEE2E2)        // Red - Issues Detected (L1-3)
+        else -> SemanticColors.Default.surfaceError          // Red - Issues Detected (L1-3)
     }
     val textColor = when {
-        level >= 5 -> Color(0xFF065F46)  // Green text
-        level == 4 -> Color(0xFF92400E)  // Amber text
-        notAttempted -> Color(0xFF6B7280)  // Gray text
-        else -> Color(0xFFDC2626)        // Red text
+        level >= 5 -> SemanticColors.Default.onSuccess  // Green text
+        level == 4 -> SemanticColors.Default.onWarning  // Amber text
+        notAttempted -> SemanticColors.Default.inactive // Gray text
+        else -> SemanticColors.Default.error            // Red text
     }
 
     Card(
@@ -493,7 +494,7 @@ private fun LevelDebugExpansion(status: VerifyStatusResponse, textColor: Color) 
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
-                        color = if (match) Color(0xFF059669) else Color(0xFFDC2626)
+                        color = if (match) SemanticColors.Default.success else SemanticColors.Default.error
                     )
                 }
             }
@@ -511,7 +512,7 @@ private fun LevelDebugRow(level: String, pass: Boolean, details: String) {
             Text(
                 text = if (pass) "✓" else "✗",
                 fontSize = 10.sp,
-                color = if (pass) Color(0xFF059669) else Color(0xFFDC2626)
+                color = if (pass) SemanticColors.Default.success else SemanticColors.Default.error
             )
             Text(text = level, fontSize = 10.sp, fontWeight = FontWeight.Medium)
         }
@@ -519,7 +520,7 @@ private fun LevelDebugRow(level: String, pass: Boolean, details: String) {
             text = details,
             fontSize = 9.sp,
             fontFamily = FontFamily.Monospace,
-            color = Color(0xFF6B7280)
+            color = SemanticColors.Default.inactive
         )
     }
 }
@@ -843,9 +844,9 @@ private fun AttestationLevel(
 ) {
     val unverified = previousFailed && passed
     val color = when {
-        !passed -> Color(0xFFDC2626)
-        unverified -> Color(0xFFD97706)
-        else -> Color(0xFF059669)
+        !passed -> SemanticColors.Default.error
+        unverified -> SemanticColors.Default.warning
+        else -> SemanticColors.Default.success
     }
     val icon = when {
         !passed -> "✗"
@@ -880,7 +881,7 @@ private fun AttestationLevel(
         Text(
             text = description,
             fontSize = 12.sp,
-            color = Color(0xFF6B7280),
+            color = SemanticColors.Default.inactive,
             modifier = Modifier.padding(start = 22.dp)
         )
         extraContent?.let {
@@ -900,12 +901,12 @@ private fun NetworkBadge(label: String, passed: Boolean) {
         Text(
             text = if (passed) "●" else "○",
             fontSize = 8.sp,
-            color = if (passed) Color(0xFF059669) else Color(0xFFDC2626)
+            color = if (passed) SemanticColors.Default.success else SemanticColors.Default.error
         )
         Text(
             text = label,
             fontSize = 10.sp,
-            color = if (passed) Color(0xFF059669) else Color(0xFF6B7280)
+            color = if (passed) SemanticColors.Default.success else SemanticColors.Default.inactive
         )
     }
 }
@@ -920,12 +921,12 @@ private fun StatusBadge(label: String, passed: Boolean) {
             text = if (passed) "✓" else "✗",
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
-            color = if (passed) Color(0xFF059669) else Color(0xFFDC2626)
+            color = if (passed) SemanticColors.Default.success else SemanticColors.Default.error
         )
         Text(
             text = label,
             fontSize = 11.sp,
-            color = if (passed) Color(0xFF059669) else Color(0xFFDC2626)
+            color = if (passed) SemanticColors.Default.success else SemanticColors.Default.error
         )
     }
 }
@@ -1121,9 +1122,9 @@ private fun ExpandableTierCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val levelColor = when {
-        passed && !partial -> Color(0xFF059669)  // Green - fully passed
-        partial -> Color(0xFFF59E0B)              // Yellow/amber - partial/warning
-        else -> Color(0xFFDC2626)                 // Red - failed
+        passed && !partial -> SemanticColors.Default.success  // Green - fully passed
+        partial -> SemanticColors.Default.warning             // Yellow/amber - partial/warning
+        else -> SemanticColors.Default.error                  // Red - failed
     }
 
     Card(
@@ -2140,9 +2141,9 @@ private fun DetailRow(
     icon: String? = null
 ) {
     val color = when {
-        ok -> Color(0xFF059669)
-        pending -> Color(0xFFD97706)
-        else -> Color(0xFFDC2626)
+        ok -> SemanticColors.Default.success
+        pending -> SemanticColors.Default.warning
+        else -> SemanticColors.Default.error
     }
     val statusIcon = when {
         ok -> "✓"
@@ -2475,9 +2476,9 @@ private fun CheckRow(
     detail: String? = null
 ) {
     val color = when {
-        ok -> Color(0xFF059669)
-        pending -> Color(0xFFD97706)
-        else -> Color(0xFFDC2626)
+        ok -> SemanticColors.Default.success
+        pending -> SemanticColors.Default.warning
+        else -> SemanticColors.Default.error
     }
     val statusIcon = when {
         ok -> "✓"
@@ -2617,7 +2618,7 @@ private fun DiagnosticsLogCard(
 private fun KeyStatusWarningCard(status: VerifyStatusResponse) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7))
+        colors = CardDefaults.cardColors(containerColor = SemanticColors.Default.surfaceWarning)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -2626,12 +2627,12 @@ private fun KeyStatusWarningCard(status: VerifyStatusResponse) {
             Text(
                 text = "Identity Key Not Active",
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF92400E)
+                color = SemanticColors.Default.onWarning
             )
             Text(
                 text = "Key status: ${status.keyStatus}",
                 fontSize = 12.sp,
-                color = Color(0xFFD97706)
+                color = SemanticColors.Default.warning
             )
             Text(
                 text = when (status.keyStatus) {
@@ -2641,7 +2642,7 @@ private fun KeyStatusWarningCard(status: VerifyStatusResponse) {
                     else -> "The identity key is not yet active. This is optional and enables additional attestation capabilities."
                 },
                 fontSize = 12.sp,
-                color = Color(0xFFD97706)
+                color = SemanticColors.Default.warning
             )
         }
     }
@@ -2651,7 +2652,7 @@ private fun KeyStatusWarningCard(status: VerifyStatusResponse) {
 private fun DisclaimerCard() {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4))
+        colors = CardDefaults.cardColors(containerColor = SemanticColors.Default.surfaceSuccess)
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -2660,12 +2661,12 @@ private fun DisclaimerCard() {
             Text(
                 text = "CIRISVerify provides cryptographic attestation of agent identity for the Coherence Ratchet and CIRIS Scoring.",
                 fontSize = 12.sp,
-                color = Color(0xFF047857)
+                color = SemanticColors.Default.onSuccess
             )
             Text(
                 text = "CIRISVerify provides cryptographic attestation under defined threat models and does not guarantee absolute security.",
                 fontSize = 11.sp,
-                color = Color(0xFF6B7280),
+                color = SemanticColors.Default.inactive,
                 fontWeight = FontWeight.Normal
             )
         }
@@ -2733,7 +2734,7 @@ private fun RawLine(label: String, value: Boolean) {
         text = "$label: $value",
         fontSize = 10.sp,
         fontFamily = FontFamily.Monospace,
-        color = if (value) Color(0xFF059669) else Color(0xFFDC2626)
+        color = if (value) SemanticColors.Default.success else SemanticColors.Default.error
     )
 }
 

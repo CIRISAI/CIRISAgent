@@ -30,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -237,14 +238,14 @@ private fun AdapterStatusHeader(
                         .size(12.dp)
                         .clip(CircleShape)
                         .background(
-                            if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444)
+                            if (isConnected) SemanticColors.Default.success else SemanticColors.Default.error
                         )
                 )
                 Text(
                     text = if (isConnected) "Connected" else "Disconnected",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
-                    color = if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444)
+                    color = if (isConnected) SemanticColors.Default.success else SemanticColors.Default.error
                 )
             }
 
@@ -299,7 +300,7 @@ private fun AdapterCard(
                             .size(12.dp)
                             .clip(CircleShape)
                             .background(
-                                if (adapter.isHealthy) Color(0xFF10B981) else Color(0xFFEF4444)
+                                if (adapter.isHealthy) SemanticColors.Default.success else SemanticColors.Default.error
                             )
                     )
 
@@ -324,7 +325,7 @@ private fun AdapterCard(
                     Text(
                         text = DisplayNames.humanizeStatus(adapter.status),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (adapter.isHealthy) Color(0xFF10B981) else Color(0xFFEF4444)
+                        color = if (adapter.isHealthy) SemanticColors.Default.success else SemanticColors.Default.error
                     )
                     Icon(
                         imageVector = Icons.Filled.KeyboardArrowDown,

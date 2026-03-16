@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import kotlinx.coroutines.launch
 
 /**
@@ -152,7 +153,7 @@ fun LogsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 4.dp),
-                color = Color(0xFF1A1A1A),
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
                 shape = MaterialTheme.shapes.small
             ) {
                 if (logsState.isLoading && logsState.logs.isEmpty()) {
@@ -160,7 +161,7 @@ fun LogsScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = Color.White)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.onSurface)
                     }
                 } else if (logsState.logs.isEmpty()) {
                     Box(
@@ -169,7 +170,7 @@ fun LogsScreen(
                     ) {
                         Text(
                             text = "No logs matching current filters",
-                            color = Color(0xFF666666),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -378,7 +379,7 @@ private fun LogsStatsBar(
             Text(
                 text = "Auto-scroll ON",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF10B981)
+                color = SemanticColors.Default.success
             )
         }
     }
@@ -397,7 +398,7 @@ private fun LogEntryRow(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFF2A2A2A), MaterialTheme.shapes.small)
+            .background(MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.shapes.small)
             .then(
                 if (hasMetadata) Modifier.testableClickable("item_log_entry_${log.id}") { onToggleExpand() }
                 else Modifier
@@ -425,7 +426,7 @@ private fun LogEntryRow(
                 text = log.formattedTime,
                 style = MaterialTheme.typography.labelSmall,
                 fontFamily = FontFamily.Monospace,
-                color = Color(0xFF888888),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp
             )
 
@@ -444,7 +445,7 @@ private fun LogEntryRow(
                 text = "[${log.service}]",
                 style = MaterialTheme.typography.labelSmall,
                 fontFamily = FontFamily.Monospace,
-                color = Color(0xFF66D9EF),
+                color = SemanticColors.Default.info,
                 fontSize = 10.sp
             )
 
@@ -453,7 +454,7 @@ private fun LogEntryRow(
                 text = log.message,
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
-                color = Color(0xFFE5E5E5),
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 11.sp,
                 modifier = Modifier.weight(1f),
                 maxLines = if (isExpanded) Int.MAX_VALUE else 2,
@@ -465,7 +466,7 @@ private fun LogEntryRow(
                 Icon(
                     imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                     contentDescription = if (isExpanded) "Collapse" else "Expand",
-                    tint = Color(0xFF888888),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -476,7 +477,7 @@ private fun LogEntryRow(
             Spacer(modifier = Modifier.height(8.dp))
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFF1A1A1A),
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
                 shape = MaterialTheme.shapes.small
             ) {
                 Text(
@@ -484,7 +485,7 @@ private fun LogEntryRow(
                     modifier = Modifier.padding(8.dp),
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
-                    color = Color(0xFF999999),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 10.sp
                 )
             }
@@ -493,12 +494,13 @@ private fun LogEntryRow(
 }
 
 private fun getLogLevelColor(level: String): Color {
+    val colors = SemanticColors.Default
     return when (level.uppercase()) {
-        "ERROR", "CRITICAL" -> Color(0xFFEF4444) // Red
-        "WARN", "WARNING" -> Color(0xFFF59E0B) // Amber
-        "INFO" -> Color(0xFF3B82F6) // Blue
-        "DEBUG" -> Color(0xFF6B7280) // Gray
-        else -> Color(0xFF6B7280) // Gray
+        "ERROR", "CRITICAL" -> colors.error
+        "WARN", "WARNING" -> colors.warning
+        "INFO" -> colors.info
+        "DEBUG" -> colors.inactive
+        else -> colors.inactive
     }
 }
 

@@ -1,6 +1,9 @@
 package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.ui.theme.BrightnessPreference
+import ai.ciris.mobile.shared.ui.theme.ColorTheme
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import ai.ciris.mobile.shared.viewmodels.SettingsViewModel
 import ai.ciris.mobile.shared.viewmodels.VerifyStatusResponse
 import ai.ciris.mobile.shared.platform.testable
@@ -927,14 +930,15 @@ private fun CirisJwtInfoCard(
                 val info = tokenInfo!!
 
                 // Token format indicator
+                val semantic = SemanticColors.Default
                 Surface(
                     shape = RoundedCornerShape(4.dp),
-                    color = if (info.isJwt) Color(0xFFD1FAE5) else Color(0xFFFEF3C7)
+                    color = if (info.isJwt) semantic.surfaceSuccess else semantic.surfaceWarning
                 ) {
                     Text(
                         text = if (info.isJwt) "JWT Token" else "Opaque Token",
                         fontSize = 10.sp,
-                        color = if (info.isJwt) Color(0xFF065F46) else Color(0xFF92400E),
+                        color = if (info.isJwt) semantic.onSuccess else semantic.onWarning,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
@@ -946,7 +950,7 @@ private fun CirisJwtInfoCard(
                 InfoRow("Token ID", info.tokenIdShort)
 
                 if (info.expiresAt != null) {
-                    val expiryColor = if (info.isExpired) Color(0xFFDC2626) else Color(0xFF059669)
+                    val expiryColor = if (info.isExpired) semantic.error else semantic.success
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -974,7 +978,7 @@ private fun CirisJwtInfoCard(
                     Spacer(modifier = Modifier.height(8.dp))
                     Surface(
                         shape = RoundedCornerShape(4.dp),
-                        color = Color(0xFFFEE2E2),
+                        color = semantic.surfaceError,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
@@ -985,7 +989,7 @@ private fun CirisJwtInfoCard(
                                     "Token Expired",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
-                                color = Color(0xFFDC2626)
+                                color = semantic.error
                             )
                             Text(
                                 text = if (info.hasSigningKeyIssue)
@@ -993,7 +997,7 @@ private fun CirisJwtInfoCard(
                                 else
                                     "Your access token has expired. Re-run the setup wizard to refresh authentication.",
                                 fontSize = 11.sp,
-                                color = Color(0xFF991B1B)
+                                color = semantic.onError
                             )
                         }
                     }
@@ -1132,12 +1136,14 @@ private fun parseTokenForDisplay(token: String): TokenDisplayInfo {
 
 // ========== Trust and Security Card ==========
 
+// TrustColors derived from SemanticColors for consistency
 private object TrustColors {
-    val EmeraldLight = Color(0xFFD1FAE5)
-    val EmeraldBorder = Color(0xFF6EE7B7)
-    val EmeraldDark = Color(0xFF065F46)
-    val EmeraldText = Color(0xFF047857)
-    val EmeraldMuted = Color(0xFFA7F3D0)
+    private val semantic = SemanticColors.Default
+    val EmeraldLight = semantic.surfaceSuccess
+    val EmeraldBorder = semantic.success
+    val EmeraldDark = semantic.onSuccess
+    val EmeraldText = semantic.success
+    val EmeraldMuted = semantic.surfaceSuccess
 }
 
 /**
@@ -1204,6 +1210,8 @@ private fun TrustSecurityCard(
         scrollState.animateScrollTo(scrollState.maxValue)
     }
 
+    val semantic = SemanticColors.Default
+
     // Log view - show during loading OR on error (persists on timeout)
     if (showLogView) {
         Card(
@@ -1224,16 +1232,16 @@ private fun TrustSecurityCard(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "🛡 Attestation Check",
+                            text = "Attestation Check",
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF10B981),
+                            color = semantic.success,
                             fontSize = 12.sp
                         )
                         if (loading) {
                             Spacer(modifier = Modifier.width(8.dp))
                             CircularProgressIndicator(
                                 modifier = Modifier.size(12.dp),
-                                color = Color(0xFF10B981),
+                                color = semantic.success,
                                 strokeWidth = 2.dp
                             )
                         }
@@ -1314,8 +1322,8 @@ private fun TrustSecurityCard(
                         Text(
                             text = msg,
                             fontSize = 11.sp,
-                            color = if (msg.contains("✗")) Color(0xFFEF4444)
-                                   else if (msg.contains("✓")) Color(0xFF10B981)
+                            color = if (msg.contains("✗")) semantic.error
+                                   else if (msg.contains("✓")) semantic.success
                                    else Color(0xFF9CA3AF),
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                             lineHeight = 14.sp
@@ -1327,9 +1335,9 @@ private fun TrustSecurityCard(
                 if (error != null && !loading) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Tap 📋 Copy to share logs for debugging",
+                        text = "Tap Copy to share logs for debugging",
                         fontSize = 10.sp,
-                        color = Color(0xFFD97706)
+                        color = semantic.warning
                     )
                 }
             }
@@ -1341,19 +1349,19 @@ private fun TrustSecurityCard(
     if (verifyStatus?.loaded != true) {
         Card(
             modifier = modifier,
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7))
+            colors = CardDefaults.cardColors(containerColor = semantic.surfaceWarning)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "⚠ CIRISVerify Status Unknown",
+                    text = "CIRISVerify Status Unknown",
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF92400E)
+                    color = semantic.onWarning
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = error ?: verifyStatus?.error ?: "Unable to check CIRISVerify status",
                     fontSize = 13.sp,
-                    color = Color(0xFFD97706)
+                    color = semantic.warning
                 )
                 // Show diagnostic info for troubleshooting
                 verifyStatus?.diagnosticInfo?.let { diag ->
@@ -1361,7 +1369,7 @@ private fun TrustSecurityCard(
                     Text(
                         text = "Debug: $diag",
                         fontSize = 10.sp,
-                        color = Color(0xFF92400E),
+                        color = semantic.onWarning,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                     )
                 }
@@ -1575,7 +1583,7 @@ private fun TrustSecurityCard(
 
                         // Level 1: Binary loaded and functional
                         val level1Passed = status.binaryOk
-                        val level1Color = if (level1Passed) Color(0xFF059669) else Color(0xFFDC2626)
+                        val level1Color = if (level1Passed) semantic.success else semantic.error
                         val level1Icon = if (level1Passed) "✓" else "✗"
                         Column(modifier = Modifier.padding(vertical = 4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1606,9 +1614,9 @@ private fun TrustSecurityCard(
                         val level2Passed = status.envOk
                         val level2Unverified = level1Failed && level2Passed
                         val level2Color = when {
-                            !level2Passed -> Color(0xFFDC2626)
-                            level2Unverified -> Color(0xFFD97706)
-                            else -> Color(0xFF059669)
+                            !level2Passed -> semantic.error
+                            level2Unverified -> semantic.warning
+                            else -> semantic.success
                         }
                         val level2Icon = when {
                             !level2Passed -> "✗"
@@ -1663,9 +1671,9 @@ private fun TrustSecurityCard(
                         val level3Passed = networkPassed >= 2
                         val level3Unverified = (level1Failed || level2Failed) && level3Passed
                         val level3Color = when {
-                            !level3Passed -> Color(0xFFDC2626)
-                            level3Unverified -> Color(0xFFD97706)
-                            else -> Color(0xFF059669)
+                            !level3Passed -> semantic.error
+                            level3Unverified -> semantic.warning
+                            else -> semantic.success
                         }
                         val level3Icon = when {
                             !level3Passed -> "✗"
@@ -1703,9 +1711,9 @@ private fun TrustSecurityCard(
                             }
                             if (networkPassed < 2) {
                                 Text(
-                                    text = "⚠ Need 2/3 sources to agree",
+                                    text = "Need 2/3 sources to agree",
                                     fontSize = 10.sp,
-                                    color = Color(0xFFDC2626),
+                                    color = semantic.error,
                                     modifier = Modifier.padding(start = 8.dp, top = 2.dp)
                                 )
                             }
@@ -1717,9 +1725,9 @@ private fun TrustSecurityCard(
                         val level4Passed = status.moduleIntegrityOk
                         val level4Unverified = anyLowerLevelFailed && level4Passed
                         val level4Color = when {
-                            !level4Passed -> Color(0xFFDC2626)  // Red: failed
-                            level4Unverified -> Color(0xFFD97706)  // Amber: passed but unverified
-                            else -> Color(0xFF059669)  // Green: passed and verified
+                            !level4Passed -> semantic.error    // Red: failed
+                            level4Unverified -> semantic.warning  // Amber: passed but unverified
+                            else -> semantic.success   // Green: passed and verified
                         }
                         val level4Icon = when {
                             !level4Passed -> "✗"
@@ -1771,14 +1779,14 @@ private fun TrustSecurityCard(
                                     Text(
                                         text = "${status.filesPassed ?: 0} passed",
                                         fontSize = 9.sp,
-                                        color = Color(0xFF059669)
+                                        color = semantic.success
                                     )
                                     if ((status.filesFailed ?: 0) > 0) {
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
                                             text = "${status.filesFailed} failed",
                                             fontSize = 9.sp,
-                                            color = Color(0xFFDC2626)
+                                            color = semantic.error
                                         )
                                     }
                                 }
@@ -1791,9 +1799,9 @@ private fun TrustSecurityCard(
                         val level5Passes = status.registryOk && status.auditOk
                         val level5Unverified = anyLevelBelow5Failed && level5Passes
                         val level5Color = when {
-                            !level5Passes -> Color(0xFFDC2626)  // Red: failed
-                            level5Unverified -> Color(0xFFD97706)  // Amber: passed but unverified
-                            else -> Color(0xFF059669)  // Green: passed and verified
+                            !level5Passes -> semantic.error    // Red: failed
+                            level5Unverified -> semantic.warning  // Amber: passed but unverified
+                            else -> semantic.success   // Green: passed and verified
                         }
                         val level5Icon = when {
                             !level5Passes -> "✗"
@@ -1829,14 +1837,14 @@ private fun TrustSecurityCard(
                             )
                             // Portal Key status - also show yellow if unverified
                             val portalKeyColor = when {
-                                !status.registryOk -> Color(0xFFDC2626)
-                                anyLevelBelow5Failed -> Color(0xFFD97706)
-                                else -> Color(0xFF059669)
+                                !status.registryOk -> semantic.error
+                                anyLevelBelow5Failed -> semantic.warning
+                                else -> semantic.success
                             }
                             val auditColor = when {
-                                !status.auditOk -> Color(0xFFDC2626)
-                                anyLevelBelow5Failed -> Color(0xFFD97706)
-                                else -> Color(0xFF059669)
+                                !status.auditOk -> semantic.error
+                                anyLevelBelow5Failed -> semantic.warning
+                                else -> semantic.success
                             }
                             Row(
                                 modifier = Modifier.padding(start = 16.dp, top = 2.dp),
@@ -1858,7 +1866,7 @@ private fun TrustSecurityCard(
                                 Text(
                                     text = if (status.auditOk) (if (anyLevelBelow5Failed) "?" else "✓") else "✗",
                                     fontSize = 10.sp,
-                                    color = if (status.auditOk) Color(0xFF059669) else Color(0xFFDC2626),
+                                    color = if (status.auditOk) semantic.success else semantic.error,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
@@ -1972,7 +1980,7 @@ private fun TrustSecurityCard(
                                         }
                                         else -> reason
                                     }
-                                    val reasonColor = if (reason.startsWith("unexpected")) Color(0xFFD97706) else Color(0xFFDC2626)
+                                    val reasonColor = if (reason.startsWith("unexpected")) semantic.warning else semantic.error
                                     Text("Reason: $displayReason", fontSize = 9.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, color = reasonColor)
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -1988,29 +1996,29 @@ private fun TrustSecurityCard(
                 Spacer(modifier = Modifier.height(12.dp))
                 Surface(
                     shape = RoundedCornerShape(4.dp),
-                    color = Color(0xFFFEF3C7),
+                    color = semantic.surfaceWarning,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
                         Text(
-                            text = "⚠ Portal Key Not Active",
+                            text = "Portal Key Not Active",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF92400E)
+                            color = semantic.onWarning
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "The purchased portal key was not saved to the Android Keystore. " +
                                    "This may be a bug in CIRISVerify key persistence.",
                             fontSize = 11.sp,
-                            color = Color(0xFFD97706)
+                            color = semantic.warning
                         )
                         status.diagnosticInfo?.let { diag ->
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "Debug: $diag",
                                 fontSize = 10.sp,
-                                color = Color(0xFF92400E),
+                                color = semantic.onWarning,
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                             )
                         }
@@ -2054,25 +2062,28 @@ private fun TrustSecurityCard(
 }
 
 private fun getKeyStatusLabel(keyStatus: String): Pair<String, Color> {
+    val semantic = SemanticColors.Default
     return when (keyStatus) {
-        "portal_active" -> "Portal Key Active" to Color(0xFF047857)
-        "portal_pending" -> "Portal Key Pending" to Color(0xFFD97706)
-        "ephemeral" -> "Ephemeral Key" to Color(0xFF1D4ED8)
-        else -> "No Key" to Color(0xFF6B7280)
+        "portal_active" -> "Portal Key Active" to semantic.success
+        "portal_pending" -> "Portal Key Pending" to semantic.warning
+        "ephemeral" -> "Ephemeral Key" to semantic.info
+        else -> "No Key" to semantic.inactive
     }
 }
 
 private fun getAttestationLabel(attestation: String): Pair<String, Color> {
+    val semantic = SemanticColors.Default
     return when (attestation) {
-        "verified" -> "Verified" to Color(0xFF047857)
-        "pending" -> "Pending" to Color(0xFFD97706)
-        "failed" -> "Failed" to Color(0xFFDC2626)
-        else -> "Not Attempted" to Color(0xFF6B7280)
+        "verified" -> "Verified" to semantic.success
+        "pending" -> "Pending" to semantic.warning
+        "failed" -> "Failed" to semantic.error
+        else -> "Not Attempted" to semantic.inactive
     }
 }
 
 @Composable
 private fun AttestationCheckRow(label: String, passed: Boolean, level: String) {
+    val semantic = SemanticColors.Default
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -2084,7 +2095,7 @@ private fun AttestationCheckRow(label: String, passed: Boolean, level: String) {
             Text(
                 text = if (passed) "✓" else "✗",
                 fontSize = 12.sp,
-                color = if (passed) Color(0xFF047857) else Color(0xFFDC2626),
+                color = if (passed) semantic.success else semantic.error,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.width(16.dp)
             )
@@ -2109,12 +2120,13 @@ private fun AttestationSection(
     passed: Boolean,
     level: Int
 ) {
+    val semantic = SemanticColors.Default
     Column(modifier = Modifier.padding(vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = if (passed) "✓" else "✗",
                 fontSize = 12.sp,
-                color = if (passed) Color(0xFF047857) else Color(0xFFDC2626),
+                color = if (passed) semantic.success else semantic.error,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.width(16.dp)
             )
@@ -2122,7 +2134,7 @@ private fun AttestationSection(
                 text = "Level $level: $title",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (passed) Color(0xFF059669) else Color(0xFFDC2626)
+                color = if (passed) semantic.success else semantic.error
             )
         }
         Text(
@@ -2136,27 +2148,30 @@ private fun AttestationSection(
 
 @Composable
 private fun NetworkCheck(label: String, passed: Boolean) {
+    val semantic = SemanticColors.Default
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = if (passed) "●" else "○",
             fontSize = 8.sp,
-            color = if (passed) Color(0xFF047857) else Color(0xFFDC2626)
+            color = if (passed) semantic.success else semantic.error
         )
         Spacer(modifier = Modifier.width(2.dp))
         Text(
             text = label,
             fontSize = 10.sp,
-            color = if (passed) Color(0xFF059669) else Color.Gray
+            color = if (passed) semantic.success else semantic.inactive
         )
     }
 }
 
 /**
- * Display settings section with live background toggle.
+ * Display settings section with color theme, brightness, and live background toggles.
  */
 @Composable
 private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
     val liveBackgroundEnabled by viewModel.liveBackgroundEnabled.collectAsState()
+    val colorTheme by viewModel.colorTheme.collectAsState()
+    val brightnessPreference by viewModel.brightnessPreference.collectAsState()
 
     Text(
         text = "Display",
@@ -2164,35 +2179,195 @@ private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
         color = MaterialTheme.colorScheme.primary
     )
 
+    // Color Theme Card
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Live Memory Background",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = "Show animated 3D memory graph behind chat",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Color Theme",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "Choose your color palette (affects graph colors too)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Color theme grid - 3 columns
+            val themes = ColorTheme.entries.toList()
+            val chunkedThemes = themes.chunked(3)
+
+            chunkedThemes.forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    row.forEach { theme ->
+                        ColorThemeChip(
+                            theme = theme,
+                            isSelected = colorTheme == theme,
+                            onClick = { viewModel.setColorTheme(theme) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    // Fill remaining space if row is incomplete
+                    repeat(3 - row.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Brightness preference
+            Text(
+                text = "Brightness",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                BrightnessPreference.entries.forEach { pref ->
+                    FilterChip(
+                        selected = brightnessPreference == pref,
+                        onClick = { viewModel.setBrightnessPreference(pref) },
+                        label = { Text(pref.displayName) },
+                        modifier = Modifier.testable("chip_brightness_${pref.name.lowercase()}")
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Live background toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Live Memory Background",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Show animated 3D memory graph behind chat",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = liveBackgroundEnabled,
+                    onCheckedChange = { viewModel.toggleLiveBackground(it) },
+                    modifier = Modifier.testable("switch_live_background")
                 )
             }
-            Switch(
-                checked = liveBackgroundEnabled,
-                onCheckedChange = { viewModel.toggleLiveBackground(it) },
-                modifier = Modifier.testable("switch_live_background")
+        }
+    }
+}
+
+/**
+ * Color theme chip with color swatch preview.
+ */
+@Composable
+private fun ColorThemeChip(
+    theme: ColorTheme,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+               else MaterialTheme.colorScheme.surface,
+        modifier = modifier
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) MaterialTheme.colorScheme.primary
+                       else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(8.dp)
+            )
+            .testableClickable("chip_color_${theme.name.lowercase()}") { onClick() }
+    ) {
+        Column(
+            modifier = Modifier.padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Color swatches (3 circles showing primary, secondary, tertiary)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                // Primary color circle
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .background(
+                            color = theme.primary,
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = Color.Black.copy(alpha = 0.2f),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                )
+                // Secondary color circle
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .background(
+                            color = theme.secondary,
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = Color.Black.copy(alpha = 0.2f),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                )
+                // Tertiary color circle
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .background(
+                            color = theme.tertiary,
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = Color.Black.copy(alpha = 0.2f),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Theme name
+            Text(
+                text = theme.displayName,
+                fontSize = 10.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                color = if (isSelected) MaterialTheme.colorScheme.primary
+                       else MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                maxLines = 1
             )
         }
     }

@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
 import ai.ciris.mobile.shared.platform.isDesktop
 import ai.ciris.mobile.shared.platform.isIOS
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 
 /**
  * Login Screen - Cross-platform login for Android, iOS, and Desktop
@@ -47,7 +48,7 @@ private object LoginColors {
     val Primary = Color(0xFF667eea)     // ciris_primary
     val Accent = Color(0xFF00d4aa)      // ciris_accent
     val White = Color.White
-    val Error = Color(0xFFFF6B6B)       // Error red
+    val Error = SemanticColors.Default.error  // Use semantic error color
 }
 
 @Composable

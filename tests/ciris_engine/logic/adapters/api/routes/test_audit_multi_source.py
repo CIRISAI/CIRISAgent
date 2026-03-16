@@ -281,26 +281,24 @@ class TestMergeAuditSources:
 
     @pytest.mark.asyncio
     async def test_merge_all_sources(self, mock_graph_entries, mock_sqlite_db, mock_jsonl_file):
-        """Test merging audit entries from all sources."""
+        """Test merging audit entries - SQLite is authoritative when present."""
         # Get data from fixtures
         sqlite_entries = await _query_sqlite_audit(mock_sqlite_db)
         jsonl_entries = await _query_jsonl_audit(mock_jsonl_file)
 
-        # Merge all sources
+        # Merge all sources - SQLite is authoritative so graph/jsonl are skipped
         merged = await _merge_audit_sources(mock_graph_entries, sqlite_entries, jsonl_entries)
 
-        # Should have all entries from all sources (no duplicates in this test)
-        assert len(merged) == 8  # 2 graph + 3 sqlite + 3 jsonl (no duplicates)
+        # Should have only SQLite entries (SQLite is authoritative)
+        assert len(merged) == 3  # Only 3 sqlite entries
 
-        # Check storage sources are properly tracked
+        # All entries should be from sqlite
         storage_sources = [entry.storage_sources for entry in merged]
-        assert ["graph"] in storage_sources
-        assert ["jsonl"] in storage_sources
-        assert ["sqlite"] in storage_sources
+        assert all(sources == ["sqlite"] for sources in storage_sources)
 
     @pytest.mark.asyncio
     async def test_merge_with_duplicates(self, mock_graph_entries):
-        """Test merging handles duplicate entries correctly."""
+        """Test merging handles duplicate entries - SQLite is authoritative."""
         # Create duplicate entries across sources
         sqlite_entries = [
             {
@@ -328,12 +326,12 @@ class TestMergeAuditSources:
 
         merged = await _merge_audit_sources(mock_graph_entries[:1], sqlite_entries, jsonl_entries)
 
-        # Should have only 1 unique entry (graph_001 merged from all 3 sources)
+        # SQLite is authoritative - only SQLite entry should be present
         assert len(merged) == 1
 
-        # graph_001 should have all 3 storage sources
+        # Entry should only have sqlite as storage source (authoritative source)
         graph_001_entry = next(entry for entry in merged if entry.id == "graph_001")
-        assert sorted(graph_001_entry.storage_sources) == ["graph", "jsonl", "sqlite"]
+        assert graph_001_entry.storage_sources == ["sqlite"]
 
     @pytest.mark.asyncio
     async def test_merge_empty_sources(self):
@@ -350,23 +348,31 @@ class TestMergeAuditSources:
         assert all(entry.storage_sources == ["graph"] for entry in merged)
 
     @pytest.mark.asyncio
-    async def test_merge_sorting_by_timestamp(self, mock_graph_entries):
+    async def test_merge_sorting_by_timestamp(self):
         """Test merged entries are sorted by timestamp (newest first)."""
-        # Create entries with specific timestamps
+        # Create multiple SQLite entries with specific timestamps
         sqlite_entries = [
             {
                 "event_id": "oldest",
                 "event_timestamp": "2025-08-01T10:00:00+00:00",
                 "event_type": "OLD_EVENT",
                 "originator_id": "old_user",
-            }
+            },
+            {
+                "event_id": "newest",
+                "event_timestamp": "2025-09-02T10:00:00+00:00",
+                "event_type": "NEW_EVENT",
+                "originator_id": "new_user",
+            },
+            {
+                "event_id": "middle",
+                "event_timestamp": "2025-08-15T10:00:00+00:00",
+                "event_type": "MIDDLE_EVENT",
+                "originator_id": "middle_user",
+            },
         ]
 
-        jsonl_entries = [
-            {"id": "newest", "timestamp": "2025-09-02T10:00:00+00:00", "action": "NEW_EVENT", "actor": "new_user"}
-        ]
-
-        merged = await _merge_audit_sources(mock_graph_entries, sqlite_entries, jsonl_entries)
+        merged = await _merge_audit_sources([], sqlite_entries, [])
 
         # Check entries are sorted newest first
         timestamps = [entry.timestamp for entry in merged]
@@ -460,6 +466,7 @@ class TestErrorHandling:
     async def test_merge_handles_malformed_entries(self):
         """Test merging handles malformed entries gracefully."""
         # Create malformed entries with minimal required fields
+        # SQLite is authoritative, so when present only SQLite entries are used
         malformed_sqlite = [
             {
                 "event_id": "malformed_001",
@@ -470,25 +477,36 @@ class TestErrorHandling:
             }
         ]
 
-        malformed_jsonl = [
-            {
-                "id": "malformed_002",
-                "timestamp": "2025-09-01T11:00:00+00:00",
-                # Missing action and actor - should use defaults
-            }
-        ]
-
         # Should not raise exception
-        merged = await _merge_audit_sources([], malformed_sqlite, malformed_jsonl)
+        merged = await _merge_audit_sources([], malformed_sqlite, [])
 
         # Should still create entries with defaults
-        assert len(merged) == 2
+        assert len(merged) == 1
 
         # Check that default values are used for missing fields
         for entry in merged:
             assert entry.action is not None
             assert entry.actor is not None
             assert entry.timestamp is not None
+
+    @pytest.mark.asyncio
+    async def test_merge_handles_malformed_jsonl_when_no_sqlite(self):
+        """Test JSONL entries with missing fields get defaults when no SQLite."""
+        malformed_jsonl = [
+            {
+                "id": "malformed_jsonl_001",
+                "timestamp": "2025-09-01T11:00:00+00:00",
+                # Missing action and actor - should use defaults
+            }
+        ]
+
+        # No SQLite entries, so JSONL will be processed
+        merged = await _merge_audit_sources([], [], malformed_jsonl)
+
+        # Should still create entry with defaults
+        assert len(merged) == 1
+        assert merged[0].action is not None
+        assert merged[0].actor is not None
 
 
 class TestOutcomeExtraction:
@@ -595,6 +613,219 @@ class TestOutcomeExtraction:
 
         assert len(merged) == 1
         assert merged[0].context.outcome == "success"
+
+    @pytest.mark.asyncio
+    async def test_defer_reason_extracted_from_sqlite_payload(self):
+        """Test that defer_reason is extracted from event_payload JSON in SQLite entries."""
+        # Create SQLite entries with defer_reason in parameters
+        sqlite_entries = [
+            {
+                "event_id": "defer_evt_001",
+                "event_timestamp": "2025-09-01T10:00:00+00:00",
+                "event_type": "HANDLER_ACTION_DEFER",
+                "originator_id": "user_defer",
+                "event_payload": json.dumps(
+                    {
+                        "action_type": "DEFER",
+                        "parameters": json.dumps(
+                            {
+                                "defer_reason": "Waiting for human approval",
+                                "defer_until": "2025-09-02T10:00:00+00:00",
+                            }
+                        ),
+                    }
+                ),
+                "sequence_number": 1,
+                "entry_hash": "hash_defer_001",
+                "signature": "sig_defer_001",
+            }
+        ]
+
+        merged = await _merge_audit_sources([], sqlite_entries, [])
+
+        assert len(merged) == 1
+        assert merged[0].context.metadata is not None
+        assert merged[0].context.metadata.get("defer_reason") == "Waiting for human approval"
+
+    @pytest.mark.asyncio
+    async def test_defer_reason_extracted_from_nested_parameters(self):
+        """Test that defer_reason is extracted even with deeply nested parameters JSON."""
+        # Create SQLite entries with nested JSON structure
+        sqlite_entries = [
+            {
+                "event_id": "defer_nested_001",
+                "event_timestamp": "2025-09-01T11:00:00+00:00",
+                "event_type": "HANDLER_ACTION_DEFER",
+                "originator_id": "user_nested",
+                "event_payload": json.dumps(
+                    {
+                        "handler": "defer_handler",
+                        "parameters": json.dumps(
+                            {
+                                "defer_reason": "Requires WA guidance",
+                                "context": {"priority": "high"},
+                            }
+                        ),
+                    }
+                ),
+                "sequence_number": 2,
+                "entry_hash": "hash_nested_001",
+                "signature": "sig_nested_001",
+            }
+        ]
+
+        merged = await _merge_audit_sources([], sqlite_entries, [])
+
+        assert len(merged) == 1
+        assert merged[0].context.metadata.get("defer_reason") == "Requires WA guidance"
+
+    @pytest.mark.asyncio
+    async def test_sqlite_authoritative_deduplication(self):
+        """Test that when SQLite has entries, graph and JSONL sources are skipped."""
+        # Create mock graph entry
+        mock_graph = MagicMock()
+        mock_graph.id = "graph_dup_001"
+        mock_graph.action = "SPEAK"
+        mock_graph.actor = "user_graph"
+        mock_graph.timestamp = datetime(2025, 9, 1, 10, 0, 0, tzinfo=timezone.utc)
+        mock_graph.signature = "graph_sig_001"
+        mock_graph.hash_chain = "graph_hash_001"
+        mock_graph.context = MagicMock()
+        mock_graph.context.model_dump.return_value = {}
+
+        graph_entries = [mock_graph]
+
+        sqlite_entries = [
+            {
+                "event_id": "sqlite_auth_001",
+                "event_timestamp": "2025-09-01T10:00:00+00:00",
+                "event_type": "HANDLER_ACTION_SPEAK",
+                "originator_id": "user_sqlite",
+                "event_payload": "{}",
+                "sequence_number": 1,
+                "entry_hash": "hash_sqlite_001",
+                "signature": "sig_sqlite_001",
+            }
+        ]
+
+        jsonl_entries = [
+            {
+                "id": "jsonl_dup_001",
+                "timestamp": "2025-09-01T10:00:00+00:00",
+                "action": "SPEAK",
+                "actor": "user_jsonl",
+            }
+        ]
+
+        merged = await _merge_audit_sources(graph_entries, sqlite_entries, jsonl_entries)
+
+        # Should only have 1 entry (SQLite is authoritative when present)
+        assert len(merged) == 1
+        # Should be from SQLite - verify by checking storage_sources and signature
+        assert merged[0].storage_sources == ["sqlite"]
+        assert merged[0].signature == "sig_sqlite_001"
+
+    @pytest.mark.asyncio
+    async def test_graph_and_jsonl_used_when_sqlite_empty(self):
+        """Test that graph and JSONL sources are used when SQLite has no entries."""
+        # Create mock graph entry
+        mock_graph = MagicMock()
+        mock_graph.id = "graph_only_001"
+        mock_graph.action = "SPEAK"
+        mock_graph.actor = "user_graph"
+        mock_graph.timestamp = datetime(2025, 9, 1, 10, 0, 0, tzinfo=timezone.utc)
+        mock_graph.signature = "graph_sig_001"
+        mock_graph.hash_chain = "graph_hash_001"
+        mock_graph.context = MagicMock()
+        mock_graph.context.model_dump.return_value = {}
+
+        graph_entries = [mock_graph]
+
+        jsonl_entries = [
+            {
+                "id": "jsonl_only_001",
+                "timestamp": "2025-09-01T11:00:00+00:00",
+                "action": "TOOL_USE",
+                "actor": "user_jsonl",
+            }
+        ]
+
+        # Empty SQLite entries
+        sqlite_entries: List[dict] = []
+
+        merged = await _merge_audit_sources(graph_entries, sqlite_entries, jsonl_entries)
+
+        # Should have entries from both graph and JSONL
+        assert len(merged) == 2
+        entry_ids = [e.id for e in merged]
+        assert "graph_only_001" in entry_ids
+        assert "jsonl_only_001" in entry_ids
+
+    @pytest.mark.asyncio
+    async def test_malformed_payload_json_handled_gracefully(self):
+        """Test that malformed event_payload JSON doesn't crash metadata extraction."""
+        sqlite_entries = [
+            {
+                "event_id": "malformed_001",
+                "event_timestamp": "2025-09-01T10:00:00+00:00",
+                "event_type": "HANDLER_ACTION_DEFER",
+                "originator_id": "user_malformed",
+                "event_payload": "not valid json {{{",  # Invalid JSON
+                "sequence_number": 1,
+                "entry_hash": "hash_malformed_001",
+                "signature": "sig_malformed_001",
+            }
+        ]
+
+        # Should not raise exception
+        merged = await _merge_audit_sources([], sqlite_entries, [])
+
+        assert len(merged) == 1
+        # Metadata should be empty dict since JSON parsing failed
+        assert (
+            merged[0].context.metadata == {}
+            or merged[0].context.metadata is None
+            or "defer_reason" not in merged[0].context.metadata
+        )
+
+    @pytest.mark.asyncio
+    async def test_action_parameters_extracted_from_payload(self):
+        """Test that relevant parameters are extracted from event_payload."""
+        sqlite_entries = [
+            {
+                "event_id": "params_001",
+                "event_timestamp": "2025-09-01T10:00:00+00:00",
+                "event_type": "HANDLER_ACTION_SPEAK",
+                "originator_id": "user_params",
+                "event_payload": json.dumps(
+                    {
+                        "action_type": "SPEAK",
+                        "thought_id": "thought_123",
+                        "parameters": json.dumps(
+                            {
+                                "content": "Hello world",
+                                "channel_id": "test_channel",
+                            }
+                        ),
+                    }
+                ),
+                "sequence_number": 1,
+                "entry_hash": "hash_params_001",
+                "signature": "sig_params_001",
+            }
+        ]
+
+        merged = await _merge_audit_sources([], sqlite_entries, [])
+
+        assert len(merged) == 1
+        # Check that relevant fields were extracted to metadata
+        metadata = merged[0].context.metadata
+        assert metadata is not None
+        # 'content' is extracted from parameters
+        assert metadata.get("content") == "Hello world"
+        # 'action_type' and 'thought_id' are extracted from payload
+        assert metadata.get("action_type") == "SPEAK"
+        assert metadata.get("thought_id") == "thought_123"
 
 
 if __name__ == "__main__":

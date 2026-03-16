@@ -260,6 +260,7 @@ class QARunner:
             QAModule.DREAM_LIVE,
             QAModule.FILTERS,
             QAModule.HANDLERS,
+            QAModule.DEFERRAL,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -872,6 +873,7 @@ class QARunner:
         from .modules.cirisnode_tests import CIRISNodeTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
+        from .modules.deferral_tests import DeferralTestModule
         from .modules.dream_live_tests import DreamLiveTests
         from .modules.dsar_multi_source_tests import DSARMultiSourceTests
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
@@ -926,6 +928,7 @@ class QARunner:
             QAModule.DREAM_LIVE: DreamLiveTests,
             QAModule.FILTERS: FilterTestModule,
             QAModule.HANDLERS: HandlerTestModule,
+            QAModule.DEFERRAL: DeferralTestModule,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):

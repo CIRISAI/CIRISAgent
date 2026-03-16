@@ -1888,7 +1888,7 @@ private fun BubbleNet(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         items(events.reversed()) { event ->
-                            TimelineRow(event = event)
+                            TimelineRow(event = event, theme = theme)
                         }
                     }
                 }
@@ -1903,6 +1903,7 @@ private fun BubbleNet(
 @Composable
 private fun TimelineRow(
     event: TimelineEvent,
+    theme: InteractTheme,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -1910,11 +1911,11 @@ private fun TimelineRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Timestamp
+        // Timestamp - use theme color for readability
         Text(
             text = formatTimelineTimestamp(event.timestamp),
             fontSize = 10.sp,
-            color = Color(0xFF6B7280),
+            color = theme.timelineText,
             modifier = Modifier.width(60.dp)
         )
 
@@ -1924,11 +1925,11 @@ private fun TimelineRow(
             fontSize = 16.sp
         )
 
-        // Action name
+        // Action name - use theme color for readability
         Text(
             text = event.eventType,
             fontSize = 11.sp,
-            color = Color(0xFF4B5563)
+            color = theme.timelineText
         )
     }
 }
@@ -1972,7 +1973,7 @@ private fun EmojiLegendDialog(
                     text = "Processing Stages",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LegendRow("🤔", "Thought Start")
                 LegendRow("📋", "Snapshot & Context")
@@ -1987,7 +1988,7 @@ private fun EmojiLegendDialog(
                     text = "External Actions",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LegendRow("👀", "Observe")
                 LegendRow("💬", "Speak")
@@ -2000,7 +2001,7 @@ private fun EmojiLegendDialog(
                     text = "Control Actions",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LegendRow("❌", "Reject")
                 LegendRow("💭", "Ponder")
@@ -2013,7 +2014,7 @@ private fun EmojiLegendDialog(
                     text = "Memory Actions",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LegendRow("💾", "Memorize")
                 LegendRow("🔍", "Recall")
@@ -2026,7 +2027,7 @@ private fun EmojiLegendDialog(
                     text = "Terminal",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LegendRow("✅", "Task Complete")
 
@@ -2037,7 +2038,7 @@ private fun EmojiLegendDialog(
                     text = "Agent Status",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LegendRow("💭", "Idle")
                 LegendRow("🔄", "Processing")
@@ -2077,7 +2078,7 @@ private fun LegendRow(
         Text(
             text = description,
             fontSize = 14.sp,
-            color = Color(0xFF1F2937)
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }

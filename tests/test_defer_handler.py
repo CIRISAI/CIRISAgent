@@ -184,10 +184,16 @@ class TestDeferHandler:
 
     @pytest.fixture
     def defer_handler(
-        self, bus_manager: BusManager, mock_time_service: MockTimeService, mock_service_registry: Mock
+        self,
+        bus_manager: BusManager,
+        mock_time_service: MockTimeService,
+        mock_service_registry: Mock,
+        mock_task_scheduler: AsyncMock,
     ) -> DeferHandler:
         """Create a DeferHandler instance with dependencies."""
-        deps = ActionHandlerDependencies(bus_manager=bus_manager, time_service=mock_time_service)
+        deps = ActionHandlerDependencies(
+            bus_manager=bus_manager, time_service=mock_time_service, task_scheduler_service=mock_task_scheduler
+        )
         handler = DeferHandler(deps)
         setattr(handler, "_service_registry", mock_service_registry)
         return handler

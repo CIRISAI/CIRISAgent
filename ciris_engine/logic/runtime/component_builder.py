@@ -349,6 +349,7 @@ class ComponentBuilder:
             telemetry_service=self.runtime.telemetry_service,
             secrets_service=dependencies.secrets_service,
             audit_service=self.runtime.audit_service,
+            task_scheduler_service=self.runtime.task_scheduler,
         )
 
     async def _get_cognitive_behaviors_from_graph(self) -> Optional[Any]:
@@ -388,9 +389,7 @@ class ComponentBuilder:
             logger.warning(f"[COGNITIVE_LOAD] Failed to get cognitive behaviors from graph: {e}")
 
         # Fallback: ally-style defaults (wakeup disabled for seamless UX)
-        logger.info(
-            "[COGNITIVE_LOAD] No cognitive behaviors in graph - using ally defaults (wakeup.enabled=False)"
-        )
+        logger.info("[COGNITIVE_LOAD] No cognitive behaviors in graph - using ally defaults (wakeup.enabled=False)")
         return CognitiveStateBehaviors(
             wakeup=WakeupBehavior(enabled=False, rationale="No config in graph - ally-style seamless startup"),
         )

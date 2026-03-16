@@ -16,16 +16,14 @@ logger = logging.getLogger(__name__)
 
 
 class DeferHandler(BaseActionHandler):
-    async def _get_task_scheduler_service(self) -> Optional[Any]:
-        """Get task scheduler service from registry."""
-        try:
-            if hasattr(self, "_service_registry") and self._service_registry:
-                return await self._service_registry.get_service(handler="task_scheduler", service_type="scheduler")
-            else:
-                logger.debug("No _service_registry available for task scheduler lookup")
-        except Exception as e:
-            logger.warning(f"Could not get task scheduler service: {e}")
-        return None
+    def _get_task_scheduler_service(self) -> Optional[Any]:
+        """Get task scheduler service from dependencies."""
+        service = self.dependencies.task_scheduler_service
+        if service:
+            logger.info(f"Got TaskSchedulerService from dependencies: {type(service).__name__}")
+        else:
+            logger.warning("TaskSchedulerService not available in handler dependencies")
+        return service
 
     async def handle(
         self,
@@ -78,7 +76,7 @@ class DeferHandler(BaseActionHandler):
         self, defer_params: DeferParams, thought: Thought, follow_up_info: str
     ) -> str:
         """Schedule a time-based deferral. Returns updated follow_up_info."""
-        scheduler_service = await self._get_task_scheduler_service()
+        scheduler_service = self._get_task_scheduler_service()
         if not scheduler_service:
             return follow_up_info
 

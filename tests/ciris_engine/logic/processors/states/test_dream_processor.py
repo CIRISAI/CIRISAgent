@@ -367,3 +367,282 @@ class TestDreamProcessor:
 
         assert dream_processor.current_session.memories_consolidated == 5
         assert dream_processor.current_session.patterns_analyzed == 3
+
+    @pytest.mark.asyncio
+    async def test_dispatch_dream_thought_result(self, dream_processor):
+        """Test that _dispatch_dream_thought_result calls dispatch_action."""
+        from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem, ThoughtContent
+        from ciris_engine.schemas.actions.parameters import PonderParams
+        from ciris_engine.schemas.conscience.core import EpistemicData
+        from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+        from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+        from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtType
+
+        dream_processor.initialize()
+
+        # Create a mock processing queue item
+        item = ProcessingQueueItem(
+            thought_id="test_thought_123",
+            source_task_id="test_task_456",
+            thought_type=ThoughtType.STANDARD,
+            content=ThoughtContent(text="Test thought"),
+            thought_depth=0,
+            initial_context={},
+            agent_occurrence_id="default",
+        )
+
+        # Create a mock conscience result with PONDER action
+        ponder_action = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.PONDER,
+            action_parameters=PonderParams(questions=["Test question"]),
+            rationale="Test rationale",
+        )
+        result = ConscienceApplicationResult(
+            original_action=ponder_action,
+            final_action=ponder_action,
+            overridden=False,
+            override_reason=None,
+            epistemic_data=EpistemicData(
+                entropy_level=0.3,
+                coherence_level=0.8,
+                uncertainty_acknowledged=True,
+                reasoning_transparency=1.0,
+            ),
+        )
+
+        # Mock persistence functions
+        mock_thought = Mock(thought_id="test_thought_123")
+        mock_task = Mock(task_id="test_task_456")
+
+        # Mock dispatch context with model_dump method
+        mock_dispatch_context = Mock()
+        mock_dispatch_context.model_dump.return_value = {"thought_id": "test_thought_123"}
+
+        with patch("ciris_engine.logic.persistence") as mock_persistence:
+            with patch(
+                "ciris_engine.logic.processors.states.dream_processor.build_dispatch_context",
+                return_value=mock_dispatch_context,
+            ):
+                with patch.object(dream_processor, "dispatch_action", new_callable=AsyncMock) as mock_dispatch:
+                    mock_persistence.async_get_thought_by_id = AsyncMock(return_value=mock_thought)
+                    mock_persistence.get_task_by_id = Mock(return_value=mock_task)
+
+                    await dream_processor._dispatch_dream_thought_result(item, result)
+
+                    # Verify dispatch_action was called
+                    mock_dispatch.assert_called_once()
+                    call_args = mock_dispatch.call_args
+                    assert call_args[0][0] == result  # First arg is result
+                    assert call_args[0][1] == mock_thought  # Second arg is thought
+
+    @pytest.mark.asyncio
+    async def test_sleepwalk_prevention_speak_blocked(self, dream_processor):
+        """Test that SPEAK action is blocked during dream and converted to PONDER."""
+        from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem, ThoughtContent
+        from ciris_engine.schemas.actions.parameters import SpeakParams
+        from ciris_engine.schemas.conscience.core import EpistemicData
+        from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+        from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+        from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtType
+
+        dream_processor.initialize()
+
+        # Create a mock processing queue item
+        item = ProcessingQueueItem(
+            thought_id="test_thought_speak",
+            source_task_id="test_task_speak",
+            thought_type=ThoughtType.STANDARD,
+            content=ThoughtContent(text="Test speak thought"),
+            thought_depth=0,
+            initial_context={},
+            agent_occurrence_id="default",
+        )
+
+        # Create a SPEAK action result (should be blocked)
+        speak_action = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.SPEAK,
+            action_parameters=SpeakParams(content="Hello world"),
+            rationale="Test speak",
+        )
+        speak_result = ConscienceApplicationResult(
+            original_action=speak_action,
+            final_action=speak_action,
+            overridden=False,
+            override_reason=None,
+            epistemic_data=EpistemicData(
+                entropy_level=0.3,
+                coherence_level=0.8,
+                uncertainty_acknowledged=True,
+                reasoning_transparency=1.0,
+            ),
+        )
+
+        # Mock process_thought_item to return SPEAK
+        mock_thought = Mock(thought_id="test_thought_speak")
+        mock_task = Mock(task_id="test_task_speak")
+
+        # Mock dispatch context with model_dump method
+        mock_dispatch_context = Mock()
+        mock_dispatch_context.model_dump.return_value = {"thought_id": "test_thought_speak"}
+
+        with patch.object(dream_processor, "process_thought_item", new_callable=AsyncMock) as mock_process:
+            with patch("ciris_engine.logic.persistence") as mock_persistence:
+                with patch(
+                    "ciris_engine.logic.processors.states.dream_processor.build_dispatch_context",
+                    return_value=mock_dispatch_context,
+                ):
+                    with patch.object(dream_processor, "dispatch_action", new_callable=AsyncMock) as mock_dispatch:
+                        mock_process.return_value = speak_result
+                        mock_persistence.async_get_thought_by_id = AsyncMock(return_value=mock_thought)
+                        mock_persistence.get_task_by_id = Mock(return_value=mock_task)
+
+                        result = await dream_processor._process_dream_thought(item)
+
+                        # Verify SPEAK was converted to PONDER
+                        assert result is not None
+                        assert result.final_action.selected_action == HandlerActionType.PONDER
+                        assert result.overridden is True
+                        assert "sleepwalk" in result.override_reason.lower()
+
+                        # Verify dispatch was still called (with PONDER)
+                        mock_dispatch.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_sleepwalk_prevention_tool_blocked(self, dream_processor):
+        """Test that TOOL action is blocked during dream and converted to PONDER."""
+        from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem, ThoughtContent
+        from ciris_engine.schemas.actions.parameters import ToolParams
+        from ciris_engine.schemas.conscience.core import EpistemicData
+        from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+        from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+        from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtType
+
+        dream_processor.initialize()
+
+        # Create a mock processing queue item
+        item = ProcessingQueueItem(
+            thought_id="test_thought_tool",
+            source_task_id="test_task_tool",
+            thought_type=ThoughtType.STANDARD,
+            content=ThoughtContent(text="Test tool thought"),
+            thought_depth=0,
+            initial_context={},
+            agent_occurrence_id="default",
+        )
+
+        # Create a TOOL action result (should be blocked)
+        tool_action = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.TOOL,
+            action_parameters=ToolParams(name="some_tool", parameters={}),
+            rationale="Test tool",
+        )
+        tool_result = ConscienceApplicationResult(
+            original_action=tool_action,
+            final_action=tool_action,
+            overridden=False,
+            override_reason=None,
+            epistemic_data=EpistemicData(
+                entropy_level=0.3,
+                coherence_level=0.8,
+                uncertainty_acknowledged=True,
+                reasoning_transparency=1.0,
+            ),
+        )
+
+        # Mock process_thought_item to return TOOL
+        mock_thought = Mock(thought_id="test_thought_tool")
+        mock_task = Mock(task_id="test_task_tool")
+
+        # Mock dispatch context with model_dump method
+        mock_dispatch_context = Mock()
+        mock_dispatch_context.model_dump.return_value = {"thought_id": "test_thought_tool"}
+
+        with patch.object(dream_processor, "process_thought_item", new_callable=AsyncMock) as mock_process:
+            with patch("ciris_engine.logic.persistence") as mock_persistence:
+                with patch(
+                    "ciris_engine.logic.processors.states.dream_processor.build_dispatch_context",
+                    return_value=mock_dispatch_context,
+                ):
+                    with patch.object(dream_processor, "dispatch_action", new_callable=AsyncMock) as mock_dispatch:
+                        mock_process.return_value = tool_result
+                        mock_persistence.async_get_thought_by_id = AsyncMock(return_value=mock_thought)
+                        mock_persistence.get_task_by_id = Mock(return_value=mock_task)
+
+                        result = await dream_processor._process_dream_thought(item)
+
+                        # Verify TOOL was converted to PONDER
+                        assert result is not None
+                        assert result.final_action.selected_action == HandlerActionType.PONDER
+                        assert result.overridden is True
+                        assert "sleepwalk" in result.override_reason.lower()
+
+    @pytest.mark.asyncio
+    async def test_sleepwalk_allowed_actions_pass_through(self, dream_processor):
+        """Test that allowed actions (PONDER, MEMORIZE, RECALL) pass through unchanged."""
+        from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem, ThoughtContent
+        from ciris_engine.schemas.actions.parameters import PonderParams
+        from ciris_engine.schemas.conscience.core import EpistemicData
+        from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+        from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+        from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtType
+
+        dream_processor.initialize()
+
+        # Create a mock processing queue item
+        item = ProcessingQueueItem(
+            thought_id="test_thought_ponder",
+            source_task_id="test_task_ponder",
+            thought_type=ThoughtType.STANDARD,
+            content=ThoughtContent(text="Test ponder thought"),
+            thought_depth=0,
+            initial_context={},
+            agent_occurrence_id="default",
+        )
+
+        # Create a PONDER action result (should pass through)
+        ponder_action = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.PONDER,
+            action_parameters=PonderParams(questions=["What should I learn?"]),
+            rationale="Test ponder",
+        )
+        ponder_result = ConscienceApplicationResult(
+            original_action=ponder_action,
+            final_action=ponder_action,
+            overridden=False,
+            override_reason=None,
+            epistemic_data=EpistemicData(
+                entropy_level=0.3,
+                coherence_level=0.8,
+                uncertainty_acknowledged=True,
+                reasoning_transparency=1.0,
+            ),
+        )
+
+        # Mock process_thought_item to return PONDER
+        mock_thought = Mock(thought_id="test_thought_ponder")
+        mock_task = Mock(task_id="test_task_ponder")
+
+        # Mock dispatch context with model_dump method
+        mock_dispatch_context = Mock()
+        mock_dispatch_context.model_dump.return_value = {"thought_id": "test_thought_ponder"}
+
+        with patch.object(dream_processor, "process_thought_item", new_callable=AsyncMock) as mock_process:
+            with patch("ciris_engine.logic.persistence") as mock_persistence:
+                with patch(
+                    "ciris_engine.logic.processors.states.dream_processor.build_dispatch_context",
+                    return_value=mock_dispatch_context,
+                ):
+                    with patch.object(dream_processor, "dispatch_action", new_callable=AsyncMock) as mock_dispatch:
+                        mock_process.return_value = ponder_result
+                        mock_persistence.async_get_thought_by_id = AsyncMock(return_value=mock_thought)
+                        mock_persistence.get_task_by_id = Mock(return_value=mock_task)
+
+                        result = await dream_processor._process_dream_thought(item)
+
+                        # Verify PONDER passed through unchanged
+                        assert result is not None
+                        assert result.final_action.selected_action == HandlerActionType.PONDER
+                        assert result.overridden is False  # Not overridden by sleepwalk prevention
+
+                        # Verify dispatch was called
+                        mock_dispatch.assert_called_once()

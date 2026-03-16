@@ -10,7 +10,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
@@ -141,18 +141,24 @@ async def _get_destinations(config_service: Any) -> List[Dict[str, Any]]:
         return value
     elif isinstance(value, str):
         try:
-            return json.loads(value)
+            return cast(List[Dict[str, Any]], json.loads(value))
         except json.JSONDecodeError:
             return []
     return []
 
 
 async def _save_destinations(config_service: Any, destinations: List[Dict[str, Any]]) -> None:
-    """Save export destinations to config service."""
+    """Save export destinations to config service.
+
+    Note: ConfigValue only supports List[primitive], not List[Dict].
+    We serialize the destinations list to JSON string for storage.
+    """
     if not config_service:
         raise HTTPException(status_code=503, detail="Config service not available")
 
-    await config_service.set_config(EXPORT_DESTINATIONS_KEY, destinations, updated_by="telemetry_export_api")
+    # Serialize to JSON string since ConfigValue.list_value doesn't support List[Dict]
+    destinations_json = json.dumps(destinations)
+    await config_service.set_config(EXPORT_DESTINATIONS_KEY, destinations_json, updated_by="telemetry_export_api")
 
 
 def _find_destination(destinations: List[Dict[str, Any]], destination_id: str) -> Optional[Dict[str, Any]]:

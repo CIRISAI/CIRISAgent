@@ -633,7 +633,7 @@ class DreamProcessor(BaseProcessor):
         task = persistence.get_task_by_id(item.source_task_id, self.agent_occurrence_id)
         dispatch_context = build_dispatch_context(
             thought=thought_obj,
-            time_service=self._time_service,
+            time_service=self.time_service,  # Use BaseProcessor's time_service (non-None)
             task=task,
             app_config=self.config,
             round_number=getattr(item, "round_number", 0),

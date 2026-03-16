@@ -521,6 +521,12 @@ class APIServerManager:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
 
+        # Set CIRIS_HOME for verifier_singleton (required for audit hash chain)
+        if "CIRIS_HOME" not in env:
+            project_root = Path(__file__).parent.parent.parent
+            env["CIRIS_HOME"] = str(project_root)
+            self.console.print(f"[dim]Setting CIRIS_HOME={project_root}[/dim]")
+
         # Set CIRIS_ADAPTER environment variable (supports comma-separated adapters)
         # This allows loading modular services like Reddit alongside built-in adapters
         env["CIRIS_ADAPTER"] = self.config.adapter

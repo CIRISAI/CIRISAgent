@@ -196,8 +196,8 @@ data class InteractTheme(
                     statusWarning = LiveBackgroundTheme.statusWarning,
                     warningBackground = LiveBackgroundTheme.warningBackground,
                     warningText = LiveBackgroundTheme.warningText,
-                    timelineBackground = colorTheme.tertiary.copy(alpha = 0.3f),  // Use theme tertiary
-                    timelineText = colorTheme.tertiary,
+                    timelineBackground = colorTheme.tertiary.copy(alpha = 0.5f),  // Semi-transparent for readability
+                    timelineText = Color.White,  // High contrast text for dark mode
                     inputBackground = LiveBackgroundTheme.inputBackground,
                     inputBorder = LiveBackgroundTheme.inputBorder,
                     inputText = LiveBackgroundTheme.inputText,
@@ -237,8 +237,8 @@ data class InteractTheme(
                     statusWarning = LightTheme.statusWarning,
                     warningBackground = LightTheme.warningBackground,
                     warningText = LightTheme.warningText,
-                    timelineBackground = mutedTertiary.copy(alpha = 0.15f),
-                    timelineText = mutedTertiary,
+                    timelineBackground = mutedTertiary.copy(alpha = 0.4f),  // Higher opacity for readability
+                    timelineText = LightTheme.textPrimary,  // High contrast text for light mode
                     inputBackground = LightTheme.inputBackground,
                     inputBorder = LightTheme.inputBorder,
                     inputText = LightTheme.inputText,

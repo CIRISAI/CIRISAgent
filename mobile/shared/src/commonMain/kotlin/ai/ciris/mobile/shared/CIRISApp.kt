@@ -800,8 +800,9 @@ fun CIRISApp(
         }
     }
 
-    // Collect brightness preference for theme
+    // Collect theme preferences for immediate application
     val brightnessPreference by settingsViewModel.brightnessPreference.collectAsState()
+    val selectedColorTheme by settingsViewModel.colorTheme.collectAsState()
     val systemInDarkTheme = isSystemInDarkTheme()
     val isDarkMode = when (brightnessPreference) {
         BrightnessPreference.LIGHT -> false
@@ -809,11 +810,19 @@ fun CIRISApp(
         BrightnessPreference.SYSTEM -> systemInDarkTheme
     }
 
-    // Apply appropriate color scheme based on brightness preference
+    // Apply color scheme with selected color theme applied immediately
     val colorScheme = if (isDarkMode) {
-        darkColorScheme()
+        darkColorScheme(
+            primary = selectedColorTheme.primary,
+            secondary = selectedColorTheme.secondary,
+            tertiary = selectedColorTheme.tertiary
+        )
     } else {
-        lightColorScheme()
+        lightColorScheme(
+            primary = selectedColorTheme.primary,
+            secondary = selectedColorTheme.secondary,
+            tertiary = selectedColorTheme.tertiary
+        )
     }
 
     MaterialTheme(colorScheme = colorScheme) {
@@ -2472,7 +2481,7 @@ private fun CIRISTopBar(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("LLM Settings") },
+                        text = { Text("App Settings") },
                         onClick = { activeCategory = NavCategory.NONE; onSettingsClick() },
                         leadingIcon = { Icon(Icons.Default.Settings, null) }
                     )

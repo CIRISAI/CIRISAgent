@@ -48,11 +48,13 @@ class ActionHandlerDependencies:
         time_service: TimeServiceProtocol,
         secrets_service: Optional[SecretsService] = None,
         shutdown_callback: Optional[Callable[[], None]] = None,
+        task_scheduler_service: Optional[Any] = None,
     ) -> None:
         self.bus_manager = bus_manager
         self.time_service = time_service
         self.secrets_service = secrets_service
         self.shutdown_callback = shutdown_callback
+        self.task_scheduler_service = task_scheduler_service
         self._shutdown_requested = False
         self._shutdown_task: Optional[asyncio.Task[Any]] = None
 

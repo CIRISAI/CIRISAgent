@@ -656,9 +656,33 @@ def action_selection(
 
             elif action == HandlerActionType.DEFER:
                 if action_params:
-                    params = DeferParams(reason=action_params, defer_until=None)
+                    # Check for timed defer format: $defer_timed <seconds> <reason>
+                    # or $defer @<ISO_timestamp> <reason>
+                    # or $defer +<seconds>s <reason>
+                    defer_until = None
+                    reason = action_params
+
+                    # Format: $defer +30s <reason> (seconds from now)
+                    import re
+                    from datetime import datetime, timedelta, timezone
+
+                    time_match = re.match(r"^\+(\d+)s\s+(.+)$", action_params)
+                    if time_match:
+                        seconds = int(time_match.group(1))
+                        reason = time_match.group(2)
+                        defer_until = (datetime.now(timezone.utc) + timedelta(seconds=seconds)).isoformat()
+                        logger.info(f"[MOCK_LLM] Timed defer: {seconds}s from now → {defer_until}")
+
+                    # Format: $defer @2026-03-16T00:00:00Z <reason>
+                    iso_match = re.match(r"^@(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[Z\+\-\d:]*)\s+(.+)$", action_params)
+                    if iso_match:
+                        defer_until = iso_match.group(1)
+                        reason = iso_match.group(2)
+                        logger.info(f"[MOCK_LLM] Timed defer with ISO: {defer_until}")
+
+                    params = DeferParams(reason=reason, defer_until=defer_until)
                 else:
-                    error_msg = "❌ $defer requires a reason. Format: $defer <reason>\nExample: $defer I need more context to answer properly"
+                    error_msg = "❌ $defer requires a reason. Format: $defer <reason>\nOr for timed: $defer +30s <reason> or $defer @2026-03-16T00:00:00Z <reason>"
                     params = SpeakParams(content=error_msg)
                     action = HandlerActionType.SPEAK
 
@@ -905,9 +929,33 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
             command_found = True
         elif command_from_context == "$defer":
             reason = command_args_from_context or "Need more information"
-            params = DeferParams(reason=reason, context={"channel": default_channel} if default_channel else None)
+            defer_until = None
+
+            # Check for timed defer format
+            if command_args_from_context:
+                import re
+                from datetime import datetime, timedelta, timezone
+
+                time_match = re.match(r"^\+(\d+)s\s+(.+)$", command_args_from_context)
+                if time_match:
+                    seconds = int(time_match.group(1))
+                    reason = time_match.group(2)
+                    defer_until = (datetime.now(timezone.utc) + timedelta(seconds=seconds)).isoformat()
+
+                iso_match = re.match(
+                    r"^@(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[Z\+\-\d:]*)\s+(.+)$", command_args_from_context
+                )
+                if iso_match:
+                    defer_until = iso_match.group(1)
+                    reason = iso_match.group(2)
+
+            params = DeferParams(
+                reason=reason,
+                defer_until=defer_until,
+                context={"channel": default_channel} if default_channel else None,
+            )
             action = HandlerActionType.DEFER
-            rationale = f"[MOCK LLM] Deferring: {reason}"
+            rationale = f"[MOCK LLM] Deferring: {reason}" + (f" until {defer_until}" if defer_until else "")
             command_found = True
         elif command_from_context == "$reject":
             reason = command_args_from_context or "Cannot process request"
@@ -1291,11 +1339,29 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                             command_found = True
                             break
                         elif command == "$defer":
-                            params = DeferParams(
-                                reason=command_args if command_args else "Need more information", defer_until=None
-                            )
+                            reason = command_args if command_args else "Need more information"
+                            defer_until = None
+
+                            if command_args:
+                                import re
+                                from datetime import datetime, timedelta, timezone
+
+                                time_match = re.match(r"^\+(\d+)s\s+(.+)$", command_args)
+                                if time_match:
+                                    seconds = int(time_match.group(1))
+                                    reason = time_match.group(2)
+                                    defer_until = (datetime.now(timezone.utc) + timedelta(seconds=seconds)).isoformat()
+
+                                iso_match = re.match(
+                                    r"^@(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[Z\+\-\d:]*)\s+(.+)$", command_args
+                                )
+                                if iso_match:
+                                    defer_until = iso_match.group(1)
+                                    reason = iso_match.group(2)
+
+                            params = DeferParams(reason=reason, defer_until=defer_until)
                             action = HandlerActionType.DEFER
-                            rationale = "[MOCK LLM] Deferring task"
+                            rationale = "[MOCK LLM] Deferring task" + (f" until {defer_until}" if defer_until else "")
                             command_found = True
                             break
                         elif command == "$reject":

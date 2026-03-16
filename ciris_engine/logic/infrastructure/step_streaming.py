@@ -160,6 +160,22 @@ class ReasoningEventStream:
         """
         return self._recent_events[-limit:]
 
+    def get_oldest_events(self, limit: int = 100) -> list[Dict[str, Any]]:
+        """
+        Get oldest reasoning events for telemetry export (FIFO order).
+
+        This should be used with clear_exported_events() which removes from
+        the front of the buffer. Using get_recent_events() with clear_exported_events()
+        would clear the wrong events when buffer size > limit.
+
+        Args:
+            limit: Maximum number of events to return
+
+        Returns:
+            List of oldest reasoning events (oldest first)
+        """
+        return self._recent_events[:limit]
+
     def clear_exported_events(self, count: int) -> None:
         """
         Remove events that have been exported.

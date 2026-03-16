@@ -112,8 +112,7 @@ def _convert_to_response(task_info: ScheduledTaskInfo) -> ScheduledTaskResponse:
 
 async def _get_dream_schedules_from_graph(request: Request) -> List[ScheduledTaskInfo]:
     """Query graph memory for scheduled dream sessions."""
-    from ciris_engine.schemas.services.graph.memory import GraphQuery
-    from ciris_engine.schemas.services.graph_core import GraphScope
+    from ciris_engine.schemas.services.graph.memory import GraphQuery, MemorySearchFilter
 
     memory_service = getattr(request.app.state, "memory_service", None)
     if not memory_service:
@@ -123,9 +122,12 @@ async def _get_dream_schedules_from_graph(request: Request) -> List[ScheduledTas
     try:
         # Query for scheduled_dream tasks in the graph
         query = GraphQuery(
-            scope=GraphScope.LOCAL,
-            node_types=["task"],
-            metadata_filter={"task_type": "scheduled_dream"},
+            query_type="match",
+            node_filters=MemorySearchFilter(
+                node_type="task",
+                scope="local",
+                attribute_values={"task_type": "scheduled_dream"},
+            ),
         )
 
         results = await memory_service.query(query)

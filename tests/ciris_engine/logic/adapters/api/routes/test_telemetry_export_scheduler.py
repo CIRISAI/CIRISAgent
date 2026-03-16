@@ -196,6 +196,27 @@ class TestHeaderBuilding:
 
         assert headers["X-Custom-Key"] == "my-api-key"
 
+    def test_build_headers_null_auth_header_uses_default(self, mock_telemetry_service, mock_config_service):
+        """Test that explicit null auth_header falls back to X-API-Key default."""
+        scheduler = TelemetryExportScheduler(
+            telemetry_service=mock_telemetry_service,
+            config_service=mock_config_service,
+        )
+
+        # This simulates a destination created without specifying auth_header,
+        # which persists as auth_header: null in the config
+        dest = {
+            "auth_type": "header",
+            "auth_value": "my-api-key",
+            "auth_header": None,  # Explicit null, not missing
+        }
+        headers = scheduler._build_headers(dest)
+
+        # Should use default X-API-Key, not fail with headers[None]
+        assert "X-API-Key" in headers
+        assert headers["X-API-Key"] == "my-api-key"
+        assert None not in headers
+
 
 class TestSignalCollection:
     """Tests for signal data collection."""

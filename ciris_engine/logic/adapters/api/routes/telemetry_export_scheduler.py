@@ -201,7 +201,8 @@ class TelemetryExportScheduler:
             encoded = base64.b64encode(auth_value.encode()).decode()
             headers["Authorization"] = f"Basic {encoded}"
         elif auth_type == "header" and auth_value:
-            header_name = dest.get("auth_header", "X-API-Key")
+            # Use 'or' to handle both missing key AND explicit null value
+            header_name = dest.get("auth_header") or "X-API-Key"
             headers[header_name] = auth_value
 
         return headers
@@ -309,23 +310,26 @@ class TelemetryExportScheduler:
             # Import the global reasoning event stream
             from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
 
-            # Get recent reasoning events from the buffer
-            recent_events = reasoning_event_stream.get_recent_events(limit=100)
+            # Get OLDEST events first (FIFO) - this matches clear_exported_events which
+            # removes from the front of the buffer. Using newest-first would cause the
+            # wrong events to be cleared when buffer > limit.
+            events_to_export = reasoning_event_stream.get_oldest_events(limit=100)
 
-            if not recent_events:
-                logger.debug("No recent reasoning events in buffer")
+            if not events_to_export:
+                logger.debug("No reasoning events in buffer for export")
                 return None
 
             # Convert to trace format
             traces: List[JSONDict] = []
-            for event_update in recent_events:
+            for event_update in events_to_export:
                 trace_data = self._build_trace_from_reasoning_event(event_update)
                 if trace_data:
                     traces.append(trace_data)
 
-            # Clear exported events to avoid duplicates
-            if traces:
-                reasoning_event_stream.clear_exported_events(len(recent_events))
+            # Clear the exported events from the front of the buffer
+            # This works correctly because we exported from the front (oldest first)
+            if events_to_export:
+                reasoning_event_stream.clear_exported_events(len(events_to_export))
                 logger.info(f"Collected {len(traces)} reasoning traces for export")
 
             return traces if traces else None

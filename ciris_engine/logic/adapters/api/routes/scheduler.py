@@ -110,6 +110,72 @@ def _convert_to_response(task_info: ScheduledTaskInfo) -> ScheduledTaskResponse:
     )
 
 
+async def _get_dream_schedules_from_graph(request: Request) -> List[ScheduledTaskInfo]:
+    """Query graph memory for scheduled dream sessions."""
+    from ciris_engine.schemas.services.graph.memory import GraphQuery, MemorySearchFilter
+
+    memory_service = getattr(request.app.state, "memory_service", None)
+    if not memory_service:
+        logger.debug("Memory service not available for dream schedule query")
+        return []
+
+    try:
+        # Query for scheduled_dream tasks in the graph
+        query = GraphQuery(
+            query_type="match",
+            node_filters=MemorySearchFilter(
+                node_type="task",
+                scope="local",
+                attribute_values={"task_type": "scheduled_dream"},
+            ),
+        )
+
+        results = await memory_service.query(query)
+        dream_tasks: List[ScheduledTaskInfo] = []
+
+        now = datetime.now(timezone.utc)
+
+        for node in results.nodes:
+            # Extract scheduled time from metadata
+            metadata = node.metadata or {}
+            scheduled_for = metadata.get("scheduled_for")
+
+            # Determine status based on scheduled time
+            status = "PENDING"
+            if scheduled_for:
+                try:
+                    scheduled_dt = datetime.fromisoformat(scheduled_for.replace("Z", "+00:00"))
+                    if scheduled_dt <= now:
+                        status = "ACTIVE"  # Due or past due
+                except (ValueError, AttributeError):
+                    pass
+
+            dream_tasks.append(
+                ScheduledTaskInfo(
+                    task_id=node.id,
+                    name="Dream Session",
+                    goal_description="Scheduled introspection and memory consolidation",
+                    status=status,
+                    defer_until=scheduled_for,
+                    schedule_cron=None,  # Dream sessions are one-time, then rescheduled
+                    created_at=(
+                        node.created_at.isoformat()
+                        if hasattr(node, "created_at") and node.created_at
+                        else scheduled_for or now.isoformat()
+                    ),
+                    last_triggered_at=None,
+                    deferral_count=0,
+                )
+            )
+
+        logger.debug(f"Found {len(dream_tasks)} dream schedules in graph")
+        return dream_tasks
+
+    except Exception as e:
+        logger.warning(f"Failed to query dream schedules from graph: {e}")
+        return []
+
+
 # Endpoints
 
 
@@ -117,7 +183,9 @@ def _convert_to_response(task_info: ScheduledTaskInfo) -> ScheduledTaskResponse:
 async def list_scheduled_tasks(
     request: Request,
     auth: AuthObserverDep,
-    status: Annotated[Optional[str], Query(description="Filter by status: PENDING, ACTIVE, COMPLETE, FAILED, CANCELLED")] = None,
+    status: Annotated[
+        Optional[str], Query(description="Filter by status: PENDING, ACTIVE, COMPLETE, FAILED, CANCELLED")
+    ] = None,
     limit: Annotated[int, Query(ge=1, le=200, description="Maximum tasks to return")] = 50,
 ) -> SuccessResponse[ScheduledTasksListResponse]:
     """
@@ -125,22 +193,32 @@ async def list_scheduled_tasks(
 
     Returns information about scheduled tasks including their status,
     schedule (one-time or recurring), and execution history.
+    Also includes dream schedules from the graph memory.
     """
     task_scheduler = _get_task_scheduler(request)
 
     try:
-        # Get all scheduled tasks
+        # Get all scheduled tasks from TaskSchedulerService
         tasks: List[ScheduledTaskInfo] = await task_scheduler.get_scheduled_tasks()
+
+        # Also get dream schedules from graph memory
+        dream_tasks = await _get_dream_schedules_from_graph(request)
+
+        # Merge task lists (dream tasks won't have duplicates since they have different IDs)
+        all_tasks = tasks + dream_tasks
 
         # Apply status filter if provided
         if status:
-            tasks = [t for t in tasks if t.status.upper() == status.upper()]
+            all_tasks = [t for t in all_tasks if t.status.upper() == status.upper()]
+
+        # Sort by defer_until (soonest first), with None values at end
+        all_tasks.sort(key=lambda t: t.defer_until or "9999-12-31")
 
         # Apply limit
-        tasks = tasks[:limit]
+        all_tasks = all_tasks[:limit]
 
         # Convert to response format
-        task_responses = [_convert_to_response(t) for t in tasks]
+        task_responses = [_convert_to_response(t) for t in all_tasks]
 
         # Calculate stats
         active_count = sum(1 for t in task_responses if t.status in ("PENDING", "ACTIVE"))

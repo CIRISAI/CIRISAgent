@@ -1551,7 +1551,10 @@ class CIRISApiClient(
 
             val body = response.body()
             val data = body.`data` ?: throw RuntimeException("API returned null data")
-            logDebug(method, "Adapters: total=${data.totalCount}, running=${data.runningCount}")
+            logInfo(method, "API response: total=${data.totalCount}, running=${data.runningCount}, adapters.size=${data.adapters.size}")
+            data.adapters.forEachIndexed { index, adapter ->
+                logInfo(method, "  API adapter[$index]: id=${adapter.adapterId}, type=${adapter.adapterType}, running=${adapter.isRunning}")
+            }
 
             AdaptersListData(
                 adapters = data.adapters.map { adapter ->
@@ -4254,6 +4257,260 @@ class CIRISApiClient(
         } catch (e: Exception) {
             logException(method, e)
             false
+        }
+    }
+
+    // ===== Telemetry Export Destinations API =====
+
+    /**
+     * Get all telemetry export destinations.
+     */
+    suspend fun getExportDestinations(): List<ExportDestination> {
+        val method = "getExportDestinations"
+        logInfo(method, "Fetching export destinations")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.get("$baseUrl/v1/telemetry/export/destinations") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.status.isSuccess()) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val apiResponse: DestinationsListApiResponse = response.body()
+            val data = apiResponse.data ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Fetched ${data.total} export destinations")
+
+            data.destinations
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Get a specific export destination by ID.
+     */
+    suspend fun getExportDestination(destinationId: String): ExportDestination {
+        val method = "getExportDestination"
+        logInfo(method, "Fetching export destination: $destinationId")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.get("$baseUrl/v1/telemetry/export/destinations/$destinationId") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.status.isSuccess()) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val apiResponse: ExportDestinationResponse = response.body()
+            apiResponse.data ?: throw RuntimeException("API returned null data")
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Create a new export destination.
+     */
+    suspend fun createExportDestination(destination: ExportDestinationCreate): ExportDestination {
+        val method = "createExportDestination"
+        logInfo(method, "Creating export destination: ${destination.name}")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.post("$baseUrl/v1/telemetry/export/destinations") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(destination)
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                logError(method, "API returned non-success status: ${response.status}, body=$errorBody")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val apiResponse: ExportDestinationResponse = response.body()
+            val data = apiResponse.data ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Created export destination: ${data.id}")
+
+            data
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Update an existing export destination.
+     */
+    suspend fun updateExportDestination(destinationId: String, update: ExportDestinationUpdate): ExportDestination {
+        val method = "updateExportDestination"
+        logInfo(method, "Updating export destination: $destinationId")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.put("$baseUrl/v1/telemetry/export/destinations/$destinationId") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(update)
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                logError(method, "API returned non-success status: ${response.status}, body=$errorBody")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val apiResponse: ExportDestinationResponse = response.body()
+            val data = apiResponse.data ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Updated export destination: ${data.id}")
+
+            data
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Delete an export destination.
+     */
+    suspend fun deleteExportDestination(destinationId: String): Boolean {
+        val method = "deleteExportDestination"
+        logInfo(method, "Deleting export destination: $destinationId")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.delete("$baseUrl/v1/telemetry/export/destinations/$destinationId") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                logError(method, "API returned non-success status: ${response.status}, body=$errorBody")
+                return false
+            }
+
+            logInfo(method, "Deleted export destination: $destinationId")
+            true
+        } catch (e: Exception) {
+            logException(method, e)
+            false
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Test connectivity to an export destination.
+     */
+    suspend fun testExportDestination(destinationId: String): TestResult {
+        val method = "testExportDestination"
+        logInfo(method, "Testing export destination: $destinationId")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.post("$baseUrl/v1/telemetry/export/destinations/$destinationId/test") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                logError(method, "API returned non-success status: ${response.status}, body=$errorBody")
+                return TestResult(
+                    success = false,
+                    statusCode = response.status.value,
+                    message = "API error: HTTP ${response.status}",
+                    latencyMs = null
+                )
+            }
+
+            val apiResponse: TestResultApiResponse = response.body()
+            val data = apiResponse.data ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Test result: success=${data.success}, message=${data.message}")
+
+            data
+        } catch (e: Exception) {
+            logException(method, e)
+            TestResult(
+                success = false,
+                statusCode = null,
+                message = "Error: ${e.message}",
+                latencyMs = null
+            )
+        } finally {
+            client.close()
         }
     }
 

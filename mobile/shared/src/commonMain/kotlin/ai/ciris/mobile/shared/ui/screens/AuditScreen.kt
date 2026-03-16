@@ -452,11 +452,89 @@ private fun AuditEntryCard(
                 }
             }
 
+            // Summary line (ponder questions, tool results, etc.)
+            entry.summaryLine?.let { summary ->
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
             // Expanded content
             if (isExpanded) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                 Spacer(modifier = Modifier.height(12.dp))
+
+                // Ponder questions (full list)
+                if (!entry.ponderQuestions.isNullOrEmpty()) {
+                    Text(
+                        text = "Questions",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    entry.ponderQuestions.forEachIndexed { index, question ->
+                        Text(
+                            text = "${index + 1}. $question",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // Tool details
+                if (!entry.toolName.isNullOrEmpty()) {
+                    Text(
+                        text = "Tool Execution",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SecurityInfoRow(label = "Tool", value = entry.toolName)
+                    entry.toolParameters?.let { params ->
+                        Text(
+                            text = "Parameters:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text(
+                                text = params,
+                                modifier = Modifier.padding(8.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                    entry.toolResult?.let { result ->
+                        Text(
+                            text = "Result:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        Text(
+                            text = result,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(start = 8.dp, top = 4.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 // Security info
                 if (entry.hashChain != null || entry.signature != null) {
@@ -557,7 +635,12 @@ private fun getActionBadgeColor(action: String): Color {
         action.uppercase().contains("PAUSE") || action.uppercase().contains("RESUME") -> SemanticColors.Default.info // Blue
         action.uppercase().contains("MEMORIZE") || action.uppercase().contains("RECALL") -> SemanticColors.Default.accentSecondary // Purple
         action.uppercase().contains("SPEAK") -> SemanticColors.Default.success // Green
-        action.uppercase().contains("FORGET") -> Color(0xFFF97316) // Orange (keep as-is, no direct semantic equivalent)
+        action.uppercase().contains("FORGET") -> Color(0xFFF97316) // Orange
+        action.uppercase().contains("PONDER") -> Color(0xFF8B5CF6) // Violet - thoughtful/reflective
+        action.uppercase().contains("TOOL") -> Color(0xFF0EA5E9) // Sky blue - action/execution
+        action.uppercase().contains("DEFER") -> Color(0xFFF59E0B) // Amber - waiting/deferred
+        action.uppercase().contains("REJECT") -> Color(0xFFEF4444) // Red - rejection
+        action.uppercase().contains("TASK_COMPLETE") -> SemanticColors.Default.success // Green - completion
         else -> SemanticColors.Default.inactive // Gray
     }
 }
@@ -609,12 +692,38 @@ data class AuditEntryData(
     val hashChain: String? = null,
     val signature: String? = null,
     val storageSources: List<String>? = null,
-    val contextJson: String = ""
+    val contextJson: String = "",
+    // Extracted fields for timeline card display
+    val ponderQuestions: List<String>? = null,
+    val toolName: String? = null,
+    val toolParameters: String? = null,
+    val toolResult: String? = null,
+    val speakContent: String? = null,
+    val deferReason: String? = null,
+    val completionReason: String? = null,
+    val description: String? = null
 ) {
     val actionDisplay: String
         get() = action
             .replace("AuditEventType.HANDLER_ACTION_", "")
             .replace("AuditEventType.", "")
+
+    /**
+     * Get a summary line for the timeline card (non-expanded view)
+     */
+    val summaryLine: String?
+        get() = when {
+            !ponderQuestions.isNullOrEmpty() -> "Questions: ${ponderQuestions.joinToString("; ").take(100)}${if (ponderQuestions.joinToString("; ").length > 100) "..." else ""}"
+            !toolName.isNullOrEmpty() -> {
+                val result = toolResult?.take(80)?.let { " → $it" } ?: ""
+                "Tool: $toolName$result"
+            }
+            !speakContent.isNullOrEmpty() -> speakContent.take(100) + if (speakContent.length > 100) "..." else ""
+            !deferReason.isNullOrEmpty() -> "Deferred: ${deferReason.take(80)}"
+            !completionReason.isNullOrEmpty() -> completionReason.take(80)
+            !description.isNullOrEmpty() -> description.take(100)
+            else -> null
+        }
 
     val formattedDate: String
         get() = try {

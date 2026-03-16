@@ -800,8 +800,9 @@ fun CIRISApp(
         }
     }
 
-    // Collect brightness preference for theme
+    // Collect theme preferences for immediate application
     val brightnessPreference by settingsViewModel.brightnessPreference.collectAsState()
+    val selectedColorTheme by settingsViewModel.colorTheme.collectAsState()
     val systemInDarkTheme = isSystemInDarkTheme()
     val isDarkMode = when (brightnessPreference) {
         BrightnessPreference.LIGHT -> false
@@ -809,11 +810,19 @@ fun CIRISApp(
         BrightnessPreference.SYSTEM -> systemInDarkTheme
     }
 
-    // Apply appropriate color scheme based on brightness preference
+    // Apply color scheme with selected color theme applied immediately
     val colorScheme = if (isDarkMode) {
-        darkColorScheme()
+        darkColorScheme(
+            primary = selectedColorTheme.primary,
+            secondary = selectedColorTheme.secondary,
+            tertiary = selectedColorTheme.tertiary
+        )
     } else {
-        lightColorScheme()
+        lightColorScheme(
+            primary = selectedColorTheme.primary,
+            secondary = selectedColorTheme.secondary,
+            tertiary = selectedColorTheme.tertiary
+        )
     }
 
     MaterialTheme(colorScheme = colorScheme) {
@@ -1344,10 +1353,17 @@ fun CIRISApp(
                 val telemetryData by telemetryViewModel.telemetryData.collectAsState()
                 val isTelemetryLoading by telemetryViewModel.isLoading.collectAsState()
 
-                // Start/stop polling based on screen visibility
+                // Export destinations state
+                val exportDestinations by telemetryViewModel.exportDestinations.collectAsState()
+                val showDestinationDialog by telemetryViewModel.showDestinationDialog.collectAsState()
+                val editingDestination by telemetryViewModel.editingDestination.collectAsState()
+                val testResult by telemetryViewModel.testResult.collectAsState()
+
+                // Start/stop polling and load destinations based on screen visibility
                 DisposableEffect(Unit) {
                     PlatformLogger.i(TAG, "[Screen.Telemetry] Starting telemetry polling")
                     telemetryViewModel.startPolling()
+                    telemetryViewModel.loadExportDestinations()
                     onDispose {
                         PlatformLogger.i(TAG, "[Screen.Telemetry] Stopping telemetry polling")
                         telemetryViewModel.stopPolling()
@@ -1356,7 +1372,8 @@ fun CIRISApp(
 
                 PlatformLogger.d("CIRISApp", "[Screen.Telemetry] Rendering telemetry screen: " +
                         "services=${telemetryData.healthyServices}/${telemetryData.totalServices}, " +
-                        "state=${telemetryData.cognitiveState}, isLoading=$isTelemetryLoading")
+                        "state=${telemetryData.cognitiveState}, isLoading=$isTelemetryLoading, " +
+                        "exportDestinations=${exportDestinations.size}")
 
                 TelemetryScreen(
                     telemetryData = telemetryData,
@@ -1364,10 +1381,47 @@ fun CIRISApp(
                     onRefresh = {
                         PlatformLogger.i("CIRISApp", "[Screen.Telemetry] User triggered refresh")
                         telemetryViewModel.refresh()
+                        telemetryViewModel.loadExportDestinations()
                     },
                     onNavigateBack = {
                         PlatformLogger.i("CIRISApp", "[Screen.Telemetry] Navigating back to Interact")
                         currentScreen = Screen.Interact
+                    },
+                    // Export destinations
+                    exportDestinations = exportDestinations,
+                    showDestinationDialog = showDestinationDialog,
+                    editingDestination = editingDestination,
+                    testResult = testResult,
+                    onAddDestination = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Telemetry] Adding export destination")
+                        telemetryViewModel.showAddDestinationDialog()
+                    },
+                    onEditDestination = { dest ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Telemetry] Editing destination: ${dest.id}")
+                        telemetryViewModel.showEditDestinationDialog(dest)
+                    },
+                    onDeleteDestination = { id ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Telemetry] Deleting destination: $id")
+                        telemetryViewModel.deleteDestination(id)
+                    },
+                    onToggleDestination = { id ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Telemetry] Toggling destination: $id")
+                        telemetryViewModel.toggleDestinationEnabled(id)
+                    },
+                    onTestDestination = { id ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Telemetry] Testing destination: $id")
+                        telemetryViewModel.testDestination(id)
+                    },
+                    onSaveDestination = { dest ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Telemetry] Saving destination: ${dest.name}")
+                        telemetryViewModel.saveDestination(dest)
+                    },
+                    onDismissDialog = {
+                        PlatformLogger.d("CIRISApp", "[Screen.Telemetry] Dismissing destination dialog")
+                        telemetryViewModel.dismissDestinationDialog()
+                    },
+                    onClearTestResult = {
+                        telemetryViewModel.clearTestResult()
                     }
                 )
             }
@@ -2427,7 +2481,7 @@ private fun CIRISTopBar(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("LLM Settings") },
+                        text = { Text("App Settings") },
                         onClick = { activeCategory = NavCategory.NONE; onSettingsClick() },
                         leadingIcon = { Icon(Icons.Default.Settings, null) }
                     )

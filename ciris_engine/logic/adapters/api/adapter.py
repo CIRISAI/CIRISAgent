@@ -37,6 +37,7 @@ from .api_runtime_control import APIRuntimeControlService
 from .api_tools import APIToolService
 from .app import create_app
 from .config import APIAdapterConfig
+from .routes.telemetry_export_scheduler import TelemetryExportScheduler
 from .service_configuration import ApiServiceConfiguration
 from .services.auth_service import APIAuthService
 
@@ -88,6 +89,9 @@ class ApiPlatform(Service):
 
         # Adapter configuration service for interactive adapter setup
         self.adapter_configuration_service = AdapterConfigurationService()
+
+        # Telemetry export scheduler (initialized in start() when services are available)
+        self._export_scheduler: TelemetryExportScheduler | None = None
 
         # Debug logging
         logger.debug(f"[DEBUG] adapter_config in kwargs: {'adapter_config' in kwargs}")
@@ -354,19 +358,17 @@ class ApiPlatform(Service):
         if existing_auth_service is not None and isinstance(existing_auth_service, APIAuthService):
             # Propagate attestation cache from old auth service to new one
             old_auth = existing_auth_service._auth_service
-            if old_auth and hasattr(old_auth, '_attestation_cache') and old_auth._attestation_cache is not None:
-                if hasattr(auth_service, '_attestation_cache'):
+            if old_auth and hasattr(old_auth, "_attestation_cache") and old_auth._attestation_cache is not None:
+                if hasattr(auth_service, "_attestation_cache"):
                     auth_service._attestation_cache = old_auth._attestation_cache
-                    auth_service._last_known_attestation = getattr(old_auth, '_last_known_attestation', None)
+                    auth_service._last_known_attestation = getattr(old_auth, "_last_known_attestation", None)
                     logger.info(
                         f"[AUTH SERVICE DEBUG] Propagated attestation cache from old instance={hex(id(old_auth))} "
                         f"to new instance={hex(id(auth_service))}, level={old_auth._attestation_cache.max_level}"
                     )
             else:
                 old_id = hex(id(old_auth)) if old_auth else "None"
-                logger.info(
-                    f"[AUTH SERVICE DEBUG] No attestation cache to propagate from old instance={old_id}"
-                )
+                logger.info(f"[AUTH SERVICE DEBUG] No attestation cache to propagate from old instance={old_id}")
             # Update the existing instance's auth_service reference but preserve API keys
             existing_auth_service._auth_service = auth_service
             # Reset users_loaded so users are reloaded from DB on next access
@@ -618,7 +620,9 @@ class ApiPlatform(Service):
             error_msg = str(e)
             if "No module named" in error_msg and "configurable" in error_msg:
                 # Expected - adapter doesn't have interactive configuration
-                logger.debug(f"Adapter {adapter_type} has no configurable class (expected for non-interactive adapters)")
+                logger.debug(
+                    f"Adapter {adapter_type} has no configurable class (expected for non-interactive adapters)"
+                )
             else:
                 logger.warning(f"Failed to load configurable class for {adapter_type}: {e}")
             return False
@@ -911,6 +915,22 @@ class ApiPlatform(Service):
         await self.runtime_control.start()
         logger.info("Started API runtime control service")
 
+        # Start telemetry export scheduler if services are available
+        telemetry_service = getattr(self.app.state, "telemetry_service", None)
+        config_service = getattr(self.app.state, "config_service", None)
+        visibility_service = getattr(self.app.state, "visibility_service", None)
+
+        if telemetry_service and config_service:
+            self._export_scheduler = TelemetryExportScheduler(
+                telemetry_service=telemetry_service,
+                config_service=config_service,
+                visibility_service=visibility_service,
+            )
+            await self._export_scheduler.start()
+            logger.info("Started telemetry export scheduler")
+        else:
+            logger.info("Telemetry export scheduler not started (services not available)")
+
         # Wait for port to become available (handles TIME_WAIT from previous shutdown)
         await self._wait_for_port_available()
 
@@ -980,6 +1000,11 @@ class ApiPlatform(Service):
     async def stop(self) -> None:
         """Stop the API server."""
         logger.info("Stopping API server...")
+
+        # Stop telemetry export scheduler
+        if self._export_scheduler:
+            await self._export_scheduler.stop()
+            logger.info("Stopped telemetry export scheduler")
 
         # Stop runtime control service
         await self.runtime_control.stop()

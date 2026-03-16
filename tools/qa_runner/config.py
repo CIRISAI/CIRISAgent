@@ -59,6 +59,7 @@ class QAModule(Enum):
 
     # Handler modules
     HANDLERS = "handlers"
+    DEFERRAL = "deferral"  # Time-based deferral and TaskSchedulerService testing
 
     # Filter modules
     FILTERS = "filters"

@@ -152,6 +152,19 @@ class AuditViewModel(
                         "context.result=${entry.context?.result}, " +
                         "extractedOutcome=$extractedOutcome")
 
+                    // Extract fields from metadata for timeline card display
+                    val metadata = entry.context?.metadata
+                    val ponderQuestions = extractPonderQuestions(metadata)
+                    val toolName = extractStringFromMetadata(metadata, "tool_name")
+                    val toolParameters = extractStringFromMetadata(metadata, "tool_parameters")
+                    // Tool result can be in metadata["tool_result"] or context.result
+                    val toolResult = extractStringFromMetadata(metadata, "tool_result")
+                        ?: entry.context?.result
+                    val speakContent = extractStringFromMetadata(metadata, "content")
+                        ?: extractStringFromMetadata(metadata, "content_preview")
+                    val deferReason = extractStringFromMetadata(metadata, "defer_reason")
+                    val completionReason = extractStringFromMetadata(metadata, "completion_reason")
+
                     AuditEntryData(
                         id = entry.id,
                         action = entry.action,
@@ -161,7 +174,15 @@ class AuditViewModel(
                         hashChain = entry.hashChain,
                         signature = entry.signature,
                         storageSources = entry.storageSources,
-                        contextJson = formatContextJson(entry.context)
+                        contextJson = formatContextJson(entry.context),
+                        ponderQuestions = ponderQuestions,
+                        toolName = toolName,
+                        toolParameters = toolParameters,
+                        toolResult = toolResult,
+                        speakContent = speakContent,
+                        deferReason = deferReason,
+                        completionReason = completionReason,
+                        description = entry.context?.description
                     )
                 }
 
@@ -310,6 +331,65 @@ class AuditViewModel(
             }
         } catch (e: Exception) {
             jsonString
+        }
+    }
+
+    /**
+     * Extract ponder questions from metadata JSON object
+     */
+    private fun extractPonderQuestions(metadata: kotlinx.serialization.json.JsonObject?): List<String>? {
+        if (metadata == null) return null
+        val questionsElement = metadata["ponder_questions"] ?: return null
+
+        return try {
+            when (questionsElement) {
+                is kotlinx.serialization.json.JsonArray -> {
+                    questionsElement.mapNotNull { element ->
+                        when (element) {
+                            is kotlinx.serialization.json.JsonPrimitive -> element.content
+                            else -> null
+                        }
+                    }
+                }
+                is kotlinx.serialization.json.JsonPrimitive -> {
+                    // Might be a JSON string containing an array
+                    val content = questionsElement.content
+                    if (content.startsWith("[")) {
+                        try {
+                            val parsed = kotlinx.serialization.json.Json.parseToJsonElement(content)
+                            if (parsed is kotlinx.serialization.json.JsonArray) {
+                                parsed.mapNotNull { element ->
+                                    when (element) {
+                                        is kotlinx.serialization.json.JsonPrimitive -> element.content
+                                        else -> null
+                                    }
+                                }
+                            } else null
+                        } catch (e: Exception) {
+                            listOf(content) // Treat as single question
+                        }
+                    } else {
+                        listOf(content)
+                    }
+                }
+                else -> null
+            }
+        } catch (e: Exception) {
+            logError("extractPonderQuestions", "Failed to parse ponder questions: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Extract a string value from metadata JSON object
+     */
+    private fun extractStringFromMetadata(metadata: kotlinx.serialization.json.JsonObject?, key: String): String? {
+        if (metadata == null) return null
+        val element = metadata[key] ?: return null
+
+        return when (element) {
+            is kotlinx.serialization.json.JsonPrimitive -> element.content
+            else -> element.toString()
         }
     }
 

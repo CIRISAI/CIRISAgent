@@ -29,6 +29,7 @@ def build_action_dispatcher(
     telemetry_service: Optional[Any] = None,
     secrets_service: Optional[Any] = None,
     audit_service: Optional[Any] = None,
+    task_scheduler_service: Optional[Any] = None,
 ) -> ActionDispatcher:
     """
     Instantiates all handlers and returns a ready-to-use ActionDispatcher.
@@ -39,6 +40,7 @@ def build_action_dispatcher(
         time_service=time_service,
         shutdown_callback=shutdown_callback,
         secrets_service=secrets_service,
+        task_scheduler_service=task_scheduler_service,
     )
     handlers = {
         HandlerActionType.MEMORIZE: MemorizeHandler(deps),

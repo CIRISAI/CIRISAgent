@@ -267,15 +267,6 @@ fun InteractScreen(
             onClear = { viewModel.clearTimeline() }
         )
 
-        // Processing status (from fragment_interact.xml:78-117)
-        AnimatedVisibility(
-            visible = processingStatus.isNotEmpty(),
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            ProcessingStatusBar(status = processingStatus)
-        }
-
         // Loading indicator (from fragment_interact.xml:119-125)
         if (isLoading) {
             Box(
@@ -815,61 +806,6 @@ private fun AIWarningBanner(
         color = theme.warningText,
         textAlign = TextAlign.Center
     )
-}
-
-/**
- * Processing status indicator
- * From fragment_interact.xml:78-117
- */
-@Composable
-private fun ProcessingStatusBar(
-    status: String,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        color = Color(0xFFF0F9FF),
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = getStatusEmoji(status),
-                fontSize = 16.sp
-            )
-            Text(
-                text = status,
-                modifier = Modifier.weight(1f),
-                fontSize = 12.sp,
-                color = Color(0xFF0369A1),
-                maxLines = 1
-            )
-        }
-    }
-}
-
-/**
- * Get emoji for processing status
- * Based on InteractFragment.kt:525-562
- */
-private fun getStatusEmoji(status: String): String {
-    return when {
-        status.contains("Thinking") -> "🤔"
-        status.contains("context") -> "📋"
-        status.contains("Evaluating") -> "⚖️"
-        status.contains("Selecting action") -> "🎯"
-        status.contains("ethics") -> "🧭"
-        status.contains("Speaking") -> "💬"
-        status.contains("Complete") -> "✅"
-        status.contains("memory") -> "💾"
-        status.contains("Recalling") -> "🔍"
-        status.contains("tool") -> "🔧"
-        status.contains("Pondering") -> "💭"
-        status.contains("Deferred") -> "⏸️"
-        else -> "⏳"
-    }
 }
 
 /**
@@ -1952,7 +1888,7 @@ private fun BubbleNet(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         items(events.reversed()) { event ->
-                            TimelineRow(event = event)
+                            TimelineRow(event = event, theme = theme)
                         }
                     }
                 }
@@ -1967,6 +1903,7 @@ private fun BubbleNet(
 @Composable
 private fun TimelineRow(
     event: TimelineEvent,
+    theme: InteractTheme,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -1974,11 +1911,11 @@ private fun TimelineRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Timestamp
+        // Timestamp - use theme color for readability
         Text(
             text = formatTimelineTimestamp(event.timestamp),
             fontSize = 10.sp,
-            color = Color(0xFF6B7280),
+            color = theme.timelineText,
             modifier = Modifier.width(60.dp)
         )
 
@@ -1988,11 +1925,11 @@ private fun TimelineRow(
             fontSize = 16.sp
         )
 
-        // Action name
+        // Action name - use theme color for readability
         Text(
             text = event.eventType,
             fontSize = 11.sp,
-            color = Color(0xFF4B5563)
+            color = theme.timelineText
         )
     }
 }
@@ -2036,7 +1973,7 @@ private fun EmojiLegendDialog(
                     text = "Processing Stages",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LegendRow("🤔", "Thought Start")
                 LegendRow("📋", "Snapshot & Context")
@@ -2051,7 +1988,7 @@ private fun EmojiLegendDialog(
                     text = "External Actions",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LegendRow("👀", "Observe")
                 LegendRow("💬", "Speak")
@@ -2064,7 +2001,7 @@ private fun EmojiLegendDialog(
                     text = "Control Actions",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LegendRow("❌", "Reject")
                 LegendRow("💭", "Ponder")
@@ -2077,7 +2014,7 @@ private fun EmojiLegendDialog(
                     text = "Memory Actions",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LegendRow("💾", "Memorize")
                 LegendRow("🔍", "Recall")
@@ -2090,7 +2027,7 @@ private fun EmojiLegendDialog(
                     text = "Terminal",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LegendRow("✅", "Task Complete")
 
@@ -2101,7 +2038,7 @@ private fun EmojiLegendDialog(
                     text = "Agent Status",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LegendRow("💭", "Idle")
                 LegendRow("🔄", "Processing")
@@ -2141,7 +2078,7 @@ private fun LegendRow(
         Text(
             text = description,
             fontSize = 14.sp,
-            color = Color(0xFF1F2937)
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }

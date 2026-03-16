@@ -94,7 +94,7 @@ class SessionsViewModel(
             try {
                 logDebug(method, "Calling apiClient.getSystemStatus()")
                 val status = apiClient.getSystemStatus()
-                val cognitiveState = status.cognitive_state ?: "UNKNOWN"
+                val cognitiveState = (status.cognitive_state ?: "UNKNOWN").uppercase()
 
                 logInfo(method, "Got cognitive state: $cognitiveState (status: ${status.status})")
 
@@ -134,7 +134,7 @@ class SessionsViewModel(
                 pollCount++
                 try {
                     val status = apiClient.getSystemStatus()
-                    val cognitiveState = status.cognitive_state ?: "UNKNOWN"
+                    val cognitiveState = (status.cognitive_state ?: "UNKNOWN").uppercase()
 
                     if (_currentState.value != cognitiveState) {
                         logInfo(method, "Poll #$pollCount: State changed ${_currentState.value} -> $cognitiveState")

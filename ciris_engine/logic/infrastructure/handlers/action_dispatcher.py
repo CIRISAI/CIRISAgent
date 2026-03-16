@@ -256,6 +256,21 @@ class ActionDispatcher:
             action_type, final_action_result.action_parameters, follow_up_thought_id
         )
 
+        # For TOOL actions, capture the result from the updated thought's follow_up info
+        if action_type == HandlerActionType.TOOL and updated_thought:
+            follow_up_info = getattr(updated_thought, "follow_up_info", None)
+            if follow_up_info:
+                # Extract just the result part if it follows the pattern "Tool '...' executed successfully. Result: ..."
+                if "Result:" in follow_up_info:
+                    result_part = follow_up_info.split("Result:", 1)[-1].strip()
+                    # Truncate if too long for audit
+                    if len(result_part) > 500:
+                        result_part = result_part[:500] + "..."
+                    audit_params["tool_result"] = result_part
+                elif "failed:" in follow_up_info.lower():
+                    # Capture error message
+                    audit_params["tool_result"] = follow_up_info
+
         audit_context = AuditActionContext(
             thought_id=thought.thought_id,
             task_id=getattr(dispatch_context, "task_id", "unknown"),

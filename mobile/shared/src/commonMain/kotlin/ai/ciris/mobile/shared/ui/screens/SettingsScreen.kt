@@ -266,7 +266,7 @@ fun SettingsScreen(
             ) {
                 // LLM Configuration Section - Mode dependent
                 Text(
-                    text = "LLM Configuration",
+                    text = "AI Configuration",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -2165,7 +2165,8 @@ private fun NetworkCheck(label: String, passed: Boolean) {
 }
 
 /**
- * Display settings section with color theme, brightness, and live background toggles.
+ * Theme settings section - all appearance options in one card.
+ * Changes apply immediately to the app.
  */
 @Composable
 private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
@@ -2174,12 +2175,12 @@ private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
     val brightnessPreference by viewModel.brightnessPreference.collectAsState()
 
     Text(
-        text = "Display",
+        text = "Theme",
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.primary
     )
 
-    // Color Theme Card
+    // Theme Card - all appearance settings together
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -2187,13 +2188,43 @@ private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
+            // Live background toggle at top (most impactful setting)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Live Memory Background",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Animated 3D memory graph behind chat",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = liveBackgroundEnabled,
+                    onCheckedChange = { viewModel.toggleLiveBackground(it) },
+                    modifier = Modifier.testable("switch_live_background")
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Color theme selection
             Text(
-                text = "Color Theme",
+                text = "Color Palette",
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = "Choose your color palette (affects graph colors too)",
+                text = "Changes apply immediately to app and graph",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -2248,35 +2279,6 @@ private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
                         modifier = Modifier.testable("chip_brightness_${pref.name.lowercase()}")
                     )
                 }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Live background toggle
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Live Memory Background",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = "Show animated 3D memory graph behind chat",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = liveBackgroundEnabled,
-                    onCheckedChange = { viewModel.toggleLiveBackground(it) },
-                    modifier = Modifier.testable("switch_live_background")
-                )
             }
         }
     }

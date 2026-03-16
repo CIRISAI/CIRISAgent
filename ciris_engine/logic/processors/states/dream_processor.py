@@ -19,6 +19,7 @@ from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.services.governance.self_observation import SelfObservationService
 from ciris_engine.logic.services.graph.telemetry_service import GraphTelemetryService
+from ciris_engine.logic.utils.context_utils import build_dispatch_context
 from ciris_engine.logic.utils.jsondict_helpers import get_bool, get_dict, get_int, get_str
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.processors.base import MetricsUpdate, ProcessorServices
@@ -297,7 +298,7 @@ class DreamProcessor(BaseProcessor):
             ]
         )
 
-        # Activate all tasks immediately
+        # Activate all tasks immediately (use "default" for shared task coordination across occurrences)
         from ciris_engine.logic import persistence
 
         if self._time_service:
@@ -469,47 +470,66 @@ class DreamProcessor(BaseProcessor):
             if self.task_manager:
                 activated = self.task_manager.activate_pending_tasks()
                 round_metrics["tasks_activated"] = activated
+                if activated > 0:
+                    logger.info(f"[DREAM] Round {round_number}: Activated {activated} tasks")
 
                 # Generate seed thoughts for tasks needing them
                 tasks_needing_seed = self.task_manager.get_tasks_needing_seed(limit=100)
+                logger.debug(f"[DREAM] Round {round_number}: {len(tasks_needing_seed)} tasks need seed thoughts")
             else:
                 tasks_needing_seed = []
+                logger.warning("[DREAM] No task_manager available")
 
             if self.thought_manager and tasks_needing_seed:
                 generated = self.thought_manager.generate_seed_thoughts(tasks_needing_seed, round_number)
                 round_metrics["seed_thoughts_generated"] = generated
+                if generated > 0:
+                    logger.info(f"[DREAM] Round {round_number}: Generated {generated} seed thoughts")
 
                 # Populate processing queue to maximum capacity
-                _queued = self.thought_manager.populate_queue(round_number)
+                queued = self.thought_manager.populate_queue(round_number)
+                logger.debug(f"[DREAM] Round {round_number}: Queued {queued} thoughts for processing")
 
                 # Get batch and process
                 batch = self.thought_manager.get_queue_batch()
+                logger.debug(f"[DREAM] Round {round_number}: Got batch of {len(batch) if batch else 0} thoughts")
             else:
                 batch = None
+                if not self.thought_manager:
+                    logger.warning("[DREAM] No thought_manager available")
 
             if batch and self.thought_manager:
                 # Mark thoughts as PROCESSING
                 batch = self.thought_manager.mark_thoughts_processing(batch, round_number)
+                logger.info(f"[DREAM] Round {round_number}: Processing batch of {len(batch)} thoughts")
 
                 # Process all thoughts concurrently for maximum throughput
                 thought_coroutines = [self._process_dream_thought(item) for item in batch]
                 results = await asyncio.gather(*thought_coroutines, return_exceptions=True)
 
                 # Handle results
+                success_count = 0
+                error_count = 0
                 for item, result in zip(batch, results):
                     if isinstance(result, Exception):
-                        logger.error(f"Error processing thought {item.thought_id}: {result}")
+                        logger.error(f"[DREAM] Error processing thought {item.thought_id}: {result}")
+                        error_count += 1
                         errors = round_metrics["errors"]
                         round_metrics["errors"] = int(errors) + 1 if isinstance(errors, (int, float)) else 1
                         persistence.update_thought_status(
                             item.thought_id, ThoughtStatus.FAILED, final_action={"error": str(result)}
                         )
                     elif result:
+                        success_count += 1
                         processed = round_metrics["thoughts_processed"]
                         round_metrics["thoughts_processed"] = (
                             int(processed) + 1 if isinstance(processed, (int, float)) else 1
                         )
                         # Result will be handled by thought processor's dispatch
+
+                logger.info(
+                    f"[DREAM] Round {round_number}: Batch complete - {success_count} success, {error_count} errors"
+                )
 
             # Check if all tasks are complete
             active_count = persistence.count_active_tasks()
@@ -530,17 +550,107 @@ class DreamProcessor(BaseProcessor):
 
     async def _process_dream_thought(self, item: ProcessingQueueItem) -> Optional[Any]:
         """Process a single dream thought through the thought processor."""
-        # The thought processor handles everything - context building, DMAs, actions
-        # We just need to ensure dream-specific context is available
+        from ciris_engine.logic import persistence
+        from ciris_engine.schemas.actions.parameters import PonderParams
+
+        logger.debug(f"[DREAM] Processing thought {item.thought_id}")
+
+        # Add dream-specific context for the thought processor
         if hasattr(item, "initial_context") and isinstance(item.initial_context, dict):
-            # Add dream session info to context
             item.initial_context["dream_session_id"] = self.current_session.session_id if self.current_session else None
             item.initial_context["dream_phase"] = self.current_session.phase.value if self.current_session else None
 
-        # Let the thought processor handle it
-        # Note: We should get thought_processor from service registry or pass it in
-        # For now, we'll assume it's available through the standard flow
-        return None  # Actual processing happens through the standard pipeline
+        # Process through the standard pipeline (BaseProcessor.process_thought_item)
+        # This calls thought_processor.process_thought() which handles context building, DMAs, actions
+        result = await self.process_thought_item(item)
+        logger.debug(f"[DREAM] Thought {item.thought_id} processed with result type: {type(result).__name__}")
+
+        if not result:
+            return None
+
+        # SLEEPWALK PREVENTION: Dream state cannot SPEAK or use TOOLs
+        # These would be like sleepwalking - acting on the external world while dreaming
+        action_result = result.final_action if hasattr(result, "final_action") else result
+        selected_action = getattr(action_result, "selected_action", None)
+
+        forbidden_dream_actions = {HandlerActionType.SPEAK, HandlerActionType.TOOL}
+        if selected_action in forbidden_dream_actions:
+            logger.warning(
+                f"[DREAM] Sleepwalk prevention: {selected_action.value} action blocked for thought {item.thought_id}, "
+                "converting to PONDER"
+            )
+            # Replace with PONDER action
+            from ciris_engine.schemas.conscience.core import EpistemicData
+            from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+            from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+
+            ponder_action = ActionSelectionDMAResult(
+                selected_action=HandlerActionType.PONDER,
+                action_parameters=PonderParams(
+                    questions=[
+                        f"During dream reflection, I considered taking action: {selected_action.value}",
+                        "What insights can I derive from this impulse without acting on it?",
+                        "How might this inform my behavior when I wake?",
+                    ]
+                ),
+                rationale=f"Sleepwalk prevention: {selected_action.value} converted to reflection during dream state",
+            )
+            result = ConscienceApplicationResult(
+                original_action=action_result,
+                final_action=ponder_action,
+                overridden=True,
+                override_reason=f"Dream state sleepwalk prevention: {selected_action.value} not allowed",
+                epistemic_data=EpistemicData(
+                    entropy_level=0.3,
+                    coherence_level=0.8,
+                    uncertainty_acknowledged=True,
+                    reasoning_transparency=1.0,
+                ),
+            )
+
+        # Dispatch the action to the handler
+        await self._dispatch_dream_thought_result(item, result)
+
+        return result
+
+    async def _dispatch_dream_thought_result(self, item: ProcessingQueueItem, result: Any) -> None:
+        """Dispatch the result of dream thought processing."""
+        from ciris_engine.logic import persistence
+
+        thought_id = item.thought_id
+
+        # Extract action from ConscienceApplicationResult if needed
+        action_result = result.final_action if hasattr(result, "final_action") else result
+        selected_action = action_result.selected_action if hasattr(action_result, "selected_action") else "unknown"
+
+        logger.debug(f"[DREAM] Dispatching action {selected_action} for thought {thought_id}")
+
+        thought_obj = await persistence.async_get_thought_by_id(thought_id, self.agent_occurrence_id)
+        if not thought_obj:
+            logger.error(f"[DREAM] Could not retrieve thought {thought_id} for dispatch")
+            return
+
+        task = persistence.get_task_by_id(item.source_task_id, self.agent_occurrence_id)
+        dispatch_context = build_dispatch_context(
+            thought=thought_obj,
+            time_service=self.time_service,  # Use BaseProcessor's time_service (non-None)
+            task=task,
+            app_config=self.config,
+            round_number=getattr(item, "round_number", 0),
+            extra_context=getattr(item, "initial_context", {}),
+            action_type=selected_action if result else None,
+        )
+
+        try:
+            await self.dispatch_action(result, thought_obj, dispatch_context.model_dump())
+            logger.info(f"[DREAM] Successfully dispatched {selected_action} for thought {thought_id}")
+        except Exception as e:
+            logger.error(f"[DREAM] Error dispatching action for thought {thought_id}: {e}")
+            persistence.update_thought_status(
+                thought_id=thought_id,
+                status=ThoughtStatus.FAILED,
+                final_action={"error": f"Dream dispatch failed: {str(e)}"},
+            )
 
     async def _dream_loop(self, duration: float) -> None:
         """Main dream processing loop using standard round processing."""

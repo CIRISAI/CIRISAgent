@@ -10,9 +10,8 @@ import kotlinx.coroutines.delay
 /**
  * Desktop PythonRuntime implementation.
  *
- * On desktop, the Python server is started by the CLI before launching this app.
- * This runtime connects to the already-running server and polls startup-status
- * to drive the startup light animations.
+ * Starts the CIRIS Python backend automatically if not already running,
+ * then connects to the server and polls startup-status to drive the UI.
  *
  * The server URL can be configured via CIRIS_API_URL environment variable.
  */
@@ -29,6 +28,9 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
     // Track last reported service count to emit only new service lines
     private var _lastReportedServiceCount = 0
 
+    // Server process we launched (null if server was already running)
+    private var _serverProcess: Process? = null
+
     private val httpClient = HttpClient(CIO) {
         engine {
             requestTimeout = 5000
@@ -42,17 +44,30 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
     }
 
     actual override suspend fun startServer(): Result<String> = runCatching {
-        // On desktop, server is started by CLI before launching the JAR.
-        // Wait for it to become healthy, polling startup-status to drive UI lights.
-        println("[PythonRuntime.desktop] startServer() called, waiting for server at $_serverUrl")
-        repeat(60) { attempt ->
-            // Try startup-status first (available before full health)
+        println("[PythonRuntime.desktop] startServer() called, checking for server at $_serverUrl")
+
+        // Check if server is already running (launched by ciris-agent CLI)
+        val alreadyRunning = try {
+            val resp = httpClient.get("$_serverUrl/v1/system/health")
+            resp.status == HttpStatusCode.OK
+        } catch (_: Exception) {
+            false
+        }
+
+        if (!alreadyRunning) {
+            // Launch the Python backend ourselves
+            launchServerProcess()
+        } else {
+            println("[PythonRuntime.desktop] Server already running at $_serverUrl")
+        }
+
+        // Wait for server to become healthy
+        repeat(120) { attempt ->
             pollStartupStatus()
 
             val health = checkHealth()
             println("[PythonRuntime.desktop] Health check attempt $attempt: ${health.getOrNull()}")
             if (health.getOrNull() == true) {
-                // Final poll to capture any remaining services
                 pollStartupStatus()
                 println("[PythonRuntime.desktop] Server is healthy!")
                 _serverStarted = true
@@ -61,6 +76,68 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
             delay(1000)
         }
         throw RuntimeException("Cannot connect to CIRIS server at $_serverUrl. Please ensure the server is running.")
+    }
+
+    /**
+     * Launch ciris-agent --adapter api as a subprocess.
+     * Tries ciris-agent first (pip-installed), then falls back to python main.py.
+     */
+    private fun launchServerProcess() {
+        println("[PythonRuntime.desktop] No server detected, launching backend...")
+
+        // Parse port from server URL
+        val port = Regex(":(\\d+)").find(_serverUrl)?.groupValues?.get(1) ?: "8080"
+
+        // Try ciris-agent first (pip-installed command)
+        val cirisAgent = findExecutable("ciris-agent")
+        if (cirisAgent != null) {
+            println("[PythonRuntime.desktop] Found ciris-agent at: $cirisAgent")
+            _serverProcess = ProcessBuilder(cirisAgent, "--adapter", "api", "--port", port)
+                .redirectErrorStream(true)
+                .inheritIO()
+                .start()
+            println("[PythonRuntime.desktop] Started ciris-agent (PID: ${_serverProcess?.pid()})")
+            return
+        }
+
+        // Fallback: python main.py from repo root
+        val repoRoot = findRepoRoot()
+        val mainPy = repoRoot?.resolve("main.py")
+        if (mainPy != null && mainPy.exists()) {
+            val python = findExecutable("python3") ?: findExecutable("python") ?: "python3"
+            println("[PythonRuntime.desktop] Falling back to: $python ${mainPy.absolutePath}")
+            _serverProcess = ProcessBuilder(python, mainPy.absolutePath, "--adapter", "api", "--port", port)
+                .directory(repoRoot)
+                .redirectErrorStream(true)
+                .inheritIO()
+                .start()
+            println("[PythonRuntime.desktop] Started python server (PID: ${_serverProcess?.pid()})")
+            return
+        }
+
+        println("[PythonRuntime.desktop] WARNING: Could not find ciris-agent or main.py - waiting for external server")
+    }
+
+    private fun findExecutable(name: String): String? {
+        // Check PATH
+        val pathDirs = System.getenv("PATH")?.split(java.io.File.pathSeparator) ?: emptyList()
+        for (dir in pathDirs) {
+            val f = java.io.File(dir, name)
+            if (f.exists() && f.canExecute()) return f.absolutePath
+        }
+        return null
+    }
+
+    private fun findRepoRoot(): java.io.File? {
+        // Walk up from JAR location to find main.py
+        var dir = java.io.File(System.getProperty("user.dir", "."))
+        repeat(5) {
+            if (java.io.File(dir, "main.py").exists() && java.io.File(dir, "ciris_engine").isDirectory) {
+                return dir
+            }
+            dir = dir.parentFile ?: return null
+        }
+        return null
     }
 
     actual override suspend fun startPythonServer(onStatus: ((String) -> Unit)?): Result<String> {
@@ -73,7 +150,7 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
             return Result.success(_serverUrl)
         }
 
-        onStatus?.invoke("Waiting for server...")
+        onStatus?.invoke("Starting server...")
         return startServer()
     }
 
@@ -123,8 +200,18 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
     }
 
     actual override fun shutdown() {
-        // On desktop, server lifecycle is managed by CLI - nothing to do here
         _serverStarted = false
+        // Kill the server process if we launched it
+        _serverProcess?.let { proc ->
+            println("[PythonRuntime.desktop] Shutting down server process (PID: ${proc.pid()})...")
+            proc.destroy()
+            try {
+                proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+            } catch (_: Exception) {
+                proc.destroyForcibly()
+            }
+            _serverProcess = null
+        }
     }
 
     actual override fun isInitialized(): Boolean = _initialized

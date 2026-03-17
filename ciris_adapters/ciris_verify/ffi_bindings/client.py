@@ -309,18 +309,6 @@ class CIRISVerify:
             if candidate.exists():
                 return candidate
 
-        # Check pip-installed ciris_verify package
-        try:
-            import ciris_verify as cv_pkg
-
-            pip_pkg_dir = Path(cv_pkg.__file__).parent
-            for suffix in [".so", ".dylib", ".dll"]:
-                candidate = pip_pkg_dir / f"libciris_verify_ffi{suffix}"
-                if candidate.exists():
-                    return candidate
-        except ImportError:
-            pass
-
         raise BinaryNotFoundError(f"Searched: {paths}")
 
     def _verify_binary_integrity(self) -> None:
@@ -475,6 +463,11 @@ class CIRISVerify:
                 ctypes.POINTER(ctypes.c_size_t),  # key_len (out)
             ]
             self._lib.ciris_verify_get_ed25519_public_key.restype = ctypes.c_int
+
+            # ciris_verify_generate_key(handle) -> i32
+            # CRITICAL: This must be set or ctypes truncates 64-bit pointers to 32-bit!
+            self._lib.ciris_verify_generate_key.argtypes = [ctypes.c_void_p]
+            self._lib.ciris_verify_generate_key.restype = ctypes.c_int
 
             self._has_ed25519_support = True
         except AttributeError:

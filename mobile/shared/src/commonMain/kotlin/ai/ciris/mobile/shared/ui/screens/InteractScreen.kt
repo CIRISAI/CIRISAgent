@@ -164,6 +164,17 @@ fun InteractScreen(
         mutableStateOf(if (liveBackgroundEnabled) VisualizationMode.BACKGROUND else VisualizationMode.OFF)
     }
 
+    // Sync visualization mode with liveBackgroundEnabled setting changes
+    LaunchedEffect(liveBackgroundEnabled) {
+        visualizationMode = if (liveBackgroundEnabled) {
+            // When enabled, default to BACKGROUND (user can still toggle to FG/OFF)
+            if (visualizationMode == VisualizationMode.OFF) VisualizationMode.BACKGROUND else visualizationMode
+        } else {
+            // When disabled, force OFF
+            VisualizationMode.OFF
+        }
+    }
+
     // Effective live background: enabled when visualization mode is not OFF
     val effectiveLiveBackground = visualizationMode != VisualizationMode.OFF
 

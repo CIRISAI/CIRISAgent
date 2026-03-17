@@ -516,9 +516,20 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         Returns:
             List of adapter information dictionaries
         """
+        logger.info(
+            "[ADAPTER_MGR_LIST] Starting list_adapters, loaded_adapters has %d entries: %s",
+            len(self.loaded_adapters),
+            list(self.loaded_adapters.keys()),
+        )
         try:
             adapters = []
             for adapter_id, instance in self.loaded_adapters.items():
+                logger.info(
+                    "[ADAPTER_MGR_LIST]   Processing %s: type=%s running=%s",
+                    adapter_id,
+                    instance.adapter_type,
+                    instance.is_running,
+                )
                 try:
                     if hasattr(instance.adapter, "is_healthy"):
                         is_healthy = await instance.adapter.is_healthy()
@@ -583,6 +594,14 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 except Exception as e:
                     logger.warning(f"Failed to get tools for adapter {adapter_id}: {e}", exc_info=True)
 
+                # Safely sanitize config params - don't let validation errors crash the list
+                try:
+                    sanitized_config = self._sanitize_config_params(instance.adapter_type, instance.config_params)
+                except Exception as config_err:
+                    logger.warning(f"[ADAPTER_MGR_LIST] Failed to sanitize config for {adapter_id}: {config_err}")
+                    # Create a minimal fallback config
+                    sanitized_config = AdapterConfig(adapter_type=instance.adapter_type, enabled=instance.is_running)
+
                 adapters.append(
                     RuntimeAdapterStatus(
                         adapter_id=adapter_id,
@@ -590,7 +609,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                         is_running=instance.is_running,
                         loaded_at=instance.loaded_at,
                         services_registered=instance.services_registered,
-                        config_params=self._sanitize_config_params(instance.adapter_type, instance.config_params),
+                        config_params=sanitized_config,
                         metrics=metrics,
                         last_activity=None,
                         tools=tools,
@@ -827,10 +846,21 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             # Merge adapter_config into settings for UI display
             sanitized_settings = {**sanitized_settings, **sanitized_adapter_config}
 
+        # Filter out non-primitive values that violate AdapterConfig.settings schema
+        # AdapterConfig.settings only allows: str, int, float, bool, List[str], None
+        def is_primitive(v: Any) -> bool:
+            if v is None or isinstance(v, (str, int, float, bool)):
+                return True
+            if isinstance(v, list) and all(isinstance(x, str) for x in v):
+                return True
+            return False
+
+        filtered_settings = {k: v for k, v in sanitized_settings.items() if is_primitive(v)}
+
         return AdapterConfig(
             adapter_type=config_params.adapter_type,
             enabled=config_params.enabled,
-            settings=sanitized_settings,
+            settings=filtered_settings,
             adapter_config=None,  # Flattened into settings
         )
 

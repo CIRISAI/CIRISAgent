@@ -1201,7 +1201,9 @@ Examples:
 
         # Desktop binary (from PyPI wheel)
         if do_desktop:
-            update_desktop_binary(version, tmpdir)
+            if not update_desktop_binary(version, tmpdir):
+                print("\n❌ Desktop binary update failed - aborting release")
+                sys.exit(1)
 
         if do_android:
             android_dir = tmpdir / "android_dl"

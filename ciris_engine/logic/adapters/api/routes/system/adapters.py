@@ -395,8 +395,12 @@ def _try_load_service_manifest(service_name: str, apply_filter: bool = True) -> 
             return None
 
         result = _parse_manifest_to_module_info(manifest_data, service_name)
-        logger.info("[ADAPTER_DISCOVERY]   %s: OK (services=%s, platform_available=%s)",
-                    service_name, result.service_types, result.platform_available)
+        logger.info(
+            "[ADAPTER_DISCOVERY]   %s: OK (services=%s, platform_available=%s)",
+            service_name,
+            result.service_types,
+            result.platform_available,
+        )
         return result
     except Exception as e:
         logger.info("[ADAPTER_DISCOVERY]   %s: IMPORT ERROR: %s", service_name, e)
@@ -421,7 +425,11 @@ async def _discover_services_from_directory(services_base: Path) -> List[ModuleT
         module_info = _try_load_service_manifest(item.name)
         if module_info:
             adapters.append(module_info)
-            logger.info("[ADAPTER_DISCOVERY] ✓ Loaded via importlib: %s (platform_available=%s)", item.name, module_info.platform_available)
+            logger.info(
+                "[ADAPTER_DISCOVERY] ✓ Loaded via importlib: %s (platform_available=%s)",
+                item.name,
+                module_info.platform_available,
+            )
             continue
 
         # Fallback to direct file access
@@ -526,20 +534,29 @@ def _get_auto_loaded_adapters(service_registry: Any, seen_adapter_ids: set[str])
     from ciris_engine.schemas.runtime.enums import ServiceType
 
     auto_adapters: List[AdapterInfo] = []
+    logger.info("[AUTO_LOADED] Checking for auto-loaded adapters in service_registry")
     for service_type in [ServiceType.TOOL, ServiceType.WISE_AUTHORITY]:
         try:
             providers = service_registry.get_providers_by_type(service_type)
-            for provider_info in providers:
+            logger.info("[AUTO_LOADED] %s has %d providers", service_type, len(providers))
+            for idx, provider_info in enumerate(providers):
                 metadata = provider_info.get("metadata", {})
+                logger.info("[AUTO_LOADED]   provider[%d] metadata=%s", idx, metadata)
                 if not metadata.get("auto_loaded"):
+                    logger.info("[AUTO_LOADED]   provider[%d] SKIPPED - no auto_loaded flag", idx)
                     continue
                 adapter_name = metadata.get("adapter", "unknown")
                 adapter_id = f"{adapter_name}_auto"
+                logger.info("[AUTO_LOADED]   provider[%d] adapter_name=%s adapter_id=%s", idx, adapter_name, adapter_id)
                 if adapter_id not in seen_adapter_ids:
                     seen_adapter_ids.add(adapter_id)
                     auto_adapters.append(_create_auto_adapter_info(adapter_name, service_type))
+                    logger.info("[AUTO_LOADED]   provider[%d] ADDED to list", idx)
+                else:
+                    logger.info("[AUTO_LOADED]   provider[%d] SKIPPED - already seen", idx)
         except Exception as e:
-            logger.debug(f"Error getting {service_type} providers: {e}")
+            logger.warning(f"[AUTO_LOADED] Error getting {service_type} providers: {e}")
+    logger.info("[AUTO_LOADED] Total auto-loaded adapters: %d", len(auto_adapters))
     return auto_adapters
 
 
@@ -585,16 +602,28 @@ async def list_adapters(
 ) -> SuccessResponse[AdapterListResponse]:
     """List all loaded adapters with their type, status, and metrics."""
     runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
+    logger.info("[LIST_ADAPTERS] Starting adapter list request")
+    logger.info("[LIST_ADAPTERS] runtime_control=%s", runtime_control)
     if not runtime_control:
         raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
 
     try:
+        logger.info("[LIST_ADAPTERS] Calling runtime_control.list_adapters()...")
         adapters = await runtime_control.list_adapters()
+        logger.info("[LIST_ADAPTERS] Got %d adapters from runtime_control", len(adapters))
+        for i, a in enumerate(adapters):
+            logger.info("[LIST_ADAPTERS]   [%d] id=%s type=%s status=%s", i, a.adapter_id, a.adapter_type, a.status)
         seen_adapter_ids = {a.adapter_id for a in adapters}
+        logger.info("[LIST_ADAPTERS] seen_adapter_ids=%s", seen_adapter_ids)
 
         service_registry = getattr(request.app.state, "service_registry", None)
+        logger.info("[LIST_ADAPTERS] service_registry=%s", service_registry)
         if service_registry:
-            adapters.extend(_get_auto_loaded_adapters(service_registry, seen_adapter_ids))
+            auto_adapters = _get_auto_loaded_adapters(service_registry, seen_adapter_ids)
+            logger.info("[LIST_ADAPTERS] Got %d auto-loaded adapters", len(auto_adapters))
+            for i, a in enumerate(auto_adapters):
+                logger.info("[LIST_ADAPTERS]   auto[%d] id=%s type=%s", i, a.adapter_id, a.adapter_type)
+            adapters.extend(auto_adapters)
 
         adapter_statuses = [_convert_adapter_to_status(a) for a in adapters]
         running_count = sum(1 for a in adapter_statuses if a.is_running)

@@ -771,12 +771,17 @@ class InteractViewModel(
                 if (newMessages.isNotEmpty()) {
                     logInfo(method, "Adding ${newMessages.size} new messages to chat")
                     // Merge with existing messages to preserve action entries
-                    // Use content-based deduplication for USER messages (local vs server IDs differ)
+                    // Use content + timestamp window deduplication for USER messages
+                    // (local ID vs server ID differ, but we don't want to collapse
+                    // legitimately repeated messages like "ok" sent at different times)
                     val allMessages = (_messages.value + deduplicatedMessages)
                         .distinctBy { msg ->
                             if (msg.type == MessageType.USER) {
-                                // Dedupe USER messages by content (local ID vs server ID)
-                                "USER:${msg.text}"
+                                // Dedupe USER messages by content + timestamp window (5 sec)
+                                // This handles local-vs-server ID mismatch while preserving
+                                // intentionally repeated messages sent at different times
+                                val timestampWindow = msg.timestamp.toEpochMilliseconds() / 5000 // 5-second buckets
+                                "USER:${msg.text}:$timestampWindow"
                             } else {
                                 msg.id
                             }

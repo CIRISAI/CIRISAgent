@@ -766,8 +766,16 @@ class InteractViewModel(
                 if (newMessages.isNotEmpty()) {
                     logInfo(method, "Adding ${newMessages.size} new messages to chat")
                     // Merge with existing messages to preserve action entries
+                    // Use content-based deduplication for USER messages (local vs server IDs differ)
                     val allMessages = (_messages.value + deduplicatedMessages)
-                        .distinctBy { it.id }
+                        .distinctBy { msg ->
+                            if (msg.type == MessageType.USER) {
+                                // Dedupe USER messages by content (local ID vs server ID)
+                                "USER:${msg.text}"
+                            } else {
+                                msg.id
+                            }
+                        }
                         .sortedBy { it.timestamp }
                         .takeLast(50)
                     _messages.value = allMessages
@@ -981,12 +989,16 @@ class InteractViewModel(
                 val ponderTopic = metadata?.get("topic")?.jsonPrimitiveContent()
                     ?: metadata?.get("ponder_topic")?.jsonPrimitiveContent()
 
+                // Parse ponder_questions from the double-encoded parameters JSON string
+                val ponderQuestions = parsePonderQuestions(metadata?.get("parameters"))
+
                 ActionDetails(
                     actionType = actionType,
                     outcome = outcome,
                     auditEntryId = auditEntryId,
                     description = description,
-                    ponderTopic = ponderTopic
+                    ponderTopic = ponderTopic,
+                    ponderQuestions = ponderQuestions
                 )
             }
             else -> {
@@ -1073,6 +1085,45 @@ class InteractViewModel(
             // Ignore parse errors - return empty parameters
         }
         return parameters
+    }
+
+    /**
+     * Parse ponder questions from double-encoded parameters JSON.
+     * The parameters field contains a JSON string like:
+     * "{\"ponder_questions\": \"[\\\"Question 1\\\", \\\"Question 2\\\"]\", ...}"
+     */
+    private fun parsePonderQuestions(parametersElement: kotlinx.serialization.json.JsonElement?): List<String> {
+        if (parametersElement == null) return emptyList()
+
+        try {
+            // First, get the parameters string
+            val parametersStr = parametersElement.jsonPrimitiveContent() ?: return emptyList()
+
+            // Parse the outer JSON
+            val paramsJson = kotlinx.serialization.json.Json.parseToJsonElement(parametersStr)
+            if (paramsJson !is kotlinx.serialization.json.JsonObject) return emptyList()
+
+            // Get the ponder_questions field (which is also a JSON-encoded string)
+            val questionsElement = paramsJson["ponder_questions"] ?: return emptyList()
+            val questionsStr = when (questionsElement) {
+                is kotlinx.serialization.json.JsonPrimitive -> questionsElement.content
+                else -> questionsElement.toString()
+            }
+
+            // Parse the questions array
+            val questionsJson = kotlinx.serialization.json.Json.parseToJsonElement(questionsStr)
+            if (questionsJson !is kotlinx.serialization.json.JsonArray) return emptyList()
+
+            return questionsJson.mapNotNull { element ->
+                when (element) {
+                    is kotlinx.serialization.json.JsonPrimitive -> element.content
+                    else -> null
+                }
+            }
+        } catch (e: Exception) {
+            logDebug("parsePonderQuestions", "Failed to parse: ${e.message}")
+            return emptyList()
+        }
     }
 
     /**

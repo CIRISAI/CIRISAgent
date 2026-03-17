@@ -72,7 +72,8 @@ data class ActionDetails(
     // Reject-specific
     val rejectReason: String? = null,
     // Ponder-specific
-    val ponderTopic: String? = null
+    val ponderTopic: String? = null,
+    val ponderQuestions: List<String> = emptyList()
 )
 
 @Serializable

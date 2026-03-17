@@ -2947,11 +2947,27 @@ class CIRISApiClient(
         logInfo(method, "Fetching channels")
 
         return try {
-            // Note: This endpoint may not exist - return empty data if not available
-            ChannelsData(channels = emptyList())
+            val authHeaderValue = accessToken?.let { "Bearer $it" }
+            val response = agentApi.getChannelsV1AgentChannelsGet(authHeaderValue)
+            val body = response.body()
+
+            val channels = body.data?.channels?.map { channel ->
+                ChannelInfoData(
+                    channelId = channel.channelId,
+                    displayName = channel.displayName ?: channel.channelId,
+                    channelType = channel.channelType,
+                    isActive = channel.isActive ?: true,
+                    messageCount = channel.messageCount ?: 0,
+                    lastActivity = channel.lastActivity?.toString()
+                )
+            } ?: emptyList()
+
+            logInfo(method, "Fetched ${channels.size} channels")
+            ChannelsData(channels = channels)
         } catch (e: Exception) {
-            logException(method, e)
-            throw e
+            logWarn(method, "Failed to fetch channels: ${e.message}")
+            // Return empty data if endpoint fails (might not be available)
+            ChannelsData(channels = emptyList())
         }
     }
 

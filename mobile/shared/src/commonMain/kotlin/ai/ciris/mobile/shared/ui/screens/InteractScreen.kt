@@ -1358,8 +1358,30 @@ private fun ActionExpandedDetails(
                     )
                 }
             }
+            ActionType.PONDER -> {
+                // Show ponder questions if available
+                val questions = actionDetails.ponderQuestions
+                if (questions.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Questions:",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF0369A1)
+                        )
+                        questions.forEach { question ->
+                            Text(
+                                text = "• $question",
+                                fontSize = 10.sp,
+                                color = Color(0xFF6B7280),
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+                }
+            }
             else -> {
-                // No additional details for SPEAK, OBSERVE, FORGET, PONDER, TASK_COMPLETE
+                // No additional details for SPEAK, OBSERVE, FORGET, TASK_COMPLETE
             }
         }
     }

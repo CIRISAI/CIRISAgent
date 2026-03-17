@@ -6,6 +6,7 @@ import ai.ciris.mobile.shared.ui.theme.ColorTheme
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import ai.ciris.mobile.shared.viewmodels.SettingsViewModel
 import ai.ciris.mobile.shared.viewmodels.VerifyStatusResponse
+import ai.ciris.mobile.shared.platform.getOAuthProviderName
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.background
@@ -165,19 +166,23 @@ fun SettingsScreen(
         )
     }
 
-    // Confirmation dialog for factory reset (wipes ALL data)
+    // Confirmation dialog for account & data deletion
     if (showFactoryResetDialog) {
         AlertDialog(
             onDismissRequest = { showFactoryResetDialog = false },
-            title = { Text("Factory Reset?") },
+            title = { Text("Delete Account & Data?") },
             text = {
                 Text(
-                    "⚠️ WARNING: This will DELETE ALL DATA including:\n\n" +
+                    "This will permanently delete all local data:\n\n" +
                     "• Conversations and chat history\n" +
                     "• Memory and knowledge graph\n" +
                     "• Audit logs and signing keys\n" +
                     "• All configuration\n\n" +
-                    "This cannot be undone. The app will restart as if freshly installed."
+                    "Transaction records (amounts, dates, credit balance) are retained " +
+                    "server-side for 10 years as required by EU AI Act and tax compliance " +
+                    "(see ciris.ai/privacy). No conversation content is ever stored on our servers. " +
+                    "To request server-side data deletion, contact privacy@ciris.ai.\n\n" +
+                    "This cannot be undone."
                 )
             },
             confirmButton = {
@@ -194,7 +199,7 @@ fun SettingsScreen(
                         viewModel.factoryReset { onResetSetup() }
                     }
                 ) {
-                    Text("Delete All & Reset")
+                    Text("Delete Account & Data")
                 }
             },
             dismissButton = {
@@ -327,6 +332,35 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
 
+                // Explain that OAuth login IS the API key
+                val providerName = getOAuthProviderName()
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "Authentication",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Your Sign in with $providerName account is your API key. " +
+                                "Authentication is handled automatically — no separate API key is needed. " +
+                                "CIRIS verifies your identity securely with $providerName on each request.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(4.dp))
+
                 // Logout button
                 OutlinedButton(
                     onClick = {
@@ -400,27 +434,44 @@ fun SettingsScreen(
 
                 Spacer(Modifier.height(8.dp))
 
-                // Factory Reset (wipes ALL data)
+                // Delete Account & Data
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer
                     )
                 ) {
+                    val uriHandler = LocalUriHandler.current
                     Column(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "Factory Reset",
+                            text = "Delete Account & Data",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                         Text(
-                            text = "Delete ALL data and start fresh. This removes conversations, memory, audit logs, and signing keys. Cannot be undone.",
+                            text = "Permanently deletes all local data including conversations, memory, " +
+                                "audit logs, and signing keys.\n\n" +
+                                "All agent data — conversations, memory graphs, and configuration — " +
+                                "is stored exclusively on this device and is completely removed by this action. " +
+                                "Transaction records (amounts, dates) are retained server-side for 10 years " +
+                                "as required by EU AI Act and tax compliance. No conversation content " +
+                                "is ever stored on our servers.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                        )
+                        Text(
+                            text = "Privacy Policy: ciris.ai/privacy",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                textDecoration = TextDecoration.Underline
+                            ),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable {
+                                uriHandler.openUri("https://ciris.ai/privacy")
+                            }
                         )
                         Button(
                             onClick = { showFactoryResetDialog = true },
@@ -440,7 +491,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(Modifier.width(8.dp))
                             }
-                            Text(if (isResetting) "Resetting..." else "Factory Reset")
+                            Text(if (isResetting) "Deleting..." else "Delete Account & Data")
                         }
                     }
                 }
@@ -504,9 +555,11 @@ private fun CirisProxyInfoCard() {
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
 
+            val provider = getOAuthProviderName()
             Text(
                 text = "Your AI requests are routed through CIRIS proxy services. " +
-                       "Your Google account authenticates you, and CIRIS handles LLM access.",
+                       "Your $provider account authenticates you automatically — " +
+                       "no separate API key is needed. CIRIS handles LLM access securely.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center
@@ -527,7 +580,7 @@ private fun CirisProxyInfoCard() {
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                BenefitItem("No API key required")
+                BenefitItem("Sign-in is your API key — nothing else needed")
                 BenefitItem("Automatic model selection")
                 BenefitItem("Built-in rate limiting")
                 BenefitItem("Cost managed by CIRIS")

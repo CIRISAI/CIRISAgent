@@ -476,6 +476,11 @@ class CIRISVerify:
             ]
             self._lib.ciris_verify_get_ed25519_public_key.restype = ctypes.c_int
 
+            # ciris_verify_generate_key(handle) -> i32
+            # CRITICAL: This must be set or ctypes truncates 64-bit pointers to 32-bit!
+            self._lib.ciris_verify_generate_key.argtypes = [ctypes.c_void_p]
+            self._lib.ciris_verify_generate_key.restype = ctypes.c_int
+
             self._has_ed25519_support = True
         except AttributeError:
             import logging

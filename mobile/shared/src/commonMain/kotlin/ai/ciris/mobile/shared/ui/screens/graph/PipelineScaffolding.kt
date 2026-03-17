@@ -7,6 +7,36 @@ import kotlin.math.max
 import kotlin.math.sin
 
 /**
+ * Visualization mode for the live graph background.
+ * - OFF: No visualization (plain background)
+ * - BACKGROUND: Subtle background visualization (current default)
+ * - FOREGROUND: Prominent foreground visualization (higher opacity, more visible)
+ */
+enum class VisualizationMode {
+    OFF,
+    BACKGROUND,
+    FOREGROUND;
+
+    fun next(): VisualizationMode = when (this) {
+        OFF -> BACKGROUND
+        BACKGROUND -> FOREGROUND
+        FOREGROUND -> OFF
+    }
+
+    val label: String get() = when (this) {
+        OFF -> "OFF"
+        BACKGROUND -> "BG"
+        FOREGROUND -> "FG"
+    }
+
+    val description: String get() = when (this) {
+        OFF -> "Visualization off"
+        BACKGROUND -> "Background mode"
+        FOREGROUND -> "Foreground mode"
+    }
+}
+
+/**
  * H3ERE pipeline stage representation for scaffolding visualization.
  *
  * Each stage maps to a reasoning stream SSE event type and is drawn
@@ -33,7 +63,7 @@ data class PipelineStage(
             PipelineStage("dma_results", "DMA", Color(0xFFFBBF24)),           // Yellow
             PipelineStage("idma_result", "IDMA", Color(0xFFF97316)),          // Orange
             PipelineStage("aspdma_result", "SELECT", Color(0xFFA78BFA)),      // Purple
-            PipelineStage("conscience_result", "CONSCIENCE", Color(0xFF38BDF8)), // Sky
+            PipelineStage("conscience_result", "ETHICS", Color(0xFF38BDF8)), // Sky
             PipelineStage("action_result", "ACT", Color(0xFF4ADE80))          // Emerald
         )
     }

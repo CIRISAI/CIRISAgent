@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.ui.theme
 
+import ai.ciris.api.models.GraphScope
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -168,3 +169,33 @@ data class ThemeConfig(
     val colorTheme: ColorTheme = ColorTheme.DEFAULT,
     val brightness: BrightnessPreference = BrightnessPreference.SYSTEM
 )
+
+/**
+ * Get color for a graph scope based on this color theme.
+ * Maps scopes to theme colors:
+ * - LOCAL -> primary
+ * - IDENTITY -> secondary
+ * - ENVIRONMENT -> tertiary
+ * - COMMUNITY -> darkened primary
+ */
+fun ColorTheme.getScopeColor(scope: GraphScope): Color {
+    return when (scope) {
+        GraphScope.LOCAL -> this.primary
+        GraphScope.IDENTITY -> this.secondary
+        GraphScope.ENVIRONMENT -> this.tertiary
+        GraphScope.COMMUNITY -> darkenColor(this.primary, 0.15f)
+        else -> this.primary  // Default fallback
+    }
+}
+
+/**
+ * Darken a color by a factor.
+ */
+private fun darkenColor(color: Color, factor: Float): Color {
+    return Color(
+        red = (color.red * (1 - factor)).coerceIn(0f, 1f),
+        green = (color.green * (1 - factor)).coerceIn(0f, 1f),
+        blue = (color.blue * (1 - factor)).coerceIn(0f, 1f),
+        alpha = color.alpha
+    )
+}

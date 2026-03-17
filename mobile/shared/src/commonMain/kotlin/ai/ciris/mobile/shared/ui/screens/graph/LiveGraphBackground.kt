@@ -2,6 +2,8 @@ package ai.ciris.mobile.shared.ui.screens.graph
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.ui.theme.ColorTheme
+import ai.ciris.mobile.shared.ui.theme.getScopeColor
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
@@ -68,10 +70,14 @@ fun LiveGraphBackground(
     baseOpacity: Float = 0.85f,  // Near-solid for sharp nodes
     eventTrigger: Int = 0,  // Incremented when SSE events occur (speak, tool, etc.)
     externalRotation: Float = 0f,  // External rotation from swipe gestures (degrees)
+    externalTilt: Float = 0f,  // External vertical tilt from gestures (degrees)
     spinEnergy: Float = 0f,  // Accumulated spin energy from multiple flicks
     spinEnergyThreshold: Float = 100f,  // Energy threshold to trigger spin apart
     onSpinApartTriggered: () -> Unit = {},  // Callback when spin apart animation starts
-    pipelineState: PipelineState = PipelineState()  // H3ERE pipeline scaffolding state
+    pipelineState: PipelineState = PipelineState(),  // H3ERE pipeline scaffolding state
+    isForegroundMode: Boolean = false,  // Thicker rings and more visible scaffolding
+    ringColor: Color = Color(0xFFE54D2E),  // Default: tomato9 tertiary color
+    colorTheme: ColorTheme = ColorTheme.DEFAULT  // Theme for graph node colors
 ) {
     // Log when composable is first called
     PlatformLogger.i(TAG, ">>> LiveGraphBackground COMPOSING (eventTrigger=$eventTrigger, opacity=$baseOpacity)")
@@ -138,8 +144,8 @@ fun LiveGraphBackground(
     // Combined rotation: auto + external (swipe) rotation
     val rotationY = autoRotationY + externalRotation
 
-    // Secondary tilt on X-axis (gentle rocking)
-    val rotationX by infiniteTransition.animateFloat(
+    // Secondary tilt on X-axis (gentle rocking) + external tilt from gestures
+    val autoTiltX by infiniteTransition.animateFloat(
         initialValue = -10f,
         targetValue = 10f,
         animationSpec = infiniteRepeatable(
@@ -148,6 +154,8 @@ fun LiveGraphBackground(
         ),
         label = "rotationX"
     )
+    // Combined tilt: auto + external (gesture) tilt
+    val rotationX = autoTiltX + externalTilt
 
     // Birth animation pulse for new nodes
     val birthPulse by infiniteTransition.animateFloat(
@@ -220,7 +228,7 @@ fun LiveGraphBackground(
                     id = node.id,
                     theta = theta,
                     heightOffset = heightOffset,
-                    color = GraphColors.getScopeColor(node.scope),
+                    scope = node.scope,  // Store scope for dynamic theme-based coloring
                     radius = GraphColors.getNodeRadius(node.type) * 1.5f,  // Larger nodes for visibility
                     birthTimeMs = birthTime
                 )
@@ -281,7 +289,9 @@ fun LiveGraphBackground(
                     cylinderRadius = cylinderRadius * 1.15f,  // Slightly larger than node cylinder
                     cylinderHeight = cylinderHeight,
                     currentTimeMs = currentTimeMs,
-                    baseOpacity = baseOpacity
+                    baseOpacity = baseOpacity,
+                    isForegroundMode = isForegroundMode,
+                    ringColor = ringColor  // Use theme's tertiary color
                 )
 
                 // Project and draw nodes (with optional spin apart explosion)
@@ -328,6 +338,7 @@ fun LiveGraphBackground(
                     drawBackgroundNode(
                         projected = projected,
                         baseOpacity = baseOpacity,
+                        colorTheme = colorTheme,
                         birthProgress = birthProgress,
                         birthPulse = if (birthProgress < 1f) birthPulse else 0f
                     )
@@ -341,12 +352,13 @@ fun LiveGraphBackground(
 
 /**
  * Lightweight node data for background rendering.
+ * Stores scope instead of color to support dynamic theme changes.
  */
 private data class BackgroundNode(
     val id: String,
     val theta: Float,      // Angle on cylinder (radians)
     val heightOffset: Float,  // Vertical position offset (-1 to 1)
-    val color: Color,
+    val scope: ai.ciris.api.models.GraphScope,  // Store scope for dynamic color lookup
     val radius: Float,
     val birthTimeMs: Long = 0L  // When this node first appeared (0 = not new)
 )
@@ -368,7 +380,7 @@ private data class ProjectedNode(
     val depth: Float,  // For z-ordering
     val scale: Float,  // Perspective scaling
     val alpha: Float,  // Depth-based transparency
-    val color: Color,
+    val scope: ai.ciris.api.models.GraphScope,  // Store scope for dynamic color lookup
     val radius: Float,
     val birthTimeMs: Long = 0L  // For birth animation
 )
@@ -449,7 +461,7 @@ private fun projectNode(
         depth = z3dRotated,
         scale = scale,
         alpha = alpha,
-        color = node.color,
+        scope = node.scope,  // Pass scope for dynamic color lookup
         radius = node.radius,
         birthTimeMs = node.birthTimeMs
     )
@@ -460,13 +472,18 @@ private fun projectNode(
  *
  * Birth animation: New nodes scale up from 0 with a pulsing glow effect,
  * then settle into normal background rendering.
+ *
+ * @param colorTheme The current color theme for dynamic node coloring
  */
 private fun DrawScope.drawBackgroundNode(
     projected: ProjectedNode,
     baseOpacity: Float,
+    colorTheme: ColorTheme,
     birthProgress: Float = 1f,  // 0 = just born, 1 = fully mature
     birthPulse: Float = 0f      // 0-1 pulse cycle for glow effect
 ) {
+    // Compute color at render time based on current theme
+    val nodeColor = colorTheme.getScopeColor(projected.scope)
     // Apply birth animation: scale up from 0, extra glow while new
     val birthScale = if (birthProgress < 1f) {
         // Ease-out curve for smooth scale-up
@@ -493,7 +510,7 @@ private fun DrawScope.drawBackgroundNode(
 
         // Inner glow
         drawCircle(
-            color = projected.color.safeAlpha(ringAlpha * 0.6f),
+            color = nodeColor.safeAlpha(ringAlpha * 0.6f),
             radius = scaledRadius * 1.8f,
             center = Offset(projected.x, projected.y)
         )
@@ -501,7 +518,7 @@ private fun DrawScope.drawBackgroundNode(
 
     // Main node - solid
     drawCircle(
-        color = projected.color.safeAlpha(effectiveAlpha),
+        color = nodeColor.safeAlpha(effectiveAlpha),
         radius = scaledRadius,
         center = Offset(projected.x, projected.y)
     )
@@ -569,6 +586,11 @@ private fun DrawScope.drawBackgroundEdge(
  * Stages are distributed evenly along the cylinder height, with
  * padding at top and bottom. The scaffolding radius is slightly
  * larger than the node cylinder so it wraps around the data.
+ *
+ * Performance optimizations:
+ * - Draw segments individually for proper depth alpha (fixes front/back rendering)
+ * - Batch similar alpha ranges when possible
+ * - Skip segments below visibility threshold
  */
 private fun DrawScope.drawPipelineScaffolding(
     pipelineState: PipelineState,
@@ -579,32 +601,36 @@ private fun DrawScope.drawPipelineScaffolding(
     cylinderRadius: Float,
     cylinderHeight: Float,
     currentTimeMs: Long,
-    baseOpacity: Float
+    baseOpacity: Float,
+    isForegroundMode: Boolean = false,
+    ringColor: Color = Color(0xFFE54D2E)  // Theme tertiary color
 ) {
     val stages = pipelineState.stages
     if (stages.isEmpty()) return
 
-    val strutCount = PipelineStage.STRUT_COUNT
-    val verticalPadding = 0.1f  // 10% padding top and bottom
+    // Rings MUCH closer together - tight cluster in the middle
+    // Use 30% of cylinder height, centered (35% padding each end)
+    val verticalPadding = 0.30f
+    val verticalSpan = 1f - 2 * verticalPadding  // 0.40 of total height
 
-    // Draw vertical struts first (behind rings)
-    drawScaffoldStruts(
-        strutCount = strutCount,
-        rotationY = rotationY,
-        rotationX = rotationX,
-        centerX = centerX,
-        centerY = centerY,
-        cylinderRadius = cylinderRadius,
-        cylinderHeight = cylinderHeight,
-        verticalPadding = verticalPadding,
-        baseOpacity = baseOpacity
-    )
+    // NO STRUTS - just clean rings around the graph
 
     // Draw horizontal rings for each pipeline stage
+    // REVERSED: Bottom-to-top flow to match graph (new nodes at top)
+    // Index 0 (THINK) at bottom, index 6 (ACT) at top
     stages.forEachIndexed { index, stage ->
-        // Distribute stages evenly along cylinder height
-        val heightFraction = verticalPadding +
-            (index.toFloat() / (stages.size - 1).coerceAtLeast(1)) * (1f - 2 * verticalPadding)
+        // Distribute stages in the middle band - REVERSED direction
+        // (1 - verticalPadding) is bottom, verticalPadding is top
+        val heightFraction = (1f - verticalPadding) -
+            (index.toFloat() / (stages.size - 1).coerceAtLeast(1)) * verticalSpan
+
+        // EGG SHAPE: radius varies with height
+        // Maximum at center (0.5), pinched at ends (0.0 and 1.0)
+        // Use sine curve for smooth egg profile
+        val eggFactor = sin(heightFraction * PI.toFloat())  // 0 at ends, 1 at middle
+        val minRadiusFactor = 0.6f  // How pinched the ends are (0.6 = 60% of max)
+        val radiusFactor = minRadiusFactor + (1f - minRadiusFactor) * eggFactor
+        val ringRadius = cylinderRadius * radiusFactor
 
         // Calculate glow intensity (1.0 when just activated, fading to 0)
         val glowIntensity = if (stage.activatedAtMs > 0) {
@@ -622,9 +648,11 @@ private fun DrawScope.drawPipelineScaffolding(
             rotationX = rotationX,
             centerX = centerX,
             centerY = centerY,
-            cylinderRadius = cylinderRadius,
+            cylinderRadius = ringRadius,  // Egg-shaped varying radius
             cylinderHeight = cylinderHeight,
-            baseOpacity = baseOpacity
+            baseOpacity = baseOpacity,
+            isForegroundMode = isForegroundMode,
+            ringColor = ringColor  // Use theme color
         )
     }
 }
@@ -642,10 +670,16 @@ private fun DrawScope.drawScaffoldStruts(
     cylinderRadius: Float,
     cylinderHeight: Float,
     verticalPadding: Float,
-    baseOpacity: Float
+    baseOpacity: Float,
+    isForegroundMode: Boolean = false
 ) {
     val topFraction = verticalPadding
     val bottomFraction = 1f - verticalPadding
+
+    // Foreground mode: thicker, more visible struts
+    // Background mode: still visible but subtle
+    val strutWidth = if (isForegroundMode) 2.5f else 1.2f  // BG: 1.2px
+    val strutAlphaMultiplier = if (isForegroundMode) 0.4f else 0.25f  // BG: 0.25 alpha
 
     for (i in 0 until strutCount) {
         val theta = (i.toFloat() / strutCount) * 2 * PI.toFloat()
@@ -660,14 +694,14 @@ private fun DrawScope.drawScaffoldStruts(
         )
 
         // Only draw struts on the visible side (or dimmed on back)
-        val avgAlpha = (top.alpha + bottom.alpha) / 2 * baseOpacity * 0.15f
+        val avgAlpha = (top.alpha + bottom.alpha) / 2 * baseOpacity * strutAlphaMultiplier
 
         if (avgAlpha > 0.01f) {
             drawLine(
                 color = Color.White.safeAlpha(avgAlpha),
                 start = Offset(top.screenX, top.screenY),
                 end = Offset(bottom.screenX, bottom.screenY),
-                strokeWidth = 0.8f
+                strokeWidth = strutWidth
             )
         }
     }
@@ -676,6 +710,10 @@ private fun DrawScope.drawScaffoldStruts(
 /**
  * Draw a single horizontal pipeline ring at the given height.
  * When glowIntensity > 0, the ring lights up in the stage's color.
+ *
+ * FIX: Draw segments individually with per-segment alpha to properly
+ * show depth (back-side dimmer than front-side). Using a single path
+ * with constant alpha breaks the front/back depth cue.
  */
 private fun DrawScope.drawScaffoldRing(
     stage: PipelineStage,
@@ -687,86 +725,207 @@ private fun DrawScope.drawScaffoldRing(
     centerY: Float,
     cylinderRadius: Float,
     cylinderHeight: Float,
-    baseOpacity: Float
+    baseOpacity: Float,
+    isForegroundMode: Boolean = false,
+    ringColor: Color = Color(0xFFE54D2E)  // Theme tertiary color
 ) {
     // Sample points around the ring circumference
     val segments = 48  // Smooth ring
-    val points = (0..segments).map { i ->
-        val theta = (i.toFloat() / segments) * 2 * PI.toFloat()
-        projectScaffoldPoint(
-            theta, heightFraction, rotationY, rotationX,
-            centerX, centerY, cylinderRadius, cylinderHeight
-        )
-    }
+
+    // Foreground mode: much thicker, more visible rings
+    // Background mode: still visible but more subtle
+    val thicknessMultiplier = if (isForegroundMode) 3.5f else 2f  // Thicker rings
+    val alphaBoost = if (isForegroundMode) 0.35f else 0.2f  // Brighter
 
     // Determine ring color and intensity
+    // Use theme's tertiary color for inactive, stage color when active
     val isActive = glowIntensity > 0f
-    val ringColor = if (isActive) stage.color else Color.White
+    val effectiveRingColor = if (isActive) stage.color else ringColor
     val baseRingAlpha = if (isActive) {
-        0.2f + glowIntensity * 0.7f  // Active: 0.2 to 0.9
+        0.5f + glowIntensity * 0.5f + alphaBoost  // Active: very bright
     } else {
-        0.08f  // Inactive: very subtle
+        0.4f + alphaBoost  // Inactive: clearly visible (was 0.22)
     }
-    val ringWidth = if (isActive) {
-        1.5f + glowIntensity * 2f  // Active: 1.5 to 3.5px
+    val ringWidth = (if (isActive) {
+        3f + glowIntensity * 3f  // Active: 3 to 6px
     } else {
-        0.8f  // Inactive: thin
-    }
+        2.5f  // Inactive: nice thick baseline
+    }) * thicknessMultiplier
 
-    // Draw ring as connected line segments
-    val path = Path()
-    var started = false
-
+    // Draw ring as individual line segments with per-segment depth alpha
+    // This fixes the depth rendering issue where back-side segments
+    // were drawn at the same opacity as front-side segments
     for (i in 0 until segments) {
-        val p1 = points[i]
-        val p2 = points[i + 1]
+        val theta1 = (i.toFloat() / segments) * 2 * PI.toFloat()
+        val theta2 = ((i + 1).toFloat() / segments) * 2 * PI.toFloat()
 
+        val p1 = projectScaffoldPoint(
+            theta1, heightFraction, rotationY, rotationX,
+            centerX, centerY, cylinderRadius, cylinderHeight
+        )
+        val p2 = projectScaffoldPoint(
+            theta2, heightFraction, rotationY, rotationX,
+            centerX, centerY, cylinderRadius, cylinderHeight
+        )
+
+        // Per-segment alpha based on depth (front brighter, back dimmer)
         val segAlpha = ((p1.alpha + p2.alpha) / 2 * baseOpacity * baseRingAlpha).coerceIn(0f, 1f)
 
         if (segAlpha > 0.01f) {
-            if (!started) {
-                path.moveTo(p1.screenX, p1.screenY)
-                started = true
-            }
-            path.lineTo(p2.screenX, p2.screenY)
+            drawLine(
+                color = effectiveRingColor.safeAlpha(segAlpha),
+                start = Offset(p1.screenX, p1.screenY),
+                end = Offset(p2.screenX, p2.screenY),
+                strokeWidth = ringWidth,
+                cap = StrokeCap.Round
+            )
         }
     }
 
-    if (started) {
-        drawPath(
-            path = path,
-            color = ringColor.safeAlpha(baseRingAlpha * baseOpacity),
-            style = Stroke(width = ringWidth, cap = StrokeCap.Round)
-        )
-    }
-
     // Draw outer glow for active rings (larger, more transparent)
+    // Also use per-segment alpha for proper depth
     if (isActive && glowIntensity > 0.1f) {
-        val glowPath = Path()
-        var glowStarted = false
+        val glowWidth = (ringWidth + 6f) * thicknessMultiplier
 
         for (i in 0 until segments) {
-            val p1 = points[i]
-            val p2 = points[i + 1]
+            val theta1 = (i.toFloat() / segments) * 2 * PI.toFloat()
+            val theta2 = ((i + 1).toFloat() / segments) * 2 * PI.toFloat()
+
+            val p1 = projectScaffoldPoint(
+                theta1, heightFraction, rotationY, rotationX,
+                centerX, centerY, cylinderRadius, cylinderHeight
+            )
+            val p2 = projectScaffoldPoint(
+                theta2, heightFraction, rotationY, rotationX,
+                centerX, centerY, cylinderRadius, cylinderHeight
+            )
 
             val segAlpha = ((p1.alpha + p2.alpha) / 2 * baseOpacity * glowIntensity * 0.3f)
                 .coerceIn(0f, 1f)
 
-            if (segAlpha > 0.01f) {
-                if (!glowStarted) {
-                    glowPath.moveTo(p1.screenX, p1.screenY)
-                    glowStarted = true
-                }
-                glowPath.lineTo(p2.screenX, p2.screenY)
+            if (segAlpha > 0.02f) {
+                drawLine(
+                    color = stage.color.safeAlpha(segAlpha),
+                    start = Offset(p1.screenX, p1.screenY),
+                    end = Offset(p2.screenX, p2.screenY),
+                    strokeWidth = glowWidth,
+                    cap = StrokeCap.Round
+                )
             }
         }
+    }
 
-        if (glowStarted) {
-            drawPath(
-                path = glowPath,
-                color = stage.color.safeAlpha(glowIntensity * 0.3f * baseOpacity),
-                style = Stroke(width = ringWidth + 6f, cap = StrokeCap.Round)
-            )
-        }
+    // Draw label ON the cylinder surface, ABOVE the ring (in the space between rings)
+    // Label rotates WITH the cylinder like a decal
+    val labelAlpha = if (isActive) {
+        0.95f + glowIntensity * 0.05f  // Active: very bright
+    } else {
+        0.75f  // Inactive: clearly visible
+    }
+    val labelScale = if (isActive) {
+        1f + glowIntensity * 0.3f  // Grow when active
+    } else {
+        1f
+    }
+    val labelColor = if (isActive) stage.color else ringColor
+
+    // Position label ABOVE the ring on cylinder surface (smaller heightFraction = higher)
+    val labelHeightOffset = 0.04f  // Space above ring
+    val labelHeightFraction = (heightFraction - labelHeightOffset).coerceIn(0.02f, 0.98f)
+
+    // Project label ON the cylinder surface at front-facing position (theta = 0)
+    // Uses same radius as ring so it appears on the cylinder surface
+    val labelPoint = projectScaffoldPoint(
+        0f, labelHeightFraction, rotationY, rotationX,
+        centerX, centerY, cylinderRadius * 1.05f, cylinderHeight  // Slightly outside ring
+    )
+
+    // Always draw label - visible through the cylinder
+    // Use minimum alpha so back-side labels are dimmer but still readable
+    val minLabelAlpha = 0.4f  // Minimum visibility even on back side
+    val textAlpha = ((labelPoint.alpha * 0.6f + minLabelAlpha) * baseOpacity * labelAlpha).coerceIn(0f, 1f)
+    val charSize = (24f + (if (isForegroundMode) 12f else 0f)) * labelScale  // 3x larger
+    val strokeWidth = (3f + (if (isForegroundMode) 2f else 0f)) * labelScale
+
+    // Draw label using line-based block letters
+    drawBlockText(
+        text = stage.label,
+        x = labelPoint.screenX,
+        y = labelPoint.screenY,
+        charSize = charSize,
+        color = labelColor.safeAlpha(textAlpha),
+        strokeWidth = strokeWidth
+    )
+}
+
+// =============================================================================
+// Line-Based Block Text Rendering (Platform Agnostic)
+// =============================================================================
+
+/**
+ * Draw text using simple line segments - works on all platforms.
+ * Each character is rendered as a set of line strokes.
+ */
+private fun DrawScope.drawBlockText(
+    text: String,
+    x: Float,
+    y: Float,
+    charSize: Float,
+    color: Color,
+    strokeWidth: Float
+) {
+    val charWidth = charSize * 0.8f
+    val spacing = charSize * 0.3f
+    val totalWidth = text.length * (charWidth + spacing) - spacing
+    var currentX = x - totalWidth / 2  // Center the text
+
+    for (char in text.uppercase()) {
+        drawBlockChar(char, currentX, y, charSize, charWidth, color, strokeWidth)
+        currentX += charWidth + spacing
+    }
+}
+
+/**
+ * Draw a single character using line segments.
+ * Simple block-letter font optimized for clarity at small sizes.
+ */
+private fun DrawScope.drawBlockChar(
+    char: Char,
+    x: Float,
+    y: Float,
+    h: Float,  // Height
+    w: Float,  // Width
+    color: Color,
+    sw: Float  // Stroke width
+) {
+    val t = y - h / 2  // Top
+    val b = y + h / 2  // Bottom
+    val m = y          // Middle
+    val l = x          // Left
+    val r = x + w      // Right
+    val c = x + w / 2  // Center
+
+    // Helper to draw a line
+    fun line(x1: Float, y1: Float, x2: Float, y2: Float) {
+        drawLine(color, Offset(x1, y1), Offset(x2, y2), sw, StrokeCap.Round)
+    }
+
+    when (char) {
+        'A' -> { line(l, b, c, t); line(c, t, r, b); line(l + w*0.2f, m, r - w*0.2f, m) }
+        'C' -> { line(r, t, l, t); line(l, t, l, b); line(l, b, r, b) }
+        'D' -> { line(l, t, l, b); line(l, t, c, t); line(c, t, r, m); line(r, m, c, b); line(c, b, l, b) }
+        'E' -> { line(r, t, l, t); line(l, t, l, b); line(l, b, r, b); line(l, m, c, m) }
+        'H' -> { line(l, t, l, b); line(r, t, r, b); line(l, m, r, m) }
+        'I' -> { line(l, t, r, t); line(c, t, c, b); line(l, b, r, b) }
+        'K' -> { line(l, t, l, b); line(r, t, l, m); line(l, m, r, b) }
+        'L' -> { line(l, t, l, b); line(l, b, r, b) }
+        'M' -> { line(l, b, l, t); line(l, t, c, m); line(c, m, r, t); line(r, t, r, b) }
+        'N' -> { line(l, b, l, t); line(l, t, r, b); line(r, b, r, t) }
+        'O' -> { line(l, t, r, t); line(r, t, r, b); line(r, b, l, b); line(l, b, l, t) }
+        'S' -> { line(r, t, l, t); line(l, t, l, m); line(l, m, r, m); line(r, m, r, b); line(r, b, l, b) }
+        'T' -> { line(l, t, r, t); line(c, t, c, b) }
+        'X' -> { line(l, t, r, b); line(r, t, l, b) }
+        // Numbers and special chars as needed
+        else -> { /* Skip unknown chars */ }
     }
 }

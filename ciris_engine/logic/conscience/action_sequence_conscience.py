@@ -35,13 +35,37 @@ REPEATED_SPEAK_GUIDANCE = (
     "start with, 'I apologize'"
 )
 
+# Actions that count as valid intervening actions allowing another SPEAK
+# TOOL is NOT included - using tools doesn't mean you should speak again
+# TODO: Adjust logic to track tool signatures (name + params) and allow SPEAK
+#       after DIFFERENT tool calls (making progress) while still blocking
+#       identical TOOL->SPEAK->TOOL->SPEAK loops (stuck in loop).
+VALID_INTERVENING_ACTIONS = {
+    HandlerActionType.OBSERVE.value,  # New input from user
+    HandlerActionType.DEFER.value,  # Deferred to authority
+    HandlerActionType.MEMORIZE.value,  # Memory operation
+    HandlerActionType.REJECT.value,  # Rejected task
+    HandlerActionType.PONDER.value,  # Deep reflection
+}
+
 
 class ActionSequenceConscience(ConscienceInterface):
-    """Prevents repeated SPEAK actions without intervening actions.
+    """Prevents repeated SPEAK actions without VALID intervening actions.
 
     This heuristic conscience checks if a SPEAK action is being attempted
-    after a prior completed SPEAK with no intervening completed action.
-    If so, it bounces the action back to recursive ASPDMA with guidance.
+    after a prior completed SPEAK with no valid intervening action.
+
+    Valid intervening actions that allow another SPEAK:
+    - OBSERVE (new user input)
+    - DEFER (deferred to authority)
+    - MEMORIZE (memory operation)
+    - REJECT (rejected task)
+    - PONDER (deep reflection)
+
+    TOOL is NOT a valid intervening action - using tools doesn't grant
+    permission to speak again. This prevents TOOL->SPEAK->TOOL->SPEAK loops.
+
+    If the rule is violated, bounces back to recursive ASPDMA with guidance.
     """
 
     def __init__(self, time_service: TimeServiceProtocol):
@@ -205,11 +229,26 @@ class ActionSequenceConscience(ConscienceInterface):
             f"attempting={action.selected_action}"
         )
 
-        # Check rule: SPEAK after SPEAK with no intervening action
-        if completed_actions and completed_actions[-1] == HandlerActionType.SPEAK.value:
-            # Last completed action was SPEAK, and we're attempting another SPEAK
+        # Check rule: SPEAK after SPEAK with no VALID intervening action
+        # Look backwards through actions to find if there's been a SPEAK
+        # since the last valid intervening action (OBSERVE, DEFER, etc.)
+        # TOOL does NOT count as valid - can't loop TOOL->SPEAK->TOOL->SPEAK
+        found_speak_since_valid_action = False
+        for action_type in reversed(completed_actions):
+            if action_type in VALID_INTERVENING_ACTIONS:
+                # Found a valid intervening action - SPEAK is allowed
+                break
+            if action_type == HandlerActionType.SPEAK.value:
+                # Found a SPEAK before any valid intervening action
+                found_speak_since_valid_action = True
+                break
+            # TOOL and other actions don't count - keep looking back
+
+        if found_speak_since_valid_action:
+            # Already spoke since last valid action (like OBSERVE), blocking repeat
             logger.info(
-                f"[action_sequence] Blocking repeated SPEAK for task {task_id}. Prior actions: {completed_actions}"
+                f"[action_sequence] Blocking repeated SPEAK for task {task_id}. "
+                f"Prior actions: {completed_actions}. TOOL doesn't reset SPEAK allowance."
             )
 
             end_time = self._time_service.now()
@@ -236,11 +275,11 @@ class ActionSequenceConscience(ConscienceInterface):
                 # No replacement_action - let recursive ASPDMA decide
             )
 
-        # SPEAK is allowed - either first SPEAK or has intervening action
+        # SPEAK is allowed - either first SPEAK or has valid intervening action
         reason = (
             "First SPEAK for this task"
             if HandlerActionType.SPEAK.value not in completed_actions
-            else "SPEAK allowed - intervening action(s) since last SPEAK"
+            else "SPEAK allowed - valid intervening action (OBSERVE/DEFER/etc.) since last SPEAK"
         )
 
         end_time = self._time_service.now()

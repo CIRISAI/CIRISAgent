@@ -5,6 +5,7 @@ import ai.ciris.api.models.ImagePayload
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.ReasoningEvent
 import ai.ciris.mobile.shared.api.ReasoningStreamClient
+import ai.ciris.mobile.shared.ui.screens.graph.PipelineState
 import ai.ciris.mobile.shared.auth.TokenManager
 import ai.ciris.mobile.shared.models.ActionDetails
 import ai.ciris.mobile.shared.models.ActionType
@@ -178,6 +179,10 @@ class InteractViewModel(
     // Timeline events - minimal storage for bubble net
     private val _timelineEvents = MutableStateFlow<List<TimelineEvent>>(emptyList())
     val timelineEvents: StateFlow<List<TimelineEvent>> = _timelineEvents.asStateFlow()
+
+    // H3ERE pipeline scaffolding state - tracks which pipeline stages are active
+    private val _pipelineState = MutableStateFlow(PipelineState())
+    val pipelineState: StateFlow<PipelineState> = _pipelineState.asStateFlow()
 
     // Show timeline popup
     private val _showTimeline = MutableStateFlow(false)
@@ -1156,6 +1161,19 @@ class InteractViewModel(
                                 logInfo(method, "SSE disconnected")
                                 _sseConnected.value = false
                                 _agentProcessingState.value = AgentProcessingState.IDLE
+                            }
+                            is ReasoningEvent.PipelineStep -> {
+                                // Update pipeline scaffolding visualization
+                                val now = Clock.System.now().toEpochMilliseconds()
+                                if (event.isNewThought) {
+                                    // New thought round - reset then activate
+                                    _pipelineState.value = _pipelineState.value
+                                        .reset()
+                                        .activate(event.eventType, now)
+                                } else {
+                                    _pipelineState.value = _pipelineState.value
+                                        .activate(event.eventType, now)
+                                }
                             }
                             is ReasoningEvent.Emoji -> {
                                 // Add bubble emoji (floats up and disappears)

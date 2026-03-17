@@ -70,7 +70,8 @@ fun LiveGraphBackground(
     externalRotation: Float = 0f,  // External rotation from swipe gestures (degrees)
     spinEnergy: Float = 0f,  // Accumulated spin energy from multiple flicks
     spinEnergyThreshold: Float = 100f,  // Energy threshold to trigger spin apart
-    onSpinApartTriggered: () -> Unit = {}  // Callback when spin apart animation starts
+    onSpinApartTriggered: () -> Unit = {},  // Callback when spin apart animation starts
+    pipelineState: PipelineState = PipelineState()  // H3ERE pipeline scaffolding state
 ) {
     // Log when composable is first called
     PlatformLogger.i(TAG, ">>> LiveGraphBackground COMPOSING (eventTrigger=$eventTrigger, opacity=$baseOpacity)")
@@ -268,6 +269,20 @@ fun LiveGraphBackground(
                 val centerY = size.height / 2
                 val cylinderRadius = minOf(size.width, size.height) * 0.35f
                 val cylinderHeight = size.height * 0.6f
+                val currentTimeMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+
+                // Draw H3ERE pipeline scaffolding (behind everything)
+                drawPipelineScaffolding(
+                    pipelineState = pipelineState,
+                    rotationY = rotationY,
+                    rotationX = rotationX,
+                    centerX = centerX,
+                    centerY = centerY,
+                    cylinderRadius = cylinderRadius * 1.15f,  // Slightly larger than node cylinder
+                    cylinderHeight = cylinderHeight,
+                    currentTimeMs = currentTimeMs,
+                    baseOpacity = baseOpacity
+                )
 
                 // Project and draw nodes (with optional spin apart explosion)
                 val projectedNodes = nodes.mapIndexed { index, node ->
@@ -303,7 +318,6 @@ fun LiveGraphBackground(
                 }
 
                 // Draw nodes sorted by depth (furthest first)
-                val currentTimeMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                 projectedNodes.sortedByDescending { it.depth }.forEach { projected ->
                     // Calculate birth animation progress (0 = just born, 1 = mature)
                     val birthProgress = if (projected.birthTimeMs > 0) {
@@ -538,4 +552,221 @@ private fun DrawScope.drawBackgroundEdge(
             pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f), 0f)
         )
     )
+}
+
+// =============================================================================
+// H3ERE Pipeline Scaffolding Drawing
+// =============================================================================
+
+/**
+ * Draw H3ERE pipeline scaffolding around the memory cylinder.
+ *
+ * The scaffolding consists of:
+ * 1. Vertical struts running along the cylinder surface
+ * 2. Horizontal rings at each pipeline stage height
+ * 3. Glow effects on rings when their stage is active
+ *
+ * Stages are distributed evenly along the cylinder height, with
+ * padding at top and bottom. The scaffolding radius is slightly
+ * larger than the node cylinder so it wraps around the data.
+ */
+private fun DrawScope.drawPipelineScaffolding(
+    pipelineState: PipelineState,
+    rotationY: Float,
+    rotationX: Float,
+    centerX: Float,
+    centerY: Float,
+    cylinderRadius: Float,
+    cylinderHeight: Float,
+    currentTimeMs: Long,
+    baseOpacity: Float
+) {
+    val stages = pipelineState.stages
+    if (stages.isEmpty()) return
+
+    val strutCount = PipelineStage.STRUT_COUNT
+    val verticalPadding = 0.1f  // 10% padding top and bottom
+
+    // Draw vertical struts first (behind rings)
+    drawScaffoldStruts(
+        strutCount = strutCount,
+        rotationY = rotationY,
+        rotationX = rotationX,
+        centerX = centerX,
+        centerY = centerY,
+        cylinderRadius = cylinderRadius,
+        cylinderHeight = cylinderHeight,
+        verticalPadding = verticalPadding,
+        baseOpacity = baseOpacity
+    )
+
+    // Draw horizontal rings for each pipeline stage
+    stages.forEachIndexed { index, stage ->
+        // Distribute stages evenly along cylinder height
+        val heightFraction = verticalPadding +
+            (index.toFloat() / (stages.size - 1).coerceAtLeast(1)) * (1f - 2 * verticalPadding)
+
+        // Calculate glow intensity (1.0 when just activated, fading to 0)
+        val glowIntensity = if (stage.activatedAtMs > 0) {
+            val elapsed = currentTimeMs - stage.activatedAtMs
+            if (elapsed < PipelineStage.GLOW_DURATION_MS) {
+                1f - (elapsed.toFloat() / PipelineStage.GLOW_DURATION_MS)
+            } else 0f
+        } else 0f
+
+        drawScaffoldRing(
+            stage = stage,
+            heightFraction = heightFraction,
+            glowIntensity = glowIntensity,
+            rotationY = rotationY,
+            rotationX = rotationX,
+            centerX = centerX,
+            centerY = centerY,
+            cylinderRadius = cylinderRadius,
+            cylinderHeight = cylinderHeight,
+            baseOpacity = baseOpacity
+        )
+    }
+}
+
+/**
+ * Draw vertical struts connecting the top and bottom of the scaffolding.
+ * These give the scaffolding its cage-like structure.
+ */
+private fun DrawScope.drawScaffoldStruts(
+    strutCount: Int,
+    rotationY: Float,
+    rotationX: Float,
+    centerX: Float,
+    centerY: Float,
+    cylinderRadius: Float,
+    cylinderHeight: Float,
+    verticalPadding: Float,
+    baseOpacity: Float
+) {
+    val topFraction = verticalPadding
+    val bottomFraction = 1f - verticalPadding
+
+    for (i in 0 until strutCount) {
+        val theta = (i.toFloat() / strutCount) * 2 * PI.toFloat()
+
+        val top = projectScaffoldPoint(
+            theta, topFraction, rotationY, rotationX,
+            centerX, centerY, cylinderRadius, cylinderHeight
+        )
+        val bottom = projectScaffoldPoint(
+            theta, bottomFraction, rotationY, rotationX,
+            centerX, centerY, cylinderRadius, cylinderHeight
+        )
+
+        // Only draw struts on the visible side (or dimmed on back)
+        val avgAlpha = (top.alpha + bottom.alpha) / 2 * baseOpacity * 0.15f
+
+        if (avgAlpha > 0.01f) {
+            drawLine(
+                color = Color.White.safeAlpha(avgAlpha),
+                start = Offset(top.screenX, top.screenY),
+                end = Offset(bottom.screenX, bottom.screenY),
+                strokeWidth = 0.8f
+            )
+        }
+    }
+}
+
+/**
+ * Draw a single horizontal pipeline ring at the given height.
+ * When glowIntensity > 0, the ring lights up in the stage's color.
+ */
+private fun DrawScope.drawScaffoldRing(
+    stage: PipelineStage,
+    heightFraction: Float,
+    glowIntensity: Float,
+    rotationY: Float,
+    rotationX: Float,
+    centerX: Float,
+    centerY: Float,
+    cylinderRadius: Float,
+    cylinderHeight: Float,
+    baseOpacity: Float
+) {
+    // Sample points around the ring circumference
+    val segments = 48  // Smooth ring
+    val points = (0..segments).map { i ->
+        val theta = (i.toFloat() / segments) * 2 * PI.toFloat()
+        projectScaffoldPoint(
+            theta, heightFraction, rotationY, rotationX,
+            centerX, centerY, cylinderRadius, cylinderHeight
+        )
+    }
+
+    // Determine ring color and intensity
+    val isActive = glowIntensity > 0f
+    val ringColor = if (isActive) stage.color else Color.White
+    val baseRingAlpha = if (isActive) {
+        0.2f + glowIntensity * 0.7f  // Active: 0.2 to 0.9
+    } else {
+        0.08f  // Inactive: very subtle
+    }
+    val ringWidth = if (isActive) {
+        1.5f + glowIntensity * 2f  // Active: 1.5 to 3.5px
+    } else {
+        0.8f  // Inactive: thin
+    }
+
+    // Draw ring as connected line segments
+    val path = Path()
+    var started = false
+
+    for (i in 0 until segments) {
+        val p1 = points[i]
+        val p2 = points[i + 1]
+
+        val segAlpha = ((p1.alpha + p2.alpha) / 2 * baseOpacity * baseRingAlpha).coerceIn(0f, 1f)
+
+        if (segAlpha > 0.01f) {
+            if (!started) {
+                path.moveTo(p1.screenX, p1.screenY)
+                started = true
+            }
+            path.lineTo(p2.screenX, p2.screenY)
+        }
+    }
+
+    if (started) {
+        drawPath(
+            path = path,
+            color = ringColor.safeAlpha(baseRingAlpha * baseOpacity),
+            style = Stroke(width = ringWidth, cap = StrokeCap.Round)
+        )
+    }
+
+    // Draw outer glow for active rings (larger, more transparent)
+    if (isActive && glowIntensity > 0.1f) {
+        val glowPath = Path()
+        var glowStarted = false
+
+        for (i in 0 until segments) {
+            val p1 = points[i]
+            val p2 = points[i + 1]
+
+            val segAlpha = ((p1.alpha + p2.alpha) / 2 * baseOpacity * glowIntensity * 0.3f)
+                .coerceIn(0f, 1f)
+
+            if (segAlpha > 0.01f) {
+                if (!glowStarted) {
+                    glowPath.moveTo(p1.screenX, p1.screenY)
+                    glowStarted = true
+                }
+                glowPath.lineTo(p2.screenX, p2.screenY)
+            }
+        }
+
+        if (glowStarted) {
+            drawPath(
+                path = glowPath,
+                color = stage.color.safeAlpha(glowIntensity * 0.3f * baseOpacity),
+                style = Stroke(width = ringWidth + 6f, cap = StrokeCap.Round)
+            )
+        }
+    }
 }

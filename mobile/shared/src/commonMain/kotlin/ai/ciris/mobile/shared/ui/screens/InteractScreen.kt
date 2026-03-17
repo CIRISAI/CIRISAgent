@@ -70,6 +70,7 @@ import kotlinx.datetime.toLocalDateTime
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.ui.screens.graph.GraphColors
 import ai.ciris.mobile.shared.ui.screens.graph.LiveGraphBackground
+import ai.ciris.mobile.shared.ui.screens.graph.PipelineState
 import ai.ciris.mobile.shared.ui.theme.ColorTheme
 import ai.ciris.mobile.shared.ui.theme.InteractTheme
 
@@ -128,6 +129,7 @@ fun InteractScreen(
     val creditStatus by viewModel.creditStatus.collectAsState()
     val trustStatus by viewModel.trustStatus.collectAsState()
     val attachedFiles by viewModel.attachedFiles.collectAsState()
+    val pipelineState by viewModel.pipelineState.collectAsState()
 
     // Observe text input requests for test automation
     val textInputRequest by TestAutomation.textInputRequests.collectAsState()
@@ -225,7 +227,8 @@ fun InteractScreen(
                 onSpinApartTriggered = {
                     // Reset energy after explosion
                     spinEnergy = 0f
-                }
+                },
+                pipelineState = pipelineState  // H3ERE scaffolding visualization
             )
         }
 

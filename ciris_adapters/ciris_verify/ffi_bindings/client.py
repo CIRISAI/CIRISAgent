@@ -309,6 +309,18 @@ class CIRISVerify:
             if candidate.exists():
                 return candidate
 
+        # Check pip-installed ciris_verify package
+        try:
+            import ciris_verify as cv_pkg
+
+            pip_pkg_dir = Path(cv_pkg.__file__).parent
+            for suffix in [".so", ".dylib", ".dll"]:
+                candidate = pip_pkg_dir / f"libciris_verify_ffi{suffix}"
+                if candidate.exists():
+                    return candidate
+        except ImportError:
+            pass
+
         raise BinaryNotFoundError(f"Searched: {paths}")
 
     def _verify_binary_integrity(self) -> None:

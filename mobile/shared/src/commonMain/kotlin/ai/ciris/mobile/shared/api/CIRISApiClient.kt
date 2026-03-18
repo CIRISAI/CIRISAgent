@@ -913,7 +913,7 @@ class CIRISApiClient(
             val models = data.models?.map { model ->
                 ModelInfo(
                     id = model.id ?: "",
-                    displayName = model.displayName,
+                    displayName = model.displayName ?: model.id ?: "Unknown",
                     cirisCompatible = model.cirisCompatible ?: false,
                     cirisRecommended = model.cirisRecommended ?: false,
                     contextWindow = model.contextWindow

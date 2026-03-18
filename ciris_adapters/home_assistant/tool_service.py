@@ -513,20 +513,25 @@ Navigate the music library by category.
     async def _check_ma_available(self) -> bool:
         """Check if Music Assistant is installed in Home Assistant.
 
-        Detects MA by looking for media_player.mass_* entities or
-        the music_assistant integration.
+        Detects MA by looking for:
+        - media_player.mass_* entities (MA-managed players)
+        - update.music_assistant_* entities (MA server update entity)
+        - Any entity with mass_player_id attribute
         """
         if self._ma_available is not None:
             return self._ma_available
 
         try:
             entities = await self.ha_service.get_all_entities()
-            # Check for MA player entities (mass_* prefix or mass_player_id attribute)
+            # Check for MA indicators:
+            # 1. MA player entities (mass_* prefix)
+            # 2. MA update entity (indicates MA server is installed)
+            # 3. Any media_player with mass_player_id attribute
             ma_found = any(
                 e.entity_id.startswith("media_player.mass_")
-                or e.attributes.get("mass_player_id")
+                or e.entity_id.startswith("update.music_assistant")
+                or (e.domain == "media_player" and e.attributes.get("mass_player_id"))
                 for e in entities
-                if e.domain == "media_player"
             )
             self._ma_available = ma_found
             if ma_found:

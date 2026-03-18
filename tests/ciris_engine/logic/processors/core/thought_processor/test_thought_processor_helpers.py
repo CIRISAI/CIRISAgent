@@ -56,7 +56,8 @@ class MockThoughtProcessor:
             f"{base_guidance}"
             "Consider: Is there a more cautious approach? Should you gather more information first? "
             "Can this task be marked as complete without further action? "
-            "Remember: DEFER only if the task MUST be done AND requires human approval."
+            "Remember: DEFER only for ethical dilemmas or permission issues - NOT for technical errors. "
+            "If a tool fails, SPEAK to explain the error to the user."
         )
 
 
@@ -195,7 +196,7 @@ class TestBuildRetryGuidance:
             updated_observation=None,
         )
 
-        assert "DEFER only if" in result
+        assert "DEFER only for ethical dilemmas" in result
 
     def test_observation_guidance_suggests_speak_or_tool(self, processor):
         """Test observation guidance suggests SPEAK or TOOL."""

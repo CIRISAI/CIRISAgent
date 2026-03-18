@@ -142,6 +142,20 @@ class HAIntegrationService:
                 f"[HA TOKEN] Token set explicitly: {value[:20]}..." if len(value) > 20 else "[HA TOKEN] Token set"
             )
 
+    @property
+    def ma_url(self) -> Optional[str]:
+        """Get Music Assistant URL from environment.
+
+        Music Assistant runs as a separate service, typically on port 8095.
+        Set MUSIC_ASSISTANT_URL env var to enable MA integration.
+        """
+        return os.getenv("MUSIC_ASSISTANT_URL")
+
+    @property
+    def ma_enabled(self) -> bool:
+        """Check if Music Assistant integration is enabled."""
+        return bool(self.ma_url)
+
     def _parse_camera_urls(self) -> Dict[str, str]:
         """Parse camera URLs from environment variable."""
         urls_env = os.getenv("WEBRTC_CAMERA_URLS", "")
@@ -620,6 +634,198 @@ class HAIntegrationService:
         """Get all entities in a specific domain (sensor, light, switch, etc.)."""
         entities = await self.get_all_entities()
         return [e for e in entities if e.domain == domain]
+
+    # ========== Music Assistant Functionality ==========
+
+    async def ma_search(
+        self,
+        query: str,
+        media_types: Optional[List[str]] = None,
+        limit: int = 10,
+    ) -> Dict[str, Any]:
+        """Search Music Assistant library and providers.
+
+        Args:
+            query: Search query string
+            media_types: Optional list of types to search (artist, album, track, playlist, radio)
+            limit: Maximum results per type (default 10)
+
+        Returns:
+            Dict with search results by type
+        """
+        if not self.ma_enabled:
+            return {"error": "Music Assistant not configured. Set MUSIC_ASSISTANT_URL env var."}
+
+        try:
+            # MA API uses POST /api with JSON-RPC style commands
+            payload = {
+                "name": query,
+                "media_types": media_types or ["artist", "album", "track", "playlist"],
+                "limit": limit,
+            }
+
+            async with aiohttp.ClientSession() as session:
+                # Try global search endpoint
+                async with session.post(
+                    f"{self.ma_url}/api/music/search",
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        logger.info(f"[MA] Search '{query}': found results")
+                        return {
+                            "success": True,
+                            "query": query,
+                            "results": data,
+                        }
+                    else:
+                        body = await response.text()
+                        logger.error(f"[MA] Search failed: HTTP {response.status} - {body[:200]}")
+                        return {"error": f"MA search failed: HTTP {response.status}"}
+        except Exception as e:
+            logger.error(f"[MA] Search exception: {e}")
+            return {"error": str(e)}
+
+    async def ma_play(
+        self,
+        uri: str,
+        player_id: Optional[str] = None,
+        queue_option: str = "play",
+    ) -> Dict[str, Any]:
+        """Play a media item on Music Assistant.
+
+        Args:
+            uri: Music Assistant URI (e.g., "library://track/123" or share URL)
+            player_id: Target player entity ID (uses default if not specified)
+            queue_option: How to add to queue - "play" (now), "next", "add" (end), "replace"
+
+        Returns:
+            Dict with play result
+        """
+        if not self.ma_enabled:
+            return {"error": "Music Assistant not configured. Set MUSIC_ASSISTANT_URL env var."}
+
+        try:
+            payload: Dict[str, Any] = {
+                "uri": uri,
+                "queue_option": queue_option,
+            }
+            if player_id:
+                payload["player_id"] = player_id
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.ma_url}/api/music/play",
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        logger.info(f"[MA] Play '{uri}': success")
+                        return {"success": True, "data": data}
+                    else:
+                        body = await response.text()
+                        logger.error(f"[MA] Play failed: HTTP {response.status} - {body[:200]}")
+                        return {"error": f"MA play failed: HTTP {response.status}"}
+        except Exception as e:
+            logger.error(f"[MA] Play exception: {e}")
+            return {"error": str(e)}
+
+    async def ma_get_players(self) -> Dict[str, Any]:
+        """Get all Music Assistant players and their states.
+
+        Returns:
+            Dict with player list and states
+        """
+        if not self.ma_enabled:
+            return {"error": "Music Assistant not configured. Set MUSIC_ASSISTANT_URL env var."}
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self.ma_url}/api/players",
+                    headers={"Content-Type": "application/json"},
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        logger.info(f"[MA] Get players: found {len(data) if isinstance(data, list) else 'N/A'}")
+                        return {"success": True, "players": data}
+                    else:
+                        body = await response.text()
+                        logger.error(f"[MA] Get players failed: HTTP {response.status} - {body[:200]}")
+                        return {"error": f"MA get players failed: HTTP {response.status}"}
+        except Exception as e:
+            logger.error(f"[MA] Get players exception: {e}")
+            return {"error": str(e)}
+
+    async def ma_get_queue(self, player_id: str) -> Dict[str, Any]:
+        """Get the queue for a Music Assistant player.
+
+        Args:
+            player_id: Player entity ID
+
+        Returns:
+            Dict with queue items
+        """
+        if not self.ma_enabled:
+            return {"error": "Music Assistant not configured. Set MUSIC_ASSISTANT_URL env var."}
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self.ma_url}/api/player_queues/items",
+                    params={"player_id": player_id, "limit": 50},
+                    headers={"Content-Type": "application/json"},
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        logger.info(f"[MA] Get queue for {player_id}: {len(data) if isinstance(data, list) else 'N/A'} items")
+                        return {"success": True, "queue": data}
+                    else:
+                        body = await response.text()
+                        logger.error(f"[MA] Get queue failed: HTTP {response.status} - {body[:200]}")
+                        return {"error": f"MA get queue failed: HTTP {response.status}"}
+        except Exception as e:
+            logger.error(f"[MA] Get queue exception: {e}")
+            return {"error": str(e)}
+
+    async def ma_browse(self, path: str = "") -> Dict[str, Any]:
+        """Browse Music Assistant library.
+
+        Args:
+            path: Browse path (e.g., "artists", "albums", "playlists", or empty for root)
+
+        Returns:
+            Dict with browsable items
+        """
+        if not self.ma_enabled:
+            return {"error": "Music Assistant not configured. Set MUSIC_ASSISTANT_URL env var."}
+
+        try:
+            endpoint = f"{self.ma_url}/api/music/{path}" if path else f"{self.ma_url}/api/music"
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    endpoint,
+                    headers={"Content-Type": "application/json"},
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        logger.info(f"[MA] Browse '{path}': success")
+                        return {"success": True, "items": data}
+                    else:
+                        body = await response.text()
+                        logger.error(f"[MA] Browse failed: HTTP {response.status} - {body[:200]}")
+                        return {"error": f"MA browse failed: HTTP {response.status}"}
+        except Exception as e:
+            logger.error(f"[MA] Browse exception: {e}")
+            return {"error": str(e)}
 
     # ========== Camera Functionality ==========
 

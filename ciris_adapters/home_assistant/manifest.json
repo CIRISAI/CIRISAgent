@@ -169,6 +169,12 @@
       "default": "http://127.0.0.1:8554",
       "description": "go2rtc server URL for WebRTC camera streams"
     },
+    "music_assistant_url": {
+      "type": "string",
+      "env": "MUSIC_ASSISTANT_URL",
+      "default": null,
+      "description": "Music Assistant server URL (e.g., http://192.168.1.100:8095). Enables ma_search, ma_play, ma_browse tools."
+    },
     "webrtc_camera_urls": {
       "type": "string",
       "env": "WEBRTC_CAMERA_URLS",

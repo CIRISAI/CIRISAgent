@@ -350,9 +350,8 @@ async def update_llm_config(
 
         reload_file.write_text(str(time.time()), encoding="utf-8")
 
-        logger.info(
-            f"LLM config updated: provider={body.llm_provider}, base_url={effective_base_url}, model={body.llm_model}"
-        )
+        # Log update without user-controlled data to prevent log injection (CWE-117)
+        logger.info("LLM config updated successfully")
 
         return SuccessResponse(
             data={

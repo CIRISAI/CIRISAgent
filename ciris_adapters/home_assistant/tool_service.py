@@ -16,7 +16,16 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
+from ciris_engine.schemas.adapters.tools import (
+    ToolDMAGuidance,
+    ToolDocumentation,
+    ToolExecutionResult,
+    ToolExecutionStatus,
+    ToolGotcha,
+    ToolInfo,
+    ToolParameterSchema,
+    UsageExample,
+)
 
 from .schemas import HANotification
 from .service import HAIntegrationService
@@ -39,28 +48,165 @@ class HAToolService:
     TOOL_DEFINITIONS: Dict[str, ToolInfo] = {
         "ha_device_control": ToolInfo(
             name="ha_device_control",
-            description="Control a Home Assistant device (light, switch, cover, etc.)",
+            description="Control a Home Assistant device (light, switch, media_player, cover, climate, fan, etc.)",
             parameters=ToolParameterSchema(
                 type="object",
                 properties={
                     "entity_id": {
                         "type": "string",
-                        "description": "Home Assistant entity ID (e.g., light.living_room, switch.garage)",
+                        "description": "Home Assistant entity ID (e.g., light.living_room, media_player.bedroom)",
                     },
                     "action": {
                         "type": "string",
-                        "enum": ["turn_on", "turn_off", "toggle"],
-                        "description": "Action to perform. To set brightness, use 'turn_on' with the brightness parameter.",
+                        "enum": [
+                            # Universal actions
+                            "turn_on",
+                            "turn_off",
+                            "toggle",
+                            # Media player actions
+                            "media_play",
+                            "media_pause",
+                            "media_stop",
+                            "media_play_pause",
+                            "media_next_track",
+                            "media_previous_track",
+                            "volume_up",
+                            "volume_down",
+                            "volume_mute",
+                            # Cover actions
+                            "open_cover",
+                            "close_cover",
+                            "stop_cover",
+                            # Lock actions
+                            "lock",
+                            "unlock",
+                            # Climate actions
+                            "set_hvac_mode",
+                            "set_temperature",
+                            # Fan actions
+                            "set_percentage",
+                        ],
+                        "description": "Action to perform. Use domain-specific actions for best results.",
                     },
                     "brightness": {
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 255,
-                        "description": "Brightness level 0-255 for lights. Use with action='turn_on' to set brightness.",
+                        "description": "Brightness level 0-255 for lights. Use with action='turn_on'.",
                     },
                     "color_temp": {"type": "integer", "description": "Color temperature in mireds (optional)"},
+                    "volume_level": {
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 1.0,
+                        "description": "Volume level 0.0-1.0 for media players with volume_set.",
+                    },
+                    "temperature": {
+                        "type": "number",
+                        "description": "Target temperature for climate entities.",
+                    },
+                    "hvac_mode": {
+                        "type": "string",
+                        "description": "HVAC mode: heat, cool, heat_cool, auto, dry, fan_only, off.",
+                    },
+                    "percentage": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100,
+                        "description": "Fan speed percentage 0-100.",
+                    },
                 },
                 required=["entity_id", "action"],
+            ),
+            documentation=ToolDocumentation(
+                quick_start="Control HA devices: use entity_id + action. For media players use media_stop/media_play, not turn_off.",
+                detailed_instructions="""
+# Home Assistant Device Control
+
+## Action Reference by Domain
+
+### media_player.* (Music, Speakers, TVs)
+- **media_play** - Start/resume playback
+- **media_pause** - Pause playback
+- **media_stop** - STOP playback (USE THIS to stop music!)
+- **media_play_pause** - Toggle play/pause
+- **media_next_track** - Skip to next
+- **media_previous_track** - Go to previous
+- **volume_up** / **volume_down** - Adjust volume
+- **volume_mute** - Mute/unmute
+- **turn_on** / **turn_off** - Power device on/off (NOT for stopping music!)
+
+### light.*
+- **turn_on** - Turn on (optionally with brightness, color_temp)
+- **turn_off** - Turn off
+- **toggle** - Toggle state
+
+### switch.* / input_boolean.*
+- **turn_on** / **turn_off** / **toggle**
+
+### cover.* (Blinds, Garage Doors, Curtains)
+- **open_cover** - Open
+- **close_cover** - Close
+- **stop_cover** - Stop movement
+- **toggle** - Toggle open/closed
+
+### lock.*
+- **lock** - Lock
+- **unlock** - Unlock
+
+### climate.* (Thermostats, AC)
+- **turn_on** / **turn_off** - Power
+- **set_hvac_mode** - Set mode (requires hvac_mode parameter)
+- **set_temperature** - Set target temp (requires temperature parameter)
+
+### fan.*
+- **turn_on** / **turn_off** / **toggle**
+- **set_percentage** - Set speed (requires percentage parameter)
+
+## Common Mistakes
+- Using turn_off to stop music → Use media_stop instead!
+- Using turn_on to resume music → Use media_play instead!
+""",
+                examples=[
+                    UsageExample(
+                        title="Stop music in bedroom",
+                        description="Use media_stop to stop playback (NOT turn_off)",
+                        code='{"entity_id": "media_player.bedroom", "action": "media_stop"}',
+                    ),
+                    UsageExample(
+                        title="Pause music temporarily",
+                        description="Use media_pause to pause, media_play to resume",
+                        code='{"entity_id": "media_player.living_room", "action": "media_pause"}',
+                    ),
+                    UsageExample(
+                        title="Turn off bedroom light",
+                        description="Use turn_off for lights and switches",
+                        code='{"entity_id": "light.bedroom_lamp", "action": "turn_off"}',
+                    ),
+                    UsageExample(
+                        title="Set thermostat temperature",
+                        description="Use set_temperature with temperature parameter",
+                        code='{"entity_id": "climate.living_room", "action": "set_temperature", "temperature": 72}',
+                    ),
+                ],
+                gotchas=[
+                    ToolGotcha(
+                        title="Don't use turn_off to stop music",
+                        description="When user says 'stop the music', use media_stop NOT turn_off. turn_off powers off the device entirely which may fail on some players.",
+                    ),
+                    ToolGotcha(
+                        title="Don't use turn_on to play music",
+                        description="When user says 'play music' or 'resume', use media_play NOT turn_on. turn_on just powers on the device, it doesn't start playback.",
+                    ),
+                    ToolGotcha(
+                        title="500 error on turn_off for media players",
+                        description="If a media player returns 500 on turn_off, use media_stop instead. Some players (like Music Assistant) don't support turn_off.",
+                    ),
+                ],
+            ),
+            dma_guidance=ToolDMAGuidance(
+                when_not_to_use="Do not use for querying state - use ha_sensor_query instead. Do not use for automations - use ha_automation_trigger.",
+                ethical_considerations="Device control affects the physical environment. Verify user intent for irreversible actions like unlocking doors.",
             ),
         ),
         "ha_automation_trigger": ToolInfo(
@@ -317,12 +463,25 @@ class HAToolService:
 
         # Map common LLM action aliases to valid HA actions
         action_aliases = {
+            # Light aliases
             "set_brightness": "turn_on",
             "set_level": "turn_on",
             "dim": "turn_on",
             "brighten": "turn_on",
             "set_color_temp": "turn_on",
             "set_color": "turn_on",
+            # Media player aliases
+            "play": "media_play",
+            "pause": "media_pause",
+            "stop": "media_stop",
+            "resume": "media_play",
+            "skip": "media_next_track",
+            "next": "media_next_track",
+            "previous": "media_previous_track",
+            "mute": "volume_mute",
+            # Cover aliases
+            "open": "open_cover",
+            "close": "close_cover",
         }
         if action in action_aliases:
             original_action = action
@@ -331,7 +490,35 @@ class HAToolService:
             logger.info(f"[HA TOOL] Mapped action alias '{original_action}' -> '{action}'")
 
         # Validate action is one of the allowed values
-        valid_actions = ["turn_on", "turn_off", "toggle"]
+        valid_actions = [
+            # Universal
+            "turn_on",
+            "turn_off",
+            "toggle",
+            # Media player
+            "media_play",
+            "media_pause",
+            "media_stop",
+            "media_play_pause",
+            "media_next_track",
+            "media_previous_track",
+            "volume_up",
+            "volume_down",
+            "volume_mute",
+            "volume_set",
+            # Cover
+            "open_cover",
+            "close_cover",
+            "stop_cover",
+            # Lock
+            "lock",
+            "unlock",
+            # Climate
+            "set_hvac_mode",
+            "set_temperature",
+            # Fan
+            "set_percentage",
+        ]
         if action not in valid_actions:
             error_msg = (
                 f"Invalid action '{action}'. Must be one of: {', '.join(valid_actions)}. "

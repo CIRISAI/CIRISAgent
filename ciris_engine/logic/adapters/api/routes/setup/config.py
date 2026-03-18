@@ -272,17 +272,33 @@ async def update_llm_config(
         # Get the effective base URL (use provider default if not specified)
         effective_base_url = _get_provider_base_url(body.llm_provider, body.llm_base_url) or ""
 
+        # Determine which API key env var to use based on provider
+        # anthropic → ANTHROPIC_API_KEY, google → GOOGLE_API_KEY, others → OPENAI_API_KEY
+        provider_key_mapping = {
+            "anthropic": "ANTHROPIC_API_KEY",
+            "google": "GOOGLE_API_KEY",
+        }
+        target_key_var = provider_key_mapping.get(body.llm_provider.lower(), "OPENAI_API_KEY")
+
         for line in lines:
             stripped = line.strip()
 
-            # Update or uncomment OPENAI_API_KEY
-            if stripped.startswith("OPENAI_API_KEY=") or stripped.startswith("# OPENAI_API_KEY="):
+            # Update the appropriate provider-specific API key
+            # For anthropic: ANTHROPIC_API_KEY, for google: GOOGLE_API_KEY, else: OPENAI_API_KEY
+            if stripped.startswith(f"{target_key_var}=") or stripped.startswith(f"# {target_key_var}="):
                 if body.llm_api_key:
-                    new_lines.append(f'OPENAI_API_KEY="{body.llm_api_key}"')
+                    new_lines.append(f'{target_key_var}="{body.llm_api_key}"')
                     updated_key = True
                 else:
                     new_lines.append(line)  # Keep existing
                     updated_key = True
+                continue
+
+            # Also handle OPENAI_API_KEY for non-openai providers (comment it out or keep as-is)
+            if target_key_var != "OPENAI_API_KEY" and (
+                stripped.startswith("OPENAI_API_KEY=") or stripped.startswith("# OPENAI_API_KEY=")
+            ):
+                new_lines.append(line)  # Keep existing OPENAI_API_KEY unchanged
                 continue
 
             # Update or uncomment OPENAI_API_BASE
@@ -314,7 +330,7 @@ async def update_llm_config(
 
         # Add missing keys if not found
         if not updated_key and body.llm_api_key:
-            new_lines.append(f'OPENAI_API_KEY="{body.llm_api_key}"')
+            new_lines.append(f'{target_key_var}="{body.llm_api_key}"')
         if not updated_base and effective_base_url:
             new_lines.append(f'OPENAI_API_BASE="{effective_base_url}"')
         if not updated_model and body.llm_model:

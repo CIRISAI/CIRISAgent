@@ -924,6 +924,20 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             if new_base_url.rstrip("/") != current_base_url:
                 self.update_base_url(new_base_url)
 
+        # Check if model changed (e.g. user changed model in Settings)
+        new_model = os.environ.get("OPENAI_MODEL", "")
+        if new_model and new_model != self.model_name:
+            old_model = self.model_name
+            self.model_name = new_model
+            self.openai_config.model_name = new_model
+            logger.info(
+                "[LLM_TOKEN] Model updated:\n  Old model: %s\n  New model: %s",
+                old_model,
+                new_model,
+            )
+            # Reset circuit breaker since we're switching models
+            self.circuit_breaker.reset()
+
         logger.info("[LLM_TOKEN] Token refresh complete - LLM service ready for requests")
 
     def _get_client(self) -> Any:

@@ -478,7 +478,7 @@ class SettingsViewModel(
                     else -> _llmProvider.value.lowercase()
                 }
 
-                // Save to backend .env file first
+                // Save to backend .env file first - this is the source of truth
                 logInfo(method, "Calling API to update .env: provider=$providerId")
                 val result = apiClient.updateLlmConfig(
                     provider = providerId,
@@ -487,13 +487,15 @@ class SettingsViewModel(
                     model = _llmModel.value.takeIf { it.isNotEmpty() }
                 )
 
-                result.onSuccess { message ->
-                    logInfo(method, "API update successful: $message")
-                }.onFailure { e ->
-                    logWarn(method, "API update failed: ${e.message}, saving to local storage only")
+                // Fail the save if backend update fails - the agent reads from .env, not local storage
+                result.onFailure { e ->
+                    logError(method, "API update failed: ${e.message}")
+                    throw Exception("Failed to update agent configuration: ${e.message}")
                 }
 
-                // Also save to secure storage for quick access
+                logInfo(method, "API update successful")
+
+                // Only save to local storage AFTER backend succeeds (for quick UI access)
                 secureStorage.save("llm_provider", _llmProvider.value).getOrThrow()
                 secureStorage.save("llm_model", _llmModel.value).getOrThrow()
                 secureStorage.save("llm_base_url", _llmBaseUrl.value).getOrThrow()

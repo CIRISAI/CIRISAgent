@@ -517,9 +517,14 @@ Navigate the music library by category.
         - media_player.mass_* entities (MA-managed players)
         - update.music_assistant_* entities (MA server update entity)
         - Any entity with mass_player_id attribute
+
+        Note: Only caches positive detection (MA found). Transient HA errors
+        will retry on next call rather than permanently disabling MA tools.
         """
-        if self._ma_available is not None:
-            return self._ma_available
+        # Only use cache if MA was previously detected (positive cache)
+        # Don't cache failures - allow retry on transient HA errors
+        if self._ma_available is True:
+            return True
 
         try:
             entities = await self.ha_service.get_all_entities()
@@ -533,15 +538,17 @@ Navigate the music library by category.
                 or (e.domain == "media_player" and e.attributes.get("mass_player_id"))
                 for e in entities
             )
-            self._ma_available = ma_found
             if ma_found:
+                # Cache positive detection - MA is installed
+                self._ma_available = True
                 logger.info("[HA TOOLS] Music Assistant detected - MA tools enabled")
             else:
-                logger.info("[HA TOOLS] Music Assistant not detected - MA tools disabled")
+                # Don't cache negative - MA might be installed later or HA might be starting up
+                logger.debug("[HA TOOLS] Music Assistant not detected in current entity list")
             return ma_found
         except Exception as e:
-            logger.warning(f"[HA TOOLS] Error checking for MA: {e}")
-            self._ma_available = False
+            # Don't cache failures - allow retry when HA recovers
+            logger.warning(f"[HA TOOLS] Error checking for MA (will retry): {e}")
             return False
 
     def get_service_metadata(self) -> Dict[str, Any]:

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-Update CIRISVerify binaries and Python bindings for Android and iOS.
+Update CIRISVerify binaries and Python bindings for all platforms.
+
+Supports:
+    - Desktop: Linux (x86_64), macOS (x86_64, arm64), Windows (x86_64)
+    - Mobile: Android (arm64-v8a, x86_64, armeabi-v7a), iOS (device, simulator)
 
 Usage:
     python -m tools.update_ciris_verify [version]
@@ -12,6 +16,7 @@ Examples:
     python -m tools.update_ciris_verify --local ../CIRISVerify  # From local build
     python -m tools.update_ciris_verify --local ../CIRISVerify --ios-only
     python -m tools.update_ciris_verify --local ../CIRISVerify --android-only
+    python -m tools.update_ciris_verify --desktop-only       # Linux/macOS/Windows only
 """
 
 import argparse
@@ -62,6 +67,23 @@ ANDROID_ARCHS = {
 IOS_TARGETS = {
     "device": "aarch64-apple-ios",
     "simulator": "aarch64-apple-ios-sim",
+}
+
+# Desktop platform wheel patterns (PyPI wheel naming convention)
+# Maps (system, machine) to PyPI wheel platform tag
+DESKTOP_WHEEL_PLATFORMS = {
+    ("Linux", "x86_64"): "manylinux_2_17_x86_64.manylinux2014_x86_64",
+    ("Linux", "aarch64"): "manylinux_2_17_aarch64.manylinux2014_aarch64",
+    ("Darwin", "x86_64"): "macosx_10_12_x86_64",
+    ("Darwin", "arm64"): "macosx_11_0_arm64",
+    ("Windows", "AMD64"): "win_amd64",
+}
+
+# Desktop binary names by platform
+DESKTOP_BINARY_NAMES = {
+    "Linux": "libciris_verify_ffi.so",
+    "Darwin": "libciris_verify_ffi.dylib",
+    "Windows": "ciris_verify_ffi.dll",
 }
 
 
@@ -188,6 +210,194 @@ def update_android_binaries(extract_dir: Path, checksums: dict[str, str]) -> Non
         dest_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src_file, dest_file)
         print(f"  -> Copied to {dest_file.relative_to(REPO_ROOT)}")
+
+
+# ---------------------------------------------------------------------------
+# Desktop (Linux, macOS, Windows)
+# ---------------------------------------------------------------------------
+
+
+def get_current_platform() -> tuple[str, str]:
+    """Get current platform (system, machine) tuple."""
+    import platform as plat
+
+    return plat.system(), plat.machine()
+
+
+def update_desktop_binary(version: str, tmpdir: Path) -> bool:
+    """Download and install desktop binary from PyPI wheel.
+
+    Downloads the platform-specific wheel from PyPI, extracts the native
+    library, and copies it to the FFI bindings directory.
+
+    Args:
+        version: Version to download (e.g., "1.1.25")
+        tmpdir: Temporary directory for downloads
+
+    Returns:
+        True if successful, False otherwise
+    """
+    import platform as plat
+
+    system = plat.system()
+    machine = plat.machine()
+    platform_key = (system, machine)
+
+    print(f"\nUpdating desktop binary for {system} {machine}...")
+
+    if platform_key not in DESKTOP_WHEEL_PLATFORMS:
+        print(f"  Unsupported platform: {system} {machine}")
+        print(f"  Supported: {list(DESKTOP_WHEEL_PLATFORMS.keys())}")
+        return False
+
+    wheel_platform = DESKTOP_WHEEL_PLATFORMS[platform_key]
+    binary_name = DESKTOP_BINARY_NAMES.get(system)
+
+    if not binary_name:
+        print(f"  Unknown binary name for {system}")
+        return False
+
+    # Download platform-specific wheel
+    download_dir = tmpdir / "desktop_wheel"
+    download_dir.mkdir(exist_ok=True)
+
+    # Try to download the specific platform wheel
+    result = run_cmd(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "download",
+            f"ciris-verify=={version}",
+            "--no-deps",
+            "--only-binary=:all:",
+            "--platform",
+            wheel_platform,
+            "-d",
+            str(download_dir),
+        ],
+        check=False,
+    )
+
+    # Find the downloaded wheel
+    wheel_file = None
+    for f in download_dir.iterdir():
+        if f.name.startswith(f"ciris_verify-{version}") and f.suffix == ".whl":
+            wheel_file = f
+            break
+
+    if not wheel_file:
+        # Fallback: try downloading any wheel (current platform)
+        print(f"  Platform-specific wheel not found, trying default...")
+        result = run_cmd(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "download",
+                f"ciris-verify=={version}",
+                "--no-deps",
+                "-d",
+                str(download_dir),
+            ],
+            check=False,
+        )
+        for f in download_dir.iterdir():
+            if f.name.startswith(f"ciris_verify-{version}") and f.suffix == ".whl":
+                wheel_file = f
+                break
+
+    if not wheel_file:
+        print(f"  ERROR: Could not download wheel for {system} {machine}")
+        return False
+
+    print(f"  Downloaded: {wheel_file.name}")
+
+    # Extract the binary from the wheel
+    extract_dir = tmpdir / "desktop_extract"
+    extract_dir.mkdir(exist_ok=True)
+
+    with zipfile.ZipFile(wheel_file, "r") as zf:
+        # Look for the native library
+        found_binary = None
+        for name in zf.namelist():
+            if name.endswith(binary_name):
+                zf.extract(name, extract_dir)
+                found_binary = extract_dir / name
+                print(f"  Extracted: {name}")
+                break
+
+        if not found_binary:
+            print(f"  ERROR: Binary '{binary_name}' not found in wheel")
+            print(f"  Wheel contents: {[n for n in zf.namelist() if not n.endswith('.py')]}")
+            return False
+
+    # Copy to FFI bindings directory
+    FFI_BINDINGS_DIR.mkdir(parents=True, exist_ok=True)
+    dest_file = FFI_BINDINGS_DIR / binary_name
+    shutil.copy2(found_binary, dest_file)
+
+    size_mb = dest_file.stat().st_size / 1024 / 1024
+    print(f"  -> Copied to {dest_file.relative_to(REPO_ROOT)} ({size_mb:.1f}MB)")
+
+    return True
+
+
+def update_desktop_from_local(ciris_verify_root: Path) -> bool:
+    """Update desktop binary from local CIRISVerify build.
+
+    Args:
+        ciris_verify_root: Path to local CIRISVerify repo
+
+    Returns:
+        True if successful, False otherwise
+    """
+    import platform as plat
+
+    system = plat.system()
+    machine = plat.machine()
+
+    print(f"\nUpdating desktop binary from local build ({system} {machine})...")
+
+    binary_name = DESKTOP_BINARY_NAMES.get(system)
+    if not binary_name:
+        print(f"  Unknown binary name for {system}")
+        return False
+
+    # Map to Rust target
+    target_map = {
+        ("Linux", "x86_64"): "x86_64-unknown-linux-gnu",
+        ("Linux", "aarch64"): "aarch64-unknown-linux-gnu",
+        ("Darwin", "x86_64"): "x86_64-apple-darwin",
+        ("Darwin", "arm64"): "aarch64-apple-darwin",
+        ("Windows", "AMD64"): "x86_64-pc-windows-msvc",
+    }
+
+    target = target_map.get((system, machine))
+    if not target:
+        print(f"  Unknown Rust target for {system} {machine}")
+        return False
+
+    # Find the binary
+    src_path = ciris_verify_root / "target" / target / "release" / binary_name
+    if not src_path.exists():
+        # Try without target subdirectory (native build)
+        src_path = ciris_verify_root / "target" / "release" / binary_name
+
+    if not src_path.exists():
+        print(f"  Binary not found: {src_path}")
+        print(f"  Build with: cargo build --release -p ciris-verify-ffi")
+        return False
+
+    # Copy to FFI bindings directory
+    FFI_BINDINGS_DIR.mkdir(parents=True, exist_ok=True)
+    dest_file = FFI_BINDINGS_DIR / binary_name
+    shutil.copy2(src_path, dest_file)
+
+    size_mb = dest_file.stat().st_size / 1024 / 1024
+    print(f"  -> Copied to {dest_file.relative_to(REPO_ROOT)} ({size_mb:.1f}MB)")
+
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -840,7 +1050,7 @@ def update_python_version_string(version: str, python_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def update_from_local(ciris_verify_root: Path, android: bool, ios: bool) -> None:
+def update_from_local(ciris_verify_root: Path, android: bool, ios: bool, desktop: bool = True) -> None:
     """Update from a local CIRISVerify build directory."""
     ciris_verify_root = ciris_verify_root.resolve()
     if not ciris_verify_root.exists():
@@ -866,6 +1076,9 @@ def update_from_local(ciris_verify_root: Path, android: bool, ios: bool) -> None
     local_python = ciris_verify_root / "bindings" / "python" / "ciris_verify"
     if local_python.exists():
         python_src = local_python
+
+    if desktop:
+        update_desktop_from_local(ciris_verify_root)
 
     if android:
         # Android: copy .so files from local build
@@ -896,6 +1109,13 @@ def update_from_local(ciris_verify_root: Path, android: bool, ios: bool) -> None
     print(f"\n{'='*50}")
     print(f"CIRISVerify v{version} updated successfully")
     print(f"{'='*50}")
+
+    if desktop:
+        import platform as plat
+
+        print(f"\nDesktop ({plat.system()}):")
+        print(f"  Binary installed to: {FFI_BINDINGS_DIR.relative_to(REPO_ROOT)}/")
+        print("  Ready to use - no additional steps required")
 
     if ios:
         print("\niOS next steps:")
@@ -931,16 +1151,24 @@ Examples:
     parser.add_argument("--skip-checksums", action="store_true", help="Skip checksum verification")
     parser.add_argument("--ios-only", action="store_true", help="Only update iOS")
     parser.add_argument("--android-only", action="store_true", help="Only update Android")
+    parser.add_argument("--desktop-only", action="store_true", help="Only update desktop (Linux/macOS/Windows)")
+    parser.add_argument("--no-desktop", action="store_true", help="Skip desktop binary update")
     parser.add_argument("--no-zip", action="store_true", help="Skip rebuilding Resources.zip")
     args = parser.parse_args()
 
     # Determine platforms
-    do_android = not args.ios_only
-    do_ios = not args.android_only
+    if args.desktop_only:
+        do_android = False
+        do_ios = False
+        do_desktop = True
+    else:
+        do_android = not args.ios_only and not args.desktop_only
+        do_ios = not args.android_only and not args.desktop_only
+        do_desktop = not args.no_desktop and not args.ios_only and not args.android_only
 
     # Local build mode
     if args.local:
-        update_from_local(args.local, android=do_android, ios=do_ios)
+        update_from_local(args.local, android=do_android, ios=do_ios, desktop=do_desktop)
         return
 
     # GitHub release mode
@@ -970,6 +1198,12 @@ Examples:
                 print(f"  Loaded {len(checksums)} checksums")
             except Exception as e:
                 print(f"  Could not load checksums: {e}")
+
+        # Desktop binary (from PyPI wheel)
+        if do_desktop:
+            if not update_desktop_binary(version, tmpdir):
+                print("\n❌ Desktop binary update failed - aborting release")
+                sys.exit(1)
 
         if do_android:
             android_dir = tmpdir / "android_dl"
@@ -1004,6 +1238,13 @@ Examples:
     print(f"\n{'='*50}")
     print(f"CIRISVerify updated to v{version}")
     print(f"{'='*50}")
+
+    if do_desktop:
+        import platform as plat
+
+        print(f"\nDesktop ({plat.system()}):")
+        print(f"  Binary installed to: {FFI_BINDINGS_DIR.relative_to(REPO_ROOT)}/")
+        print("  Ready to use - no additional steps required")
 
     if do_android:
         print("\nAndroid next steps:")

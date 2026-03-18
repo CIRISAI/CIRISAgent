@@ -5,6 +5,7 @@ import ai.ciris.api.models.ImagePayload
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.ReasoningEvent
 import ai.ciris.mobile.shared.api.ReasoningStreamClient
+import ai.ciris.mobile.shared.ui.screens.graph.PipelineState
 import ai.ciris.mobile.shared.auth.TokenManager
 import ai.ciris.mobile.shared.models.ActionDetails
 import ai.ciris.mobile.shared.models.ActionType
@@ -178,6 +179,10 @@ class InteractViewModel(
     // Timeline events - minimal storage for bubble net
     private val _timelineEvents = MutableStateFlow<List<TimelineEvent>>(emptyList())
     val timelineEvents: StateFlow<List<TimelineEvent>> = _timelineEvents.asStateFlow()
+
+    // H3ERE pipeline scaffolding state - tracks which pipeline stages are active
+    private val _pipelineState = MutableStateFlow(PipelineState())
+    val pipelineState: StateFlow<PipelineState> = _pipelineState.asStateFlow()
 
     // Show timeline popup
     private val _showTimeline = MutableStateFlow(false)
@@ -766,8 +771,28 @@ class InteractViewModel(
                 if (newMessages.isNotEmpty()) {
                     logInfo(method, "Adding ${newMessages.size} new messages to chat")
                     // Merge with existing messages to preserve action entries
+                    // Use content + timestamp window deduplication for USER messages
+                    // (local ID vs server ID differ, but we don't want to collapse
+                    // legitimately repeated messages like "ok" sent at different times)
                     val allMessages = (_messages.value + deduplicatedMessages)
-                        .distinctBy { it.id }
+                        .distinctBy { msg ->
+                            when (msg.type) {
+                                MessageType.USER -> {
+                                    // Dedupe USER messages by content + timestamp window (5 sec)
+                                    // This handles local-vs-server ID mismatch while preserving
+                                    // intentionally repeated messages sent at different times
+                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 5000 // 5-second buckets
+                                    "USER:${msg.text}:$timestampWindow"
+                                }
+                                MessageType.AGENT -> {
+                                    // Dedupe AGENT messages by content + timestamp window (10 sec)
+                                    // Local response (from sendMessage) and server history have different IDs
+                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 10000 // 10-second buckets
+                                    "AGENT:${msg.text}:$timestampWindow"
+                                }
+                                else -> msg.id // ACTION messages use ID
+                            }
+                        }
                         .sortedBy { it.timestamp }
                         .takeLast(50)
                     _messages.value = allMessages
@@ -981,12 +1006,16 @@ class InteractViewModel(
                 val ponderTopic = metadata?.get("topic")?.jsonPrimitiveContent()
                     ?: metadata?.get("ponder_topic")?.jsonPrimitiveContent()
 
+                // Parse ponder_questions from the double-encoded parameters JSON string
+                val ponderQuestions = parsePonderQuestions(metadata?.get("parameters"))
+
                 ActionDetails(
                     actionType = actionType,
                     outcome = outcome,
                     auditEntryId = auditEntryId,
                     description = description,
-                    ponderTopic = ponderTopic
+                    ponderTopic = ponderTopic,
+                    ponderQuestions = ponderQuestions
                 )
             }
             else -> {
@@ -1076,6 +1105,45 @@ class InteractViewModel(
     }
 
     /**
+     * Parse ponder questions from double-encoded parameters JSON.
+     * The parameters field contains a JSON string like:
+     * "{\"ponder_questions\": \"[\\\"Question 1\\\", \\\"Question 2\\\"]\", ...}"
+     */
+    private fun parsePonderQuestions(parametersElement: kotlinx.serialization.json.JsonElement?): List<String> {
+        if (parametersElement == null) return emptyList()
+
+        try {
+            // First, get the parameters string
+            val parametersStr = parametersElement.jsonPrimitiveContent() ?: return emptyList()
+
+            // Parse the outer JSON
+            val paramsJson = kotlinx.serialization.json.Json.parseToJsonElement(parametersStr)
+            if (paramsJson !is kotlinx.serialization.json.JsonObject) return emptyList()
+
+            // Get the ponder_questions field (which is also a JSON-encoded string)
+            val questionsElement = paramsJson["ponder_questions"] ?: return emptyList()
+            val questionsStr = when (questionsElement) {
+                is kotlinx.serialization.json.JsonPrimitive -> questionsElement.content
+                else -> questionsElement.toString()
+            }
+
+            // Parse the questions array
+            val questionsJson = kotlinx.serialization.json.Json.parseToJsonElement(questionsStr)
+            if (questionsJson !is kotlinx.serialization.json.JsonArray) return emptyList()
+
+            return questionsJson.mapNotNull { element ->
+                when (element) {
+                    is kotlinx.serialization.json.JsonPrimitive -> element.content
+                    else -> null
+                }
+            }
+        } catch (e: Exception) {
+            logDebug("parsePonderQuestions", "Failed to parse: ${e.message}")
+            return emptyList()
+        }
+    }
+
+    /**
      * Update processing status
      */
     fun updateProcessingStatus(eventType: String, action: String? = null) {
@@ -1156,6 +1224,19 @@ class InteractViewModel(
                                 logInfo(method, "SSE disconnected")
                                 _sseConnected.value = false
                                 _agentProcessingState.value = AgentProcessingState.IDLE
+                            }
+                            is ReasoningEvent.PipelineStep -> {
+                                // Update pipeline scaffolding visualization
+                                val now = Clock.System.now().toEpochMilliseconds()
+                                if (event.isNewThought) {
+                                    // New thought round - reset then activate
+                                    _pipelineState.value = _pipelineState.value
+                                        .reset()
+                                        .activate(event.eventType, now)
+                                } else {
+                                    _pipelineState.value = _pipelineState.value
+                                        .activate(event.eventType, now)
+                                }
                             }
                             is ReasoningEvent.Emoji -> {
                                 // Add bubble emoji (floats up and disappears)

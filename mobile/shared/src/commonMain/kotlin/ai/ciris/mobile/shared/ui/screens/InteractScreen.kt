@@ -15,6 +15,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -70,6 +71,8 @@ import kotlinx.datetime.toLocalDateTime
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.ui.screens.graph.GraphColors
 import ai.ciris.mobile.shared.ui.screens.graph.LiveGraphBackground
+import ai.ciris.mobile.shared.ui.screens.graph.PipelineState
+import ai.ciris.mobile.shared.ui.screens.graph.VisualizationMode
 import ai.ciris.mobile.shared.ui.theme.ColorTheme
 import ai.ciris.mobile.shared.ui.theme.InteractTheme
 
@@ -96,6 +99,7 @@ fun InteractScreen(
     onOpenBilling: () -> Unit = {},
     onOpenSystem: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onOpenSessions: () -> Unit = {},  // Navigate to sessions screen
     apiClient: CIRISApiClient? = null,  // For live background
     liveBackgroundEnabled: Boolean = false,  // From settings
     colorTheme: ColorTheme = ColorTheme.DEFAULT,  // Color theme from settings
@@ -128,6 +132,7 @@ fun InteractScreen(
     val creditStatus by viewModel.creditStatus.collectAsState()
     val trustStatus by viewModel.trustStatus.collectAsState()
     val attachedFiles by viewModel.attachedFiles.collectAsState()
+    val pipelineState by viewModel.pipelineState.collectAsState()
 
     // Observe text input requests for test automation
     val textInputRequest by TestAutomation.textInputRequests.collectAsState()
@@ -147,16 +152,45 @@ fun InteractScreen(
     // File picker state
     var showFilePicker by remember { mutableStateOf(false) }
 
+    // Visualization legend state (separate from emoji legend)
+    var showVizLegend by remember { mutableStateOf(false) }
+
     // Focus requester for the text input
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
+    // Visualization mode state - controls the live graph display
+    var visualizationMode by remember {
+        mutableStateOf(if (liveBackgroundEnabled) VisualizationMode.BACKGROUND else VisualizationMode.OFF)
+    }
+
+    // Sync visualization mode with liveBackgroundEnabled setting changes
+    LaunchedEffect(liveBackgroundEnabled) {
+        visualizationMode = if (liveBackgroundEnabled) {
+            // When enabled, default to BACKGROUND (user can still toggle to FG/OFF)
+            if (visualizationMode == VisualizationMode.OFF) VisualizationMode.BACKGROUND else visualizationMode
+        } else {
+            // When disabled, force OFF
+            VisualizationMode.OFF
+        }
+    }
+
+    // Effective live background: enabled when visualization mode is not OFF
+    val effectiveLiveBackground = visualizationMode != VisualizationMode.OFF
+
+    // Full-screen fidget mode when FOREGROUND
+    val isFullscreenFidget = visualizationMode == VisualizationMode.FOREGROUND
+
+    // Multi-axis rotation for fidget mode (vertical spin - full 360 rotation)
+    var verticalRotation by remember { mutableStateOf(0f) }
+    var verticalVelocity by remember { mutableStateOf(0f) }
+
     // Create theme based on live background state, color theme, and brightness preference
     // All colors defined in LiveBackgroundTheme.kt, accent colors from ColorTheme
-    val theme = remember(liveBackgroundEnabled, colorTheme, isDarkMode) {
+    val theme = remember(effectiveLiveBackground, colorTheme, isDarkMode) {
         // Also update GraphColors to use the selected theme for graph node colors
         GraphColors.setTheme(colorTheme)
-        InteractTheme.forLiveBackground(liveBackgroundEnabled, colorTheme, isDarkMode)
+        InteractTheme.forLiveBackground(effectiveLiveBackground, colorTheme, isDarkMode)
     }
 
     // Cylinder rotation state for swipe-to-spin
@@ -170,12 +204,12 @@ fun InteractScreen(
     val energyDecayRate = 0.92f  // Energy decays faster when not spinning fast
     val energyGainMultiplier = 0.15f  // How much velocity contributes to energy (reduced for more flicks needed)
 
-    // Momentum animation loop for cylinder spin
+    // Momentum animation loop for cylinder spin and tilt
     LaunchedEffect(Unit) {
         while (isActive) {
             kotlinx.coroutines.delay(16)  // ~60 FPS
 
-            // Always apply momentum (even during touch - only actual drag changes velocity)
+            // Horizontal spin momentum
             if (abs(rotationVelocity) > 0.1f) {
                 cylinderRotation += rotationVelocity
 
@@ -200,6 +234,15 @@ fun InteractScreen(
                 spinEnergy *= 0.95f
             }
 
+            // Vertical rotation momentum (fidget mode - full 360 spin over the top)
+            if (abs(verticalVelocity) > 0.1f) {
+                verticalRotation += verticalVelocity
+                verticalVelocity *= 0.97f  // Same decay as horizontal for satisfying spin
+                // Normalize rotation
+                while (verticalRotation > 360f) verticalRotation -= 360f
+                while (verticalRotation < -360f) verticalRotation += 360f
+            }
+
             // Clamp energy
             if (spinEnergy < 0.1f) spinEnergy = 0f
         }
@@ -214,28 +257,43 @@ fun InteractScreen(
     ) {
         // Live animated memory graph background (when enabled)
         // Event trigger: timeline events trigger organic graph refreshes
-        if (liveBackgroundEnabled && apiClient != null) {
+        // Opacity varies by visualization mode: BG=0.85, FG=1.0
+        if (effectiveLiveBackground && apiClient != null) {
+            val graphOpacity = when (visualizationMode) {
+                VisualizationMode.FOREGROUND -> 1.0f  // Full opacity in foreground mode
+                VisualizationMode.BACKGROUND -> 0.85f  // Subtle in background mode
+                VisualizationMode.OFF -> 0f  // Should not reach here
+            }
             LiveGraphBackground(
                 apiClient = apiClient,
                 modifier = Modifier.fillMaxSize(),
+                baseOpacity = graphOpacity,
                 eventTrigger = timelineEvents.size,  // New events trigger refresh
                 externalRotation = cylinderRotation,
+                externalTilt = verticalRotation,  // Vertical rotation for fidget mode (full 360)
                 spinEnergy = spinEnergy,
                 spinEnergyThreshold = spinEnergyThreshold,
                 onSpinApartTriggered = {
                     // Reset energy after explosion
                     spinEnergy = 0f
-                }
+                },
+                pipelineState = pipelineState,  // H3ERE scaffolding visualization
+                isForegroundMode = isFullscreenFidget,  // Thicker rings in foreground
+                ringColor = colorTheme.tertiary,  // Use theme's tertiary color for rings
+                colorTheme = colorTheme  // Pass theme for dynamic graph node coloring
             )
         }
 
         // Main content column with platform-specific keyboard padding
+        // Note: In fullscreen fidget mode, we hide the UI by setting alpha to 0
+        // instead of using early return (which breaks Compose recomposition)
         // Android: Uses imePadding() for proper keyboard avoidance
         // iOS: No-op - native keyboard avoidance handles this automatically
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .platformImePadding()
+                .alpha(if (isFullscreenFidget) 0f else 1f)  // Hide in fullscreen fidget mode
         ) {
             // Enhanced status bar with LLM health, credits, and trust shield
             EnhancedStatusBar(
@@ -244,12 +302,15 @@ fun InteractScreen(
                 llmHealth = llmHealth,
                 creditStatus = creditStatus,
                 trustStatus = trustStatus,
+                visualizationMode = visualizationMode,
+                onVisualizationToggle = { visualizationMode = visualizationMode.next() },
                 onShutdown = { viewModel.shutdown(emergency = false) },
                 onEmergencyStop = { viewModel.shutdown(emergency = true) },
                 onTrustShieldClick = onOpenTrustPage,
                 onCreditsClick = onOpenBilling,
                 onLocalClick = onOpenSystem,
                 onSettingsClick = onOpenSettings,
+                onSessionsClick = onOpenSessions,
                 theme = theme
             )
 
@@ -380,6 +441,85 @@ fun InteractScreen(
         )
 
         // Note: ErrorToast, DebugIndicator, and DebugConsole removed for production release
+
+        // Fullscreen fidget mode overlay - on top of everything when active
+        // Uses conditional visibility instead of early return to avoid breaking Compose recomposition
+        if (isFullscreenFidget) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Transparent)  // Transparent - graph shows through
+                    .pointerInput(Unit) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { isDraggingHorizontal = true },
+                            onDragEnd = { isDraggingHorizontal = false },
+                            onDragCancel = { isDraggingHorizontal = false },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                val rotationSensitivity = 0.5f
+                                val deltaRotation = dragAmount * rotationSensitivity
+                                cylinderRotation += deltaRotation
+                                rotationVelocity = rotationVelocity * 0.3f + deltaRotation * 0.7f
+                            }
+                        )
+                    }
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onVerticalDrag = { change, dragAmount ->
+                                change.consume()
+                                val rotationSensitivity = 0.5f
+                                // Reversed: drag down = rotate forward (positive)
+                                val deltaRotation = dragAmount * rotationSensitivity
+                                verticalRotation += deltaRotation
+                                verticalVelocity = verticalVelocity * 0.3f + deltaRotation * 0.7f
+                            }
+                        )
+                    }
+            ) {
+                // X button to exit fullscreen fidget mode - top right corner
+                IconButton(
+                    onClick = { visualizationMode = VisualizationMode.BACKGROUND },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                        .size(48.dp)
+                        .background(
+                            color = theme.surface.copy(alpha = 0.7f),
+                            shape = CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Exit fullscreen",
+                        tint = theme.textPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                // Legend button INSIDE fullscreen overlay so it receives touch events
+                // Same position as BG mode for consistency
+                VisualizationLegendButton(
+                    isExpanded = showVizLegend,
+                    onToggle = { showVizLegend = !showVizLegend },
+                    theme = theme,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 140.dp)
+                )
+            }
+        }
+
+        // Visualization legend button for BG mode (outside fullscreen overlay)
+        if (visualizationMode == VisualizationMode.BACKGROUND) {
+            VisualizationLegendButton(
+                isExpanded = showVizLegend,
+                onToggle = { showVizLegend = !showVizLegend },
+                theme = theme,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 140.dp)
+            )
+        }
     } // End of Box
 }
 
@@ -398,12 +538,15 @@ private fun EnhancedStatusBar(
     llmHealth: LlmHealthStatus,
     creditStatus: CreditStatus,
     trustStatus: TrustStatus,
+    visualizationMode: VisualizationMode,
+    onVisualizationToggle: () -> Unit,
     onShutdown: () -> Unit,
     onEmergencyStop: () -> Unit,
     onTrustShieldClick: () -> Unit,
     onCreditsClick: () -> Unit,
     onLocalClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onSessionsClick: () -> Unit,
     theme: InteractTheme,
     modifier: Modifier = Modifier
 ) {
@@ -473,15 +616,61 @@ private fun EnhancedStatusBar(
                     .padding(bottom = 6.dp)
                     .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Cognitive state
-                Text(
-                    text = status,
-                    fontSize = 10.sp,
-                    color = theme.textSecondary,
-                    modifier = Modifier.weight(1f)
-                )
+                // Cognitive state - clickable to go to Sessions
+                Surface(
+                    onClick = onSessionsClick,
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color.Transparent
+                ) {
+                    Text(
+                        text = status,
+                        fontSize = 10.sp,
+                        color = theme.textSecondary,
+                        modifier = Modifier.padding(4.dp)
+                    )
+                }
+
+                // Visualization mode toggle button
+                Surface(
+                    onClick = onVisualizationToggle,
+                    shape = RoundedCornerShape(4.dp),
+                    color = when (visualizationMode) {
+                        VisualizationMode.FOREGROUND -> theme.statusConnected.copy(alpha = 0.2f)
+                        VisualizationMode.BACKGROUND -> theme.textAccent.copy(alpha = 0.15f)
+                        VisualizationMode.OFF -> Color.Transparent
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = "VIZ",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = when (visualizationMode) {
+                                VisualizationMode.FOREGROUND -> theme.statusConnected
+                                VisualizationMode.BACKGROUND -> theme.textAccent
+                                VisualizationMode.OFF -> theme.textMuted
+                            }
+                        )
+                        Text(
+                            text = visualizationMode.label,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = when (visualizationMode) {
+                                VisualizationMode.FOREGROUND -> theme.statusConnected
+                                VisualizationMode.BACKGROUND -> theme.textAccent
+                                VisualizationMode.OFF -> theme.textMuted
+                            }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
 
                 // Shutdown button
                 OutlinedButton(
@@ -894,8 +1083,9 @@ private fun ChatMessageList(
         }
     }
 
-    // Auto-scroll to latest message
-    LaunchedEffect(messages.size) {
+    // Auto-scroll to latest message - trigger on size OR last message change
+    val lastMessageKey = messages.lastOrNull()?.let { "${it.id}_${it.timestamp}" } ?: ""
+    LaunchedEffect(messages.size, lastMessageKey) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(0)
         }
@@ -1358,8 +1548,30 @@ private fun ActionExpandedDetails(
                     )
                 }
             }
+            ActionType.PONDER -> {
+                // Show ponder questions if available
+                val questions = actionDetails.ponderQuestions
+                if (questions.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Questions:",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF0369A1)
+                        )
+                        questions.forEach { question ->
+                            Text(
+                                text = "• $question",
+                                fontSize = 10.sp,
+                                color = Color(0xFF6B7280),
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+                }
+            }
             else -> {
-                // No additional details for SPEAK, OBSERVE, FORGET, PONDER, TASK_COMPLETE
+                // No additional details for SPEAK, OBSERVE, FORGET, TASK_COMPLETE
             }
         }
     }
@@ -2079,6 +2291,134 @@ private fun LegendRow(
             text = description,
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+/**
+ * Visualization legend button - question mark that expands to show
+ * H3ERE pipeline stages and graph node colors
+ */
+@Composable
+private fun VisualizationLegendButton(
+    isExpanded: Boolean,
+    onToggle: () -> Unit,
+    theme: InteractTheme,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.End
+    ) {
+        // Expandable legend panel
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
+            exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut()
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = theme.surface.copy(alpha = 0.9f),
+                shadowElevation = 4.dp,
+                modifier = Modifier
+                    .widthIn(max = 200.dp)
+                    .padding(bottom = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Title
+                    Text(
+                        text = "H3ERE Pipeline",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = theme.textPrimary
+                    )
+
+                    // Pipeline stages (bottom to top to match visualization)
+                    VisualizationLegendItem("THINK", Color(0xFF60A5FA), "Start reasoning", theme)
+                    VisualizationLegendItem("CONTEXT", Color(0xFF34D399), "Gather context", theme)
+                    VisualizationLegendItem("DMA", Color(0xFFFBBF24), "Decision making", theme)
+                    VisualizationLegendItem("IDMA", Color(0xFFF97316), "Intuition check", theme)
+                    VisualizationLegendItem("SELECT", Color(0xFFA78BFA), "Choose action", theme)
+                    VisualizationLegendItem("ETHICS", Color(0xFF38BDF8), "Ethics check", theme)
+                    VisualizationLegendItem("ACT", Color(0xFF4ADE80), "Execute action", theme)
+
+                    Divider(color = theme.textMuted.copy(alpha = 0.3f))
+
+                    // Graph nodes
+                    Text(
+                        text = "Memory Graph",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = theme.textSecondary
+                    )
+                    VisualizationLegendItem("LOCAL", theme.textAccent, "Local scope", theme)
+                    VisualizationLegendItem("IDENTITY", theme.textSecondary, "Identity scope", theme)
+                    VisualizationLegendItem("ENVIRON", theme.statusConnected, "Environment", theme)
+                }
+            }
+        }
+
+        // Question mark button - larger and more visible
+        Surface(
+            onClick = onToggle,
+            shape = CircleShape,
+            color = theme.surface.copy(alpha = 0.95f),
+            shadowElevation = 4.dp,
+            modifier = Modifier.size(56.dp)
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Text(
+                    text = "?",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = theme.textAccent
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Single item in the visualization legend
+ */
+@Composable
+private fun VisualizationLegendItem(
+    label: String,
+    color: Color,
+    description: String,
+    theme: InteractTheme,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Color dot
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .background(color, CircleShape)
+        )
+        // Label
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            color = color,
+            modifier = Modifier.width(60.dp)
+        )
+        // Description
+        Text(
+            text = description,
+            fontSize = 9.sp,
+            color = theme.textMuted
         )
     }
 }

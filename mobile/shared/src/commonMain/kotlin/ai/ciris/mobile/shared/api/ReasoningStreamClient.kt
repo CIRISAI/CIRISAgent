@@ -146,6 +146,12 @@ class ReasoningStreamClient(
                         it.contains("task_complete") || it.contains("reject")
                     } == true)
 
+                // Emit pipeline step for scaffolding visualization
+                result.add(ReasoningEvent.PipelineStep(
+                    eventType = eventType,
+                    isNewThought = eventType == "thought_start"
+                ))
+
                 result.add(ReasoningEvent.Emoji(emoji, eventType, isComplete))
             }
         } catch (e: Exception) {
@@ -166,5 +172,15 @@ sealed class ReasoningEvent {
         val emoji: String,
         val eventType: String,
         val isComplete: Boolean = false
+    ) : ReasoningEvent()
+
+    /**
+     * Raw pipeline step event for scaffolding visualization.
+     * Emitted for every SSE event type so the UI can light up
+     * the corresponding H3ERE pipeline ring.
+     */
+    data class PipelineStep(
+        val eventType: String,
+        val isNewThought: Boolean = false  // true for thought_start (resets pipeline)
     ) : ReasoningEvent()
 }

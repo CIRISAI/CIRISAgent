@@ -181,13 +181,20 @@ class DreamProcessor(BaseProcessor):
         from ciris_engine.logic.processors.support.thought_manager import ThoughtManager
 
         # Initialize managers if needed
+        # IMPORTANT: Dreams always use "default" occurrence - only one occurrence processes dreams
+        dream_occurrence_id = "default"
+        logger.info(
+            f"[DREAM] Initializing dream tasks with occurrence_id={dream_occurrence_id} "
+            f"(agent_occurrence_id={self.agent_occurrence_id})"
+        )
+
         if not self.task_manager:
             if not self._time_service:
                 raise RuntimeError("TimeService not available for TaskManager")
             self.task_manager = TaskManager(
                 max_active_tasks=self.max_active_tasks,
                 time_service=self._time_service,
-                agent_occurrence_id=self.agent_occurrence_id,
+                agent_occurrence_id=dream_occurrence_id,  # Always "default" for dreams
             )
         if not self.thought_manager:
             if not self._time_service:
@@ -196,7 +203,7 @@ class DreamProcessor(BaseProcessor):
                 time_service=self._time_service,
                 max_active_thoughts=self.max_active_thoughts,
                 default_channel_id=self.startup_channel_id,
-                agent_occurrence_id=self.agent_occurrence_id,
+                agent_occurrence_id=dream_occurrence_id,  # Always "default" for dreams
             )
 
         # Clear any previous tasks
@@ -298,12 +305,31 @@ class DreamProcessor(BaseProcessor):
             ]
         )
 
-        # Activate all tasks immediately (use "default" for shared task coordination across occurrences)
+        # Activate all tasks immediately (use "default" - dreams always run on default occurrence)
         from ciris_engine.logic import persistence
 
         if self._time_service:
+            activation_success = 0
+            activation_failed = 0
             for task in self._dream_tasks:
-                persistence.update_task_status(task.task_id, TaskStatus.ACTIVE, "default", self._time_service)
+                # Log task details before activation
+                logger.debug(
+                    f"[DREAM] Activating task {task.task_id}: "
+                    f"occurrence={task.agent_occurrence_id}, status={task.status}"
+                )
+                success = persistence.update_task_status(task.task_id, TaskStatus.ACTIVE, "default", self._time_service)
+                if success:
+                    activation_success += 1
+                else:
+                    activation_failed += 1
+                    logger.error(
+                        f"[DREAM] FAILED to activate task {task.task_id} - "
+                        f"task.occurrence={task.agent_occurrence_id}, target_occurrence=default"
+                    )
+
+            logger.info(
+                f"[DREAM] Task activation complete: {activation_success} activated, {activation_failed} failed"
+            )
 
         logger.info(f"Created and activated {len(self._dream_tasks)} dream tasks")
 
@@ -531,15 +557,34 @@ class DreamProcessor(BaseProcessor):
                     f"[DREAM] Round {round_number}: Batch complete - {success_count} success, {error_count} errors"
                 )
 
-            # Check if all tasks are complete
-            active_count = persistence.count_active_tasks()
-            pending_count = len(persistence.get_pending_tasks_for_activation(limit=1))
+            # Check if all tasks AND thoughts are complete
+            # Use "default" occurrence for all dream queries (dreams always run on default)
+            active_count = persistence.count_active_tasks("default")
+            pending_count = len(persistence.get_pending_tasks_for_activation(limit=1, occurrence_id="default"))
 
-            if active_count == 0 and pending_count == 0:
-                logger.info("All dream tasks completed")
+            # Also check for any pending or processing thoughts - they need to complete too
+            # (followup thoughts created by handlers need to be processed before we exit)
+            pending_thoughts = persistence.count_thoughts_by_status(ThoughtStatus.PENDING, "default")
+            processing_thoughts = persistence.count_thoughts_by_status(ThoughtStatus.PROCESSING, "default")
+
+            # Always log dream state for debugging
+            logger.info(
+                f"[DREAM] Round {round_number} state: "
+                f"active_tasks={active_count}, pending_tasks={pending_count}, "
+                f"pending_thoughts={pending_thoughts}, processing_thoughts={processing_thoughts}"
+            )
+
+            if active_count == 0 and pending_count == 0 and pending_thoughts == 0 and processing_thoughts == 0:
+                logger.info("[DREAM] All dream tasks and thoughts completed - triggering exit")
                 # Mark dream as complete
                 if self._stop_event:
                     self._stop_event.set()
+            elif active_count == 0 and pending_count == 0:
+                # Tasks done but thoughts remain - this is the followup thought scenario
+                logger.warning(
+                    f"[DREAM] All tasks complete but {pending_thoughts} pending + "
+                    f"{processing_thoughts} processing thoughts remain - continuing to process"
+                )
 
         except Exception as e:
             logger.error(f"Error in dream round {round_number}: {e}", exc_info=True)

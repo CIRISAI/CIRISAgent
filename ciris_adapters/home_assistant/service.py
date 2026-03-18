@@ -647,7 +647,7 @@ class HAIntegrationService:
                         entries = await response.json()
                         for entry in entries:
                             if entry.get("domain") == "music_assistant":
-                                entry_id = entry.get("entry_id")
+                                entry_id: str | None = entry.get("entry_id")
                                 logger.info(f"[MA] Found config_entry_id: {entry_id}")
                                 return entry_id
                     logger.warning("[MA] Could not find music_assistant config entry")

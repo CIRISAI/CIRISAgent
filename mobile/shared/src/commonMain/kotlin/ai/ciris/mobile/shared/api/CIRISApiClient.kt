@@ -876,21 +876,43 @@ class CIRISApiClient(
         logInfo(method, "Listing models: provider=$provider, baseUrl=${baseUrl ?: "default"}")
 
         return try {
-            val request = ai.ciris.api.models.LLMValidationRequest(
-                provider = provider,
-                apiKey = apiKey,
-                baseUrl = baseUrl
+            // Use manual HTTP request to ensure auth header is sent
+            // (generated SDK has requiresAuthentication=false for this endpoint)
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+
+            val requestBody = mapOf(
+                "provider" to provider,
+                "api_key" to apiKey,
+                "base_url" to baseUrl
             )
 
-            val response = setupApi.listModelsV1SetupListModelsPost(request)
-            logDebug(method, "Response: status=${response.status}")
+            val response = client.post("${this.baseUrl}/v1/setup/list-models") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(io.ktor.http.ContentType.Application.Json)
+                setBody(requestBody)
+            }
 
-            val body = response.body()
-            val data = body.`data`
+            logDebug(method, "Response: status=${response.status}")
+            client.close()
+
+            if (response.status.value !in 200..299) {
+                logError(method, "API returned error status: ${response.status}")
+                return emptyList()
+            }
+
+            val body = response.body<ListModelsApiResponse>()
+            val data = body.data ?: return emptyList()
 
             val models = data.models?.map { model ->
                 ModelInfo(
-                    id = model.id,
+                    id = model.id ?: "",
                     displayName = model.displayName,
                     cirisCompatible = model.cirisCompatible ?: false,
                     cirisRecommended = model.cirisRecommended ?: false,
@@ -898,13 +920,37 @@ class CIRISApiClient(
                 )
             } ?: emptyList()
 
-            logInfo(method, "Listed ${models.size} models from ${data.source}")
+            logInfo(method, "Listed ${models.size} models from ${data.source ?: "unknown"}")
             models
         } catch (e: Exception) {
             logException(method, e)
             emptyList()
         }
     }
+
+    /**
+     * Response wrapper for /v1/setup/list-models endpoint
+     */
+    @Serializable
+    private data class ListModelsApiResponse(
+        val status: String? = null,
+        val data: ListModelsData? = null
+    )
+
+    @Serializable
+    private data class ListModelsData(
+        val source: String? = null,
+        val models: List<LiveModelInfo>? = null
+    )
+
+    @Serializable
+    private data class LiveModelInfo(
+        val id: String? = null,
+        @SerialName("display_name") val displayName: String? = null,
+        @SerialName("ciris_compatible") val cirisCompatible: Boolean? = null,
+        @SerialName("ciris_recommended") val cirisRecommended: Boolean? = null,
+        @SerialName("context_window") val contextWindow: Int? = null
+    )
 
     /**
      * Get CIRISVerify status for Trust and Security display.

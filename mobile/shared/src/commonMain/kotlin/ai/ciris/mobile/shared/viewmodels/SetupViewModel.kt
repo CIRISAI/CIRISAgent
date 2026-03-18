@@ -674,9 +674,13 @@ class SetupViewModel : ViewModel() {
             // BYOK mode - use user-provided API key
             val providerId = when (currentState.llmProvider) {
                 "OpenAI" -> "openai"
+                "OpenRouter" -> "openrouter"
                 "Anthropic" -> "anthropic"
+                "Google AI" -> "google"
+                "Groq" -> "groq"
+                "Together AI" -> "together"
                 "Azure OpenAI" -> "other"
-                "LocalAI" -> "local"
+                "LocalAI", "Local LLM" -> "local"
                 else -> "openai"
             }
 
@@ -684,6 +688,10 @@ class SetupViewModel : ViewModel() {
             if (apiKey.isEmpty() && providerId == "local") {
                 apiKey = "local"
             }
+
+            // For BYOK mode, we still need OAuth fields if user authenticated via OAuth
+            // This allows OAuth users to use their own API keys while still using OAuth for login
+            val isOAuthUser = currentState.isGoogleAuth && currentState.googleUserId != null
 
             CompleteSetupRequest(
                 llm_provider = providerId,
@@ -700,9 +708,18 @@ class SetupViewModel : ViewModel() {
                 // Admin account (auto-generated)
                 system_admin_password = adminPassword,
 
-                // Local user account
-                admin_username = currentState.username.ifEmpty { "admin" },
-                admin_password = currentState.userPassword,
+                // User account - OAuth users get auto-generated username, local users provide their own
+                admin_username = if (isOAuthUser) {
+                    "oauth_${currentState.oauthProvider}_user"
+                } else {
+                    currentState.username.ifEmpty { "admin" }
+                },
+                admin_password = if (isOAuthUser) null else currentState.userPassword,
+
+                // OAuth fields - include if user authenticated via OAuth (even in BYOK mode)
+                oauth_provider = if (isOAuthUser) currentState.oauthProvider else null,
+                oauth_external_id = if (isOAuthUser) currentState.googleUserId else null,
+                oauth_email = if (isOAuthUser) currentState.googleEmail else null,
 
                 // Node flow fields
                 node_url = nodeFlowData?.nodeUrl,

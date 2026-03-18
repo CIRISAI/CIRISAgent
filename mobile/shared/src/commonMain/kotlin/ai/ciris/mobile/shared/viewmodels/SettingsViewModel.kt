@@ -252,10 +252,14 @@ class SettingsViewModel(
             _llmProvider.value = config.provider
             _llmModel.value = config.model
             _llmBaseUrl.value = config.baseUrl ?: ""
-            _availableModels.value = modelsByProvider[config.provider] ?: listOf(config.model)
+            // Start with current model as fallback while fetching
+            _availableModels.value = if (config.model.isNotEmpty()) listOf(config.model) else emptyList()
 
-            // Load API key from secure storage (not from API for security)
+            // Load API key FIRST, then fetch models (must be sequential)
             loadApiKeyFromStorage(config.provider)
+            // Now fetch models with the loaded API key
+            logInfo(method, "API key loaded, now fetching models for provider: ${config.provider}")
+            fetchModelsForProvider(config.provider)
         }
 
         logInfo(method, "Configuration loaded successfully from $source")
@@ -323,6 +327,7 @@ class SettingsViewModel(
 
     /**
      * Update LLM provider (BYOK mode only).
+     * Fetches available models from the API for the selected provider.
      */
     fun onProviderChanged(provider: String) {
         if (_isCirisProxy.value) {
@@ -330,15 +335,71 @@ class SettingsViewModel(
             return
         }
 
+        val method = "onProviderChanged"
+        logInfo(method, "Provider changed to: $provider")
+
         _llmProvider.value = provider
+        // Use static fallback first while fetching
         _availableModels.value = modelsByProvider[provider] ?: emptyList()
 
         // Reset model to first available
         _llmModel.value = modelsByProvider[provider]?.firstOrNull() ?: ""
 
-        // Load API key for new provider
+        // Load API key for new provider and fetch live models
         viewModelScope.launch {
             loadApiKeyFromStorage(provider)
+            fetchModelsForProvider(provider)
+        }
+    }
+
+    /**
+     * Fetch available models from API for a provider.
+     * Falls back to static list if API call fails.
+     */
+    private suspend fun fetchModelsForProvider(provider: String) {
+        val method = "fetchModelsForProvider"
+        logInfo(method, "Fetching models for provider: $provider")
+
+        try {
+            // Map display name to provider ID for API
+            val providerId = when (provider.lowercase()) {
+                "openai" -> "openai"
+                "openrouter" -> "openrouter"
+                "anthropic" -> "anthropic"
+                "google ai", "google" -> "google"
+                "groq" -> "groq"
+                "together ai", "together" -> "together"
+                "local", "localai" -> "local"
+                else -> provider.lowercase()
+            }
+
+            // Only fetch if we have an API key
+            val apiKey = _apiKey.value
+            if (apiKey.isEmpty() && provider != "local") {
+                logWarn(method, "No API key available, using static model list")
+                return
+            }
+
+            val models = apiClient.listModels(
+                provider = providerId,
+                apiKey = apiKey,
+                baseUrl = _llmBaseUrl.value.takeIf { it.isNotEmpty() }
+            )
+
+            if (models.isNotEmpty()) {
+                _availableModels.value = models.map { it.id }
+                logInfo(method, "Fetched ${models.size} models from API")
+
+                // If current model is not in list, select first available
+                if (_llmModel.value !in _availableModels.value && _availableModels.value.isNotEmpty()) {
+                    _llmModel.value = _availableModels.value.first()
+                }
+            } else {
+                logWarn(method, "API returned no models, keeping static list")
+            }
+        } catch (e: Exception) {
+            logError(method, "Failed to fetch models: ${e.message}")
+            // Keep static fallback
         }
     }
 
@@ -380,8 +441,7 @@ class SettingsViewModel(
 
     /**
      * Save settings (BYOK mode only).
-     * Note: This currently only saves to secure storage.
-     * Full .env update would require backend API call.
+     * Saves to both secure storage and backend .env file.
      */
     fun saveSettings() {
         val method = "saveSettings"
@@ -392,7 +452,7 @@ class SettingsViewModel(
             return
         }
 
-        logInfo(method, "Saving BYOK settings: provider=${_llmProvider.value}, model=${_llmModel.value}")
+        logInfo(method, "Saving BYOK settings: provider=${_llmProvider.value}, model=${_llmModel.value}, baseUrl=${_llmBaseUrl.value}")
 
         viewModelScope.launch {
             _isSaving.value = true
@@ -406,7 +466,34 @@ class SettingsViewModel(
                     throw Exception("API key is required")
                 }
 
-                // Save to secure storage
+                // Map provider display name to ID for API
+                val providerId = when (_llmProvider.value.lowercase()) {
+                    "openai" -> "openai"
+                    "openrouter" -> "openrouter"
+                    "anthropic" -> "anthropic"
+                    "google ai", "google" -> "google"
+                    "groq" -> "groq"
+                    "together ai", "together" -> "together"
+                    "local", "localai" -> "local"
+                    else -> _llmProvider.value.lowercase()
+                }
+
+                // Save to backend .env file first
+                logInfo(method, "Calling API to update .env: provider=$providerId")
+                val result = apiClient.updateLlmConfig(
+                    provider = providerId,
+                    apiKey = _apiKey.value.takeIf { it.isNotEmpty() },
+                    baseUrl = _llmBaseUrl.value.takeIf { it.isNotEmpty() },
+                    model = _llmModel.value.takeIf { it.isNotEmpty() }
+                )
+
+                result.onSuccess { message ->
+                    logInfo(method, "API update successful: $message")
+                }.onFailure { e ->
+                    logWarn(method, "API update failed: ${e.message}, saving to local storage only")
+                }
+
+                // Also save to secure storage for quick access
                 secureStorage.save("llm_provider", _llmProvider.value).getOrThrow()
                 secureStorage.save("llm_model", _llmModel.value).getOrThrow()
                 secureStorage.save("llm_base_url", _llmBaseUrl.value).getOrThrow()
@@ -417,9 +504,6 @@ class SettingsViewModel(
 
                 _saveSuccess.value = true
                 logInfo(method, "Settings saved successfully")
-
-                // Note: To fully update the running agent, we'd need a backend API call
-                // to update the .env file. For now, changes take effect on restart.
 
             } catch (e: Exception) {
                 logError(method, "Failed to save settings: ${e::class.simpleName}: ${e.message}")

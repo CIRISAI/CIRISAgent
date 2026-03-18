@@ -256,20 +256,36 @@ class ActionDispatcher:
             action_type, final_action_result.action_parameters, follow_up_thought_id
         )
 
-        # For TOOL actions, capture the result from the updated thought's follow_up info
-        if action_type == HandlerActionType.TOOL and updated_thought:
-            follow_up_info = getattr(updated_thought, "follow_up_info", None)
-            if follow_up_info:
-                # Extract just the result part if it follows the pattern "Tool '...' executed successfully. Result: ..."
-                if "Result:" in follow_up_info:
-                    result_part = follow_up_info.split("Result:", 1)[-1].strip()
-                    # Truncate if too long for audit
-                    if len(result_part) > 500:
-                        result_part = result_part[:500] + "..."
-                    audit_params["tool_result"] = result_part
-                elif "failed:" in follow_up_info.lower():
-                    # Capture error message
-                    audit_params["tool_result"] = follow_up_info
+        # For TOOL actions, capture the result from the follow-up thought's content
+        if action_type == HandlerActionType.TOOL and follow_up_thought_id:
+            try:
+                follow_up_thought = persistence.get_thought_by_id(
+                    follow_up_thought_id, occurrence_id=thought.agent_occurrence_id
+                )
+                if follow_up_thought and follow_up_thought.content:
+                    follow_up_content = follow_up_thought.content
+                    # Extract result from pattern: "Info: Tool '...' executed successfully. Result: ..."
+                    if "Result:" in follow_up_content:
+                        result_part = follow_up_content.split("Result:", 1)[-1].strip()
+                        # Clean up trailing context
+                        if ". Awaiting" in result_part:
+                            result_part = result_part.split(". Awaiting", 1)[0].strip()
+                        # Truncate if too long for audit
+                        if len(result_part) > 500:
+                            result_part = result_part[:500] + "..."
+                        audit_params["tool_result"] = result_part
+                        logger.debug(f"Captured tool_result from follow-up: {result_part[:100]}...")
+                    elif "failed:" in follow_up_content.lower():
+                        # Capture error message - extract from "Reason: ..." pattern
+                        if "Reason:" in follow_up_content:
+                            error_part = follow_up_content.split("Reason:", 1)[-1].strip()
+                            if ". Review" in error_part:
+                                error_part = error_part.split(". Review", 1)[0].strip()
+                            audit_params["tool_result"] = f"FAILED: {error_part}"
+                        else:
+                            audit_params["tool_result"] = "FAILED: See follow-up thought for details"
+            except Exception as e:
+                logger.warning(f"Could not get follow-up thought for tool_result: {e}")
 
         audit_context = AuditActionContext(
             thought_id=thought.thought_id,

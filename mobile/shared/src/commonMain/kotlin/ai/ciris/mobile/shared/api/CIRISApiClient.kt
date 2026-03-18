@@ -1456,6 +1456,73 @@ class CIRISApiClient(
         @SerialName("backup_llm_api_key_set") val backupLlmApiKeySet: Boolean? = null
     )
 
+    /**
+     * Update LLM configuration in .env file.
+     * This persists the LLM settings so they survive app restarts.
+     *
+     * @param provider LLM provider ID (openai, openrouter, anthropic, etc.)
+     * @param apiKey API key (null to keep existing)
+     * @param baseUrl Custom base URL (null for provider default)
+     * @param model Model name (null to keep existing)
+     * @return Result with success status and message
+     */
+    suspend fun updateLlmConfig(
+        provider: String,
+        apiKey: String?,
+        baseUrl: String?,
+        model: String?
+    ): Result<String> {
+        val method = "updateLlmConfig"
+        logInfo(method, "Updating LLM config: provider=$provider, baseUrl=${baseUrl ?: "default"}, model=${model ?: "unchanged"}")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+
+            @Serializable
+            data class UpdateLlmRequest(
+                @SerialName("llm_provider") val llmProvider: String,
+                @SerialName("llm_api_key") val llmApiKey: String? = null,
+                @SerialName("llm_base_url") val llmBaseUrl: String? = null,
+                @SerialName("llm_model") val llmModel: String? = null
+            )
+
+            val request = UpdateLlmRequest(
+                llmProvider = provider,
+                llmApiKey = apiKey,
+                llmBaseUrl = baseUrl,
+                llmModel = model
+            )
+
+            val response = client.put("${this.baseUrl}/v1/setup/llm") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+            }
+
+            client.close()
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (response.status.value !in 200..299) {
+                logError(method, "API returned error status: ${response.status}")
+                return Result.failure(RuntimeException("API error: HTTP ${response.status.value}"))
+            }
+
+            logInfo(method, "LLM config updated successfully")
+            Result.success("LLM configuration updated successfully")
+        } catch (e: Exception) {
+            logException(method, e)
+            Result.failure(e)
+        }
+    }
+
     // ===== Billing API =====
 
     override suspend fun getCredits(): CreditStatusData {

@@ -1205,9 +1205,19 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             metadata = _build_ciris_proxy_metadata(task_id, thought_id, retry_state, resp_model_name)
             extra_kwargs["extra_body"] = {"metadata": metadata}
         elif "openrouter.ai" in base_url:
+            extra_body: Dict[str, Any] = {}
             provider_config = _build_openrouter_provider_config()
             if provider_config:
-                extra_kwargs["extra_body"] = {"provider": provider_config}
+                extra_body["provider"] = provider_config
+            # CRITICAL: Disable reasoning/thinking mode for faster responses
+            # Models like Kimi K2.5 have thinking enabled by default (60-90s latency)
+            # OpenRouter format: {"reasoning": {"enabled": false}}
+            extra_body["reasoning"] = {"enabled": False}
+            extra_kwargs["extra_body"] = extra_body
+        elif "together" in base_url or "api.together" in base_url:
+            # Together AI uses different format for disabling thinking
+            # Format: {"thinking": {"type": "disabled"}}
+            extra_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
 
         return extra_kwargs
 

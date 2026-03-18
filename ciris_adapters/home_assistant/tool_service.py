@@ -1107,13 +1107,14 @@ Navigate the music library by category.
 
         result = await self.ha_service.ma_search(query, media_types, limit)
 
-        if "error" in result:
+        # Check both explicit success field and error presence
+        if not result.get("success", False) or "error" in result:
             return ToolExecutionResult(
                 tool_name="ma_search",
                 status=ToolExecutionStatus.FAILED,
                 success=False,
-                data=None,
-                error=result["error"],
+                data=result,  # Include full result for debugging
+                error=result.get("error", "Search failed"),
                 correlation_id=str(uuid.uuid4()),
             )
 
@@ -1145,13 +1146,17 @@ Navigate the music library by category.
 
         result = await self.ha_service.ma_play(media_id, player_id, media_type, enqueue)
 
-        if "error" in result:
+        # Check both explicit success field and error presence
+        if not result.get("success", False) or "error" in result:
+            error_msg = result.get("error", "Playback verification failed")
+            suggestion = result.get("suggestion", "")
+            full_error = f"{error_msg}. {suggestion}".strip() if suggestion else error_msg
             return ToolExecutionResult(
                 tool_name="ma_play",
                 status=ToolExecutionStatus.FAILED,
                 success=False,
-                data=None,
-                error=result["error"],
+                data=result,  # Include full result for debugging
+                error=full_error,
                 correlation_id=str(uuid.uuid4()),
             )
 

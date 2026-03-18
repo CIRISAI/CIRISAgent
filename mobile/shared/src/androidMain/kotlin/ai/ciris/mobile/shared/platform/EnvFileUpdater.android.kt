@@ -9,7 +9,10 @@ import java.io.File
 /**
  * Android implementation of EnvFileUpdater.
  *
- * Updates .env file located at /data/user/0/ai.ciris.mobile/files/ciris/.env
+ * Updates .env file located at $CIRIS_HOME/.env
+ *
+ * CIRIS_HOME is set by CirisVerify.setup() from context.filesDir/ciris
+ * This class reads the path from the CIRIS_HOME environment variable.
  *
  * Logic extracted from:
  * - android/app/src/main/java/ai/ciris/mobile/auth/TokenRefreshManager.kt (lines 240-334)
@@ -22,30 +25,41 @@ actual class EnvFileUpdater {
         private const val CONFIG_RELOAD_FILE = ".config_reload"
         private const val TOKEN_REFRESH_SIGNAL_FILE = ".token_refresh_needed"
 
-        // CIRIS_HOME is typically at /data/user/0/ai.ciris.mobile/files/ciris
-        // We'll find it by looking for common Android data paths
-        private val CIRIS_HOME_CANDIDATES = listOf(
-            "/data/user/0/ai.ciris.mobile/files/ciris",
-            "/data/data/ai.ciris.mobile/files/ciris"
-        )
-
         /**
-         * Find the CIRIS_HOME directory
+         * Get CIRIS_HOME from environment variable (set by CirisVerify.setup())
+         * Returns null if not set, with detailed logging for debugging.
+         *
+         * This is called lazily each time to handle the case where CirisVerify.setup()
+         * runs after EnvFileUpdater is first instantiated.
          */
-        private fun findCirisHome(): File? {
-            for (path in CIRIS_HOME_CANDIDATES) {
-                val dir = File(path)
+        fun getCirisHome(): File? {
+            // Check CIRIS_HOME env var set by CirisVerify.setup()
+            val cirisHomePath = System.getenv("CIRIS_HOME")
+            if (!cirisHomePath.isNullOrEmpty()) {
+                val dir = File(cirisHomePath)
                 if (dir.exists() && dir.isDirectory) {
-                    Log.d(TAG, "Found CIRIS_HOME at: $path")
+                    Log.d(TAG, "Found CIRIS_HOME from env: $cirisHomePath")
                     return dir
+                } else {
+                    // Directory doesn't exist yet - create it
+                    Log.i(TAG, "CIRIS_HOME env set but dir doesn't exist, creating: $cirisHomePath")
+                    if (dir.mkdirs()) {
+                        Log.i(TAG, "Created CIRIS_HOME directory: $cirisHomePath")
+                        return dir
+                    } else {
+                        Log.e(TAG, "Failed to create CIRIS_HOME directory: $cirisHomePath")
+                    }
                 }
             }
-            Log.w(TAG, "Could not find CIRIS_HOME in any known location")
+
+            Log.w(TAG, "CIRIS_HOME env var not set - CirisVerify.setup() may not have been called yet")
             return null
         }
     }
 
-    private val cirisHome: File? = findCirisHome()
+    // Use lazy property that re-checks env var each access until found
+    private val cirisHome: File?
+        get() = getCirisHome()
     private var lastSignalTimestamp: Long = 0
 
     actual suspend fun updateEnvWithToken(oauthIdToken: String): Result<Boolean> = withContext(Dispatchers.IO) {

@@ -776,14 +776,21 @@ class InteractViewModel(
                     // legitimately repeated messages like "ok" sent at different times)
                     val allMessages = (_messages.value + deduplicatedMessages)
                         .distinctBy { msg ->
-                            if (msg.type == MessageType.USER) {
-                                // Dedupe USER messages by content + timestamp window (5 sec)
-                                // This handles local-vs-server ID mismatch while preserving
-                                // intentionally repeated messages sent at different times
-                                val timestampWindow = msg.timestamp.toEpochMilliseconds() / 5000 // 5-second buckets
-                                "USER:${msg.text}:$timestampWindow"
-                            } else {
-                                msg.id
+                            when (msg.type) {
+                                MessageType.USER -> {
+                                    // Dedupe USER messages by content + timestamp window (5 sec)
+                                    // This handles local-vs-server ID mismatch while preserving
+                                    // intentionally repeated messages sent at different times
+                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 5000 // 5-second buckets
+                                    "USER:${msg.text}:$timestampWindow"
+                                }
+                                MessageType.AGENT -> {
+                                    // Dedupe AGENT messages by content + timestamp window (10 sec)
+                                    // Local response (from sendMessage) and server history have different IDs
+                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 10000 // 10-second buckets
+                                    "AGENT:${msg.text}:$timestampWindow"
+                                }
+                                else -> msg.id // ACTION messages use ID
                             }
                         }
                         .sortedBy { it.timestamp }

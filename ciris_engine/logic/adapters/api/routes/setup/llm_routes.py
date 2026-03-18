@@ -1,24 +1,52 @@
 """LLM model listing and validation endpoints for CIRIS setup.
 
 This module provides endpoints for listing available models and
-validating LLM configurations during setup.
+validating LLM configurations during setup AND post-setup settings.
 """
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ciris_engine.schemas.api.responses import SuccessResponse
 
 from .._common import RESPONSES_404_500, RESPONSES_500
 from .dependencies import SetupOnlyDep
+from .helpers import _is_setup_allowed_without_auth
 from .llm_validation import _list_models_for_provider, _validate_llm_connection
 from .models import ListModelsResponse, LLMValidationRequest, LLMValidationResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _require_setup_or_auth(request: Request) -> None:
+    """Allow access during first-run OR with valid authentication.
+
+    This enables the LLM validation/listing endpoints to work both:
+    1. During setup (no auth required)
+    2. From Settings screen (auth required)
+    """
+    if _is_setup_allowed_without_auth():
+        # First-run - no auth needed
+        return
+
+    # Post-setup - require authentication
+    from ...dependencies.auth import get_auth_context, get_auth_service
+
+    authorization = request.headers.get("Authorization")
+    auth_service = get_auth_service(request)
+    auth = await get_auth_context(request, authorization, auth_service)
+    if auth is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required for LLM configuration after setup",
+        )
+
+
+SetupOrAuthDep = Depends(_require_setup_or_auth)
 
 
 @router.get("/models", responses=RESPONSES_500, dependencies=[SetupOnlyDep])
@@ -118,18 +146,18 @@ async def get_provider_models(provider_id: str) -> SuccessResponse[Dict[str, Any
         )
 
 
-@router.post("/validate-llm", dependencies=[SetupOnlyDep])
+@router.post("/validate-llm", dependencies=[SetupOrAuthDep])
 async def validate_llm(config: LLMValidationRequest) -> SuccessResponse[LLMValidationResponse]:
     """Validate LLM configuration.
 
     Tests the provided LLM configuration by attempting a connection.
-    This endpoint is always accessible without authentication during first-run.
+    Accessible without auth during first-run, or with auth after setup.
     """
     validation_result = await _validate_llm_connection(config)
     return SuccessResponse(data=validation_result)
 
 
-@router.post("/list-models", dependencies=[SetupOnlyDep])
+@router.post("/list-models", dependencies=[SetupOrAuthDep])
 async def list_models(config: LLMValidationRequest) -> SuccessResponse[ListModelsResponse]:
     """List available models from a provider's live API.
 
@@ -138,7 +166,7 @@ async def list_models(config: LLMValidationRequest) -> SuccessResponse[ListModel
     for CIRIS compatibility annotations.
 
     Falls back to static capabilities data if the live query fails.
-    This endpoint is always accessible without authentication during first-run.
+    Accessible without auth during first-run, or with auth after setup.
     """
     result = await _list_models_for_provider(config)
     return SuccessResponse(data=result)

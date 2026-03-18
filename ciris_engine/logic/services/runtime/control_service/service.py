@@ -862,23 +862,19 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
     async def list_adapters(self) -> List[AdapterInfo]:
         """List all loaded adapters including bootstrap adapters."""
-        logger.info("[LIST_ADAPTERS_SVC] Starting list_adapters")
+        logger.debug("[LIST_ADAPTERS_SVC] Starting list_adapters")
         self._ensure_adapter_manager_initialized()
 
         adapters_list: List[AdapterInfo] = []
         bootstrap = await self._get_bootstrap_adapters()
-        logger.info("[LIST_ADAPTERS_SVC] Got %d bootstrap adapters", len(bootstrap))
-        for a in bootstrap:
-            logger.info("[LIST_ADAPTERS_SVC]   bootstrap: id=%s type=%s", a.adapter_id, a.adapter_type)
+        logger.debug("[LIST_ADAPTERS_SVC] Got %d bootstrap adapters", len(bootstrap))
         adapters_list.extend(bootstrap)
 
         managed = await self._get_managed_adapters()
-        logger.info("[LIST_ADAPTERS_SVC] Got %d managed adapters", len(managed))
-        for a in managed:
-            logger.info("[LIST_ADAPTERS_SVC]   managed: id=%s type=%s", a.adapter_id, a.adapter_type)
+        logger.debug("[LIST_ADAPTERS_SVC] Got %d managed adapters", len(managed))
         adapters_list.extend(managed)
 
-        logger.info("[LIST_ADAPTERS_SVC] Total: %d adapters", len(adapters_list))
+        logger.debug("[LIST_ADAPTERS_SVC] Total: %d adapters", len(adapters_list))
         return adapters_list
 
     def _ensure_adapter_manager_initialized(self) -> None:
@@ -898,27 +894,17 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         """Get bootstrap adapters from runtime."""
         adapters: List[AdapterInfo] = []
 
-        logger.info(
-            "[BOOTSTRAP_ADAPTERS] runtime=%s, has adapters=%s",
-            self.runtime,
-            hasattr(self.runtime, "adapters") if self.runtime else False,
-        )
         if not (self.runtime and hasattr(self.runtime, "adapters")):
-            logger.info("[BOOTSTRAP_ADAPTERS] No runtime.adapters, returning empty")
             return adapters
 
-        logger.info("[BOOTSTRAP_ADAPTERS] runtime.adapters has %d items", len(self.runtime.adapters))
         for idx, adapter in enumerate(self.runtime.adapters):
             adapter_type = self._extract_adapter_type(adapter)
-            logger.info("[BOOTSTRAP_ADAPTERS]   [%d] class=%s type=%s", idx, adapter.__class__.__name__, adapter_type)
 
             if await self._should_skip_bootstrap_adapter(adapter_type):
-                logger.info("[BOOTSTRAP_ADAPTERS]   [%d] SKIPPED", idx)
                 continue
 
             adapter_info = await self._create_bootstrap_adapter_info(adapter, adapter_type)
             adapters.append(adapter_info)
-            logger.info("[BOOTSTRAP_ADAPTERS]   [%d] ADDED: id=%s", idx, adapter_info.adapter_id)
 
         return adapters
 
@@ -968,7 +954,6 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
 
                 cfg = adapter.config
-                logger.info(f"[BOOTSTRAP_INFO] Found config: type={type(cfg).__name__}")
                 if hasattr(cfg, "model_dump"):
                     config_dict = cfg.model_dump()
                     # Filter out None values and internal fields
@@ -979,7 +964,6 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                         and k not in ["adapter_type", "enabled", "persist", "settings", "adapter_config"]
                     }
                     config_params = AdapterConfig(adapter_type=adapter_type, enabled=True, settings=settings)
-                    logger.info(f"[BOOTSTRAP_INFO] Extracted config settings: {list(settings.keys())}")
                 elif isinstance(cfg, dict):
                     settings = {k: str(v) for k, v in cfg.items() if v is not None}
                     config_params = AdapterConfig(adapter_type=adapter_type, enabled=True, settings=settings)
@@ -1078,32 +1062,13 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
     async def _get_managed_adapters(self) -> List[AdapterInfo]:
         """Get adapters from adapter manager."""
-        logger.info("[MANAGED_ADAPTERS] Checking adapter_manager=%s", self.adapter_manager)
         if not self.adapter_manager:
-            logger.info("[MANAGED_ADAPTERS] No adapter_manager, returning empty list")
             return []
-
-        logger.info(
-            "[MANAGED_ADAPTERS] adapter_manager.loaded_adapters=%s",
-            (
-                list(self.adapter_manager.loaded_adapters.keys())
-                if hasattr(self.adapter_manager, "loaded_adapters")
-                else "N/A"
-            ),
-        )
 
         adapters = []
         adapters_raw = await self.adapter_manager.list_adapters()
-        logger.info("[MANAGED_ADAPTERS] adapter_manager.list_adapters() returned %d items", len(adapters_raw))
 
-        for idx, adapter_status in enumerate(adapters_raw):
-            logger.info(
-                "[MANAGED_ADAPTERS]   raw[%d] id=%s type=%s running=%s",
-                idx,
-                adapter_status.adapter_id,
-                adapter_status.adapter_type,
-                adapter_status.is_running,
-            )
+        for adapter_status in adapters_raw:
             adapter_info = self._convert_managed_adapter_status(adapter_status)
             adapters.append(adapter_info)
 

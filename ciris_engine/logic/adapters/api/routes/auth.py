@@ -929,7 +929,7 @@ def _check_first_oauth_user_status(
         logger.debug(f"[AUTH DEBUG] User {user_id_check} already exists - not first user")
         return False
 
-    logger.info("[AUTH DEBUG] No existing users found - this is the first OAuth user")
+    logger.debug("[AUTH DEBUG] No existing users found - this is the first OAuth user")
     return True
 
 
@@ -960,12 +960,12 @@ def _determine_user_role(
 
     # No auth service - return default role
     if auth_service is None:
-        logger.info("[AUTH DEBUG] No auth_service provided - returning OBSERVER role")
+        logger.debug("[AUTH DEBUG] No auth_service provided - returning OBSERVER role")
         return UserRole.OBSERVER
 
     try:
         oauth_users = _get_oauth_users_dict(auth_service)
-        logger.info(f"[AUTH DEBUG] _oauth_users count: {len(oauth_users) if oauth_users else 'None'}")
+        logger.debug("[AUTH DEBUG] _oauth_users count: %d", len(oauth_users) if oauth_users else 0)
 
         # Check if this user already exists with a role - preserve their existing role
         if external_id and oauth_users:
@@ -981,14 +981,14 @@ def _determine_user_role(
 
         # Check if this is the first OAuth user (setup wizard scenario)
         if _check_first_oauth_user_status(auth_service, oauth_users, provider, external_id):
-            logger.info("[AUTH DEBUG] First OAuth user detected - granting SYSTEM_ADMIN role for setup wizard user")
+            logger.debug("[AUTH DEBUG] First OAuth user detected - granting SYSTEM_ADMIN role for setup wizard user")
             return UserRole.SYSTEM_ADMIN
 
     except (TypeError, AttributeError) as e:
         # Mock objects or missing attributes - fall through to OBSERVER
-        logger.warning(f"[AUTH DEBUG] Exception accessing auth_service: {e}")
+        logger.warning("[AUTH DEBUG] Exception accessing auth_service: %s", type(e).__name__)
 
-    logger.info("[AUTH DEBUG] No special conditions met - returning OBSERVER role")
+    logger.debug("[AUTH DEBUG] No special conditions met - returning OBSERVER role")
     return UserRole.OBSERVER
 
 
@@ -1031,7 +1031,7 @@ def _update_billing_provider_token(google_id_token: str) -> None:
 
         # Check if we have access to the app state (will be set by FastAPI)
         # The billing provider will be initialized on the next credit check if not done here
-        logger.info("[NativeAuth] Billing provider token updated - will be used on next credit check")
+        logger.debug("[NativeAuth] Billing provider token updated")
     except Exception as e:
         logger.warning(f"[NativeAuth] Could not update billing provider directly: {e}")
 
@@ -1384,13 +1384,11 @@ def _get_allowed_audiences_from_config() -> Optional[Set[str]]:
             allowed_audiences.add(expected_client_id)
         if android_client_id:
             allowed_audiences.add(android_client_id)
-        logger.info(
-            f"[NativeAuth] Configured allowed audiences: {allowed_audiences}"
-        )  # NOSONAR - client IDs are public config
+        logger.debug("[NativeAuth] Configured allowed audiences count: %d", len(allowed_audiences))
         return allowed_audiences if allowed_audiences else None
     except HTTPException:
         # On-device mode: OAuth not configured, skip audience validation
-        logger.info("[NativeAuth] No OAuth config found - running in on-device mode, skipping audience validation")
+        logger.debug("[NativeAuth] No OAuth config found - running in on-device mode")
         return None
 
 
@@ -1401,8 +1399,8 @@ def _validate_token_audience(token_aud: Optional[str], allowed_audiences: Option
     Raises HTTPException if validation fails.
     """
     if allowed_audiences is None:
-        # On-device mode: skip audience validation, just log the audience
-        logger.info(f"[NativeAuth] On-device mode: skipping audience validation (aud: {token_aud})")
+        # On-device mode: skip audience validation
+        logger.debug("[NativeAuth] On-device mode: skipping audience validation")
         return
 
     if not token_aud or token_aud not in allowed_audiences:
@@ -1491,7 +1489,7 @@ def _decode_google_jwt_locally(id_token: str) -> Dict[str, Optional[str]]:
     import json
     import time
 
-    logger.info("[NativeAuth] Decoding Google JWT locally (fallback mode)...")
+    logger.debug("[NativeAuth] Decoding Google JWT locally (fallback mode)...")
 
     try:
         # JWT has 3 parts: header.payload.signature
@@ -1509,7 +1507,7 @@ def _decode_google_jwt_locally(id_token: str) -> Dict[str, Optional[str]]:
         payload_bytes = base64.urlsafe_b64decode(payload_b64)
         payload = json.loads(payload_bytes.decode("utf-8"))
 
-        logger.info(f"[NativeAuth] Local decode - sub: {payload.get('sub')}, email: {payload.get('email')}")
+        logger.debug("[NativeAuth] Local decode successful")
 
         # Basic validation
         exp = payload.get("exp")
@@ -1537,12 +1535,12 @@ async def _call_google_tokeninfo_api(id_token: str) -> Dict[str, Any]:
     """Call Google's tokeninfo API and return the response JSON."""
     import httpx
 
-    logger.info("[NativeAuth] Calling Google tokeninfo API...")
+    logger.debug("[NativeAuth] Calling Google tokeninfo API...")
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         # Use params dict for proper URL encoding of the token
         response = await client.get("https://oauth2.googleapis.com/tokeninfo", params={"id_token": id_token})
-        logger.info(f"[NativeAuth] Google tokeninfo response: {response.status_code}")
+        logger.debug("[NativeAuth] Google tokeninfo response: %d", response.status_code)
 
         if response.status_code != 200:
             logger.error(f"[NativeAuth] Google API rejected token: {response.status_code} - {response.text}")
@@ -1568,7 +1566,7 @@ def _validate_all_token_claims(token_info: Dict[str, Any], allowed_audiences: Op
 def _extract_user_info_from_token(token_info: Dict[str, Any]) -> Dict[str, Optional[str]]:
     """Extract user information from validated token."""
     sub = token_info.get("sub")
-    logger.info(f"[NativeAuth] Token VERIFIED successfully - sub: {sub}, email: {token_info.get('email')}")
+    logger.debug("[NativeAuth] Token verified successfully")
 
     return {
         "external_id": sub,
@@ -1594,7 +1592,7 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
     """
     import httpx
 
-    logger.info(f"[NativeAuth] Verifying Google ID token (length: {len(id_token)})")
+    logger.debug("[NativeAuth] Verifying Google ID token")
 
     # Load our expected client ID from OAuth config
     allowed_audiences = _get_allowed_audiences_from_config()
@@ -1603,11 +1601,7 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
     try:
         token_info = await _call_google_tokeninfo_api(id_token)
 
-        logger.info(
-            f"[NativeAuth] Token info received - sub: {token_info.get('sub')}, "
-            f"email: {token_info.get('email')}, aud: {token_info.get('aud')}, "
-            f"iss: {token_info.get('iss')}, exp: {token_info.get('exp')}"
-        )
+        logger.debug("[NativeAuth] Token info received from Google")
 
         # Validate all token claims
         _validate_all_token_claims(token_info, allowed_audiences)
@@ -1618,11 +1612,11 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
     except HTTPException:
         raise
     except httpx.TimeoutException:
-        logger.error("[NativeAuth] Google tokeninfo API timed out")
+        logger.warning("[NativeAuth] Google tokeninfo API timed out")
         # On-device fallback: if we can't reach Google, decode the JWT locally
         # This is safe because the token came from Google Sign-In SDK on the device
         # which already verified it cryptographically
-        logger.info("[NativeAuth] Attempting local JWT decode fallback for on-device mode...")
+        logger.debug("[NativeAuth] Attempting local JWT decode fallback for on-device mode...")
         try:
             return _decode_google_jwt_locally(id_token)
         except Exception as fallback_error:
@@ -1660,10 +1654,10 @@ async def native_google_token_exchange(
     Unlike the web OAuth flow (which uses authorization codes), native apps get
     ID tokens directly from Google Sign-In SDK and send them here.
     """
-    logger.info("[NativeAuth] Native Google token exchange request")
+    logger.debug("[NativeAuth] Native Google token exchange request")
 
     if native_request.provider != "google":
-        logger.warning(f"[NativeAuth] Unsupported provider: {native_request.provider}")
+        logger.warning("[NativeAuth] Unsupported provider requested")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only 'google' provider is currently supported for native token exchange",
@@ -1671,9 +1665,9 @@ async def native_google_token_exchange(
 
     try:
         # Verify the Google ID token and get user info
-        logger.info("[NativeAuth] Starting token verification...")
+        logger.debug("[NativeAuth] Starting token verification...")
         user_data = await _verify_google_id_token(native_request.id_token)
-        logger.info(f"[NativeAuth] Token verification complete - external_id: {user_data.get('external_id')}")
+        logger.debug("[NativeAuth] Token verification complete")
 
         external_id = user_data.get("external_id")
         if not external_id:
@@ -1687,10 +1681,9 @@ async def native_google_token_exchange(
         await auth_service._ensure_users_loaded()
         # Pass external_id to preserve existing user's role (don't demote on re-auth!)
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider="google")
-        logger.info(f"[NativeAuth] Determined role for {user_email}: {user_role}")
+        logger.debug("[NativeAuth] Determined role: %s", user_role)
 
         # Create or get OAuth user
-        logger.info(f"[NativeAuth] Creating/getting OAuth user - external_id: {external_id}, email: {user_email}")
         oauth_user = auth_service.create_oauth_user(
             provider="google",
             external_id=external_id,
@@ -1699,20 +1692,17 @@ async def native_google_token_exchange(
             role=user_role,
             marketing_opt_in=False,
         )
-        logger.info(f"[NativeAuth] OAuth user created/retrieved - user_id: {oauth_user.user_id}")
+        logger.debug("[NativeAuth] OAuth user created/retrieved")
 
         # Store OAuth profile data
         name = user_data.get("name") or "Unknown"
         _store_oauth_profile(auth_service, oauth_user.user_id, name, user_data.get("picture"))
 
         # Auto-mint SYSTEM_ADMIN users as WA with ROOT role so they can handle deferrals
-        logger.info(
-            f"CIRIS_USER_CREATE: [NativeAuth] Checking auto-mint for {oauth_user.user_id} with role {oauth_user.role}"
-        )
+        logger.debug("[NativeAuth] Checking auto-mint for role %s", oauth_user.role)
         await _auto_mint_system_admin_if_needed(oauth_user, auth_service, "NativeAuth")
 
         # Generate API key
-        logger.info(f"[NativeAuth] Generating API key for user {oauth_user.user_id}")
         api_key = _generate_api_key_and_store(auth_service, oauth_user, "google")
 
         # Update billing provider with the Google ID token for credit checks
@@ -1721,12 +1711,11 @@ async def native_google_token_exchange(
 
         # Trigger billing credit check to create billing user (same as webview OAuth flow)
         # This ensures the billing user record is created so getBalance() returns correct credits
-        logger.info(f"[NativeAuth] Triggering billing credit check for user {oauth_user.user_id}")
         await _trigger_billing_credit_check_if_enabled(
             fastapi_request, oauth_user, user_email=user_email, marketing_opt_in=False
         )
 
-        logger.info(f"[NativeAuth] SUCCESS - Native Google user {oauth_user.user_id} logged in, token generated")
+        logger.info("[NativeAuth] Native Google login successful")
 
         return NativeTokenResponse(
             access_token=api_key,
@@ -2145,15 +2134,15 @@ def _handle_no_cached_attestation(infra_auth_service: Any) -> Dict[str, Any]:
     in_progress = (
         hasattr(infra_auth_service, "is_attestation_in_progress") and infra_auth_service.is_attestation_in_progress()
     )
-    logger.info(f"[attestation] Cache empty. in_progress={in_progress}")
+    logger.debug("[attestation] Cache empty. in_progress=%s", in_progress)
 
     if in_progress:
-        logger.info("[attestation] Returning in_progress status")
+        logger.debug("[attestation] Returning in_progress status")
         return _build_attestation_response("in_progress")
 
     # Try to trigger attestation if not already triggered
     if not _attestation_triggered_from_endpoint:
-        logger.info("[attestation] No cached attestation - triggering now")
+        logger.debug("[attestation] No cached attestation - triggering now")
         if _trigger_background_attestation(infra_auth_service):
             _attestation_triggered_from_endpoint = True
             return _build_attestation_response("in_progress")
@@ -2164,7 +2153,7 @@ def _handle_no_cached_attestation(infra_auth_service: Any) -> Dict[str, Any]:
         logger.debug("[attestation] Attestation already triggered")
         return _build_attestation_response("in_progress")
 
-    logger.info("[attestation] No cached attestation and could not trigger")
+    logger.debug("[attestation] No cached attestation and could not trigger")
     return _build_attestation_response(
         "not_attempted",
         error="No cached attestation - startup attestation may not have completed",
@@ -2194,7 +2183,7 @@ async def get_attestation(request: Request, refresh: bool = False) -> Dict[str, 
 
     # Handle refresh request
     if refresh:
-        logger.info("[attestation] Refresh requested — invalidating cache and re-running attestation")
+        logger.debug("[attestation] Refresh requested")
         _trigger_background_attestation(infra_auth_service, force_refresh=True)
         return _build_attestation_response("in_progress")
 
@@ -2206,34 +2195,12 @@ async def get_attestation(request: Request, refresh: bool = False) -> Dict[str, 
 
     # Convert cached AttestationResult to response format
     # This matches the format returned by /v1/setup/verify-status
-    logger.info("[attestation] === API RESPONSE DEBUG ===")
-    logger.info(
-        f"[attestation] max_level={cached.max_level}, level_pending={cached.level_pending}, file_integrity_ok={cached.file_integrity_ok}, play_integrity_ok={cached.play_integrity_ok}"
+    logger.debug(
+        "[attestation] Returning cached attestation: max_level=%s, python_modules_passed=%s/%s",
+        cached.max_level,
+        cached.python_modules_passed,
+        cached.python_modules_checked,
     )
-    logger.info(
-        f"[attestation] files_checked={cached.files_checked}, files_passed={cached.files_passed}, files_failed={cached.files_failed}"
-    )
-    logger.info(
-        f"[attestation] per_file_results count={len(cached.per_file_results) if cached.per_file_results else 0}"
-    )
-    logger.info(
-        f"[attestation] python_modules_checked={cached.python_modules_checked}, python_modules_passed={cached.python_modules_passed}"
-    )
-    logger.info(
-        f"[attestation] FUNCTION INTEGRITY: functions_checked={cached.functions_checked}, functions_passed={cached.functions_passed}"
-    )
-    logger.info(f"[attestation] module_integrity_ok={cached.module_integrity_ok}")
-    logger.info(f"[attestation] module_integrity_summary={cached.module_integrity_summary}")
-    logger.info(
-        f"[attestation] cross_validated_files count={len(cached.cross_validated_files) if cached.cross_validated_files else 0}"
-    )
-    logger.info(
-        f"[attestation] filesystem_verified_files count={len(cached.filesystem_verified_files) if cached.filesystem_verified_files else 0}"
-    )
-    logger.info(
-        f"[attestation] agent_verified_files count={len(cached.agent_verified_files) if cached.agent_verified_files else 0}"
-    )
-    logger.info("[attestation] === END API RESPONSE DEBUG ===")
 
     return {
         "data": {

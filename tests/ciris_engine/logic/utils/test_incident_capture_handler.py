@@ -2,7 +2,9 @@ import asyncio
 import logging
 import os
 import sys
+import time
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
@@ -10,6 +12,7 @@ import pytest
 
 from ciris_engine.logic.utils.incident_capture_handler import (
     IncidentCaptureHandler,
+    _cleanup_old_incident_logs,
     add_incident_capture_handler,
     inject_graph_audit_service_to_handlers,
 )
@@ -254,3 +257,140 @@ class TestHelperFunctions:
         # This is more of a "nice to have" test rather than critical functionality
         if caplog.records:
             assert any("No IncidentCaptureHandler instances found" in record.message for record in caplog.records)
+
+
+class TestCleanupOldIncidentLogs:
+    """Tests for the _cleanup_old_incident_logs helper function."""
+
+    def test_cleanup_removes_oldest_files(self, tmp_path):
+        """Test that cleanup removes oldest incident log files."""
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        # Create 5 incident log files with different modification times
+        for i in range(5):
+            log_file = log_dir / f"incidents_{i:02d}.log"
+            log_file.write_text(f"content {i}")
+            mtime = time.time() - (5 - i) * 100
+            os.utime(log_file, (mtime, mtime))
+
+        # Keep only 2 files
+        _cleanup_old_incident_logs(log_dir, prefix="incidents_", keep_count=2)
+
+        remaining = list(log_dir.glob("incidents_*.log*"))
+        assert len(remaining) == 2
+
+        # Verify the newest 2 are kept (03, 04)
+        remaining_names = sorted(f.name for f in remaining)
+        assert remaining_names == ["incidents_03.log", "incidents_04.log"]
+
+    def test_cleanup_does_nothing_when_under_keep_count(self, tmp_path):
+        """Test that cleanup does nothing when file count <= keep_count."""
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        # Create 2 incident log files
+        for i in range(2):
+            (log_dir / f"incidents_{i}.log").write_text(f"content {i}")
+
+        _cleanup_old_incident_logs(log_dir, prefix="incidents_", keep_count=3)
+
+        remaining = list(log_dir.glob("incidents_*.log*"))
+        assert len(remaining) == 2
+
+    def test_cleanup_handles_empty_directory(self, tmp_path):
+        """Test that cleanup handles empty directory gracefully."""
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        # Should not raise
+        _cleanup_old_incident_logs(log_dir, prefix="incidents_", keep_count=3)
+
+    def test_cleanup_handles_nonexistent_directory(self, tmp_path):
+        """Test that cleanup handles nonexistent directory gracefully."""
+        log_dir = tmp_path / "nonexistent"
+
+        # Should not raise
+        _cleanup_old_incident_logs(log_dir, prefix="incidents_", keep_count=3)
+
+    def test_cleanup_includes_rotation_backups(self, tmp_path):
+        """Test that cleanup includes rotation backup files."""
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        # Create main incident log files and their backups
+        for i in range(4):
+            base = log_dir / f"incidents_{i}.log"
+            base.write_text(f"content {i}")
+            mtime = time.time() - (4 - i) * 100
+            os.utime(base, (mtime, mtime))
+
+            # Create backup files
+            backup1 = log_dir / f"incidents_{i}.log.1"
+            backup1.write_text(f"backup1 {i}")
+            os.utime(backup1, (mtime - 1, mtime - 1))
+
+            backup2 = log_dir / f"incidents_{i}.log.2"
+            backup2.write_text(f"backup2 {i}")
+            os.utime(backup2, (mtime - 2, mtime - 2))
+
+        # Total: 12 files (4 main + 4 backup1 + 4 backup2)
+        all_files = list(log_dir.glob("incidents_*.log*"))
+        assert len(all_files) == 12
+
+        # Keep only 3
+        _cleanup_old_incident_logs(log_dir, prefix="incidents_", keep_count=3)
+
+        remaining = list(log_dir.glob("incidents_*.log*"))
+        assert len(remaining) == 3
+
+
+class TestIncidentCaptureHandlerRotation:
+    """Tests for RotatingFileHandler integration in IncidentCaptureHandler."""
+
+    def test_handler_uses_rotating_file_handler(self, log_dir, mock_time_service):
+        """Test that IncidentCaptureHandler uses RotatingFileHandler internally."""
+        handler = IncidentCaptureHandler(log_dir=str(log_dir), time_service=mock_time_service)
+
+        # Check that internal rotating handler is configured
+        assert hasattr(handler, "_rotating_handler")
+        assert isinstance(handler._rotating_handler, RotatingFileHandler)
+
+        # Verify rotation settings (2MB max, 2 backups)
+        assert handler._rotating_handler.maxBytes == 2 * 1024 * 1024
+        assert handler._rotating_handler.backupCount == 2
+
+    def test_emit_uses_rotating_handler(self, log_dir, mock_time_service):
+        """Test that emit delegates to the rotating handler."""
+        handler = IncidentCaptureHandler(log_dir=str(log_dir), time_service=mock_time_service)
+
+        # Emit a warning record
+        record = logging.LogRecord("test.rotation", logging.WARNING, "test.py", 10, "Test rotation message", (), None)
+        handler.emit(record)
+
+        # Verify the message was written
+        with open(handler.log_file, "r", encoding="utf-8") as f:
+            content = f.read()
+            assert "Test rotation message" in content
+
+    def test_cleanup_called_on_init(self, tmp_path, mock_time_service):
+        """Test that cleanup is called during initialization."""
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        # Create 5 old incident log files
+        for i in range(5):
+            log_file = log_dir / f"incidents_{i:02d}.log"
+            log_file.write_text(f"old content {i}")
+            mtime = time.time() - (5 - i) * 1000
+            os.utime(log_file, (mtime, mtime))
+
+        # Create handler - should trigger cleanup
+        handler = IncidentCaptureHandler(log_dir=str(log_dir), time_service=mock_time_service)
+
+        # Count incident log files (excluding symlinks and the new handler's file)
+        all_incident_logs = list(log_dir.glob("incidents_*.log"))
+        old_files = [f for f in all_incident_logs if f != handler.log_file and not f.is_symlink()]
+
+        # Cleanup keeps 3, so we should have at most 3 old files remaining
+        assert len(old_files) <= 3

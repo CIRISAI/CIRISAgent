@@ -127,3 +127,65 @@ class EventSubscription(BaseModel):
     cameras: List[str] = Field(default_factory=list, description="Cameras to monitor (empty = all)")
     callback_url: Optional[str] = Field(default=None, description="Webhook URL for event delivery")
     sensitivity: float = Field(default=0.7, ge=0.0, le=1.0, description="Detection sensitivity")
+
+
+# =============================================================================
+# Music Assistant Schemas
+# =============================================================================
+
+
+class MAMediaType(str, Enum):
+    """Music Assistant media types for search."""
+
+    ARTIST = "artist"
+    ALBUM = "album"
+    TRACK = "track"
+    PLAYLIST = "playlist"
+    RADIO = "radio"
+
+
+class MAMediaItem(BaseModel):
+    """A media item from Music Assistant."""
+
+    item_id: str = Field(..., description="Unique item ID")
+    name: str = Field(..., description="Item name/title")
+    media_type: MAMediaType = Field(..., description="Type of media")
+    uri: Optional[str] = Field(None, description="Music Assistant URI")
+    artist: Optional[str] = Field(None, description="Artist name (for tracks/albums)")
+    album: Optional[str] = Field(None, description="Album name (for tracks)")
+    duration: Optional[int] = Field(None, description="Duration in seconds")
+    image_url: Optional[str] = Field(None, description="Cover art URL")
+    provider: Optional[str] = Field(None, description="Music provider (spotify, tidal, etc.)")
+
+
+class MASearchResult(BaseModel):
+    """Search results from Music Assistant."""
+
+    query: str = Field(..., description="Original search query")
+    artists: List[MAMediaItem] = Field(default_factory=list, description="Matching artists")
+    albums: List[MAMediaItem] = Field(default_factory=list, description="Matching albums")
+    tracks: List[MAMediaItem] = Field(default_factory=list, description="Matching tracks")
+    playlists: List[MAMediaItem] = Field(default_factory=list, description="Matching playlists")
+    total_results: int = Field(0, description="Total number of results")
+
+
+class MAQueueItem(BaseModel):
+    """An item in a Music Assistant queue."""
+
+    queue_item_id: str = Field(..., description="Queue item ID")
+    name: str = Field(..., description="Track name")
+    artist: Optional[str] = Field(None, description="Artist name")
+    duration: Optional[int] = Field(None, description="Duration in seconds")
+    position: int = Field(0, description="Position in queue")
+    is_playing: bool = Field(False, description="Whether currently playing")
+
+
+class MAPlayerState(BaseModel):
+    """State of a Music Assistant player."""
+
+    player_id: str = Field(..., description="Player entity ID")
+    name: str = Field(..., description="Player friendly name")
+    state: str = Field(..., description="Player state (playing, paused, idle, off)")
+    current_item: Optional[MAMediaItem] = Field(None, description="Currently playing item")
+    volume_level: float = Field(0.0, ge=0.0, le=1.0, description="Volume 0-1")
+    queue_size: int = Field(0, description="Number of items in queue")

@@ -15,7 +15,7 @@ import logging
 import uuid
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ciris_engine.schemas.types import JSONDict
 
@@ -84,6 +84,16 @@ class IDMAResult(BaseModel):
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
+def _coerce_to_string(v: Any) -> str:
+    """Coerce value to string, handling null/None and lists from LLMs like Kimi K2.5."""
+    if v is None:
+        return ""
+    if isinstance(v, list):
+        # LLM returned array instead of comma-separated string
+        return ", ".join(str(item) for item in v)
+    return str(v)
+
+
 class EthicalDMAResult(BaseModel):
     """Result from Principled Decision Making Algorithm (PDMA).
 
@@ -94,6 +104,9 @@ class EthicalDMAResult(BaseModel):
     - subject_of_evaluation: Explicitly identifies WHOSE actions are being judged
     - proportionality_assessment: Checks if responses are proportionate to triggering events
     - Enhanced conflict analysis includes relational obligations vs autonomy
+
+    Note: All string fields use validators to handle LLMs that return null or arrays
+    instead of strings (e.g., Kimi K2.5).
     """
 
     subject_of_evaluation: str = Field(
@@ -101,11 +114,11 @@ class EthicalDMAResult(BaseModel):
         description="WHO is being ethically evaluated (e.g., 'OP', 'the user asking the question'). Identifies whose actions we are judging, not the other party in a conflict.",
     )
     stakeholders: str = Field(
-        ...,
+        default="",
         description="Comma-separated list of all stakeholders who could possibly be affected by the agent's action or inaction (e.g., 'user, community, system, third-parties')",
     )
     conflicts: str = Field(
-        ...,
+        default="none",
         description="Comma-separated list of potential conflicts between stakeholder interests (e.g., 'user privacy vs system learning, autonomy vs relational obligations'). Use 'none' if no conflicts identified.",
     )
     proportionality_assessment: str = Field(
@@ -113,13 +126,19 @@ class EthicalDMAResult(BaseModel):
         description="For scenarios involving responses to harm/conflict, assessment of whether the response is proportionate (e.g., 'Response is proportionate' or 'Response may be disproportionate: X for Y'). Use 'not applicable' for non-conflict scenarios.",
     )
     reasoning: str = Field(
-        ...,
+        default="",
         description="Ethical reasoning for the identified stakeholders, conflicts, and proportionality. Include consideration of relational obligations where relevant.",
     )
     alignment_check: str = Field(
-        ...,
+        default="",
         description="Detailed ethical analysis addressing relevant CIRIS principles. When autonomy is invoked, also consider relational obligations.",
     )
+
+    # Validators to handle LLMs returning null or arrays instead of strings
+    @field_validator("subject_of_evaluation", "stakeholders", "conflicts", "proportionality_assessment", "reasoning", "alignment_check", mode="before")
+    @classmethod
+    def coerce_string_fields(cls, v: Any) -> str:
+        return _coerce_to_string(v)
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 

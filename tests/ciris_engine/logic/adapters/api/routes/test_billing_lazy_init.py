@@ -200,10 +200,10 @@ class TestTryLazyInitBillingProvider:
                 with patch("ciris_engine.logic.adapters.api.routes.billing.logger") as mock_logger:
                     _try_lazy_init_billing_provider(request, resource_monitor)
 
-                    # Check that info log was called (with BILLING_LAZY_INIT tag)
-                    assert mock_logger.info.called
-                    info_calls = [str(call) for call in mock_logger.info.call_args_list]
-                    assert any("BILLING_LAZY_INIT" in call for call in info_calls)
+                    # Check that debug log was called (with BILLING_LAZY_INIT tag)
+                    assert mock_logger.debug.called
+                    debug_calls = [str(call) for call in mock_logger.debug.call_args_list]
+                    assert any("BILLING_LAZY_INIT" in call for call in debug_calls)
 
 
 class TestValidateBillingUrl:

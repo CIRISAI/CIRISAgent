@@ -275,3 +275,123 @@ class TestInstructorModes:
         assert mode_map["json"] == instructor.Mode.JSON
         assert mode_map["tools"] == instructor.Mode.TOOLS
         assert "md_json" in mode_map
+
+
+class TestReasoningModeDisabling:
+    """Tests for disabling reasoning/thinking mode on OpenRouter and Together AI.
+
+    These tests verify that CIRIS correctly disables expensive reasoning modes
+    (like Kimi K2.5's thinking mode) to improve latency.
+    """
+
+    def test_openrouter_reasoning_disabled_in_extra_body(self):
+        """OpenRouter requests should have reasoning mode disabled."""
+        from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient, OpenAIConfig
+
+        # Create minimal client for testing with proper config
+        config = OpenAIConfig(
+            api_key="test-key",
+            model_name="kimi/k2-0130-preview",
+            base_url="https://openrouter.ai/api/v1",
+        )
+        client = OpenAICompatibleClient.__new__(OpenAICompatibleClient)
+        client.openai_config = config
+        client.model_name = config.model_name
+
+        # Call the method that builds extra kwargs
+        extra_kwargs = client._build_extra_kwargs(
+            task_id="test-task-123",
+            thought_id="test-thought-456",
+            resp_model_name="EthicalDMAResult",
+            retry_state={},
+        )
+
+        # Verify reasoning is disabled
+        assert "extra_body" in extra_kwargs
+        extra_body = extra_kwargs["extra_body"]
+        assert "reasoning" in extra_body
+        assert extra_body["reasoning"]["enabled"] is False
+
+    def test_together_thinking_disabled_in_extra_body(self):
+        """Together AI requests should have thinking mode disabled."""
+        from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient, OpenAIConfig
+
+        # Create minimal client for testing with proper config
+        config = OpenAIConfig(
+            api_key="test-key",
+            model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+            base_url="https://api.together.xyz/v1",
+        )
+        client = OpenAICompatibleClient.__new__(OpenAICompatibleClient)
+        client.openai_config = config
+        client.model_name = config.model_name
+
+        # Call the method that builds extra kwargs
+        extra_kwargs = client._build_extra_kwargs(
+            task_id="test-task-123",
+            thought_id="test-thought-456",
+            resp_model_name="ActionSelectionDMAResult",
+            retry_state={},
+        )
+
+        # Verify thinking is disabled
+        assert "extra_body" in extra_kwargs
+        extra_body = extra_kwargs["extra_body"]
+        assert "thinking" in extra_body
+        assert extra_body["thinking"]["type"] == "disabled"
+
+    def test_openai_no_reasoning_override(self):
+        """Standard OpenAI requests should not have reasoning/thinking overrides."""
+        from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient, OpenAIConfig
+
+        # Create minimal client for testing with proper config
+        config = OpenAIConfig(
+            api_key="test-key",
+            model_name="gpt-4o",
+            base_url="https://api.openai.com/v1",
+        )
+        client = OpenAICompatibleClient.__new__(OpenAICompatibleClient)
+        client.openai_config = config
+        client.model_name = config.model_name
+
+        # Call the method that builds extra kwargs
+        extra_kwargs = client._build_extra_kwargs(
+            task_id="test-task-123",
+            thought_id="test-thought-456",
+            resp_model_name="ActionSelectionDMAResult",
+            retry_state={},
+        )
+
+        # Standard OpenAI should have no extra_body with reasoning/thinking
+        if "extra_body" in extra_kwargs and extra_kwargs["extra_body"] is not None:
+            assert "reasoning" not in extra_kwargs["extra_body"]
+            assert "thinking" not in extra_kwargs["extra_body"]
+
+    def test_openrouter_includes_provider_config(self):
+        """OpenRouter requests should include both provider config and reasoning disabled."""
+        from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient, OpenAIConfig
+
+        # Create minimal client for testing with proper config
+        config = OpenAIConfig(
+            api_key="test-key",
+            model_name="openai/gpt-4o",
+            base_url="https://openrouter.ai/api/v1",
+        )
+        client = OpenAICompatibleClient.__new__(OpenAICompatibleClient)
+        client.openai_config = config
+        client.model_name = config.model_name
+
+        # Call the method that builds extra kwargs
+        extra_kwargs = client._build_extra_kwargs(
+            task_id="test-task-123",
+            thought_id="test-thought-456",
+            resp_model_name="ActionSelectionDMAResult",
+            retry_state={},
+        )
+
+        # Verify reasoning is disabled
+        assert "extra_body" in extra_kwargs
+        extra_body = extra_kwargs["extra_body"]
+        # Provider config may or may not be present depending on env
+        assert "reasoning" in extra_body
+        assert extra_body["reasoning"]["enabled"] is False

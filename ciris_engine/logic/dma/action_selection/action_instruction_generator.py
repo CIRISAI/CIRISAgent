@@ -108,7 +108,9 @@ class ActionInstructionGenerator:
             return (
                 "DEFER: defer_reason (string, required), defer_until (ISO 8601 timestamp, optional)\n"
                 "defer_until format: '2025-01-20T15:00:00Z'\n"
-                "Use defer_until for time-based deferrals that auto-reactivate."
+                "Use defer_until for time-based deferrals that auto-reactivate.\n"
+                "⚠️ DEFER is ONLY for: ethical dilemmas, permission/access issues, professional domains (medical/legal/financial).\n"
+                "❌ DO NOT DEFER for: tool errors, API failures, adapter issues, or technical problems - use SPEAK to explain the error."
             )
 
         elif action_type == HandlerActionType.REJECT:
@@ -422,8 +424,9 @@ class ActionInstructionGenerator:
                 "Set 'reject_create_filter' to true to prevent similar requests."
             ),
             HandlerActionType.DEFER: (
-                "Use 'DEFER' ONLY when a task MUST be completed AND requires human approval. "
-                "Set 'defer_reason' and optionally 'defer_until' (ISO timestamp)."
+                "Use 'DEFER' ONLY for ethical dilemmas, permission/access issues, or professional domains "
+                "(medical/legal/financial). DO NOT defer for technical errors or tool failures - "
+                "use SPEAK to explain the issue to the user instead."
             ),
             HandlerActionType.TASK_COMPLETE: (
                 "Use 'TASK_COMPLETE' when: task is done, impossible, unnecessary, or unclear. "

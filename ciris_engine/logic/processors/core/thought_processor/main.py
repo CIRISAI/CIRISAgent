@@ -654,7 +654,8 @@ class ThoughtProcessor(
             f"{base_guidance}"
             "Consider: Is there a more cautious approach? Should you gather more information first? "
             "Can this task be marked as complete without further action? "
-            "Remember: DEFER only if the task MUST be done AND requires human approval."
+            "Remember: DEFER only for ethical dilemmas or permission issues - NOT for technical errors. "
+            "If a tool fails, SPEAK to explain the error to the user."
         )
 
     def _prepare_conscience_retry_context(

@@ -16,7 +16,16 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
+from ciris_engine.schemas.adapters.tools import (
+    ToolDMAGuidance,
+    ToolDocumentation,
+    ToolExecutionResult,
+    ToolExecutionStatus,
+    ToolGotcha,
+    ToolInfo,
+    ToolParameterSchema,
+    UsageExample,
+)
 
 from .schemas import HANotification
 from .service import HAIntegrationService
@@ -39,28 +48,165 @@ class HAToolService:
     TOOL_DEFINITIONS: Dict[str, ToolInfo] = {
         "ha_device_control": ToolInfo(
             name="ha_device_control",
-            description="Control a Home Assistant device (light, switch, cover, etc.)",
+            description="Control a Home Assistant device (light, switch, media_player, cover, climate, fan, etc.)",
             parameters=ToolParameterSchema(
                 type="object",
                 properties={
                     "entity_id": {
                         "type": "string",
-                        "description": "Home Assistant entity ID (e.g., light.living_room, switch.garage)",
+                        "description": "Home Assistant entity ID (e.g., light.living_room, media_player.bedroom)",
                     },
                     "action": {
                         "type": "string",
-                        "enum": ["turn_on", "turn_off", "toggle"],
-                        "description": "Action to perform. To set brightness, use 'turn_on' with the brightness parameter.",
+                        "enum": [
+                            # Universal actions
+                            "turn_on",
+                            "turn_off",
+                            "toggle",
+                            # Media player actions
+                            "media_play",
+                            "media_pause",
+                            "media_stop",
+                            "media_play_pause",
+                            "media_next_track",
+                            "media_previous_track",
+                            "volume_up",
+                            "volume_down",
+                            "volume_mute",
+                            # Cover actions
+                            "open_cover",
+                            "close_cover",
+                            "stop_cover",
+                            # Lock actions
+                            "lock",
+                            "unlock",
+                            # Climate actions
+                            "set_hvac_mode",
+                            "set_temperature",
+                            # Fan actions
+                            "set_percentage",
+                        ],
+                        "description": "Action to perform. Use domain-specific actions for best results.",
                     },
                     "brightness": {
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 255,
-                        "description": "Brightness level 0-255 for lights. Use with action='turn_on' to set brightness.",
+                        "description": "Brightness level 0-255 for lights. Use with action='turn_on'.",
                     },
                     "color_temp": {"type": "integer", "description": "Color temperature in mireds (optional)"},
+                    "volume_level": {
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 1.0,
+                        "description": "Volume level 0.0-1.0 for media players with volume_set.",
+                    },
+                    "temperature": {
+                        "type": "number",
+                        "description": "Target temperature for climate entities.",
+                    },
+                    "hvac_mode": {
+                        "type": "string",
+                        "description": "HVAC mode: heat, cool, heat_cool, auto, dry, fan_only, off.",
+                    },
+                    "percentage": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100,
+                        "description": "Fan speed percentage 0-100.",
+                    },
                 },
                 required=["entity_id", "action"],
+            ),
+            documentation=ToolDocumentation(
+                quick_start="Control HA devices: use entity_id + action. For media players use media_stop/media_play, not turn_off.",
+                detailed_instructions="""
+# Home Assistant Device Control
+
+## Action Reference by Domain
+
+### media_player.* (Music, Speakers, TVs)
+- **media_play** - Start/resume playback
+- **media_pause** - Pause playback
+- **media_stop** - STOP playback (USE THIS to stop music!)
+- **media_play_pause** - Toggle play/pause
+- **media_next_track** - Skip to next
+- **media_previous_track** - Go to previous
+- **volume_up** / **volume_down** - Adjust volume
+- **volume_mute** - Mute/unmute
+- **turn_on** / **turn_off** - Power device on/off (NOT for stopping music!)
+
+### light.*
+- **turn_on** - Turn on (optionally with brightness, color_temp)
+- **turn_off** - Turn off
+- **toggle** - Toggle state
+
+### switch.* / input_boolean.*
+- **turn_on** / **turn_off** / **toggle**
+
+### cover.* (Blinds, Garage Doors, Curtains)
+- **open_cover** - Open
+- **close_cover** - Close
+- **stop_cover** - Stop movement
+- **toggle** - Toggle open/closed
+
+### lock.*
+- **lock** - Lock
+- **unlock** - Unlock
+
+### climate.* (Thermostats, AC)
+- **turn_on** / **turn_off** - Power
+- **set_hvac_mode** - Set mode (requires hvac_mode parameter)
+- **set_temperature** - Set target temp (requires temperature parameter)
+
+### fan.*
+- **turn_on** / **turn_off** / **toggle**
+- **set_percentage** - Set speed (requires percentage parameter)
+
+## Common Mistakes
+- Using turn_off to stop music → Use media_stop instead!
+- Using turn_on to resume music → Use media_play instead!
+""",
+                examples=[
+                    UsageExample(
+                        title="Stop music in bedroom",
+                        description="Use media_stop to stop playback (NOT turn_off)",
+                        code='{"entity_id": "media_player.bedroom", "action": "media_stop"}',
+                    ),
+                    UsageExample(
+                        title="Pause music temporarily",
+                        description="Use media_pause to pause, media_play to resume",
+                        code='{"entity_id": "media_player.living_room", "action": "media_pause"}',
+                    ),
+                    UsageExample(
+                        title="Turn off bedroom light",
+                        description="Use turn_off for lights and switches",
+                        code='{"entity_id": "light.bedroom_lamp", "action": "turn_off"}',
+                    ),
+                    UsageExample(
+                        title="Set thermostat temperature",
+                        description="Use set_temperature with temperature parameter",
+                        code='{"entity_id": "climate.living_room", "action": "set_temperature", "temperature": 72}',
+                    ),
+                ],
+                gotchas=[
+                    ToolGotcha(
+                        title="Don't use turn_off to stop music",
+                        description="When user says 'stop the music', use media_stop NOT turn_off. turn_off powers off the device entirely which may fail on some players.",
+                    ),
+                    ToolGotcha(
+                        title="Don't use turn_on to play music",
+                        description="When user says 'play music' or 'resume', use media_play NOT turn_on. turn_on just powers on the device, it doesn't start playback.",
+                    ),
+                    ToolGotcha(
+                        title="500 error on turn_off for media players",
+                        description="If a media player returns 500 on turn_off, use media_stop instead. Some players (like Music Assistant) don't support turn_off.",
+                    ),
+                ],
+            ),
+            dma_guidance=ToolDMAGuidance(
+                when_not_to_use="Do not use for querying state - use ha_sensor_query instead. Do not use for automations - use ha_automation_trigger.",
+                ethical_considerations="Device control affects the physical environment. Verify user intent for irreversible actions like unlocking doors.",
             ),
         ),
         "ha_automation_trigger": ToolInfo(
@@ -139,13 +285,197 @@ class HAToolService:
                 required=["camera_name"],
             ),
         ),
-    }
+        # =====================================================================
+        # Music Assistant Tools (uses HA service calls - requires MA integration in HA)
+        # =====================================================================
+        "ma_search": ToolInfo(
+            name="ma_search",
+            description="Search Music Assistant library for tracks, albums, artists, or playlists",
+            when_to_use="Use when the user wants to find music, search for songs, artists, or albums",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={
+                    "query": {
+                        "type": "string",
+                        "description": "Search query (song name, artist, album, etc.)",
+                    },
+                    "media_types": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": ["artist", "album", "track", "playlist", "radio"]},
+                        "description": "Types to search. Default: all types.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "description": "Max results per type (default: 10)",
+                    },
+                },
+                required=["query"],
+            ),
+            documentation=ToolDocumentation(
+                quick_start="Search for music: ma_search query='song name' to find tracks, albums, artists",
+                detailed_instructions="""
+# Music Assistant Search
 
-    def __init__(self, ha_service: HAIntegrationService) -> None:
-        """Initialize with underlying HA integration service."""
-        self.ha_service = ha_service
-        self._started = False
-        logger.info("HAToolService initialized")
+Search across all configured music providers (Spotify, Tidal, local library, etc.).
+Requires Music Assistant integration to be installed in Home Assistant.
+
+## Search Tips
+- For specific songs: include artist name ("Never Gonna Give You Up Rick Astley")
+- For albums: include album name and optionally artist
+- For artists: just the artist name
+- Filter by type with media_types parameter
+
+## Results
+Returns matches grouped by type (tracks, albums, artists, playlists).
+Use the media_id from results with ma_play to start playback.
+""",
+                examples=[
+                    UsageExample(
+                        title="Search for a song",
+                        description="Find a specific track",
+                        code='{"query": "Bohemian Rhapsody Queen", "media_types": ["track"]}',
+                    ),
+                    UsageExample(
+                        title="Search for an artist",
+                        description="Find all content by an artist",
+                        code='{"query": "Taylor Swift", "media_types": ["artist", "album", "track"]}',
+                    ),
+                ],
+            ),
+            dma_guidance=ToolDMAGuidance(
+                when_not_to_use="Do not use if Music Assistant integration is not installed in Home Assistant.",
+            ),
+        ),
+        "ma_play": ToolInfo(
+            name="ma_play",
+            description="Play a track, album, or playlist on Music Assistant",
+            when_to_use="Use after ma_search to play a specific item, or to play by name",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={
+                    "media_id": {
+                        "type": "string",
+                        "description": "Media name, URI, or ID from search results",
+                    },
+                    "player_id": {
+                        "type": "string",
+                        "description": "Target player entity ID (e.g., media_player.mass_living_room)",
+                    },
+                    "media_type": {
+                        "type": "string",
+                        "enum": ["track", "album", "artist", "playlist", "radio"],
+                        "description": "Type of media to play (default: track)",
+                    },
+                    "enqueue": {
+                        "type": "string",
+                        "enum": ["play", "next", "add", "replace"],
+                        "description": "Queue behavior: play (now), next (after current), add (end), replace (clear queue)",
+                    },
+                },
+                required=["media_id"],
+            ),
+            documentation=ToolDocumentation(
+                quick_start="Play music: ma_play media_id='song name' or use ID from ma_search results",
+                detailed_instructions="""
+# Music Assistant Play
+
+Play media via Music Assistant through Home Assistant.
+
+## Queue Options
+- **play**: Start playing immediately (default)
+- **next**: Add after currently playing track
+- **add**: Add to end of queue
+- **replace**: Clear queue and play this item
+
+## Player Selection
+If player_id not specified, uses the default/active player.
+Use ma_players to see available Music Assistant players.
+""",
+                examples=[
+                    UsageExample(
+                        title="Play a song by name",
+                        description="Play a track immediately",
+                        code='{"media_id": "Bohemian Rhapsody", "media_type": "track", "enqueue": "play"}',
+                    ),
+                    UsageExample(
+                        title="Play on specific player",
+                        description="Play on a specific speaker",
+                        code='{"media_id": "Abbey Road", "media_type": "album", "player_id": "media_player.mass_living_room"}',
+                    ),
+                ],
+            ),
+        ),
+        "ma_browse": ToolInfo(
+            name="ma_browse",
+            description="Browse Music Assistant library categories (artists, albums, playlists)",
+            when_to_use="Use to explore available music without a specific search query",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={
+                    "media_type": {
+                        "type": "string",
+                        "enum": ["artists", "albums", "tracks", "playlists"],
+                        "description": "Category to browse (default: artists)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "description": "Max results (default: 25)",
+                    },
+                },
+                required=[],
+            ),
+            documentation=ToolDocumentation(
+                quick_start="Browse library: ma_browse path='artists' to see all artists",
+                detailed_instructions="""
+# Music Assistant Browse
+
+Navigate the music library by category.
+
+## Available Paths
+- **artists**: List all artists
+- **albums**: List all albums
+- **tracks**: List all tracks
+- **playlists**: List all playlists
+- (empty): Show root categories
+""",
+            ),
+        ),
+        "ma_queue": ToolInfo(
+            name="ma_queue",
+            description="View or manage the playback queue for a Music Assistant player",
+            when_to_use="Use to see what's playing or coming up in the queue",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={
+                    "player_id": {
+                        "type": "string",
+                        "description": "Player entity ID to get queue for",
+                    },
+                },
+                required=["player_id"],
+            ),
+            documentation=ToolDocumentation(
+                quick_start="View queue: ma_queue player_id='media_player.living_room'",
+            ),
+        ),
+        "ma_players": ToolInfo(
+            name="ma_players",
+            description="List all Music Assistant players and their current state",
+            when_to_use="Use to see available players and what's currently playing",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={},
+                required=[],
+            ),
+            documentation=ToolDocumentation(
+                quick_start="List players: ma_players to see all available music players",
+            ),
+        ),
+    }
 
     async def start(self) -> None:
         """Start the tool service."""
@@ -170,13 +500,68 @@ class HAToolService:
     # - get_tool_result(correlation_id)     : Get async result (not used here)
     # =========================================================================
 
+    # MA tools are only available if Music Assistant is installed in HA
+    MA_TOOL_NAMES = {"ma_search", "ma_play", "ma_browse", "ma_queue", "ma_players"}
+
+    def __init__(self, ha_service: HAIntegrationService) -> None:
+        """Initialize with underlying HA integration service."""
+        self.ha_service = ha_service
+        self._started = False
+        self._ma_available: Optional[bool] = None  # Cached MA detection
+        logger.info("HAToolService initialized")
+
+    async def _check_ma_available(self) -> bool:
+        """Check if Music Assistant is installed in Home Assistant.
+
+        Detects MA by looking for:
+        - media_player.mass_* entities (MA-managed players)
+        - update.music_assistant_* entities (MA server update entity)
+        - Any entity with mass_player_id attribute
+
+        Note: Only caches positive detection (MA found). Transient HA errors
+        will retry on next call rather than permanently disabling MA tools.
+        """
+        # Only use cache if MA was previously detected (positive cache)
+        # Don't cache failures - allow retry on transient HA errors
+        if self._ma_available is True:
+            return True
+
+        try:
+            entities = await self.ha_service.get_all_entities()
+            # Check for MA indicators:
+            # 1. MA player entities (mass_* prefix)
+            # 2. MA update entity (indicates MA server is installed)
+            # 3. Any media_player with mass_player_id attribute
+            ma_found = any(
+                e.entity_id.startswith("media_player.mass_")
+                or e.entity_id.startswith("update.music_assistant")
+                or (e.domain == "media_player" and e.attributes.get("mass_player_id"))
+                for e in entities
+            )
+            if ma_found:
+                # Cache positive detection - MA is installed
+                self._ma_available = True
+                logger.info("[HA TOOLS] Music Assistant detected - MA tools enabled")
+            else:
+                # Don't cache negative - MA might be installed later or HA might be starting up
+                logger.debug("[HA TOOLS] Music Assistant not detected in current entity list")
+            return ma_found
+        except Exception as e:
+            # Don't cache failures - allow retry when HA recovers
+            logger.warning(f"[HA TOOLS] Error checking for MA (will retry): {e}")
+            return False
+
     def get_service_metadata(self) -> Dict[str, Any]:
         """Return service metadata for DSAR and data source discovery."""
         return {"data_source": False, "service_type": "device_control"}
 
     async def get_available_tools(self) -> List[str]:
         """Get available tool names. Used by system snapshot tool collection."""
-        return list(self.TOOL_DEFINITIONS.keys())
+        tools = list(self.TOOL_DEFINITIONS.keys())
+        # Filter out MA tools if MA not available
+        if not await self._check_ma_available():
+            tools = [t for t in tools if t not in self.MA_TOOL_NAMES]
+        return tools
 
     async def list_tools(self) -> List[str]:
         """Legacy alias for get_available_tools()."""
@@ -184,11 +569,18 @@ class HAToolService:
 
     async def get_tool_info(self, tool_name: str) -> Optional[ToolInfo]:
         """Get detailed info for a specific tool. Used by system snapshot."""
+        # Don't return MA tools if MA not available
+        if tool_name in self.MA_TOOL_NAMES and not await self._check_ma_available():
+            return None
         return self.TOOL_DEFINITIONS.get(tool_name)
 
     async def get_all_tool_info(self) -> List[ToolInfo]:
         """Get info for all tools. Used by /tools API endpoint."""
-        return list(self.TOOL_DEFINITIONS.values())
+        tools = list(self.TOOL_DEFINITIONS.values())
+        # Filter out MA tools if MA not available
+        if not await self._check_ma_available():
+            tools = [t for t in tools if t.name not in self.MA_TOOL_NAMES]
+        return tools
 
     async def get_tool_schema(self, tool_name: str) -> Optional[ToolParameterSchema]:
         """Get parameter schema for a tool."""
@@ -252,6 +644,17 @@ class HAToolService:
                 result = await self._execute_notification(parameters)
             elif tool_name == "ha_camera_analyze":
                 result = await self._execute_camera_analyze(parameters)
+            # Music Assistant tools
+            elif tool_name == "ma_search":
+                result = await self._execute_ma_search(parameters)
+            elif tool_name == "ma_play":
+                result = await self._execute_ma_play(parameters)
+            elif tool_name == "ma_browse":
+                result = await self._execute_ma_browse(parameters)
+            elif tool_name == "ma_queue":
+                result = await self._execute_ma_queue(parameters)
+            elif tool_name == "ma_players":
+                result = await self._execute_ma_players(parameters)
             else:
                 result = ToolExecutionResult(
                     tool_name=tool_name,
@@ -317,12 +720,25 @@ class HAToolService:
 
         # Map common LLM action aliases to valid HA actions
         action_aliases = {
+            # Light aliases
             "set_brightness": "turn_on",
             "set_level": "turn_on",
             "dim": "turn_on",
             "brighten": "turn_on",
             "set_color_temp": "turn_on",
             "set_color": "turn_on",
+            # Media player aliases
+            "play": "media_play",
+            "pause": "media_pause",
+            "stop": "media_stop",
+            "resume": "media_play",
+            "skip": "media_next_track",
+            "next": "media_next_track",
+            "previous": "media_previous_track",
+            "mute": "volume_mute",
+            # Cover aliases
+            "open": "open_cover",
+            "close": "close_cover",
         }
         if action in action_aliases:
             original_action = action
@@ -331,7 +747,35 @@ class HAToolService:
             logger.info(f"[HA TOOL] Mapped action alias '{original_action}' -> '{action}'")
 
         # Validate action is one of the allowed values
-        valid_actions = ["turn_on", "turn_off", "toggle"]
+        valid_actions = [
+            # Universal
+            "turn_on",
+            "turn_off",
+            "toggle",
+            # Media player
+            "media_play",
+            "media_pause",
+            "media_stop",
+            "media_play_pause",
+            "media_next_track",
+            "media_previous_track",
+            "volume_up",
+            "volume_down",
+            "volume_mute",
+            "volume_set",
+            # Cover
+            "open_cover",
+            "close_cover",
+            "stop_cover",
+            # Lock
+            "lock",
+            "unlock",
+            # Climate
+            "set_hvac_mode",
+            "set_temperature",
+            # Fan
+            "set_percentage",
+        ]
         if action not in valid_actions:
             error_msg = (
                 f"Invalid action '{action}'. Must be one of: {', '.join(valid_actions)}. "
@@ -644,6 +1088,173 @@ class HAToolService:
                 "motion_detected": result.motion_detected,
                 "average_brightness": result.average_brightness,
             },
+            error=None,
+            correlation_id=str(uuid.uuid4()),
+        )
+
+    # =========================================================================
+    # Music Assistant Tool Execution
+    # =========================================================================
+
+    async def _execute_ma_search(self, params: Dict[str, Any]) -> ToolExecutionResult:
+        """Execute Music Assistant search."""
+        query = params.get("query", "")
+        if not query:
+            return ToolExecutionResult(
+                tool_name="ma_search",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data=None,
+                error="Missing required parameter: query",
+                correlation_id=str(uuid.uuid4()),
+            )
+
+        media_types = params.get("media_types")
+        limit = params.get("limit", 10)
+
+        result = await self.ha_service.ma_search(query, media_types, limit)
+
+        # Check both explicit success field and error presence
+        if not result.get("success", False) or "error" in result:
+            return ToolExecutionResult(
+                tool_name="ma_search",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data=result,  # Include full result for debugging
+                error=result.get("error", "Search failed"),
+                correlation_id=str(uuid.uuid4()),
+            )
+
+        return ToolExecutionResult(
+            tool_name="ma_search",
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data=result,
+            error=None,
+            correlation_id=str(uuid.uuid4()),
+        )
+
+    async def _execute_ma_play(self, params: Dict[str, Any]) -> ToolExecutionResult:
+        """Execute Music Assistant play."""
+        media_id = params.get("media_id", "")
+        if not media_id:
+            return ToolExecutionResult(
+                tool_name="ma_play",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data=None,
+                error="Missing required parameter: media_id",
+                correlation_id=str(uuid.uuid4()),
+            )
+
+        player_id = params.get("player_id")
+        media_type = params.get("media_type", "track")
+        enqueue = params.get("enqueue", "play")
+
+        result = await self.ha_service.ma_play(media_id, player_id, media_type, enqueue)
+
+        # Check both explicit success field and error presence
+        if not result.get("success", False) or "error" in result:
+            error_msg = result.get("error", "Playback verification failed")
+            suggestion = result.get("suggestion", "")
+            full_error = f"{error_msg}. {suggestion}".strip() if suggestion else error_msg
+            return ToolExecutionResult(
+                tool_name="ma_play",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data=result,  # Include full result for debugging
+                error=full_error,
+                correlation_id=str(uuid.uuid4()),
+            )
+
+        return ToolExecutionResult(
+            tool_name="ma_play",
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data=result,
+            error=None,
+            correlation_id=str(uuid.uuid4()),
+        )
+
+    async def _execute_ma_browse(self, params: Dict[str, Any]) -> ToolExecutionResult:
+        """Execute Music Assistant browse."""
+        media_type = params.get("media_type", "artists")
+        limit = params.get("limit", 25)
+
+        result = await self.ha_service.ma_browse(media_type, limit)
+
+        if "error" in result:
+            return ToolExecutionResult(
+                tool_name="ma_browse",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data=None,
+                error=result["error"],
+                correlation_id=str(uuid.uuid4()),
+            )
+
+        return ToolExecutionResult(
+            tool_name="ma_browse",
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data=result,
+            error=None,
+            correlation_id=str(uuid.uuid4()),
+        )
+
+    async def _execute_ma_queue(self, params: Dict[str, Any]) -> ToolExecutionResult:
+        """Execute Music Assistant queue query."""
+        player_id = params.get("player_id", "")
+        if not player_id:
+            return ToolExecutionResult(
+                tool_name="ma_queue",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data=None,
+                error="Missing required parameter: player_id",
+                correlation_id=str(uuid.uuid4()),
+            )
+
+        result = await self.ha_service.ma_get_queue(player_id)
+
+        if "error" in result:
+            return ToolExecutionResult(
+                tool_name="ma_queue",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data=None,
+                error=result["error"],
+                correlation_id=str(uuid.uuid4()),
+            )
+
+        return ToolExecutionResult(
+            tool_name="ma_queue",
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data=result,
+            error=None,
+            correlation_id=str(uuid.uuid4()),
+        )
+
+    async def _execute_ma_players(self, params: Dict[str, Any]) -> ToolExecutionResult:
+        """Execute Music Assistant players list."""
+        result = await self.ha_service.ma_get_players()
+
+        if "error" in result:
+            return ToolExecutionResult(
+                tool_name="ma_players",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data=None,
+                error=result["error"],
+                correlation_id=str(uuid.uuid4()),
+            )
+
+        return ToolExecutionResult(
+            tool_name="ma_players",
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data=result,
             error=None,
             correlation_id=str(uuid.uuid4()),
         )

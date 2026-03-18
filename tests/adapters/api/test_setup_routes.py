@@ -246,8 +246,9 @@ class TestValidateLLMEndpoint:
     """Test POST /v1/setup/validate-llm endpoint."""
 
     @pytest.mark.asyncio
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
     @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
-    async def test_validate_openai_success(self, mock_first_run, client):
+    async def test_validate_openai_success(self, mock_dep_first_run, mock_helpers_first_run, client):
         """Test successful OpenAI validation."""
         with patch("openai.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
@@ -274,8 +275,9 @@ class TestValidateLLMEndpoint:
             assert "successful" in data["message"].lower()
 
     @pytest.mark.asyncio
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
     @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
-    async def test_validate_openai_invalid_key(self, mock_first_run, client):
+    async def test_validate_openai_invalid_key(self, mock_dep_first_run, mock_helpers_first_run, client):
         """Test OpenAI validation with invalid key."""
         response = client.post(
             "/v1/setup/validate-llm",
@@ -293,8 +295,9 @@ class TestValidateLLMEndpoint:
         assert "api key" in data["message"].lower()
 
     @pytest.mark.asyncio
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
     @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
-    async def test_validate_local_llm_success(self, mock_first_run, client):
+    async def test_validate_local_llm_success(self, mock_dep_first_run, mock_helpers_first_run, client):
         """Test successful local LLM validation."""
         with patch("openai.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
@@ -320,8 +323,9 @@ class TestValidateLLMEndpoint:
             assert data["valid"] is True
 
     @pytest.mark.asyncio
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
     @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
-    async def test_validate_llm_connection_timeout(self, mock_first_run, client):
+    async def test_validate_llm_connection_timeout(self, mock_dep_first_run, mock_helpers_first_run, client):
         """Test LLM validation with connection timeout."""
         with patch("openai.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
@@ -346,7 +350,9 @@ class TestValidateLLMEndpoint:
             data = response.json()["data"]
             assert data["valid"] is False
 
-    def test_validate_llm_no_auth_required(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    def test_validate_llm_no_auth_required(self, mock_dep_first_run, mock_helpers_first_run, client):
         """Test that LLM validation doesn't require authentication during first-run."""
         response = client.post(
             "/v1/setup/validate-llm",
@@ -976,12 +982,162 @@ class TestValidateSetupPasswords:
         assert "System admin password" in str(exc_info.value.detail)
 
 
+class TestUpdateLLMConfigEndpoint:
+    """Test PUT /v1/setup/llm endpoint."""
+
+    def test_update_llm_config_requires_auth(self, client):
+        """Test that LLM config update requires authentication."""
+        response = client.put(
+            "/v1/setup/llm",
+            json={
+                "llm_provider": "openrouter",
+                "llm_api_key": "sk-new-key",
+                "llm_model": "gpt-4o",
+            },
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_update_llm_config_with_admin_auth(self, client, auth_headers, tmp_path):
+        """Test LLM config update with admin authentication."""
+        config_file = tmp_path / ".env"
+        config_file.write_text('OPENAI_API_KEY="old-key"\nOPENAI_MODEL="gpt-3.5-turbo"\n')
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.get_default_config_path",
+            return_value=config_file,
+        ):
+            response = client.put(
+                "/v1/setup/llm",
+                headers=auth_headers,
+                json={
+                    "llm_provider": "openrouter",
+                    "llm_api_key": "sk-new-key",
+                    "llm_model": "gpt-4o",
+                },
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["status"] == "updated"
+        assert data["provider"] == "openrouter"
+        assert data["model"] == "gpt-4o"
+
+        # Verify file was updated
+        content = config_file.read_text()
+        assert "sk-new-key" in content
+        assert "gpt-4o" in content
+
+    def test_update_llm_config_file_not_found(self, client, auth_headers, tmp_path):
+        """Test LLM config update when config file doesn't exist."""
+        config_file = tmp_path / "nonexistent" / ".env"
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.get_default_config_path",
+            return_value=config_file,
+        ):
+            response = client.put(
+                "/v1/setup/llm",
+                headers=auth_headers,
+                json={
+                    "llm_provider": "openai",
+                    "llm_model": "gpt-4o",
+                },
+            )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_update_llm_config_preserves_other_settings(self, client, auth_headers, tmp_path):
+        """Test that LLM config update preserves other .env settings."""
+        config_file = tmp_path / ".env"
+        config_file.write_text(
+            "CIRIS_CONFIGURED=true\n"
+            'OPENAI_API_KEY="old-key"\n'
+            'OPENAI_MODEL="gpt-3.5-turbo"\n'
+            'CIRIS_ADAPTER="api,discord"\n'
+            'DISCORD_BOT_TOKEN="secret-token"\n'
+        )
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.get_default_config_path",
+            return_value=config_file,
+        ):
+            response = client.put(
+                "/v1/setup/llm",
+                headers=auth_headers,
+                json={
+                    "llm_provider": "openai",
+                    "llm_api_key": "new-key",
+                    "llm_model": "gpt-4o",
+                },
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify other settings preserved
+        content = config_file.read_text()
+        assert "CIRIS_CONFIGURED=true" in content
+        assert "CIRIS_ADAPTER=" in content
+        assert "DISCORD_BOT_TOKEN=" in content
+
+    def test_update_llm_config_keeps_key_if_not_provided(self, client, auth_headers, tmp_path):
+        """Test that existing API key is kept if not provided in update."""
+        config_file = tmp_path / ".env"
+        config_file.write_text('OPENAI_API_KEY="existing-secret-key"\nOPENAI_MODEL="gpt-3.5-turbo"\n')
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.get_default_config_path",
+            return_value=config_file,
+        ):
+            response = client.put(
+                "/v1/setup/llm",
+                headers=auth_headers,
+                json={
+                    "llm_provider": "openai",
+                    # No api_key provided
+                    "llm_model": "gpt-4o",
+                },
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify key preserved
+        content = config_file.read_text()
+        assert "existing-secret-key" in content
+        assert "gpt-4o" in content
+
+    def test_update_llm_config_creates_reload_signal(self, client, auth_headers, tmp_path):
+        """Test that LLM config update creates config reload signal file."""
+        config_file = tmp_path / ".env"
+        config_file.write_text('OPENAI_API_KEY="key"\n')
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.get_default_config_path",
+            return_value=config_file,
+        ):
+            response = client.put(
+                "/v1/setup/llm",
+                headers=auth_headers,
+                json={
+                    "llm_provider": "openai",
+                    "llm_model": "gpt-4o",
+                },
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify reload signal file was created
+        reload_file = tmp_path / ".config_reload"
+        assert reload_file.exists()
+
+
 class TestListModelsEndpoint:
     """Test POST /v1/setup/list-models endpoint."""
 
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
     @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
     @patch("ciris_engine.logic.adapters.api.routes.setup.llm_routes._list_models_for_provider")
-    def test_list_models_success(self, mock_list, mock_first_run, client):
+    def test_list_models_success(self, mock_list, mock_dep_first_run, mock_helpers_first_run, client):
         """Test successful model listing returns expected structure."""
         from ciris_engine.logic.adapters.api.routes.setup import ListModelsResponse, LiveModelInfo
 
@@ -1012,9 +1168,10 @@ class TestListModelsEndpoint:
         assert data["models"][0]["id"] == "gpt-4o"
         assert data["models"][0]["ciris_compatible"] is True
 
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
     @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
     @patch("ciris_engine.logic.adapters.api.routes.setup.llm_routes._list_models_for_provider")
-    def test_list_models_static_fallback(self, mock_list, mock_first_run, client):
+    def test_list_models_static_fallback(self, mock_list, mock_dep_first_run, mock_helpers_first_run, client):
         """Test fallback response when live query fails."""
         from ciris_engine.logic.adapters.api.routes.setup import ListModelsResponse, LiveModelInfo
 
@@ -1039,9 +1196,10 @@ class TestListModelsEndpoint:
         assert data["error"] is not None
         assert "Connection timeout" in data["error"]
 
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
     @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
     @patch("ciris_engine.logic.adapters.api.routes.setup.llm_routes._list_models_for_provider")
-    def test_list_models_no_auth_required(self, mock_list, mock_first_run, client):
+    def test_list_models_no_auth_required(self, mock_list, mock_dep_first_run, mock_helpers_first_run, client):
         """Test endpoint is accessible without auth during first-run."""
         from ciris_engine.logic.adapters.api.routes.setup import ListModelsResponse
 

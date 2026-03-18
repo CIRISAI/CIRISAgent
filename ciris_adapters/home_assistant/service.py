@@ -142,6 +142,15 @@ class HAIntegrationService:
                 f"[HA TOKEN] Token set explicitly: {value[:20]}..." if len(value) > 20 else "[HA TOKEN] Token set"
             )
 
+    @property
+    def ma_enabled(self) -> bool:
+        """Check if Music Assistant integration is available.
+
+        MA is accessed through HA services (music_assistant.* domain).
+        Returns True as MA availability is checked at runtime.
+        """
+        return True
+
     def _parse_camera_urls(self) -> Dict[str, str]:
         """Parse camera URLs from environment variable."""
         urls_env = os.getenv("WEBRTC_CAMERA_URLS", "")
@@ -620,6 +629,376 @@ class HAIntegrationService:
         """Get all entities in a specific domain (sensor, light, switch, etc.)."""
         entities = await self.get_all_entities()
         return [e for e in entities if e.domain == domain]
+
+    # ========== Music Assistant Functionality ==========
+    # These methods use HA service calls to interact with Music Assistant.
+    # MA must be installed as an HA integration (music_assistant.* services).
+
+    async def _get_ma_config_entry_id(self) -> Optional[str]:
+        """Get the Music Assistant config entry ID from Home Assistant."""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self.ha_url}/api/config/config_entries/entry",
+                    headers=self._get_headers(),
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as response:
+                    if response.status == 200:
+                        entries = await response.json()
+                        for entry in entries:
+                            if entry.get("domain") == "music_assistant":
+                                entry_id: str | None = entry.get("entry_id")
+                                logger.info(f"[MA] Found config_entry_id: {entry_id}")
+                                return entry_id
+                    logger.warning("[MA] Could not find music_assistant config entry")
+                    return None
+        except Exception as e:
+            logger.error(f"[MA] Error getting config entry: {e}")
+            return None
+
+    async def ma_search(
+        self,
+        query: str,
+        media_types: Optional[List[str]] = None,
+        limit: int = 10,
+    ) -> Dict[str, Any]:
+        """Search Music Assistant library via HA service call.
+
+        Uses music_assistant.search service through HA API.
+
+        Args:
+            query: Search query string
+            media_types: Optional list of types to search (artist, album, track, playlist, radio)
+            limit: Maximum results per type (default 10)
+
+        Returns:
+            Dict with search results
+        """
+        try:
+            # Get MA config entry ID (required for search)
+            config_entry_id = await self._get_ma_config_entry_id()
+
+            # Use HA service call for MA search
+            # Service: music_assistant.search
+            service_data: Dict[str, Any] = {
+                "name": query,
+                "limit": limit,
+            }
+            if config_entry_id:
+                service_data["config_entry_id"] = config_entry_id
+            if media_types:
+                service_data["media_type"] = media_types
+
+            logger.info(f"[MA] Search request: {service_data}")
+
+            async with aiohttp.ClientSession() as session:
+                # Use ?return_response to get search results back
+                async with session.post(
+                    f"{self.ha_url}/api/services/music_assistant/search?return_response",
+                    json=service_data,
+                    headers={
+                        "Authorization": f"Bearer {self.ha_token}",
+                        "Content-Type": "application/json",
+                    },
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
+                    response_body = await response.text()
+                    logger.info(f"[MA] Search response: HTTP {response.status}, body: {response_body[:500]}")
+
+                    if response.status == 200:
+                        # Try to parse as JSON
+                        try:
+                            data = await response.json() if response_body else []
+                        except Exception:
+                            data = []
+
+                        # HA service calls often return `[]` on success
+                        # The actual results may be delivered via events
+                        if not data or data == []:
+                            logger.info(f"[MA] Search '{query}': service accepted (async results via events)")
+                            return {
+                                "success": True,
+                                "query": query,
+                                "results": [],
+                                "note": "Search request accepted. Results may be async via events.",
+                            }
+
+                        logger.info(f"[MA] Search '{query}' via HA: got {len(data)} results")
+                        return {"success": True, "query": query, "results": data}
+                    elif response.status == 404:
+                        return {
+                            "success": False,
+                            "error": "Music Assistant integration not found in Home Assistant",
+                        }
+                    else:
+                        logger.error(f"[MA] Search failed: HTTP {response.status} - {response_body[:200]}")
+                        return {
+                            "success": False,
+                            "error": f"MA search failed: HTTP {response.status}",
+                        }
+        except Exception as e:
+            logger.error(f"[MA] Search exception: {e}")
+            return {"error": str(e)}
+
+    async def ma_play(
+        self,
+        media_id: str,
+        player_id: Optional[str] = None,
+        media_type: str = "track",
+        enqueue: str = "play",
+    ) -> Dict[str, Any]:
+        """Play media on Music Assistant via HA service call.
+
+        Uses music_assistant.play_media service through HA API.
+
+        Args:
+            media_id: Media name, URI, or ID to play
+            player_id: Target player entity ID (e.g., media_player.mass_living_room)
+            media_type: Type of media (track, album, artist, playlist)
+            enqueue: Queue behavior - play, next, add, replace
+
+        Returns:
+            Dict with play result including verification status
+        """
+        try:
+            # Get MA config entry ID (required for play_media service)
+            config_entry_id = await self._get_ma_config_entry_id()
+
+            service_data: Dict[str, Any] = {
+                "media_id": media_id,
+                "media_type": media_type,
+                "enqueue": enqueue,
+            }
+            if config_entry_id:
+                service_data["config_entry_id"] = config_entry_id
+            if player_id:
+                service_data["entity_id"] = player_id
+
+            logger.info(f"[MA] Play request: {service_data}")
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.ha_url}/api/services/music_assistant/play_media",
+                    json=service_data,
+                    headers={
+                        "Authorization": f"Bearer {self.ha_token}",
+                        "Content-Type": "application/json",
+                    },
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
+                    response_body = await response.text()
+                    logger.info(f"[MA] Play response: HTTP {response.status}, body: {response_body[:500]}")
+
+                    if response.status == 404:
+                        return {
+                            "success": False,
+                            "error": "Music Assistant integration not found in Home Assistant",
+                        }
+                    elif response.status != 200:
+                        logger.error(f"[MA] Play failed: HTTP {response.status} - {response_body[:200]}")
+                        return {
+                            "success": False,
+                            "error": f"MA play failed: HTTP {response.status}",
+                            "details": response_body[:200],
+                        }
+
+                    # HTTP 200 received - but we need to verify playback actually started
+                    # HA returns 200 for any valid service call even if media wasn't found
+
+                    # Wait briefly for player state to update
+                    await asyncio.sleep(2)
+
+                    # Verify playback if we have a player_id
+                    if player_id:
+                        player_state = await self.get_device_state(player_id)
+                        if player_state:
+                            current_state = player_state.state
+                            media_title = player_state.attributes.get("media_title", "")
+                            media_artist = player_state.attributes.get("media_artist", "")
+                            logger.info(
+                                f"[MA] Player state after play: {current_state}, "
+                                f"title='{media_title}', artist='{media_artist}'"
+                            )
+
+                            if current_state == "playing":
+                                return {
+                                    "success": True,
+                                    "media_id": media_id,
+                                    "player": player_id,
+                                    "verified": True,
+                                    "now_playing": {
+                                        "title": media_title,
+                                        "artist": media_artist,
+                                    },
+                                }
+                            else:
+                                # Player exists but not playing
+                                return {
+                                    "success": False,
+                                    "error": f"Playback did not start. Player state: {current_state}",
+                                    "player": player_id,
+                                    "suggestion": (
+                                        "The track may not exist in Music Assistant, or the player "
+                                        "may not be available. Try ma_search first to verify the track exists, "
+                                        "and ma_players to list available players."
+                                    ),
+                                }
+                        else:
+                            return {
+                                "success": False,
+                                "error": f"Could not verify player state for '{player_id}'",
+                                "suggestion": "The player entity may not exist. Use ma_players to list available players.",
+                            }
+
+                    # No player_id specified - can't verify, return cautious response
+                    return {
+                        "success": True,
+                        "media_id": media_id,
+                        "verified": False,
+                        "warning": "No player specified - could not verify playback started",
+                    }
+
+        except Exception as e:
+            logger.error(f"[MA] Play exception: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def ma_get_players(self) -> Dict[str, Any]:
+        """Get all Music Assistant players via HA entity query.
+
+        Finds all media_player entities that belong to Music Assistant.
+
+        Returns:
+            Dict with player list and states
+        """
+        try:
+            # Get all media_player entities and filter for MA players
+            entities = await self.get_all_entities()
+            ma_players = [
+                {
+                    "entity_id": e.entity_id,
+                    "name": e.friendly_name,
+                    "state": e.state,
+                    "attributes": e.attributes,
+                }
+                for e in entities
+                if e.domain == "media_player"
+                and (
+                    e.entity_id.startswith("media_player.mass_")
+                    or e.attributes.get("mass_player_id")
+                    or "music_assistant" in str(e.attributes.get("friendly_name", "")).lower()
+                )
+            ]
+
+            if not ma_players:
+                # Fall back to all media players if no MA-specific ones found
+                ma_players = [
+                    {
+                        "entity_id": e.entity_id,
+                        "name": e.friendly_name,
+                        "state": e.state,
+                    }
+                    for e in entities
+                    if e.domain == "media_player"
+                ]
+
+            logger.info(f"[MA] Get players: found {len(ma_players)}")
+            return {"success": True, "players": ma_players}
+        except Exception as e:
+            logger.error(f"[MA] Get players exception: {e}")
+            return {"error": str(e)}
+
+    async def ma_get_queue(self, player_id: str) -> Dict[str, Any]:
+        """Get the queue for a Music Assistant player.
+
+        Queries player attributes for queue info.
+
+        Args:
+            player_id: Player entity ID
+
+        Returns:
+            Dict with queue info from player attributes
+        """
+        try:
+            state = await self.get_device_state(player_id)
+            if not state:
+                return {"error": f"Player not found: {player_id}"}
+
+            # Extract queue info from player attributes
+            attrs = state.attributes
+            queue_info = {
+                "player_id": player_id,
+                "state": state.state,
+                "current_track": attrs.get("media_title"),
+                "current_artist": attrs.get("media_artist"),
+                "current_album": attrs.get("media_album_name"),
+                "queue_position": attrs.get("queue_position"),
+                "queue_size": attrs.get("queue_size"),
+                "shuffle": attrs.get("shuffle"),
+                "repeat": attrs.get("repeat"),
+            }
+
+            logger.info(
+                f"[MA] Get queue for {player_id}: position {queue_info.get('queue_position')}/{queue_info.get('queue_size')}"
+            )
+            return {"success": True, "queue": queue_info}
+        except Exception as e:
+            logger.error(f"[MA] Get queue exception: {e}")
+            return {"error": str(e)}
+
+    async def ma_browse(self, media_type: str = "artists", limit: int = 25) -> Dict[str, Any]:
+        """Browse Music Assistant library via HA service call.
+
+        Uses music_assistant.get_library service.
+
+        Args:
+            media_type: Category to browse (artists, albums, tracks, playlists)
+            limit: Maximum results
+
+        Returns:
+            Dict with browsable items
+        """
+        try:
+            # Get MA config entry ID (may be required)
+            config_entry_id = await self._get_ma_config_entry_id()
+
+            service_data: Dict[str, Any] = {
+                "media_type": media_type,
+                "limit": limit,
+            }
+            if config_entry_id:
+                service_data["config_entry_id"] = config_entry_id
+
+            logger.info(f"[MA] Browse request: {service_data}")
+
+            async with aiohttp.ClientSession() as session:
+                # Note: ?return_response required for HA 2024.3+ to get response data
+                async with session.post(
+                    f"{self.ha_url}/api/services/music_assistant/get_library?return_response",
+                    json=service_data,
+                    headers={
+                        "Authorization": f"Bearer {self.ha_token}",
+                        "Content-Type": "application/json",
+                    },
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
+                    response_body = await response.text()
+                    logger.info(f"[MA] Browse response: HTTP {response.status}, body: {response_body[:500]}")
+
+                    if response.status == 200:
+                        try:
+                            data = await response.json() if response_body else []
+                        except Exception:
+                            data = []
+                        logger.info(f"[MA] Browse '{media_type}' via HA: success")
+                        return {"success": True, "media_type": media_type, "items": data}
+                    elif response.status == 404:
+                        return {"success": False, "error": "Music Assistant integration not found in Home Assistant"}
+                    else:
+                        logger.error(f"[MA] Browse failed: HTTP {response.status} - {response_body[:200]}")
+                        return {"success": False, "error": f"MA browse failed: HTTP {response.status}"}
+        except Exception as e:
+            logger.error(f"[MA] Browse exception: {e}")
+            return {"error": str(e)}
 
     # ========== Camera Functionality ==========
 

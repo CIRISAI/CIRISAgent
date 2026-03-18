@@ -469,7 +469,7 @@ def _try_lazy_init_billing_provider(request: Request, resource_monitor: Any) -> 
     # Get billing URL from central config (checks env var first)
     billing_url = get_billing_url()
 
-    logger.info(
+    logger.debug(
         "[BILLING_LAZY_INIT] Token found (%d chars), creating CIRISBillingProvider...",
         len(google_token),
     )
@@ -490,10 +490,9 @@ def _try_lazy_init_billing_provider(request: Request, resource_monitor: Any) -> 
             host_only = urlparse(billing_url).hostname or "unknown"
         except Exception:
             host_only = "parse-error"
-        logger.info(
-            "[BILLING_LAZY_INIT] Successfully created CIRISBillingProvider: host=%s, token_length=%d",
+        logger.debug(
+            "[BILLING_LAZY_INIT] Successfully created CIRISBillingProvider: host=%s",
             host_only,
-            len(google_token),
         )
         return provider
 
@@ -537,10 +536,9 @@ async def get_credits(
     from ciris_engine.logic.adapters.api.routes.agent import _derive_credit_account
     from ciris_engine.schemas.services.credit_gate import CreditContext
 
-    logger.info("[BILLING_API] get_credits called for user_id=%s", auth.user_id)
+    logger.debug("[BILLING_API] get_credits called")
     user_identity = _extract_user_identity(auth, request)
     agent_id = _get_agent_id(request)
-    logger.info("[BILLING_API] agent_id=%s, user_identity=%s", agent_id, user_identity)
 
     # Check credit provider availability
     credit_provider = _get_credit_provider(request)
@@ -548,7 +546,7 @@ async def get_credits(
         if not hasattr(request.app.state, "resource_monitor"):
             logger.error("[BILLING_API] No resource_monitor on app.state")
             raise HTTPException(status_code=503, detail=ERROR_RESOURCE_MONITOR_UNAVAILABLE)
-        logger.info("[BILLING_API] No credit provider, returning unlimited response")
+        logger.debug("[BILLING_API] No credit provider, returning unlimited response")
         return _get_unlimited_credit_response()
 
     # Query credit provider
@@ -794,7 +792,7 @@ async def get_transactions(
         return TransactionListResponse(transactions=[], total_count=0, has_more=False)
 
     # CIRISBillingProvider - query billing backend for transaction history
-    logger.info(f"[BILLING_TRANSACTIONS] Fetching transactions (limit={limit}, offset={offset})")
+    logger.debug("[BILLING_TRANSACTIONS] Fetching transactions (limit=%d, offset=%d)", limit, offset)
     billing_client = _get_billing_client(request)
     user_identity = _extract_user_identity(auth, request)
 

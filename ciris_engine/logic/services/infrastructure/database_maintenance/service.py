@@ -776,6 +776,8 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                             self.time_service,
                             db_path=self.db_path,
                         )
+                        # Create audit entry for auto-completion
+                        await self._audit_task_auto_complete(task)
                         # Send notification to the channel that the task was auto-completed
                         await self._notify_stale_task_completed(task)
                 logger.info(f"Marked {len(old_task_ids)} old active tasks as completed")
@@ -821,6 +823,53 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             logger.info(f"Sent stale task notification to channel {channel_id}")
         except Exception as e:
             logger.warning(f"Failed to send stale task notification to {channel_id}: {e}")
+
+    async def _audit_task_auto_complete(self, task: Any) -> None:
+        """Create an audit entry for a task that was auto-completed by maintenance service.
+
+        This creates a proper audit trail entry indicating the task was automatically
+        completed due to being stale (older than 5 minutes from a previous run),
+        rather than being completed by the TASK_COMPLETE handler.
+        """
+        if not self.bus_manager:
+            logger.debug("No bus_manager available - skipping auto-complete audit")
+            return
+
+        if not hasattr(self.bus_manager, "audit_service") or not self.bus_manager.audit_service:
+            logger.warning("No audit_service available - skipping auto-complete audit")
+            return
+
+        try:
+            # Calculate task age for the audit record
+            current_time = self.time_service.now()
+            if isinstance(task.created_at, str):
+                from datetime import datetime
+
+                task_created = datetime.fromisoformat(task.created_at.replace("Z", UTC_TIMEZONE_SUFFIX))
+            else:
+                task_created = task.created_at
+            task_age_seconds = (current_time - task_created).total_seconds()
+
+            # Create audit event with all relevant task details
+            await self.bus_manager.audit_service.log_event(
+                event_type="handler_action_task_complete",
+                event_data={
+                    "handler_name": "DatabaseMaintenanceService",
+                    "task_id": task.task_id,
+                    "thought_id": None,  # No thought associated with auto-complete
+                    "action": "task_complete",
+                    "outcome": "auto_completed",
+                    "completion_reason": "maintenance_auto_complete",
+                    "auto_complete_reason": f"Task was stale (age: {task_age_seconds:.0f}s, threshold: 300s)",
+                    "task_age_seconds": task_age_seconds,
+                    "channel_id": getattr(task, "channel_id", None),
+                    "agent_occurrence_id": getattr(task, "agent_occurrence_id", "default"),
+                    "wa_authorized": False,  # Not authorized by WA, done by maintenance
+                },
+            )
+            logger.debug(f"Created audit entry for auto-completed task {task.task_id}")
+        except Exception as e:
+            logger.warning(f"Failed to create audit entry for auto-completed task {task.task_id}: {e}")
 
     def _is_wakeup_or_shutdown_task(self, task_id: str) -> bool:
         """Check if a task ID matches wakeup or shutdown patterns."""

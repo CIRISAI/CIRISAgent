@@ -924,6 +924,20 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             if new_base_url.rstrip("/") != current_base_url:
                 self.update_base_url(new_base_url)
 
+        # Check if model changed (e.g. user changed model in Settings)
+        new_model = os.environ.get("OPENAI_MODEL", "")
+        if new_model and new_model != self.model_name:
+            old_model = self.model_name
+            self.model_name = new_model
+            self.openai_config.model_name = new_model
+            logger.info(
+                "[LLM_TOKEN] Model updated:\n  Old model: %s\n  New model: %s",
+                old_model,
+                new_model,
+            )
+            # Reset circuit breaker since we're switching models
+            self.circuit_breaker.reset()
+
         logger.info("[LLM_TOKEN] Token refresh complete - LLM service ready for requests")
 
     def _get_client(self) -> Any:
@@ -1205,9 +1219,19 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             metadata = _build_ciris_proxy_metadata(task_id, thought_id, retry_state, resp_model_name)
             extra_kwargs["extra_body"] = {"metadata": metadata}
         elif "openrouter.ai" in base_url:
+            extra_body: Dict[str, Any] = {}
             provider_config = _build_openrouter_provider_config()
             if provider_config:
-                extra_kwargs["extra_body"] = {"provider": provider_config}
+                extra_body["provider"] = provider_config
+            # CRITICAL: Disable reasoning/thinking mode for faster responses
+            # Models like Kimi K2.5 have thinking enabled by default (60-90s latency)
+            # OpenRouter format: {"reasoning": {"enabled": false}}
+            extra_body["reasoning"] = {"enabled": False}
+            extra_kwargs["extra_body"] = extra_body
+        elif "together" in base_url or "api.together" in base_url:
+            # Together AI uses different format for disabling thinking
+            # Format: {"thinking": {"type": "disabled"}}
+            extra_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
 
         return extra_kwargs
 

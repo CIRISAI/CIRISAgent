@@ -172,14 +172,24 @@ def create_env_file(
     if llm_provider == "openai":
         content += f"""# OpenAI Configuration
 OPENAI_API_KEY="{llm_api_key}"
-
-# Optional: Use a different OpenAI model
-# OPENAI_MODEL="gpt-4"
-
+"""
+        # Write custom base URL if provided (for OpenAI-compatible providers like OpenRouter)
+        if llm_base_url:
+            content += f'OPENAI_API_BASE="{llm_base_url}"\n'
+        else:
+            content += """
 # Optional: Use OpenAI-compatible endpoint
 # OPENAI_API_BASE="https://api.openai.com/v1"
-
 """
+        # Write model if provided
+        if llm_model:
+            content += f'OPENAI_MODEL="{llm_model}"\n'
+        else:
+            content += """
+# Optional: Use a different OpenAI model
+# OPENAI_MODEL="gpt-4"
+"""
+        content += "\n"
     elif llm_provider == "google":
         content += f"""# Google (Gemini) Configuration
 GOOGLE_API_KEY="{llm_api_key}"

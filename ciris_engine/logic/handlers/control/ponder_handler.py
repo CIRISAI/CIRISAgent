@@ -134,7 +134,7 @@ class PonderHandler(BaseActionHandler):
                 f'Task: "{task_context}"\n'
                 "FINAL ACTION. You should either:\n"
                 "1) TASK_COMPLETE - If work is substantially complete\n"
-                "2) DEFER - Only if you truly need human help\n"
+                "2) DEFER - Only for ethical dilemmas or permission issues (NOT technical errors)\n"
                 "Note: Someone can ask you to continue for 7 more actions."
             )
 

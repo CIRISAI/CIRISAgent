@@ -5,15 +5,27 @@ This module provides endpoints for reading and updating agent configuration.
 
 import logging
 import os
-from typing import Dict
+from pathlib import Path
+from typing import Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
+from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.api.responses import SuccessResponse
 
 from .._common import RESPONSES_401_500, RESPONSES_403, RESPONSES_500, AuthAdminDep
 from .helpers import _is_setup_allowed_without_auth
 from .models import SetupCompleteRequest, SetupConfigResponse
+
+
+class UpdateLlmConfigRequest(BaseModel):
+    """Request to update LLM configuration only."""
+
+    llm_provider: str = Field(..., description="LLM provider ID (openai, openrouter, anthropic, etc.)")
+    llm_api_key: Optional[str] = Field(None, description="API key (omit to keep existing)")
+    llm_base_url: Optional[str] = Field(None, description="Custom base URL (for OpenRouter, local, etc.)")
+    llm_model: Optional[str] = Field(None, description="Model name")
+
 
 logger = logging.getLogger(__name__)
 
@@ -212,4 +224,148 @@ async def update_config(
         )
 
     except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.put(
+    "/llm",
+    responses={**RESPONSES_403, **RESPONSES_500},
+)
+async def update_llm_config(
+    request: Request,
+    body: UpdateLlmConfigRequest,
+    auth: AuthAdminDep,
+) -> SuccessResponse[Dict[str, str]]:
+    """Update LLM configuration only.
+
+    Updates just the LLM provider, API key, base URL, and model in the .env file.
+    This is a simpler alternative to PUT /setup/config for BYOK users who
+    just want to change their LLM settings without going through the full wizard.
+
+    Requires admin authentication.
+    """
+    from ciris_engine.logic.setup.first_run import get_default_config_path
+
+    from .llm_validation import _get_provider_base_url
+
+    _ = auth  # Used for auth enforcement
+
+    try:
+        config_path = get_default_config_path()
+        if not config_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Configuration file not found. Run setup wizard first.",
+            )
+
+        # Read existing .env content
+        content = config_path.read_text(encoding="utf-8")
+        lines = content.splitlines()
+        new_lines = []
+
+        # Track what we've updated
+        updated_provider = False
+        updated_key = False
+        updated_base = False
+        updated_model = False
+
+        # Get the effective base URL (use provider default if not specified)
+        effective_base_url = _get_provider_base_url(body.llm_provider, body.llm_base_url) or ""
+
+        # Determine which API key env var to use based on provider
+        # anthropic → ANTHROPIC_API_KEY, google → GOOGLE_API_KEY, others → OPENAI_API_KEY
+        provider_key_mapping = {
+            "anthropic": "ANTHROPIC_API_KEY",
+            "google": "GOOGLE_API_KEY",
+        }
+        target_key_var = provider_key_mapping.get(body.llm_provider.lower(), "OPENAI_API_KEY")
+
+        for line in lines:
+            stripped = line.strip()
+
+            # Update the appropriate provider-specific API key
+            # For anthropic: ANTHROPIC_API_KEY, for google: GOOGLE_API_KEY, else: OPENAI_API_KEY
+            if stripped.startswith(f"{target_key_var}=") or stripped.startswith(f"# {target_key_var}="):
+                if body.llm_api_key:
+                    new_lines.append(f'{target_key_var}="{body.llm_api_key}"')
+                    updated_key = True
+                else:
+                    new_lines.append(line)  # Keep existing
+                    updated_key = True
+                continue
+
+            # Also handle OPENAI_API_KEY for non-openai providers (comment it out or keep as-is)
+            if target_key_var != "OPENAI_API_KEY" and (
+                stripped.startswith("OPENAI_API_KEY=") or stripped.startswith("# OPENAI_API_KEY=")
+            ):
+                new_lines.append(line)  # Keep existing OPENAI_API_KEY unchanged
+                continue
+
+            # Update or uncomment OPENAI_API_BASE
+            if stripped.startswith("OPENAI_API_BASE=") or stripped.startswith("# OPENAI_API_BASE="):
+                if effective_base_url:
+                    new_lines.append(f'OPENAI_API_BASE="{effective_base_url}"')
+                else:
+                    new_lines.append(f'# OPENAI_API_BASE=""')
+                updated_base = True
+                continue
+
+            # Update or uncomment OPENAI_MODEL
+            if stripped.startswith("OPENAI_MODEL=") or stripped.startswith("# OPENAI_MODEL="):
+                if body.llm_model:
+                    new_lines.append(f'OPENAI_MODEL="{body.llm_model}"')
+                else:
+                    new_lines.append(line)  # Keep existing
+                updated_model = True
+                continue
+
+            # Update LLM_PROVIDER if present
+            if stripped.startswith("LLM_PROVIDER=") or stripped.startswith("# LLM_PROVIDER="):
+                new_lines.append(f'LLM_PROVIDER="{body.llm_provider}"')
+                updated_provider = True
+                continue
+
+            # Keep other lines unchanged
+            new_lines.append(line)
+
+        # Add missing keys if not found
+        if not updated_key and body.llm_api_key:
+            new_lines.append(f'{target_key_var}="{body.llm_api_key}"')
+        if not updated_base and effective_base_url:
+            new_lines.append(f'OPENAI_API_BASE="{effective_base_url}"')
+        if not updated_model and body.llm_model:
+            new_lines.append(f'OPENAI_MODEL="{body.llm_model}"')
+        if not updated_provider:
+            new_lines.append(f'LLM_PROVIDER="{body.llm_provider}"')
+
+        # Write updated content
+        new_content = "\n".join(new_lines)
+        if not new_content.endswith("\n"):
+            new_content += "\n"
+        config_path.write_text(new_content, encoding="utf-8")
+
+        # Trigger config reload signal for the Python runtime
+        reload_file = config_path.parent / ".config_reload"
+        import time
+
+        reload_file.write_text(str(time.time()), encoding="utf-8")
+
+        # Log update without user-controlled data to prevent log injection (CWE-117)
+        logger.info("LLM config updated successfully")
+
+        return SuccessResponse(
+            data={
+                "status": "updated",
+                "message": "LLM configuration updated successfully",
+                "provider": body.llm_provider,
+                "base_url": effective_base_url or "(default)",
+                "model": body.llm_model or "(unchanged)",
+                "config_path": str(config_path),
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update LLM config: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

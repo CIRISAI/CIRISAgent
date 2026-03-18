@@ -393,7 +393,8 @@ class ADBHelper:
         results["files"].append(str(logcat_crashes))
         log("logcat_crashes.txt")
 
-        # Logcat - App logs (CIRISApp, MainActivity, EnvFileUpdater, etc.)
+        # Logcat - App logs (CIRISApp, MainActivity, ViewModels, etc.)
+        # Include all ViewModels and key app components
         logcat_app = output_path / "logcat_app.txt"
         result = self._run_adb(
             [
@@ -401,13 +402,34 @@ class ADBHelper:
                 "-d",
                 "-v",
                 "time",
+                # Core app components
                 "CIRISApp:*",
                 "MainActivity:*",
                 "EnvFileUpdater:*",
                 "TokenManager:*",
                 "FirstRunDetector:*",
-                "BillingViewModel:*",
                 "PythonRuntime:*",
+                # API client
+                "CIRISApiClient:*",
+                # All ViewModels
+                "AdaptersViewModel:*",
+                "AuditViewModel:*",
+                "BillingViewModel:*",
+                "ConfigViewModel:*",
+                "ConsentViewModel:*",
+                "GraphMemoryViewModel:*",
+                "InteractViewModel:*",
+                "LogsViewModel:*",
+                "MemoryViewModel:*",
+                "RuntimeViewModel:*",
+                "SchedulerViewModel:*",
+                "ServicesViewModel:*",
+                "SessionsViewModel:*",
+                "SettingsViewModel:*",
+                "SetupViewModel:*",
+                "StartupViewModel:*",
+                "TrustViewModel:*",
+                "TicketsViewModel:*",
                 "*:S",
             ]
         )
@@ -416,7 +438,7 @@ class ADBHelper:
         results["files"].append(str(logcat_app))
         log("logcat_app.txt")
 
-        # Logcat - Combined
+        # Logcat - Combined (app + python + web)
         logcat_combined = output_path / "logcat_combined.txt"
         result = self._run_adb(
             [
@@ -424,11 +446,21 @@ class ADBHelper:
                 "-d",
                 "-v",
                 "time",
+                # Core app
                 "CIRISApp:*",
                 "MainActivity:*",
                 "EnvFileUpdater:*",
+                "TokenManager:*",
+                "CIRISApiClient:*",
+                # Key ViewModels (subset for combined)
+                "SettingsViewModel:*",
+                "SetupViewModel:*",
+                "InteractViewModel:*",
+                "BillingViewModel:*",
+                # Python
                 "python.stdout:*",
                 "python.stderr:*",
+                # Web
                 "chromium:*",
                 "WebViewFactory:*",
                 "*:S",

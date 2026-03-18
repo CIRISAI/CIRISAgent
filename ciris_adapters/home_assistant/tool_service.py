@@ -286,7 +286,7 @@ class HAToolService:
             ),
         ),
         # =====================================================================
-        # Music Assistant Tools (requires MUSIC_ASSISTANT_URL env var)
+        # Music Assistant Tools (uses HA service calls - requires MA integration in HA)
         # =====================================================================
         "ma_search": ToolInfo(
             name="ma_search",
@@ -319,6 +319,7 @@ class HAToolService:
 # Music Assistant Search
 
 Search across all configured music providers (Spotify, Tidal, local library, etc.).
+Requires Music Assistant integration to be installed in Home Assistant.
 
 ## Search Tips
 - For specific songs: include artist name ("Never Gonna Give You Up Rick Astley")
@@ -328,7 +329,7 @@ Search across all configured music providers (Spotify, Tidal, local library, etc
 
 ## Results
 Returns matches grouped by type (tracks, albums, artists, playlists).
-Each result includes a URI you can use with ma_play to start playback.
+Use the media_id from results with ma_play to start playback.
 """,
                 examples=[
                     UsageExample(
@@ -344,38 +345,43 @@ Each result includes a URI you can use with ma_play to start playback.
                 ],
             ),
             dma_guidance=ToolDMAGuidance(
-                when_not_to_use="Do not use if Music Assistant is not configured (MUSIC_ASSISTANT_URL not set).",
+                when_not_to_use="Do not use if Music Assistant integration is not installed in Home Assistant.",
             ),
         ),
         "ma_play": ToolInfo(
             name="ma_play",
             description="Play a track, album, or playlist on Music Assistant",
-            when_to_use="Use after ma_search to play a specific item, or to play by URI",
+            when_to_use="Use after ma_search to play a specific item, or to play by name",
             parameters=ToolParameterSchema(
                 type="object",
                 properties={
-                    "uri": {
+                    "media_id": {
                         "type": "string",
-                        "description": "Music Assistant URI from search results (e.g., library://track/123)",
+                        "description": "Media name, URI, or ID from search results",
                     },
                     "player_id": {
                         "type": "string",
-                        "description": "Target player entity ID. Uses default player if not specified.",
+                        "description": "Target player entity ID (e.g., media_player.mass_living_room)",
                     },
-                    "queue_option": {
+                    "media_type": {
+                        "type": "string",
+                        "enum": ["track", "album", "artist", "playlist", "radio"],
+                        "description": "Type of media to play (default: track)",
+                    },
+                    "enqueue": {
                         "type": "string",
                         "enum": ["play", "next", "add", "replace"],
-                        "description": "How to handle queue: play (now), next (after current), add (end), replace (clear queue)",
+                        "description": "Queue behavior: play (now), next (after current), add (end), replace (clear queue)",
                     },
                 },
-                required=["uri"],
+                required=["media_id"],
             ),
             documentation=ToolDocumentation(
-                quick_start="Play music: use URI from ma_search results",
+                quick_start="Play music: ma_play media_id='song name' or use ID from ma_search results",
                 detailed_instructions="""
 # Music Assistant Play
 
-Play a specific media item using its URI from search results.
+Play media via Music Assistant through Home Assistant.
 
 ## Queue Options
 - **play**: Start playing immediately (default)
@@ -385,18 +391,18 @@ Play a specific media item using its URI from search results.
 
 ## Player Selection
 If player_id not specified, uses the default/active player.
-Use ha_list_entities with domain=media_player to see available players.
+Use ma_players to see available Music Assistant players.
 """,
                 examples=[
                     UsageExample(
-                        title="Play a track immediately",
-                        description="Start playback of a specific track",
-                        code='{"uri": "library://track/12345", "queue_option": "play"}',
+                        title="Play a song by name",
+                        description="Play a track immediately",
+                        code='{"media_id": "Bohemian Rhapsody", "media_type": "track", "enqueue": "play"}',
                     ),
                     UsageExample(
-                        title="Add to queue",
-                        description="Add a track to end of current queue",
-                        code='{"uri": "library://track/12345", "queue_option": "add"}',
+                        title="Play on specific player",
+                        description="Play on a specific speaker",
+                        code='{"media_id": "Abbey Road", "media_type": "album", "player_id": "media_player.mass_living_room"}',
                     ),
                 ],
             ),
@@ -408,9 +414,16 @@ Use ha_list_entities with domain=media_player to see available players.
             parameters=ToolParameterSchema(
                 type="object",
                 properties={
-                    "path": {
+                    "media_type": {
                         "type": "string",
-                        "description": "Browse path: 'artists', 'albums', 'tracks', 'playlists', or empty for root",
+                        "enum": ["artists", "albums", "tracks", "playlists"],
+                        "description": "Category to browse (default: artists)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "description": "Max results (default: 25)",
                     },
                 },
                 required=[],
@@ -464,12 +477,6 @@ Navigate the music library by category.
         ),
     }
 
-    def __init__(self, ha_service: HAIntegrationService) -> None:
-        """Initialize with underlying HA integration service."""
-        self.ha_service = ha_service
-        self._started = False
-        logger.info("HAToolService initialized")
-
     async def start(self) -> None:
         """Start the tool service."""
         self._started = True
@@ -493,13 +500,56 @@ Navigate the music library by category.
     # - get_tool_result(correlation_id)     : Get async result (not used here)
     # =========================================================================
 
+    # MA tools are only available if Music Assistant is installed in HA
+    MA_TOOL_NAMES = {"ma_search", "ma_play", "ma_browse", "ma_queue", "ma_players"}
+
+    def __init__(self, ha_service: HAIntegrationService) -> None:
+        """Initialize with underlying HA integration service."""
+        self.ha_service = ha_service
+        self._started = False
+        self._ma_available: Optional[bool] = None  # Cached MA detection
+        logger.info("HAToolService initialized")
+
+    async def _check_ma_available(self) -> bool:
+        """Check if Music Assistant is installed in Home Assistant.
+
+        Detects MA by looking for media_player.mass_* entities or
+        the music_assistant integration.
+        """
+        if self._ma_available is not None:
+            return self._ma_available
+
+        try:
+            entities = await self.ha_service.get_all_entities()
+            # Check for MA player entities (mass_* prefix or mass_player_id attribute)
+            ma_found = any(
+                e.entity_id.startswith("media_player.mass_")
+                or e.attributes.get("mass_player_id")
+                for e in entities
+                if e.domain == "media_player"
+            )
+            self._ma_available = ma_found
+            if ma_found:
+                logger.info("[HA TOOLS] Music Assistant detected - MA tools enabled")
+            else:
+                logger.info("[HA TOOLS] Music Assistant not detected - MA tools disabled")
+            return ma_found
+        except Exception as e:
+            logger.warning(f"[HA TOOLS] Error checking for MA: {e}")
+            self._ma_available = False
+            return False
+
     def get_service_metadata(self) -> Dict[str, Any]:
         """Return service metadata for DSAR and data source discovery."""
         return {"data_source": False, "service_type": "device_control"}
 
     async def get_available_tools(self) -> List[str]:
         """Get available tool names. Used by system snapshot tool collection."""
-        return list(self.TOOL_DEFINITIONS.keys())
+        tools = list(self.TOOL_DEFINITIONS.keys())
+        # Filter out MA tools if MA not available
+        if not await self._check_ma_available():
+            tools = [t for t in tools if t not in self.MA_TOOL_NAMES]
+        return tools
 
     async def list_tools(self) -> List[str]:
         """Legacy alias for get_available_tools()."""
@@ -507,11 +557,18 @@ Navigate the music library by category.
 
     async def get_tool_info(self, tool_name: str) -> Optional[ToolInfo]:
         """Get detailed info for a specific tool. Used by system snapshot."""
+        # Don't return MA tools if MA not available
+        if tool_name in self.MA_TOOL_NAMES and not await self._check_ma_available():
+            return None
         return self.TOOL_DEFINITIONS.get(tool_name)
 
     async def get_all_tool_info(self) -> List[ToolInfo]:
         """Get info for all tools. Used by /tools API endpoint."""
-        return list(self.TOOL_DEFINITIONS.values())
+        tools = list(self.TOOL_DEFINITIONS.values())
+        # Filter out MA tools if MA not available
+        if not await self._check_ma_available():
+            tools = [t for t in tools if t.name not in self.MA_TOOL_NAMES]
+        return tools
 
     async def get_tool_schema(self, tool_name: str) -> Optional[ToolParameterSchema]:
         """Get parameter schema for a tool."""
@@ -1066,21 +1123,22 @@ Navigate the music library by category.
 
     async def _execute_ma_play(self, params: Dict[str, Any]) -> ToolExecutionResult:
         """Execute Music Assistant play."""
-        uri = params.get("uri", "")
-        if not uri:
+        media_id = params.get("media_id", "")
+        if not media_id:
             return ToolExecutionResult(
                 tool_name="ma_play",
                 status=ToolExecutionStatus.FAILED,
                 success=False,
                 data=None,
-                error="Missing required parameter: uri",
+                error="Missing required parameter: media_id",
                 correlation_id=str(uuid.uuid4()),
             )
 
         player_id = params.get("player_id")
-        queue_option = params.get("queue_option", "play")
+        media_type = params.get("media_type", "track")
+        enqueue = params.get("enqueue", "play")
 
-        result = await self.ha_service.ma_play(uri, player_id, queue_option)
+        result = await self.ha_service.ma_play(media_id, player_id, media_type, enqueue)
 
         if "error" in result:
             return ToolExecutionResult(
@@ -1103,9 +1161,10 @@ Navigate the music library by category.
 
     async def _execute_ma_browse(self, params: Dict[str, Any]) -> ToolExecutionResult:
         """Execute Music Assistant browse."""
-        path = params.get("path", "")
+        media_type = params.get("media_type", "artists")
+        limit = params.get("limit", 25)
 
-        result = await self.ha_service.ma_browse(path)
+        result = await self.ha_service.ma_browse(media_type, limit)
 
         if "error" in result:
             return ToolExecutionResult(

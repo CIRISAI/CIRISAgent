@@ -1,5 +1,6 @@
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
@@ -9,6 +10,34 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_LOG_FORMAT = "%(asctime)s.%(msecs)03d - %(name)s - %(levelname)s - %(message)s"
 DEFAULT_LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+def _cleanup_old_logs(log_path: Path, prefix: str, keep_count: int = 5) -> None:
+    """Remove old log files, keeping only the most recent ones.
+
+    Args:
+        log_path: Directory containing log files
+        prefix: Filename prefix to match (e.g., 'ciris_agent_')
+        keep_count: Number of recent log sessions to keep
+    """
+    try:
+        # Find all log files with the prefix (including rotation backups)
+        log_files = list(log_path.glob(f"{prefix}*.log*"))
+        if len(log_files) <= keep_count:
+            return
+
+        # Sort by modification time (oldest first)
+        log_files.sort(key=lambda f: f.stat().st_mtime)
+
+        # Remove oldest files, keeping keep_count
+        files_to_remove = log_files[:-keep_count]
+        for log_file in files_to_remove:
+            try:
+                log_file.unlink()
+            except Exception:
+                pass  # Ignore errors deleting individual files
+    except Exception:
+        pass  # Cleanup is best-effort
 
 
 def setup_basic_logging(
@@ -79,15 +108,25 @@ def setup_basic_logging(
 
         if not time_service:
             raise RuntimeError("CRITICAL: TimeService is required for logging setup")
+
+        # Clean up old log files on startup (keep last 5 sessions)
+        _cleanup_old_logs(log_path, prefix="ciris_agent_", keep_count=5)
+
         timestamp = time_service.now().strftime("%Y%m%d_%H%M%S")
         log_filename = log_path / f"ciris_agent_{timestamp}.log"
 
-        file_handler = logging.FileHandler(log_filename, encoding="utf-8")
+        # Use RotatingFileHandler: 5MB max, keep 3 backups (20MB total per session)
+        file_handler = RotatingFileHandler(
+            log_filename,
+            maxBytes=5 * 1024 * 1024,  # 5MB
+            backupCount=3,
+            encoding="utf-8",
+        )
         file_handler.setFormatter(formatter)
         target_logger.addHandler(file_handler)
 
         latest_link = log_path / "latest.log"
-        if latest_link.exists():
+        if latest_link.exists() or latest_link.is_symlink():
             latest_link.unlink()
         try:
             latest_link.symlink_to(log_filename.name)

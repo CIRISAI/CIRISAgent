@@ -6,12 +6,29 @@ import asyncio
 import logging
 import traceback
 import uuid
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Optional
 
 from ciris_engine.protocols.services import TimeServiceProtocol
 from ciris_engine.schemas.services.graph.incident import IncidentNode, IncidentSeverity, IncidentStatus
 from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
+
+
+def _cleanup_old_incident_logs(log_path: Path, prefix: str, keep_count: int = 3) -> None:
+    """Remove old incident log files, keeping only the most recent ones."""
+    try:
+        log_files = list(log_path.glob(f"{prefix}*.log*"))
+        if len(log_files) <= keep_count:
+            return
+        log_files.sort(key=lambda f: f.stat().st_mtime)
+        for log_file in log_files[:-keep_count]:
+            try:
+                log_file.unlink()
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 class IncidentCaptureHandler(logging.Handler):
@@ -35,6 +52,9 @@ class IncidentCaptureHandler(logging.Handler):
         self._time_service = time_service
 
         self._graph_audit_service = graph_audit_service
+
+        # Clean up old incident logs on startup (keep last 3 sessions)
+        _cleanup_old_incident_logs(self.log_dir, prefix=filename_prefix, keep_count=3)
 
         # Create incident log file with timestamp
         timestamp = self._time_service.now().strftime("%Y%m%d_%H%M%S")
@@ -61,6 +81,15 @@ class IncidentCaptureHandler(logging.Handler):
             datefmt="%Y-%m-%d %H:%M:%S",
         )
         self.setFormatter(formatter)
+
+        # Create rotating file handler: 2MB max, keep 2 backups (6MB total per session)
+        self._rotating_handler = RotatingFileHandler(
+            self.log_file,
+            maxBytes=2 * 1024 * 1024,  # 2MB
+            backupCount=2,
+            encoding="utf-8",
+        )
+        self._rotating_handler.setFormatter(formatter)
 
         # Write header to the file
         with open(self.log_file, "w") as f:
@@ -89,22 +118,34 @@ class IncidentCaptureHandler(logging.Handler):
             if record.levelno < logging.WARNING:
                 return
 
-            msg = self.format(record)
-
-            # Add extra context for errors
+            # Add extra context for errors with exception info
             if record.levelno >= logging.ERROR and record.exc_info:
-                import traceback
+                # Create a modified message with traceback
+                original_msg = record.getMessage()
+                tb = "".join(traceback.format_exception(*record.exc_info))
+                record.msg = f"{original_msg}\nException Traceback:\n{tb}"
+                record.args = ()
 
-                msg += "\nException Traceback:\n"
-                msg += "".join(traceback.format_exception(*record.exc_info))
+            # Use rotating handler for file output (handles rotation automatically)
+            self._rotating_handler.emit(record)
 
-            # Write to file with proper encoding
-            with open(self.log_file, "a", encoding="utf-8") as f:
-                f.write(msg + "\n")
-
-                # Add separator for ERROR and CRITICAL messages
-                if record.levelno >= logging.ERROR:
-                    f.write("-" * 80 + "\n")
+            # Add separator for ERROR and CRITICAL messages
+            if record.levelno >= logging.ERROR:
+                separator_record = logging.LogRecord(
+                    name=record.name,
+                    level=record.levelno,
+                    pathname=record.pathname,
+                    lineno=record.lineno,
+                    msg="-" * 80,
+                    args=(),
+                    exc_info=None,
+                )
+                # Write separator without formatting
+                try:
+                    with open(self.log_file, "a", encoding="utf-8") as f:
+                        f.write("-" * 80 + "\n")
+                except Exception:
+                    pass
 
             # The IncidentManagementService will read from the incidents log file during dream cycles
 

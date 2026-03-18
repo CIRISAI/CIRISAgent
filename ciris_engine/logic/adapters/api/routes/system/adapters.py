@@ -602,27 +602,18 @@ async def list_adapters(
 ) -> SuccessResponse[AdapterListResponse]:
     """List all loaded adapters with their type, status, and metrics."""
     runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
-    logger.info("[LIST_ADAPTERS] Starting adapter list request")
-    logger.info("[LIST_ADAPTERS] runtime_control=%s", runtime_control)
     if not runtime_control:
         raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
 
     try:
-        logger.info("[LIST_ADAPTERS] Calling runtime_control.list_adapters()...")
         adapters = await runtime_control.list_adapters()
-        logger.info("[LIST_ADAPTERS] Got %d adapters from runtime_control", len(adapters))
-        for i, a in enumerate(adapters):
-            logger.info("[LIST_ADAPTERS]   [%d] id=%s type=%s status=%s", i, a.adapter_id, a.adapter_type, a.status)
+        logger.debug("[LIST_ADAPTERS] Got %d adapters from runtime_control", len(adapters))
         seen_adapter_ids = {a.adapter_id for a in adapters}
-        logger.info("[LIST_ADAPTERS] seen_adapter_ids=%s", seen_adapter_ids)
 
         service_registry = getattr(request.app.state, "service_registry", None)
-        logger.info("[LIST_ADAPTERS] service_registry=%s", service_registry)
         if service_registry:
             auto_adapters = _get_auto_loaded_adapters(service_registry, seen_adapter_ids)
-            logger.info("[LIST_ADAPTERS] Got %d auto-loaded adapters", len(auto_adapters))
-            for i, a in enumerate(auto_adapters):
-                logger.info("[LIST_ADAPTERS]   auto[%d] id=%s type=%s", i, a.adapter_id, a.adapter_type)
+            logger.debug("[LIST_ADAPTERS] Got %d auto-loaded adapters", len(auto_adapters))
             adapters.extend(auto_adapters)
 
         adapter_statuses = [_convert_adapter_to_status(a) for a in adapters]

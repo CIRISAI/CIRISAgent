@@ -3099,7 +3099,7 @@ class CIRISApiClient(
             offset: Int = 0
         ): AuditEntriesData {
             val method = "getAuditEntries"
-            logInfo(method, "Fetching audit entries: severity=$severity, outcome=$outcome, limit=$limit, offset=$offset")
+            logDebug(method, "Fetching audit entries: severity=$severity, outcome=$outcome, limit=$limit, offset=$offset")
 
             return try {
                 val response = auditApi.queryAuditEntriesV1AuditEntriesGet(
@@ -3124,7 +3124,7 @@ class CIRISApiClient(
 
                 val body = response.body()
                 val data = body.`data` ?: throw RuntimeException("API returned null data")
-                logInfo(method, "Fetched ${data.propertyEntries.size} audit entries, total=${data.total}")
+                logDebug(method, "Fetched ${data.propertyEntries.size} audit entries, total=${data.total}")
 
                 AuditEntriesData(
                     entries = data.propertyEntries.map { entry ->

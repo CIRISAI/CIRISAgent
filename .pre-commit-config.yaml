@@ -88,14 +88,15 @@ repos:
         stages: [manual]
         verbose: true
 
-      # Version reminder - Gentle nudge
-      - id: version-check
-        name: Version Reminder
-        entry: tools/dev/check_version_reminder.sh
-        language: system
+      # Version alignment - Blocks if constants are out of sync
+      - id: version-alignment
+        name: Version Alignment Check
+        entry: python tools/dev/check_version_alignment.py
+        language: python
         pass_filenames: false
-        always_run: false
-        stages: [manual]
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
 
 # Configuration
 default_language_version:

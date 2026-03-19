@@ -202,6 +202,30 @@ def bump_version(bump_type: str):
         with open(android_gradle_file, "w") as f:
             f.write(gradle_content)
 
+    # Update mobile Python version files (android + iOS)
+    display_version = f"{major}.{minor}.{patch}"
+    mobile_version_files = [
+        ("mobile/androidApp/src/main/python/version.py", f"android-{display_version}"),
+        ("android/app/src/main/python/version.py", f"android-{display_version}"),
+        ("ios/CirisiOS/src/ciris_ios/version.py", f"ios-{display_version}"),
+    ]
+    for rel_path, platform_version in mobile_version_files:
+        version_file = Path(__file__).parent.parent.parent / rel_path
+        if version_file.exists():
+            with open(version_file, "r") as f:
+                content_vf = f.read()
+            old_match = re.search(r'__version__ = "([^"]+)"', content_vf)
+            old_ver = old_match.group(1) if old_match else "unknown"
+            content_vf = re.sub(
+                r'__version__ = "[^"]+"',
+                f'__version__ = "{platform_version}"',
+                content_vf,
+            )
+            with open(version_file, "w") as f:
+                f.write(content_vf)
+            if old_ver != platform_version:
+                print(f"  Updated {rel_path}: {old_ver} -> {platform_version}")
+
     print(f"Version bumped to {new_version}")
     return True
 

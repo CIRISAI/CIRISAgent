@@ -95,7 +95,8 @@ class HAIntegrationService:
         # State
         self._entity_cache: Dict[str, HADeviceState] = {}
         self._entity_list_cache: List[HADeviceState] = []  # Full list cache for get_all_entities
-        self._cache_timestamp: Optional[datetime] = None
+        self._cache_timestamp: Optional[datetime] = None  # Per-entity cache timestamp
+        self._list_cache_timestamp: Optional[datetime] = None  # Full list cache timestamp
         self._cache_ttl = 30  # seconds
         self._detection_tasks: Dict[str, asyncio.Task[None]] = {}
         self._event_history: List[DetectionEvent] = []
@@ -589,9 +590,9 @@ class HAIntegrationService:
         if not self.ha_token:
             return []
 
-        # Return cached results if still fresh
-        if self._cache_timestamp and self._entity_list_cache:
-            age = (datetime.now(timezone.utc) - self._cache_timestamp).total_seconds()
+        # Return cached results if still fresh (uses list-specific timestamp)
+        if self._list_cache_timestamp and self._entity_list_cache:
+            age = (datetime.now(timezone.utc) - self._list_cache_timestamp).total_seconds()
             if age < self._cache_ttl:
                 return self._entity_list_cache
 
@@ -620,7 +621,9 @@ class HAIntegrationService:
                             )
                             result.append(state)
                             self._entity_cache[state.entity_id] = state
-                        self._cache_timestamp = datetime.now(timezone.utc)
+                        now = datetime.now(timezone.utc)
+                        self._cache_timestamp = now
+                        self._list_cache_timestamp = now
                         self._entity_list_cache = result
                         logger.info(f"[HA] get_all_entities: Retrieved {len(result)} entities")
                         return result

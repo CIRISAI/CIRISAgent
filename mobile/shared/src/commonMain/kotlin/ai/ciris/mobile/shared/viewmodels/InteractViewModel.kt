@@ -556,10 +556,18 @@ class InteractViewModel(
                 // If levelPending is true, trigger Play Integrity if not already triggered
                 if (currentTrust.levelPending) {
                     if (!deviceAttestationTriggered && deviceAttestationCallback != null) {
-                        logInfo(method, "Level pending=true, triggering Play Integrity automatically...")
+                        logInfo(method, "Level pending=true, triggering device attestation automatically...")
                         deviceAttestationTriggered = true
                         deviceAttestationCallback?.onDeviceAttestationRequested { result ->
-                            logInfo(method, "Play Integrity completed: $result")
+                            logInfo(method, "Device attestation completed: $result")
+                            // After device attestation succeeds, refresh trust status
+                            // so the backend's re-attestation (with device attestation included)
+                            // is picked up by the UI
+                            viewModelScope.launch {
+                                delay(2000) // Give backend time to re-attest
+                                fetchTrustStatus()
+                                logInfo(method, "Trust status refreshed after device attestation")
+                            }
                         }
                     }
                     logDebug(method, "Level pending=true (level=${currentTrust.maxLevel}), continuing fast poll...")

@@ -94,11 +94,14 @@ class HAIntegrationService:
 
         # State
         self._entity_cache: Dict[str, HADeviceState] = {}
+        self._entity_list_cache: List[HADeviceState] = []  # Full list cache for get_all_entities
         self._cache_timestamp: Optional[datetime] = None
         self._cache_ttl = 30  # seconds
         self._detection_tasks: Dict[str, asyncio.Task[None]] = {}
         self._event_history: List[DetectionEvent] = []
         self._initialized = False
+        self._init_failures = 0
+        self._max_init_retries = 2  # Stop retrying after 2 failures
 
         logger.info(f"HAIntegrationService initialized for {self.ha_url}")
         logger.info(f"Configured {len(self.camera_urls)} cameras via go2rtc")
@@ -566,20 +569,35 @@ class HAIntegrationService:
         """Lazy initialization - retry if token has become available since startup."""
         if self._initialized:
             return True
+        if self._init_failures >= self._max_init_retries:
+            return False
         if self.ha_token:
             logger.info("[HA] Token now available, attempting lazy initialization...")
-            return await self.initialize()
+            result = await self.initialize()
+            if not result:
+                self._init_failures += 1
+                if self._init_failures >= self._max_init_retries:
+                    logger.warning(
+                        f"[HA] Initialization failed {self._init_failures} times, giving up. "
+                        "Will not retry until adapter restart."
+                    )
+            return result
         return False
 
     async def get_all_entities(self, _retry: bool = True) -> List[HADeviceState]:
-        """Get all Home Assistant entities."""
+        """Get all Home Assistant entities. Returns cached results if fresh."""
         if not self.ha_token:
-            logger.warning("[HA] get_all_entities: No token available")
-            logger.warning(f"[HA]   HOME_ASSISTANT_TOKEN env: {bool(os.getenv('HOME_ASSISTANT_TOKEN'))}")
             return []
 
-        # Ensure we're initialized (lazy init if token appeared after startup)
-        await self._ensure_initialized()
+        # Return cached results if still fresh
+        if self._cache_timestamp and self._entity_list_cache:
+            age = (datetime.now(timezone.utc) - self._cache_timestamp).total_seconds()
+            if age < self._cache_ttl:
+                return self._entity_list_cache
+
+        # Ensure we're initialized (respects max retry limit)
+        if not await self._ensure_initialized():
+            return self._entity_list_cache  # Return stale cache if available, else empty
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -602,18 +620,12 @@ class HAIntegrationService:
                             )
                             result.append(state)
                             self._entity_cache[state.entity_id] = state
-                            # Log entity details at INFO level for context tuning
-                            logger.info(
-                                f"[HA ENTITY DISCOVERED] {state.entity_id} | "
-                                f"state={state.state} | name={state.friendly_name} | "
-                                f"device_class={attrs.get('device_class', 'N/A')} | "
-                                f"unit={attrs.get('unit_of_measurement', 'N/A')}"
-                            )
                         self._cache_timestamp = datetime.now(timezone.utc)
+                        self._entity_list_cache = result
                         logger.info(f"[HA] get_all_entities: Retrieved {len(result)} entities")
                         return result
                     elif response.status == 401 and _retry:
-                        logger.warning("[HA] get_all_entities: 401 Unauthorized - token expired, attempting refresh")
+                        logger.warning("[HA] get_all_entities: 401 - attempting token refresh")
                         if await self._try_refresh_token():
                             return await self.get_all_entities(_retry=False)
                         logger.error("[HA] get_all_entities: Token refresh failed")
@@ -623,7 +635,7 @@ class HAIntegrationService:
         except Exception as e:
             logger.error(f"[HA] get_all_entities: Exception - {e}")
 
-        return []
+        return self._entity_list_cache  # Return stale cache on failure
 
     async def get_sensors_by_domain(self, domain: str) -> List[HADeviceState]:
         """Get all entities in a specific domain (sensor, light, switch, etc.)."""
@@ -1308,4 +1320,5 @@ class HAIntegrationService:
         for camera_name in list(self._detection_tasks.keys()):
             await self.stop_event_detection(camera_name)
         self._entity_cache.clear()
+        self._entity_list_cache.clear()
         logger.info("HAIntegrationService cleaned up")

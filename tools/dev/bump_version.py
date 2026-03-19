@@ -147,15 +147,14 @@ def bump_version(bump_type: str):
             f.write(readme_content)
         print(f"  Updated README.md to {release_type} {new_version}")
 
-    # Update iOS Info.plist CFBundleVersion
+    # Update iOS Info.plist CFBundleVersion + CFBundleShortVersionString
     ios_plist_file = Path(__file__).parent.parent.parent / "mobile" / "iosApp" / "iosApp" / "Info.plist"
     if ios_plist_file.exists():
         with open(ios_plist_file, "r") as f:
             plist_content = f.read()
 
-        bundle_version_match = re.search(
-            r"<key>CFBundleVersion</key>\s*<string>(\d+)</string>", plist_content
-        )
+        # Update CFBundleVersion (build number, always increment)
+        bundle_version_match = re.search(r"<key>CFBundleVersion</key>\s*<string>(\d+)</string>", plist_content)
         if bundle_version_match:
             old_build = int(bundle_version_match.group(1))
             new_build = old_build + 1
@@ -164,9 +163,22 @@ def bump_version(bump_type: str):
                 rf"\g<1>{new_build}\2",
                 plist_content,
             )
-            with open(ios_plist_file, "w") as f:
-                f.write(plist_content)
             print(f"  Updated iOS CFBundleVersion: {old_build} -> {new_build}")
+
+        # Update CFBundleShortVersionString (display version, sync with engine)
+        display_version = f"{major}.{minor}.{patch}"
+        old_short_match = re.search(r"<key>CFBundleShortVersionString</key>\s*<string>([^<]+)</string>", plist_content)
+        old_short = old_short_match.group(1) if old_short_match else "unknown"
+        plist_content = re.sub(
+            r"(<key>CFBundleShortVersionString</key>\s*<string>)[^<]+(</string>)",
+            rf"\g<1>{display_version}\2",
+            plist_content,
+        )
+        if old_short != display_version:
+            print(f"  Updated iOS CFBundleShortVersionString: {old_short} -> {display_version}")
+
+        with open(ios_plist_file, "w") as f:
+            f.write(plist_content)
 
     # Update Android build.gradle
     android_gradle_file = Path(__file__).parent.parent.parent / "mobile" / "androidApp" / "build.gradle"

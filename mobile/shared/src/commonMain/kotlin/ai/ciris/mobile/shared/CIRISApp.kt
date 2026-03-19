@@ -258,7 +258,7 @@ fun interface PurchaseResultCallback {
 @Composable
 fun CIRISApp(
     accessToken: String,
-    baseUrl: String = "http://localhost:8080",
+    baseUrl: String = "http://127.0.0.1:8080",
     pythonRuntime: PythonRuntime = createPythonRuntime(),
     secureStorage: SecureStorage = createSecureStorage(),
     envFileUpdater: EnvFileUpdater = createEnvFileUpdater(),

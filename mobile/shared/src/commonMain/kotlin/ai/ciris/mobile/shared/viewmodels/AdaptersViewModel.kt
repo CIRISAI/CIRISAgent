@@ -32,7 +32,7 @@ import kotlinx.coroutines.launch
  */
 class AdaptersViewModel(
     private val apiClient: CIRISApiClient,
-    baseUrl: String = "http://localhost:8080"
+    baseUrl: String = "http://127.0.0.1:8080"
 ) : ViewModel() {
 
     companion object {

@@ -101,7 +101,7 @@ private fun ConfigValue.toDisplayString(): String {
  * All methods include comprehensive error logging for debugging.
  */
 class CIRISApiClient(
-    val baseUrl: String = "http://localhost:8080",
+    val baseUrl: String = "http://127.0.0.1:8080",
     private var accessToken: String? = null
 ) : CIRISApiClientProtocol {
 

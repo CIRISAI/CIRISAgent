@@ -855,31 +855,28 @@ class InteractViewModel(
             // Get current message IDs to check if actions need re-adding after history refresh
             val currentMessageIds = _messages.value.map { it.id }.toSet()
 
-            logInfo(method, "Processing ${entries.entries.size} entries, currentMessageIds=${currentMessageIds.size}")
+            logDebug(method, "Processing ${entries.entries.size} entries, currentMessageIds=${currentMessageIds.size}")
             for (entry in entries.entries) {
                 val actionMessageId = "action_${entry.id}"
 
                 // Skip if already in current messages (already displayed)
                 if (actionMessageId in currentMessageIds) {
-                    logInfo(method, "SKIP ${entry.id}: already in messages")
                     continue
                 }
 
                 // Check if this is one of the 10 action types
                 val actionType = ActionType.fromAuditEventType(entry.action)
                 if (actionType == null) {
-                    logInfo(method, "SKIP ${entry.id}: action '${entry.action}' NOT RECOGNIZED")
                     continue
                 }
 
                 // Skip SPEAK and TASK_COMPLETE - not interesting for timeline display
                 // SPEAK is already shown as a chat message, TASK_COMPLETE is just a marker
                 if (actionType == ActionType.SPEAK || actionType == ActionType.TASK_COMPLETE) {
-                    logInfo(method, "SKIP ${entry.id}: ${actionType.name} filtered")
                     continue
                 }
 
-                logInfo(method, "ADD ${entry.id}: ${actionType.name} from '${entry.action}'")
+                logDebug(method, "ADD ${entry.id}: ${actionType.name} from '${entry.action}'")
 
 
                 // Track that we've processed this entry (for SSE deduplication)

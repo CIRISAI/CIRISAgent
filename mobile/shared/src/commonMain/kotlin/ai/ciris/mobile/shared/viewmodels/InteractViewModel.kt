@@ -769,25 +769,22 @@ class InteractViewModel(
                 val existingIds = _messages.value.map { it.id }.toSet()
                 val newMessages = deduplicatedMessages.filter { it.id !in existingIds }
                 if (newMessages.isNotEmpty()) {
-                    logInfo(method, "Adding ${newMessages.size} new messages to chat")
                     // Merge with existing messages to preserve action entries
                     // Use content + timestamp window deduplication for USER messages
                     // (local ID vs server ID differ, but we don't want to collapse
                     // legitimately repeated messages like "ok" sent at different times)
+                    val previousSize = _messages.value.size
                     val allMessages = (_messages.value + deduplicatedMessages)
                         .distinctBy { msg ->
                             when (msg.type) {
                                 MessageType.USER -> {
                                     // Dedupe USER messages by content + timestamp window (5 sec)
-                                    // This handles local-vs-server ID mismatch while preserving
-                                    // intentionally repeated messages sent at different times
-                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 5000 // 5-second buckets
+                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 5000
                                     "USER:${msg.text}:$timestampWindow"
                                 }
                                 MessageType.AGENT -> {
                                     // Dedupe AGENT messages by content + timestamp window (10 sec)
-                                    // Local response (from sendMessage) and server history have different IDs
-                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 10000 // 10-second buckets
+                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 10000
                                     "AGENT:${msg.text}:$timestampWindow"
                                 }
                                 else -> msg.id // ACTION messages use ID
@@ -795,6 +792,9 @@ class InteractViewModel(
                         }
                         .sortedBy { it.timestamp }
                         .takeLast(50)
+                    if (allMessages.size > previousSize) {
+                        logInfo(method, "Added ${allMessages.size - previousSize} new messages to chat")
+                    }
                     _messages.value = allMessages
                 }
             }

@@ -1426,7 +1426,7 @@ class CIRISApiClient(
      */
     override suspend fun getLlmConfig(): LlmConfigData {
         val method = "getLlmConfig"
-        logInfo(method, "Fetching current LLM configuration")
+        logDebug(method, "Fetching current LLM configuration")
         logDebug(method, "Auth header: ${authHeader()}")
 
         return try {
@@ -1573,7 +1573,7 @@ class CIRISApiClient(
 
     override suspend fun getCredits(): CreditStatusData {
         val method = "getCredits"
-        logInfo(method, "Fetching credit status")
+        logDebug(method, "Fetching credit status")
 
         return try {
             val response = billingApi.getCreditsV1ApiBillingCreditsGet(authHeader())
@@ -1585,7 +1585,7 @@ class CIRISApiClient(
             }
 
             val body = response.body()
-            logInfo(method, "Credits: hasCredit=${body.hasCredit}, remaining=${body.creditsRemaining}, " +
+            logDebug(method, "Credits: hasCredit=${body.hasCredit}, remaining=${body.creditsRemaining}, " +
                     "freeUses=${body.freeUsesRemaining}, plan=${body.planName}")
 
             CreditStatusData(

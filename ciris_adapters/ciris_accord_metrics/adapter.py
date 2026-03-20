@@ -287,13 +287,17 @@ class AccordMetricsAdapter(Service):
     # Consent Management API
     # =========================================================================
 
-    def update_consent(self, consent_given: bool) -> None:
+    def update_consent(self, consent_given: bool, request_lens_deletion: bool = False) -> None:
         """Update consent state.
 
-        This is called by the setup wizard when consent is granted/revoked.
+        This is called by the setup wizard or DSAR self-service when consent is granted/revoked.
+
+        When consent is revoked and request_lens_deletion is True, a deletion request
+        is queued to be sent to CIRISLens on the next flush cycle.
 
         Args:
             consent_given: Whether user has consented
+            request_lens_deletion: If True and revoking consent, queue a lens deletion request
         """
         self._consent_given = consent_given
         self._consent_timestamp = datetime.now(timezone.utc).isoformat()
@@ -304,6 +308,8 @@ class AccordMetricsAdapter(Service):
             logger.info(f"Consent GRANTED for accord metrics collection " f"at {self._consent_timestamp}")
         else:
             logger.info(f"Consent REVOKED for accord metrics collection " f"at {self._consent_timestamp}")
+            if request_lens_deletion:
+                self.metrics_service.queue_lens_deletion_on_revoke()
 
     def is_consent_given(self) -> bool:
         """Check if consent has been given.

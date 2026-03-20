@@ -1694,4 +1694,30 @@ class AccordMetricsService:
             "traces_signed": self._traces_signed,
             "signer_key_id": self._signer.key_id,
             "has_signing_key": self._signer.has_signing_key,
+            "agent_id_hash": self._agent_id_hash,
         }
+
+    def queue_lens_deletion_on_revoke(self) -> None:
+        """Queue a deletion event to be sent to CIRISLens.
+
+        Called when consent is revoked to request removal of all traces
+        for this agent from the lens repository. Sends a disconnect event
+        with deletion_requested=True so the lens API knows to purge data.
+        """
+        if not self._agent_id_hash:
+            logger.warning("Cannot queue lens deletion: no agent_id_hash set")
+            return
+
+        deletion_event: Dict[str, Any] = {
+            "event_type": "consent_revoked_deletion_requested",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "agent_id_hash": self._agent_id_hash,
+            "deletion_requested": True,
+            "reason": "User revoked accord metrics consent via DSAR self-service",
+        }
+
+        self._event_queue.append(deletion_event)
+        logger.info(
+            f"Queued lens deletion request for agent {self._agent_id_hash} "
+            f"(queue size: {len(self._event_queue)})"
+        )

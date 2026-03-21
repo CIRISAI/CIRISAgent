@@ -234,7 +234,9 @@ def _create_founding_partnership(user_id: str) -> None:
         type=NodeType.CONSENT,
         scope=GraphScope.LOCAL,
         attributes={
-            "stream": partnered_status.stream.value if hasattr(partnered_status.stream, "value") else partnered_status.stream,
+            "stream": (
+                partnered_status.stream.value if hasattr(partnered_status.stream, "value") else partnered_status.stream
+            ),
             "categories": [c.value if hasattr(c, "value") else c for c in partnered_status.categories],
             "granted_at": partnered_status.granted_at.isoformat(),
             "expires_at": None,
@@ -312,7 +314,12 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
 
         # Create founding partnership for setup user — the user consented by
         # completing setup, the agent's consent is configured in its template
-        _create_founding_partnership(setup.admin_username)
+        # Use canonical user ID: for OAuth users it's "provider:external_id", for local users it's the username
+        if setup.oauth_provider and setup.oauth_external_id:
+            canonical_user_id = f"{setup.oauth_provider}:{setup.oauth_external_id}"
+        else:
+            canonical_user_id = setup.admin_username
+        _create_founding_partnership(canonical_user_id)
 
         # Ensure system WA exists
         await _ensure_system_wa(auth_service)

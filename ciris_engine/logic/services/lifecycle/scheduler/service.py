@@ -332,16 +332,16 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         else:
             self._oneshot_tasks += 1
 
-        # Log scheduling details
+        # Log scheduling details - sanitize user-controlled data to prevent log injection (CWE-117)
+        safe_name = name.replace("\n", "").replace("\r", "")[:64] if name else "unnamed"
         if defer_until:
-            logger.info(f"Scheduled one-time task: {name} ({task_id}) for {defer_until}")
+            logger.info(f"Scheduled one-time task: {safe_name} ({task_id}) for {defer_until}")
         elif schedule_cron:
             next_run = self._get_next_cron_time(schedule_cron)
-            logger.info(
-                f"Scheduled recurring task: {name} ({task_id}) with cron '{schedule_cron}'. " f"Next run: {next_run}"
-            )
+            # schedule_cron is validated above, safe to log
+            logger.info(f"Scheduled recurring task: {safe_name} ({task_id}). Next run: {next_run}")
         else:
-            logger.info(f"Scheduled task: {name} ({task_id})")
+            logger.info(f"Scheduled task: {safe_name} ({task_id})")
 
         return task
 
@@ -406,7 +406,9 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             task = self._active_tasks[task_id]
             task.status = "CANCELLED"
             del self._active_tasks[task_id]
-            logger.info(f"Cancelled task: {task.name} ({task_id})")
+            # Sanitize task name for logging to prevent log injection (CWE-117)
+            safe_name = task.name.replace("\n", "").replace("\r", "")[:64] if task.name else "unnamed"
+            logger.info(f"Cancelled task: {safe_name} ({task_id})")
             return True
 
         return False

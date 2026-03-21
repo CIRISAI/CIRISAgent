@@ -338,7 +338,9 @@ async def update_destination(
 
         await _save_destinations(config_service, destinations)
 
-        logger.info(f"Updated export destination: {destination_id}")
+        # Sanitize destination_id for logging to prevent log injection (CWE-117)
+        safe_id = destination_id.replace("\n", "").replace("\r", "")[:64] if destination_id else "unknown"
+        logger.info(f"Updated export destination: {safe_id}")
 
         return SuccessResponse(
             data=_sanitize_destination(dest),

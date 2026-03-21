@@ -145,28 +145,64 @@ def _get_accord_adapter(request: Request) -> Any:
         # AdapterInstance wraps the actual adapter in .adapter
         adapter = getattr(instance, "adapter", instance)
         type_name = type(adapter).__name__
-        logger.debug(f"_get_accord_adapter: Checking adapter {adapter_id}: type={type_name}")
-        if "AccordMetrics" in type_name:
-            logger.debug(f"_get_accord_adapter: Found AccordMetrics adapter: {adapter_id}")
+
+        # Match by class name or adapter ID
+        if "AccordMetrics" in type_name or "accord_metrics" in adapter_id:
+            logger.debug(f"_get_accord_adapter: Found AccordMetrics adapter: {adapter_id} (type={type_name})")
             return adapter
 
-    logger.debug("_get_accord_adapter: No AccordMetrics adapter found")
+    logger.debug(
+        f"_get_accord_adapter: No AccordMetrics adapter found among: "
+        f"{[(aid, type(getattr(inst, 'adapter', inst)).__name__) for aid, inst in loaded.items()]}"
+    )
     return None
 
 
 def _get_agent_id(request: Request) -> Optional[str]:
-    """Get the current agent ID from runtime."""
+    """Get the current agent ID from runtime.
+
+    Checks multiple paths since identity may be populated at different stages.
+    """
     runtime = getattr(request.app.state, "runtime", None)
     if not runtime:
+        logger.debug("_get_agent_id: No runtime in app.state")
         return None
 
+    # Primary path: runtime.agent_identity.agent_id
     identity = getattr(runtime, "agent_identity", None)
     if identity and hasattr(identity, "agent_id"):
         agent_id = identity.agent_id
-        return str(agent_id) if agent_id is not None else None
+        if agent_id is not None:
+            return str(agent_id)
+
+    # Fallback: identity_manager.agent_identity
+    identity_mgr = getattr(runtime, "identity_manager", None)
+    if identity_mgr:
+        mgr_identity = getattr(identity_mgr, "agent_identity", None)
+        if mgr_identity and hasattr(mgr_identity, "agent_id") and mgr_identity.agent_id:
+            return str(mgr_identity.agent_id)
+
+    # Fallback: essential_config.agent_name (always set)
+    essential = getattr(runtime, "essential_config", None)
+    if essential:
+        agent_name = getattr(essential, "agent_name", None)
+        if agent_name:
+            logger.debug(f"_get_agent_id: Using essential_config.agent_name={agent_name}")
+            return agent_name
 
     # Legacy fallback
-    return getattr(runtime, "agent_id", None)
+    legacy = getattr(runtime, "agent_id", None)
+    if legacy:
+        return str(legacy)
+
+    logger.warning(
+        "_get_agent_id: Could not determine agent_id. "
+        f"runtime={type(runtime).__name__}, "
+        f"has_identity={identity is not None}, "
+        f"has_identity_mgr={identity_mgr is not None}, "
+        f"has_essential={essential is not None}"
+    )
+    return None
 
 
 # ---------------------------------------------------------------------------

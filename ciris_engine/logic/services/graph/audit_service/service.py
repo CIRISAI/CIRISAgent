@@ -139,6 +139,12 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             self.db_path = Path(db_path)
 
         # Retention configuration
+        # TODO: Implement audit trail cleanup using retention_days as a threshold
+        # when the resource monitor signals storage pressure. Currently audit data
+        # is retained indefinitely. When we evolve the resource manager to respond
+        # to disk constraints, add a cleanup_old_entries(retention_days) method that
+        # purges entries older than retention_days while preserving hash chain
+        # integrity (re-anchor the chain after truncation).
         self.retention_days = retention_days
 
         # Cache for recent entries

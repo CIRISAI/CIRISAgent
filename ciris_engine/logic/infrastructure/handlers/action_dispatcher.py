@@ -64,9 +64,45 @@ class ActionDispatcher:
 
     @streaming_step(StepPoint.ACTION_COMPLETE)
     @step_point(StepPoint.ACTION_COMPLETE)
-    async def _action_complete_step(self, thought_item: ProcessingQueueItem, dispatch_result: Any) -> Any:
-        """Step 10: Action execution completed - streaming decorator for visibility."""
+    async def _action_complete_step(
+        self, thought_item: ProcessingQueueItem, dispatch_result: Any, **kwargs: Any
+    ) -> Any:
+        """Step 10: Action execution completed - streaming decorator for visibility.
+
+        Accepts _coherence_data via kwargs for propagation to CIRISLens traces.
+        """
         return dispatch_result
+
+    @staticmethod
+    def _extract_coherence_data(action_selection_result: Any) -> Dict[str, Any]:
+        """Extract coherence data from ConscienceApplicationResult for trace propagation.
+
+        Returns a dict with coherence/entropy check results, or empty dict for exempt actions
+        or non-ConscienceApplicationResult inputs.
+        """
+        coherence_data: Dict[str, Any] = {}
+
+        # Check if this is a ConscienceApplicationResult with conscience check data
+        if not hasattr(action_selection_result, "coherence_check"):
+            return coherence_data
+
+        # Extract coherence check results
+        coherence_check = getattr(action_selection_result, "coherence_check", None)
+        if coherence_check:
+            coherence_data["coherence_passed"] = getattr(coherence_check, "passed", None)
+            coherence_data["coherence_score"] = getattr(coherence_check, "coherence_score", None)
+            coherence_data["coherence_threshold"] = getattr(coherence_check, "threshold", None)
+            coherence_data["coherence_reason"] = getattr(coherence_check, "message", None)
+
+        # Extract entropy check results
+        entropy_check = getattr(action_selection_result, "entropy_check", None)
+        if entropy_check:
+            coherence_data["entropy_passed"] = getattr(entropy_check, "passed", None)
+            coherence_data["entropy_score"] = getattr(entropy_check, "entropy_score", None)
+            coherence_data["entropy_threshold"] = getattr(entropy_check, "threshold", None)
+            coherence_data["entropy_reason"] = getattr(entropy_check, "message", None)
+
+        return coherence_data
 
     async def dispatch(
         self,
@@ -107,7 +143,14 @@ class ActionDispatcher:
 
         try:
             return await self._execute_handler(
-                handler, final_action_result, thought, dispatch_context, action_type, thought_item, start_time
+                handler,
+                final_action_result,
+                thought,
+                dispatch_context,
+                action_type,
+                thought_item,
+                start_time,
+                action_selection_result,
             )
         except Exception as e:
             return await self._handle_execution_error(
@@ -225,6 +268,7 @@ class ActionDispatcher:
         action_type: HandlerActionType,
         thought_item: ProcessingQueueItem,
         start_time: datetime.datetime,
+        action_selection_result: Any = None,
     ) -> ActionResponse:
         """Execute the handler and create success response."""
         # Record telemetry
@@ -312,7 +356,9 @@ class ActionDispatcher:
             audit_data=audit_result,
         )
 
-        await self._action_complete_step(thought_item, dispatch_result)
+        # Extract coherence data from conscience result for CIRISLens trace propagation
+        coherence_data = self._extract_coherence_data(action_selection_result)
+        await self._action_complete_step(thought_item, dispatch_result, _coherence_data=coherence_data)
         self._log_completion(handler, action_type, thought, follow_up_thought_id)
         await self._record_handler_completion(action_type)
 
@@ -363,7 +409,9 @@ class ActionDispatcher:
             audit_data=audit_result,
         )
 
-        await self._action_complete_step(thought_item, dispatch_result)
+        # Extract coherence data from conscience result for CIRISLens trace propagation
+        coherence_data = self._extract_coherence_data(action_selection_result)
+        await self._action_complete_step(thought_item, dispatch_result, _coherence_data=coherence_data)
         await self._record_handler_error(action_type)
         self._update_thought_status_on_error(thought, handler, error, action_selection_result)
 

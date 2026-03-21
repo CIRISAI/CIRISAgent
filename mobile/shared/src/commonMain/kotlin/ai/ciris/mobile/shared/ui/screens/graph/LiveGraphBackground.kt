@@ -79,8 +79,7 @@ fun LiveGraphBackground(
     ringColor: Color = Color(0xFFE54D2E),  // Default: tomato9 tertiary color
     colorTheme: ColorTheme = ColorTheme.DEFAULT  // Theme for graph node colors
 ) {
-    // Log when composable is first called
-    PlatformLogger.i(TAG, ">>> LiveGraphBackground COMPOSING (eventTrigger=$eventTrigger, opacity=$baseOpacity)")
+    // Composable entry - no logging here (recomposes every frame)
 
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var nodes by remember { mutableStateOf<List<BackgroundNode>>(emptyList()) }
@@ -268,10 +267,10 @@ fun LiveGraphBackground(
     ) {
         // Log whether we're rendering or not
         val shouldRender = !isLoading && nodes.isNotEmpty() && canvasSize.width > 0
-        PlatformLogger.d(TAG, ">>> SHOULD RENDER: $shouldRender (isLoading=$isLoading, nodes=${nodes.size}, width=${canvasSize.width})")
+        // shouldRender check - no per-frame logging
 
         if (shouldRender) {
-            PlatformLogger.i(TAG, ">>> RENDERING CANVAS with ${nodes.size} nodes")
+            // Canvas render - no per-frame logging
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val centerX = size.width / 2
                 val centerY = size.height / 2

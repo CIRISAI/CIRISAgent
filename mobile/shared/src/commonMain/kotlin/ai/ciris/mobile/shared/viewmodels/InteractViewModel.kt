@@ -556,10 +556,18 @@ class InteractViewModel(
                 // If levelPending is true, trigger Play Integrity if not already triggered
                 if (currentTrust.levelPending) {
                     if (!deviceAttestationTriggered && deviceAttestationCallback != null) {
-                        logInfo(method, "Level pending=true, triggering Play Integrity automatically...")
+                        logInfo(method, "Level pending=true, triggering device attestation automatically...")
                         deviceAttestationTriggered = true
                         deviceAttestationCallback?.onDeviceAttestationRequested { result ->
-                            logInfo(method, "Play Integrity completed: $result")
+                            logInfo(method, "Device attestation completed: $result")
+                            // After device attestation succeeds, refresh trust status
+                            // so the backend's re-attestation (with device attestation included)
+                            // is picked up by the UI
+                            viewModelScope.launch {
+                                delay(2000) // Give backend time to re-attest
+                                fetchTrustStatus()
+                                logInfo(method, "Trust status refreshed after device attestation")
+                            }
                         }
                     }
                     logDebug(method, "Level pending=true (level=${currentTrust.maxLevel}), continuing fast poll...")
@@ -769,25 +777,22 @@ class InteractViewModel(
                 val existingIds = _messages.value.map { it.id }.toSet()
                 val newMessages = deduplicatedMessages.filter { it.id !in existingIds }
                 if (newMessages.isNotEmpty()) {
-                    logInfo(method, "Adding ${newMessages.size} new messages to chat")
                     // Merge with existing messages to preserve action entries
                     // Use content + timestamp window deduplication for USER messages
                     // (local ID vs server ID differ, but we don't want to collapse
                     // legitimately repeated messages like "ok" sent at different times)
+                    val previousSize = _messages.value.size
                     val allMessages = (_messages.value + deduplicatedMessages)
                         .distinctBy { msg ->
                             when (msg.type) {
                                 MessageType.USER -> {
                                     // Dedupe USER messages by content + timestamp window (5 sec)
-                                    // This handles local-vs-server ID mismatch while preserving
-                                    // intentionally repeated messages sent at different times
-                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 5000 // 5-second buckets
+                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 5000
                                     "USER:${msg.text}:$timestampWindow"
                                 }
                                 MessageType.AGENT -> {
                                     // Dedupe AGENT messages by content + timestamp window (10 sec)
-                                    // Local response (from sendMessage) and server history have different IDs
-                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 10000 // 10-second buckets
+                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 10000
                                     "AGENT:${msg.text}:$timestampWindow"
                                 }
                                 else -> msg.id // ACTION messages use ID
@@ -795,6 +800,9 @@ class InteractViewModel(
                         }
                         .sortedBy { it.timestamp }
                         .takeLast(50)
+                    if (allMessages.size > previousSize) {
+                        logInfo(method, "Added ${allMessages.size - previousSize} new messages to chat")
+                    }
                     _messages.value = allMessages
                 }
             }
@@ -855,31 +863,28 @@ class InteractViewModel(
             // Get current message IDs to check if actions need re-adding after history refresh
             val currentMessageIds = _messages.value.map { it.id }.toSet()
 
-            logInfo(method, "Processing ${entries.entries.size} entries, currentMessageIds=${currentMessageIds.size}")
+            logDebug(method, "Processing ${entries.entries.size} entries, currentMessageIds=${currentMessageIds.size}")
             for (entry in entries.entries) {
                 val actionMessageId = "action_${entry.id}"
 
                 // Skip if already in current messages (already displayed)
                 if (actionMessageId in currentMessageIds) {
-                    logInfo(method, "SKIP ${entry.id}: already in messages")
                     continue
                 }
 
                 // Check if this is one of the 10 action types
                 val actionType = ActionType.fromAuditEventType(entry.action)
                 if (actionType == null) {
-                    logInfo(method, "SKIP ${entry.id}: action '${entry.action}' NOT RECOGNIZED")
                     continue
                 }
 
                 // Skip SPEAK and TASK_COMPLETE - not interesting for timeline display
                 // SPEAK is already shown as a chat message, TASK_COMPLETE is just a marker
                 if (actionType == ActionType.SPEAK || actionType == ActionType.TASK_COMPLETE) {
-                    logInfo(method, "SKIP ${entry.id}: ${actionType.name} filtered")
                     continue
                 }
 
-                logInfo(method, "ADD ${entry.id}: ${actionType.name} from '${entry.action}'")
+                logDebug(method, "ADD ${entry.id}: ${actionType.name} from '${entry.action}'")
 
 
                 // Track that we've processed this entry (for SSE deduplication)

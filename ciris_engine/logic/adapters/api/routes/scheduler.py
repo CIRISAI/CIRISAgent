@@ -385,7 +385,8 @@ async def cancel_scheduled_task(
         if not success:
             raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
 
-        logger.info(f"Cancelled scheduled task: {task_id}")
+        # Log without user-controlled task_id to prevent log injection (CWE-117)
+        logger.info("Scheduled task cancelled successfully")
 
         response = CancelTaskResponse(success=True, task_id=task_id, message=f"Task {task_id} has been cancelled")
 
@@ -399,5 +400,6 @@ async def cancel_scheduled_task(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to cancel task {task_id}: {e}")
+        # Log without user-controlled task_id to prevent log injection (CWE-117)
+        logger.error(f"Failed to cancel task: {e}")
         raise HTTPException(status_code=500, detail=str(e))

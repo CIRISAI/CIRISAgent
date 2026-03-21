@@ -45,6 +45,7 @@ import ai.ciris.mobile.shared.viewmodels.WiseAuthorityViewModel
 import ai.ciris.mobile.shared.viewmodels.TicketsViewModel
 import ai.ciris.mobile.shared.viewmodels.SchedulerViewModel
 import ai.ciris.mobile.shared.viewmodels.ToolsViewModel
+import ai.ciris.mobile.shared.viewmodels.DataManagementViewModel
 import ai.ciris.mobile.shared.ui.screens.graph.GraphMemoryScreen
 import ai.ciris.mobile.shared.ui.theme.BrightnessPreference
 import ai.ciris.mobile.shared.ui.theme.ColorTheme
@@ -60,6 +61,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.material.icons.Icons
@@ -238,11 +240,30 @@ interface PurchaseLauncher {
 }
 
 /**
+ * Typed purchase errors for robust error handling and retry logic.
+ */
+sealed class PurchaseError {
+    data class AuthRequired(val message: String = "Sign in required") : PurchaseError()
+    data class TokenExpired(val message: String = "Session expired") : PurchaseError()
+    data class ServerError(val statusCode: Int, val message: String) : PurchaseError()
+    data class NetworkError(val message: String) : PurchaseError()
+    data class StoreError(val message: String) : PurchaseError()
+
+    fun toUserMessage(): String = when (this) {
+        is AuthRequired -> "Please sign in to make purchases"
+        is TokenExpired -> "Session expired. Please try your purchase again."
+        is ServerError -> "Server error ($statusCode). Please try again."
+        is NetworkError -> "Network error. Check your connection."
+        is StoreError -> message
+    }
+}
+
+/**
  * Result of a purchase attempt
  */
 sealed class PurchaseResultType {
     data class Success(val creditsAdded: Int, val newBalance: Int) : PurchaseResultType()
-    data class Error(val message: String) : PurchaseResultType()
+    data class Error(val message: String, val errorType: PurchaseError? = null) : PurchaseResultType()
     object Cancelled : PurchaseResultType()
 }
 
@@ -258,7 +279,7 @@ fun interface PurchaseResultCallback {
 @Composable
 fun CIRISApp(
     accessToken: String,
-    baseUrl: String = "http://localhost:8080",
+    baseUrl: String = "http://127.0.0.1:8080",
     pythonRuntime: PythonRuntime = createPythonRuntime(),
     secureStorage: SecureStorage = createSecureStorage(),
     envFileUpdater: EnvFileUpdater = createEnvFileUpdater(),
@@ -294,6 +315,9 @@ fun CIRISApp(
 
             // GraphMemory goes back to Memory list
             is Screen.GraphMemory -> Screen.Memory
+
+            // DataManagement goes back to Settings
+            is Screen.DataManagement -> Screen.Settings
 
             // All other screens go back to Interact (main screen)
             else -> Screen.Interact
@@ -485,24 +509,15 @@ fun CIRISApp(
     val toolsViewModel: ToolsViewModel = viewModel {
         ToolsViewModel(apiClient)
     }
+    val dataManagementViewModel: DataManagementViewModel = viewModel {
+        DataManagementViewModel(apiClient, secureStorage, envFileUpdater)
+    }
 
-    // Set up purchase result callback
+    // Set up purchase result callback — routes through handlePurchaseResult for typed error handling
     LaunchedEffect(purchaseLauncher) {
         purchaseLauncher?.setOnPurchaseResult { result ->
-            when (result) {
-                is PurchaseResultType.Success -> {
-                    PlatformLogger.i(TAG, " Purchase success: creditsAdded=${result.creditsAdded}, newBalance=${result.newBalance}")
-                    billingViewModel.onPurchaseSuccess(result.creditsAdded, result.newBalance)
-                }
-                is PurchaseResultType.Error -> {
-                    PlatformLogger.e(TAG, " Purchase error: ${result.message}")
-                    billingViewModel.onPurchaseError(result.message)
-                }
-                PurchaseResultType.Cancelled -> {
-                    PlatformLogger.i(TAG, " Purchase cancelled")
-                    billingViewModel.onPurchaseCancelled()
-                }
-            }
+            PlatformLogger.i(TAG, " Purchase result: $result")
+            billingViewModel.handlePurchaseResult(result)
         }
     }
 
@@ -1200,6 +1215,7 @@ fun CIRISApp(
                             onMemoryClick = { currentScreen = Screen.GraphMemory },  // Default to 3D cylinder view
                             onConfigClick = { currentScreen = Screen.Config },
                             onConsentClick = { currentScreen = Screen.Consent },
+                            onDataManagementClick = { currentScreen = Screen.DataManagement },
                             onSystemClick = { currentScreen = Screen.System },
                             onRuntimeClick = { currentScreen = Screen.Runtime },
                             onUsersClick = { currentScreen = Screen.Users },
@@ -1276,6 +1292,10 @@ fun CIRISApp(
                         startupViewModel.retry()
                         checkingFirstRun = false  // Allow first-run re-check after restart
                         currentScreen = Screen.Startup
+                    },
+                    onNavigateToDataManagement = {
+                        PlatformLogger.i("CIRISApp", "[Settings] Navigating to Data Management")
+                        currentScreen = Screen.DataManagement
                     }
                 )
             }
@@ -1321,15 +1341,28 @@ fun CIRISApp(
                             PlatformLogger.i("CIRISApp", "[Screen.Billing] Launching purchase for: ${selectedProduct.productId}")
                             if (purchaseLauncher != null) {
                                 billingViewModel.onPurchaseStarted(selectedProduct.productId)
-                                // Ensure valid token before purchase (silent refresh if needed)
                                 coroutineScope.launch {
-                                    val oauthToken = tokenManager.ensureValidToken()
-                                    if (oauthToken != null) {
-                                        purchaseLauncher.launchPurchaseWithAuth(selectedProduct.productId, oauthToken)
-                                    } else {
-                                        PlatformLogger.w("CIRISApp", "[Screen.Billing] Token refresh failed - sign in required")
-                                        billingViewModel.onPurchaseError("Please sign in to make purchases")
+                                    val maxRetries = 2
+                                    var attempt = 0
+
+                                    while (attempt < maxRetries) {
+                                        attempt++
+                                        val oauthToken = tokenManager.ensureValidToken()
+                                        if (oauthToken != null) {
+                                            PlatformLogger.i("CIRISApp", "[Screen.Billing] Token valid, launching purchase (attempt $attempt)")
+                                            purchaseLauncher.launchPurchaseWithAuth(selectedProduct.productId, oauthToken)
+                                            return@launch
+                                        }
+
+                                        if (attempt < maxRetries) {
+                                            PlatformLogger.w("CIRISApp", "[Screen.Billing] Token null on attempt $attempt, forcing refresh...")
+                                            tokenManager.on401Error()
+                                            delay(2000)
+                                        }
                                     }
+
+                                    PlatformLogger.e("CIRISApp", "[Screen.Billing] All token attempts exhausted ($maxRetries)")
+                                    billingViewModel.onPurchaseError("Please sign in to make purchases")
                                 }
                             } else {
                                 PlatformLogger.w("CIRISApp", "[Screen.Billing] No purchase launcher available")
@@ -2291,6 +2324,20 @@ fun CIRISApp(
                 )
             }
 
+            Screen.DataManagement -> {
+                DataManagementScreen(
+                    viewModel = dataManagementViewModel,
+                    onNavigateBack = {
+                        PlatformLogger.i(TAG, "[Screen.DataManagement] Navigating back to Settings")
+                        currentScreen = Screen.Settings
+                    },
+                    onResetSetup = {
+                        PlatformLogger.i(TAG, "[Screen.DataManagement] Reset triggered, going to Setup")
+                        currentScreen = Screen.Setup
+                    }
+                )
+            }
+
             Screen.Trust -> {
                 TrustPage(
                     apiClient = apiClient,
@@ -2370,6 +2417,7 @@ private fun CIRISTopBar(
     onMemoryClick: () -> Unit = {},
     onConfigClick: () -> Unit = {},
     onConsentClick: () -> Unit = {},
+    onDataManagementClick: () -> Unit = {},
     onSystemClick: () -> Unit = {},
     onRuntimeClick: () -> Unit = {},
     onUsersClick: () -> Unit = {},
@@ -2541,6 +2589,11 @@ private fun CIRISTopBar(
                         onClick = { activeCategory = NavCategory.NONE; onAuditClick() },
                         leadingIcon = { Icon(Icons.Default.List, null) }
                     )
+                    DropdownMenuItem(
+                        text = { Text("Data Management") },
+                        onClick = { activeCategory = NavCategory.NONE; onDataManagementClick() },
+                        leadingIcon = { Icon(Icons.Default.Info, null) }
+                    )
                 }
             }
 
@@ -2676,6 +2729,7 @@ private sealed class Screen {
     object Tickets : Screen()
     object Scheduler : Screen()
     object Tools : Screen()
+    object DataManagement : Screen()
 }
 
 /**

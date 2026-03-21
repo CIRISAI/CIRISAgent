@@ -27,7 +27,7 @@ actual class PythonRuntime : PythonRuntimeProtocol {
     private var _outputLineCallback: ((String) -> Unit)? = null
     private var _lastReportedServiceCount = 0
 
-    actual override val serverUrl: String = "http://localhost:8080"
+    actual override val serverUrl: String = "http://127.0.0.1:8080"
 
     /**
      * On iOS, Python is initialized by Swift before Compose UI loads.

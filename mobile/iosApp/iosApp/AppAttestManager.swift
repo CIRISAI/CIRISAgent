@@ -236,7 +236,7 @@ class AppAttestManager {
 
     /// Get App Attest nonce from the local Python backend.
     private func getNonceFromBackend() async throws -> String {
-        let url = URL(string: "http://localhost:8080/v1/setup/app-attest/nonce")!
+        let url = URL(string: "http://127.0.0.1:8080/v1/setup/app-attest/nonce")!
         var request = URLRequest(url: url, timeoutInterval: 15)
         request.httpMethod = "GET"
 
@@ -263,7 +263,7 @@ class AppAttestManager {
         keyId: String,
         nonce: String
     ) async throws -> AppAttestResult {
-        let url = URL(string: "http://localhost:8080/v1/setup/app-attest/verify")!
+        let url = URL(string: "http://127.0.0.1:8080/v1/setup/app-attest/verify")!
         var request = URLRequest(url: url, timeoutInterval: 30)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

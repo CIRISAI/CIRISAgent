@@ -1813,3 +1813,179 @@ class TestNewHelperFunctions:
         except Exception as e:
             # Expected to fail due to mock result, but should get past dispatch logic
             assert "Unknown step point" not in str(e), f"Dispatch failed: {e}"
+
+
+class TestCoherenceDataPropagation:
+    """Test that coherence data from conscience checks is propagated to action results.
+
+    BUG EXPOSURE: These tests verify that for non-exempt actions (SPEAK, TOOL),
+    coherence data computed during FINALIZE_ACTION is carried through to ACTION_COMPLETE
+    and included in ActionResultEvent for CIRISLens traces.
+
+    Currently FAILING because ActionResultEvent and ActionCompleteStepData schemas
+    don't have coherence fields, and _create_action_result_event doesn't pass them.
+    """
+
+    def test_action_result_event_has_coherence_fields(self):
+        """Test ActionResultEvent schema includes coherence data fields.
+
+        EXPECTED TO FAIL: ActionResultEvent currently lacks coherence_passed,
+        coherence_score, epistemic_data, etc.
+        """
+        from ciris_engine.schemas.services.runtime_control import ActionResultEvent
+
+        # Check that ActionResultEvent has coherence fields
+        field_names = set(ActionResultEvent.model_fields.keys())
+
+        # These fields SHOULD exist but currently DON'T (BUG)
+        required_coherence_fields = {
+            "coherence_passed",
+            "coherence_score",
+            "coherence_threshold",
+            "coherence_reason",
+            "entropy_passed",
+            "entropy_score",
+        }
+
+        missing_fields = required_coherence_fields - field_names
+        assert not missing_fields, (
+            f"ActionResultEvent missing coherence fields: {missing_fields}. "
+            f"These are computed in FINALIZE_ACTION but not propagated to ACTION_RESULT events, "
+            f"causing CIRISLens traces for TOOL actions to lack coherence data."
+        )
+
+    def test_action_complete_step_data_has_coherence_fields(self):
+        """Test ActionCompleteStepData schema includes coherence data fields.
+
+        EXPECTED TO FAIL: ActionCompleteStepData currently lacks coherence fields.
+        """
+        from ciris_engine.schemas.services.runtime_control import ActionCompleteStepData
+
+        field_names = set(ActionCompleteStepData.model_fields.keys())
+
+        # These fields SHOULD exist but currently DON'T (BUG)
+        required_coherence_fields = {
+            "coherence_passed",
+            "coherence_score",
+            "entropy_passed",
+            "entropy_score",
+        }
+
+        missing_fields = required_coherence_fields - field_names
+        assert not missing_fields, (
+            f"ActionCompleteStepData missing coherence fields: {missing_fields}. "
+            f"Coherence data from FINALIZE_ACTION is lost at ACTION_COMPLETE step."
+        )
+
+    def test_finalize_action_and_action_complete_both_have_coherence(self):
+        """Verify both FinalizeActionStepData and ActionCompleteStepData have coherence fields.
+
+        This ensures coherence data flows from FINALIZE_ACTION to ACTION_COMPLETE.
+        """
+        from ciris_engine.schemas.services.runtime_control import ActionCompleteStepData, FinalizeActionStepData
+
+        finalize_fields = set(FinalizeActionStepData.model_fields.keys())
+        action_complete_fields = set(ActionCompleteStepData.model_fields.keys())
+
+        # Core coherence fields that MUST be in both schemas
+        required_coherence_fields = {
+            "coherence_passed",
+            "coherence_score",
+            "coherence_threshold",
+            "coherence_reason",
+            "entropy_passed",
+            "entropy_score",
+            "entropy_threshold",
+            "entropy_reason",
+        }
+
+        # FinalizeActionStepData must have all coherence fields plus epistemic_data
+        finalize_coherence = required_coherence_fields | {"epistemic_data"}
+        assert finalize_coherence.issubset(
+            finalize_fields
+        ), f"FinalizeActionStepData missing fields: {finalize_coherence - finalize_fields}"
+
+        # ActionCompleteStepData must have coherence fields for trace propagation
+        assert required_coherence_fields.issubset(
+            action_complete_fields
+        ), f"ActionCompleteStepData missing coherence fields: {required_coherence_fields - action_complete_fields}"
+
+    def test_create_action_result_event_includes_coherence_data(self):
+        """Test that _create_action_result_event passes coherence data from step_data.
+
+        EXPECTED TO FAIL: Currently coherence data is not passed.
+        """
+        from ciris_engine.logic.processors.core.step_decorators import _create_action_result_event
+        from ciris_engine.schemas.services.runtime_control import ActionCompleteStepData, AuditEntryResult
+
+        # Create step_data with coherence fields (simulating data from FINALIZE_ACTION)
+        # Note: ActionCompleteStepData doesn't have these fields yet, so we use a mock
+        mock_step_data = Mock()
+        mock_step_data.thought_id = "test-thought-123"
+        mock_step_data.task_id = "test-task-456"
+        mock_step_data.action_executed = "TOOL"
+        mock_step_data.action_parameters = {"tool_name": "web_search"}
+        mock_step_data.dispatch_success = True
+        mock_step_data.execution_time_ms = 150.0
+        mock_step_data.follow_up_thought_id = None
+        mock_step_data.audit_entry_id = "audit-123"
+        mock_step_data.audit_sequence_number = 1
+        mock_step_data.audit_entry_hash = "abc123"
+        mock_step_data.audit_signature = "sig123"
+        mock_step_data.tokens_total = 100
+        mock_step_data.tokens_input = 50
+        mock_step_data.tokens_output = 50
+        mock_step_data.cost_cents = 0.1
+        mock_step_data.carbon_grams = 0.01
+        mock_step_data.energy_mwh = 0.001
+        mock_step_data.llm_calls = 1
+        mock_step_data.models_used = ["gpt-4"]
+        mock_step_data.api_bases_used = ["https://api.openai.com"]
+
+        # Add coherence data that SHOULD be passed (but currently isn't)
+        mock_step_data.coherence_passed = True
+        mock_step_data.coherence_score = 0.95
+        mock_step_data.coherence_threshold = 0.7
+        mock_step_data.coherence_reason = "Action coherent with context"
+        mock_step_data.entropy_passed = True
+        mock_step_data.entropy_score = 0.2
+
+        timestamp = "2025-01-15T12:00:00Z"
+        mock_create_reasoning_event = Mock(return_value="reasoning_event")
+
+        # Call the function
+        result = _create_action_result_event(mock_step_data, timestamp, mock_create_reasoning_event)
+
+        # Check what was passed to create_reasoning_event
+        call_kwargs = mock_create_reasoning_event.call_args.kwargs
+
+        # These assertions SHOULD pass but currently FAIL (BUG)
+        assert (
+            "coherence_passed" in call_kwargs
+        ), "coherence_passed not passed to ActionResultEvent - TOOL actions missing coherence data in traces"
+        assert (
+            "coherence_score" in call_kwargs
+        ), "coherence_score not passed to ActionResultEvent - TOOL actions missing coherence data in traces"
+        assert call_kwargs.get("coherence_passed") == True, "coherence_passed value not propagated"
+        assert call_kwargs.get("coherence_score") == 0.95, "coherence_score value not propagated"
+
+    def test_non_exempt_actions_require_coherence_data(self):
+        """Document which actions are non-exempt and require coherence data.
+
+        Non-exempt actions (SPEAK, TOOL, PONDER, MEMORIZE) go through full conscience
+        evaluation and should have coherence data in their traces.
+
+        Exempt actions (RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT) skip ethical
+        faculties and don't need coherence data.
+        """
+        # Non-exempt actions that MUST have coherence data in traces
+        non_exempt_actions = {"SPEAK", "TOOL", "PONDER", "MEMORIZE"}
+
+        # Exempt actions that skip ethical faculties
+        exempt_actions = {"RECALL", "TASK_COMPLETE", "OBSERVE", "DEFER", "REJECT"}
+
+        # This is a documentation test - it passes to explain the expected behavior
+        assert non_exempt_actions.isdisjoint(exempt_actions), "Action sets should not overlap"
+
+        # The bug is: non_exempt_actions don't have coherence data populated in traces
+        # because ActionResultEvent doesn't carry it from FinalizeActionStepData

@@ -1179,12 +1179,14 @@ async def get_adapter_status(
         raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
 
     try:
-        logger.info(f"[ADAPTER_STATUS_ROUTE] Getting info for adapter: {adapter_id}")
+        # Sanitize adapter_id for logging to prevent log injection (CWE-117)
+        safe_id = adapter_id.replace("\n", "").replace("\r", "")[:64] if adapter_id else "unknown"
+        logger.info(f"[ADAPTER_STATUS_ROUTE] Getting info for adapter: {safe_id}")
         # Get adapter info from runtime control service
         adapter_info = await runtime_control.get_adapter_info(adapter_id)
 
         if not adapter_info:
-            logger.warning(f"[ADAPTER_STATUS_ROUTE] Adapter not found: {adapter_id}")
+            logger.warning(f"[ADAPTER_STATUS_ROUTE] Adapter not found: {safe_id}")
             raise HTTPException(status_code=404, detail=f"Adapter '{adapter_id}' not found")
 
         # Debug logging

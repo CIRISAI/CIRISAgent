@@ -15,8 +15,10 @@ Designed for CIRISHome hardware: Jetson + HA Yellow + Voice PE
 import asyncio
 import logging
 import os
+import socket
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
+from urllib.parse import urlparse
 
 import aiohttp
 
@@ -38,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 # Optional imports for camera functionality
 try:
-    import cv2  # type: ignore[import-not-found]
+    import cv2  # type: ignore[import-not-found,unused-ignore]
     import numpy as np
 
     OPENCV_AVAILABLE = True
@@ -94,11 +96,15 @@ class HAIntegrationService:
 
         # State
         self._entity_cache: Dict[str, HADeviceState] = {}
-        self._cache_timestamp: Optional[datetime] = None
+        self._entity_list_cache: List[HADeviceState] = []  # Full list cache for get_all_entities
+        self._cache_timestamp: Optional[datetime] = None  # Per-entity cache timestamp
+        self._list_cache_timestamp: Optional[datetime] = None  # Full list cache timestamp
         self._cache_ttl = 30  # seconds
         self._detection_tasks: Dict[str, asyncio.Task[None]] = {}
         self._event_history: List[DetectionEvent] = []
         self._initialized = False
+        self._init_failures = 0
+        self._max_init_retries = 2  # Stop retrying after 2 failures
 
         logger.info(f"HAIntegrationService initialized for {self.ha_url}")
         logger.info(f"Configured {len(self.camera_urls)} cameras via go2rtc")
@@ -196,8 +202,49 @@ class HAIntegrationService:
             },
         )
 
+    async def _check_host_reachable(self, timeout_seconds: float = 1.0) -> bool:
+        """Quick check if the HA host is reachable via TCP socket.
+
+        This is much faster than a full HTTP request when the host is unreachable.
+        Returns True if we can establish a TCP connection, False otherwise.
+        """
+        try:
+            parsed = urlparse(self.ha_url)
+            host = parsed.hostname or "localhost"
+            port = parsed.port or (443 if parsed.scheme == "https" else 8123)
+
+            # Run socket connect in executor to avoid blocking
+            loop = asyncio.get_event_loop()
+
+            def try_connect() -> bool:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(timeout_seconds)
+                try:
+                    sock.connect((host, port))
+                    sock.close()
+                    return True
+                except (socket.timeout, socket.error, OSError):
+                    return False
+                finally:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+
+            reachable = await loop.run_in_executor(None, try_connect)
+            if not reachable:
+                logger.debug(f"[HA] Host {host}:{port} not reachable (timeout={timeout_seconds}s)")
+            return reachable
+        except Exception as e:
+            logger.debug(f"[HA] Reachability check failed: {e}")
+            return False
+
     async def initialize(self) -> bool:
-        """Initialize the service and verify connectivity."""
+        """Initialize the service and verify connectivity.
+
+        Uses a quick reachability check before attempting HTTP connection
+        to fail fast when HA server is unreachable.
+        """
         if self._initialized:
             return True
 
@@ -205,14 +252,19 @@ class HAIntegrationService:
             logger.warning("Cannot initialize - no HA token configured")
             return False
 
+        # Quick reachability check (1 second timeout) - fail fast if host unreachable
+        if not await self._check_host_reachable(timeout_seconds=1.0):
+            logger.warning(f"[HA] Host unreachable: {self.ha_url} - skipping initialization")
+            return False
+
         try:
-            # Test HA connection
+            # Test HA connection with reduced timeout (3 seconds instead of 10)
             headers = self._get_headers()
             async with aiohttp.ClientSession() as session:
                 async with session.get(
                     f"{self.ha_url}/api/",
                     headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=10),
+                    timeout=aiohttp.ClientTimeout(total=3),
                 ) as response:
                     if response.status == 200:
                         self._initialized = True
@@ -226,7 +278,7 @@ class HAIntegrationService:
                                 async with retry_session.get(
                                     f"{self.ha_url}/api/",
                                     headers=self._get_headers(),
-                                    timeout=aiohttp.ClientTimeout(total=10),
+                                    timeout=aiohttp.ClientTimeout(total=3),
                                 ) as retry_response:
                                     if retry_response.status == 200:
                                         self._initialized = True
@@ -239,6 +291,9 @@ class HAIntegrationService:
                     else:
                         logger.error(f"HA connection failed with status {response.status}")
                         return False
+        except asyncio.TimeoutError:
+            logger.warning(f"[HA] Connection timeout (3s) to {self.ha_url}")
+            return False
         except Exception as e:
             logger.error(f"Failed to initialize HA integration: {e}")
             return False
@@ -566,20 +621,35 @@ class HAIntegrationService:
         """Lazy initialization - retry if token has become available since startup."""
         if self._initialized:
             return True
+        if self._init_failures >= self._max_init_retries:
+            return False
         if self.ha_token:
             logger.info("[HA] Token now available, attempting lazy initialization...")
-            return await self.initialize()
+            result = await self.initialize()
+            if not result:
+                self._init_failures += 1
+                if self._init_failures >= self._max_init_retries:
+                    logger.warning(
+                        f"[HA] Initialization failed {self._init_failures} times, giving up. "
+                        "Will not retry until adapter restart."
+                    )
+            return result
         return False
 
     async def get_all_entities(self, _retry: bool = True) -> List[HADeviceState]:
-        """Get all Home Assistant entities."""
+        """Get all Home Assistant entities. Returns cached results if fresh."""
         if not self.ha_token:
-            logger.warning("[HA] get_all_entities: No token available")
-            logger.warning(f"[HA]   HOME_ASSISTANT_TOKEN env: {bool(os.getenv('HOME_ASSISTANT_TOKEN'))}")
             return []
 
-        # Ensure we're initialized (lazy init if token appeared after startup)
-        await self._ensure_initialized()
+        # Return cached results if still fresh (uses list-specific timestamp)
+        if self._list_cache_timestamp and self._entity_list_cache:
+            age = (datetime.now(timezone.utc) - self._list_cache_timestamp).total_seconds()
+            if age < self._cache_ttl:
+                return self._entity_list_cache
+
+        # Ensure we're initialized (respects max retry limit)
+        if not await self._ensure_initialized():
+            return self._entity_list_cache  # Return stale cache if available, else empty
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -602,18 +672,14 @@ class HAIntegrationService:
                             )
                             result.append(state)
                             self._entity_cache[state.entity_id] = state
-                            # Log entity details at INFO level for context tuning
-                            logger.info(
-                                f"[HA ENTITY DISCOVERED] {state.entity_id} | "
-                                f"state={state.state} | name={state.friendly_name} | "
-                                f"device_class={attrs.get('device_class', 'N/A')} | "
-                                f"unit={attrs.get('unit_of_measurement', 'N/A')}"
-                            )
-                        self._cache_timestamp = datetime.now(timezone.utc)
+                        now = datetime.now(timezone.utc)
+                        self._cache_timestamp = now
+                        self._list_cache_timestamp = now
+                        self._entity_list_cache = result
                         logger.info(f"[HA] get_all_entities: Retrieved {len(result)} entities")
                         return result
                     elif response.status == 401 and _retry:
-                        logger.warning("[HA] get_all_entities: 401 Unauthorized - token expired, attempting refresh")
+                        logger.warning("[HA] get_all_entities: 401 - attempting token refresh")
                         if await self._try_refresh_token():
                             return await self.get_all_entities(_retry=False)
                         logger.error("[HA] get_all_entities: Token refresh failed")
@@ -623,7 +689,7 @@ class HAIntegrationService:
         except Exception as e:
             logger.error(f"[HA] get_all_entities: Exception - {e}")
 
-        return []
+        return self._entity_list_cache  # Return stale cache on failure
 
     async def get_sensors_by_domain(self, domain: str) -> List[HADeviceState]:
         """Get all entities in a specific domain (sensor, light, switch, etc.)."""
@@ -1308,4 +1374,5 @@ class HAIntegrationService:
         for camera_name in list(self._detection_tasks.keys()):
             await self.stop_event_detection(camera_name)
         self._entity_cache.clear()
+        self._entity_list_cache.clear()
         logger.info("HAIntegrationService cleaned up")

@@ -10,7 +10,7 @@ import kotlinx.coroutines.delay
  * Extracted from MainActivity.kt (lines 1241-1660) for KMP shared module
  */
 class ServerManager(
-    private val serverUrl: String = "http://localhost:8080"
+    private val serverUrl: String = "http://127.0.0.1:8080"
 ) {
     companion object {
         private const val TAG = "ServerManager"

@@ -931,7 +931,11 @@ def _create_perform_action_data(
 def _create_action_complete_data(
     base_data: BaseStepData, result: Any, kwargs: Optional[JSONDict] = None
 ) -> ActionCompleteStepData:
-    """Add ACTION_COMPLETE specific data with resource usage."""
+    """Add ACTION_COMPLETE specific data with resource usage and coherence data.
+
+    Coherence data is passed via kwargs['_coherence_data'] from the calling code,
+    which extracts it from the FINALIZE_ACTION result (ConscienceApplicationResult).
+    """
     if not result:
         raise ValueError("ACTION_COMPLETE step result is None - this indicates a serious pipeline issue")
 
@@ -947,6 +951,10 @@ def _create_action_complete_data(
     # Extract resource usage data if available (passed via kwargs from decorator)
     kwargs_dict = kwargs or {}
     resource_data = get_dict(kwargs_dict, "_resource_usage", {})
+
+    # Extract coherence data if available (passed via kwargs from thought processor)
+    # This comes from FINALIZE_ACTION's ConscienceApplicationResult
+    coherence_data = get_dict(kwargs_dict, "_coherence_data", {})
 
     # Extract action_parameters from result (captures content for SPEAK, tool params, etc.)
     action_params = result.action_parameters if hasattr(result, "action_parameters") else {}
@@ -983,6 +991,15 @@ def _create_action_complete_data(
         llm_calls=get_int(resource_data, "llm_calls", 0),
         models_used=get_list(resource_data, "models_used", []),
         api_bases_used=get_list(resource_data, "api_bases_used", []),
+        # Coherence data from FINALIZE_ACTION (None for exempt actions like RECALL, TASK_COMPLETE)
+        coherence_passed=coherence_data.get("coherence_passed"),
+        coherence_score=coherence_data.get("coherence_score"),
+        coherence_threshold=coherence_data.get("coherence_threshold"),
+        coherence_reason=coherence_data.get("coherence_reason"),
+        entropy_passed=coherence_data.get("entropy_passed"),
+        entropy_score=coherence_data.get("entropy_score"),
+        entropy_threshold=coherence_data.get("entropy_threshold"),
+        entropy_reason=coherence_data.get("entropy_reason"),
     )
 
 
@@ -1595,7 +1612,7 @@ def _create_conscience_result_event(step_data: StepDataUnion, timestamp: str, cr
 
 
 def _create_action_result_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
-    """Create ACTION_RESULT reasoning event with audit trail, resource usage, and follow-up data."""
+    """Create ACTION_RESULT reasoning event with audit trail, resource usage, coherence data, and follow-up data."""
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
 
     # Extract follow_up_thought_id from step_data (already populated from dispatch_result)
@@ -1626,6 +1643,15 @@ def _create_action_result_event(step_data: StepDataUnion, timestamp: str, create
         llm_calls=getattr(step_data, "llm_calls", 0),
         models_used=getattr(step_data, "models_used", []),
         api_bases_used=getattr(step_data, "api_bases_used", []),
+        # Coherence data from conscience checks (None for exempt actions like RECALL, TASK_COMPLETE)
+        coherence_passed=getattr(step_data, "coherence_passed", None),
+        coherence_score=getattr(step_data, "coherence_score", None),
+        coherence_threshold=getattr(step_data, "coherence_threshold", None),
+        coherence_reason=getattr(step_data, "coherence_reason", None),
+        entropy_passed=getattr(step_data, "entropy_passed", None),
+        entropy_score=getattr(step_data, "entropy_score", None),
+        entropy_threshold=getattr(step_data, "entropy_threshold", None),
+        entropy_reason=getattr(step_data, "entropy_reason", None),
     )
 
 

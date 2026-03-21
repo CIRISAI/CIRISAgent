@@ -567,7 +567,17 @@ class AccordMetricsService:
 
             node = get_graph_node("accord_metrics/events_total", GraphScope.LOCAL)
             if node and node.attributes:
-                return int(node.attributes.get("events_sent_total", 0))
+                attrs = node.attributes
+                # Handle both dict and object attribute access
+                if isinstance(attrs, dict):
+                    value = attrs.get("events_sent_total", 0)
+                else:
+                    value = getattr(attrs, "events_sent_total", 0)
+                # Ensure we have a numeric type for int()
+                if isinstance(value, (int, float)):
+                    return int(value)
+                elif isinstance(value, str) and value.isdigit():
+                    return int(value)
         except Exception as e:
             logger.debug(f"Could not load persisted events total: {e}")
         return 0

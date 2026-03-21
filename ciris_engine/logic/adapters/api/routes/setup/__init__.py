@@ -29,7 +29,7 @@ from fastapi import APIRouter
 from . import attestation, complete, config, device_auth_routes, llm_routes, providers, status
 
 # Complete helpers - imported from complete.py module
-from .complete import _create_setup_users, _save_setup_config
+from .complete import _create_founding_partnership, _create_setup_users, _save_setup_config
 
 # Device auth helpers - imported from device_auth.py module
 from .device_auth import (
@@ -157,4 +157,5 @@ __all__ = [
     # Complete helpers (for test compatibility)
     "_save_setup_config",
     "_create_setup_users",
+    "_create_founding_partnership",
 ]

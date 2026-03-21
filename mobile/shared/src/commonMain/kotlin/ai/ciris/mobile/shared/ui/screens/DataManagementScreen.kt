@@ -257,12 +257,14 @@ fun DataManagementScreen(
                 )
 
                 Text(
-                    text = "CIRIS respects your data rights under GDPR. Use these options to manage or delete your data.",
+                    text = "CIRIS respects your data rights under GDPR, CCPA, and the EU AI Act. " +
+                            "Use these options to manage or delete your data.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                // Privacy & Data Practices summary
+                PrivacyInfoCard()
 
                 // Section 1: Delete Opt-In Traces
                 Text(
@@ -520,22 +522,12 @@ private fun DeleteLocalDataCard(
             )
 
             Text(
-                text = "Transaction records (amounts, dates) are retained server-side for 10 years " +
-                        "as required by EU AI Act and tax compliance. No conversation content " +
-                        "is ever stored on our servers.",
+                text = "Transaction records (amounts, dates, account email) are retained " +
+                        "server-side for 10 years as required by EU AI Act and tax " +
+                        "compliance. No conversation content is ever stored on our servers. " +
+                        "To request deletion of billing records, contact privacy@ciris.ai.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
-            )
-
-            Text(
-                text = "Privacy Policy: ciris.ai/privacy",
-                style = MaterialTheme.typography.bodySmall.copy(
-                    textDecoration = TextDecoration.Underline
-                ),
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable {
-                    uriHandler.openUri("https://ciris.ai/privacy")
-                }
             )
 
             Button(
@@ -558,6 +550,129 @@ private fun DeleteLocalDataCard(
                 }
                 Text(if (isResetting) "Deleting..." else "Delete Account & Data")
             }
+        }
+    }
+}
+
+/**
+ * Card summarizing privacy practices, data retention, user rights, and contact info.
+ * Ensures compliance with GDPR Arts. 13-14, CCPA, and EU AI Act transparency requirements.
+ */
+@Composable
+private fun PrivacyInfoCard() {
+    val uriHandler = LocalUriHandler.current
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "How CIRIS Handles Your Data",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+
+            // LLM zero data retention
+            Text(
+                text = "LLM Services",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "All LLM providers (Groq, OpenRouter, Together AI) are configured " +
+                        "for zero data retention. Your conversations are processed and " +
+                        "immediately discarded \u2014 never stored on remote servers or used " +
+                        "to train AI models. If you use your own API key (BYOK), the same " +
+                        "zero-retention policy applies via our provider configuration.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+
+            // Local data
+            Text(
+                text = "Local Device Data",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "All conversations, memory graphs, audit logs, and configuration " +
+                        "are stored exclusively on this device. CIRIS servers never receive " +
+                        "or store your conversation content. Local audit trails are retained " +
+                        "for 90 days by default (configurable). You can delete all local " +
+                        "data at any time using the option below.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+
+            // Billing records
+            Text(
+                text = "Billing & Transaction Records",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "Transaction records (amounts, dates, account email) are processed " +
+                        "via Stripe and retained for 10 years as required by EU AI Act and " +
+                        "tax compliance. These records never contain conversation content. " +
+                        "To request deletion of billing records, contact privacy@ciris.ai.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+
+            // Your rights
+            Text(
+                text = "Your Rights",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "Under GDPR and CCPA, you have the right to:\n" +
+                        "\u2022 Access \u2014 request a copy of your data\n" +
+                        "\u2022 Erasure \u2014 request deletion (90-day decay protocol)\n" +
+                        "\u2022 Rectification \u2014 correct inaccurate data\n" +
+                        "\u2022 Portability \u2014 export in JSON/CSV format\n" +
+                        "\u2022 Restriction \u2014 limit how your data is processed\n" +
+                        "\u2022 Object \u2014 opt out of specific processing\n\n" +
+                        "DSAR requests are responded to within 30 days.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+
+            // Contact & links
+            Text(
+                text = "Contact: privacy@ciris.ai",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable {
+                    uriHandler.openUri("mailto:privacy@ciris.ai")
+                }
+            )
+
+            Text(
+                text = "Full Privacy Policy: ciris.ai/privacy",
+                style = MaterialTheme.typography.bodySmall.copy(
+                    textDecoration = TextDecoration.Underline
+                ),
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable {
+                    uriHandler.openUri("https://ciris.ai/privacy")
+                }
+            )
         }
     }
 }

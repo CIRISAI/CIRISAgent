@@ -4845,7 +4845,9 @@ class CIRISApiClient(
                 consentTimestamp = data.consentTimestamp,
                 traceLevel = data.traceLevel,
                 endpointUrl = data.endpointUrl,
-                eventsSent = data.eventsSent ?: 0
+                eventsSent = data.eventsSent ?: 0,
+                eventsReceived = data.eventsReceived ?: 0,
+                eventsQueued = data.eventsQueued ?: 0
             )
         } catch (e: Exception) {
             logException(method, e)
@@ -5561,7 +5563,11 @@ data class AccordSettingsPayload(
     @SerialName("endpoint_url")
     val endpointUrl: String? = null,
     @SerialName("events_sent")
-    val eventsSent: Int? = null
+    val eventsSent: Int? = null,
+    @SerialName("events_received")
+    val eventsReceived: Int? = null,
+    @SerialName("events_queued")
+    val eventsQueued: Int? = null
 )
 
 /**
@@ -5573,7 +5579,9 @@ data class AccordSettingsData(
     val consentTimestamp: String?,
     val traceLevel: String?,
     val endpointUrl: String?,
-    val eventsSent: Int
+    val eventsSent: Int,
+    val eventsReceived: Int,
+    val eventsQueued: Int
 )
 
 /**

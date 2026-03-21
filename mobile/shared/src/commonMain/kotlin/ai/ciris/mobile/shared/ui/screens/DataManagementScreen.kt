@@ -365,7 +365,13 @@ private fun DeleteTracesCard(
                 // Status info
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     InfoRow("Agent ID Hash", settings.agentIdHash)
-                    InfoRow("Events Sent", settings.eventsSent.toString())
+                    InfoRow("Events Sent to Lens", settings.eventsSent.toString())
+                    if (settings.eventsReceived > 0 || settings.eventsQueued > 0) {
+                        InfoRow("Events Captured", settings.eventsReceived.toString())
+                        if (settings.eventsQueued > 0) {
+                            InfoRow("Events Queued", settings.eventsQueued.toString())
+                        }
+                    }
                     settings.traceLevel?.let { level ->
                         InfoRow("Detail Level", level)
                     }
@@ -408,20 +414,22 @@ private fun DeleteTracesCard(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-                // Delete/Revoke section
+                // Delete/Revoke section - always show deletion request option
                 val traceCount = settings.eventsSent
 
                 Text(
-                    text = if (traceCount > 0) "Delete Traces & Revoke Consent" else "Revoke Consent",
+                    text = "Request Data Deletion from CIRISLens",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
                 )
 
                 Text(
                     text = if (traceCount > 0) {
-                        "Request deletion of all $traceCount traces sent to CIRISLens and revoke consent. This is irreversible."
+                        "Request deletion of all $traceCount traces sent to CIRISLens and revoke consent. " +
+                            "This is irreversible."
                     } else {
-                        "Revoke your opt-in consent. No traces have been sent yet, but this ensures none will be collected in the future."
+                        "Send a deletion request to CIRISLens for any traces associated with your agent ID " +
+                            "and revoke consent. This ensures no data is retained."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -447,8 +455,7 @@ private fun DeleteTracesCard(
                     }
                     Text(
                         if (isDeleting) "Processing..."
-                        else if (traceCount > 0) "Delete Traces & Revoke"
-                        else "Revoke Consent"
+                        else "Delete Traces & Revoke Consent"
                     )
                 }
             }

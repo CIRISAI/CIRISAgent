@@ -38,6 +38,7 @@ import hashlib
 import json
 import logging
 import os
+import ssl
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -501,13 +502,16 @@ class AccordMetricsService:
         # HTTP client session
         self._session: Optional[aiohttp.ClientSession] = None
 
-        # Metrics
+        # Metrics (session counters)
         self._events_received = 0
         self._events_sent = 0
         self._events_failed = 0
         self._traces_completed = 0
         self._traces_signed = 0
         self._last_send_time: Optional[datetime] = None
+
+        # Persisted cumulative total from prior sessions (loaded in start())
+        self._persisted_events_sent = 0
 
         # Agent ID for anonymization (set during start)
         self._agent_id_hash: Optional[str] = None
@@ -555,8 +559,50 @@ class AccordMetricsService:
             scopes=["accord_compliance"],
         )
 
+    def _load_persisted_events_total(self) -> int:
+        """Load persisted cumulative events_sent from previous sessions."""
+        try:
+            from ciris_engine.logic.persistence.models.graph import get_graph_node
+            from ciris_engine.schemas.services.graph_core import GraphScope
+
+            node = get_graph_node("accord_metrics/events_total", GraphScope.LOCAL)
+            if node and node.attributes:
+                return int(node.attributes.get("events_sent_total", 0))
+        except Exception as e:
+            logger.debug(f"Could not load persisted events total: {e}")
+        return 0
+
+    def _persist_events_total(self) -> None:
+        """Persist cumulative events_sent to graph for survival across restarts."""
+        try:
+            from ciris_engine.logic.persistence.models.graph import add_graph_node
+            from ciris_engine.logic.services.lifecycle.time.service import TimeService
+            from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+
+            total = self._persisted_events_sent + self._events_sent
+            node = GraphNode(
+                id="accord_metrics/events_total",
+                type=NodeType.CONFIG,
+                scope=GraphScope.LOCAL,
+                attributes={
+                    "events_sent_total": total,
+                    "last_updated": datetime.now(timezone.utc).isoformat(),
+                },
+                updated_by="accord_metrics_service",
+                updated_at=datetime.now(timezone.utc),
+            )
+            time_service = TimeService()
+            add_graph_node(node, time_service, None)
+        except Exception as e:
+            logger.debug(f"Could not persist events total: {e}")
+
     async def start(self) -> None:
         """Start the service and initialize HTTP client."""
+        # Load persisted event count from previous sessions
+        self._persisted_events_sent = self._load_persisted_events_total()
+        if self._persisted_events_sent:
+            logger.info(f"   Loaded persisted events total: {self._persisted_events_sent}")
+
         logger.info("=" * 70)
         logger.info("🚀 ACCORD METRICS SERVICE STARTING")
         logger.info(f"   Consent given: {self._consent_given}")
@@ -706,8 +752,11 @@ class AccordMetricsService:
             self._events_sent += len(events_to_send)
             self._last_send_time = datetime.now(timezone.utc)
             logger.info(
-                f"✅ [{self._adapter_instance_id}] FLUSH SUCCESS: {len(events_to_send)} events sent (total: {self._events_sent}, level={self._trace_level.value})"
+                f"✅ [{self._adapter_instance_id}] FLUSH SUCCESS: {len(events_to_send)} events sent "
+                f"(session: {self._events_sent}, lifetime: {self._persisted_events_sent + self._events_sent}, level={self._trace_level.value})"
             )
+            # Persist cumulative total to survive restarts
+            self._persist_events_total()
         except Exception as e:
             self._events_failed += len(events_to_send)
             logger.error(f"❌ FLUSH FAILED: {len(events_to_send)} events: {e}")
@@ -1673,11 +1722,21 @@ class AccordMetricsService:
 
         Safe to call multiple times — will only create a session if one
         does not already exist (or the existing one is closed).
+
+        On iOS, Python's default SSL context cannot find system CA certificates,
+        so we explicitly create an SSL context using certifi's bundled CA bundle.
         """
         if self._session is not None and not getattr(self._session, "closed", True):
             return
 
+        # Create SSL context with certifi CA bundle for iOS compatibility.
+        # On iOS, Python's ssl module cannot locate system CA certs, causing
+        # SSLCertVerificationError for all HTTPS connections.
+        ssl_context = self._create_ssl_context()
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+
         self._session = aiohttp.ClientSession(
+            connector=connector,
             timeout=aiohttp.ClientTimeout(total=30),
             headers={
                 "Content-Type": "application/json",
@@ -1685,6 +1744,27 @@ class AccordMetricsService:
             },
         )
         logger.info(f"HTTP session initialized for {self._endpoint_url}")
+
+    @staticmethod
+    def _create_ssl_context() -> ssl.SSLContext:
+        """Create an SSL context with proper CA certificates.
+
+        Tries certifi first (bundled in iOS Resources), then falls back
+        to the default context (works on desktop/server platforms).
+        """
+        try:
+            import certifi
+
+            ca_bundle = certifi.where()
+            ctx = ssl.create_default_context(cafile=ca_bundle)
+            logger.info(f"SSL context created with certifi CA bundle: {ca_bundle}")
+            return ctx
+        except ImportError:
+            logger.debug("certifi not available, using default SSL context")
+        except Exception as e:
+            logger.warning(f"Failed to load certifi CA bundle: {e}, falling back to default")
+
+        return ssl.create_default_context()
 
     def set_agent_id(self, agent_id: str) -> None:
         """Set and anonymize the agent ID.
@@ -1712,7 +1792,8 @@ class AccordMetricsService:
             "consent_given": self._consent_given,
             "trace_level": self._trace_level.value,
             "events_received": self._events_received,
-            "events_sent": self._events_sent,
+            "events_sent": self._persisted_events_sent + self._events_sent,
+            "events_sent_session": self._events_sent,
             "events_failed": self._events_failed,
             "events_queued": len(self._event_queue),
             "last_send_time": self._last_send_time.isoformat() if self._last_send_time else None,

@@ -605,9 +605,9 @@ private fun PrivacyInfoCard() {
             Text(
                 text = "All conversations, memory graphs, audit logs, and configuration " +
                         "are stored exclusively on this device. CIRIS servers never receive " +
-                        "or store your conversation content. Local audit trails are retained " +
-                        "for 90 days by default (configurable). You can delete all local " +
-                        "data at any time using the option below.",
+                        "or store your conversation content. Audit trails are retained " +
+                        "indefinitely on-device with a cryptographic hash chain for integrity. " +
+                        "You can delete all local data at any time using the option below.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

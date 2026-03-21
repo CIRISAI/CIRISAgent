@@ -188,7 +188,7 @@ def _get_agent_id(request: Request) -> Optional[str]:
         agent_name = getattr(essential, "agent_name", None)
         if agent_name:
             logger.debug(f"_get_agent_id: Using essential_config.agent_name={agent_name}")
-            return agent_name
+            return str(agent_name)
 
     # Legacy fallback
     legacy = getattr(runtime, "agent_id", None)

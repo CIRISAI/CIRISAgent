@@ -103,13 +103,14 @@ class HomeAssistantAdapter(Service):
         return registrations
 
     async def start(self) -> None:
-        """Start the Home Assistant adapter."""
+        """Start the Home Assistant adapter.
+
+        NOTE: Adapter startup is non-blocking. HA connection is initialized
+        in the background to avoid delaying agent startup when HA is unreachable.
+        """
         logger.info("Starting Home Assistant adapter")
 
-        # Initialize underlying HA service
-        await self.ha_service.initialize()
-
-        # Start tool service
+        # Start tool service (will lazy-init HA connection on first use)
         await self.tool_service.start()
         logger.info("HAToolService started")
 
@@ -120,19 +121,31 @@ class HomeAssistantAdapter(Service):
         self._running = True
         logger.info("Home Assistant adapter started")
 
-        # Run initial entity discovery so we can confirm HA connectivity in logs
-        if self.ha_service._initialized:
-            try:
-                entities = await self.ha_service.get_all_entities()
-                domains: dict[str, int] = {}
-                for e in entities:
-                    domains[e.domain] = domains.get(e.domain, 0) + 1
-                logger.warning(
-                    f"[HA DISCOVERY] Found {len(entities)} entities across {len(domains)} domains: "
-                    + ", ".join(f"{d}={c}" for d, c in sorted(domains.items(), key=lambda x: -x[1])[:15])
-                )
-            except Exception as e:
-                logger.warning(f"[HA DISCOVERY] Entity discovery failed: {e}")
+        # Initialize HA connection in background - don't block startup
+        asyncio.create_task(self._background_initialize())
+
+    async def _background_initialize(self) -> None:
+        """Initialize HA connection in background without blocking startup."""
+        try:
+            initialized = await self.ha_service.initialize()
+            if initialized:
+                logger.info("[HA BACKGROUND] Connection established successfully")
+                # Run entity discovery in background
+                try:
+                    entities = await self.ha_service.get_all_entities()
+                    domains: dict[str, int] = {}
+                    for e in entities:
+                        domains[e.domain] = domains.get(e.domain, 0) + 1
+                    logger.warning(
+                        f"[HA DISCOVERY] Found {len(entities)} entities across {len(domains)} domains: "
+                        + ", ".join(f"{d}={c}" for d, c in sorted(domains.items(), key=lambda x: -x[1])[:15])
+                    )
+                except Exception as e:
+                    logger.warning(f"[HA DISCOVERY] Entity discovery failed: {e}")
+            else:
+                logger.warning("[HA BACKGROUND] Connection not established - will retry on first use")
+        except Exception as e:
+            logger.warning(f"[HA BACKGROUND] Initialization failed: {e} - will retry on first use")
 
     async def stop(self) -> None:
         """Stop the Home Assistant adapter."""

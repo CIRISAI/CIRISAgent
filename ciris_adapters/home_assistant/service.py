@@ -15,8 +15,10 @@ Designed for CIRISHome hardware: Jetson + HA Yellow + Voice PE
 import asyncio
 import logging
 import os
+import socket
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
+from urllib.parse import urlparse
 
 import aiohttp
 
@@ -38,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 # Optional imports for camera functionality
 try:
-    import cv2  # type: ignore[import-not-found]
+    import cv2  # type: ignore[import-not-found,unused-ignore]
     import numpy as np
 
     OPENCV_AVAILABLE = True
@@ -200,8 +202,49 @@ class HAIntegrationService:
             },
         )
 
+    async def _check_host_reachable(self, timeout_seconds: float = 1.0) -> bool:
+        """Quick check if the HA host is reachable via TCP socket.
+
+        This is much faster than a full HTTP request when the host is unreachable.
+        Returns True if we can establish a TCP connection, False otherwise.
+        """
+        try:
+            parsed = urlparse(self.ha_url)
+            host = parsed.hostname or "localhost"
+            port = parsed.port or (443 if parsed.scheme == "https" else 8123)
+
+            # Run socket connect in executor to avoid blocking
+            loop = asyncio.get_event_loop()
+
+            def try_connect() -> bool:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(timeout_seconds)
+                try:
+                    sock.connect((host, port))
+                    sock.close()
+                    return True
+                except (socket.timeout, socket.error, OSError):
+                    return False
+                finally:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+
+            reachable = await loop.run_in_executor(None, try_connect)
+            if not reachable:
+                logger.debug(f"[HA] Host {host}:{port} not reachable (timeout={timeout_seconds}s)")
+            return reachable
+        except Exception as e:
+            logger.debug(f"[HA] Reachability check failed: {e}")
+            return False
+
     async def initialize(self) -> bool:
-        """Initialize the service and verify connectivity."""
+        """Initialize the service and verify connectivity.
+
+        Uses a quick reachability check before attempting HTTP connection
+        to fail fast when HA server is unreachable.
+        """
         if self._initialized:
             return True
 
@@ -209,14 +252,19 @@ class HAIntegrationService:
             logger.warning("Cannot initialize - no HA token configured")
             return False
 
+        # Quick reachability check (1 second timeout) - fail fast if host unreachable
+        if not await self._check_host_reachable(timeout_seconds=1.0):
+            logger.warning(f"[HA] Host unreachable: {self.ha_url} - skipping initialization")
+            return False
+
         try:
-            # Test HA connection
+            # Test HA connection with reduced timeout (3 seconds instead of 10)
             headers = self._get_headers()
             async with aiohttp.ClientSession() as session:
                 async with session.get(
                     f"{self.ha_url}/api/",
                     headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=10),
+                    timeout=aiohttp.ClientTimeout(total=3),
                 ) as response:
                     if response.status == 200:
                         self._initialized = True
@@ -230,7 +278,7 @@ class HAIntegrationService:
                                 async with retry_session.get(
                                     f"{self.ha_url}/api/",
                                     headers=self._get_headers(),
-                                    timeout=aiohttp.ClientTimeout(total=10),
+                                    timeout=aiohttp.ClientTimeout(total=3),
                                 ) as retry_response:
                                     if retry_response.status == 200:
                                         self._initialized = True
@@ -243,6 +291,9 @@ class HAIntegrationService:
                     else:
                         logger.error(f"HA connection failed with status {response.status}")
                         return False
+        except asyncio.TimeoutError:
+            logger.warning(f"[HA] Connection timeout (3s) to {self.ha_url}")
+            return False
         except Exception as e:
             logger.error(f"Failed to initialize HA integration: {e}")
             return False

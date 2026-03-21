@@ -437,7 +437,8 @@ async def update_accord_settings(
             detail="No settings provided to update.",
         )
 
-    logger.info(f"Accord settings updated by {current_user.username}: {', '.join(changes)}")
+    # Log role instead of username to avoid logging user-controlled data
+    logger.info(f"Accord settings updated (role={current_user.role}): {', '.join(changes)}")
 
     return StandardResponse(
         success=True,

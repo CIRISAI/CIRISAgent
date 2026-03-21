@@ -68,6 +68,8 @@ DESC_AUDIT_HASH = "Hash of audit entry (tamper-evident)"
 DESC_AUDIT_SIGNATURE = "Cryptographic signature of audit entry"
 DESC_THRESHOLD_USED = "Threshold used"
 DESC_ACTION_PARAMETERS = "Action parameters (content for SPEAK, etc.)"
+DESC_ENTROPY_REASON = "Entropy check result message"
+DESC_COHERENCE_REASON = "Coherence check result message"
 
 
 class StepPoint(str, Enum):
@@ -879,13 +881,13 @@ class FinalizeActionStepData(BaseStepData):
     entropy_passed: Optional[bool] = Field(None, description="Whether entropy check passed")
     entropy_score: Optional[float] = Field(None, description="Entropy score (0=ordered, 1=chaotic)")
     entropy_threshold: Optional[float] = Field(None, description=DESC_THRESHOLD_USED)
-    entropy_reason: Optional[str] = Field(None, description="Entropy check result message")
+    entropy_reason: Optional[str] = Field(None, description=DESC_ENTROPY_REASON)
 
     # === ETHICAL FACULTY 2: Coherence Conscience ===
     coherence_passed: Optional[bool] = Field(None, description="Whether coherence check passed")
     coherence_score: Optional[float] = Field(None, description="Coherence score (0=incoherent, 1=coherent)")
     coherence_threshold: Optional[float] = Field(None, description=DESC_THRESHOLD_USED)
-    coherence_reason: Optional[str] = Field(None, description="Coherence check result message")
+    coherence_reason: Optional[str] = Field(None, description=DESC_COHERENCE_REASON)
 
     # === ETHICAL FACULTY 3: Optimization Veto Conscience ===
     optimization_veto_passed: Optional[bool] = Field(None, description="Whether optimization veto passed")
@@ -946,11 +948,11 @@ class ActionCompleteStepData(BaseStepData):
     )
     coherence_score: Optional[float] = Field(None, description="Coherence score 0-1 (None for exempt actions)")
     coherence_threshold: Optional[float] = Field(None, description="Coherence threshold used")
-    coherence_reason: Optional[str] = Field(None, description="Coherence check result message")
+    coherence_reason: Optional[str] = Field(None, description=DESC_COHERENCE_REASON)
     entropy_passed: Optional[bool] = Field(None, description="Whether entropy check passed (None for exempt actions)")
     entropy_score: Optional[float] = Field(None, description="Entropy score 0-1 (None for exempt actions)")
     entropy_threshold: Optional[float] = Field(None, description="Entropy threshold used")
-    entropy_reason: Optional[str] = Field(None, description="Entropy check result message")
+    entropy_reason: Optional[str] = Field(None, description=DESC_ENTROPY_REASON)
 
 
 class ActionResponse(BaseModel):
@@ -1239,7 +1241,7 @@ class ConscienceResultEvent(BaseModel):
     entropy_passed: Optional[bool] = Field(None, description="Whether entropy check passed")
     entropy_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Entropy score (0=ordered, 1=chaotic)")
     entropy_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description=DESC_THRESHOLD_USED)
-    entropy_reason: Optional[str] = Field(None, description="Entropy check result message")
+    entropy_reason: Optional[str] = Field(None, description=DESC_ENTROPY_REASON)
 
     # === ETHICAL FACULTY 2: Coherence Conscience ===
     # Verifies internal consistency with prior commitments
@@ -1248,7 +1250,7 @@ class ConscienceResultEvent(BaseModel):
         None, ge=0.0, le=1.0, description="Coherence score (0=incoherent, 1=coherent)"
     )
     coherence_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description=DESC_THRESHOLD_USED)
-    coherence_reason: Optional[str] = Field(None, description="Coherence check result message")
+    coherence_reason: Optional[str] = Field(None, description=DESC_COHERENCE_REASON)
 
     # === ETHICAL FACULTY 3: Optimization Veto Conscience ===
     # Preserves human values, vetoes actions that compromise them for efficiency
@@ -1310,8 +1312,8 @@ class ActionResultEvent(BaseModel):
     )
     coherence_score: Optional[float] = Field(None, description="Coherence score 0-1 (None for exempt actions)")
     coherence_threshold: Optional[float] = Field(None, description="Coherence threshold used")
-    coherence_reason: Optional[str] = Field(None, description="Coherence check result message")
+    coherence_reason: Optional[str] = Field(None, description=DESC_COHERENCE_REASON)
     entropy_passed: Optional[bool] = Field(None, description="Whether entropy check passed (None for exempt actions)")
     entropy_score: Optional[float] = Field(None, description="Entropy score 0-1 (None for exempt actions)")
     entropy_threshold: Optional[float] = Field(None, description="Entropy threshold used")
-    entropy_reason: Optional[str] = Field(None, description="Entropy check result message")
+    entropy_reason: Optional[str] = Field(None, description=DESC_ENTROPY_REASON)

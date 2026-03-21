@@ -938,6 +938,20 @@ class ActionCompleteStepData(BaseStepData):
         default_factory=list, description="API base URLs used (query telemetry by thought_id)"
     )
 
+    # Coherence data from conscience checks (propagated from FINALIZE_ACTION for non-exempt actions)
+    # Non-exempt actions: SPEAK, TOOL, PONDER, MEMORIZE
+    # Exempt actions: RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT (these skip ethical faculties)
+    coherence_passed: Optional[bool] = Field(
+        None, description="Whether coherence check passed (None for exempt actions)"
+    )
+    coherence_score: Optional[float] = Field(None, description="Coherence score 0-1 (None for exempt actions)")
+    coherence_threshold: Optional[float] = Field(None, description="Coherence threshold used")
+    coherence_reason: Optional[str] = Field(None, description="Coherence check result message")
+    entropy_passed: Optional[bool] = Field(None, description="Whether entropy check passed (None for exempt actions)")
+    entropy_score: Optional[float] = Field(None, description="Entropy score 0-1 (None for exempt actions)")
+    entropy_threshold: Optional[float] = Field(None, description="Entropy threshold used")
+    entropy_reason: Optional[str] = Field(None, description="Entropy check result message")
+
 
 class ActionResponse(BaseModel):
     """Typed response from action dispatch."""
@@ -1287,3 +1301,17 @@ class ActionResultEvent(BaseModel):
     llm_calls: int = Field(0, description="Number of LLM calls for this thought")
     models_used: List[str] = Field(default_factory=list, description="Unique models used for this thought")
     api_bases_used: List[str] = Field(default_factory=list, description="Unique API base URLs used for this thought")
+
+    # Coherence data from conscience checks (propagated from FINALIZE_ACTION for non-exempt actions)
+    # Non-exempt actions: SPEAK, TOOL, PONDER, MEMORIZE
+    # Exempt actions: RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT (these skip ethical faculties)
+    coherence_passed: Optional[bool] = Field(
+        None, description="Whether coherence check passed (None for exempt actions)"
+    )
+    coherence_score: Optional[float] = Field(None, description="Coherence score 0-1 (None for exempt actions)")
+    coherence_threshold: Optional[float] = Field(None, description="Coherence threshold used")
+    coherence_reason: Optional[str] = Field(None, description="Coherence check result message")
+    entropy_passed: Optional[bool] = Field(None, description="Whether entropy check passed (None for exempt actions)")
+    entropy_score: Optional[float] = Field(None, description="Entropy score 0-1 (None for exempt actions)")
+    entropy_threshold: Optional[float] = Field(None, description="Entropy threshold used")
+    entropy_reason: Optional[str] = Field(None, description="Entropy check result message")

@@ -1995,14 +1995,47 @@ class CIRISApiClient(
      * Load an adapter directly (for adapters that don't require configuration).
      */
     suspend fun loadAdapter(adapterType: String): AdapterLoadResult {
-        val method = "loadAdapter"
-        logInfo(method, "Loading adapter: $adapterType")
+        return loadAdapterWithConfig(adapterType, config = null, persist = false)
+    }
+
+    /**
+     * Load an adapter with configuration options.
+     *
+     * @param adapterType The adapter type to load (e.g., "ciris_accord_metrics")
+     * @param config Optional configuration map for the adapter (will be serialized to JSON)
+     * @param persist Whether to save config to graph for auto-restore on restart
+     */
+    suspend fun loadAdapterWithConfig(
+        adapterType: String,
+        config: Map<String, Any>? = null,
+        persist: Boolean = true
+    ): AdapterLoadResult {
+        val method = "loadAdapterWithConfig"
+        logInfo(method, "Loading adapter: $adapterType with config=$config, persist=$persist")
 
         return try {
+            // Serialize config map to JSON string (SDK expects String, not Map)
+            val configJson = config?.let { map ->
+                buildString {
+                    append("{")
+                    map.entries.forEachIndexed { index, (key, value) ->
+                        if (index > 0) append(",")
+                        append("\"$key\":")
+                        when (value) {
+                            is String -> append("\"$value\"")
+                            is Boolean -> append(value)
+                            is Number -> append(value)
+                            else -> append("\"$value\"")
+                        }
+                    }
+                    append("}")
+                }
+            }
+
             val request = AdapterActionRequest(
-                config = null,
+                config = configJson,
                 force = false,
-                persist = false
+                persist = persist
             )
             val response = systemApi.loadAdapterV1SystemAdaptersAdapterTypePost(
                 adapterType = adapterType,
@@ -4643,6 +4676,245 @@ class CIRISApiClient(
         }
     }
 
+    // ===== My Data API (DSAR Self-Service) =====
+
+    /**
+     * Get lens identifier and accord metrics status.
+     * Returns the hashed agent ID used in CIRISLens traces.
+     */
+    suspend fun getLensIdentifier(): LensIdentifierData {
+        val method = "getLensIdentifier"
+        logInfo(method, "Fetching lens identifier")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.get("$baseUrl/v1/my-data/lens-identifier") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status} - $errorBody")
+            }
+
+            val apiResponse: MyDataApiResponse = response.body()
+            val data = apiResponse.data ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Lens identifier fetched: hash=${data.agentIdHash?.take(8)}...")
+
+            LensIdentifierData(
+                agentIdHash = data.agentIdHash ?: "",
+                agentId = data.agentId ?: "",
+                consentGiven = data.consentGiven ?: false,
+                consentTimestamp = data.consentTimestamp,
+                traceLevel = data.traceLevel,
+                tracesSent = data.tracesSent ?: 0,
+                endpointUrl = data.endpointUrl
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Request deletion of CIRISLens traces (DSAR Article 17 self-service).
+     * This is irreversible - all traces associated with this agent are deleted.
+     */
+    suspend fun deleteLensTraces(reason: String? = null): LensDeletionResult {
+        val method = "deleteLensTraces"
+        logInfo(method, "Requesting deletion of lens traces")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.delete("$baseUrl/v1/my-data/lens-traces") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(LensDeletionRequest(confirm = true, reason = reason))
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                logError(method, "API returned non-success status: ${response.status}")
+                return LensDeletionResult(
+                    success = false,
+                    agentIdHash = null,
+                    status = "error",
+                    message = "API error: HTTP ${response.status}",
+                    lensRequestAccepted = false,
+                    localConsentRevoked = false
+                )
+            }
+
+            val apiResponse: DeletionApiResponse = response.body()
+            val data = apiResponse.data
+            logInfo(method, "Deletion result: status=${data?.status}, lensAccepted=${data?.lensRequestAccepted}")
+
+            LensDeletionResult(
+                success = apiResponse.success ?: false,
+                agentIdHash = data?.agentIdHash,
+                status = data?.status ?: "unknown",
+                message = data?.message ?: apiResponse.message ?: "Unknown response",
+                lensRequestAccepted = data?.lensRequestAccepted ?: false,
+                localConsentRevoked = data?.localConsentRevoked ?: false
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            LensDeletionResult(
+                success = false,
+                agentIdHash = null,
+                status = "error",
+                message = "Error: ${e.message}",
+                lensRequestAccepted = false,
+                localConsentRevoked = false
+            )
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Get current accord metrics settings.
+     */
+    suspend fun getAccordSettings(): AccordSettingsData {
+        val method = "getAccordSettings"
+        logInfo(method, "Fetching accord settings")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.get("$baseUrl/v1/my-data/accord-settings") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                logError(method, "API returned non-success status: ${response.status}, body: $errorBody")
+                // 404 means adapter not loaded from API's perspective
+                if (response.status.value == 404) {
+                    logWarn(method, "Accord adapter not found by API - may not be registered with RuntimeAdapterManager")
+                }
+                throw RuntimeException("API error: HTTP ${response.status} - $errorBody")
+            }
+
+            // Log raw response for debugging
+            val rawBody = response.bodyAsText()
+            logDebug(method, "Raw response body: ${rawBody.take(500)}")
+
+            // Re-parse since we consumed the body
+            val apiResponse: AccordSettingsApiResponse = jsonConfig.decodeFromString(rawBody)
+            val data = apiResponse.data
+            if (data == null) {
+                logError(method, "API returned success but data is null. Full response: $rawBody")
+                throw RuntimeException("API returned null data")
+            }
+            logInfo(method, "Accord settings: consent=${data.consentGiven}, level=${data.traceLevel}, " +
+                    "eventsSent=${data.eventsSent}, agentIdHash=${data.agentIdHash?.take(8)}...")
+
+            AccordSettingsData(
+                agentIdHash = data.agentIdHash ?: "",
+                consentGiven = data.consentGiven ?: false,
+                consentTimestamp = data.consentTimestamp,
+                traceLevel = data.traceLevel,
+                endpointUrl = data.endpointUrl,
+                eventsSent = data.eventsSent ?: 0
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Update accord metrics settings (consent and/or trace level).
+     */
+    suspend fun updateAccordSettings(
+        consentGiven: Boolean? = null,
+        traceLevel: String? = null
+    ): AccordSettingsUpdateResult {
+        val method = "updateAccordSettings"
+        logInfo(method, "Updating accord settings: consent=$consentGiven, level=$traceLevel")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.put("$baseUrl/v1/my-data/accord-settings") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(AccordSettingsUpdateRequest(
+                    consentGiven = consentGiven,
+                    traceLevel = traceLevel
+                ))
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                logError(method, "API returned non-success status: ${response.status}")
+                return AccordSettingsUpdateResult(
+                    success = false,
+                    message = "API error: HTTP ${response.status}",
+                    changes = emptyList()
+                )
+            }
+
+            val apiResponse: AccordUpdateApiResponse = response.body()
+            logInfo(method, "Settings updated: ${apiResponse.data?.changes}")
+
+            AccordSettingsUpdateResult(
+                success = apiResponse.success ?: false,
+                message = apiResponse.message ?: "Settings updated",
+                changes = apiResponse.data?.changes ?: emptyList()
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            AccordSettingsUpdateResult(
+                success = false,
+                message = "Error: ${e.message}",
+                changes = emptyList()
+            )
+        } finally {
+            client.close()
+        }
+    }
+
     override fun close() {
     logInfo("close", "Closing CIRISApiClient")
     }
@@ -5176,4 +5448,165 @@ data class ToolsMetadataData(
 data class ToolsResult(
     val tools: List<ToolInfoData>,
     val metadata: ToolsMetadataData?
+)
+
+// ===== My Data API (DSAR Self-Service) Data Models =====
+
+/**
+ * API response wrapper for my-data endpoints.
+ */
+@Serializable
+data class MyDataApiResponse(
+    val success: Boolean? = null,
+    val data: MyDataPayload? = null,
+    val message: String? = null
+)
+
+@Serializable
+data class MyDataPayload(
+    @SerialName("agent_id_hash")
+    val agentIdHash: String? = null,
+    @SerialName("agent_id")
+    val agentId: String? = null,
+    @SerialName("consent_given")
+    val consentGiven: Boolean? = null,
+    @SerialName("consent_timestamp")
+    val consentTimestamp: String? = null,
+    @SerialName("trace_level")
+    val traceLevel: String? = null,
+    @SerialName("traces_sent")
+    val tracesSent: Int? = null,
+    @SerialName("endpoint_url")
+    val endpointUrl: String? = null,
+    @SerialName("events_sent")
+    val eventsSent: Int? = null
+)
+
+/**
+ * Lens identifier data (user-facing).
+ */
+data class LensIdentifierData(
+    val agentIdHash: String,
+    val agentId: String,
+    val consentGiven: Boolean,
+    val consentTimestamp: String?,
+    val traceLevel: String?,
+    val tracesSent: Int,
+    val endpointUrl: String?
+)
+
+/**
+ * Request body for lens trace deletion.
+ */
+@Serializable
+data class LensDeletionRequest(
+    val confirm: Boolean,
+    val reason: String? = null
+)
+
+/**
+ * API response for deletion.
+ */
+@Serializable
+data class DeletionApiResponse(
+    val success: Boolean? = null,
+    val data: DeletionPayload? = null,
+    val message: String? = null
+)
+
+@Serializable
+data class DeletionPayload(
+    @SerialName("agent_id_hash")
+    val agentIdHash: String? = null,
+    val status: String? = null,
+    val message: String? = null,
+    @SerialName("lens_request_accepted")
+    val lensRequestAccepted: Boolean? = null,
+    @SerialName("local_consent_revoked")
+    val localConsentRevoked: Boolean? = null
+)
+
+/**
+ * Lens deletion result (user-facing).
+ */
+data class LensDeletionResult(
+    val success: Boolean,
+    val agentIdHash: String?,
+    val status: String,
+    val message: String,
+    val lensRequestAccepted: Boolean,
+    val localConsentRevoked: Boolean
+)
+
+/**
+ * API response for accord settings GET.
+ */
+@Serializable
+data class AccordSettingsApiResponse(
+    val success: Boolean? = null,
+    val data: AccordSettingsPayload? = null,
+    val message: String? = null
+)
+
+@Serializable
+data class AccordSettingsPayload(
+    @SerialName("agent_id_hash")
+    val agentIdHash: String? = null,
+    @SerialName("consent_given")
+    val consentGiven: Boolean? = null,
+    @SerialName("consent_timestamp")
+    val consentTimestamp: String? = null,
+    @SerialName("trace_level")
+    val traceLevel: String? = null,
+    @SerialName("endpoint_url")
+    val endpointUrl: String? = null,
+    @SerialName("events_sent")
+    val eventsSent: Int? = null
+)
+
+/**
+ * Accord settings data (user-facing).
+ */
+data class AccordSettingsData(
+    val agentIdHash: String,
+    val consentGiven: Boolean,
+    val consentTimestamp: String?,
+    val traceLevel: String?,
+    val endpointUrl: String?,
+    val eventsSent: Int
+)
+
+/**
+ * Request body for accord settings update.
+ */
+@Serializable
+data class AccordSettingsUpdateRequest(
+    @SerialName("consent_given")
+    val consentGiven: Boolean? = null,
+    @SerialName("trace_level")
+    val traceLevel: String? = null
+)
+
+/**
+ * API response for accord settings update.
+ */
+@Serializable
+data class AccordUpdateApiResponse(
+    val success: Boolean? = null,
+    val data: AccordUpdatePayload? = null,
+    val message: String? = null
+)
+
+@Serializable
+data class AccordUpdatePayload(
+    val changes: List<String>? = null
+)
+
+/**
+ * Accord settings update result (user-facing).
+ */
+data class AccordSettingsUpdateResult(
+    val success: Boolean,
+    val message: String,
+    val changes: List<String>
 )

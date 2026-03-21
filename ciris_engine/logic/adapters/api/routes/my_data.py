@@ -37,7 +37,9 @@ router = APIRouter(prefix="/my-data", tags=["My Data"])
 class LensIdentifierResponse(BaseModel):
     """Response containing the user's lens identifier and accord metrics status."""
 
-    agent_id_hash: str = Field(..., description="SHA-256 hash (first 16 hex chars) of agent ID used in CIRISLens traces")
+    agent_id_hash: str = Field(
+        ..., description="SHA-256 hash (first 16 hex chars) of agent ID used in CIRISLens traces"
+    )
     agent_id: str = Field(..., description="Raw agent ID (so user can verify the hash)")
     consent_given: bool = Field(..., description="Whether accord metrics consent is currently active")
     consent_timestamp: Optional[str] = Field(None, description="When consent was last granted/revoked")
@@ -108,24 +110,47 @@ def _get_accord_adapter(request: Request) -> Any:
 
     RuntimeAdapterManager stores adapters in loaded_adapters: Dict[str, AdapterInstance]
     where AdapterInstance.adapter is the actual adapter object.
-    """
-    runtime = getattr(request.app.state, "runtime", None)
-    if not runtime:
-        return None
 
-    adapter_manager = getattr(runtime, "adapter_manager", None)
+    Note: We check multiple locations since adapter_manager may be stored differently
+    depending on how the runtime was initialized.
+    """
+    adapter_manager = None
+
+    # Try main_runtime_control_service first (matches /v1/adapters endpoint)
+    main_runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
+    if main_runtime_control:
+        adapter_manager = getattr(main_runtime_control, "adapter_manager", None)
+
+    # Fallback to runtime_control_service
     if not adapter_manager:
+        runtime_control = getattr(request.app.state, "runtime_control_service", None)
+        if runtime_control:
+            adapter_manager = getattr(runtime_control, "adapter_manager", None)
+
+    # Fallback to runtime.adapter_manager (legacy path)
+    if not adapter_manager:
+        runtime = getattr(request.app.state, "runtime", None)
+        if runtime:
+            adapter_manager = getattr(runtime, "adapter_manager", None)
+
+    if not adapter_manager:
+        logger.debug("_get_accord_adapter: No adapter_manager found in any location")
         return None
 
     # RuntimeAdapterManager.loaded_adapters is Dict[str, AdapterInstance]
     loaded = getattr(adapter_manager, "loaded_adapters", {})
-    for instance in loaded.values():
+    logger.debug(f"_get_accord_adapter: Found {len(loaded)} loaded adapters: {list(loaded.keys())}")
+
+    for adapter_id, instance in loaded.items():
         # AdapterInstance wraps the actual adapter in .adapter
         adapter = getattr(instance, "adapter", instance)
         type_name = type(adapter).__name__
+        logger.debug(f"_get_accord_adapter: Checking adapter {adapter_id}: type={type_name}")
         if "AccordMetrics" in type_name:
+            logger.debug(f"_get_accord_adapter: Found AccordMetrics adapter: {adapter_id}")
             return adapter
 
+    logger.debug("_get_accord_adapter: No AccordMetrics adapter found")
     return None
 
 
@@ -137,7 +162,8 @@ def _get_agent_id(request: Request) -> Optional[str]:
 
     identity = getattr(runtime, "agent_identity", None)
     if identity and hasattr(identity, "agent_id"):
-        return identity.agent_id
+        agent_id = identity.agent_id
+        return str(agent_id) if agent_id is not None else None
 
     # Legacy fallback
     return getattr(runtime, "agent_id", None)
@@ -411,9 +437,7 @@ async def update_accord_settings(
             detail="No settings provided to update.",
         )
 
-    logger.info(
-        f"Accord settings updated by {current_user.username}: {', '.join(changes)}"
-    )
+    logger.info(f"Accord settings updated by {current_user.username}: {', '.join(changes)}")
 
     return StandardResponse(
         success=True,

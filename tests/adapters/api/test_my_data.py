@@ -371,11 +371,12 @@ class TestLateConsentInitialization:
         mock_session = MagicMock()
         mock_session.closed = False
 
-        # Patch aiohttp.ClientSession (needs event loop) and asyncio.create_task
-        with patch("ciris_adapters.ciris_accord_metrics.services.aiohttp.ClientSession", return_value=mock_session):
-            with patch("ciris_adapters.ciris_accord_metrics.services.asyncio.create_task") as mock_create_task:
-                mock_create_task.return_value = MagicMock(done=MagicMock(return_value=False))
-                svc.set_consent(True)
+        # Patch asyncio.get_running_loop (returns mock loop), aiohttp.ClientSession, and asyncio.create_task
+        with patch("ciris_adapters.ciris_accord_metrics.services.asyncio.get_running_loop", return_value=MagicMock()):
+            with patch("ciris_adapters.ciris_accord_metrics.services.aiohttp.ClientSession", return_value=mock_session):
+                with patch("ciris_adapters.ciris_accord_metrics.services.asyncio.create_task") as mock_create_task:
+                    mock_create_task.return_value = MagicMock(done=MagicMock(return_value=False))
+                    svc.set_consent(True)
 
         assert svc._consent_given is True
         assert svc._session is mock_session

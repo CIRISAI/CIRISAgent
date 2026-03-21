@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
@@ -66,6 +67,7 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onLogout: () -> Unit,
     onResetSetup: () -> Unit,  // Callback to restart app after reset
+    onNavigateToDataManagement: () -> Unit = {},  // Navigate to Data Management screen
     modifier: Modifier = Modifier
 ) {
     // Core state
@@ -93,7 +95,6 @@ fun SettingsScreen(
     var showApiKey by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
     var showResetConfirmDialog by remember { mutableStateOf(false) }
-    var showFactoryResetDialog by remember { mutableStateOf(false) }
 
     // Show snackbar for success/error
     val snackbarHostState = remember { SnackbarHostState() }
@@ -159,53 +160,6 @@ fun SettingsScreen(
                 TextButton(
                     onClick = { showResetConfirmDialog = false },
                     modifier = Modifier.testableClickable("btn_reset_cancel") { showResetConfirmDialog = false }
-                ) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    // Confirmation dialog for account & data deletion
-    if (showFactoryResetDialog) {
-        AlertDialog(
-            onDismissRequest = { showFactoryResetDialog = false },
-            title = { Text("Delete Account & Data?") },
-            text = {
-                Text(
-                    "This will permanently delete all local data:\n\n" +
-                    "• Conversations and chat history\n" +
-                    "• Memory and knowledge graph\n" +
-                    "• Audit logs and signing keys\n" +
-                    "• All configuration\n\n" +
-                    "Transaction records (amounts, dates, credit balance) are retained " +
-                    "server-side for 10 years as required by EU AI Act and tax compliance " +
-                    "(see ciris.ai/privacy). No conversation content is ever stored on our servers. " +
-                    "To request server-side data deletion, contact privacy@ciris.ai.\n\n" +
-                    "This cannot be undone."
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showFactoryResetDialog = false
-                        viewModel.factoryReset { onResetSetup() }
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    ),
-                    modifier = Modifier.testableClickable("btn_factory_reset_confirm") {
-                        showFactoryResetDialog = false
-                        viewModel.factoryReset { onResetSetup() }
-                    }
-                ) {
-                    Text("Delete Account & Data")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showFactoryResetDialog = false },
-                    modifier = Modifier.testableClickable("btn_factory_reset_cancel") { showFactoryResetDialog = false }
                 ) {
                     Text("Cancel")
                 }
@@ -434,65 +388,40 @@ fun SettingsScreen(
 
                 Spacer(Modifier.height(8.dp))
 
-                // Delete Account & Data
+                // Data Management - Navigate to DSAR self-service screen
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToDataManagement() }
+                        .testableClickable("btn_data_management") { onNavigateToDataManagement() },
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
                     )
                 ) {
-                    val uriHandler = LocalUriHandler.current
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    Row(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Delete Account & Data",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Text(
-                            text = "Permanently deletes all local data including conversations, memory, " +
-                                "audit logs, and signing keys.\n\n" +
-                                "All agent data — conversations, memory graphs, and configuration — " +
-                                "is stored exclusively on this device and is completely removed by this action. " +
-                                "Transaction records (amounts, dates) are retained server-side for 10 years " +
-                                "as required by EU AI Act and tax compliance. No conversation content " +
-                                "is ever stored on our servers.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
-                        )
-                        Text(
-                            text = "Privacy Policy: ciris.ai/privacy",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                textDecoration = TextDecoration.Underline
-                            ),
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable {
-                                uriHandler.openUri("https://ciris.ai/privacy")
-                            }
-                        )
-                        Button(
-                            onClick = { showFactoryResetDialog = true },
-                            enabled = !isResetting,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error
-                            ),
-                            modifier = Modifier.fillMaxWidth().testableClickable("btn_factory_reset") {
-                                showFactoryResetDialog = true
-                            }
-                        ) {
-                            if (isResetting) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    color = MaterialTheme.colorScheme.onError,
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            Text(if (isResetting) "Deleting..." else "Delete Account & Data")
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Data Management",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Delete account data, manage opt-in traces, exercise GDPR rights",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
+                        Icon(
+                            imageVector = Icons.Filled.ArrowForward,
+                            contentDescription = "Go to Data Management",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
 

@@ -1654,12 +1654,17 @@ class AccordMetricsService:
             logger.info(f"Consent granted for accord metrics at {self._consent_timestamp}")
             # If the service was started without consent, the HTTP session and
             # flush task were never created.  Initialize them now so collection
-            # begins immediately.
-            if self._session is None or (hasattr(self._session, "closed") and self._session.closed):
-                self._initialize_http_session()
-            if self._flush_task is None or self._flush_task.done():
-                self._flush_task = asyncio.create_task(self._periodic_flush())
-                logger.info("Started periodic flush task after late consent grant")
+            # begins immediately.  Only do this if there's a running event loop.
+            try:
+                loop = asyncio.get_running_loop()
+                if self._session is None or (hasattr(self._session, "closed") and self._session.closed):
+                    self._initialize_http_session()
+                if self._flush_task is None or self._flush_task.done():
+                    self._flush_task = asyncio.create_task(self._periodic_flush())
+                    logger.info("Started periodic flush task after late consent grant")
+            except RuntimeError:
+                # No running event loop — session/task will be created on first async call
+                pass
         else:
             logger.info(f"Consent revoked for accord metrics at {self._consent_timestamp}")
 
@@ -1741,6 +1746,5 @@ class AccordMetricsService:
 
         self._event_queue.append(deletion_event)
         logger.info(
-            f"Queued lens deletion request for agent {self._agent_id_hash} "
-            f"(queue size: {len(self._event_queue)})"
+            f"Queued lens deletion request for agent {self._agent_id_hash} " f"(queue size: {len(self._event_queue)})"
         )

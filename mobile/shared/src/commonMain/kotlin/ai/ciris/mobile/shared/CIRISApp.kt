@@ -45,6 +45,7 @@ import ai.ciris.mobile.shared.viewmodels.WiseAuthorityViewModel
 import ai.ciris.mobile.shared.viewmodels.TicketsViewModel
 import ai.ciris.mobile.shared.viewmodels.SchedulerViewModel
 import ai.ciris.mobile.shared.viewmodels.ToolsViewModel
+import ai.ciris.mobile.shared.viewmodels.DataManagementViewModel
 import ai.ciris.mobile.shared.ui.screens.graph.GraphMemoryScreen
 import ai.ciris.mobile.shared.ui.theme.BrightnessPreference
 import ai.ciris.mobile.shared.ui.theme.ColorTheme
@@ -315,6 +316,9 @@ fun CIRISApp(
             // GraphMemory goes back to Memory list
             is Screen.GraphMemory -> Screen.Memory
 
+            // DataManagement goes back to Settings
+            is Screen.DataManagement -> Screen.Settings
+
             // All other screens go back to Interact (main screen)
             else -> Screen.Interact
         }
@@ -504,6 +508,9 @@ fun CIRISApp(
     }
     val toolsViewModel: ToolsViewModel = viewModel {
         ToolsViewModel(apiClient)
+    }
+    val dataManagementViewModel: DataManagementViewModel = viewModel {
+        DataManagementViewModel(apiClient, secureStorage, envFileUpdater)
     }
 
     // Set up purchase result callback — routes through handlePurchaseResult for typed error handling
@@ -1208,6 +1215,7 @@ fun CIRISApp(
                             onMemoryClick = { currentScreen = Screen.GraphMemory },  // Default to 3D cylinder view
                             onConfigClick = { currentScreen = Screen.Config },
                             onConsentClick = { currentScreen = Screen.Consent },
+                            onDataManagementClick = { currentScreen = Screen.DataManagement },
                             onSystemClick = { currentScreen = Screen.System },
                             onRuntimeClick = { currentScreen = Screen.Runtime },
                             onUsersClick = { currentScreen = Screen.Users },
@@ -1284,6 +1292,10 @@ fun CIRISApp(
                         startupViewModel.retry()
                         checkingFirstRun = false  // Allow first-run re-check after restart
                         currentScreen = Screen.Startup
+                    },
+                    onNavigateToDataManagement = {
+                        PlatformLogger.i("CIRISApp", "[Settings] Navigating to Data Management")
+                        currentScreen = Screen.DataManagement
                     }
                 )
             }
@@ -2312,6 +2324,20 @@ fun CIRISApp(
                 )
             }
 
+            Screen.DataManagement -> {
+                DataManagementScreen(
+                    viewModel = dataManagementViewModel,
+                    onNavigateBack = {
+                        PlatformLogger.i(TAG, "[Screen.DataManagement] Navigating back to Settings")
+                        currentScreen = Screen.Settings
+                    },
+                    onResetSetup = {
+                        PlatformLogger.i(TAG, "[Screen.DataManagement] Reset triggered, going to Setup")
+                        currentScreen = Screen.Setup
+                    }
+                )
+            }
+
             Screen.Trust -> {
                 TrustPage(
                     apiClient = apiClient,
@@ -2391,6 +2417,7 @@ private fun CIRISTopBar(
     onMemoryClick: () -> Unit = {},
     onConfigClick: () -> Unit = {},
     onConsentClick: () -> Unit = {},
+    onDataManagementClick: () -> Unit = {},
     onSystemClick: () -> Unit = {},
     onRuntimeClick: () -> Unit = {},
     onUsersClick: () -> Unit = {},
@@ -2562,6 +2589,11 @@ private fun CIRISTopBar(
                         onClick = { activeCategory = NavCategory.NONE; onAuditClick() },
                         leadingIcon = { Icon(Icons.Default.List, null) }
                     )
+                    DropdownMenuItem(
+                        text = { Text("Data Management") },
+                        onClick = { activeCategory = NavCategory.NONE; onDataManagementClick() },
+                        leadingIcon = { Icon(Icons.Default.Info, null) }
+                    )
                 }
             }
 
@@ -2697,6 +2729,7 @@ private sealed class Screen {
     object Tickets : Screen()
     object Scheduler : Screen()
     object Tools : Screen()
+    object DataManagement : Screen()
 }
 
 /**

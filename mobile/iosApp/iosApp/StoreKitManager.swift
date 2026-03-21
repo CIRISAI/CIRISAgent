@@ -199,13 +199,25 @@ class StoreKitManager: NSObject, ObservableObject {
                         success: success,
                         creditsAdded: creditsAdded,
                         newBalance: newBalance,
-                        alreadyProcessed: alreadyProcessed
+                        alreadyProcessed: alreadyProcessed,
+                        httpStatusCode: 200
                     )
                 }
+            } else if httpResponse.statusCode == 401 {
+                NSLog("[StoreKitManager] 401 from billing backend - token expired or invalid")
+                return VerifyResult(
+                    success: false,
+                    error: "auth_expired",
+                    httpStatusCode: 401
+                )
             } else {
                 let errorBody = String(data: data, encoding: .utf8) ?? "unknown"
                 NSLog("[StoreKitManager] Verification failed: \(httpResponse.statusCode) - \(errorBody)")
-                return VerifyResult(success: false, error: "Server error: \(httpResponse.statusCode)")
+                return VerifyResult(
+                    success: false,
+                    error: "Server error: \(httpResponse.statusCode)",
+                    httpStatusCode: httpResponse.statusCode
+                )
             }
         } catch {
             NSLog("[StoreKitManager] Verification error: \(error)")
@@ -249,4 +261,5 @@ struct VerifyResult {
     var newBalance: Int = 0
     var alreadyProcessed: Bool = false
     var error: String? = nil
+    var httpStatusCode: Int = 0
 }

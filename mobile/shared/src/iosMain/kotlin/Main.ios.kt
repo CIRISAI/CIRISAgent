@@ -115,8 +115,12 @@ fun MainViewControllerWithAuthAndStore(
     val purchaseLauncher = object : PurchaseLauncher {
         override fun launchPurchase(productId: String) {
             NSLog("[Main.ios][INFO] launchPurchase called for $productId (no auth token)")
-            // Cannot purchase without auth token on iOS - need to use launchPurchaseWithAuth
-            purchaseResultCallback?.onResult(PurchaseResultType.Error("Authentication required for purchase"))
+            purchaseResultCallback?.onResult(
+                PurchaseResultType.Error(
+                    "Authentication required for purchase",
+                    PurchaseError.AuthRequired()
+                )
+            )
         }
 
         override fun launchPurchaseWithAuth(productId: String, authToken: String) {
@@ -131,7 +135,22 @@ fun MainViewControllerWithAuthAndStore(
                     )
                     is StoreKitPurchaseResult.Cancelled -> PurchaseResultType.Cancelled
                     is StoreKitPurchaseResult.Pending -> PurchaseResultType.Error("Purchase pending approval")
-                    is StoreKitPurchaseResult.Failed -> PurchaseResultType.Error(storeKitResult.error)
+                    is StoreKitPurchaseResult.Failed -> {
+                        val errorType = when {
+                            storeKitResult.error.contains("auth_expired") ->
+                                PurchaseError.TokenExpired()
+                            storeKitResult.error.contains("Server error: 401") ->
+                                PurchaseError.TokenExpired()
+                            storeKitResult.error.startsWith("Server error:") ->
+                                PurchaseError.ServerError(0, storeKitResult.error)
+                            storeKitResult.error.contains("network", ignoreCase = true) ||
+                                storeKitResult.error.contains("connection", ignoreCase = true) ||
+                                storeKitResult.error.contains("timed out", ignoreCase = true) ->
+                                PurchaseError.NetworkError(storeKitResult.error)
+                            else -> PurchaseError.StoreError(storeKitResult.error)
+                        }
+                        PurchaseResultType.Error(storeKitResult.error, errorType)
+                    }
                 }
                 purchaseResultCallback?.onResult(result)
             }

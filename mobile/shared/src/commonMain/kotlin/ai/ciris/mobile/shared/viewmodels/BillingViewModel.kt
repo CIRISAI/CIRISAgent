@@ -1,6 +1,8 @@
 package ai.ciris.mobile.shared.viewmodels
 
-import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.PurchaseError
+import ai.ciris.mobile.shared.PurchaseResultType
+import ai.ciris.mobile.shared.api.CIRISApiClientProtocol
 import ai.ciris.mobile.shared.api.CreditStatusData
 import ai.ciris.mobile.shared.auth.TokenManager
 import ai.ciris.mobile.shared.platform.PlatformLogger
@@ -30,7 +32,7 @@ import kotlinx.coroutines.launch
  * and API communication layer.
  */
 class BillingViewModel(
-    private val apiClient: CIRISApiClient,
+    private val apiClient: CIRISApiClientProtocol,
     baseUrl: String = "http://127.0.0.1:8080"
 ) : ViewModel() {
 
@@ -126,7 +128,8 @@ class BillingViewModel(
     }
 
     /**
-     * Load current credit balance from API
+     * Load current credit balance from API.
+     * On 401/auth errors, triggers token refresh and retries once.
      */
     fun loadBalance() {
         val method = "loadBalance"
@@ -136,50 +139,63 @@ class BillingViewModel(
             _isLoading.value = true
             _errorMessage.value = null
 
-            try {
-                logDebug(method, "Calling apiClient.getCredits()")
-                val creditStatus = apiClient.getCredits()
-                logInfo(method, "Credit status loaded: hasCredit=${creditStatus.hasCredit}, " +
-                    "creditsRemaining=${creditStatus.creditsRemaining}, " +
-                    "freeUsesRemaining=${creditStatus.freeUsesRemaining}, " +
-                    "dailyFreeUsesRemaining=${creditStatus.dailyFreeUsesRemaining}, " +
-                    "planName=${creditStatus.planName}")
+            val maxAttempts = 2
+            var attempt = 0
+            var lastException: Exception? = null
 
-                // Check for BYOK/unlimited mode
-                if (creditStatus.planName == "unlimited") {
-                    logInfo(method, "BYOK mode detected - user has unlimited credits")
-                    _isByokMode.value = true
-                    _currentBalance.value = -1 // Show "unlimited" in UI
-                    _creditStatus.value = creditStatus
-                } else {
-                    _isByokMode.value = false
-                    // Calculate total credits (paid + free + daily free)
-                    val totalCredits = creditStatus.creditsRemaining +
-                        creditStatus.freeUsesRemaining +
-                        (creditStatus.dailyFreeUsesRemaining ?: 0)
-                    logInfo(method, "Total credits calculated: $totalCredits")
-                    _currentBalance.value = totalCredits
-                    _creditStatus.value = creditStatus
+            while (attempt < maxAttempts) {
+                attempt++
+                try {
+                    logDebug(method, "Calling apiClient.getCredits() (attempt $attempt)")
+                    val creditStatus = apiClient.getCredits()
+                    logInfo(method, "Credit status loaded: hasCredit=${creditStatus.hasCredit}, " +
+                        "creditsRemaining=${creditStatus.creditsRemaining}, " +
+                        "freeUsesRemaining=${creditStatus.freeUsesRemaining}, " +
+                        "dailyFreeUsesRemaining=${creditStatus.dailyFreeUsesRemaining}, " +
+                        "planName=${creditStatus.planName}")
+
+                    // Check for BYOK/unlimited mode
+                    if (creditStatus.planName == "unlimited") {
+                        logInfo(method, "BYOK mode detected - user has unlimited credits")
+                        _isByokMode.value = true
+                        _currentBalance.value = -1 // Show "unlimited" in UI
+                        _creditStatus.value = creditStatus
+                    } else {
+                        _isByokMode.value = false
+                        val totalCredits = creditStatus.creditsRemaining +
+                            creditStatus.freeUsesRemaining +
+                            (creditStatus.dailyFreeUsesRemaining ?: 0)
+                        logInfo(method, "Total credits calculated: $totalCredits")
+                        _currentBalance.value = totalCredits
+                        _creditStatus.value = creditStatus
+                    }
+
+                    _isLoading.value = false
+                    return@launch // Success — exit
+                } catch (e: Exception) {
+                    logException(method, e)
+                    lastException = e
+
+                    val errorMsg = e.message ?: ""
+                    val isAuthError = errorMsg.contains("401") ||
+                        errorMsg.contains("503") ||
+                        errorMsg.contains("Unauthorized", ignoreCase = true)
+
+                    if (isAuthError && attempt < maxAttempts) {
+                        logWarn(method, "Auth error on attempt $attempt, triggering token refresh + retry")
+                        TokenManager.shared?.on401Error()
+                        delay(2000)
+                        continue // Retry
+                    }
+
+                    // Non-auth error or retry exhausted
+                    break
                 }
-
-            } catch (e: Exception) {
-                logException(method, e)
-
-                // Check for auth errors (401/503) and trigger token refresh
-                val errorMessage = e.message ?: ""
-                val isAuthError = errorMessage.contains("401") ||
-                    errorMessage.contains("503") ||
-                    errorMessage.contains("Unauthorized", ignoreCase = true)
-
-                if (isAuthError) {
-                    logWarn(method, "Auth error detected, triggering token refresh")
-                    TokenManager.shared?.on401Error()
-                }
-
-                handleBalanceError("Failed to load balance: ${e.message}")
-            } finally {
-                _isLoading.value = false
             }
+
+            // All attempts failed
+            handleBalanceError("Failed to load balance: ${lastException?.message}")
+            _isLoading.value = false
         }
     }
 
@@ -357,6 +373,53 @@ class BillingViewModel(
         logError(method, "Purchase failed: $error")
         _isPurchasing.value = false
         _errorMessage.value = "Purchase failed: $error"
+    }
+
+    /**
+     * Handle typed purchase results with automatic token refresh on auth errors.
+     * This is the primary entry point for purchase results from the platform bridge.
+     */
+    fun handlePurchaseResult(result: PurchaseResultType) {
+        val method = "handlePurchaseResult"
+        when (result) {
+            is PurchaseResultType.Success -> {
+                logInfo(method, "Purchase success: credits=${result.creditsAdded}, balance=${result.newBalance}")
+                onPurchaseSuccess(result.creditsAdded, result.newBalance)
+            }
+            is PurchaseResultType.Cancelled -> {
+                logInfo(method, "Purchase cancelled")
+                onPurchaseCancelled()
+            }
+            is PurchaseResultType.Error -> {
+                val errorType = result.errorType
+                when (errorType) {
+                    is PurchaseError.TokenExpired, is PurchaseError.AuthRequired -> {
+                        logWarn(method, "Auth error during purchase: ${result.message}")
+                        TokenManager.shared?.on401Error()
+                        _isPurchasing.value = false
+                        _errorMessage.value = errorType.toUserMessage()
+                    }
+                    is PurchaseError.NetworkError -> {
+                        logError(method, "Network error during purchase: ${result.message}")
+                        _isPurchasing.value = false
+                        _errorMessage.value = errorType.toUserMessage()
+                    }
+                    is PurchaseError.ServerError -> {
+                        logError(method, "Server error during purchase: ${result.message}")
+                        _isPurchasing.value = false
+                        _errorMessage.value = errorType.toUserMessage()
+                    }
+                    is PurchaseError.StoreError -> {
+                        logError(method, "Store error during purchase: ${result.message}")
+                        onPurchaseError(result.message)
+                    }
+                    null -> {
+                        logError(method, "Untyped purchase error: ${result.message}")
+                        onPurchaseError(result.message)
+                    }
+                }
+            }
+        }
     }
 
     /**

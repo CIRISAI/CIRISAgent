@@ -71,6 +71,33 @@ DESC_ACTION_PARAMETERS = "Action parameters (content for SPEAK, etc.)"
 DESC_ENTROPY_REASON = "Entropy check result message"
 DESC_COHERENCE_REASON = "Coherence check result message"
 
+# Description constants for propagated coherence/entropy fields
+DESC_COHERENCE_PASSED_PROPAGATED = "Whether coherence check passed (None for exempt actions)"
+DESC_COHERENCE_SCORE_PROPAGATED = "Coherence score 0-1 (None for exempt actions)"
+DESC_ENTROPY_PASSED_PROPAGATED = "Whether entropy check passed (None for exempt actions)"
+DESC_ENTROPY_SCORE_PROPAGATED = "Entropy score 0-1 (None for exempt actions)"
+
+
+class PropagatedCoherenceEntropyMixin(BaseModel):
+    """Mixin for coherence/entropy data propagated from FINALIZE_ACTION to ACTION_COMPLETE.
+
+    Non-exempt actions: SPEAK, TOOL, PONDER, MEMORIZE
+    Exempt actions: RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT (these skip ethical faculties)
+
+    This mixin provides DRY fields for classes that need propagated conscience check results.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    coherence_passed: Optional[bool] = Field(None, description=DESC_COHERENCE_PASSED_PROPAGATED)
+    coherence_score: Optional[float] = Field(None, description=DESC_COHERENCE_SCORE_PROPAGATED)
+    coherence_threshold: Optional[float] = Field(None, description="Coherence threshold used")
+    coherence_reason: Optional[str] = Field(None, description=DESC_COHERENCE_REASON)
+    entropy_passed: Optional[bool] = Field(None, description=DESC_ENTROPY_PASSED_PROPAGATED)
+    entropy_score: Optional[float] = Field(None, description=DESC_ENTROPY_SCORE_PROPAGATED)
+    entropy_threshold: Optional[float] = Field(None, description="Entropy threshold used")
+    entropy_reason: Optional[str] = Field(None, description=DESC_ENTROPY_REASON)
+
 
 class StepPoint(str, Enum):
     """Points where single-stepping can pause in the H3ERE pipeline."""
@@ -912,8 +939,11 @@ class PerformActionStepData(BaseStepData):
     dispatch_context: str = Field("{}", description="Context for action dispatch")
 
 
-class ActionCompleteStepData(BaseStepData):
-    """Step data for ACTION_COMPLETE step with audit trail and resource usage information."""
+class ActionCompleteStepData(BaseStepData, PropagatedCoherenceEntropyMixin):
+    """Step data for ACTION_COMPLETE step with audit trail and resource usage information.
+
+    Inherits coherence/entropy fields from PropagatedCoherenceEntropyMixin.
+    """
 
     action_executed: str = Field(..., description="Action that was executed")
     action_parameters: Dict[str, Any] = Field(default_factory=dict, description=DESC_ACTION_PARAMETERS)
@@ -939,20 +969,7 @@ class ActionCompleteStepData(BaseStepData):
     api_bases_used: List[str] = Field(
         default_factory=list, description="API base URLs used (query telemetry by thought_id)"
     )
-
-    # Coherence data from conscience checks (propagated from FINALIZE_ACTION for non-exempt actions)
-    # Non-exempt actions: SPEAK, TOOL, PONDER, MEMORIZE
-    # Exempt actions: RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT (these skip ethical faculties)
-    coherence_passed: Optional[bool] = Field(
-        None, description="Whether coherence check passed (None for exempt actions)"
-    )
-    coherence_score: Optional[float] = Field(None, description="Coherence score 0-1 (None for exempt actions)")
-    coherence_threshold: Optional[float] = Field(None, description="Coherence threshold used")
-    coherence_reason: Optional[str] = Field(None, description=DESC_COHERENCE_REASON)
-    entropy_passed: Optional[bool] = Field(None, description="Whether entropy check passed (None for exempt actions)")
-    entropy_score: Optional[float] = Field(None, description="Entropy score 0-1 (None for exempt actions)")
-    entropy_threshold: Optional[float] = Field(None, description="Entropy threshold used")
-    entropy_reason: Optional[str] = Field(None, description=DESC_ENTROPY_REASON)
+    # Coherence/entropy fields inherited from PropagatedCoherenceEntropyMixin
 
 
 class ActionResponse(BaseModel):
@@ -1269,8 +1286,11 @@ class ConscienceResultEvent(BaseModel):
     epistemic_humility_recommendation: Optional[str] = Field(None, description="Recommendation: proceed, ponder, defer")
 
 
-class ActionResultEvent(BaseModel):
-    """Event 5: Action execution outcome with audit trail and resource usage (ACTION_COMPLETE step)."""
+class ActionResultEvent(PropagatedCoherenceEntropyMixin, BaseModel):
+    """Event 5: Action execution outcome with audit trail and resource usage (ACTION_COMPLETE step).
+
+    Inherits coherence/entropy fields from PropagatedCoherenceEntropyMixin.
+    """
 
     model_config = ConfigDict(defer_build=True)
 
@@ -1303,17 +1323,4 @@ class ActionResultEvent(BaseModel):
     llm_calls: int = Field(0, description="Number of LLM calls for this thought")
     models_used: List[str] = Field(default_factory=list, description="Unique models used for this thought")
     api_bases_used: List[str] = Field(default_factory=list, description="Unique API base URLs used for this thought")
-
-    # Coherence data from conscience checks (propagated from FINALIZE_ACTION for non-exempt actions)
-    # Non-exempt actions: SPEAK, TOOL, PONDER, MEMORIZE
-    # Exempt actions: RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT (these skip ethical faculties)
-    coherence_passed: Optional[bool] = Field(
-        None, description="Whether coherence check passed (None for exempt actions)"
-    )
-    coherence_score: Optional[float] = Field(None, description="Coherence score 0-1 (None for exempt actions)")
-    coherence_threshold: Optional[float] = Field(None, description="Coherence threshold used")
-    coherence_reason: Optional[str] = Field(None, description=DESC_COHERENCE_REASON)
-    entropy_passed: Optional[bool] = Field(None, description="Whether entropy check passed (None for exempt actions)")
-    entropy_score: Optional[float] = Field(None, description="Entropy score 0-1 (None for exempt actions)")
-    entropy_threshold: Optional[float] = Field(None, description="Entropy threshold used")
-    entropy_reason: Optional[str] = Field(None, description=DESC_ENTROPY_REASON)
+    # Coherence/entropy fields inherited from PropagatedCoherenceEntropyMixin

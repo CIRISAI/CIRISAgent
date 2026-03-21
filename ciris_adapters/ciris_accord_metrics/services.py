@@ -597,16 +597,8 @@ class AccordMetricsService:
             logger.warning("=" * 70)
             return
 
-        # Initialize HTTP session
-        self._session = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=30),
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "CIRIS-AccordMetrics/1.0",
-            },
-        )
-
-        # Start flush task
+        # Initialize HTTP session and start flush task
+        self._initialize_http_session()
         self._flush_task = asyncio.create_task(self._periodic_flush())
 
         logger.info("=" * 70)
@@ -1646,6 +1638,11 @@ class AccordMetricsService:
     def set_consent(self, consent_given: bool, timestamp: Optional[str] = None) -> None:
         """Update consent state.
 
+        When consent is granted and the HTTP session/flush task are not yet
+        initialized (adapter was started without consent), this method will
+        start them so collection begins immediately without requiring a
+        full adapter reload.
+
         Args:
             consent_given: Whether consent is given
             timestamp: ISO timestamp when consent was given/revoked
@@ -1655,8 +1652,34 @@ class AccordMetricsService:
 
         if consent_given:
             logger.info(f"Consent granted for accord metrics at {self._consent_timestamp}")
+            # If the service was started without consent, the HTTP session and
+            # flush task were never created.  Initialize them now so collection
+            # begins immediately.
+            if self._session is None or (hasattr(self._session, "closed") and self._session.closed):
+                self._initialize_http_session()
+            if self._flush_task is None or self._flush_task.done():
+                self._flush_task = asyncio.create_task(self._periodic_flush())
+                logger.info("Started periodic flush task after late consent grant")
         else:
             logger.info(f"Consent revoked for accord metrics at {self._consent_timestamp}")
+
+    def _initialize_http_session(self) -> None:
+        """Create the aiohttp session used to send events to CIRISLens.
+
+        Safe to call multiple times — will only create a session if one
+        does not already exist (or the existing one is closed).
+        """
+        if self._session is not None and not getattr(self._session, "closed", True):
+            return
+
+        self._session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=30),
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "CIRIS-AccordMetrics/1.0",
+            },
+        )
+        logger.info(f"HTTP session initialized for {self._endpoint_url}")
 
     def set_agent_id(self, agent_id: str) -> None:
         """Set and anonymize the agent ID.

@@ -30,7 +30,8 @@ def mock_runtime():
     runtime.agent_identity = MagicMock()
     runtime.agent_identity.agent_id = "test-agent-001"
     runtime.adapter_manager = MagicMock()
-    runtime.adapter_manager._adapters = {}
+    # RuntimeAdapterManager uses loaded_adapters, not _adapters
+    runtime.adapter_manager.loaded_adapters = {}
     return runtime
 
 
@@ -65,13 +66,21 @@ def mock_accord_adapter():
 
 
 @pytest.fixture
-def app_with_runtime(mock_runtime, mock_accord_adapter):
+def mock_adapter_instance(mock_accord_adapter):
+    """Wrap the mock adapter in an AdapterInstance-like object."""
+    instance = MagicMock()
+    instance.adapter = mock_accord_adapter
+    return instance
+
+
+@pytest.fixture
+def app_with_runtime(mock_runtime, mock_adapter_instance):
     """Create app with mock runtime and accord adapter."""
     app = create_app()
     app.state.runtime = mock_runtime
 
-    # Register adapter under a key that contains "AccordMetrics"
-    mock_runtime.adapter_manager._adapters = {"accord": mock_accord_adapter}
+    # RuntimeAdapterManager stores AdapterInstance objects in loaded_adapters
+    mock_runtime.adapter_manager.loaded_adapters = {"accord": mock_adapter_instance}
 
     app.dependency_overrides[get_current_user] = _mock_admin_user
     return app
@@ -87,7 +96,7 @@ def app_no_adapter(mock_runtime):
     """Create app with runtime but NO accord adapter."""
     app = create_app()
     app.state.runtime = mock_runtime
-    mock_runtime.adapter_manager._adapters = {}
+    mock_runtime.adapter_manager.loaded_adapters = {}
     app.dependency_overrides[get_current_user] = _mock_admin_user
     return app
 
@@ -177,27 +186,42 @@ class TestDeleteLensTraces:
         assert response.status_code == 400
 
     def test_successful_deletion_request(self, client, mock_accord_adapter):
-        # Mock the HTTP session for lens API call
-        mock_session = AsyncMock()
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.text = AsyncMock(return_value="OK")
-        mock_session.post.return_value.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_session.post.return_value.__aexit__ = AsyncMock(return_value=False)
-        mock_session.closed = False
-        mock_accord_adapter.metrics_service._session = mock_session
-        mock_accord_adapter.metrics_service._signer = MagicMock(has_signing_key=False)
-
-        response = client.request(
-            "DELETE",
-            "/v1/my-data/lens-traces",
-            json={"confirm": True, "reason": "Testing deletion"},
-        )
+        """When CIRISLens accepts, no retry is needed."""
+        # Patch _send_lens_deletion_request to simulate successful lens response
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.my_data._send_lens_deletion_request",
+            return_value=(True, "CIRISLens accepted the deletion request."),
+        ):
+            response = client.request(
+                "DELETE",
+                "/v1/my-data/lens-traces",
+                json={"confirm": True, "reason": "Testing deletion"},
+            )
 
         assert response.status_code == 200
         data = response.json()["data"]
         assert data["local_consent_revoked"] is True
-        mock_accord_adapter.update_consent.assert_called_with(False)
+        assert data["lens_request_accepted"] is True
+        # Lens accepted → request_lens_deletion=False (no retry needed)
+        mock_accord_adapter.update_consent.assert_called_with(False, request_lens_deletion=False)
+
+    def test_deletion_queues_retry_on_lens_failure(self, client, mock_accord_adapter):
+        """When CIRISLens API fails, deletion event should be queued for retry."""
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.my_data._send_lens_deletion_request",
+            return_value=(False, "Could not connect to CIRISLens."),
+        ):
+            response = client.request(
+                "DELETE",
+                "/v1/my-data/lens-traces",
+                json={"confirm": True},
+            )
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["lens_request_accepted"] is False
+        # Lens rejected → request_lens_deletion=True (queue for retry)
+        mock_accord_adapter.update_consent.assert_called_with(False, request_lens_deletion=True)
 
     def test_deletion_without_adapter(self, client_no_adapter):
         response = client_no_adapter.request(
@@ -325,3 +349,50 @@ class TestConsentRevocationDeletionHook:
         svc.queue_lens_deletion_on_revoke()
 
         assert len(svc._event_queue) == 0
+
+
+class TestLateConsentInitialization:
+    """Test that granting consent after start initializes HTTP session + flush."""
+
+    def test_set_consent_true_creates_session(self):
+        """set_consent(True) should create HTTP session if none exists."""
+        from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
+
+        svc = AccordMetricsService.__new__(AccordMetricsService)
+        svc._consent_given = False
+        svc._consent_timestamp = None
+        svc._session = None
+        svc._flush_task = None
+        svc._flush_interval = 60.0
+        svc._endpoint_url = "https://example.com/api/v1"
+        svc._batch_size = 10
+        svc._event_queue = []
+
+        mock_session = MagicMock()
+        mock_session.closed = False
+
+        # Patch aiohttp.ClientSession (needs event loop) and asyncio.create_task
+        with patch("ciris_adapters.ciris_accord_metrics.services.aiohttp.ClientSession", return_value=mock_session):
+            with patch("ciris_adapters.ciris_accord_metrics.services.asyncio.create_task") as mock_create_task:
+                mock_create_task.return_value = MagicMock(done=MagicMock(return_value=False))
+                svc.set_consent(True)
+
+        assert svc._consent_given is True
+        assert svc._session is mock_session
+        # Flush task should have been created
+        mock_create_task.assert_called_once()
+
+    def test_set_consent_false_does_not_create_session(self):
+        """set_consent(False) should not create an HTTP session."""
+        from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
+
+        svc = AccordMetricsService.__new__(AccordMetricsService)
+        svc._consent_given = True
+        svc._consent_timestamp = None
+        svc._session = None
+        svc._flush_task = None
+
+        svc.set_consent(False)
+
+        assert svc._consent_given is False
+        assert svc._session is None

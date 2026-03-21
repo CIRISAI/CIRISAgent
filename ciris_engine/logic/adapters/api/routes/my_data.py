@@ -104,18 +104,24 @@ def _compute_agent_id_hash(agent_id: str) -> str:
 
 
 def _get_accord_adapter(request: Request) -> Any:
-    """Get the accord metrics adapter from app state, or None if not loaded."""
+    """Get the accord metrics adapter from app state, or None if not loaded.
+
+    RuntimeAdapterManager stores adapters in loaded_adapters: Dict[str, AdapterInstance]
+    where AdapterInstance.adapter is the actual adapter object.
+    """
     runtime = getattr(request.app.state, "runtime", None)
     if not runtime:
         return None
 
-    # Check loaded adapters for the accord metrics adapter
     adapter_manager = getattr(runtime, "adapter_manager", None)
     if not adapter_manager:
         return None
 
-    adapters = getattr(adapter_manager, "_adapters", {})
-    for adapter in adapters.values():
+    # RuntimeAdapterManager.loaded_adapters is Dict[str, AdapterInstance]
+    loaded = getattr(adapter_manager, "loaded_adapters", {})
+    for instance in loaded.values():
+        # AdapterInstance wraps the actual adapter in .adapter
+        adapter = getattr(instance, "adapter", instance)
         type_name = type(adapter).__name__
         if "AccordMetrics" in type_name:
             return adapter
@@ -263,9 +269,11 @@ async def delete_lens_traces(
         lens_accepted, lens_message = await _send_lens_deletion_request(svc, agent_id_hash, deletion.reason)
 
     # Step 2: Revoke local consent (stops future collection)
+    # If the direct lens API call failed, use request_lens_deletion=True so the
+    # deletion event is queued in the event buffer and retried on the next flush.
     local_revoked = False
     if adapter:
-        adapter.update_consent(False)
+        adapter.update_consent(False, request_lens_deletion=not lens_accepted)
         local_revoked = True
         logger.info(f"Local accord consent revoked for agent {agent_id_hash} via DSAR self-service")
 

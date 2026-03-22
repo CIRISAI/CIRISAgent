@@ -5,7 +5,6 @@ for saving configuration and creating users during setup.
 """
 
 import asyncio
-import json
 import logging
 import os
 import time
@@ -346,37 +345,6 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
     finally:
         await auth_service.stop()
         await time_service.stop()
-
-
-def _save_pending_users(setup: SetupCompleteRequest, config_dir: Path) -> None:
-    """Save pending user creation info for initialization service.
-
-    Args:
-        setup: Setup configuration with user info
-        config_dir: Directory where .env file is saved
-    """
-    pending_users_file = config_dir / ".ciris_pending_users.json"
-
-    # Prepare user creation data
-    users_data = {
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "new_user": {
-            "username": setup.admin_username,
-            "password": setup.admin_password,  # Will be hashed by auth service
-            "role": "ADMIN",  # New user gets admin role
-        },
-    }
-
-    # Add system admin password update if provided
-    if setup.system_admin_password:
-        users_data["system_admin"] = {
-            "username": "admin",  # Default system admin username
-            "password": setup.system_admin_password,  # Will be hashed by auth service
-        }
-
-    # Save to JSON file
-    with open(pending_users_file, "w") as f:
-        json.dump(users_data, f, indent=2)
 
 
 def _save_and_reload_config(setup: SetupCompleteRequest) -> Path:

@@ -144,7 +144,7 @@ def _module_info_to_adapter_config(module_info: "ModuleTypeInfo") -> AdapterConf
     requires_ciris_services = module_info.module_id in _CIRIS_SERVICES_ADAPTERS
 
     # Get CLI dependency info
-    cli_deps, _, _ = get_cli_dependency_status(module_info)
+    cli_deps, missing_deps, deps_available = get_cli_dependency_status(module_info)
 
     return AdapterConfig(
         id=module_info.module_id,
@@ -157,6 +157,8 @@ def _module_info_to_adapter_config(module_info: "ModuleTypeInfo") -> AdapterConf
         platform_available=module_info.platform_available,
         requires_binaries=requires_binaries,
         required_binaries=cli_deps,
+        missing_binaries=missing_deps,
+        binaries_available=deps_available,
         supported_platforms=supported_platforms,
         requires_ciris_services=requires_ciris_services,
     )

@@ -6,6 +6,7 @@ import ai.ciris.mobile.shared.models.SetupMode
 import ai.ciris.mobile.shared.models.filterAdaptersForPlatform
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
+import ai.ciris.mobile.shared.platform.getPlatform
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 
@@ -121,10 +122,15 @@ fun SetupScreen(
                 // This approach works for both iOS and Android (KMP)
                 viewModel.loadAvailableAdapters {
                     val allAdapters = apiClient.getSetupAdapters()
+                    val currentPlatform = when (getPlatform()) {
+                        ai.ciris.mobile.shared.platform.Platform.IOS -> Platform.IOS
+                        ai.ciris.mobile.shared.platform.Platform.ANDROID -> Platform.ANDROID
+                        ai.ciris.mobile.shared.platform.Platform.DESKTOP -> Platform.DESKTOP
+                    }
                     filterAdaptersForPlatform(
                         adapters = allAdapters,
-                        platform = Platform.ANDROID,  // TODO: Use expect/actual for platform detection
-                        useCirisServices = state.isGoogleAuth
+                        platform = currentPlatform,
+                        useCirisServices = state.useCirisProxy()
                     )
                 }
             }

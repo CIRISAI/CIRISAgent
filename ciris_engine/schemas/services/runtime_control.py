@@ -385,10 +385,13 @@ class ConfigBackupData(BaseModel):
         )
 
 
-class ProcessingQueueItem(BaseModel):
+class QueueItemStatusReport(BaseModel):
     """
-    Information about an item in the processing queue.
+    Status report for a queue item.
     Used for runtime control service to report queue status.
+
+    Note: This is distinct from ProcessingQueueItem in logic/processors/support/processing_queue.py
+    which is the actual queue item used for thought processing.
     """
 
     model_config = ConfigDict(defer_build=True)

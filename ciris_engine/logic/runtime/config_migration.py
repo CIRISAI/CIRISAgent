@@ -66,6 +66,9 @@ async def migrate_adapter_configs_to_graph(runtime: Any) -> None:
     # Migrate cognitive state behaviors (pre-1.7 compatibility)
     await migrate_cognitive_state_behaviors_to_graph(runtime)
 
+    # Backfill founding partnerships for pre-existing ROOT users (pre-2.2.9)
+    await migrate_founding_partnerships(runtime)
+
 
 async def migrate_tickets_config_to_graph(runtime: Any) -> None:
     """Migrate tickets config to graph.
@@ -271,3 +274,63 @@ async def migrate_cognitive_state_behaviors_to_graph(runtime: Any, force_from_te
         await save_cognitive_behaviors_to_graph(config_service, cognitive_behaviors)
     except Exception as e:
         logger.error(f"[COGNITIVE_MIGRATION] FAILED to migrate cognitive state behaviors to graph: {e}")
+
+
+async def migrate_founding_partnerships(runtime: Any) -> None:
+    """Backfill founding PARTNERED consent records for pre-existing ROOT users.
+
+    Agents upgraded from releases before 2.2.9 have ROOT Wise Authorities
+    that were created without a consent GraphNode.  This migration creates
+    PARTNERED consent for each ROOT WA that lacks one, using the same
+    _create_founding_partnership() helper used by the setup wizard.
+
+    Skips first-run mode (new installs get the record from the setup wizard).
+    Idempotent: checks for existing consent node before creating.
+    """
+    from ciris_engine.logic.setup.first_run import is_first_run
+
+    if is_first_run():
+        logger.info("[PARTNERSHIP_MIGRATION] First-run mode: skipping (setup wizard handles this)")
+        return
+
+    if not runtime.service_initializer or not runtime.service_initializer.auth_service:
+        logger.warning("[PARTNERSHIP_MIGRATION] Cannot migrate - AuthenticationService not available")
+        return
+
+    auth_service = runtime.service_initializer.auth_service
+
+    try:
+        all_was = await auth_service.list_was(active_only=True)
+    except Exception as e:
+        logger.error(f"[PARTNERSHIP_MIGRATION] Failed to list WAs: {e}")
+        return
+
+    from ciris_engine.logic.persistence.models.graph import get_graph_node
+    from ciris_engine.schemas.services.authority_core import WARole
+    from ciris_engine.schemas.services.graph_core import GraphScope
+
+    root_was = [wa for wa in all_was if getattr(wa, "role", None) == WARole.ROOT]
+    if not root_was:
+        logger.info("[PARTNERSHIP_MIGRATION] No ROOT WAs found - nothing to backfill")
+        return
+
+    backfilled = 0
+    for wa in root_was:
+        user_id = wa.name
+        existing = get_graph_node(f"consent/{user_id}", GraphScope.LOCAL)
+        if existing is not None:
+            logger.debug(f"[PARTNERSHIP_MIGRATION] consent/{user_id} already exists - skipping")
+            continue
+
+        try:
+            from ciris_engine.logic.adapters.api.routes.setup.complete import _create_founding_partnership
+
+            _create_founding_partnership(user_id)
+            backfilled += 1
+        except Exception as e:
+            logger.error(f"[PARTNERSHIP_MIGRATION] Failed to create partnership for {user_id}: {e}")
+
+    if backfilled:
+        logger.info(f"[PARTNERSHIP_MIGRATION] Backfilled founding partnerships for {backfilled} ROOT user(s)")
+    else:
+        logger.info("[PARTNERSHIP_MIGRATION] All ROOT users already have consent records")

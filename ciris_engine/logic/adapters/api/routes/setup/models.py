@@ -67,6 +67,8 @@ class AdapterConfig(BaseModel):
     # Fields for KMP-side filtering
     requires_binaries: bool = Field(False, description="Requires external CLI tools (not available on mobile)")
     required_binaries: List[str] = Field(default_factory=list, description="Specific binary names needed")
+    missing_binaries: List[str] = Field(default_factory=list, description="Required binaries not found on system")
+    binaries_available: bool = Field(True, description="Whether all required binaries are installed")
     supported_platforms: List[str] = Field(
         default_factory=list,
         description="Platforms supported - empty means all, otherwise ['android', 'ios', 'desktop']",

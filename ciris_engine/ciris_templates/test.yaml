@@ -1,5 +1,6 @@
 description: 'Agent profile: test'
 name: test
+internal_only: true
 role_description: 'Test Agent - Minimal agent for development and debugging purposes only. Limited to observe action for safety.'
 permitted_actions:
 - observe

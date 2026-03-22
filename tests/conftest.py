@@ -20,6 +20,16 @@ os.environ["CIRIS_DATA_DIR"] = "test_data"
 # /dev/shm is a RAM-based tmpfs available on most Linux systems
 _TMPFS_DIR = "/dev/shm/ciris_tests"
 if os.path.isdir("/dev/shm"):
+    # Clean up stale temp files from previous test runs to prevent /dev/shm from filling up
+    # Only do this for the main process (not xdist workers) to avoid race conditions
+    import shutil
+
+    is_xdist_worker = os.environ.get("PYTEST_XDIST_WORKER") is not None
+    if not is_xdist_worker and os.path.isdir(_TMPFS_DIR):
+        try:
+            shutil.rmtree(_TMPFS_DIR)
+        except OSError:
+            pass  # May fail if files are in use by another test run
     os.makedirs(_TMPFS_DIR, exist_ok=True)
     os.environ["TMPDIR"] = _TMPFS_DIR
     tempfile.tempdir = _TMPFS_DIR

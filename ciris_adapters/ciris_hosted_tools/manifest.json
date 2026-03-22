@@ -20,10 +20,9 @@
     "tool:ciris_hosted"
   ],
   "platform_requirements": [
-    "android_play_integrity",
-    "google_native_auth"
+    "device_attestation"
   ],
-  "platform_requirements_rationale": "CIRIS hosted tools require device attestation to prevent API abuse. These tools are only available on Android with Google Play Services. Future support planned for iOS (App Attest) and Web (DPoP).",
+  "platform_requirements_rationale": "CIRIS hosted tools require device attestation to prevent API abuse. Supported on Android (Play Integrity) and iOS (App Attest). Future support planned for Web (DPoP).",
   "dependencies": {
     "protocols": [
       "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
@@ -83,8 +82,8 @@
   },
   "metadata": {
     "requires_device_attestation": true,
-    "supported_platforms": ["android"],
-    "future_platforms": ["ios", "web"],
+    "supported_platforms": ["android", "ios"],
+    "future_platforms": ["web"],
     "billing_model": "credits",
     "free_tier": {
       "welcome_bonus": 10,

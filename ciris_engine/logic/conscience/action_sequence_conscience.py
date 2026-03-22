@@ -224,7 +224,7 @@ class ActionSequenceConscience(ConscienceInterface):
             occurrence_id=occurrence_id,
         )
 
-        logger.debug(
+        logger.info(
             f"[action_sequence] Task {task_id}: completed_actions={completed_actions}, "
             f"attempting={action.selected_action}"
         )
@@ -281,6 +281,7 @@ class ActionSequenceConscience(ConscienceInterface):
             if HandlerActionType.SPEAK.value not in completed_actions
             else "SPEAK allowed - valid intervening action (OBSERVE/DEFER/etc.) since last SPEAK"
         )
+        logger.info(f"[action_sequence] PASSED for task {task_id}: {reason}")
 
         end_time = self._time_service.now()
         update_req = CorrelationUpdateRequest(

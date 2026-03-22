@@ -2332,8 +2332,10 @@ fun CIRISApp(
                         currentScreen = Screen.Settings
                     },
                     onResetSetup = {
-                        PlatformLogger.i(TAG, "[Screen.DataManagement] Reset triggered, going to Setup")
-                        currentScreen = Screen.Setup
+                        PlatformLogger.i(TAG, "[Screen.DataManagement] Reset triggered, restarting via Startup")
+                        startupViewModel.retry()
+                        checkingFirstRun = false
+                        currentScreen = Screen.Startup
                     }
                 )
             }

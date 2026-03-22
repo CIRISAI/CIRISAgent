@@ -2,7 +2,7 @@
   "module": {
     "name": "slack",
     "version": "1.0.0",
-    "description": "Use when you need to control Slack from Moltbot via the slack tool, including reacting to messages or pinning/unpinning items in Slack channels or DMs.",
+    "description": "Slack integration for reacting to messages, pinning/unpinning items in channels or DMs.",
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": null
   },

@@ -17,7 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
-    from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+    # Note: ProcessingQueueItem is from logic/processors/support/processing_queue.py
+    # We use Any to avoid layer violation (schemas should not import from logic)
     from ciris_engine.schemas.adapters.tools import ToolInfo
 
 

@@ -2,22 +2,30 @@
 
 This module contains shared utility functions used by setup endpoints,
 including adapter discovery, template loading, and password validation.
+
+Adapter discovery uses the shared module `_adapter_discovery.py` to ensure
+consistency with the "Add Adapters" card in system/adapters.py.
 """
 
+import asyncio
 import logging
 import secrets
-from typing import Any, List, Optional
+from typing import TYPE_CHECKING, Any, List
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.runtime.adapter_management import ModuleTypeInfo
 
 from fastapi import HTTPException, status
 
 from ciris_engine.logic.setup.first_run import is_first_run
 
+from .._adapter_discovery import discover_adapters, get_cli_dependency_status
 from .models import AdapterConfig, AgentTemplate, SetupCompleteRequest
 
 logger = logging.getLogger(__name__)
 
 # Constants for adapter filtering
-_SKIP_ADAPTERS = {"ciris_accord_metrics"}  # Handled by consent checkbox
+_SKIP_ADAPTERS = {"ciris_accord_metrics"}  # Handled by consent checkbox in setup
 _CIRIS_SERVICES_ADAPTERS = {"ciris_hosted_tools"}  # Require Google sign-in
 
 
@@ -67,6 +75,11 @@ def _get_agent_templates() -> List[AgentTemplate]:
             # Load and validate template
             config_template = ConfigAgentTemplate(**template_data)
 
+            # Skip internal-only templates (same pattern as adapters)
+            if config_template.internal_only:
+                logger.info(f"[SETUP TEMPLATES] Skipping internal template: {template_file.name}")
+                continue
+
             # Extract SOP names from tickets config
             supported_sops: List[str] = []
             if config_template.tickets and config_template.tickets.sops:
@@ -107,61 +120,61 @@ def _get_agent_templates() -> List[AgentTemplate]:
     return templates
 
 
-def _should_skip_manifest(manifest: Any, module_id: str, seen_ids: set[str]) -> bool:
-    """Check if a manifest should be skipped during adapter discovery."""
-    if module_id in seen_ids:
-        return True
-    if module_id in _SKIP_ADAPTERS:
-        logger.debug(f"[SETUP ADAPTERS] Skipping {module_id} (handled separately)")
-        return True
-    if manifest.module.is_mock:
-        return True
-    if manifest.module.reference or manifest.module.for_qa:
-        return True
-    if not manifest.services:
-        return True
-    if manifest.metadata and manifest.metadata.get("type") == "library":
-        return True
-    if module_id.endswith("_common") or "_common_" in module_id:
-        return True
-    return False
+def _module_info_to_adapter_config(module_info: "ModuleTypeInfo") -> AdapterConfig:
+    """Convert ModuleTypeInfo from shared discovery to AdapterConfig for setup API.
 
+    Args:
+        module_info: ModuleTypeInfo from _adapter_discovery module
 
-def _create_adapter_from_manifest(manifest: Any, module_id: str) -> AdapterConfig:
-    """Create an AdapterConfig from a service manifest."""
-    capabilities = manifest.capabilities or []
+    Returns:
+        AdapterConfig for setup wizard API response
+    """
+    from ciris_engine.schemas.runtime.adapter_management import ModuleTypeInfo
+
+    capabilities = module_info.capabilities or []
     requires_binaries = "requires:binaries" in capabilities
 
+    # Extract supported platforms from metadata
     supported_platforms: List[str] = []
-    if manifest.metadata:
-        platforms = manifest.metadata.get("supported_platforms")
+    if module_info.metadata:
+        platforms = module_info.metadata.get("supported_platforms")
         if platforms and isinstance(platforms, list):
             supported_platforms = platforms
 
-    requires_ciris_services = module_id in _CIRIS_SERVICES_ADAPTERS
+    requires_ciris_services = module_info.module_id in _CIRIS_SERVICES_ADAPTERS
+
+    # Get CLI dependency info
+    cli_deps, missing_deps, deps_available = get_cli_dependency_status(module_info)
 
     return AdapterConfig(
-        id=module_id,
-        name=manifest.module.name.replace("_", " ").title(),
-        description=manifest.module.description or f"{module_id} adapter",
+        id=module_info.module_id,
+        name=module_info.name.replace("_", " ").title(),
+        description=module_info.description or f"{module_info.module_id} adapter",
         enabled_by_default=requires_ciris_services,
         required_env_vars=[],
         optional_env_vars=[],
-        platform_requirements=manifest.platform_requirements or [],
-        platform_available=True,
+        platform_requirements=module_info.platform_requirements or [],
+        platform_available=module_info.platform_available,
         requires_binaries=requires_binaries,
-        required_binaries=[],
+        required_binaries=cli_deps,
+        missing_binaries=missing_deps,
+        binaries_available=deps_available,
         supported_platforms=supported_platforms,
         requires_ciris_services=requires_ciris_services,
     )
 
 
 def _get_available_adapters() -> List[AdapterConfig]:
-    """Get all adapters with platform requirements for KMP-side filtering."""
-    from ciris_engine.logic.services.tool.discovery_service import AdapterDiscoveryService
+    """Get all adapters using shared discovery logic.
 
+    Uses the same filtering as the "Add Adapters" card via the shared
+    _adapter_discovery module. This ensures consistency between first-run
+    setup and runtime adapter management.
+
+    Returns:
+        List of AdapterConfig for setup wizard display
+    """
     adapters: List[AdapterConfig] = []
-    seen_ids: set[str] = set()
 
     # Always include API adapter first (required, cannot be disabled)
     adapters.append(
@@ -179,28 +192,61 @@ def _get_available_adapters() -> List[AdapterConfig]:
             requires_ciris_services=False,
         )
     )
-    seen_ids.add("api")
 
     try:
-        discovery = AdapterDiscoveryService()
-        for manifest in discovery.discover_adapters():
-            module_id = manifest.module.name
-            if _should_skip_manifest(manifest, module_id, seen_ids):
+        # Use shared discovery with consistent filtering
+        # filter_by_platform=True applies same filtering as Add Adapter card
+        # skip_adapters excludes accord_metrics (handled by consent checkbox)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            # Already in async context - create task
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(
+                    asyncio.run, discover_adapters(filter_by_platform=True, skip_adapters=_SKIP_ADAPTERS)
+                )
+                discovered = future.result(timeout=10)
+        else:
+            # Not in async context - run directly
+            discovered = asyncio.run(discover_adapters(filter_by_platform=True, skip_adapters=_SKIP_ADAPTERS))
+
+        for module_info in discovered:
+            # Skip internal-only adapters (e.g., ciris_verify)
+            if module_info.internal_only:
                 continue
 
-            adapter_config = _create_adapter_from_manifest(manifest, module_id)
+            adapter_config = _module_info_to_adapter_config(module_info)
             adapters.append(adapter_config)
-            seen_ids.add(module_id)
             logger.debug(
-                f"[SETUP ADAPTERS] Discovered adapter: {module_id} "
+                f"[SETUP ADAPTERS] Discovered adapter: {module_info.module_id} "
                 f"(requires_binaries={adapter_config.requires_binaries}, "
-                f"supported_platforms={adapter_config.supported_platforms})"
+                f"platform_available={adapter_config.platform_available})"
             )
+
     except Exception as e:
         logger.warning(f"[SETUP ADAPTERS] Failed to discover adapters: {e}")
+        import traceback
+
+        logger.debug(f"[SETUP ADAPTERS] Traceback: {traceback.format_exc()}")
 
     logger.info(f"[SETUP ADAPTERS] Total adapters available: {len(adapters)}")
     return adapters
+
+
+# Legacy function for backwards compatibility - now unused
+def _should_skip_manifest(*args: Any, **kwargs: Any) -> bool:
+    """DEPRECATED: Use shared _adapter_discovery.should_filter_adapter instead."""
+    raise NotImplementedError("Use _adapter_discovery.should_filter_adapter instead")
+
+
+def _create_adapter_from_manifest(*args: Any, **kwargs: Any) -> AdapterConfig:
+    """DEPRECATED: Use _module_info_to_adapter_config instead."""
+    raise NotImplementedError("Use _module_info_to_adapter_config instead")
 
 
 def _validate_setup_passwords(setup: SetupCompleteRequest, is_oauth_user: bool) -> str:

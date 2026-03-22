@@ -129,6 +129,15 @@ class TestCheckSendMessagesPermission:
         assert error_detail["requested_at"] is not None
 
 
+def _create_mock_request():
+    """Create a mock Request with required app.state attributes."""
+    mock_request = Mock(spec=Request)
+    mock_request.app = Mock()
+    mock_request.app.state = Mock()
+    mock_request.app.state.auth_service = None  # No auth service by default
+    return mock_request
+
+
 class TestCreateInteractionMessage:
     """Test _create_interaction_message helper method."""
 
@@ -141,10 +150,11 @@ class TestCreateInteractionMessage:
 
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "user-123"
+        mock_request = _create_mock_request()
 
         body = InteractRequest(message="Hello, CIRIS!")
 
-        message_id, channel_id, msg = await _create_interaction_message(mock_auth, body)
+        message_id, channel_id, msg = await _create_interaction_message(mock_auth, body, mock_request)
 
         assert message_id == "test-message-id"
         assert channel_id == "api_user-123"
@@ -165,10 +175,11 @@ class TestCreateInteractionMessage:
         mock_auth2 = Mock(spec=AuthContext)
         mock_auth2.user_id = "user-xyz"
 
+        mock_request = _create_mock_request()
         body = InteractRequest(message="Test message")
 
-        _, channel_id1, msg1 = await _create_interaction_message(mock_auth1, body)
-        _, channel_id2, msg2 = await _create_interaction_message(mock_auth2, body)
+        _, channel_id1, msg1 = await _create_interaction_message(mock_auth1, body, mock_request)
+        _, channel_id2, msg2 = await _create_interaction_message(mock_auth2, body, mock_request)
 
         assert channel_id1 == "api_user-abc"
         assert channel_id2 == "api_user-xyz"
@@ -182,6 +193,7 @@ class TestCreateInteractionMessage:
 
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "image-user"
+        mock_request = _create_mock_request()
 
         # Create body with images
         image_payload = ImagePayload(data="base64encodeddata", media_type="image/jpeg", filename="test.jpg")
@@ -195,7 +207,7 @@ class TestCreateInteractionMessage:
             mock_helper.process_image_payload.return_value = mock_image_content
             mock_get_helper.return_value = mock_helper
 
-            _, _, msg = await _create_interaction_message(mock_auth, body)
+            _, _, msg = await _create_interaction_message(mock_auth, body, mock_request)
 
             assert len(msg.images) == 1
             mock_helper.process_image_payload.assert_called_once_with("base64encodeddata", "image/jpeg", "test.jpg")
@@ -207,6 +219,7 @@ class TestCreateInteractionMessage:
 
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "multi-image-user"
+        mock_request = _create_mock_request()
 
         # Create body with multiple images
         images = [
@@ -226,7 +239,7 @@ class TestCreateInteractionMessage:
             ]
             mock_get_helper.return_value = mock_helper
 
-            _, _, msg = await _create_interaction_message(mock_auth, body)
+            _, _, msg = await _create_interaction_message(mock_auth, body, mock_request)
 
             assert len(msg.images) == 3
             assert mock_helper.process_image_payload.call_count == 3
@@ -238,6 +251,7 @@ class TestCreateInteractionMessage:
 
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "failed-image-user"
+        mock_request = _create_mock_request()
 
         image_payload = ImagePayload(data="invalid_base64", media_type="image/jpeg", filename="bad.jpg")
         body = InteractRequest(message="Bad image", images=[image_payload])
@@ -247,7 +261,7 @@ class TestCreateInteractionMessage:
             mock_helper.process_image_payload.return_value = None  # Failed processing
             mock_get_helper.return_value = mock_helper
 
-            _, _, msg = await _create_interaction_message(mock_auth, body)
+            _, _, msg = await _create_interaction_message(mock_auth, body, mock_request)
 
             # Should have empty images list when processing fails
             assert len(msg.images) == 0
@@ -259,6 +273,7 @@ class TestCreateInteractionMessage:
 
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "doc-user"
+        mock_request = _create_mock_request()
 
         doc_payload = DocumentPayload(data="base64pdfdata", media_type="application/pdf", filename="document.pdf")
         body = InteractRequest(message="Check this PDF", documents=[doc_payload])
@@ -269,7 +284,7 @@ class TestCreateInteractionMessage:
             mock_helper.process_document_list = AsyncMock(return_value="Extracted text from PDF")
             mock_get_helper.return_value = mock_helper
 
-            _, _, msg = await _create_interaction_message(mock_auth, body)
+            _, _, msg = await _create_interaction_message(mock_auth, body, mock_request)
 
             assert "[Document Analysis]" in msg.content
             assert "Extracted text from PDF" in msg.content
@@ -282,6 +297,7 @@ class TestCreateInteractionMessage:
 
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "no-doc-support-user"
+        mock_request = _create_mock_request()
 
         doc_payload = DocumentPayload(data="base64pdfdata", media_type="application/pdf", filename="document.pdf")
         body = InteractRequest(message="Check this PDF", documents=[doc_payload])
@@ -291,7 +307,7 @@ class TestCreateInteractionMessage:
             mock_helper.is_available.return_value = False  # Not available
             mock_get_helper.return_value = mock_helper
 
-            _, _, msg = await _create_interaction_message(mock_auth, body)
+            _, _, msg = await _create_interaction_message(mock_auth, body, mock_request)
 
             # Message should not have document analysis when not available
             assert "[Document Analysis]" not in msg.content
@@ -304,6 +320,7 @@ class TestCreateInteractionMessage:
 
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "empty-doc-user"
+        mock_request = _create_mock_request()
 
         doc_payload = DocumentPayload(data="empty_doc", media_type="application/pdf", filename="empty.pdf")
         body = InteractRequest(message="Empty doc", documents=[doc_payload])
@@ -314,7 +331,7 @@ class TestCreateInteractionMessage:
             mock_helper.process_document_list = AsyncMock(return_value=None)  # Returns None
             mock_get_helper.return_value = mock_helper
 
-            _, _, msg = await _create_interaction_message(mock_auth, body)
+            _, _, msg = await _create_interaction_message(mock_auth, body, mock_request)
 
             # Should not add document analysis section
             assert "[Document Analysis]" not in msg.content
@@ -327,6 +344,7 @@ class TestCreateInteractionMessage:
 
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "multimodal-user"
+        mock_request = _create_mock_request()
 
         image_payload = ImagePayload(data="imagedata", media_type="image/png", filename="screenshot.png")
         doc_payload = DocumentPayload(data="docdata", media_type="application/pdf", filename="report.pdf")
@@ -345,7 +363,7 @@ class TestCreateInteractionMessage:
                 doc_helper.process_document_list = AsyncMock(return_value="Report contents")
                 mock_doc.return_value = doc_helper
 
-                _, _, msg = await _create_interaction_message(mock_auth, body)
+                _, _, msg = await _create_interaction_message(mock_auth, body, mock_request)
 
                 # Should have both images and document content
                 assert len(msg.images) == 1
@@ -357,10 +375,11 @@ class TestCreateInteractionMessage:
         """Test message creation with no images or documents."""
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "text-only-user"
+        mock_request = _create_mock_request()
 
         body = InteractRequest(message="Just text, no attachments")
 
-        _, _, msg = await _create_interaction_message(mock_auth, body)
+        _, _, msg = await _create_interaction_message(mock_auth, body, mock_request)
 
         assert msg.content == "Just text, no attachments"
         assert len(msg.images) == 0
@@ -863,11 +882,12 @@ class TestInteractionTrackingIntegration:
         """Test complete interaction tracking flow."""
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "integration-user"
+        mock_request = _create_mock_request()
 
         body = InteractRequest(message="Integration test")
 
         # Create interaction
-        message_id, channel_id, msg = await _create_interaction_message(mock_auth, body)
+        message_id, channel_id, msg = await _create_interaction_message(mock_auth, body, mock_request)
 
         # Add tracking (simulate main function)
         event = asyncio.Event()
@@ -890,13 +910,14 @@ class TestInteractionTrackingIntegration:
         """Test handling of multiple concurrent interactions."""
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "concurrent-user"
+        mock_request = _create_mock_request()
 
         body = InteractRequest(message="Concurrent test")
 
         # Create multiple interactions
         interactions = []
         for i in range(3):
-            message_id, channel_id, msg = await _create_interaction_message(mock_auth, body)
+            message_id, channel_id, msg = await _create_interaction_message(mock_auth, body, mock_request)
             _response_events[message_id] = asyncio.Event()
             _message_responses[message_id] = f"Response {i}"
             interactions.append(message_id)

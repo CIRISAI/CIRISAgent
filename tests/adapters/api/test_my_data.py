@@ -397,3 +397,550 @@ class TestLateConsentInitialization:
 
         assert svc._consent_given is False
         assert svc._session is None
+
+
+# =============================================================================
+# Additional Helper Function Tests
+# =============================================================================
+
+
+class TestComputeAgentIdHashFromSigner:
+    """Test _compute_agent_id_hash_from_signer function."""
+
+    def test_successful_computation(self):
+        """Test successful hash computation from signing key."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _compute_agent_id_hash_from_signer
+
+        with patch("ciris_engine.logic.audit.signing_protocol.get_unified_signing_key") as mock_get_key:
+            mock_key = MagicMock()
+            mock_key.public_key_bytes = b"test_public_key_bytes"
+            mock_get_key.return_value = mock_key
+
+            result = _compute_agent_id_hash_from_signer()
+
+            # Should be first 16 chars of sha256 hash
+            expected = hashlib.sha256(b"test_public_key_bytes").hexdigest()[:16]
+            assert result == expected
+
+    def test_exception_returns_unknown(self):
+        """Test that exceptions return 'unknown'."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _compute_agent_id_hash_from_signer
+
+        with patch("ciris_engine.logic.audit.signing_protocol.get_unified_signing_key") as mock_get_key:
+            mock_get_key.side_effect = RuntimeError("No signing key")
+
+            result = _compute_agent_id_hash_from_signer()
+            assert result == "unknown"
+
+
+class TestGetAccordAdapter:
+    """Test _get_accord_adapter function."""
+
+    def test_finds_adapter_in_main_runtime_control_service(self):
+        """Test finding adapter in main_runtime_control_service."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _get_accord_adapter
+
+        mock_request = MagicMock()
+        mock_adapter = MagicMock()
+        mock_adapter.__class__.__name__ = "AccordMetricsAdapter"
+
+        mock_instance = MagicMock()
+        mock_instance.adapter = mock_adapter
+
+        mock_manager = MagicMock()
+        mock_manager.loaded_adapters = {"accord": mock_instance}
+
+        mock_request.app.state.main_runtime_control_service = MagicMock()
+        mock_request.app.state.main_runtime_control_service.adapter_manager = mock_manager
+        mock_request.app.state.runtime_control_service = None
+        mock_request.app.state.runtime = None
+
+        result = _get_accord_adapter(mock_request)
+        assert result is mock_adapter
+
+    def test_finds_adapter_in_runtime_control_service(self):
+        """Test finding adapter in runtime_control_service."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _get_accord_adapter
+
+        mock_request = MagicMock()
+        mock_adapter = MagicMock()
+        mock_adapter.__class__.__name__ = "AccordMetricsAdapter"
+
+        mock_instance = MagicMock()
+        mock_instance.adapter = mock_adapter
+
+        mock_manager = MagicMock()
+        mock_manager.loaded_adapters = {"ciris_accord_metrics": mock_instance}
+
+        mock_request.app.state.main_runtime_control_service = None
+        mock_request.app.state.runtime_control_service = MagicMock()
+        mock_request.app.state.runtime_control_service.adapter_manager = mock_manager
+        mock_request.app.state.runtime = None
+
+        result = _get_accord_adapter(mock_request)
+        assert result is mock_adapter
+
+    def test_finds_adapter_in_runtime_adapters(self):
+        """Test finding adapter in runtime.adapters (bootstrap adapters)."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _get_accord_adapter
+
+        mock_request = MagicMock()
+        mock_adapter = MagicMock()
+        mock_adapter.__class__.__name__ = "AccordMetricsAdapter"
+
+        # No adapter_manager
+        mock_request.app.state.main_runtime_control_service = None
+        mock_request.app.state.runtime_control_service = None
+
+        # But adapter exists in runtime.adapters
+        mock_request.app.state.runtime = MagicMock()
+        mock_request.app.state.runtime.adapter_manager = None
+        mock_request.app.state.runtime.adapters = [mock_adapter]
+
+        result = _get_accord_adapter(mock_request)
+        assert result is mock_adapter
+
+    def test_returns_none_when_no_adapter(self):
+        """Test returns None when no accord adapter found."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _get_accord_adapter
+
+        mock_request = MagicMock()
+
+        # Empty loaded_adapters
+        mock_manager = MagicMock()
+        mock_manager.loaded_adapters = {}
+
+        mock_request.app.state.main_runtime_control_service = MagicMock()
+        mock_request.app.state.main_runtime_control_service.adapter_manager = mock_manager
+        mock_request.app.state.runtime_control_service = None
+        mock_request.app.state.runtime = MagicMock()
+        mock_request.app.state.runtime.adapters = []
+
+        result = _get_accord_adapter(mock_request)
+        assert result is None
+
+    def test_finds_by_adapter_id_pattern(self):
+        """Test finding adapter by adapter_id containing 'accord_metrics'."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _get_accord_adapter
+
+        mock_request = MagicMock()
+        mock_adapter = MagicMock()
+        mock_adapter.__class__.__name__ = "SomeOtherName"  # Not "AccordMetrics"
+
+        mock_instance = MagicMock()
+        mock_instance.adapter = mock_adapter
+
+        mock_manager = MagicMock()
+        mock_manager.loaded_adapters = {"ciris_accord_metrics_adapter": mock_instance}
+
+        mock_request.app.state.main_runtime_control_service = MagicMock()
+        mock_request.app.state.main_runtime_control_service.adapter_manager = mock_manager
+        mock_request.app.state.runtime = MagicMock()
+        mock_request.app.state.runtime.adapters = []
+
+        result = _get_accord_adapter(mock_request)
+        assert result is mock_adapter
+
+
+class TestGetAgentId:
+    """Test _get_agent_id function."""
+
+    def test_no_runtime_returns_none(self):
+        """Test returns None when no runtime."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _get_agent_id
+
+        mock_request = MagicMock()
+        mock_request.app.state.runtime = None
+
+        result = _get_agent_id(mock_request)
+        assert result is None
+
+    def test_primary_path_agent_identity(self):
+        """Test primary path: runtime.agent_identity.agent_id."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _get_agent_id
+
+        mock_request = MagicMock()
+        mock_request.app.state.runtime = MagicMock()
+        mock_request.app.state.runtime.agent_identity = MagicMock()
+        mock_request.app.state.runtime.agent_identity.agent_id = "primary-agent-123"
+
+        result = _get_agent_id(mock_request)
+        assert result == "primary-agent-123"
+
+    def test_fallback_identity_manager(self):
+        """Test fallback to identity_manager.agent_identity."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _get_agent_id
+
+        mock_request = MagicMock()
+        mock_request.app.state.runtime = MagicMock()
+        mock_request.app.state.runtime.agent_identity = MagicMock()
+        mock_request.app.state.runtime.agent_identity.agent_id = None  # Primary path fails
+
+        mock_request.app.state.runtime.identity_manager = MagicMock()
+        mock_request.app.state.runtime.identity_manager.agent_identity = MagicMock()
+        mock_request.app.state.runtime.identity_manager.agent_identity.agent_id = "manager-agent-456"
+
+        result = _get_agent_id(mock_request)
+        assert result == "manager-agent-456"
+
+    def test_fallback_essential_config(self):
+        """Test fallback to essential_config.agent_name."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _get_agent_id
+
+        mock_request = MagicMock()
+        mock_request.app.state.runtime = MagicMock()
+        mock_request.app.state.runtime.agent_identity = None
+        mock_request.app.state.runtime.identity_manager = None
+
+        mock_request.app.state.runtime.essential_config = MagicMock()
+        mock_request.app.state.runtime.essential_config.agent_name = "essential-agent"
+
+        result = _get_agent_id(mock_request)
+        assert result == "essential-agent"
+
+    def test_legacy_fallback(self):
+        """Test legacy fallback to runtime.agent_id."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _get_agent_id
+
+        mock_request = MagicMock()
+        mock_request.app.state.runtime = MagicMock()
+        mock_request.app.state.runtime.agent_identity = None
+        mock_request.app.state.runtime.identity_manager = None
+        mock_request.app.state.runtime.essential_config = None
+        mock_request.app.state.runtime.agent_id = "legacy-agent-789"
+
+        result = _get_agent_id(mock_request)
+        assert result == "legacy-agent-789"
+
+    def test_all_fallbacks_fail_returns_none(self):
+        """Test returns None when all fallbacks fail."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _get_agent_id
+
+        mock_request = MagicMock()
+        mock_request.app.state.runtime = MagicMock()
+        mock_request.app.state.runtime.agent_identity = None
+        mock_request.app.state.runtime.identity_manager = None
+        mock_request.app.state.runtime.essential_config = None
+        mock_request.app.state.runtime.agent_id = None
+
+        result = _get_agent_id(mock_request)
+        assert result is None
+
+
+class TestUpdateEnvConsent:
+    """Test _update_env_consent function."""
+
+    def test_env_file_not_found(self):
+        """Test handling when .env file doesn't exist."""
+        import tempfile
+
+        from ciris_engine.logic.adapters.api.routes.my_data import _update_env_consent
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict("os.environ", {"CIRIS_CONFIG_DIR": tmpdir}):
+                # Should not raise, just log warning
+                _update_env_consent(True)
+
+    def test_updates_existing_consent(self):
+        """Test updating existing CIRIS_ACCORD_METRICS_CONSENT."""
+        import tempfile
+        from pathlib import Path
+
+        from ciris_engine.logic.adapters.api.routes.my_data import _update_env_consent
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / ".env"
+            env_path.write_text("CIRIS_ACCORD_METRICS_CONSENT=true\nOTHER_VAR=value\n")
+
+            with patch.dict("os.environ", {"CIRIS_CONFIG_DIR": tmpdir}):
+                _update_env_consent(False)
+
+            content = env_path.read_text()
+            assert "CIRIS_ACCORD_METRICS_CONSENT=false" in content
+            assert "OTHER_VAR=value" in content
+
+    def test_adds_consent_if_not_present(self):
+        """Test adding consent var if not already present."""
+        import tempfile
+        from pathlib import Path
+
+        from ciris_engine.logic.adapters.api.routes.my_data import _update_env_consent
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / ".env"
+            env_path.write_text("OTHER_VAR=value\n")
+
+            with patch.dict("os.environ", {"CIRIS_CONFIG_DIR": tmpdir}):
+                _update_env_consent(True)
+
+            content = env_path.read_text()
+            assert "CIRIS_ACCORD_METRICS_CONSENT=true" in content
+            assert "CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP=" in content
+
+    def test_updates_timestamp(self):
+        """Test that timestamp is updated."""
+        import tempfile
+        from pathlib import Path
+
+        from ciris_engine.logic.adapters.api.routes.my_data import _update_env_consent
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / ".env"
+            env_path.write_text(
+                "CIRIS_ACCORD_METRICS_CONSENT=false\n" "CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP=2020-01-01T00:00:00\n"
+            )
+
+            with patch.dict("os.environ", {"CIRIS_CONFIG_DIR": tmpdir}):
+                _update_env_consent(True)
+
+            content = env_path.read_text()
+            assert "CIRIS_ACCORD_METRICS_CONSENT=true" in content
+            # Timestamp should be updated (not 2020)
+            assert "2020-01-01" not in content
+
+    def test_updates_process_environment(self):
+        """Test that process environment is also updated."""
+        import os
+        import tempfile
+        from pathlib import Path
+
+        from ciris_engine.logic.adapters.api.routes.my_data import _update_env_consent
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / ".env"
+            env_path.write_text("")
+
+            with patch.dict("os.environ", {"CIRIS_CONFIG_DIR": tmpdir}):
+                _update_env_consent(True)
+
+                assert os.environ.get("CIRIS_ACCORD_METRICS_CONSENT") == "true"
+                assert "CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP" in os.environ
+
+
+class TestSendLensDeletionRequest:
+    """Test _send_lens_deletion_request function."""
+
+    @pytest.mark.asyncio
+    async def test_no_endpoint_url(self):
+        """Test when no endpoint URL is configured."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _send_lens_deletion_request
+
+        mock_service = MagicMock()
+        mock_service._endpoint_url = None
+
+        accepted, message = await _send_lens_deletion_request(mock_service, "abc123", None)
+        assert accepted is False
+        assert "No CIRISLens endpoint" in message
+
+    @pytest.mark.asyncio
+    async def test_session_not_available(self):
+        """Test when HTTP session is not available."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _send_lens_deletion_request
+
+        mock_service = MagicMock()
+        mock_service._endpoint_url = "https://lens.example.com"
+        mock_service._session = None
+
+        accepted, message = await _send_lens_deletion_request(mock_service, "abc123", None)
+        assert accepted is False
+        assert "session not available" in message
+
+    @pytest.mark.asyncio
+    async def test_session_closed(self):
+        """Test when HTTP session is closed."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _send_lens_deletion_request
+
+        mock_service = MagicMock()
+        mock_service._endpoint_url = "https://lens.example.com"
+        mock_service._session = MagicMock()
+        mock_service._session.closed = True
+
+        accepted, message = await _send_lens_deletion_request(mock_service, "abc123", None)
+        assert accepted is False
+        assert "session not available" in message
+
+    @pytest.mark.asyncio
+    async def test_successful_200_response(self):
+        """Test successful 200 response."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _send_lens_deletion_request
+
+        mock_service = MagicMock()
+        mock_service._endpoint_url = "https://lens.example.com"
+        mock_service._signer = None
+
+        mock_response = AsyncMock()
+        mock_response.status = 200
+
+        mock_session = MagicMock()
+        mock_session.closed = False
+        mock_session.post = MagicMock(return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_response)))
+        mock_service._session = mock_session
+
+        accepted, message = await _send_lens_deletion_request(mock_service, "abc123", "Test reason")
+        assert accepted is True
+        assert "accepted" in message.lower()
+
+    @pytest.mark.asyncio
+    async def test_successful_202_response(self):
+        """Test successful 202 (queued) response."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _send_lens_deletion_request
+
+        mock_service = MagicMock()
+        mock_service._endpoint_url = "https://lens.example.com"
+        mock_service._signer = None
+
+        mock_response = AsyncMock()
+        mock_response.status = 202
+
+        mock_session = MagicMock()
+        mock_session.closed = False
+        mock_session.post = MagicMock(return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_response)))
+        mock_service._session = mock_session
+
+        accepted, message = await _send_lens_deletion_request(mock_service, "abc123", None)
+        assert accepted is True
+        assert "queued" in message.lower()
+
+    @pytest.mark.asyncio
+    async def test_404_no_traces(self):
+        """Test 404 response (no traces found)."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _send_lens_deletion_request
+
+        mock_service = MagicMock()
+        mock_service._endpoint_url = "https://lens.example.com"
+        mock_service._signer = None
+
+        mock_response = AsyncMock()
+        mock_response.status = 404
+
+        mock_session = MagicMock()
+        mock_session.closed = False
+        mock_session.post = MagicMock(return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_response)))
+        mock_service._session = mock_session
+
+        accepted, message = await _send_lens_deletion_request(mock_service, "abc123", None)
+        assert accepted is True  # 404 is considered success (nothing to delete)
+        assert "no traces" in message.lower()
+
+    @pytest.mark.asyncio
+    async def test_error_response(self):
+        """Test error response (non-2xx, non-404)."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _send_lens_deletion_request
+
+        mock_service = MagicMock()
+        mock_service._endpoint_url = "https://lens.example.com"
+        mock_service._signer = None
+
+        mock_response = AsyncMock()
+        mock_response.status = 500
+        mock_response.text = AsyncMock(return_value="Internal Server Error")
+
+        mock_session = MagicMock()
+        mock_session.closed = False
+        mock_session.post = MagicMock(return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_response)))
+        mock_service._session = mock_session
+
+        accepted, message = await _send_lens_deletion_request(mock_service, "abc123", None)
+        assert accepted is False
+        assert "500" in message
+
+    @pytest.mark.asyncio
+    async def test_connection_error(self):
+        """Test connection error handling."""
+        import aiohttp
+
+        from ciris_engine.logic.adapters.api.routes.my_data import _send_lens_deletion_request
+
+        mock_service = MagicMock()
+        mock_service._endpoint_url = "https://lens.example.com"
+        mock_service._signer = None
+
+        mock_session = MagicMock()
+        mock_session.closed = False
+        mock_session.post = MagicMock(
+            return_value=AsyncMock(
+                __aenter__=AsyncMock(side_effect=aiohttp.ClientConnectorError(None, OSError("Connection refused")))
+            )
+        )
+        mock_service._session = mock_session
+
+        accepted, message = await _send_lens_deletion_request(mock_service, "abc123", None)
+        assert accepted is False
+        assert "Could not connect" in message
+
+    @pytest.mark.asyncio
+    async def test_signed_request(self):
+        """Test that request is signed when signer is available."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _send_lens_deletion_request
+
+        mock_service = MagicMock()
+        mock_service._endpoint_url = "https://lens.example.com"
+
+        # Setup signer
+        mock_unified_key = MagicMock()
+        mock_unified_key.sign_base64.return_value = "test_signature_base64"
+
+        mock_signer = MagicMock()
+        mock_signer.has_signing_key = True
+        mock_signer.key_id = "key-123"
+        mock_signer._unified_key = mock_unified_key
+        mock_service._signer = mock_signer
+
+        mock_response = AsyncMock()
+        mock_response.status = 200
+
+        mock_session = MagicMock()
+        mock_session.closed = False
+        mock_session.post = MagicMock(return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_response)))
+        mock_service._session = mock_session
+
+        accepted, message = await _send_lens_deletion_request(mock_service, "abc123", "Test")
+        assert accepted is True
+
+        # Verify post was called with signed payload
+        call_args = mock_session.post.call_args
+        payload = call_args.kwargs.get("json", {})
+        assert "signature" in payload
+        assert payload["signature"] == "test_signature_base64"
+        assert payload["signature_key_id"] == "key-123"
+
+
+class TestAdapterWithoutMetricsService:
+    """Test endpoints with adapter that has no metrics_service."""
+
+    @pytest.fixture
+    def mock_adapter_no_metrics(self):
+        """Create mock accord adapter without metrics_service."""
+        adapter = MagicMock()
+        adapter.__class__.__name__ = "AccordMetricsAdapter"
+        adapter._consent_given = True
+        adapter._consent_timestamp = "2026-01-15T10:00:00+00:00"
+        # No metrics_service attribute
+        del adapter.metrics_service
+        return adapter
+
+    @pytest.fixture
+    def app_with_basic_adapter(self, mock_runtime, mock_adapter_no_metrics):
+        """Create app with basic adapter (no metrics_service)."""
+        app = create_app()
+        app.state.runtime = mock_runtime
+
+        mock_instance = MagicMock()
+        mock_instance.adapter = mock_adapter_no_metrics
+
+        mock_runtime.adapter_manager.loaded_adapters = {"accord": mock_instance}
+        app.dependency_overrides[get_current_user] = _mock_admin_user
+        return app
+
+    @pytest.fixture
+    def client_basic_adapter(self, app_with_basic_adapter):
+        return TestClient(app_with_basic_adapter)
+
+    def test_lens_identifier_with_basic_adapter(self, client_basic_adapter):
+        """Test lens identifier endpoint with adapter lacking metrics_service."""
+        response = client_basic_adapter.get("/v1/my-data/lens-identifier")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        # Should still work, using fallback hash computation
+        assert data["agent_id_hash"] is not None
+        assert data["consent_given"] is True

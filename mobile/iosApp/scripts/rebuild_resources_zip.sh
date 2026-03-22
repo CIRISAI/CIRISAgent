@@ -5,7 +5,7 @@
 # instead of ad-hoc zip commands to avoid missing directories.
 #
 # What it does:
-#   1. Optionally syncs latest ciris_engine + ciris_adapters from repo
+#   1. Syncs latest ciris_engine + ciris_adapters from repo (default, skip with --no-sync)
 #   2. Removes desktop-only files that shouldn't be on iOS
 #   3. Cleans __pycache__ and .pyc files
 #   4. Validates all 3 required directories exist (app, app_packages, python)
@@ -13,10 +13,13 @@
 #   6. Optionally bumps CFBundleVersion in Info.plist
 #
 # Usage:
-#   ./rebuild_resources_zip.sh                  # Just rebuild zip from current Resources/
-#   ./rebuild_resources_zip.sh --sync           # Sync source from repo first, then rebuild
-#   ./rebuild_resources_zip.sh --sync --bump    # Sync + rebuild + bump build number
-#   ./rebuild_resources_zip.sh --bump           # Rebuild + bump build number
+#   ./rebuild_resources_zip.sh                  # Sync source from repo + rebuild zip (DEFAULT)
+#   ./rebuild_resources_zip.sh --bump           # Sync + rebuild + bump build number
+#   ./rebuild_resources_zip.sh --no-sync        # Skip sync, just rebuild zip from current Resources/
+#   ./rebuild_resources_zip.sh --no-sync --bump # Rebuild without sync + bump build number
+#
+# NOTE: Sync is ALWAYS on by default to prevent stale files in Resources/.
+# Use --no-sync only if you know Resources/ is already up to date.
 
 set -e
 
@@ -26,14 +29,15 @@ CIRIS_ROOT="$(dirname "$(dirname "$IOS_APP_DIR")")"
 RESOURCES_DIR="$IOS_APP_DIR/Resources"
 INFO_PLIST="$IOS_APP_DIR/iosApp/Info.plist"
 
-# Parse flags
-SYNC=false
+# Parse flags — sync is ON by default
+SYNC=true
 BUMP=false
 for arg in "$@"; do
     case "$arg" in
-        --sync)  SYNC=true ;;
-        --bump)  BUMP=true ;;
-        *)       echo "Unknown flag: $arg"; echo "Usage: $0 [--sync] [--bump]"; exit 1 ;;
+        --no-sync) SYNC=false ;;
+        --sync)    SYNC=true ;;  # Kept for backwards compat (already default)
+        --bump)    BUMP=true ;;
+        *)         echo "Unknown flag: $arg"; echo "Usage: $0 [--no-sync] [--bump]"; exit 1 ;;
     esac
 done
 

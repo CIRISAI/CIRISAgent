@@ -293,6 +293,73 @@ class SonarClient:
                     uncovered.append(line_info["line"])
         return uncovered
 
+    def get_dependencies(self, branch: Optional[str] = None) -> Dict[str, Any]:
+        """Get dependency information for the project.
+
+        Returns dependency cycles (tangles) and component relationships.
+        """
+        params = {"component": PROJECT_KEY}
+        if branch:
+            params["branch"] = branch
+
+        # Try the dependencies endpoint
+        response = self.session.get(f"{SONAR_API_BASE}/dependencies/show", params=params)
+        response.raise_for_status()
+        return response.json()
+
+    def get_measures_component_tree(
+        self, metrics: List[str], branch: Optional[str] = None, qualifier: str = "FIL"
+    ) -> Dict[str, Any]:
+        """Get measures for all components in the project tree.
+
+        Args:
+            metrics: List of metric keys to retrieve
+            branch: Optional branch name
+            qualifier: Component qualifier (FIL=files, DIR=directories, TRK=project)
+        """
+        params = {
+            "component": PROJECT_KEY,
+            "metricKeys": ",".join(metrics),
+            "ps": 500,
+            "qualifiers": qualifier,
+        }
+        if branch:
+            params["branch"] = branch
+
+        response = self.session.get(f"{SONAR_API_BASE}/measures/component_tree", params=params)
+        response.raise_for_status()
+        return response.json()
+
+    def get_architecture_info(self, branch: Optional[str] = None) -> Dict[str, Any]:
+        """Get architecture analysis information including tangles.
+
+        Note: This endpoint may require specific SonarCloud plan features.
+        """
+        params = {"component": PROJECT_KEY}
+        if branch:
+            params["branch"] = branch
+
+        # Try multiple potential endpoints for architecture data
+        endpoints_to_try = [
+            f"{SONAR_API_BASE}/architecture/tangles",
+            f"{SONAR_API_BASE}/measures/component",
+        ]
+
+        # For component measures, get architecture-related metrics
+        complexity_params = {
+            "component": PROJECT_KEY,
+            "metricKeys": "complexity,cognitive_complexity,file_complexity,function_complexity,duplicated_lines_density,sqale_index,sqale_debt_ratio",
+        }
+        if branch:
+            complexity_params["branch"] = branch
+
+        try:
+            response = self.session.get(f"{SONAR_API_BASE}/measures/component", params=complexity_params)
+            response.raise_for_status()
+            return {"type": "measures", "data": response.json()}
+        except Exception as e:
+            return {"type": "error", "error": str(e)}
+
 
 def get_recent_prs(limit: int = 2) -> List[Tuple[str, str]]:
     """Get recent open PRs from GitHub.
@@ -477,6 +544,10 @@ def main():
     uncovered_parser.add_argument("--file", type=str, help="Filter to specific file path pattern")
     uncovered_parser.add_argument("--lines", action="store_true", help="Show specific line numbers")
     uncovered_parser.add_argument("--limit", type=int, default=20, help="Max files to show (default: 20)")
+
+    # Architecture / Tangles
+    tangles_parser = subparsers.add_parser("tangles", help="Show architecture tangles (cyclic dependencies)")
+    tangles_parser.add_argument("--branch", type=str, default="main", help="Branch to analyze (default: main)")
 
     args = parser.parse_args()
 
@@ -840,6 +911,84 @@ def main():
                         shown += 1
 
                     print(f"\n\nTotal: {sum(f['uncovered'] for f in files)} uncovered lines across {len(files)} files")
+
+            except Exception as e:
+                print(f"Error: {e}")
+                import traceback
+                traceback.print_exc()
+
+        elif args.command == "tangles":
+            print(f"\n🔄 Architecture Analysis for {PROJECT_KEY}")
+            print("=" * 70)
+            print(f"Branch: {args.branch}")
+
+            try:
+                # Try to get architecture/dependency info
+                arch_info = client.get_architecture_info(branch=args.branch)
+
+                if arch_info.get("type") == "measures":
+                    measures_data = arch_info.get("data", {})
+                    component = measures_data.get("component", {})
+                    measures = {m["metric"]: m.get("value", "N/A") for m in component.get("measures", [])}
+
+                    print("\n📊 Complexity Metrics:")
+                    if "complexity" in measures:
+                        print(f"  Cyclomatic Complexity: {measures['complexity']}")
+                    if "cognitive_complexity" in measures:
+                        print(f"  Cognitive Complexity: {measures['cognitive_complexity']}")
+                    if "file_complexity" in measures:
+                        print(f"  Avg File Complexity: {measures['file_complexity']}")
+                    if "function_complexity" in measures:
+                        print(f"  Avg Function Complexity: {measures['function_complexity']}")
+                    if "duplicated_lines_density" in measures:
+                        print(f"  Duplicated Lines: {measures['duplicated_lines_density']}%")
+                    if "sqale_debt_ratio" in measures:
+                        print(f"  Technical Debt Ratio: {measures['sqale_debt_ratio']}%")
+
+                    print("\n💡 Note: SonarCloud's architecture tangle visualization")
+                    print("   requires viewing in the web UI:")
+                    print(f"   https://sonarcloud.io/project/architecture/tangles?id={PROJECT_KEY}")
+                    print("\n   A 'tangle' is a group of files with cyclic dependencies")
+                    print("   (A→B→C→A). These make code harder to maintain and test.")
+
+                elif arch_info.get("type") == "error":
+                    print(f"\n⚠️  Could not retrieve architecture data: {arch_info.get('error')}")
+                    print("\n   The tangle visualization may require viewing in the web UI:")
+                    print(f"   https://sonarcloud.io/project/architecture/tangles?id={PROJECT_KEY}")
+
+                # Try to get high-complexity files as proxy for architecture issues
+                print("\n📁 High Complexity Files (potential tangle participants):")
+                try:
+                    tree_data = client.get_measures_component_tree(
+                        metrics=["complexity", "cognitive_complexity"],
+                        branch=args.branch,
+                        qualifier="FIL"
+                    )
+                    components = tree_data.get("components", [])
+
+                    # Sort by complexity
+                    complex_files = []
+                    for comp in components:
+                        measures = {m["metric"]: float(m.get("value", 0)) for m in comp.get("measures", [])}
+                        complexity = measures.get("complexity", 0) + measures.get("cognitive_complexity", 0)
+                        if complexity > 50:  # Threshold for "high complexity"
+                            complex_files.append({
+                                "path": comp.get("path", comp.get("key", "").split(":")[-1]),
+                                "complexity": measures.get("complexity", 0),
+                                "cognitive": measures.get("cognitive_complexity", 0),
+                            })
+
+                    complex_files.sort(key=lambda x: -(x["complexity"] + x["cognitive"]))
+
+                    if complex_files:
+                        for f in complex_files[:15]:
+                            print(f"  {f['path']}")
+                            print(f"    Cyclomatic: {f['complexity']:.0f}, Cognitive: {f['cognitive']:.0f}")
+                    else:
+                        print("  No files with complexity > 50 found.")
+
+                except Exception as e:
+                    print(f"  Could not retrieve complexity data: {e}")
 
             except Exception as e:
                 print(f"Error: {e}")

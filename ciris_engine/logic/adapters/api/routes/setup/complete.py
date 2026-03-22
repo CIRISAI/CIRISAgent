@@ -5,7 +5,6 @@ for saving configuration and creating users during setup.
 """
 
 import asyncio
-import json
 import logging
 import os
 import time
@@ -195,6 +194,67 @@ async def _ensure_system_wa(auth_service: Any) -> None:
         logger.warning("⚠️ Could not create system WA - deferral handling may not work")
 
 
+def _create_founding_partnership(user_id: str) -> None:
+    """Create a default PARTNERED consent record for the setup user.
+
+    The user who completes the setup wizard has explicitly consented by
+    provisioning the agent.  The agent's consent is expressed through its
+    template configuration — Ally's foundational identity is partnership
+    ("Your growth supports mine").  This is configured consistency, not
+    bypassed safeguards (see COGNITIVE_STATE_BEHAVIORS FSD).
+
+    Creates a GraphNode with type=CONSENT and stream=PARTNERED, mirroring
+    the pattern used by _handle_partnership_accept() in partnership.py.
+    """
+    from ciris_engine.logic.persistence import add_graph_node
+    from ciris_engine.logic.services.lifecycle.time.service import TimeService
+    from ciris_engine.schemas.consent.core import ConsentCategory, ConsentStatus, ConsentStream
+    from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+
+    now = datetime.now(timezone.utc)
+
+    partnered_status = ConsentStatus(
+        user_id=user_id,
+        stream=ConsentStream.PARTNERED,
+        categories=[
+            ConsentCategory.INTERACTION,
+            ConsentCategory.PREFERENCE,
+            ConsentCategory.IMPROVEMENT,
+        ],
+        granted_at=now,
+        expires_at=None,  # PARTNERED doesn't expire
+        last_modified=now,
+        impact_score=0.0,
+        attribution_count=0,
+    )
+
+    node = GraphNode(
+        id=f"consent/{user_id}",
+        type=NodeType.CONSENT,
+        scope=GraphScope.LOCAL,
+        attributes={
+            "stream": (
+                partnered_status.stream.value if hasattr(partnered_status.stream, "value") else partnered_status.stream
+            ),
+            "categories": [c.value if hasattr(c, "value") else c for c in partnered_status.categories],
+            "granted_at": partnered_status.granted_at.isoformat(),
+            "expires_at": None,
+            "last_modified": partnered_status.last_modified.isoformat(),
+            "impact_score": partnered_status.impact_score,
+            "attribution_count": partnered_status.attribution_count,
+            "partnership_approved": True,
+            "approval_task_id": None,  # No task — founding partnership via setup wizard
+            "founding_partnership": True,  # Distinguishes from bilateral consent flow
+        },
+        updated_by="setup_wizard",
+        updated_at=now,
+    )
+
+    time_service = TimeService()
+    add_graph_node(node, time_service, None)
+    logger.info(f"✅ Founding partnership created for setup user: {user_id}")
+
+
 async def _log_wa_list(auth_service: Any, phase: str) -> None:
     """Log list of WAs for debugging purposes."""
     was = await auth_service.list_was(active_only=False)
@@ -251,6 +311,15 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
         # Log WAs after creation for debugging
         await _log_wa_list(auth_service, "after setup")
 
+        # Create founding partnership for setup user — the user consented by
+        # completing setup, the agent's consent is configured in its template
+        # Use canonical user ID: for OAuth users it's "provider:external_id", for local users it's the username
+        if setup.oauth_provider and setup.oauth_external_id:
+            canonical_user_id = f"{setup.oauth_provider}:{setup.oauth_external_id}"
+        else:
+            canonical_user_id = setup.admin_username
+        _create_founding_partnership(canonical_user_id)
+
         # Ensure system WA exists
         await _ensure_system_wa(auth_service)
 
@@ -276,37 +345,6 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
     finally:
         await auth_service.stop()
         await time_service.stop()
-
-
-def _save_pending_users(setup: SetupCompleteRequest, config_dir: Path) -> None:
-    """Save pending user creation info for initialization service.
-
-    Args:
-        setup: Setup configuration with user info
-        config_dir: Directory where .env file is saved
-    """
-    pending_users_file = config_dir / ".ciris_pending_users.json"
-
-    # Prepare user creation data
-    users_data = {
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "new_user": {
-            "username": setup.admin_username,
-            "password": setup.admin_password,  # Will be hashed by auth service
-            "role": "ADMIN",  # New user gets admin role
-        },
-    }
-
-    # Add system admin password update if provided
-    if setup.system_admin_password:
-        users_data["system_admin"] = {
-            "username": "admin",  # Default system admin username
-            "password": setup.system_admin_password,  # Will be hashed by auth service
-        }
-
-    # Save to JSON file
-    with open(pending_users_file, "w") as f:
-        json.dump(users_data, f, indent=2)
 
 
 def _save_and_reload_config(setup: SetupCompleteRequest) -> Path:

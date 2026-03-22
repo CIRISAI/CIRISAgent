@@ -69,6 +69,7 @@ class AgentTemplate(BaseModel):
     name: str = Field(..., description="Agent name/identifier")
     description: str = Field(..., description="Agent description")
     role_description: str = Field(..., description="Agent's role")
+    internal_only: bool = Field(False, description="If true, template is internal/development only")
 
     # Permissions
     permitted_actions: List[str] = Field(default_factory=list, description="List of permitted handler actions")

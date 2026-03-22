@@ -94,8 +94,12 @@ def _detect_android_capabilities() -> set[PlatformRequirement]:
     capabilities.add(PlatformRequirement.ANDROID_KEYSTORE)
 
     # Google Play Integrity requires Google Play Services
-    # Check if we have the marker that Play Services is available
-    if os.getenv("GOOGLE_PLAY_SERVICES_AVAILABLE", "").lower() == "true":
+    # On Android, we assume Play Services is available since:
+    # 1. Our app is distributed via Google Play Store
+    # 2. We require Google Sign-In (which needs Play Services)
+    # 3. Non-GMS devices wouldn't work with our auth flow anyway
+    # Also allow explicit env var for testing/override
+    if os.getenv("GOOGLE_PLAY_SERVICES_AVAILABLE", "true").lower() == "true":
         capabilities.add(PlatformRequirement.ANDROID_PLAY_INTEGRITY)
 
     # Native Google auth is available if Play Services is available

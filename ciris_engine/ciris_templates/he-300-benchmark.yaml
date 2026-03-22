@@ -6,6 +6,7 @@
 # - Direct ethical reasoning with clear judgments
 
 name: he-300-benchmark
+internal_only: true
 description: 'Ethical judgment agent for evaluating moral scenarios in the HE-300 benchmark'
 role_description: 'CIRIS-Ethics - Ethical evaluation agent providing clear moral judgments'
 

@@ -131,53 +131,43 @@ def _compute_agent_id_hash(agent_id: str) -> str:
 def _get_accord_adapter(request: Request) -> Any:
     """Get the accord metrics adapter from app state, or None if not loaded.
 
-    RuntimeAdapterManager stores adapters in loaded_adapters: Dict[str, AdapterInstance]
-    where AdapterInstance.adapter is the actual adapter object.
-
-    Note: We check multiple locations since adapter_manager may be stored differently
-    depending on how the runtime was initialized.
+    Searches multiple locations:
+    1. adapter_manager.loaded_adapters (dynamically loaded adapters)
+    2. runtime.adapters (bootstrap adapters loaded at startup)
     """
+    # 1. Check adapter_manager.loaded_adapters (dynamically loaded)
     adapter_manager = None
+    for attr in ("main_runtime_control_service", "runtime_control_service"):
+        svc = getattr(request.app.state, attr, None)
+        if svc:
+            adapter_manager = getattr(svc, "adapter_manager", None)
+            if adapter_manager:
+                break
 
-    # Try main_runtime_control_service first (matches /v1/adapters endpoint)
-    main_runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
-    if main_runtime_control:
-        adapter_manager = getattr(main_runtime_control, "adapter_manager", None)
-
-    # Fallback to runtime_control_service
-    if not adapter_manager:
-        runtime_control = getattr(request.app.state, "runtime_control_service", None)
-        if runtime_control:
-            adapter_manager = getattr(runtime_control, "adapter_manager", None)
-
-    # Fallback to runtime.adapter_manager (legacy path)
     if not adapter_manager:
         runtime = getattr(request.app.state, "runtime", None)
         if runtime:
             adapter_manager = getattr(runtime, "adapter_manager", None)
 
-    if not adapter_manager:
-        logger.debug("_get_accord_adapter: No adapter_manager found in any location")
-        return None
+    if adapter_manager:
+        loaded = getattr(adapter_manager, "loaded_adapters", {})
+        for adapter_id, instance in loaded.items():
+            adapter = getattr(instance, "adapter", instance)
+            type_name = type(adapter).__name__
+            if "AccordMetrics" in type_name or "accord_metrics" in adapter_id:
+                logger.debug(f"_get_accord_adapter: Found in adapter_manager: {adapter_id}")
+                return adapter
 
-    # RuntimeAdapterManager.loaded_adapters is Dict[str, AdapterInstance]
-    loaded = getattr(adapter_manager, "loaded_adapters", {})
-    logger.debug(f"_get_accord_adapter: Found {len(loaded)} loaded adapters: {list(loaded.keys())}")
+    # 2. Check runtime.adapters (bootstrap adapters)
+    runtime = getattr(request.app.state, "runtime", None)
+    if runtime:
+        for adapter in getattr(runtime, "adapters", []):
+            type_name = type(adapter).__name__
+            if "AccordMetrics" in type_name:
+                logger.debug(f"_get_accord_adapter: Found in runtime.adapters: {type_name}")
+                return adapter
 
-    for adapter_id, instance in loaded.items():
-        # AdapterInstance wraps the actual adapter in .adapter
-        adapter = getattr(instance, "adapter", instance)
-        type_name = type(adapter).__name__
-
-        # Match by class name or adapter ID
-        if "AccordMetrics" in type_name or "accord_metrics" in adapter_id:
-            logger.debug(f"_get_accord_adapter: Found AccordMetrics adapter: {adapter_id} (type={type_name})")
-            return adapter
-
-    logger.debug(
-        f"_get_accord_adapter: No AccordMetrics adapter found among: "
-        f"{[(aid, type(getattr(inst, 'adapter', inst)).__name__) for aid, inst in loaded.items()]}"
-    )
+    logger.debug("_get_accord_adapter: No AccordMetrics adapter found")
     return None
 
 

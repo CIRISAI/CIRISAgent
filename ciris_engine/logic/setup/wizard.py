@@ -271,7 +271,20 @@ AUDIT_LOG_PATH="{data_dir}/audit_logs.jsonl"
 
 # Mark as configured
 CIRIS_CONFIGURED="true"
+"""
 
+    # Add Android-specific platform capabilities
+    if is_android():
+        content += """
+# ============================================================================
+# Android Platform Capabilities
+# ============================================================================
+
+# Enable Google Play Services integration (Play Integrity, etc.)
+GOOGLE_PLAY_SERVICES_AVAILABLE="true"
+"""
+
+    content += """
 # ============================================================================
 # Optional: Discord Integration
 # ============================================================================

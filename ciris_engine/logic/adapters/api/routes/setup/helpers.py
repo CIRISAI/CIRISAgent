@@ -144,7 +144,7 @@ def _module_info_to_adapter_config(module_info: "ModuleTypeInfo") -> AdapterConf
     requires_ciris_services = module_info.module_id in _CIRIS_SERVICES_ADAPTERS
 
     # Get CLI dependency info
-    cli_deps, missing_deps, _ = get_cli_dependency_status(module_info)
+    cli_deps, _, _ = get_cli_dependency_status(module_info)
 
     return AdapterConfig(
         id=module_info.module_id,

@@ -105,14 +105,14 @@ fun DataManagementScreen(
                 Button(
                     onClick = {
                         showFactoryResetDialog = false
-                        viewModel.factoryReset { onResetSetup() }
+                        viewModel.factoryReset()
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error
                     ),
                     modifier = Modifier.testableClickable("btn_factory_reset_confirm") {
                         showFactoryResetDialog = false
-                        viewModel.factoryReset { onResetSetup() }
+                        viewModel.factoryReset()
                     }
                 ) {
                     Text("Delete Account & Data")

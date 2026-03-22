@@ -12,8 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.schemas.config.essential import EssentialConfig
 
 if TYPE_CHECKING:
-    from ciris_engine.logic.buses.bus_manager import BusManager
-    from ciris_engine.logic.registries.base import ServiceRegistry
+    from ciris_engine.protocols.infrastructure.base import BusManagerProtocol, ServiceRegistryProtocol
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 
 
@@ -32,17 +31,17 @@ class AdapterStartupContext(BaseModel):
     startup_channel_id: str = Field("", description="Channel ID for startup messages (may be empty string)")
     debug: bool = Field(False, description="Debug mode enabled")
 
-    # Service references - using Any but documented as specific types
+    # Service references - using Any but documented as protocol types
     # NOTE: We use Any here to avoid forward reference issues with Pydantic
-    # These are actually: BusManager, TimeServiceProtocol, ServiceRegistry
+    # These implement: BusManagerProtocol, TimeServiceProtocol, ServiceRegistryProtocol
     bus_manager: Optional[Any] = Field(
-        None, description="Message bus manager for inter-service communication (BusManager)"
+        None, description="Message bus manager for inter-service communication (BusManagerProtocol)"
     )
     time_service: Optional[Any] = Field(
         None, description="Time service for consistent timestamps (TimeServiceProtocol)"
     )
     service_registry: Optional[Any] = Field(
-        None, description="Service registry for service discovery (ServiceRegistry)"
+        None, description="Service registry for service discovery (ServiceRegistryProtocol)"
     )
 
     model_config = ConfigDict(defer_build=True, arbitrary_types_allowed=True, extra="forbid")

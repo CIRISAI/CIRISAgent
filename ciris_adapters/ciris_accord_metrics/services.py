@@ -537,16 +537,49 @@ class AccordMetricsService:
             f"endpoint={self._endpoint_url}, signer_key={self._signer.key_id})"
         )
 
-    def _anonymize_agent_id(self, agent_id: str) -> str:
-        """Hash agent ID for privacy.
+    def _compute_instance_hash(self, fallback_id: Optional[str] = None) -> str:
+        """Compute unique instance hash from signing key.
+
+        Uses the signer's public key to generate a hash that is unique per agent instance,
+        not just per template name. This ensures that multiple instances of the same
+        template (e.g., 30 "Ally" agents) have distinct agent_id_hash values.
 
         Args:
-            agent_id: Raw agent identifier
+            fallback_id: If signing key unavailable, hash this ID instead (for tests)
 
         Returns:
-            SHA-256 hash of agent ID (first 16 chars)
+            SHA-256 hash of signing key's public key (first 16 chars),
+            or hash of fallback_id if provided and no signing key,
+            or "unknown" if neither available.
         """
-        return hashlib.sha256(agent_id.encode()).hexdigest()[:16]
+        if self._signer and self._signer.has_signing_key:
+            try:
+                unified_key = self._signer._unified_key
+                if unified_key is not None:
+                    pubkey_bytes = unified_key.public_key_bytes
+                    return hashlib.sha256(pubkey_bytes).hexdigest()[:16]
+            except Exception as e:
+                logger.warning(f"Could not compute instance hash from signing key: {e}")
+
+        # Fallback for tests/environments without signing key
+        if fallback_id:
+            return hashlib.sha256(fallback_id.encode()).hexdigest()[:16]
+
+        return "unknown"
+
+    def _anonymize_agent_id(self, agent_id: str) -> str:
+        """Hash agent ID for privacy - prefers signing key, falls back to agent_id.
+
+        In production, uses the signing key's public key for uniqueness.
+        In tests (no signing key), falls back to hashing the agent_id.
+
+        Args:
+            agent_id: Raw agent identifier (template name, used as fallback)
+
+        Returns:
+            SHA-256 hash (first 16 chars) - from signing key if available, else from agent_id
+        """
+        return self._compute_instance_hash(fallback_id=agent_id)
 
     def get_capabilities(self) -> SimpleCapabilities:
         """Return service capabilities.
@@ -1777,20 +1810,35 @@ class AccordMetricsService:
         return ssl.create_default_context()
 
     def set_agent_id(self, agent_id: str) -> None:
-        """Set and anonymize the agent ID.
+        """Set agent identity for traces.
+
+        The agent_id (template name like "Ally") is stored in _agent_name for display
+        in traces. The _agent_id_hash is derived from the signing key's public key
+        to ensure uniqueness across multiple instances of the same template.
 
         Args:
-            agent_id: Raw agent identifier to hash
+            agent_id: Agent identifier (template name like "Ally", "Echo", etc.)
         """
         # Validate agent_id is a proper string (not a mock or other type)
         if not isinstance(agent_id, str) or not agent_id:
             logger.warning(f"Invalid agent_id type: {type(agent_id).__name__}, skipping")
             return
-        self._agent_id_hash = self._anonymize_agent_id(agent_id)
-        # Set agent_name to agent_id if not already configured
+
+        # Store template name for display in traces (agent_name field)
         if not self._agent_name:
             self._agent_name = agent_id
-        logger.debug(f"Agent ID hash set: {self._agent_id_hash}, agent_name: {self._agent_name}")
+
+        # Compute unique hash from signing key (not template name)
+        # This ensures each instance has a unique agent_id_hash even if
+        # multiple instances share the same template (e.g., 30 "Ally" agents)
+        # Falls back to agent_id hash in tests where signing key is mocked
+        self._agent_id_hash = self._anonymize_agent_id(agent_id)
+
+        logger.info(
+            f"Agent identity set: template={agent_id}, "
+            f"agent_name={self._agent_name}, "
+            f"agent_id_hash={self._agent_id_hash}"
+        )
 
     def get_metrics(self) -> Dict[str, Any]:
         """Get service metrics for telemetry.

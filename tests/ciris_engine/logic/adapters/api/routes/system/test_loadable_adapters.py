@@ -1,7 +1,8 @@
 """Tests for loadable adapters endpoint and internal_only filtering."""
 
-import pytest
 from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 from ciris_engine.schemas.runtime.adapter_management import ModuleTypeInfo
 
@@ -11,8 +12,8 @@ class TestParseManifestInternalOnly:
 
     def test_internal_only_defaults_to_false(self):
         """internal_only should default to False when not specified."""
-        from ciris_engine.logic.adapters.api.routes.system.adapters import (
-            _parse_manifest_to_module_info,
+        from ciris_engine.logic.adapters.api.routes._adapter_discovery import (
+            parse_manifest_to_module_info as _parse_manifest_to_module_info,
         )
 
         manifest_data = {
@@ -32,8 +33,8 @@ class TestParseManifestInternalOnly:
 
     def test_internal_only_true_when_set(self):
         """internal_only should be True when set in manifest."""
-        from ciris_engine.logic.adapters.api.routes.system.adapters import (
-            _parse_manifest_to_module_info,
+        from ciris_engine.logic.adapters.api.routes._adapter_discovery import (
+            parse_manifest_to_module_info as _parse_manifest_to_module_info,
         )
 
         manifest_data = {
@@ -54,8 +55,8 @@ class TestParseManifestInternalOnly:
 
     def test_internal_only_false_when_explicitly_set(self):
         """internal_only should be False when explicitly set to False."""
-        from ciris_engine.logic.adapters.api.routes.system.adapters import (
-            _parse_manifest_to_module_info,
+        from ciris_engine.logic.adapters.api.routes._adapter_discovery import (
+            parse_manifest_to_module_info as _parse_manifest_to_module_info,
         )
 
         manifest_data = {
@@ -120,9 +121,7 @@ class TestLoadableAdaptersFiltering:
             internal_only=False,
         )
 
-    def test_internal_only_adapters_excluded_from_loadable_list(
-        self, mock_adapter_normal, mock_adapter_internal
-    ):
+    def test_internal_only_adapters_excluded_from_loadable_list(self, mock_adapter_normal, mock_adapter_internal):
         """Internal-only adapters should be filtered out from loadable list."""
         adapters = [mock_adapter_normal, mock_adapter_internal]
 
@@ -133,9 +132,7 @@ class TestLoadableAdaptersFiltering:
         assert filtered[0].module_id == "normal_adapter"
         assert mock_adapter_internal not in filtered
 
-    def test_platform_unavailable_adapters_excluded(
-        self, mock_adapter_normal, mock_adapter_platform_unavailable
-    ):
+    def test_platform_unavailable_adapters_excluded(self, mock_adapter_normal, mock_adapter_platform_unavailable):
         """Platform-unavailable adapters should be filtered out."""
         adapters = [mock_adapter_normal, mock_adapter_platform_unavailable]
 
@@ -237,6 +234,5 @@ class TestCirisVerifyManifestInternalOnly:
             manifest = json.load(f)
 
         assert manifest["module"].get("internal_only") is True, (
-            "ciris_verify should be marked as internal_only to prevent it "
-            "from appearing in the Add Adapter UI"
+            "ciris_verify should be marked as internal_only to prevent it " "from appearing in the Add Adapter UI"
         )

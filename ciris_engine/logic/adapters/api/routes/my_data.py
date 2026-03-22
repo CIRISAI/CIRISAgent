@@ -97,10 +97,33 @@ class AccordSettingsUpdate(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _compute_agent_id_hash(agent_id: str) -> str:
-    """Compute the same hash used by AccordMetricsService._anonymize_agent_id.
+def _compute_agent_id_hash_from_signer() -> str:
+    """Compute agent_id_hash from the unified signing key.
+
+    This hash is unique per agent instance (based on signing key),
+    not per template name. This ensures multiple instances of the same
+    template (e.g., 30 "Ally" agents) have distinct hashes.
 
     Must stay in sync with ciris_adapters/ciris_accord_metrics/services.py.
+    """
+    try:
+        from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+
+        unified_key = get_unified_signing_key()
+        pubkey_bytes = unified_key.public_key_bytes
+        return hashlib.sha256(pubkey_bytes).hexdigest()[:16]
+    except Exception as e:
+        logger.warning(f"Could not compute agent_id_hash from signing key: {e}")
+        return "unknown"
+
+
+def _compute_agent_id_hash(agent_id: str) -> str:
+    """DEPRECATED: Legacy hash from agent name.
+
+    New code should use _compute_agent_id_hash_from_signer() or get
+    agent_id_hash from the metrics service.
+
+    This is kept for backward compatibility in tests.
     """
     return hashlib.sha256(agent_id.encode()).hexdigest()[:16]
 
@@ -205,6 +228,61 @@ def _get_agent_id(request: Request) -> Optional[str]:
     return None
 
 
+def _update_env_consent(consent_given: bool) -> None:
+    """Update CIRIS_ACCORD_METRICS_CONSENT in the .env file.
+
+    This persists consent changes so they survive app restarts.
+
+    Args:
+        consent_given: New consent state to persist
+    """
+    import os
+    import re
+    from pathlib import Path
+
+    # Find the .env file (same logic as setup wizard)
+    config_dir = Path(os.environ.get("CIRIS_CONFIG_DIR", "."))
+    env_path = config_dir / ".env"
+
+    if not env_path.exists():
+        logger.warning(f"Cannot persist consent: .env file not found at {env_path}")
+        return
+
+    # Read current contents
+    with open(env_path) as f:
+        content = f.read()
+
+    consent_value = "true" if consent_given else "false"
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    # Update CIRIS_ACCORD_METRICS_CONSENT
+    if "CIRIS_ACCORD_METRICS_CONSENT=" in content:
+        content = re.sub(r"CIRIS_ACCORD_METRICS_CONSENT=\w+", f"CIRIS_ACCORD_METRICS_CONSENT={consent_value}", content)
+    else:
+        # Add if not present
+        content += f"\nCIRIS_ACCORD_METRICS_CONSENT={consent_value}\n"
+
+    # Update CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP
+    if "CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP=" in content:
+        content = re.sub(
+            r"CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP=[^\n]+",
+            f"CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={timestamp}",
+            content,
+        )
+    else:
+        content += f"CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={timestamp}\n"
+
+    # Write back
+    with open(env_path, "w") as f:
+        f.write(content)
+
+    # Also update the current process environment
+    os.environ["CIRIS_ACCORD_METRICS_CONSENT"] = consent_value
+    os.environ["CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP"] = timestamp
+
+    logger.info(f"Updated .env: CIRIS_ACCORD_METRICS_CONSENT={consent_value}")
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -236,8 +314,6 @@ async def get_lens_identifier(
             detail="Agent identity not available. The agent may not be fully initialized.",
         )
 
-    agent_id_hash = _compute_agent_id_hash(agent_id)
-
     # Get accord metrics adapter status if available
     adapter = _get_accord_adapter(request)
     consent_given = False
@@ -245,6 +321,7 @@ async def get_lens_identifier(
     trace_level = None
     traces_sent = 0
     endpoint_url = None
+    agent_id_hash = None
 
     if adapter and hasattr(adapter, "metrics_service"):
         svc = adapter.metrics_service
@@ -252,11 +329,17 @@ async def get_lens_identifier(
         consent_given = metrics.get("consent_given", False)
         trace_level = metrics.get("trace_level")
         traces_sent = metrics.get("events_sent", 0)
+        # Get unique instance hash from metrics service (signing key based)
+        agent_id_hash = metrics.get("agent_id_hash")
         consent_timestamp = getattr(adapter, "_consent_timestamp", None)
         endpoint_url = getattr(svc, "_endpoint_url", None)
     elif adapter:
         consent_given = getattr(adapter, "_consent_given", False)
         consent_timestamp = getattr(adapter, "_consent_timestamp", None)
+
+    # Fallback: compute hash directly from signing key if not available from adapter
+    if not agent_id_hash:
+        agent_id_hash = _compute_agent_id_hash_from_signer()
 
     data = LensIdentifierResponse(
         agent_id_hash=agent_id_hash,
@@ -319,8 +402,17 @@ async def delete_lens_traces(
             detail="Agent identity not available.",
         )
 
-    agent_id_hash = _compute_agent_id_hash(agent_id)
     adapter = _get_accord_adapter(request)
+
+    # Get unique instance hash from metrics service (signing key based)
+    agent_id_hash = None
+    if adapter and hasattr(adapter, "metrics_service"):
+        metrics = adapter.metrics_service.get_metrics()
+        agent_id_hash = metrics.get("agent_id_hash")
+
+    # Fallback: compute hash directly from signing key
+    if not agent_id_hash:
+        agent_id_hash = _compute_agent_id_hash_from_signer()
 
     # Step 1: Send deletion request to CIRISLens
     lens_accepted = False
@@ -398,19 +490,35 @@ async def get_accord_settings(
         )
 
     agent_id = _get_agent_id(request)
-    agent_id_hash = _compute_agent_id_hash(agent_id) if agent_id else "unknown"
 
     settings: dict[str, Any] = {
-        "agent_id_hash": agent_id_hash,
+        "agent_name": agent_id,  # Template name for display
     }
 
+    # Get metrics and unique instance hash from metrics service (signing key based)
     if hasattr(adapter, "metrics_service"):
         metrics = adapter.metrics_service.get_metrics()
+        settings["agent_id_hash"] = metrics.get("agent_id_hash", "unknown")
         settings.update(metrics)
         settings["endpoint_url"] = getattr(adapter.metrics_service, "_endpoint_url", None)
+        # Check if adapter is actually started (has active session)
+        svc = adapter.metrics_service
+        settings["adapter_started"] = getattr(svc, "_started", False)
+        settings["session_active"] = (
+            svc._session is not None and not svc._session.closed if hasattr(svc, "_session") else False
+        )
+    else:
+        # Fallback: compute hash directly from signing key
+        settings["agent_id_hash"] = _compute_agent_id_hash_from_signer()
 
     settings["consent_given"] = getattr(adapter, "_consent_given", False)
     settings["consent_timestamp"] = getattr(adapter, "_consent_timestamp", None)
+
+    # Check if services were registered (only happens when consent is given)
+    services_registered = (
+        len(adapter.get_services_to_register()) > 0 if hasattr(adapter, "get_services_to_register") else False
+    )
+    settings["services_registered"] = services_registered
 
     return StandardResponse(
         success=True,
@@ -453,6 +561,13 @@ async def update_accord_settings(
     if settings.consent_given is not None:
         adapter.update_consent(settings.consent_given)
         changes.append(f"consent_given={settings.consent_given}")
+
+        # CRITICAL: Persist consent change to .env file so it survives restart
+        try:
+            _update_env_consent(settings.consent_given)
+            logger.info(f"Persisted consent={settings.consent_given} to .env file")
+        except Exception as e:
+            logger.warning(f"Failed to persist consent to .env: {e}")
 
     if settings.trace_level is not None and hasattr(adapter, "metrics_service"):
         svc = adapter.metrics_service
@@ -519,26 +634,39 @@ async def _send_lens_deletion_request(
     # Build deletion payload
     import json
 
+    requested_at = datetime.now(timezone.utc).isoformat()
     payload = {
         "agent_id_hash": agent_id_hash,
         "request_type": "delete_all_traces",
         "reason": reason or "User DSAR self-service request",
-        "requested_at": datetime.now(timezone.utc).isoformat(),
+        "requested_at": requested_at,
     }
 
     # Sign the request if signer is available
+    # Signature must be over canonical JSON of: {agent_id_hash, request_type, requested_at}
     if signer and hasattr(signer, "has_signing_key") and signer.has_signing_key:
-        content_bytes = json.dumps(payload, sort_keys=True).encode()
         try:
-            import base64
+            # Build canonical payload for signing (only required fields, alphabetically sorted)
+            canonical_payload = {
+                "agent_id_hash": agent_id_hash,
+                "request_type": "delete_all_traces",
+                "requested_at": requested_at,
+            }
+            content_bytes = json.dumps(canonical_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
-            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+            # Use the unified signing key from the signer
+            unified_key = getattr(signer, "_unified_key", None)
+            if unified_key is None:
+                # Try to load it
+                signer._ensure_unified_key()
+                unified_key = getattr(signer, "_unified_key", None)
 
-            private_key = getattr(signer, "_private_key", None)
-            if private_key:
-                signature = private_key.sign(content_bytes)
-                payload["signature"] = base64.b64encode(signature).decode()
+            if unified_key and hasattr(unified_key, "sign_base64"):
+                payload["signature"] = unified_key.sign_base64(content_bytes)
                 payload["signature_key_id"] = signer.key_id
+                logger.info(f"Signed deletion request with key {signer.key_id}")
+            else:
+                logger.warning("Could not sign deletion request: unified key not available")
         except Exception as e:
             logger.warning(f"Could not sign deletion request: {e}")
 
@@ -547,10 +675,13 @@ async def _send_lens_deletion_request(
     try:
         async with session.post(url, json=payload) as response:
             if response.status == 200:
+                logger.info(f"CIRISLens deletion request ACCEPTED (200) for agent {agent_id_hash}")
                 return True, "CIRISLens accepted the deletion request. Traces will be removed."
             elif response.status == 202:
+                logger.info(f"CIRISLens deletion request QUEUED (202) for agent {agent_id_hash}")
                 return True, "CIRISLens queued the deletion request for processing."
             elif response.status == 404:
+                logger.info(f"CIRISLens deletion request: no traces found (404) for agent {agent_id_hash}")
                 return True, "No traces found for this agent_id_hash in CIRISLens (nothing to delete)."
             else:
                 error_text = await response.text()

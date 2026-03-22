@@ -297,7 +297,7 @@ async def _process_request_documents(body: InteractRequest | MessageRequest) -> 
 
 
 async def _create_interaction_message(
-    auth: AuthContext, body: InteractRequest | MessageRequest
+    auth: AuthContext, body: InteractRequest | MessageRequest, request: Request
 ) -> Tuple[str, str, IncomingMessage]:
     """Create message ID, channel ID, and IncomingMessage for interaction."""
     message_id = str(uuid.uuid4())
@@ -307,10 +307,23 @@ async def _create_interaction_message(
     additional_content = await _process_request_documents(body)
     final_content = body.message + additional_content
 
+    # Look up user's display name (oauth_name) for author_name
+    # Falls back to user_id if not available
+    author_name = auth.user_id
+    auth_service = getattr(request.app.state, "auth_service", None)
+    if auth_service and hasattr(auth_service, "get_user"):
+        try:
+            user = auth_service.get_user(auth.user_id)
+            if user:
+                # Prefer oauth_name, then name, then fall back to user_id
+                author_name = getattr(user, "oauth_name", None) or getattr(user, "name", None) or auth.user_id
+        except Exception:
+            pass  # Keep default author_name on lookup failure
+
     msg = IncomingMessage(
         message_id=message_id,
         author_id=auth.user_id,
-        author_name=auth.user_id,
+        author_name=author_name,
         content=final_content,
         channel_id=channel_id,
         timestamp=datetime.now(timezone.utc).isoformat(),
@@ -674,7 +687,7 @@ async def submit_message(
     _check_send_messages_permission(auth, request)
 
     # Create message and tracking
-    message_id, channel_id, msg = await _create_interaction_message(auth, body)
+    message_id, channel_id, msg = await _create_interaction_message(auth, body, request)
     msg = _attach_credit_metadata(msg, request, auth, channel_id)
 
     # Handle consent for user
@@ -782,7 +795,7 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
     _check_send_messages_permission(auth, request)
 
     # Create message and tracking
-    message_id, channel_id, msg = await _create_interaction_message(auth, body)
+    message_id, channel_id, msg = await _create_interaction_message(auth, body, request)
     msg = _attach_credit_metadata(msg, request, auth, channel_id)
 
     event = asyncio.Event()

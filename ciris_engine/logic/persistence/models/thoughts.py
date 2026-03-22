@@ -313,7 +313,6 @@ def update_thought_status(
         occurrence_id: Runtime occurrence ID for safety check
         db_path: Optional database path
         final_action: ActionSelectionDMAResult object or other serializable data
-        **kwargs: Additional parameters for compatibility
 
     Returns:
         bool: True if updated, False otherwise
@@ -328,10 +327,36 @@ def update_thought_status(
 
             # Build dynamic SQL based on what needs to be updated
             updates = ["status = ?"]
-            params = [status_val]
+            params: List[Any] = [status_val]
 
-            # DELETED: Legacy JSON serialization. Protocol-driven approach stores schemas directly.
-            # final_action storage removed - use proper schema relationships instead
+            # Store final_action as JSON if provided
+            # Convert to FinalAction-compatible format for consistent deserialization
+            if final_action is not None:
+                updates.append("final_action_json = ?")
+                # Handle both Pydantic models and dicts
+                if hasattr(final_action, "model_dump"):
+                    action_data = final_action.model_dump()
+                elif isinstance(final_action, dict):
+                    action_data = final_action
+                else:
+                    action_data = {"raw": final_action}
+
+                # Convert ActionSelectionDMAResult format to FinalAction format
+                # ActionSelectionDMAResult uses: selected_action, action_parameters, rationale
+                # FinalAction expects: action_type, action_params, reasoning
+                if "selected_action" in action_data and "action_type" not in action_data:
+                    final_action_data = {
+                        "action_type": str(action_data.get("selected_action", "")),
+                        "action_params": action_data.get("action_parameters", {}),
+                        "reasoning": action_data.get("rationale", action_data.get("reasoning", "")),
+                    }
+                    # Handle nested Pydantic model for action_parameters
+                    if hasattr(final_action_data["action_params"], "model_dump"):
+                        final_action_data["action_params"] = final_action_data["action_params"].model_dump()
+                    final_action_json = json.dumps(final_action_data)
+                else:
+                    final_action_json = json.dumps(action_data)
+                params.append(final_action_json)
 
             params.extend([thought_id, occurrence_id])
 

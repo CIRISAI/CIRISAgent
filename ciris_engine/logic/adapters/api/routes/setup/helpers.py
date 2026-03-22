@@ -75,6 +75,11 @@ def _get_agent_templates() -> List[AgentTemplate]:
             # Load and validate template
             config_template = ConfigAgentTemplate(**template_data)
 
+            # Skip internal-only templates (same pattern as adapters)
+            if config_template.internal_only:
+                logger.info(f"[SETUP TEMPLATES] Skipping internal template: {template_file.name}")
+                continue
+
             # Extract SOP names from tickets config
             supported_sops: List[str] = []
             if config_template.tickets and config_template.tickets.sops:
@@ -188,7 +193,7 @@ def _get_available_adapters() -> List[AdapterConfig]:
 
     try:
         # Use shared discovery with consistent filtering
-        # Note: filter_by_platform=False lets KMP client filter
+        # filter_by_platform=True applies same filtering as Add Adapter card
         # skip_adapters excludes accord_metrics (handled by consent checkbox)
         try:
             loop = asyncio.get_running_loop()
@@ -201,12 +206,12 @@ def _get_available_adapters() -> List[AdapterConfig]:
 
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(
-                    asyncio.run, discover_adapters(filter_by_platform=False, skip_adapters=_SKIP_ADAPTERS)
+                    asyncio.run, discover_adapters(filter_by_platform=True, skip_adapters=_SKIP_ADAPTERS)
                 )
                 discovered = future.result(timeout=10)
         else:
             # Not in async context - run directly
-            discovered = asyncio.run(discover_adapters(filter_by_platform=False, skip_adapters=_SKIP_ADAPTERS))
+            discovered = asyncio.run(discover_adapters(filter_by_platform=True, skip_adapters=_SKIP_ADAPTERS))
 
         for module_info in discovered:
             # Skip internal-only adapters (e.g., ciris_verify)

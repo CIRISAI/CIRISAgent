@@ -2,7 +2,7 @@
   "module": {
     "name": "apple_notes",
     "version": "1.0.0",
-    "description": "Manage Apple Notes via the `memo` CLI on macOS (create, view, edit, delete, search, move, and export notes). Use when a user asks Moltbot to add a note, list notes, search notes, or manage note folders.",
+    "description": "Manage Apple Notes via the `memo` CLI on macOS (create, view, edit, delete, search, move, and export notes).",
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": "https://github.com/antoniorodr/memo"
   },

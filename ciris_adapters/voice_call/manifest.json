@@ -2,12 +2,12 @@
   "module": {
     "name": "voice_call",
     "version": "1.0.0",
-    "description": "Start voice calls via the Moltbot voice-call plugin.",
+    "description": "Start voice calls via the voice-call plugin.",
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": null
   },
   "platform_requirements": ["desktop_cli"],
-  "platform_requirements_rationale": "Requires Moltbot voice plugin which only runs on desktop",
+  "platform_requirements_rationale": "Requires voice plugin which only runs on desktop",
   "services": [
     {
       "type": "TOOL",

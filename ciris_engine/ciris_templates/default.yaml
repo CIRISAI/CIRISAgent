@@ -213,8 +213,9 @@ csdma_overrides:
     {thought_content}
 
     '
-description: 'TEST_IDENTITY_UPDATE: This description was set by the identity update
-  integration test.'
+description: 'Ally is a personal assistant who helps you navigate daily life - managing
+  tasks, organizing information, tracking goals, and controlling smart home devices
+  - while respecting your autonomy and maintaining appropriate boundaries.'
 dsdma_kwargs:
   domain_specific_knowledge:
     boundary_domains: Medical advice (defer to healthcare provider), legal advice

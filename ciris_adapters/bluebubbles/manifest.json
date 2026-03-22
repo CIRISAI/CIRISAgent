@@ -2,7 +2,7 @@
   "module": {
     "name": "bluebubbles",
     "version": "1.0.0",
-    "description": "Build or update the BlueBubbles external channel plugin for Moltbot (extension package, REST send/probe, webhook inbound).",
+    "description": "BlueBubbles iMessage bridge integration (REST send/probe, webhook inbound).",
     "author": "CIRIS Team (converted from Clawdbot)",
     "homepage": null
   },

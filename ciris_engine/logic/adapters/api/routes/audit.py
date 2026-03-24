@@ -360,14 +360,35 @@ def _process_sqlite_entries(
                                 params = json.loads(params_str)
                                 if isinstance(params, dict):
                                     # Copy key fields to metadata for mobile app
+                                    # DEFER params
                                     if "defer_reason" in params:
                                         metadata["defer_reason"] = params["defer_reason"]
                                     if "defer_until" in params:
                                         metadata["defer_until"] = params["defer_until"]
+                                    # TOOL params
                                     if "tool_name" in params:
                                         metadata["tool_name"] = params["tool_name"]
+                                    if "name" in params:  # Alternative key for tool name
+                                        metadata["tool_name"] = params["name"]
+                                    if "parameters" in params:
+                                        # Tool execution parameters
+                                        tool_params = params["parameters"]
+                                        if isinstance(tool_params, dict):
+                                            metadata["tool_parameters"] = json.dumps(tool_params)
+                                        else:
+                                            metadata["tool_parameters"] = str(tool_params)
+                                    # PONDER params
+                                    if "questions" in params:
+                                        metadata["ponder_questions"] = params["questions"]
+                                    # SPEAK params
                                     if "content" in params:
                                         metadata["content"] = params["content"]
+                                    # TASK_COMPLETE params
+                                    if "completion_reason" in params:
+                                        metadata["completion_reason"] = params["completion_reason"]
+                                    # REJECT params
+                                    if "reason" in params:
+                                        metadata["reject_reason"] = params["reason"]
                             except json.JSONDecodeError:
                                 pass
 

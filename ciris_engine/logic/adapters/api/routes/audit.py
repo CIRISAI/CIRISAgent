@@ -108,13 +108,17 @@ def _convert_audit_entry(entry: AuditEntry) -> AuditEntryResponse:
         ctx_dict = ctx.model_dump()
         additional_data = ctx_dict.get("additional_data", {})
 
-        # Debug logging to trace metadata propagation
+        # Log audit entry conversion for debugging
+        logger.info(f"[AUDIT API] Converting graph entry: action={entry.action}, actor={entry.actor}")
         if additional_data:
-            logger.debug(f"_convert_audit_entry - additional_data keys: {additional_data.keys()}")
-            if "tool_name" in additional_data:
-                logger.debug(f"_convert_audit_entry - Found tool_name={additional_data['tool_name']}")
+            logger.info(f"[AUDIT API]   metadata keys: {list(additional_data.keys())}")
+            # Log key fields for debugging
+            for key in ["tool_name", "tool_parameters", "tool_result", "ponder_questions"]:
+                if key in additional_data:
+                    value = str(additional_data[key])[:80]
+                    logger.info(f"[AUDIT API]   {key}: {value}...")
         else:
-            logger.debug("_convert_audit_entry - No additional_data in ctx_dict")
+            logger.info("[AUDIT API]   No additional_data in entry")
 
         # Extract outcome from additional_data (stored by audit service)
         outcome = additional_data.get("outcome") if additional_data else None

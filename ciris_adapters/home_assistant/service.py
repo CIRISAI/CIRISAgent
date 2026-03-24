@@ -484,9 +484,20 @@ class HAIntegrationService:
 
                     if not success:
                         if status == 200 and (not response_data or len(response_data) == 0):
-                            logger.error(
-                                f"[HA DEVICE CONTROL] FAILED! Entity '{entity_id}' not found or not controllable"
-                            )
+                            # HA returned success but no entities were affected
+                            # This can mean: entity doesn't exist, entity doesn't support action,
+                            # or action had no effect (e.g., media_play with nothing paused)
+                            if action in ("media_play", "media_pause", "media_stop"):
+                                logger.error(
+                                    f"[HA DEVICE CONTROL] FAILED! Action '{action}' had no effect on '{entity_id}'. "
+                                    f"For media_play: ensure something is paused/queued. "
+                                    f"To play new music, use Music Assistant tools (ma_search, ma_play)."
+                                )
+                            else:
+                                logger.error(
+                                    f"[HA DEVICE CONTROL] FAILED! Action '{action}' had no effect on '{entity_id}' "
+                                    f"(entity may not exist or doesn't support this action)"
+                                )
                         else:
                             logger.error(f"[HA DEVICE CONTROL] FAILED! Status {status}")
                         if status == 401:
@@ -504,9 +515,18 @@ class HAIntegrationService:
                     error_msg = None
                     if not success:
                         if status == 200 and (not response_data or len(response_data) == 0):
-                            error_msg = (
-                                f"Entity '{entity_id}' not found. Use ha_list_entities to see available entities."
-                            )
+                            # More specific error based on action type
+                            if action in ("media_play", "media_pause", "media_stop"):
+                                error_msg = (
+                                    f"Action '{action}' had no effect on '{entity_id}'. "
+                                    f"media_play resumes paused content; to play NEW music, use Music Assistant tools (ma_search, ma_play)."
+                                )
+                            else:
+                                error_msg = (
+                                    f"Action '{action}' had no effect on '{entity_id}'. "
+                                    f"Entity may not exist or doesn't support this action. "
+                                    f"Use ha_list_entities to verify entity availability."
+                                )
                         else:
                             error_msg = f"Status {status}: {response_text[:200]}"
 

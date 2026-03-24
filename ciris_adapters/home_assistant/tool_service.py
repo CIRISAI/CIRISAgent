@@ -119,14 +119,20 @@ class HAToolService:
                 required=["entity_id", "action"],
             ),
             documentation=ToolDocumentation(
-                quick_start="Control HA devices: use entity_id + action. For media players use media_stop/media_play, not turn_off.",
+                quick_start="Control HA devices: use entity_id + action. For PLAYING NEW MUSIC, use Music Assistant tools (ma_search, ma_play) NOT this tool!",
                 detailed_instructions="""
 # Home Assistant Device Control
+
+**IMPORTANT: To PLAY NEW MUSIC (e.g., "play Enya"), use Music Assistant tools:**
+- **ma_search** - Search for artists/songs/albums
+- **ma_play** - Play music on a player
+
+This tool (ha_device_control) is for device control, NOT for starting new music!
 
 ## Action Reference by Domain
 
 ### media_player.* (Music, Speakers, TVs)
-- **media_play** - Start/resume playback
+- **media_play** - RESUME paused playback ONLY (does NOT start new music!)
 - **media_pause** - Pause playback
 - **media_stop** - STOP playback (USE THIS to stop music!)
 - **media_play_pause** - Toggle play/pause
@@ -196,16 +202,20 @@ class HAToolService:
                     ),
                     ToolGotcha(
                         title="Don't use turn_on to play music",
-                        description="When user says 'play music' or 'resume', use media_play NOT turn_on. turn_on just powers on the device, it doesn't start playback.",
+                        description="When user says 'resume', use media_play NOT turn_on. turn_on just powers on the device, it doesn't start playback.",
                     ),
                     ToolGotcha(
                         title="500 error on turn_off for media players",
                         description="If a media player returns 500 on turn_off, use media_stop instead. Some players (like Music Assistant) don't support turn_off.",
                     ),
+                    ToolGotcha(
+                        title="CRITICAL: media_play does NOT play new music",
+                        description="media_play ONLY resumes paused content. To play NEW music (e.g., 'play Enya'), use Music Assistant tools: ma_search to find content, then ma_play to play it.",
+                    ),
                 ],
             ),
             dma_guidance=ToolDMAGuidance(
-                when_not_to_use="Do not use for querying state - use ha_sensor_query instead. Do not use for automations - use ha_automation_trigger.",
+                when_not_to_use="Do not use to PLAY NEW MUSIC - use Music Assistant tools (ma_search, ma_play) instead. Do not use for querying state - use ha_sensor_query instead. Do not use for automations - use ha_automation_trigger.",
                 ethical_considerations="Device control affects the physical environment. Verify user intent for irreversible actions like unlocking doors.",
             ),
         ),
@@ -820,12 +830,24 @@ Navigate the music library by category.
                 correlation_id=str(uuid.uuid4()),
             )
 
-        # Extract optional parameters
+        # Extract optional parameters for various domains
         kwargs: Dict[str, Any] = {}
+        # Light parameters
         if "brightness" in params:
             kwargs["brightness"] = params["brightness"]
         if "color_temp" in params:
             kwargs["color_temp"] = params["color_temp"]
+        # Media player parameters
+        if "volume_level" in params:
+            kwargs["volume_level"] = params["volume_level"]
+        # Climate parameters
+        if "temperature" in params:
+            kwargs["temperature"] = params["temperature"]
+        if "hvac_mode" in params:
+            kwargs["hvac_mode"] = params["hvac_mode"]
+        # Fan parameters
+        if "percentage" in params:
+            kwargs["percentage"] = params["percentage"]
 
         result = await self.ha_service.control_device(entity_id, action, **kwargs)
 

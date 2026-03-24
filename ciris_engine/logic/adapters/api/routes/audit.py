@@ -492,12 +492,13 @@ async def _merge_audit_sources(
     # Process SQLite entries FIRST (authoritative source with hash chain)
     _process_sqlite_entries(merged, sqlite_entries, seen_timestamps)
 
-    # Only process graph and JSONL entries if NO SQLite entries exist
-    # SQLite is the authoritative source with the hash chain - it contains
-    # complete data. Graph and JSONL are secondary copies with less metadata.
-    if not sqlite_entries:
-        _process_graph_entries(merged, graph_entries, seen_timestamps)
-        _process_jsonl_entries(merged, jsonl_entries)
+    # ALWAYS process graph entries - handler actions (tool, ponder, speak, etc.)
+    # are stored in graph via audit_service.log_action, while system events
+    # go to SQLite. Both sources are needed for a complete audit trail.
+    _process_graph_entries(merged, graph_entries, seen_timestamps)
+
+    # Process JSONL as fallback/backup
+    _process_jsonl_entries(merged, jsonl_entries)
 
     # Update storage_sources for all merged entries and build result
     result = []

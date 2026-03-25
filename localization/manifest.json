@@ -1,11 +1,11 @@
 {
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "CIRIS Agent localization - complete coverage of all LLM-facing text, setup wizard, agent messages, DMA prompts, formatters, handlers, errors, and Discord strings",
   "base_language": "en",
   "generated_by": "claude-opus-4-6",
   "generation_note": "Auto-generated translations. Native speaker review recommended before production use. v2.0 expanded en.json to cover all LLM-facing text including DMA prompts, system formatters, handler messages, escalation guidance, crisis resources, error messages, and Discord field labels. Non-English files cover setup/agent/status sections; prompts/handlers/errors/discord sections pending translation.",
   "created_at": "2026-03-25T00:00:00Z",
-  "updated_at": "2026-03-25T19:30:00Z",
+  "updated_at": "2026-03-25T21:00:00Z",
   "string_categories": {
     "setup": "Setup wizard UI strings",
     "agent": "User-facing agent response messages",
@@ -17,7 +17,11 @@
     "prompts.engine_overview": "Engine overview text sent to LLM",
     "handlers": "Handler follow-up thought messages injected into LLM context",
     "errors": "API and service error messages shown to users",
-    "discord": "Discord embed field labels and deferral messages"
+    "discord": "Discord embed field labels and deferral messages",
+    "adapters.wallet": "Wallet adapter tool descriptions, documentation, error messages (send_money, request_money, get_statement)",
+    "adapters.navigation": "Navigation adapter tool descriptions (geocode, reverse geocode, route calculation)",
+    "adapters.weather": "Weather adapter tool descriptions (current, forecast, alerts) and disclaimers",
+    "mobile": "Kotlin Multiplatform mobile UI strings (setup wizard, interaction screen, action labels, validation errors)"
   },
   "languages": {
     "en": {

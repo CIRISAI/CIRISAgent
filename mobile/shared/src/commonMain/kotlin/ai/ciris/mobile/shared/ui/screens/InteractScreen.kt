@@ -1511,6 +1511,23 @@ private fun ActionExpandedDetails(
                         }
                     }
                 }
+                // Tool result
+                actionDetails.toolResult?.let { result ->
+                    Text(
+                        text = "Result",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF374151)
+                    )
+                    SelectionContainer {
+                        Text(
+                            text = result.take(300) + if (result.length > 300) "..." else "",
+                            fontSize = 10.sp,
+                            color = Color(0xFF1F2937),
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
             }
             ActionType.MEMORIZE, ActionType.RECALL -> {
                 actionDetails.memoryContent?.let { content ->

@@ -991,15 +991,32 @@ def _process_tool_result(result: Any, tool_key: str) -> Any:
 
 
 async def _execute_enrichment_tool(tool_services: List[Any], adapter_type: str, tool: ToolInfo) -> tuple[str, Any]:
-    """Execute a single enrichment tool and return (tool_key, result)."""
+    """Execute a single enrichment tool and return (tool_key, result).
+
+    If the tool has `_info_only=True` in context_enrichment_params, it just surfaces
+    the tool info for the prompt without actually executing the tool.
+    """
     tool_key = f"{adapter_type}:{tool.name}"
+
+    params = tool.context_enrichment_params or {}
+
+    # Handle _info_only flag - just surface the tool info without executing
+    if params.get("_info_only", False):
+        logger.info(f"[CONTEXT_ENRICHMENT] {tool_key} is _info_only, surfacing tool info without execution")
+        # Return tool info as a highlight for the prompt
+        return tool_key, {
+            "_tool_highlight": True,
+            "tool_name": tool.name,
+            "description": tool.description,
+            "when_to_use": tool.when_to_use or tool.description,
+            "message": f"USE THIS TOOL for this type of request: {tool.when_to_use or tool.description}",
+        }
 
     tool_service = await _find_tool_service(tool_services, adapter_type, tool.name)
     if not tool_service:
         logger.warning(f"[CONTEXT_ENRICHMENT] No tool service found for {tool_key}")
         return tool_key, None
 
-    params = tool.context_enrichment_params or {}
     logger.info(f"[CONTEXT_ENRICHMENT] Executing {tool_key} with params: {params}")
 
     result = await _call_async_or_sync_method(tool_service, "execute_tool", tool.name, params)

@@ -954,6 +954,7 @@ class InteractViewModel(
                 val toolName = metadata?.get("tool_name")?.jsonPrimitiveContent() ?: "Unknown Tool"
                 val toolAdapter = metadata?.get("tool_adapter")?.jsonPrimitiveContent() ?: "unknown"
                 val toolParameters = parseToolParameters(metadata?.get("tool_parameters"))
+                val toolResult = metadata?.get("tool_result")?.jsonPrimitiveContent()
 
                 ActionDetails(
                     actionType = actionType,
@@ -962,7 +963,8 @@ class InteractViewModel(
                     description = description,
                     toolName = toolName,
                     toolAdapter = toolAdapter,
-                    toolParameters = toolParameters
+                    toolParameters = toolParameters,
+                    toolResult = toolResult
                 )
             }
             ActionType.MEMORIZE, ActionType.RECALL, ActionType.FORGET -> {
@@ -1011,8 +1013,9 @@ class InteractViewModel(
                 val ponderTopic = metadata?.get("topic")?.jsonPrimitiveContent()
                     ?: metadata?.get("ponder_topic")?.jsonPrimitiveContent()
 
-                // Parse ponder_questions from the double-encoded parameters JSON string
-                val ponderQuestions = parsePonderQuestions(metadata?.get("parameters"))
+                // Parse ponder_questions - check direct metadata first, then nested in parameters
+                val ponderQuestions = parsePonderQuestionsDirect(metadata?.get("ponder_questions"))
+                    .ifEmpty { parsePonderQuestions(metadata?.get("parameters")) }
 
                 ActionDetails(
                     actionType = actionType,
@@ -1107,6 +1110,56 @@ class InteractViewModel(
             // Ignore parse errors - return empty parameters
         }
         return parameters
+    }
+
+    /**
+     * Parse ponder questions directly from metadata (when merged from graph entries).
+     * Can be a JSON array, a JSON-encoded string array, or a double-encoded string.
+     */
+    private fun parsePonderQuestionsDirect(questionsElement: kotlinx.serialization.json.JsonElement?): List<String> {
+        if (questionsElement == null) return emptyList()
+
+        try {
+            // Case 1: Already a JSON array
+            if (questionsElement is kotlinx.serialization.json.JsonArray) {
+                return questionsElement.mapNotNull { element ->
+                    when (element) {
+                        is kotlinx.serialization.json.JsonPrimitive -> element.content
+                        else -> null
+                    }
+                }
+            }
+
+            // Case 2: JSON-encoded string - may be single or double encoded
+            var questionsStr = questionsElement.jsonPrimitiveContent() ?: return emptyList()
+
+            // Handle double-encoding: if it's a JSON string containing a JSON array string
+            // e.g., "\"[\\\"Q1\\\", \\\"Q2\\\"]\"" - parse first to get the inner string
+            if (questionsStr.startsWith("\"") || questionsStr.startsWith("\\\"")) {
+                try {
+                    val unescaped = kotlinx.serialization.json.Json.parseToJsonElement(questionsStr)
+                    if (unescaped is kotlinx.serialization.json.JsonPrimitive) {
+                        questionsStr = unescaped.content
+                    }
+                } catch (_: Exception) {
+                    // First unescape failed, continue with original string
+                }
+            }
+
+            // Now parse the array
+            val questionsJson = kotlinx.serialization.json.Json.parseToJsonElement(questionsStr)
+            if (questionsJson is kotlinx.serialization.json.JsonArray) {
+                return questionsJson.mapNotNull { element ->
+                    when (element) {
+                        is kotlinx.serialization.json.JsonPrimitive -> element.content
+                        else -> null
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logInfo("parsePonderQuestionsDirect", "Failed to parse: ${e.message}")
+        }
+        return emptyList()
     }
 
     /**

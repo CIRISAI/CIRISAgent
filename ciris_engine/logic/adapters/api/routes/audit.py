@@ -97,28 +97,12 @@ class AuditExportResponse(BaseModel):
 
 def _convert_audit_entry(entry: AuditEntry) -> AuditEntryResponse:
     """Convert AuditEntry to API response format."""
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     # Convert context to AuditContext
     ctx = entry.context
     if hasattr(ctx, "model_dump"):
         # Convert AuditEntryContext to dict, then to AuditContext
         ctx_dict = ctx.model_dump()
         additional_data = ctx_dict.get("additional_data", {})
-
-        # Log audit entry conversion for debugging
-        logger.info(f"[AUDIT API] Converting graph entry: action={entry.action}, actor={entry.actor}")
-        if additional_data:
-            logger.info(f"[AUDIT API]   metadata keys: {list(additional_data.keys())}")
-            # Log key fields for debugging
-            for key in ["tool_name", "tool_parameters", "tool_result", "ponder_questions"]:
-                if key in additional_data:
-                    value = str(additional_data[key])[:80]
-                    logger.info(f"[AUDIT API]   {key}: {value}...")
-        else:
-            logger.info("[AUDIT API]   No additional_data in entry")
 
         # Extract outcome from additional_data (stored by audit service)
         outcome = additional_data.get("outcome") if additional_data else None
@@ -146,7 +130,6 @@ def _convert_audit_entry(entry: AuditEntry) -> AuditEntryResponse:
         )
     else:
         # If it's not an AuditEntryContext, create a minimal AuditContext
-        logger.debug("_convert_audit_entry - ctx doesn't have model_dump, using str(ctx)")
         context = AuditContext(description=str(ctx) if ctx else None)
 
     return AuditEntryResponse(
@@ -218,6 +201,18 @@ async def _query_sqlite_audit(
     return await loop.run_in_executor(None, _sync_query_sqlite_audit, db_path, start_time, end_time, limit, offset)
 
 
+def _normalize_timestamp_str(ts_str: str) -> str:
+    """Normalize timestamp string to ISO format for consistent deduplication.
+
+    SQLite uses: 2026-03-25T01:25:49.386438+00:00 (with T)
+    JSONL uses:  2026-03-25 01:21:00.503015+00:00 (with space)
+
+    Normalizes to ISO format with 'T' separator.
+    """
+    # Replace space with T for ISO format consistency
+    return ts_str.replace(" ", "T")
+
+
 def _parse_jsonl_entry_timestamp(
     entry: dict[str, object],
 ) -> Optional[datetime]:  # SERIALIZATION BOUNDARY - JSONL raw entries
@@ -225,7 +220,7 @@ def _parse_jsonl_entry_timestamp(
     entry_time_str = get_str_optional(entry, "timestamp") or get_str_optional(entry, "event_timestamp")
     if entry_time_str:
         try:
-            return datetime.fromisoformat(entry_time_str.replace("Z", UTC_TIMEZONE_SUFFIX))
+            return datetime.fromisoformat(entry_time_str.replace("Z", UTC_TIMEZONE_SUFFIX).replace(" ", "T"))
         except ValueError:
             return None
     return None
@@ -299,17 +294,57 @@ def _process_graph_entries(
 ) -> None:
     """Process graph entries and add them to merged results.
 
-    Skip entries that already exist in SQLite (matched by timestamp + action).
-    SQLite entries are preferred as they contain the authoritative hash chain.
+    Graph entries contain the full handler action metadata (ponder_questions, tool_parameters, etc.)
+    while SQLite entries may only have partial data. We merge graph data INTO existing SQLite
+    entries rather than skipping graph entries entirely.
     """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
     for entry in graph_entries:
-        # Create a dedup key based on timestamp + action to match SQLite entries
-        dedup_key = f"{entry.timestamp.isoformat()}_{entry.action}"
+        # Create a dedup key based on timestamp + action
+        # Use normalized ISO format for consistent matching
+        normalized_ts = _normalize_timestamp_str(entry.timestamp.isoformat())
+        dedup_key = f"{normalized_ts}_{entry.action}"
+        entry_id = getattr(entry, "id", f"audit_{entry.timestamp.isoformat()}_{entry.actor}")
+
+        # Check if graph entry has additional_data (rich metadata from handlers)
+        has_metadata = False
+        if hasattr(entry, "context") and hasattr(entry.context, "additional_data"):
+            additional_data = entry.context.additional_data
+            if additional_data:
+                has_metadata = True
+
         if dedup_key in seen_timestamps:
-            # Skip - this entry already exists from SQLite with better metadata
+            # SQLite entry exists - merge graph metadata into it
+            if has_metadata:
+                # Find the matching SQLite entry and merge metadata from graph
+                found_match = False
+                for entry_key, merged_entry in merged.items():
+                    sqlite_dedup = f"{_normalize_timestamp_str(merged_entry.entry.timestamp.isoformat())}_{merged_entry.entry.action}"
+                    if sqlite_dedup == dedup_key:
+                        found_match = True
+
+                        # Merge graph metadata into SQLite entry's context
+                        if merged_entry.entry.context.metadata is None:
+                            merged_entry.entry.context.metadata = {}
+
+                        # Copy graph metadata that SQLite doesn't have
+                        graph_ctx = entry.context
+                        if hasattr(graph_ctx, "additional_data") and graph_ctx.additional_data:
+                            for key, value in graph_ctx.additional_data.items():
+                                if key not in merged_entry.entry.context.metadata:
+                                    merged_entry.entry.context.metadata[key] = value
+
+                        merged_entry.sources.append("graph")
+                        break
+                if not found_match:
+                    logger.warning(f"[AUDIT API] No matching SQLite entry found for dedup_key={dedup_key}")
             continue
 
-        entry_id = getattr(entry, "id", f"audit_{entry.timestamp.isoformat()}_{entry.actor}")
+        # New entry - add to merged results
+        logger.info(f"[AUDIT API]   Adding new entry with id={entry_id}")
         if entry_id not in merged:
             merged[entry_id] = _MergedAuditEntry(entry=_convert_audit_entry(entry), sources=["graph"])
             seen_timestamps.add(dedup_key)
@@ -318,7 +353,8 @@ def _process_graph_entries(
 
 
 def _process_sqlite_entries(
-    merged: Dict[str, _MergedAuditEntry], sqlite_entries: list[dict[str, object]], seen_timestamps: set[str]
+    merged: Dict[str, _MergedAuditEntry], sqlite_entries: list[dict[str, object]], seen_timestamps: set[str],
+    dedup_to_entry: Dict[str, str]
 ) -> None:  # SERIALIZATION BOUNDARY - SQLite query results
     """Process SQLite entries and add them to merged results.
 
@@ -332,8 +368,11 @@ def _process_sqlite_entries(
         entry_id = get_str_optional(sqlite_entry, "event_id") or f"audit_{event_timestamp}_{originator_id}"
 
         # Track timestamp + action for deduplication with graph entries
-        dedup_key = f"{event_timestamp}_{event_type}"
+        # Normalize timestamp format for consistent matching
+        normalized_ts = _normalize_timestamp_str(event_timestamp)
+        dedup_key = f"{normalized_ts}_{event_type}"
         seen_timestamps.add(dedup_key)
+        dedup_to_entry[dedup_key] = entry_id  # Map dedup_key to entry_id for later source merging
 
         if entry_id not in merged:
             # Convert SQLite entry to AuditEntryResponse format
@@ -381,8 +420,10 @@ def _process_sqlite_entries(
                                             metadata["tool_parameters"] = json.dumps(tool_params)
                                         else:
                                             metadata["tool_parameters"] = str(tool_params)
-                                    # PONDER params
-                                    if "questions" in params:
+                                    # PONDER params - check both key names
+                                    if "ponder_questions" in params:
+                                        metadata["ponder_questions"] = params["ponder_questions"]
+                                    elif "questions" in params:
                                         metadata["ponder_questions"] = params["questions"]
                                     # SPEAK params
                                     if "content" in params:
@@ -431,13 +472,30 @@ def _process_sqlite_entries(
 
 
 def _process_jsonl_entries(
-    merged: Dict[str, _MergedAuditEntry], jsonl_entries: list[dict[str, object]]
+    merged: Dict[str, _MergedAuditEntry], jsonl_entries: list[dict[str, object]], seen_timestamps: set[str],
+    dedup_to_entry: Dict[str, str]
 ) -> None:  # SERIALIZATION BOUNDARY - JSONL raw entries
-    """Process JSONL entries and add them to merged results."""
+    """Process JSONL entries and add them to merged results.
+
+    If entry already exists from SQLite/graph (by timestamp+action), just add 'jsonl' to sources.
+    """
     for jsonl_entry in jsonl_entries:
-        timestamp_str = get_str(jsonl_entry, "timestamp", "")
+        timestamp_str = get_str(jsonl_entry, "timestamp", "") or get_str(jsonl_entry, "event_timestamp", "")
         actor_str = get_str(jsonl_entry, "actor", "")
+        action = get_str_optional(jsonl_entry, "action") or get_str(jsonl_entry, "event_type", "unknown")
         entry_id = get_str_optional(jsonl_entry, "id") or f"audit_{timestamp_str}_{actor_str}"
+
+        # Check timestamp-based deduplication - add source to existing entry
+        # Normalize timestamp format for consistent matching with SQLite
+        normalized_ts = _normalize_timestamp_str(timestamp_str)
+        dedup_key = f"{normalized_ts}_{action}"
+        if dedup_key in seen_timestamps:
+            # Find the existing entry and add jsonl to its sources
+            existing_entry_id = dedup_to_entry.get(dedup_key)
+            if existing_entry_id and existing_entry_id in merged:
+                if "jsonl" not in merged[existing_entry_id].sources:
+                    merged[existing_entry_id].sources.append("jsonl")
+            continue
 
         if entry_id not in merged:
             # Convert JSONL entry to AuditEntryResponse format
@@ -485,24 +543,23 @@ async def _merge_audit_sources(
 ) -> List[AuditEntryResponse]:  # SERIALIZATION BOUNDARY - Raw database results
     """Merge audit entries from all sources and track storage locations.
 
-    SQLite entries are the authoritative source with the hash chain and
-    complete metadata. When SQLite entries exist, we skip graph entries
-    entirely to avoid duplicates (timestamp precision differences make
-    exact matching unreliable).
+    Each event should appear ONCE with storage_sources showing which backends have it.
+    SQLite entries are the authoritative source with the hash chain.
+    Graph entries provide rich metadata (ponder_questions, tool_result, etc.).
+    JSONL provides backup logging.
     """
     merged: Dict[str, _MergedAuditEntry] = {}  # Track entries by ID with their sources
     seen_timestamps: set[str] = set()  # Track timestamp+action for deduplication
+    dedup_to_entry: Dict[str, str] = {}  # Map dedup_key -> entry_id for source tracking
 
     # Process SQLite entries FIRST (authoritative source with hash chain)
-    _process_sqlite_entries(merged, sqlite_entries, seen_timestamps)
+    _process_sqlite_entries(merged, sqlite_entries, seen_timestamps, dedup_to_entry)
 
-    # ALWAYS process graph entries - handler actions (tool, ponder, speak, etc.)
-    # are stored in graph via audit_service.log_action, while system events
-    # go to SQLite. Both sources are needed for a complete audit trail.
+    # Process graph entries - merge metadata into SQLite entries, add 'graph' source
     _process_graph_entries(merged, graph_entries, seen_timestamps)
 
-    # Process JSONL as fallback/backup
-    _process_jsonl_entries(merged, jsonl_entries)
+    # Process JSONL - just add 'jsonl' source to existing entries
+    _process_jsonl_entries(merged, jsonl_entries, seen_timestamps, dedup_to_entry)
 
     # Update storage_sources for all merged entries and build result
     result = []
@@ -564,15 +621,10 @@ async def query_audit_entries(
     )
 
     try:
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         # Query all 3 audit sources concurrently
 
         # Query graph memory (existing functionality)
         graph_entries = await audit_service.query_audit_trail(query)
-        logger.info(f"[AUDIT API] Graph entries returned: {len(graph_entries)}")
 
         # Get the proper data directory for SQLite path
         from ciris_engine.logic.utils.path_resolution import get_data_dir
@@ -580,8 +632,6 @@ async def query_audit_entries(
         data_dir = get_data_dir()
         sqlite_path = str(data_dir / "ciris_audit.db")
         jsonl_path = str(data_dir / "audit_logs.jsonl")
-        logger.info(f"[AUDIT API] SQLite path: {sqlite_path}, exists: {Path(sqlite_path).exists()}")
-        logger.info(f"[AUDIT API] JSONL path: {jsonl_path}, exists: {Path(jsonl_path).exists()}")
 
         # Query SQLite database directly
         sqlite_task = _query_sqlite_audit(
@@ -603,25 +653,13 @@ async def query_audit_entries(
 
         # Execute SQLite and JSONL queries concurrently
         sqlite_entries, jsonl_entries = await asyncio.gather(sqlite_task, jsonl_task)
-        logger.info(f"[AUDIT API] SQLite entries returned: {len(sqlite_entries)}")
-        logger.info(f"[AUDIT API] JSONL entries returned: {len(jsonl_entries)}")
-
-        # Log sample of SQLite entries to debug
-        for i, entry in enumerate(sqlite_entries[:3]):
-            logger.info(
-                f"[AUDIT API] SQLite entry {i}: event_type={entry.get('event_type')}, timestamp={entry.get('event_timestamp')}"
-            )
 
         # Merge all sources and track storage locations
         response_entries = await _merge_audit_sources(graph_entries, sqlite_entries, jsonl_entries)
-        logger.info(f"[AUDIT API] After merge: {len(response_entries)} total entries")
 
         # Apply final pagination after merging
         paginated_entries = response_entries[offset : offset + limit]
         total = len(response_entries)
-        logger.info(
-            f"[AUDIT API] Returning {len(paginated_entries)} entries (offset={offset}, limit={limit}, total={total})"
-        )
 
         return SuccessResponse(
             data=AuditEntriesResponse(entries=paginated_entries, total=total, offset=offset, limit=limit),

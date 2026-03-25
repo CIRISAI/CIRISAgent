@@ -238,11 +238,27 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         that provide available resources (e.g., entity IDs) for parameter selection.
         """
         if not context_enrichment:
+            logger.info("[TSASPDMA] No context enrichment data provided")
             return ""
+
+        logger.info(f"[TSASPDMA] Formatting context enrichment with {len(context_enrichment)} entries")
+        logger.info(f"[TSASPDMA] Context enrichment keys: {list(context_enrichment.keys())}")
 
         sections = []
         for tool_key, result in context_enrichment.items():
+            logger.info(f"[TSASPDMA] Processing enrichment: {tool_key} = {type(result)}")
             if not result:
+                continue
+
+            # Handle _tool_highlight from _info_only tools
+            if isinstance(result, dict) and result.get("_tool_highlight"):
+                tool_name = result.get("tool_name", tool_key)
+                when_to_use = result.get("when_to_use", "")
+                message = result.get("message", "")
+                sections.append(f"--- IMPORTANT TOOL AVAILABLE: {tool_name} ---")
+                sections.append(f"  ⭐ {message}")
+                sections.append(f"  tool_name=\"{tool_name}\" - Use this EXACT name!")
+                logger.info(f"[TSASPDMA] Added tool highlight for: {tool_name}")
                 continue
 
             # Format based on tool type
@@ -366,12 +382,17 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         - SPEAK: Ask user for clarification
         - PONDER: Reconsider the approach
         """
+        logger.info(f"[TSASPDMA] evaluate_tool_action called for tool: {tool_name}")
+        logger.info(f"[TSASPDMA] Tool info: name={tool_info.name}, when_to_use={tool_info.when_to_use[:50] if tool_info.when_to_use else 'N/A'}...")
+        logger.info(f"[TSASPDMA] Context enrichment received: {list(context_enrichment.keys()) if context_enrichment else 'None'}")
+
         # Access the text content directly from ThoughtContent, not str() which gives repr
         thought_content_str = (
             original_thought.content.text
             if hasattr(original_thought.content, "text")
             else str(original_thought.content)
         )
+        logger.info(f"[TSASPDMA] Original thought: {thought_content_str[:100]}...")
 
         messages = self._create_tsaspdma_messages(
             tool_name=tool_name,

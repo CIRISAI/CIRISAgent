@@ -847,16 +847,12 @@ class HAIntegrationService:
             Dict with play result including verification status
         """
         try:
-            # Get MA config entry ID (required for play_media service)
-            config_entry_id = await self._get_ma_config_entry_id()
-
+            # Build service data - config_entry_id is NOT required and causes 400 if invalid
             service_data: Dict[str, Any] = {
                 "media_id": media_id,
                 "media_type": media_type,
                 "enqueue": enqueue,
             }
-            if config_entry_id:
-                service_data["config_entry_id"] = config_entry_id
             if player_id:
                 service_data["entity_id"] = player_id
 
@@ -971,12 +967,15 @@ class HAIntegrationService:
                 and (
                     e.entity_id.startswith("media_player.mass_")
                     or e.attributes.get("mass_player_id")
+                    or e.attributes.get("mass_player_type")  # MA-managed player
+                    or e.attributes.get("app_id") == "music_assistant"  # Currently using MA
                     or "music_assistant" in str(e.attributes.get("friendly_name", "")).lower()
                 )
             ]
 
             if not ma_players:
                 # Fall back to all media players if no MA-specific ones found
+                logger.warning("[MA] No Music Assistant players found, returning all media players")
                 ma_players = [
                     {
                         "entity_id": e.entity_id,
@@ -987,7 +986,7 @@ class HAIntegrationService:
                     if e.domain == "media_player"
                 ]
 
-            logger.info(f"[MA] Get players: found {len(ma_players)}")
+            logger.info(f"[MA] Get players: found {len(ma_players)} (MA-controlled)")
             return {"success": True, "players": ma_players}
         except Exception as e:
             logger.error(f"[MA] Get players exception: {e}")

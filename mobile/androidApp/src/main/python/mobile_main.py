@@ -837,10 +837,10 @@ def verify_code_integrity(package_names: list = None, save_to_file: bool = True)
 def setup_android_environment():
     """Configure environment for Android on-device operation.
 
-    Sets up CIRIS_HOME and loads .env if present.
-    First-run detection is handled by is_first_run() which is Android-aware.
+    Uses the centralized ensure_ciris_home_env() for cross-platform CIRIS_HOME setup,
+    then loads .env if present.
 
-    Uses path_resolution.py for all path logic - only CIRIS_HOME is set here.
+    First-run detection is handled by is_first_run() which is Android-aware.
     """
     from dotenv import load_dotenv
 
@@ -848,27 +848,21 @@ def setup_android_environment():
         logger.warning("ANDROID_DATA not set - not running on Android?")
         return
 
-    # Step 1: Set CIRIS_HOME (the only env var we set manually)
-    # This is the root for path_resolution.py to build all other paths
-    android_data = Path(os.environ["ANDROID_DATA"])
-    ciris_home = android_data / "data" / ANDROID_PACKAGE_NAME / "files" / "ciris"
-    os.environ.setdefault("CIRIS_HOME", str(ciris_home))
+    # Use centralized path resolution for CIRIS_HOME setup
+    # This handles all platforms: Android, iOS, Linux, macOS, Windows, Docker
+    from ciris_engine.logic.utils.path_resolution import (
+        ensure_ciris_home_env,
+        get_data_dir,
+        get_logs_dir,
+    )
 
-    # Step 2: Import path_resolution and use it for all paths
-    from ciris_engine.logic.utils.path_resolution import get_ciris_home, get_data_dir, get_logs_dir
-
-    ciris_home = get_ciris_home()
+    # This sets CIRIS_HOME, CIRIS_DATA_DIR, and creates directories
+    ciris_home = ensure_ciris_home_env()
     data_dir = get_data_dir()
     logs_dir = get_logs_dir()
 
-    # Step 3: Ensure directories exist
-    ciris_home.mkdir(parents=True, exist_ok=True)
-    data_dir.mkdir(parents=True, exist_ok=True)
+    # Ensure logs directory exists (ensure_ciris_home_env creates home and data)
     logs_dir.mkdir(parents=True, exist_ok=True)
-
-    # NOTE: Do NOT set CIRIS_DATA_DIR or CIRIS_LOG_DIR here!
-    # CIRISVerify handles its own path resolution internally.
-    # Setting these env vars causes path inconsistencies between Python and Rust.
 
     logger.info(f"Android paths: CIRIS_HOME={ciris_home}, data={data_dir}, logs={logs_dir}")
 

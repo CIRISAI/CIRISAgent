@@ -9,7 +9,14 @@ import ai.ciris.mobile.shared.platform.getOAuthProviderName
 import ai.ciris.mobile.shared.platform.getPlatform
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.platform.TestAutomation
 
+import ai.ciris.mobile.shared.models.ConfigCompleteData
+import ai.ciris.mobile.shared.models.ConfigSessionData
+import ai.ciris.mobile.shared.models.ConfigStepResultData
+import ai.ciris.mobile.shared.models.DiscoveredItemData
+import ai.ciris.mobile.shared.models.LoadableAdaptersData
+import ai.ciris.mobile.shared.ui.components.AdapterWizardDialog
 import ai.ciris.mobile.shared.viewmodels.DeviceAuthStatus
 import ai.ciris.mobile.shared.viewmodels.LlmValidationResult
 import ai.ciris.mobile.shared.viewmodels.ModelInfo
@@ -113,6 +120,78 @@ fun SetupScreen(
     val coroutineScope = rememberCoroutineScope()
     val semantic = SemanticColors.forTheme(ColorTheme.DEFAULT, isDark = false)
 
+    // Observe text input requests for test automation
+    val textInputRequest by TestAutomation.textInputRequests.collectAsState()
+
+    // Handle incoming text input requests
+    LaunchedEffect(textInputRequest) {
+        textInputRequest?.let { request ->
+            when (request.testTag) {
+                "input_public_api_email" -> {
+                    if (request.clearFirst) {
+                        viewModel.setPublicApiEmail(request.text)
+                    } else {
+                        viewModel.setPublicApiEmail(state.publicApiEmail + request.text)
+                    }
+                    TestAutomation.clearTextInputRequest()
+                }
+                "input_username" -> {
+                    if (request.clearFirst) {
+                        viewModel.setUsername(request.text)
+                    } else {
+                        viewModel.setUsername(state.username + request.text)
+                    }
+                    TestAutomation.clearTextInputRequest()
+                }
+                "input_password" -> {
+                    if (request.clearFirst) {
+                        viewModel.setUserPassword(request.text)
+                    } else {
+                        viewModel.setUserPassword(state.userPassword + request.text)
+                    }
+                    TestAutomation.clearTextInputRequest()
+                }
+                "input_api_key" -> {
+                    if (request.clearFirst) {
+                        viewModel.setLlmApiKey(request.text)
+                    } else {
+                        viewModel.setLlmApiKey(state.llmApiKey + request.text)
+                    }
+                    TestAutomation.clearTextInputRequest()
+                }
+                "input_llm_model_text" -> {
+                    if (request.clearFirst) {
+                        viewModel.setLlmModel(request.text)
+                    } else {
+                        viewModel.setLlmModel(state.llmModel + request.text)
+                    }
+                    TestAutomation.clearTextInputRequest()
+                }
+            }
+        }
+    }
+
+    // Set up the wizard API for adapter configuration
+    LaunchedEffect(Unit) {
+        viewModel.setWizardApi(object : SetupViewModel.AdapterWizardApi {
+            override suspend fun getLoadableAdapters(): LoadableAdaptersData {
+                return apiClient.getLoadableAdapters()
+            }
+            override suspend fun startAdapterConfiguration(adapterType: String): ConfigSessionData {
+                return apiClient.startAdapterConfiguration(adapterType)
+            }
+            override suspend fun executeConfigurationStep(sessionId: String, stepData: Map<String, String>): ConfigStepResultData {
+                return apiClient.executeConfigurationStep(sessionId, stepData)
+            }
+            override suspend fun getConfigurationSessionStatus(sessionId: String): ConfigSessionData {
+                return apiClient.getConfigurationSessionStatus(sessionId)
+            }
+            override suspend fun completeAdapterConfiguration(sessionId: String): ConfigCompleteData {
+                return apiClient.completeAdapterConfiguration(sessionId)
+            }
+        })
+    }
+
     // Load adapters and templates when entering OPTIONAL_FEATURES step
     LaunchedEffect(state.currentStep) {
         if (state.currentStep == SetupStep.OPTIONAL_FEATURES) {
@@ -141,6 +220,56 @@ fun SetupScreen(
                 }
             }
         }
+    }
+
+    // Adapter Wizard Dialog (shown when configuring adapters that require setup)
+    if (state.showAdapterWizard) {
+        // Create a minimal LoadableAdaptersData for the dialog to show wizard steps
+        // The wizard session is what drives the actual steps
+        val wizardLoadableAdapters = state.adapterWizardType?.let { adapterType ->
+            state.availableAdapters.find { it.id == adapterType }?.let { adapter ->
+                LoadableAdaptersData(
+                    adapters = listOf(
+                        ai.ciris.mobile.shared.models.LoadableAdapterData(
+                            adapterType = adapter.id,
+                            name = adapter.name,
+                            description = adapter.description,
+                            requiresConfiguration = adapter.requires_config,
+                            workflowType = null,
+                            stepCount = state.adapterWizardSession?.totalSteps ?: 0,
+                            requiresOauth = false,
+                            serviceTypes = emptyList(),
+                            platformAvailable = true
+                        )
+                    ),
+                    totalCount = 1,
+                    configurableCount = 1,
+                    directLoadCount = 0
+                )
+            }
+        }
+
+        AdapterWizardDialog(
+            loadableAdapters = wizardLoadableAdapters,
+            wizardSession = state.adapterWizardSession,
+            isLoading = state.adapterWizardLoading,
+            error = state.adapterWizardError,
+            discoveredItems = state.adapterDiscoveredItems,
+            discoveryExecuted = state.adapterDiscoveryExecuted,
+            oauthUrl = state.adapterOAuthUrl,
+            awaitingOAuthCallback = state.adapterAwaitingOAuthCallback,
+            selectOptions = state.adapterSelectOptions,
+            onSelectType = { /* Not used - we go directly to wizard session */ },
+            onLoadDirectly = { /* Not used during setup */ },
+            onSubmitStep = { stepData -> viewModel.submitAdapterWizardStep(stepData) },
+            onSelectDiscoveredItem = { item -> viewModel.selectAdapterDiscoveredItem(item) },
+            onSubmitManualUrl = { url -> viewModel.submitAdapterManualUrl(url) },
+            onRetryDiscovery = { viewModel.executeAdapterDiscoveryStep() },
+            onInitiateOAuth = { viewModel.initiateAdapterOAuthStep() },
+            onCheckOAuthStatus = { viewModel.checkAdapterOAuthOnResume() },
+            onBack = { viewModel.adapterWizardBack() },
+            onDismiss = { viewModel.closeAdapterWizard() }
+        )
     }
 
     Surface(
@@ -318,17 +447,19 @@ private fun StepIndicators(
     }
 
     Row(
-        modifier = modifier,
+        modifier = modifier.testable("setup_step_indicators"),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
         steps.forEachIndexed { index, (step, number) ->
             val isActive = currentStep >= step
             val isComplete = currentStep > step
+            val stepName = step.name.lowercase()
 
             Box(
                 modifier = Modifier
                     .size(32.dp)
+                    .testable("step_indicator_$stepName", if (isComplete) "complete" else if (isActive) "active" else "inactive")
                     .background(
                         color = if (isActive) SetupColors.Primary else SetupColors.GrayLight,
                         shape = CircleShape
@@ -1751,12 +1882,15 @@ private fun OptionalFeaturesStep(
                 isEnabled = true,
                 isRequired = true,
                 requiresConfig = false,
-                onToggle = {}
+                isConfigured = false,
+                onToggle = {},
+                onConfigure = null
             )
         } else {
             state.availableAdapters.forEach { adapter ->
                 val isEnabled = state.enabledAdapterIds.contains(adapter.id)
                 val isRequired = adapter.id == "api"
+                val isConfigured = state.configuredAdapterData.containsKey(adapter.id)
 
                 AdapterToggleItem(
                     name = adapter.name,
@@ -1764,11 +1898,21 @@ private fun OptionalFeaturesStep(
                     isEnabled = isEnabled,
                     isRequired = isRequired,
                     requiresConfig = adapter.requires_config,
+                    isConfigured = isConfigured,
                     configFields = adapter.config_fields,
                     onToggle = { enabled ->
                         if (!isRequired) {
-                            viewModel.toggleAdapter(adapter.id, enabled)
+                            if (enabled && adapter.requires_config && !isConfigured) {
+                                // Launch the wizard for adapters that require configuration
+                                viewModel.startAdapterWizard(adapter.id)
+                            } else {
+                                viewModel.toggleAdapter(adapter.id, enabled)
+                            }
                         }
+                    },
+                    onConfigure = {
+                        // Allow re-configuration of already configured adapters
+                        viewModel.startAdapterWizard(adapter.id)
                     }
                 )
 
@@ -1924,13 +2068,22 @@ private fun AdapterToggleItem(
     isEnabled: Boolean,
     isRequired: Boolean,
     requiresConfig: Boolean,
+    isConfigured: Boolean = false,
     configFields: List<String> = emptyList(),
-    onToggle: (Boolean) -> Unit
+    onToggle: (Boolean) -> Unit,
+    onConfigure: (() -> Unit)? = null
 ) {
+    val semantic = SemanticColors.forTheme(ColorTheme.DEFAULT, isDark = false)
+
+    val adapterTag = name.lowercase().replace(" ", "_")
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = if (isEnabled) SetupColors.SuccessLight else SetupColors.GrayLight,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .testableClickable("adapter_toggle_$adapterTag") {
+                if (!isRequired) onToggle(!isEnabled)
+            }
     ) {
         Row(
             modifier = Modifier
@@ -1962,16 +2115,32 @@ private fun AdapterToggleItem(
                     }
                     if (requiresConfig && isEnabled) {
                         Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = SemanticColors.forTheme(ColorTheme.DEFAULT, isDark = false).surfaceWarning
-                        ) {
-                            Text(
-                                text = "Needs Config",
-                                color = SemanticColors.forTheme(ColorTheme.DEFAULT, isDark = false).onWarning,
-                                fontSize = 10.sp,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
+                        if (isConfigured) {
+                            // Show configured badge (green)
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = semantic.surfaceSuccess
+                            ) {
+                                Text(
+                                    text = "Configured",
+                                    color = semantic.onSuccess,
+                                    fontSize = 10.sp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        } else {
+                            // Show needs config badge (warning)
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = semantic.surfaceWarning
+                            ) {
+                                Text(
+                                    text = "Needs Config",
+                                    color = semantic.onWarning,
+                                    fontSize = 10.sp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -1981,10 +2150,26 @@ private fun AdapterToggleItem(
                     fontSize = 12.sp,
                     modifier = Modifier.padding(top = 2.dp)
                 )
-                if (requiresConfig && configFields.isNotEmpty() && isEnabled) {
+
+                // Show configure button for configurable adapters
+                if (requiresConfig && isEnabled && onConfigure != null) {
+                    TextButton(
+                        onClick = onConfigure,
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .testableClickable("btn_configure_${name.lowercase().replace(" ", "_")}") { onConfigure() }
+                    ) {
+                        Text(
+                            text = if (isConfigured) "Reconfigure" else "Configure Now",
+                            color = SetupColors.Primary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                } else if (requiresConfig && configFields.isNotEmpty() && isEnabled && !isConfigured) {
                     Text(
                         text = "Required: ${configFields.joinToString(", ")}",
-                        color = SemanticColors.forTheme(ColorTheme.DEFAULT, isDark = false).onWarning,
+                        color = semantic.onWarning,
                         fontSize = 11.sp,
                         modifier = Modifier.padding(top = 4.dp)
                     )

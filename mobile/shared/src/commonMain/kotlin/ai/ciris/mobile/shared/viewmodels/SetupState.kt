@@ -1,6 +1,10 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.models.CommunicationAdapter
+import ai.ciris.mobile.shared.models.ConfigSessionData
+import ai.ciris.mobile.shared.models.DiscoveredItemData
+import ai.ciris.mobile.shared.models.LoadableAdaptersData
+import ai.ciris.mobile.shared.models.SelectOptionData
 import ai.ciris.mobile.shared.models.SetupMode
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -179,6 +183,26 @@ data class SetupFormState(
     val enabledAdapterIds: Set<String> = setOf("api"),
     // Loading state for adapter list
     val adaptersLoading: Boolean = false,
+
+    // Adapter wizard state (for adapters that require configuration)
+    // This mirrors AdaptersViewModel's wizard state for use during setup
+    val showAdapterWizard: Boolean = false,
+    val adapterWizardType: String? = null,  // Adapter type being configured (e.g., "home_assistant")
+    @kotlinx.serialization.Transient
+    val loadableAdaptersData: LoadableAdaptersData? = null,
+    @kotlinx.serialization.Transient
+    val adapterWizardSession: ConfigSessionData? = null,
+    val adapterWizardError: String? = null,
+    val adapterWizardLoading: Boolean = false,
+    @kotlinx.serialization.Transient
+    val adapterDiscoveredItems: List<DiscoveredItemData> = emptyList(),
+    val adapterDiscoveryExecuted: Boolean = false,
+    val adapterOAuthUrl: String? = null,
+    val adapterAwaitingOAuthCallback: Boolean = false,
+    @kotlinx.serialization.Transient
+    val adapterSelectOptions: List<SelectOptionData> = emptyList(),
+    // Map of adapterId -> completed configuration for adapters configured during setup
+    val configuredAdapterData: Map<String, Map<String, String>> = emptyMap(),
 
     // Validation state
     val isValidating: Boolean = false,

@@ -304,7 +304,9 @@ def _store_user_preferences(user_id: str, setup: SetupCompleteRequest) -> None:
 
     time_service = TimeService()
     add_graph_node(node, time_service, None)
-    logger.info(f"Stored user preferences for {user_id}: lang={setup.preferred_language}, location={attributes.get('location', 'not set')}")
+    lang = attributes.get("preferred_language", "not set")
+    loc = attributes.get("location", "not set")
+    logger.info(f"Stored user preferences for {user_id}: lang={lang}, location={loc}")
 
 
 async def _log_wa_list(auth_service: Any, phase: str) -> None:

@@ -13,7 +13,12 @@ decision_format: "Return JSON with FLAT fields (no nested action_parameters). Re
   - RECALL: recall_query (string), recall_node_type (string, optional), recall_scope (string, optional), recall_limit (integer, optional)\n\
   - FORGET: forget_node_id (string), forget_reason (string)\n\
   - TASK_COMPLETE: completion_reason (string)"
-closing_reminder: Recall CIRIS principles override personal preference.
+closing_reminder: "Recall CIRIS principles override personal preference.\n\n\
+  LANGUAGE MATCHING: When composing speak_content, respond in the same language the\
+  \ user wrote in. If the user writes in Amharic, respond in Amharic. If they write\
+  \ in Spanish, respond in Spanish. Match the user's language unless they explicitly\
+  \ request a different one. If a user's profile indicates a preferred language, respect\
+  \ that preference."
 action_parameter_schemas: "FLAT field schemas per action (DO NOT use nested 'action_parameters'):\n\
   SPEAK: speak_content is the response text\n\
   PONDER: ponder_questions is a list of 2-3 clarifying questions\n\

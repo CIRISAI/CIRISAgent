@@ -26,7 +26,7 @@
             android:textColor="@color/text_primary"
             android:layout_marginBottom="16dp"/>
 
-        <!-- Steps Indicator (3 steps) -->
+        <!-- Steps Indicator (4 steps) -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -45,11 +45,11 @@
                 android:textStyle="bold"/>
 
             <View
-                android:layout_width="48dp"
+                android:layout_width="32dp"
                 android:layout_height="2dp"
                 android:background="@color/gray_medium"/>
 
-            <!-- Step 2: AI Configuration -->
+            <!-- Step 2: Preferences -->
             <TextView
                 android:id="@+id/step2_indicator"
                 android:layout_width="32dp"
@@ -61,17 +61,33 @@
                 android:textStyle="bold"/>
 
             <View
-                android:layout_width="48dp"
+                android:layout_width="32dp"
                 android:layout_height="2dp"
                 android:background="@color/gray_medium"/>
 
-            <!-- Step 3: Confirm -->
+            <!-- Step 3: AI Configuration -->
             <TextView
                 android:id="@+id/step3_indicator"
                 android:layout_width="32dp"
                 android:layout_height="32dp"
                 android:background="@drawable/bg_step_inactive"
                 android:text="@string/setup_step_3"
+                android:gravity="center"
+                android:textColor="@color/gray_medium"
+                android:textStyle="bold"/>
+
+            <View
+                android:layout_width="32dp"
+                android:layout_height="2dp"
+                android:background="@color/gray_medium"/>
+
+            <!-- Step 4: Confirm -->
+            <TextView
+                android:id="@+id/step4_indicator"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_step_inactive"
+                android:text="@string/setup_step_4"
                 android:gravity="center"
                 android:textColor="@color/gray_medium"
                 android:textStyle="bold"/>

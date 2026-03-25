@@ -1,0 +1,146 @@
+{
+  "version": "1.0.0",
+  "description": "CIRIS Agent localization strings for setup wizard and common agent messages",
+  "base_language": "en",
+  "generated_by": "claude-opus-4-6",
+  "generation_note": "Auto-generated translations. Native speaker review recommended before production use.",
+  "created_at": "2026-03-25T00:00:00Z",
+  "languages": {
+    "en": {
+      "name": "English",
+      "native_name": "English",
+      "iso_639_1": "en",
+      "origin": "human-authored (base language)",
+      "added": "2026-03-25",
+      "status": "production",
+      "review_status": "reviewed"
+    },
+    "am": {
+      "name": "Amharic",
+      "native_name": "\u12A0\u121B\u122D\u129B",
+      "iso_639_1": "am",
+      "origin": "auto-generated",
+      "added": "2026-03-25",
+      "status": "draft",
+      "review_status": "needs_native_review"
+    },
+    "ar": {
+      "name": "Arabic",
+      "native_name": "\u0627\u0644\u0639\u0631\u0628\u064A\u0629",
+      "iso_639_1": "ar",
+      "direction": "rtl",
+      "origin": "auto-generated",
+      "added": "2026-03-25",
+      "status": "draft",
+      "review_status": "needs_native_review"
+    },
+    "de": {
+      "name": "German",
+      "native_name": "Deutsch",
+      "iso_639_1": "de",
+      "origin": "auto-generated",
+      "added": "2026-03-25",
+      "status": "draft",
+      "review_status": "needs_native_review"
+    },
+    "es": {
+      "name": "Spanish",
+      "native_name": "Espa\u00f1ol",
+      "iso_639_1": "es",
+      "origin": "auto-generated",
+      "added": "2026-03-25",
+      "status": "draft",
+      "review_status": "needs_native_review"
+    },
+    "fr": {
+      "name": "French",
+      "native_name": "Fran\u00e7ais",
+      "iso_639_1": "fr",
+      "origin": "auto-generated",
+      "added": "2026-03-25",
+      "status": "draft",
+      "review_status": "needs_native_review"
+    },
+    "hi": {
+      "name": "Hindi",
+      "native_name": "\u0939\u093F\u0928\u094D\u0926\u0940",
+      "iso_639_1": "hi",
+      "origin": "auto-generated",
+      "added": "2026-03-25",
+      "status": "draft",
+      "review_status": "needs_native_review"
+    },
+    "it": {
+      "name": "Italian",
+      "native_name": "Italiano",
+      "iso_639_1": "it",
+      "origin": "auto-generated",
+      "added": "2026-03-25",
+      "status": "draft",
+      "review_status": "needs_native_review"
+    },
+    "ja": {
+      "name": "Japanese",
+      "native_name": "\u65e5\u672c\u8a9e",
+      "iso_639_1": "ja",
+      "origin": "auto-generated",
+      "added": "2026-03-25",
+      "status": "draft",
+      "review_status": "needs_native_review"
+    },
+    "ko": {
+      "name": "Korean",
+      "native_name": "\ud55c\uad6d\uc5b4",
+      "iso_639_1": "ko",
+      "origin": "auto-generated",
+      "added": "2026-03-25",
+      "status": "draft",
+      "review_status": "needs_native_review"
+    },
+    "pt": {
+      "name": "Portuguese",
+      "native_name": "Portugu\u00eas",
+      "iso_639_1": "pt",
+      "origin": "auto-generated",
+      "added": "2026-03-25",
+      "status": "draft",
+      "review_status": "needs_native_review"
+    },
+    "ru": {
+      "name": "Russian",
+      "native_name": "\u0420\u0443\u0441\u0441\u043a\u0438\u0439",
+      "iso_639_1": "ru",
+      "origin": "auto-generated",
+      "added": "2026-03-25",
+      "status": "draft",
+      "review_status": "needs_native_review"
+    },
+    "sw": {
+      "name": "Swahili",
+      "native_name": "Kiswahili",
+      "iso_639_1": "sw",
+      "origin": "auto-generated",
+      "added": "2026-03-25",
+      "status": "draft",
+      "review_status": "needs_native_review"
+    },
+    "tr": {
+      "name": "Turkish",
+      "native_name": "T\u00fcrk\u00e7e",
+      "iso_639_1": "tr",
+      "origin": "auto-generated",
+      "added": "2026-03-25",
+      "status": "draft",
+      "review_status": "needs_native_review"
+    },
+    "zh": {
+      "name": "Chinese (Simplified)",
+      "native_name": "\u4e2d\u6587",
+      "iso_639_1": "zh",
+      "origin": "auto-generated",
+      "added": "2026-03-25",
+      "status": "draft",
+      "review_status": "needs_native_review"
+    }
+  }
+}

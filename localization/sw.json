@@ -1,0 +1,52 @@
+{
+  "_meta": {
+    "language": "sw",
+    "language_name": "Kiswahili",
+    "direction": "ltr"
+  },
+  "setup": {
+    "welcome_title": "Karibu kwenye CIRIS",
+    "welcome_desc": "CIRIS ni msaidizi wa AI wa kimaadili unaofanya kazi kwenye kifaa chako. Mazungumzo na data yako yanabaki kuwa ya faragha.",
+    "prefs_title": "Mapendeleo Yako",
+    "prefs_desc": "Saidia CIRIS kuwasiliana nawe kwa lugha unayoipendelea. Mahali ulipo si lazima lakini husaidia kutoa muktadha unaofaa.",
+    "prefs_language_label": "Lugha unayoipendelea",
+    "prefs_location_label": "Mahali (si lazima)",
+    "prefs_location_hint": "Shiriki unavyotaka. Hii husaidia CIRIS kuelewa muktadha wako.",
+    "prefs_location_none": "Sipendelei kusema",
+    "prefs_location_country": "Nchi pekee",
+    "prefs_location_region": "Nchi + Mkoa/Jimbo",
+    "prefs_location_city": "Nchi + Mkoa + Jiji",
+    "prefs_country_label": "Nchi",
+    "prefs_country_hint": "mf., Ethiopia, Marekani, Japani",
+    "prefs_region_label": "Mkoa / Jimbo",
+    "prefs_region_hint": "mf., Amhara, California, Tokyo",
+    "prefs_city_label": "Jiji",
+    "prefs_city_hint": "mf., Addis Ababa, San Francisco",
+    "llm_title": "Usanidi wa AI",
+    "llm_desc": "Sanidi jinsi CIRIS inavyounganishwa na huduma za AI.",
+    "confirm_title": "Thibitisha Usanidi",
+    "confirm_desc": "Kagua usanidi wako na ukamilishe usakinishaji.",
+    "continue": "Endelea",
+    "back": "Rudi",
+    "next": "Ifuatayo",
+    "finish": "Maliza Usanidi"
+  },
+  "agent": {
+    "greeting": "Habari! Ninawezaje kukusaidia leo?",
+    "thinking": "Niruhusu nifikirie kuhusu hilo...",
+    "error_generic": "Nilikutana na tatizo wakati wa kushughulikia ombi lako. Tafadhali jaribu tena.",
+    "error_timeout": "Ombi lilichukua muda mrefu sana. Tafadhali jaribu tena.",
+    "defer_to_wa": "Nahitaji kushauriana na mshauri wa kibinadamu kuhusu hili. Nitajibu hivi karibuni.",
+    "task_complete": "Kazi imekamilika kwa mafanikio.",
+    "no_permission": "Sina ruhusa ya kufanya hivyo.",
+    "clarify_request": "Je, unaweza kufafanua ulichomaanisha?"
+  },
+  "status": {
+    "executing": "Inatekelezwa...",
+    "completed": "Imekamilika",
+    "failed": "Imeshindikana",
+    "pending": "Inasubiri",
+    "online": "Mtandaoni",
+    "offline": "Nje ya mtandao"
+  }
+}

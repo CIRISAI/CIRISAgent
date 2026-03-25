@@ -1,0 +1,52 @@
+{
+  "_meta": {
+    "language": "ko",
+    "language_name": "한국어",
+    "direction": "ltr"
+  },
+  "setup": {
+    "welcome_title": "CIRIS에 오신 것을 환영합니다",
+    "welcome_desc": "CIRIS는 사용자의 기기에서 작동하는 윤리적 AI 어시스턴트입니다. 대화와 데이터는 비공개로 유지됩니다.",
+    "prefs_title": "사용자 설정",
+    "prefs_desc": "CIRIS가 원하는 언어로 소통할 수 있도록 도와주세요. 위치 정보는 선택 사항이며 관련 맥락을 제공하는 데 도움이 됩니다.",
+    "prefs_language_label": "선호 언어",
+    "prefs_location_label": "위치 (선택 사항)",
+    "prefs_location_hint": "원하는 정보를 공유해 주세요. CIRIS가 상황을 이해하는 데 도움이 됩니다.",
+    "prefs_location_none": "말하지 않겠습니다",
+    "prefs_location_country": "국가만",
+    "prefs_location_region": "국가 + 지역/도",
+    "prefs_location_city": "국가 + 지역 + 도시",
+    "prefs_country_label": "국가",
+    "prefs_country_hint": "예: 한국, 미국, 일본",
+    "prefs_region_label": "지역 / 도",
+    "prefs_region_hint": "예: 서울특별시, 경기도, 캘리포니아",
+    "prefs_city_label": "도시",
+    "prefs_city_hint": "예: 서울, 부산, 샌프란시스코",
+    "llm_title": "AI 설정",
+    "llm_desc": "CIRIS가 AI 서비스에 연결하는 방법을 설정합니다.",
+    "confirm_title": "설정 확인",
+    "confirm_desc": "설정을 검토하고 설치를 완료하세요.",
+    "continue": "계속",
+    "back": "뒤로",
+    "next": "다음",
+    "finish": "설정 완료"
+  },
+  "agent": {
+    "greeting": "안녕하세요! 오늘 어떻게 도와드릴까요?",
+    "thinking": "생각하고 있습니다...",
+    "error_generic": "요청을 처리하는 중에 문제가 발생했습니다. 다시 시도해 주세요.",
+    "error_timeout": "요청 시간이 초과되었습니다. 다시 시도해 주세요.",
+    "defer_to_wa": "이 건에 대해 담당자에게 확인이 필요합니다. 곧 답변드리겠습니다.",
+    "task_complete": "작업이 성공적으로 완료되었습니다.",
+    "no_permission": "해당 작업을 수행할 권한이 없습니다.",
+    "clarify_request": "무슨 뜻인지 좀 더 자세히 설명해 주시겠어요?"
+  },
+  "status": {
+    "executing": "실행 중...",
+    "completed": "완료",
+    "failed": "실패",
+    "pending": "대기 중",
+    "online": "온라인",
+    "offline": "오프라인"
+  }
+}

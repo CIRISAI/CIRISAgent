@@ -1,0 +1,52 @@
+{
+  "_meta": {
+    "language": "tr",
+    "language_name": "Türkçe",
+    "direction": "ltr"
+  },
+  "setup": {
+    "welcome_title": "CIRIS'e Hoş Geldiniz",
+    "welcome_desc": "CIRIS, cihazınızda çalışan etik bir yapay zeka asistanıdır. Konuşmalarınız ve verileriniz gizli kalır.",
+    "prefs_title": "Tercihleriniz",
+    "prefs_desc": "CIRIS'in sizinle tercih ettiğiniz dilde iletişim kurmasına yardımcı olun. Konum isteğe bağlıdır ve ilgili bağlam sağlamaya yardımcı olur.",
+    "prefs_language_label": "Tercih edilen dil",
+    "prefs_location_label": "Konum (isteğe bağlı)",
+    "prefs_location_hint": "Dilediğiniz kadar paylaşın. Bu, CIRIS'in bağlamınızı anlamasına yardımcı olur.",
+    "prefs_location_none": "Belirtmemeyi tercih ediyorum",
+    "prefs_location_country": "Yalnızca ülke",
+    "prefs_location_region": "Ülke + Bölge/Eyalet",
+    "prefs_location_city": "Ülke + Bölge + Şehir",
+    "prefs_country_label": "Ülke",
+    "prefs_country_hint": "ör., Etiyopya, ABD, Japonya",
+    "prefs_region_label": "Bölge / Eyalet",
+    "prefs_region_hint": "ör., Amhara, Kaliforniya, Tokyo",
+    "prefs_city_label": "Şehir",
+    "prefs_city_hint": "ör., Addis Ababa, San Francisco",
+    "llm_title": "Yapay Zeka Yapılandırması",
+    "llm_desc": "CIRIS'in yapay zeka hizmetlerine nasıl bağlanacağını yapılandırın.",
+    "confirm_title": "Yapılandırmayı Onayla",
+    "confirm_desc": "Ayarlarınızı gözden geçirin ve kurulumu tamamlayın.",
+    "continue": "Devam Et",
+    "back": "Geri",
+    "next": "İleri",
+    "finish": "Kurulumu Tamamla"
+  },
+  "agent": {
+    "greeting": "Merhaba! Bugün size nasıl yardımcı olabilirim?",
+    "thinking": "Bir düşüneyim...",
+    "error_generic": "İsteğiniz işlenirken bir sorunla karşılaşıldı. Lütfen tekrar deneyin.",
+    "error_timeout": "İstek çok uzun sürdü. Lütfen tekrar deneyin.",
+    "defer_to_wa": "Bu konuda bir insan danışmana başvurmam gerekiyor. En kısa sürede size döneceğim.",
+    "task_complete": "Görev başarıyla tamamlandı.",
+    "no_permission": "Bunu yapmak için iznim yok.",
+    "clarify_request": "Ne demek istediğinizi açıklayabilir misiniz?"
+  },
+  "status": {
+    "executing": "Yürütülüyor...",
+    "completed": "Tamamlandı",
+    "failed": "Başarısız",
+    "pending": "Beklemede",
+    "online": "Çevrimiçi",
+    "offline": "Çevrimdışı"
+  }
+}

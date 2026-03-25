@@ -1,0 +1,52 @@
+{
+  "_meta": {
+    "language": "de",
+    "language_name": "Deutsch",
+    "direction": "ltr"
+  },
+  "setup": {
+    "welcome_title": "Willkommen bei CIRIS",
+    "welcome_desc": "CIRIS ist ein ethischer KI-Assistent, der auf Ihrem Gerät läuft. Ihre Gespräche und Daten bleiben privat.",
+    "prefs_title": "Ihre Einstellungen",
+    "prefs_desc": "Helfen Sie CIRIS, in Ihrer bevorzugten Sprache mit Ihnen zu kommunizieren. Der Standort ist optional und hilft, relevanten Kontext bereitzustellen.",
+    "prefs_language_label": "Bevorzugte Sprache",
+    "prefs_location_label": "Standort (optional)",
+    "prefs_location_hint": "Teilen Sie mit, was Sie möchten. Dies hilft CIRIS, Ihren Kontext zu verstehen.",
+    "prefs_location_none": "Möchte ich nicht angeben",
+    "prefs_location_country": "Nur Land",
+    "prefs_location_region": "Land + Region/Bundesland",
+    "prefs_location_city": "Land + Region + Stadt",
+    "prefs_country_label": "Land",
+    "prefs_country_hint": "z.B. Äthiopien, Vereinigte Staaten, Japan",
+    "prefs_region_label": "Region / Bundesland",
+    "prefs_region_hint": "z.B. Amhara, Kalifornien, Tokio",
+    "prefs_city_label": "Stadt",
+    "prefs_city_hint": "z.B. Addis Abeba, San Francisco",
+    "llm_title": "KI-Konfiguration",
+    "llm_desc": "Konfigurieren Sie, wie CIRIS sich mit KI-Diensten verbindet.",
+    "confirm_title": "Konfiguration bestätigen",
+    "confirm_desc": "Überprüfen Sie Ihre Konfiguration und schließen Sie die Einrichtung ab.",
+    "continue": "Weiter",
+    "back": "Zurück",
+    "next": "Weiter",
+    "finish": "Einrichtung abschließen"
+  },
+  "agent": {
+    "greeting": "Hallo! Wie kann ich Ihnen heute helfen?",
+    "thinking": "Lassen Sie mich darüber nachdenken...",
+    "error_generic": "Bei der Verarbeitung Ihrer Anfrage ist ein Problem aufgetreten. Bitte versuchen Sie es erneut.",
+    "error_timeout": "Die Anfrage hat zu lange gedauert. Bitte versuchen Sie es erneut.",
+    "defer_to_wa": "Ich muss dazu einen menschlichen Berater konsultieren. Ich werde mich bald bei Ihnen melden.",
+    "task_complete": "Aufgabe erfolgreich abgeschlossen.",
+    "no_permission": "Ich habe keine Berechtigung, das zu tun.",
+    "clarify_request": "Könnten Sie bitte erläutern, was Sie meinen?"
+  },
+  "status": {
+    "executing": "Wird ausgeführt...",
+    "completed": "Abgeschlossen",
+    "failed": "Fehlgeschlagen",
+    "pending": "Ausstehend",
+    "online": "Online",
+    "offline": "Offline"
+  }
+}

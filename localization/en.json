@@ -1,0 +1,52 @@
+{
+  "_meta": {
+    "language": "en",
+    "language_name": "English",
+    "direction": "ltr"
+  },
+  "setup": {
+    "welcome_title": "Welcome to CIRIS",
+    "welcome_desc": "CIRIS is an ethical AI assistant that runs on your device. Your conversations and data stay private.",
+    "prefs_title": "Your Preferences",
+    "prefs_desc": "Help CIRIS communicate with you in your preferred language. Location is optional and helps provide relevant context.",
+    "prefs_language_label": "Preferred Language",
+    "prefs_location_label": "Location (optional)",
+    "prefs_location_hint": "Share as much or as little as you like. This helps CIRIS understand your context.",
+    "prefs_location_none": "Prefer not to say",
+    "prefs_location_country": "Country only",
+    "prefs_location_region": "Country + Region/State",
+    "prefs_location_city": "Country + Region + City",
+    "prefs_country_label": "Country",
+    "prefs_country_hint": "e.g., Ethiopia, United States, Japan",
+    "prefs_region_label": "Region / State",
+    "prefs_region_hint": "e.g., Amhara, California, Tokyo",
+    "prefs_city_label": "City",
+    "prefs_city_hint": "e.g., Addis Ababa, San Francisco",
+    "llm_title": "AI Configuration",
+    "llm_desc": "Configure how CIRIS connects to AI services.",
+    "confirm_title": "Confirm Setup",
+    "confirm_desc": "Review your configuration and complete setup.",
+    "continue": "Continue",
+    "back": "Back",
+    "next": "Next",
+    "finish": "Finish Setup"
+  },
+  "agent": {
+    "greeting": "Hello! How can I help you today?",
+    "thinking": "Let me think about that...",
+    "error_generic": "I encountered an issue processing your request. Please try again.",
+    "error_timeout": "The request took too long. Please try again.",
+    "defer_to_wa": "I need to consult with a human advisor on this. I'll get back to you.",
+    "task_complete": "Task completed successfully.",
+    "no_permission": "I don't have permission to do that.",
+    "clarify_request": "Could you clarify what you mean?"
+  },
+  "status": {
+    "executing": "Executing...",
+    "completed": "Completed",
+    "failed": "Failed",
+    "pending": "Pending",
+    "online": "Online",
+    "offline": "Offline"
+  }
+}

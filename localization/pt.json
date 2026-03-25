@@ -1,0 +1,52 @@
+{
+  "_meta": {
+    "language": "pt",
+    "language_name": "Português",
+    "direction": "ltr"
+  },
+  "setup": {
+    "welcome_title": "Bem-vindo ao CIRIS",
+    "welcome_desc": "CIRIS é um assistente de IA ético que funciona no seu dispositivo. Suas conversas e dados permanecem privados.",
+    "prefs_title": "Suas Preferências",
+    "prefs_desc": "Ajude o CIRIS a se comunicar com você no seu idioma preferido. A localização é opcional e ajuda a fornecer contexto relevante.",
+    "prefs_language_label": "Idioma preferido",
+    "prefs_location_label": "Localização (opcional)",
+    "prefs_location_hint": "Compartilhe o que desejar. Isso ajuda o CIRIS a entender seu contexto.",
+    "prefs_location_none": "Prefiro não dizer",
+    "prefs_location_country": "Apenas país",
+    "prefs_location_region": "País + Região/Estado",
+    "prefs_location_city": "País + Região + Cidade",
+    "prefs_country_label": "País",
+    "prefs_country_hint": "ex., Etiópia, Estados Unidos, Japão",
+    "prefs_region_label": "Região / Estado",
+    "prefs_region_hint": "ex., Amhara, Califórnia, Tóquio",
+    "prefs_city_label": "Cidade",
+    "prefs_city_hint": "ex., Adis Abeba, São Francisco",
+    "llm_title": "Configuração de IA",
+    "llm_desc": "Configure como o CIRIS se conecta aos serviços de IA.",
+    "confirm_title": "Confirmar Configuração",
+    "confirm_desc": "Revise sua configuração e conclua a instalação.",
+    "continue": "Continuar",
+    "back": "Voltar",
+    "next": "Próximo",
+    "finish": "Concluir Configuração"
+  },
+  "agent": {
+    "greeting": "Olá! Como posso ajudá-lo hoje?",
+    "thinking": "Deixe-me pensar sobre isso...",
+    "error_generic": "Encontrei um problema ao processar sua solicitação. Por favor, tente novamente.",
+    "error_timeout": "A solicitação demorou muito. Por favor, tente novamente.",
+    "defer_to_wa": "Preciso consultar um orientador humano sobre isso. Responderei em breve.",
+    "task_complete": "Tarefa concluída com sucesso.",
+    "no_permission": "Não tenho permissão para fazer isso.",
+    "clarify_request": "Você poderia esclarecer o que quer dizer?"
+  },
+  "status": {
+    "executing": "Executando...",
+    "completed": "Concluído",
+    "failed": "Falhou",
+    "pending": "Pendente",
+    "online": "Online",
+    "offline": "Offline"
+  }
+}

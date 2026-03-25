@@ -1,0 +1,52 @@
+{
+  "_meta": {
+    "language": "it",
+    "language_name": "Italiano",
+    "direction": "ltr"
+  },
+  "setup": {
+    "welcome_title": "Benvenuto su CIRIS",
+    "welcome_desc": "CIRIS è un assistente IA etico che funziona sul tuo dispositivo. Le tue conversazioni e i tuoi dati restano privati.",
+    "prefs_title": "Le Tue Preferenze",
+    "prefs_desc": "Aiuta CIRIS a comunicare con te nella tua lingua preferita. La posizione è facoltativa e aiuta a fornire un contesto pertinente.",
+    "prefs_language_label": "Lingua preferita",
+    "prefs_location_label": "Posizione (facoltativo)",
+    "prefs_location_hint": "Condividi ciò che desideri. Questo aiuta CIRIS a comprendere il tuo contesto.",
+    "prefs_location_none": "Preferisco non dirlo",
+    "prefs_location_country": "Solo paese",
+    "prefs_location_region": "Paese + Regione/Stato",
+    "prefs_location_city": "Paese + Regione + Città",
+    "prefs_country_label": "Paese",
+    "prefs_country_hint": "es., Etiopia, Stati Uniti, Giappone",
+    "prefs_region_label": "Regione / Stato",
+    "prefs_region_hint": "es., Amhara, California, Tokyo",
+    "prefs_city_label": "Città",
+    "prefs_city_hint": "es., Addis Abeba, San Francisco",
+    "llm_title": "Configurazione IA",
+    "llm_desc": "Configura come CIRIS si connette ai servizi di IA.",
+    "confirm_title": "Conferma Configurazione",
+    "confirm_desc": "Verifica la tua configurazione e completa l'installazione.",
+    "continue": "Continua",
+    "back": "Indietro",
+    "next": "Avanti",
+    "finish": "Completa Configurazione"
+  },
+  "agent": {
+    "greeting": "Ciao! Come posso aiutarti oggi?",
+    "thinking": "Fammi pensare...",
+    "error_generic": "Ho riscontrato un problema durante l'elaborazione della tua richiesta. Per favore, riprova.",
+    "error_timeout": "La richiesta ha impiegato troppo tempo. Per favore, riprova.",
+    "defer_to_wa": "Devo consultare un consulente umano su questo argomento. Ti risponderò presto.",
+    "task_complete": "Attività completata con successo.",
+    "no_permission": "Non ho il permesso di farlo.",
+    "clarify_request": "Potresti chiarire cosa intendi?"
+  },
+  "status": {
+    "executing": "In esecuzione...",
+    "completed": "Completato",
+    "failed": "Fallito",
+    "pending": "In sospeso",
+    "online": "Online",
+    "offline": "Offline"
+  }
+}

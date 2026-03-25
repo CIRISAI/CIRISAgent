@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:id="@+id/text_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/setup_prefs_title"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="@color/white"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/text_desc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/setup_prefs_desc"
+            android:textSize="14sp"
+            android:textColor="@color/gray_light"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Language Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/setup_prefs_language_label"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="@color/white"
+            android:layout_marginBottom="8dp" />
+
+        <Spinner
+            android:id="@+id/spinner_language"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_input_field"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Location Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/setup_prefs_location_label"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="@color/white"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/setup_prefs_location_hint"
+            android:textSize="12sp"
+            android:textColor="@color/gray_medium"
+            android:layout_marginBottom="12dp" />
+
+        <RadioGroup
+            android:id="@+id/radio_group_location"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <RadioButton
+                android:id="@+id/radio_location_none"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_prefs_location_none"
+                android:textColor="@color/white"
+                android:buttonTint="@color/ciris_accent"
+                android:padding="8dp" />
+
+            <RadioButton
+                android:id="@+id/radio_location_country"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_prefs_location_country"
+                android:textColor="@color/white"
+                android:buttonTint="@color/ciris_accent"
+                android:padding="8dp" />
+
+            <RadioButton
+                android:id="@+id/radio_location_region"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_prefs_location_region"
+                android:textColor="@color/white"
+                android:buttonTint="@color/ciris_accent"
+                android:padding="8dp" />
+
+            <RadioButton
+                android:id="@+id/radio_location_city"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_prefs_location_city"
+                android:textColor="@color/white"
+                android:buttonTint="@color/ciris_accent"
+                android:padding="8dp" />
+        </RadioGroup>
+
+        <!-- Dynamic location input fields -->
+        <LinearLayout
+            android:id="@+id/section_country"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_prefs_country_label"
+                android:textSize="14sp"
+                android:textColor="@color/gray_light"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/edit_country"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_input_field"
+                android:hint="@string/setup_prefs_country_hint"
+                android:textColor="@color/white"
+                android:textColorHint="@color/gray_medium"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:inputType="text"
+                android:singleLine="true" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/section_region"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_prefs_region_label"
+                android:textSize="14sp"
+                android:textColor="@color/gray_light"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/edit_region"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_input_field"
+                android:hint="@string/setup_prefs_region_hint"
+                android:textColor="@color/white"
+                android:textColorHint="@color/gray_medium"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:inputType="text"
+                android:singleLine="true" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/section_city"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_prefs_city_label"
+                android:textSize="14sp"
+                android:textColor="@color/gray_light"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/edit_city"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_input_field"
+                android:hint="@string/setup_prefs_city_hint"
+                android:textColor="@color/white"
+                android:textColorHint="@color/gray_medium"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:inputType="text"
+                android:singleLine="true" />
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

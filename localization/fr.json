@@ -1,0 +1,52 @@
+{
+  "_meta": {
+    "language": "fr",
+    "language_name": "Français",
+    "direction": "ltr"
+  },
+  "setup": {
+    "welcome_title": "Bienvenue sur CIRIS",
+    "welcome_desc": "CIRIS est un assistant IA éthique qui fonctionne sur votre appareil. Vos conversations et données restent privées.",
+    "prefs_title": "Vos Préférences",
+    "prefs_desc": "Aidez CIRIS à communiquer avec vous dans votre langue préférée. La localisation est facultative et aide à fournir un contexte pertinent.",
+    "prefs_language_label": "Langue préférée",
+    "prefs_location_label": "Localisation (facultatif)",
+    "prefs_location_hint": "Partagez ce que vous souhaitez. Cela aide CIRIS à comprendre votre contexte.",
+    "prefs_location_none": "Je préfère ne pas dire",
+    "prefs_location_country": "Pays uniquement",
+    "prefs_location_region": "Pays + Région/État",
+    "prefs_location_city": "Pays + Région + Ville",
+    "prefs_country_label": "Pays",
+    "prefs_country_hint": "ex., Éthiopie, États-Unis, Japon",
+    "prefs_region_label": "Région / État",
+    "prefs_region_hint": "ex., Amhara, Californie, Tokyo",
+    "prefs_city_label": "Ville",
+    "prefs_city_hint": "ex., Addis-Abeba, San Francisco",
+    "llm_title": "Configuration de l'IA",
+    "llm_desc": "Configurez la manière dont CIRIS se connecte aux services d'IA.",
+    "confirm_title": "Confirmer la Configuration",
+    "confirm_desc": "Vérifiez votre configuration et terminez l'installation.",
+    "continue": "Continuer",
+    "back": "Retour",
+    "next": "Suivant",
+    "finish": "Terminer la Configuration"
+  },
+  "agent": {
+    "greeting": "Bonjour ! Comment puis-je vous aider aujourd'hui ?",
+    "thinking": "Laissez-moi réfléchir à cela...",
+    "error_generic": "J'ai rencontré un problème lors du traitement de votre demande. Veuillez réessayer.",
+    "error_timeout": "La demande a pris trop de temps. Veuillez réessayer.",
+    "defer_to_wa": "Je dois consulter un conseiller humain à ce sujet. Je vous répondrai bientôt.",
+    "task_complete": "Tâche terminée avec succès.",
+    "no_permission": "Je n'ai pas la permission de faire cela.",
+    "clarify_request": "Pourriez-vous préciser ce que vous voulez dire ?"
+  },
+  "status": {
+    "executing": "En cours d'exécution...",
+    "completed": "Terminé",
+    "failed": "Échoué",
+    "pending": "En attente",
+    "online": "En ligne",
+    "offline": "Hors ligne"
+  }
+}

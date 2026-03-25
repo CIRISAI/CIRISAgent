@@ -1,0 +1,52 @@
+{
+  "_meta": {
+    "language": "ja",
+    "language_name": "日本語",
+    "direction": "ltr"
+  },
+  "setup": {
+    "welcome_title": "CIRISへようこそ",
+    "welcome_desc": "CIRISはお使いのデバイス上で動作する倫理的なAIアシスタントです。会話やデータはプライベートに保たれます。",
+    "prefs_title": "設定",
+    "prefs_desc": "CIRISがご希望の言語でコミュニケーションできるようにしましょう。位置情報は任意で、関連する文脈の提供に役立ちます。",
+    "prefs_language_label": "使用言語",
+    "prefs_location_label": "位置情報（任意）",
+    "prefs_location_hint": "お好きな情報を共有してください。CIRISがあなたの状況を理解するのに役立ちます。",
+    "prefs_location_none": "回答しない",
+    "prefs_location_country": "国のみ",
+    "prefs_location_region": "国 + 地域/都道府県",
+    "prefs_location_city": "国 + 地域 + 市区町村",
+    "prefs_country_label": "国",
+    "prefs_country_hint": "例：日本、アメリカ、エチオピア",
+    "prefs_region_label": "地域 / 都道府県",
+    "prefs_region_hint": "例：東京都、大阪府、カリフォルニア",
+    "prefs_city_label": "市区町村",
+    "prefs_city_hint": "例：渋谷区、サンフランシスコ",
+    "llm_title": "AI設定",
+    "llm_desc": "CIRISがAIサービスに接続する方法を設定します。",
+    "confirm_title": "設定の確認",
+    "confirm_desc": "設定を確認してセットアップを完了してください。",
+    "continue": "続ける",
+    "back": "戻る",
+    "next": "次へ",
+    "finish": "セットアップ完了"
+  },
+  "agent": {
+    "greeting": "こんにちは！今日はどのようにお手伝いできますか？",
+    "thinking": "少々お待ちください…",
+    "error_generic": "リクエストの処理中に問題が発生しました。もう一度お試しください。",
+    "error_timeout": "リクエストがタイムアウトしました。もう一度お試しください。",
+    "defer_to_wa": "この件について人間のアドバイザーに相談する必要があります。後ほどご連絡いたします。",
+    "task_complete": "タスクが正常に完了しました。",
+    "no_permission": "その操作を行う権限がありません。",
+    "clarify_request": "もう少し詳しく教えていただけますか？"
+  },
+  "status": {
+    "executing": "実行中…",
+    "completed": "完了",
+    "failed": "失敗",
+    "pending": "保留中",
+    "online": "オンライン",
+    "offline": "オフライン"
+  }
+}

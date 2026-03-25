@@ -8,10 +8,11 @@ import androidx.viewpager2.adapter.FragmentStateAdapter
 /**
  * Pager Adapter for Setup Wizard.
  *
- * 3-step wizard:
+ * 4-step wizard:
  * 1. Welcome - Introduction and overview
- * 2. LLM - AI configuration (CIRIS proxy or BYOK)
- * 3. Confirm - Setup summary (Google) or account creation (non-Google)
+ * 2. Preferences - Language and location at user-chosen granularity
+ * 3. LLM - AI configuration (CIRIS proxy or BYOK)
+ * 4. Confirm - Setup summary (Google) or account creation (non-Google)
  *
  * Admin password is auto-generated and never shown to users.
  */
@@ -19,7 +20,7 @@ class SetupPagerAdapter(fa: FragmentActivity) : FragmentStateAdapter(fa) {
 
     companion object {
         private const val TAG = "SetupPagerAdapter"
-        const val STEP_COUNT = 3
+        const val STEP_COUNT = 4
     }
 
     override fun getItemCount(): Int = STEP_COUNT
@@ -33,10 +34,14 @@ class SetupPagerAdapter(fa: FragmentActivity) : FragmentStateAdapter(fa) {
                 SetupWelcomeFragment()
             }
             1 -> {
+                Log.d(TAG, "Creating SetupPreferencesFragment")
+                SetupPreferencesFragment()
+            }
+            2 -> {
                 Log.d(TAG, "Creating SetupLlmFragment")
                 SetupLlmFragment()
             }
-            2 -> {
+            3 -> {
                 Log.d(TAG, "Creating SetupConfirmFragment")
                 SetupConfirmFragment()
             }

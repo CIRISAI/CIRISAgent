@@ -1,10 +1,24 @@
 {
-  "version": "1.0.0",
-  "description": "CIRIS Agent localization strings for setup wizard and common agent messages",
+  "version": "2.0.0",
+  "description": "CIRIS Agent localization - complete coverage of all LLM-facing text, setup wizard, agent messages, DMA prompts, formatters, handlers, errors, and Discord strings",
   "base_language": "en",
   "generated_by": "claude-opus-4-6",
-  "generation_note": "Auto-generated translations. Native speaker review recommended before production use.",
+  "generation_note": "Auto-generated translations. Native speaker review recommended before production use. v2.0 expanded en.json to cover all LLM-facing text including DMA prompts, system formatters, handler messages, escalation guidance, crisis resources, error messages, and Discord field labels. Non-English files cover setup/agent/status sections; prompts/handlers/errors/discord sections pending translation.",
   "created_at": "2026-03-25T00:00:00Z",
+  "updated_at": "2026-03-25T19:30:00Z",
+  "string_categories": {
+    "setup": "Setup wizard UI strings",
+    "agent": "User-facing agent response messages",
+    "status": "Status labels",
+    "prompts.dma": "DMA system prompt text sent to LLM (PDMA, CSDMA, IDMA, DSDMA, ASPDMA, TSASPDMA)",
+    "prompts.formatters": "System snapshot, identity, user context headers sent to LLM",
+    "prompts.escalation": "Escalation stage guidance sent to LLM",
+    "prompts.crisis": "Crisis resource guidance text sent to LLM",
+    "prompts.engine_overview": "Engine overview text sent to LLM",
+    "handlers": "Handler follow-up thought messages injected into LLM context",
+    "errors": "API and service error messages shown to users",
+    "discord": "Discord embed field labels and deferral messages"
+  },
   "languages": {
     "en": {
       "name": "English",
@@ -22,7 +36,8 @@
       "origin": "auto-generated",
       "added": "2026-03-25",
       "status": "draft",
-      "review_status": "needs_native_review"
+      "review_status": "needs_native_review",
+      "coverage": "setup, agent, status sections complete; prompts, handlers, errors, discord sections pending"
     },
     "ar": {
       "name": "Arabic",
@@ -32,7 +47,8 @@
       "origin": "auto-generated",
       "added": "2026-03-25",
       "status": "draft",
-      "review_status": "needs_native_review"
+      "review_status": "needs_native_review",
+      "coverage": "setup, agent, status sections complete; prompts, handlers, errors, discord sections pending"
     },
     "de": {
       "name": "German",
@@ -41,7 +57,8 @@
       "origin": "auto-generated",
       "added": "2026-03-25",
       "status": "draft",
-      "review_status": "needs_native_review"
+      "review_status": "needs_native_review",
+      "coverage": "setup, agent, status sections complete; prompts, handlers, errors, discord sections pending"
     },
     "es": {
       "name": "Spanish",
@@ -50,7 +67,8 @@
       "origin": "auto-generated",
       "added": "2026-03-25",
       "status": "draft",
-      "review_status": "needs_native_review"
+      "review_status": "needs_native_review",
+      "coverage": "setup, agent, status sections complete; prompts, handlers, errors, discord sections pending"
     },
     "fr": {
       "name": "French",
@@ -59,7 +77,8 @@
       "origin": "auto-generated",
       "added": "2026-03-25",
       "status": "draft",
-      "review_status": "needs_native_review"
+      "review_status": "needs_native_review",
+      "coverage": "setup, agent, status sections complete; prompts, handlers, errors, discord sections pending"
     },
     "hi": {
       "name": "Hindi",
@@ -68,7 +87,8 @@
       "origin": "auto-generated",
       "added": "2026-03-25",
       "status": "draft",
-      "review_status": "needs_native_review"
+      "review_status": "needs_native_review",
+      "coverage": "setup, agent, status sections complete; prompts, handlers, errors, discord sections pending"
     },
     "it": {
       "name": "Italian",
@@ -77,7 +97,8 @@
       "origin": "auto-generated",
       "added": "2026-03-25",
       "status": "draft",
-      "review_status": "needs_native_review"
+      "review_status": "needs_native_review",
+      "coverage": "setup, agent, status sections complete; prompts, handlers, errors, discord sections pending"
     },
     "ja": {
       "name": "Japanese",
@@ -86,7 +107,8 @@
       "origin": "auto-generated",
       "added": "2026-03-25",
       "status": "draft",
-      "review_status": "needs_native_review"
+      "review_status": "needs_native_review",
+      "coverage": "setup, agent, status sections complete; prompts, handlers, errors, discord sections pending"
     },
     "ko": {
       "name": "Korean",
@@ -95,7 +117,8 @@
       "origin": "auto-generated",
       "added": "2026-03-25",
       "status": "draft",
-      "review_status": "needs_native_review"
+      "review_status": "needs_native_review",
+      "coverage": "setup, agent, status sections complete; prompts, handlers, errors, discord sections pending"
     },
     "pt": {
       "name": "Portuguese",
@@ -104,7 +127,8 @@
       "origin": "auto-generated",
       "added": "2026-03-25",
       "status": "draft",
-      "review_status": "needs_native_review"
+      "review_status": "needs_native_review",
+      "coverage": "setup, agent, status sections complete; prompts, handlers, errors, discord sections pending"
     },
     "ru": {
       "name": "Russian",
@@ -113,7 +137,8 @@
       "origin": "auto-generated",
       "added": "2026-03-25",
       "status": "draft",
-      "review_status": "needs_native_review"
+      "review_status": "needs_native_review",
+      "coverage": "setup, agent, status sections complete; prompts, handlers, errors, discord sections pending"
     },
     "sw": {
       "name": "Swahili",
@@ -122,7 +147,8 @@
       "origin": "auto-generated",
       "added": "2026-03-25",
       "status": "draft",
-      "review_status": "needs_native_review"
+      "review_status": "needs_native_review",
+      "coverage": "setup, agent, status sections complete; prompts, handlers, errors, discord sections pending"
     },
     "tr": {
       "name": "Turkish",
@@ -131,7 +157,8 @@
       "origin": "auto-generated",
       "added": "2026-03-25",
       "status": "draft",
-      "review_status": "needs_native_review"
+      "review_status": "needs_native_review",
+      "coverage": "setup, agent, status sections complete; prompts, handlers, errors, discord sections pending"
     },
     "zh": {
       "name": "Chinese (Simplified)",
@@ -140,7 +167,8 @@
       "origin": "auto-generated",
       "added": "2026-03-25",
       "status": "draft",
-      "review_status": "needs_native_review"
+      "review_status": "needs_native_review",
+      "coverage": "setup, agent, status sections complete; prompts, handlers, errors, discord sections pending"
     }
   }
 }

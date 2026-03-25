@@ -491,10 +491,20 @@ def _process_jsonl_entries(
         dedup_key = f"{normalized_ts}_{action}"
         if dedup_key in seen_timestamps:
             # Find the existing entry and add jsonl to its sources
+            # First check dedup_to_entry (populated by SQLite entries)
             existing_entry_id = dedup_to_entry.get(dedup_key)
             if existing_entry_id and existing_entry_id in merged:
                 if "jsonl" not in merged[existing_entry_id].sources:
                     merged[existing_entry_id].sources.append("jsonl")
+            else:
+                # dedup_to_entry may not have this key if entry came from graph
+                # Search merged entries by matching dedup_key
+                for merged_id, merged_entry in merged.items():
+                    entry_dedup = f"{_normalize_timestamp_str(merged_entry.entry.timestamp.isoformat())}_{merged_entry.entry.action}"
+                    if entry_dedup == dedup_key:
+                        if "jsonl" not in merged_entry.sources:
+                            merged_entry.sources.append("jsonl")
+                        break
             continue
 
         if entry_id not in merged:

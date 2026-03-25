@@ -768,6 +768,43 @@ class TestOutcomeExtraction:
         assert "jsonl_only_001" in entry_ids
 
     @pytest.mark.asyncio
+    async def test_jsonl_source_added_when_graph_entry_exists(self):
+        """Test that JSONL source is added to graph entry when they have same timestamp+action."""
+        # Create mock graph entry
+        mock_graph = MagicMock()
+        mock_graph.id = "graph_dup_002"
+        mock_graph.action = "SPEAK"
+        mock_graph.actor = "user_graph"
+        mock_graph.timestamp = datetime(2025, 9, 1, 10, 0, 0, tzinfo=timezone.utc)
+        mock_graph.signature = "graph_sig_002"
+        mock_graph.hash_chain = "graph_hash_002"
+        mock_graph.context = MagicMock()
+        mock_graph.context.model_dump.return_value = {}
+
+        graph_entries = [mock_graph]
+
+        # JSONL entry with SAME timestamp+action (should be deduplicated, adding jsonl to sources)
+        jsonl_entries = [
+            {
+                "id": "jsonl_dup_002",
+                "timestamp": "2025-09-01T10:00:00+00:00",  # Same timestamp
+                "action": "SPEAK",  # Same action
+                "actor": "user_jsonl",
+            }
+        ]
+
+        # No SQLite entries - graph is first source
+        sqlite_entries: List[dict] = []
+
+        merged = await _merge_audit_sources(graph_entries, sqlite_entries, jsonl_entries)
+
+        # Should be deduplicated to 1 entry
+        assert len(merged) == 1
+        # Should have both graph and jsonl in storage_sources
+        assert "graph" in merged[0].storage_sources
+        assert "jsonl" in merged[0].storage_sources
+
+    @pytest.mark.asyncio
     async def test_malformed_payload_json_handled_gracefully(self):
         """Test that malformed event_payload JSON doesn't crash metadata extraction."""
         sqlite_entries = [

@@ -160,6 +160,12 @@ data class SetupFormState(
     // No message content or PII is ever sent
     val accordMetricsConsent: Boolean = false,
 
+    // Public API Services (Navigation & Weather)
+    // Email included in User-Agent header for Nominatim (OSM) and weather.gov (NOAA)
+    // Required by their usage policies for contact if issues arise
+    val publicApiEmail: String = "",
+    val publicApiServicesEnabled: Boolean = false,
+
     // V1.9.7: Template selection (Advanced Settings)
     val availableTemplates: List<AgentTemplateInfo> = emptyList(),
     val selectedTemplateId: String = "default",

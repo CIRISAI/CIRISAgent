@@ -234,6 +234,26 @@ class SetupViewModel : ViewModel() {
         _state.value = _state.value.copy(accordMetricsConsent = consent)
     }
 
+    // ========== Public API Services (Navigation & Weather) ==========
+
+    /**
+     * Set the email address for public API services (Navigation & Weather).
+     * This email is included in User-Agent headers as required by
+     * OpenStreetMap Nominatim and NOAA weather.gov usage policies.
+     */
+    fun setPublicApiEmail(email: String) {
+        _state.value = _state.value.copy(publicApiEmail = email)
+    }
+
+    /**
+     * Enable or disable public API services (Navigation & Weather).
+     * When enabled, navigation:geocode can resolve location names to coordinates
+     * for use with weather tools.
+     */
+    fun setPublicApiServicesEnabled(enabled: Boolean) {
+        _state.value = _state.value.copy(publicApiServicesEnabled = enabled)
+    }
+
     // ========== Template Selection (V1.9.7) ==========
 
     /**
@@ -602,14 +622,17 @@ class SetupViewModel : ViewModel() {
             }
         }
 
-        // Build adapter config with accord metrics settings if consented
-        val adapterConfig = if (currentState.accordMetricsConsent) {
-            mapOf(
-                "CIRIS_ACCORD_METRICS_CONSENT" to "true",
-                "CIRIS_ACCORD_METRICS_TRACE_LEVEL" to "detailed"
-            )
-        } else {
-            emptyMap()
+        // Build adapter config with consent settings
+        val adapterConfig = buildMap {
+            // Accord metrics settings
+            if (currentState.accordMetricsConsent) {
+                put("CIRIS_ACCORD_METRICS_CONSENT", "true")
+                put("CIRIS_ACCORD_METRICS_TRACE_LEVEL", "detailed")
+            }
+            // Public API services (Navigation & Weather)
+            if (currentState.publicApiServicesEnabled && currentState.publicApiEmail.isNotBlank()) {
+                put("PUBLIC_API_CONTACT_EMAIL", currentState.publicApiEmail)
+            }
         }
 
         // Node flow fields (if provisioned via Portal)

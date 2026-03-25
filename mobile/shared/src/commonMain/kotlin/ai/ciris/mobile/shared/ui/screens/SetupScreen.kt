@@ -1612,6 +1612,112 @@ private fun OptionalFeaturesStep(
             }
         }
 
+        // Navigation & Weather Services Card
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SetupColors.SuccessLight,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Text(
+                        text = "🌍",
+                        fontSize = 20.sp,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text(
+                        text = "Navigation & Weather Services",
+                        color = SetupColors.SuccessDark,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Text(
+                    text = "Enable location-based tools powered by free public APIs (OpenStreetMap, NOAA Weather). These services require a contact email in API requests per their usage policies.",
+                    color = SetupColors.SuccessText,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+
+                Text(
+                    text = "Features enabled:",
+                    color = SetupColors.SuccessDark,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+
+                Column(modifier = Modifier.padding(start = 8.dp, bottom = 12.dp)) {
+                    DataPointRow("Convert addresses to coordinates", SetupColors.SuccessText)
+                    DataPointRow("Get current weather by location name", SetupColors.SuccessText)
+                    DataPointRow("Calculate routes and distances", SetupColors.SuccessText)
+                    DataPointRow("Weather forecasts (US locations)", SetupColors.SuccessText)
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.testableClickable("item_public_api_services") {
+                        viewModel.setPublicApiServicesEnabled(!state.publicApiServicesEnabled)
+                    }
+                ) {
+                    Checkbox(
+                        checked = state.publicApiServicesEnabled,
+                        onCheckedChange = { viewModel.setPublicApiServicesEnabled(it) },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = SetupColors.Primary,
+                            uncheckedColor = SetupColors.TextSecondary
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Enable navigation & weather tools",
+                        color = SetupColors.SuccessDark,
+                        fontSize = 14.sp
+                    )
+                }
+
+                // Email input (shown when enabled)
+                AnimatedVisibility(visible = state.publicApiServicesEnabled) {
+                    Column(modifier = Modifier.padding(top = 12.dp)) {
+                        Text(
+                            text = "Contact Email (required by API policies)",
+                            color = SetupColors.SuccessDark,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                        OutlinedTextField(
+                            value = state.publicApiEmail,
+                            onValueChange = { viewModel.setPublicApiEmail(it) },
+                            placeholder = { Text("your@email.com") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testable("input_public_api_email"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = SetupColors.Primary,
+                                unfocusedBorderColor = SetupColors.SuccessBorder
+                            )
+                        )
+                        Text(
+                            text = "Used in User-Agent header so API providers can contact you if needed. Not shared with CIRIS.",
+                            color = SetupColors.SuccessText,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
+
         // Adapters Section
         Text(
             text = "Communication Adapters",

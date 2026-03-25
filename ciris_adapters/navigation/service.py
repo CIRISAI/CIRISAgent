@@ -50,7 +50,12 @@ class NavigationToolService:
         self.routing_url = "https://router.project-osrm.org"  # OSRM for routing
 
         # User agent is required by OSM policy
-        self.user_agent = os.getenv("CIRIS_OSM_USER_AGENT", "CIRIS/1.0 (contact@ciris.ai)")
+        # Use PUBLIC_API_CONTACT_EMAIL from wizard, fall back to legacy env var
+        contact_email = os.getenv("PUBLIC_API_CONTACT_EMAIL", "")
+        if contact_email:
+            self.user_agent = f"CIRIS/2.3 ({contact_email})"
+        else:
+            self.user_agent = os.getenv("CIRIS_OSM_USER_AGENT", "CIRIS/1.0 (contact@ciris.ai)")
 
         # Rate limiting
         self._last_request_time: float = 0.0

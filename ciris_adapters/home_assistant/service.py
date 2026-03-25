@@ -484,9 +484,20 @@ class HAIntegrationService:
 
                     if not success:
                         if status == 200 and (not response_data or len(response_data) == 0):
-                            logger.error(
-                                f"[HA DEVICE CONTROL] FAILED! Entity '{entity_id}' not found or not controllable"
-                            )
+                            # HA returned success but no entities were affected
+                            # This can mean: entity doesn't exist, entity doesn't support action,
+                            # or action had no effect (e.g., media_play with nothing paused)
+                            if action in ("media_play", "media_pause", "media_stop"):
+                                logger.error(
+                                    f"[HA DEVICE CONTROL] FAILED! Action '{action}' had no effect on '{entity_id}'. "
+                                    f"For media_play: ensure something is paused/queued. "
+                                    f"To play new music, use Music Assistant tools (ma_search, ma_play)."
+                                )
+                            else:
+                                logger.error(
+                                    f"[HA DEVICE CONTROL] FAILED! Action '{action}' had no effect on '{entity_id}' "
+                                    f"(entity may not exist or doesn't support this action)"
+                                )
                         else:
                             logger.error(f"[HA DEVICE CONTROL] FAILED! Status {status}")
                         if status == 401:
@@ -504,9 +515,18 @@ class HAIntegrationService:
                     error_msg = None
                     if not success:
                         if status == 200 and (not response_data or len(response_data) == 0):
-                            error_msg = (
-                                f"Entity '{entity_id}' not found. Use ha_list_entities to see available entities."
-                            )
+                            # More specific error based on action type
+                            if action in ("media_play", "media_pause", "media_stop"):
+                                error_msg = (
+                                    f"Action '{action}' had no effect on '{entity_id}'. "
+                                    f"media_play resumes paused content; to play NEW music, use Music Assistant tools (ma_search, ma_play)."
+                                )
+                            else:
+                                error_msg = (
+                                    f"Action '{action}' had no effect on '{entity_id}'. "
+                                    f"Entity may not exist or doesn't support this action. "
+                                    f"Use ha_list_entities to verify entity availability."
+                                )
                         else:
                             error_msg = f"Status {status}: {response_text[:200]}"
 
@@ -827,16 +847,12 @@ class HAIntegrationService:
             Dict with play result including verification status
         """
         try:
-            # Get MA config entry ID (required for play_media service)
-            config_entry_id = await self._get_ma_config_entry_id()
-
+            # Build service data - config_entry_id is NOT required and causes 400 if invalid
             service_data: Dict[str, Any] = {
                 "media_id": media_id,
                 "media_type": media_type,
                 "enqueue": enqueue,
             }
-            if config_entry_id:
-                service_data["config_entry_id"] = config_entry_id
             if player_id:
                 service_data["entity_id"] = player_id
 
@@ -951,12 +967,15 @@ class HAIntegrationService:
                 and (
                     e.entity_id.startswith("media_player.mass_")
                     or e.attributes.get("mass_player_id")
+                    or e.attributes.get("mass_player_type")  # MA-managed player
+                    or e.attributes.get("app_id") == "music_assistant"  # Currently using MA
                     or "music_assistant" in str(e.attributes.get("friendly_name", "")).lower()
                 )
             ]
 
             if not ma_players:
                 # Fall back to all media players if no MA-specific ones found
+                logger.warning("[MA] No Music Assistant players found, returning all media players")
                 ma_players = [
                     {
                         "entity_id": e.entity_id,
@@ -967,7 +986,7 @@ class HAIntegrationService:
                     if e.domain == "media_player"
                 ]
 
-            logger.info(f"[MA] Get players: found {len(ma_players)}")
+            logger.info(f"[MA] Get players: found {len(ma_players)} (MA-controlled)")
             return {"success": True, "players": ma_players}
         except Exception as e:
             logger.error(f"[MA] Get players exception: {e}")

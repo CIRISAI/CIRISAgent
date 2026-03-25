@@ -347,6 +347,48 @@ secrets_tool
 - **RuntimeControlBus** → Multiple control interfaces
 - **WiseBus** → Multiple wisdom sources *(FOCUS AREA)*
 
+## Adapter Development
+
+Adapters extend CIRIS with new capabilities via the bus system. See `FSD/ADAPTER_DEVELOPMENT_GUIDE.md` for the full guide.
+
+### Quick Reference
+
+**Required Files:**
+```
+ciris_adapters/your_adapter/
+├── __init__.py           # MUST export Adapter
+├── adapter.py            # BaseAdapterProtocol implementation
+├── manifest.json         # Metadata, services, capabilities
+├── tool_service.py       # ToolServiceProtocol implementation
+└── config.py             # Pydantic config models (no Dict[str, Any])
+```
+
+**Context Enrichment:**
+Tools that provide situational awareness should auto-run during context gathering:
+```python
+ToolInfo(
+    name="get_status",
+    context_enrichment=True,
+    context_enrichment_params={"include_details": False},
+    ...
+)
+```
+
+**DMA Guidance:**
+Financial and destructive tools MUST have:
+```python
+dma_guidance=ToolDMAGuidance(
+    requires_approval=True,  # Triggers Wise Authority deferral
+    min_confidence=0.95,     # High confidence required
+    ethical_considerations="...",
+)
+```
+
+**Reference Implementations:**
+- `ciris_adapters/sample_adapter/` - Complete template
+- `ciris_adapters/home_assistant/` - Context enrichment example
+- `ciris_adapters/wallet/` - Financial tools example
+
 ## Mobile Development
 
 ### Mobile QA Runner (ALWAYS USE THIS)

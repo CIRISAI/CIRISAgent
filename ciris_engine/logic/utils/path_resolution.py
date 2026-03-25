@@ -249,8 +249,9 @@ def get_ciris_home() -> Path:
         validated = _validate_ciris_home_env(" (Android)")
         if validated:
             return validated
-        # Fallback: use Path.home()/files/ciris (Android app files structure)
-        return Path.home() / "files" / "ciris"
+        # Fallback: use Path.home()/ciris (Android Chaquopy sets HOME to /data/data/{pkg}/files)
+        # So this becomes /data/data/{pkg}/files/ciris
+        return Path.home() / "ciris"
 
     # Priority 2b: iOS mode - use app's Documents directory
     if is_ios():
@@ -327,6 +328,97 @@ def get_package_root() -> Path:
     import ciris_engine
 
     return Path(ciris_engine.__file__).parent
+
+
+def ensure_ciris_home_env() -> Path:
+    """Ensure CIRIS_HOME environment variable is set for all platforms.
+
+    This function MUST be called early in application startup, before any
+    code that depends on CIRIS_HOME (especially CIRISVerify/verifier_singleton).
+
+    Platform support:
+    - Linux (desktop, server, WSL)
+    - macOS (x64, arm64)
+    - Windows (x64)
+    - Android (via Chaquopy)
+    - iOS (via BeeWare/PythonKit)
+    - Docker/managed deployments
+
+    The function:
+    1. Computes the correct CIRIS_HOME using get_ciris_home()
+    2. Sets the CIRIS_HOME environment variable
+    3. Sets CIRIS_DATA_DIR for CIRISVerify compatibility
+    4. Creates the directory if it doesn't exist
+    5. Returns the resolved path
+
+    Returns:
+        Path to CIRIS home directory
+
+    Example:
+        # In main.py, call this FIRST before any imports that use CIRISVerify
+        from ciris_engine.logic.utils.path_resolution import ensure_ciris_home_env
+        ciris_home = ensure_ciris_home_env()
+    """
+    # Compute the correct home directory for this platform
+    ciris_home = get_ciris_home()
+
+    # Resolve to absolute path
+    ciris_home = ciris_home.resolve()
+
+    # Set CIRIS_HOME environment variable (use setdefault to not override explicit user setting)
+    # But if CIRIS_HOME is already set, validate it matches our computed path in dev mode
+    existing_home = os.environ.get("CIRIS_HOME")
+    if existing_home:
+        existing_path = Path(existing_home).resolve()
+        if existing_path != ciris_home:
+            # In development mode, trust the computed path over env var
+            # In other modes, trust the explicit env var
+            if is_development_mode():
+                logger.warning(
+                    f"[path_resolution] CIRIS_HOME env ({existing_path}) differs from "
+                    f"computed path ({ciris_home}) in dev mode - using computed path"
+                )
+                os.environ["CIRIS_HOME"] = str(ciris_home)
+            else:
+                # Trust the explicit env var in non-dev modes
+                ciris_home = existing_path
+                logger.info(f"[path_resolution] Using explicit CIRIS_HOME: {ciris_home}")
+    else:
+        os.environ["CIRIS_HOME"] = str(ciris_home)
+
+    # Set CIRIS_DATA_DIR for CIRISVerify compatibility
+    # CIRISVerify reads this for key storage path
+    data_dir = ciris_home / "data"
+    os.environ.setdefault("CIRIS_DATA_DIR", str(data_dir))
+
+    # Create home directory if it doesn't exist (with appropriate permissions)
+    try:
+        ciris_home.mkdir(parents=True, exist_ok=True)
+        # Ensure data directory exists too
+        data_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        logger.warning(f"[path_resolution] Could not create CIRIS_HOME directory: {e}")
+
+    # Log the configuration for debugging
+    platform_info = []
+    if is_android():
+        platform_info.append("Android")
+    if is_ios():
+        platform_info.append("iOS")
+    if is_managed():
+        platform_info.append("Managed/Docker")
+    if is_development_mode():
+        platform_info.append("Development")
+    if not platform_info:
+        platform_info.append("Installed")
+
+    logger.info(
+        f"[path_resolution] CIRIS_HOME configured: {ciris_home} "
+        f"(platform: {', '.join(platform_info)}, "
+        f"os: {sys.platform})"
+    )
+
+    return ciris_home
 
 
 def find_template_file(template_name: str) -> Optional[Path]:

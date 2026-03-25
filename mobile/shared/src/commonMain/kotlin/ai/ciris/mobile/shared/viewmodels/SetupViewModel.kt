@@ -4,9 +4,14 @@ import ai.ciris.mobile.shared.config.CIRISConfig
 import ai.ciris.mobile.shared.models.*
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 private const val TAG = "SetupViewModel"
 
@@ -32,6 +37,9 @@ class SetupViewModel : ViewModel() {
 
     private val _state = MutableStateFlow(SetupFormState())
     val state: StateFlow<SetupFormState> = _state.asStateFlow()
+
+    // OAuth poll job for adapter wizard
+    private var adapterOAuthPollJob: Job? = null
 
     // ========== Google OAuth State ==========
     // Source: SetupViewModel.kt:68-80, SetupWizardActivity.kt:110-174
@@ -234,6 +242,26 @@ class SetupViewModel : ViewModel() {
         _state.value = _state.value.copy(accordMetricsConsent = consent)
     }
 
+    // ========== Public API Services (Navigation & Weather) ==========
+
+    /**
+     * Set the email address for public API services (Navigation & Weather).
+     * This email is included in User-Agent headers as required by
+     * OpenStreetMap Nominatim and NOAA weather.gov usage policies.
+     */
+    fun setPublicApiEmail(email: String) {
+        _state.value = _state.value.copy(publicApiEmail = email)
+    }
+
+    /**
+     * Enable or disable public API services (Navigation & Weather).
+     * When enabled, navigation:geocode can resolve location names to coordinates
+     * for use with weather tools.
+     */
+    fun setPublicApiServicesEnabled(enabled: Boolean) {
+        _state.value = _state.value.copy(publicApiServicesEnabled = enabled)
+    }
+
     // ========== Template Selection (V1.9.7) ==========
 
     /**
@@ -335,6 +363,438 @@ class SetupViewModel : ViewModel() {
      */
     fun isAdapterEnabled(adapterId: String): Boolean {
         return _state.value.enabledAdapterIds.contains(adapterId)
+    }
+
+    // ========== Adapter Wizard (for adapters requiring configuration) ==========
+
+    /**
+     * Interface for adapter wizard API calls.
+     * SetupScreen provides the implementation using apiClient.
+     */
+    interface AdapterWizardApi {
+        suspend fun getLoadableAdapters(): LoadableAdaptersData
+        suspend fun startAdapterConfiguration(adapterType: String): ConfigSessionData
+        suspend fun executeConfigurationStep(sessionId: String, stepData: Map<String, String>): ConfigStepResultData
+        suspend fun getConfigurationSessionStatus(sessionId: String): ConfigSessionData
+        suspend fun completeAdapterConfiguration(sessionId: String): ConfigCompleteData
+    }
+
+    // Stored API instance for wizard operations
+    private var wizardApi: AdapterWizardApi? = null
+
+    /**
+     * Set the API instance for wizard operations.
+     * Call this before starting the wizard.
+     */
+    fun setWizardApi(api: AdapterWizardApi) {
+        wizardApi = api
+    }
+
+    /**
+     * Start the adapter wizard for a specific adapter type.
+     * Called when user enables an adapter that requires configuration.
+     */
+    fun startAdapterWizard(adapterType: String) {
+        val api = wizardApi
+        if (api == null) {
+            PlatformLogger.e(TAG, "startAdapterWizard: No API instance set")
+            _state.value = _state.value.copy(
+                adapterWizardError = "Configuration not available"
+            )
+            return
+        }
+
+        PlatformLogger.i(TAG, "startAdapterWizard: Starting wizard for adapter type: $adapterType")
+        viewModelScope.launch {
+            _state.value = _state.value.copy(
+                showAdapterWizard = true,
+                adapterWizardType = adapterType,
+                adapterWizardLoading = true,
+                adapterWizardError = null,
+                adapterDiscoveredItems = emptyList(),
+                adapterDiscoveryExecuted = false,
+                adapterSelectOptions = emptyList()
+            )
+            try {
+                val session = api.startAdapterConfiguration(adapterType)
+                _state.value = _state.value.copy(
+                    adapterWizardSession = session,
+                    adapterWizardLoading = false
+                )
+                // Auto-execute discovery step if first step is discovery type
+                if (session.currentStep?.stepType == "discovery") {
+                    PlatformLogger.i(TAG, "First step is discovery, auto-executing...")
+                    executeAdapterDiscoveryStepInternal(session)
+                }
+                // Auto-fetch options for select steps
+                if (session.currentStep?.stepType == "select") {
+                    PlatformLogger.i(TAG, "First step is select, auto-fetching options...")
+                    fetchAdapterSelectOptionsInternal(session)
+                }
+            } catch (e: Exception) {
+                PlatformLogger.e(TAG, "startAdapterWizard: Failed - ${e.message}")
+                _state.value = _state.value.copy(
+                    adapterWizardError = "Failed to start wizard: ${e.message}",
+                    adapterWizardLoading = false
+                )
+            }
+        }
+    }
+
+    /**
+     * Execute the discovery step for an adapter wizard.
+     */
+    fun executeAdapterDiscoveryStep() {
+        val session = _state.value.adapterWizardSession ?: return
+        val api = wizardApi ?: return
+        PlatformLogger.i(TAG, "executeAdapterDiscoveryStep: Executing discovery for session: ${session.sessionId}")
+        viewModelScope.launch {
+            _state.value = _state.value.copy(
+                adapterWizardLoading = true,
+                adapterWizardError = null
+            )
+            try {
+                executeAdapterDiscoveryStepInternal(session)
+            } catch (e: Exception) {
+                PlatformLogger.e(TAG, "executeAdapterDiscoveryStep: Failed - ${e.message}")
+                _state.value = _state.value.copy(
+                    adapterWizardError = "Discovery failed: ${e.message}",
+                    adapterWizardLoading = false
+                )
+            }
+        }
+    }
+
+    private suspend fun executeAdapterDiscoveryStepInternal(session: ConfigSessionData) {
+        val api = wizardApi ?: return
+        val result = api.executeConfigurationStep(session.sessionId, emptyMap())
+        _state.value = _state.value.copy(
+            adapterDiscoveryExecuted = true,
+            adapterDiscoveredItems = result.discoveredItems,
+            adapterWizardLoading = false
+        )
+        if (result.nextStepIndex != null) {
+            _state.value = _state.value.copy(
+                adapterWizardSession = session.copy(currentStepIndex = result.nextStepIndex)
+            )
+        }
+    }
+
+    private suspend fun fetchAdapterSelectOptionsInternal(session: ConfigSessionData) {
+        val api = wizardApi ?: return
+        try {
+            val result = api.executeConfigurationStep(session.sessionId, emptyMap())
+            if (result.selectOptions.isNotEmpty()) {
+                PlatformLogger.i(TAG, "Fetched ${result.selectOptions.size} select options")
+                _state.value = _state.value.copy(adapterSelectOptions = result.selectOptions)
+            }
+        } catch (e: Exception) {
+            PlatformLogger.e(TAG, "fetchAdapterSelectOptionsInternal: Failed - ${e.message}")
+        }
+    }
+
+    /**
+     * Select a discovered item in the wizard.
+     */
+    fun selectAdapterDiscoveredItem(item: DiscoveredItemData) {
+        val session = _state.value.adapterWizardSession ?: return
+        val api = wizardApi ?: return
+        PlatformLogger.i(TAG, "selectAdapterDiscoveredItem: Selected ${item.label}")
+        viewModelScope.launch {
+            _state.value = _state.value.copy(adapterWizardLoading = true)
+            try {
+                val stepData = mapOf(
+                    "selected_url" to item.value,
+                    "selected_id" to item.id
+                )
+                val result = api.executeConfigurationStep(session.sessionId, stepData)
+                handleAdapterWizardStepResult(session, result)
+            } catch (e: Exception) {
+                PlatformLogger.e(TAG, "selectAdapterDiscoveredItem: Failed - ${e.message}")
+                _state.value = _state.value.copy(
+                    adapterWizardError = "Failed to select item: ${e.message}",
+                    adapterWizardLoading = false
+                )
+            }
+        }
+    }
+
+    /**
+     * Submit a manual URL in the discovery step.
+     */
+    fun submitAdapterManualUrl(url: String) {
+        val session = _state.value.adapterWizardSession ?: return
+        val api = wizardApi ?: return
+        PlatformLogger.i(TAG, "submitAdapterManualUrl: Submitting URL: $url")
+        viewModelScope.launch {
+            _state.value = _state.value.copy(adapterWizardLoading = true)
+            try {
+                val stepData = mapOf("manual_url" to url)
+                val result = api.executeConfigurationStep(session.sessionId, stepData)
+                handleAdapterWizardStepResult(session, result)
+            } catch (e: Exception) {
+                PlatformLogger.e(TAG, "submitAdapterManualUrl: Failed - ${e.message}")
+                _state.value = _state.value.copy(
+                    adapterWizardError = "Failed to submit URL: ${e.message}",
+                    adapterWizardLoading = false
+                )
+            }
+        }
+    }
+
+    /**
+     * Submit the current wizard step with field values.
+     */
+    fun submitAdapterWizardStep(stepData: Map<String, String>) {
+        val session = _state.value.adapterWizardSession ?: return
+        val api = wizardApi ?: return
+        PlatformLogger.i(TAG, "submitAdapterWizardStep: Submitting step data: $stepData")
+        viewModelScope.launch {
+            _state.value = _state.value.copy(
+                adapterWizardLoading = true,
+                adapterWizardError = null
+            )
+            try {
+                val result = api.executeConfigurationStep(session.sessionId, stepData)
+                handleAdapterWizardStepResult(session, result)
+            } catch (e: Exception) {
+                PlatformLogger.e(TAG, "submitAdapterWizardStep: Failed - ${e.message}")
+                _state.value = _state.value.copy(
+                    adapterWizardError = "Failed to submit step: ${e.message}",
+                    adapterWizardLoading = false
+                )
+            }
+        }
+    }
+
+    /**
+     * Initiate OAuth step in the adapter wizard.
+     */
+    fun initiateAdapterOAuthStep() {
+        val session = _state.value.adapterWizardSession ?: return
+        val api = wizardApi ?: return
+        PlatformLogger.i(TAG, "initiateAdapterOAuthStep: Starting OAuth for session: ${session.sessionId}")
+        viewModelScope.launch {
+            _state.value = _state.value.copy(
+                adapterWizardLoading = true,
+                adapterWizardError = null
+            )
+            try {
+                val stepData = mapOf("callback_base_url" to "http://127.0.0.1:8080")
+                val result = api.executeConfigurationStep(session.sessionId, stepData)
+                if (result.oauthUrl != null) {
+                    PlatformLogger.i(TAG, "OAuth URL received: ${result.oauthUrl.take(80)}...")
+                    _state.value = _state.value.copy(
+                        adapterOAuthUrl = result.oauthUrl,
+                        adapterAwaitingOAuthCallback = true,
+                        adapterWizardLoading = false
+                    )
+                    startAdapterOAuthPolling(session.sessionId)
+                } else {
+                    PlatformLogger.e(TAG, "No OAuth URL in response")
+                    _state.value = _state.value.copy(
+                        adapterWizardError = "Failed to get OAuth URL",
+                        adapterWizardLoading = false
+                    )
+                }
+            } catch (e: Exception) {
+                PlatformLogger.e(TAG, "initiateAdapterOAuthStep: Failed - ${e.message}")
+                _state.value = _state.value.copy(
+                    adapterWizardError = "OAuth initiation failed: ${e.message}",
+                    adapterWizardLoading = false
+                )
+            }
+        }
+    }
+
+    private fun startAdapterOAuthPolling(sessionId: String) {
+        val api = wizardApi ?: return
+        adapterOAuthPollJob?.cancel()
+        adapterOAuthPollJob = viewModelScope.launch {
+            PlatformLogger.i(TAG, "startAdapterOAuthPolling: Starting poll for session: $sessionId")
+            var attempts = 0
+            val maxAttempts = 120  // 2 minutes
+            while (isActive && attempts < maxAttempts && _state.value.adapterAwaitingOAuthCallback) {
+                delay(1000)
+                attempts++
+                try {
+                    val updated = api.getConfigurationSessionStatus(sessionId)
+                    val currentSession = _state.value.adapterWizardSession
+                    if (currentSession != null && updated.currentStepIndex > currentSession.currentStepIndex) {
+                        PlatformLogger.i(TAG, "OAuth callback received - step advanced")
+                        _state.value = _state.value.copy(
+                            adapterAwaitingOAuthCallback = false,
+                            adapterOAuthUrl = null
+                        )
+                        onAdapterOAuthStepAdvanced(updated)
+                        return@launch
+                    }
+                } catch (e: Exception) {
+                    if (attempts % 10 == 0) {
+                        PlatformLogger.e(TAG, "OAuth poll #$attempts failed: ${e.message}")
+                    }
+                }
+            }
+            if (_state.value.adapterAwaitingOAuthCallback) {
+                PlatformLogger.e(TAG, "OAuth polling timed out")
+                _state.value = _state.value.copy(
+                    adapterAwaitingOAuthCallback = false,
+                    adapterWizardError = "OAuth authentication timed out. Please try again."
+                )
+            }
+        }
+    }
+
+    private suspend fun onAdapterOAuthStepAdvanced(updatedSession: ConfigSessionData) {
+        _state.value = _state.value.copy(
+            adapterWizardSession = updatedSession,
+            adapterDiscoveredItems = emptyList(),
+            adapterDiscoveryExecuted = false,
+            adapterSelectOptions = emptyList()
+        )
+
+        // Check if wizard is complete
+        if (updatedSession.currentStepIndex >= updatedSession.totalSteps) {
+            completeAdapterWizardInternal(updatedSession)
+            return
+        }
+
+        // Auto-execute discovery or fetch select options for next step
+        if (updatedSession.currentStep?.stepType == "discovery") {
+            executeAdapterDiscoveryStepInternal(updatedSession)
+        }
+        if (updatedSession.currentStep?.stepType == "select") {
+            fetchAdapterSelectOptionsInternal(updatedSession)
+        }
+    }
+
+    /**
+     * Check OAuth status on app resume.
+     */
+    fun checkAdapterOAuthOnResume() {
+        if (!_state.value.adapterAwaitingOAuthCallback) return
+        val session = _state.value.adapterWizardSession ?: return
+        val api = wizardApi ?: return
+        PlatformLogger.i(TAG, "checkAdapterOAuthOnResume: Checking status...")
+        viewModelScope.launch {
+            try {
+                val updated = api.getConfigurationSessionStatus(session.sessionId)
+                if (updated.currentStepIndex > session.currentStepIndex) {
+                    PlatformLogger.i(TAG, "OAuth completed while app was suspended")
+                    _state.value = _state.value.copy(
+                        adapterAwaitingOAuthCallback = false,
+                        adapterOAuthUrl = null
+                    )
+                    adapterOAuthPollJob?.cancel()
+                    onAdapterOAuthStepAdvanced(updated)
+                }
+            } catch (e: Exception) {
+                PlatformLogger.e(TAG, "checkAdapterOAuthOnResume: Failed - ${e.message}")
+            }
+        }
+    }
+
+    private suspend fun handleAdapterWizardStepResult(session: ConfigSessionData, result: ConfigStepResultData) {
+        val api = wizardApi ?: return
+        try {
+            val updatedSession = api.getConfigurationSessionStatus(session.sessionId)
+            PlatformLogger.i(TAG, "handleAdapterWizardStepResult: Step ${updatedSession.currentStepIndex}/${updatedSession.totalSteps}")
+
+            // Check if wizard is complete
+            if (updatedSession.currentStepIndex >= updatedSession.totalSteps) {
+                PlatformLogger.i(TAG, "Wizard completed!")
+                completeAdapterWizardInternal(updatedSession)
+                return
+            }
+
+            _state.value = _state.value.copy(
+                adapterWizardSession = updatedSession,
+                adapterDiscoveredItems = emptyList(),
+                adapterDiscoveryExecuted = false,
+                adapterSelectOptions = emptyList(),
+                adapterWizardLoading = false
+            )
+
+            // Auto-execute next step if needed
+            if (updatedSession.currentStep?.stepType == "discovery") {
+                executeAdapterDiscoveryStepInternal(updatedSession)
+            }
+            if (updatedSession.currentStep?.stepType == "select") {
+                fetchAdapterSelectOptionsInternal(updatedSession)
+            }
+        } catch (e: Exception) {
+            PlatformLogger.e(TAG, "handleAdapterWizardStepResult: Failed to fetch session status - ${e.message}")
+            _state.value = _state.value.copy(adapterWizardLoading = false)
+            if (result.nextStepIndex != null && result.nextStepIndex >= session.totalSteps) {
+                completeAdapterWizardInternal(session)
+            }
+        }
+    }
+
+    private suspend fun completeAdapterWizardInternal(session: ConfigSessionData) {
+        val api = wizardApi ?: return
+        val adapterType = _state.value.adapterWizardType
+        try {
+            val completeResult = api.completeAdapterConfiguration(session.sessionId)
+            PlatformLogger.i(TAG, "completeAdapterWizardInternal: Completed - success=${completeResult.success}")
+
+            // Store the collected config for this adapter
+            val collectedConfig = session.collectedConfig
+            val currentConfigured = _state.value.configuredAdapterData.toMutableMap()
+            if (adapterType != null) {
+                currentConfigured[adapterType] = collectedConfig
+            }
+
+            // Enable the adapter since it's now configured
+            val currentEnabled = _state.value.enabledAdapterIds.toMutableSet()
+            if (adapterType != null) {
+                currentEnabled.add(adapterType)
+            }
+
+            _state.value = _state.value.copy(
+                enabledAdapterIds = currentEnabled,
+                configuredAdapterData = currentConfigured
+            )
+            closeAdapterWizard()
+        } catch (e: Exception) {
+            PlatformLogger.e(TAG, "completeAdapterWizardInternal: Failed - ${e.message}")
+            _state.value = _state.value.copy(
+                adapterWizardError = "Failed to apply configuration: ${e.message}",
+                adapterWizardLoading = false
+            )
+        }
+    }
+
+    /**
+     * Go back in the adapter wizard.
+     */
+    fun adapterWizardBack() {
+        // For now, just close the session and clear state
+        _state.value = _state.value.copy(
+            adapterWizardSession = null,
+            adapterWizardError = null
+        )
+    }
+
+    /**
+     * Close the adapter wizard dialog.
+     */
+    fun closeAdapterWizard() {
+        PlatformLogger.i(TAG, "closeAdapterWizard: Closing wizard")
+        adapterOAuthPollJob?.cancel()
+        _state.value = _state.value.copy(
+            showAdapterWizard = false,
+            adapterWizardType = null,
+            adapterWizardSession = null,
+            loadableAdaptersData = null,
+            adapterWizardError = null,
+            adapterWizardLoading = false,
+            adapterDiscoveredItems = emptyList(),
+            adapterDiscoveryExecuted = false,
+            adapterOAuthUrl = null,
+            adapterAwaitingOAuthCallback = false,
+            adapterSelectOptions = emptyList()
+        )
     }
 
     /**
@@ -602,14 +1062,17 @@ class SetupViewModel : ViewModel() {
             }
         }
 
-        // Build adapter config with accord metrics settings if consented
-        val adapterConfig = if (currentState.accordMetricsConsent) {
-            mapOf(
-                "CIRIS_ACCORD_METRICS_CONSENT" to "true",
-                "CIRIS_ACCORD_METRICS_TRACE_LEVEL" to "detailed"
-            )
-        } else {
-            emptyMap()
+        // Build adapter config with consent settings
+        val adapterConfig = buildMap {
+            // Accord metrics settings
+            if (currentState.accordMetricsConsent) {
+                put("CIRIS_ACCORD_METRICS_CONSENT", "true")
+                put("CIRIS_ACCORD_METRICS_TRACE_LEVEL", "detailed")
+            }
+            // Public API services (Navigation & Weather)
+            if (currentState.publicApiServicesEnabled && currentState.publicApiEmail.isNotBlank()) {
+                put("PUBLIC_API_CONTACT_EMAIL", currentState.publicApiEmail)
+            }
         }
 
         // Node flow fields (if provisioned via Portal)

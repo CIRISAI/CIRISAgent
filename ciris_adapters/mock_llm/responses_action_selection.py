@@ -1565,14 +1565,11 @@ def aspdma_llm_result(
             ponder_questions=params_dict.get("questions", ["What should I do?"]),
         )
     elif action == HandlerActionType.TOOL:
-        # For $tool commands, params_dict contains parsed parameters
-        # Pass them through so they don't need to be re-extracted by TSASPDMA
-        tool_parameters = params_dict.get("parameters", {})
+        # ASPDMA only selects tool NAME - TSASPDMA extracts parameters
         flat_result = ASPDMALLMResult(
             selected_action=action,
             rationale=rationale,
             tool_name=params_dict.get("name", "unknown_tool"),
-            tool_parameters=tool_parameters if tool_parameters else None,
         )
     elif action == HandlerActionType.REJECT:
         flat_result = ASPDMALLMResult(

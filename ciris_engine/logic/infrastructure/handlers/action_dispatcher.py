@@ -299,6 +299,9 @@ class ActionDispatcher:
         audit_params = extract_audit_parameters(
             action_type, final_action_result.action_parameters, follow_up_thought_id
         )
+        logger.info(
+            f"[AUDIT] Extracted params for {action_type.value}: {list(audit_params.keys())}"
+        )
 
         # For TOOL actions, capture the result from the follow-up thought's content
         if action_type == HandlerActionType.TOOL and follow_up_thought_id:
@@ -337,11 +340,21 @@ class ActionDispatcher:
             handler_name=handler.__class__.__name__,
             parameters=audit_params,
         )
+
+        # Log full audit details for debugging
+        logger.info(f"[AUDIT] Creating entry for {action_type.value}:")
+        logger.info(f"[AUDIT]   thought_id: {thought.thought_id}")
+        logger.info(f"[AUDIT]   outcome: {outcome}")
+        for key, value in audit_params.items():
+            # Truncate long values for readability
+            display_value = str(value)[:100] + "..." if len(str(value)) > 100 else value
+            logger.info(f"[AUDIT]   {key}: {display_value}")
+
         audit_result = await self.audit_service.log_action(
             action_type=action_type, context=audit_context, outcome=outcome
         )
         logger.info(
-            f"Created audit entry {audit_result.entry_id} for action {action_type.value} with outcome={outcome}"
+            f"[AUDIT] Created entry {audit_result.entry_id} for {action_type.value} (outcome={outcome})"
         )
 
         # Build response

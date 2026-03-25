@@ -257,6 +257,8 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
                 message = result.get("message", "")
                 sections.append(f"--- IMPORTANT TOOL AVAILABLE: {tool_name} ---")
                 sections.append(f"  ⭐ {message}")
+                if when_to_use:
+                    sections.append(f"  When to use: {when_to_use}")
                 sections.append(f"  tool_name=\"{tool_name}\" - Use this EXACT name!")
                 logger.info(f"[TSASPDMA] Added tool highlight for: {tool_name}")
                 continue

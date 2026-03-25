@@ -4,9 +4,12 @@ x402 Wallet Provider.
 USDC payments on Base L2 via the x402 HTTP payment protocol.
 Uses deterministic wallet derivation from CIRISVerify Ed25519 signing key.
 
+Key security feature: The private key NEVER leaves CIRISVerify's secure element.
+We derive the EVM address from the public key, and delegate all signing
+operations back to CIRISVerify.
+
 Dependencies:
-- x402[fastapi,httpx,evm]  # Core x402 protocol
-- cdp-sdk                   # Coinbase Developer Platform
+- x402[fastapi,httpx,evm]  # Core x402 protocol (future)
 - eth-keys                  # Ethereum key handling
 """
 
@@ -16,7 +19,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ..config import X402ProviderConfig
 from ..schemas import (
@@ -34,19 +37,23 @@ from .base import WalletProvider
 
 logger = logging.getLogger(__name__)
 
+# Type alias for signing callback
+SigningCallback = Callable[[bytes], bytes]
+
 
 class X402Provider(WalletProvider):
     """
     x402 provider for USDC payments on Base L2.
 
     Key features:
-    - Wallet address derived from CIRISVerify Ed25519 key
+    - Wallet address derived from CIRISVerify Ed25519 PUBLIC key
+    - Private key NEVER leaves secure element
+    - Signing delegated to CIRISVerify via callback
     - Attestation-gated spending authority
-    - Gas-free transactions via Coinbase paymaster
     - ~400ms finality on Base L2
 
-    The signing key never leaves the secure element. This provider
-    receives signing requests and returns signed transactions.
+    For receiving: Only needs public key (address derivation)
+    For sending: Needs signing callback to CIRISVerify
     """
 
     DOMAIN_SEPARATOR = b"CIRIS-x402-wallet-v1"
@@ -55,18 +62,26 @@ class X402Provider(WalletProvider):
     def __init__(
         self,
         config: X402ProviderConfig,
+        ed25519_public_key: Optional[bytes] = None,
         ed25519_seed: Optional[bytes] = None,
+        signing_callback: Optional[SigningCallback] = None,
     ) -> None:
         """
         Initialize the x402 provider.
 
         Args:
             config: Provider configuration
-            ed25519_seed: Optional Ed25519 seed for wallet derivation.
-                         In production, this comes from secure element.
+            ed25519_public_key: Ed25519 public key (32 bytes) for address derivation.
+                               This is the preferred method - key stays in secure element.
+            ed25519_seed: Optional Ed25519 seed (32 bytes) for testing only.
+                         In production, use public_key + signing_callback instead.
+            signing_callback: Callback to CIRISVerify for signing operations.
+                            Required for send operations if using public_key mode.
         """
         self.config = config
-        self._ed25519_seed = ed25519_seed
+        self._ed25519_public_key = ed25519_public_key
+        self._ed25519_seed = ed25519_seed  # Only for testing
+        self._signing_callback = signing_callback
         self._evm_address: Optional[str] = None
         self._initialized = False
 
@@ -92,17 +107,53 @@ class X402Provider(WalletProvider):
     def supported_currencies(self) -> List[str]:
         return self.SUPPORTED_CURRENCIES
 
-    def _derive_evm_address(self, seed: bytes) -> str:
+    def _derive_evm_address_from_pubkey(self, public_key: bytes) -> str:
         """
-        Derive EVM wallet address from Ed25519 seed.
+        Derive EVM wallet address from Ed25519 PUBLIC key.
 
-        Uses HKDF-SHA256 with domain separation to derive a secp256k1 key,
-        then computes the corresponding Ethereum address.
+        This is the secure method - private key never leaves CIRISVerify.
+        Uses HKDF-SHA256 with domain separation to create a deterministic
+        mapping from Ed25519 public key to EVM address.
 
-        This is deterministic: same seed always produces same address.
+        Args:
+            public_key: Ed25519 public key (32 bytes)
+
+        Returns:
+            EVM address (0x...)
+        """
+        # HKDF with public key as input keying material
+        # This creates a deterministic, one-way mapping
+        prk = hmac.new(self.DOMAIN_SEPARATOR, public_key, hashlib.sha256).digest()
+        info = b"evm-address-from-ed25519-pubkey"
+        address_bytes = hmac.new(prk, info + b"\x01", hashlib.sha256).digest()[:20]
+
+        # Convert to checksum address
+        address_hex = address_bytes.hex()
+        return self._to_checksum_address(address_hex)
+
+    def _to_checksum_address(self, address_hex: str) -> str:
+        """Convert raw hex to EIP-55 checksum address."""
+        address_hex = address_hex.lower().replace("0x", "")
+        hash_bytes = hashlib.sha3_256(address_hex.encode()).digest()
+
+        checksum_address = "0x"
+        for i, char in enumerate(address_hex):
+            if char in "0123456789":
+                checksum_address += char
+            elif hash_bytes[i // 2] >> (4 * (1 - i % 2)) & 0xF >= 8:
+                checksum_address += char.upper()
+            else:
+                checksum_address += char
+        return checksum_address
+
+    def _derive_evm_address_from_seed(self, seed: bytes) -> str:
+        """
+        Derive EVM wallet address from Ed25519 seed (TESTING ONLY).
+
+        In production, use _derive_evm_address_from_pubkey instead.
+        This method is only for testing when we have direct access to the seed.
         """
         try:
-            # Import eth_keys only when needed
             from eth_keys import keys as eth_keys
 
             # HKDF-extract
@@ -112,32 +163,36 @@ class X402Provider(WalletProvider):
             info = b"evm-secp256k1-signing-key"
             okm = hmac.new(prk, info + b"\x01", hashlib.sha256).digest()
 
-            # Derive EVM address
+            # Derive EVM address from secp256k1 private key
             private_key = eth_keys.PrivateKey(okm)
             address: str = private_key.public_key.to_checksum_address()
             return address
 
         except ImportError:
-            logger.warning("eth_keys not installed, using placeholder address")
-            # Generate deterministic placeholder from seed
-            hash_bytes = hashlib.sha256(self.DOMAIN_SEPARATOR + seed).digest()
-            return "0x" + hash_bytes[:20].hex()
+            logger.warning("eth_keys not installed, using HKDF-based address")
+            # Fall back to HKDF-based address derivation
+            return self._derive_evm_address_from_pubkey(seed)
 
     async def initialize(self) -> bool:
-        """Initialize the provider."""
+        """Initialize the provider and derive wallet address."""
         logger.info(f"Initializing X402Provider on {self.config.network}")
 
-        if self._ed25519_seed:
-            self._evm_address = self._derive_evm_address(self._ed25519_seed)
-            logger.info(f"Derived wallet address: {self._evm_address}")
+        # Priority: public_key (secure) > seed (testing only)
+        if self._ed25519_public_key:
+            self._evm_address = self._derive_evm_address_from_pubkey(self._ed25519_public_key)
+            logger.info(f"Derived wallet address from public key: {self._evm_address}")
+            if not self._signing_callback:
+                logger.warning("No signing callback - send operations will fail (receive-only mode)")
+        elif self._ed25519_seed:
+            logger.warning("Using Ed25519 seed directly - this should only be used for testing!")
+            self._evm_address = self._derive_evm_address_from_seed(self._ed25519_seed)
+            logger.info(f"Derived wallet address from seed: {self._evm_address}")
         else:
-            logger.warning("No Ed25519 seed provided - wallet operations will fail")
-
-        # TODO: Initialize x402 client and CDP SDK
-        # from x402 import x402Client
-        # from x402.mechanisms.evm.exact import ExactEvmScheme
-        # self._client = x402Client()
-        # self._client.register("eip155:*", ExactEvmScheme(signer=self._signer))
+            logger.warning("No Ed25519 key provided - wallet will use placeholder address")
+            # Generate a deterministic placeholder for testing
+            placeholder = hashlib.sha256(b"CIRIS-no-key-placeholder").digest()[:20]
+            self._evm_address = self._to_checksum_address(placeholder.hex())
+            logger.info(f"Using placeholder address: {self._evm_address}")
 
         self._initialized = True
         return True
@@ -185,7 +240,19 @@ class X402Provider(WalletProvider):
                 amount=amount,
                 currency=currency,
                 recipient=recipient,
-                error="Wallet not initialized (no Ed25519 seed)",
+                error="Wallet not initialized (no Ed25519 key)",
+            )
+
+        # Check signing capability (need either callback or seed)
+        if not self._signing_callback and not self._ed25519_seed:
+            return TransactionResult(
+                success=False,
+                provider=self.provider_id,
+                amount=amount,
+                currency=currency,
+                recipient=recipient,
+                error="Cannot send: no signing capability (receive-only mode). "
+                      "Ensure CIRISVerify is initialized with a key.",
             )
 
         # Validate recipient address format
@@ -199,11 +266,17 @@ class X402Provider(WalletProvider):
                 error=f"Invalid EVM address format: {recipient}",
             )
 
-        # TODO: Implement actual x402 transaction
-        # For now, return a simulated success for testing
+        # TODO: Implement actual x402 transaction using signing callback
+        # When implemented:
+        # 1. Build EIP-712 typed data for the transfer
+        # 2. Sign via self._signing_callback(typed_data_hash) if available
+        # 3. Submit to x402 facilitator
+        #
+        # For now, simulate transaction for testing
+        signing_mode = "CIRISVerify callback" if self._signing_callback else "local seed (testing)"
         logger.info(
             f"[X402] Sending {amount} {currency} to {recipient}"
-            f" (memo: {memo})"
+            f" (memo: {memo}, signing: {signing_mode})"
         )
 
         # Generate transaction ID

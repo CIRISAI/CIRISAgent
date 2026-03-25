@@ -8,12 +8,17 @@ This adapter follows the CIRIS adapter pattern:
 - Tool service registered with ToolBus
 - Provider-agnostic interface
 - DMA-gated financial operations
+
+KEY FEATURE: Auto-loads from CIRISVerify
+- Wallet address derived from CIRISVerify Ed25519 public key
+- Private key NEVER leaves secure element
+- Every CIRIS agent has a wallet address from birth
 """
 
 import asyncio
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.registries.base import Priority
@@ -103,15 +108,21 @@ class WalletAdapter(Service):
         """Initialize enabled wallet providers."""
         # Initialize x402 provider if enabled
         if self.adapter_config.x402.enabled:
-            # In production, Ed25519 seed comes from CIRISVerify secure element
-            # For now, use a test seed or derive from environment
-            ed25519_seed = self._get_ed25519_seed()
+            # Get Ed25519 public key from CIRISVerify (secure - key never leaves vault)
+            public_key, signing_callback = self._get_ciris_verify_key()
+
             x402_provider = X402Provider(
                 config=self.adapter_config.x402,
-                ed25519_seed=ed25519_seed,
+                ed25519_public_key=public_key,
+                ed25519_seed=self._get_test_seed(),  # Fallback for testing only
+                signing_callback=signing_callback,
             )
             self._providers["x402"] = x402_provider
-            logger.info("x402 provider configured")
+
+            if public_key:
+                logger.info("x402 provider configured with CIRISVerify key")
+            else:
+                logger.info("x402 provider configured (no CIRISVerify - test mode)")
 
         # Initialize Chapa provider if enabled
         if self.adapter_config.chapa.enabled:
@@ -119,23 +130,64 @@ class WalletAdapter(Service):
             self._providers["chapa"] = chapa_provider
             logger.info("Chapa provider configured")
 
-    def _get_ed25519_seed(self) -> Optional[bytes]:
+    def _get_ciris_verify_key(self) -> tuple[Optional[bytes], Optional[Callable[[bytes], bytes]]]:
         """
-        Get Ed25519 seed for wallet derivation.
+        Get Ed25519 public key and signing callback from CIRISVerify.
 
-        In production, this comes from CIRISVerify secure element.
-        For testing, can use environment variable or generate deterministically.
+        Returns:
+            Tuple of (public_key, signing_callback)
+            - public_key: 32 bytes Ed25519 public key for address derivation
+            - signing_callback: Function to sign data via CIRISVerify
+
+        The private key NEVER leaves the secure element. We only get:
+        1. Public key (for deriving wallet address)
+        2. Signing callback (for transaction signing)
         """
-        # Check for test seed in environment
+        try:
+            # Import the singleton getter
+            from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+                get_verifier,
+            )
+
+            verifier = get_verifier()
+
+            # Check if verifier has a key
+            if not verifier.has_key_sync():
+                logger.warning("CIRISVerify has no key loaded")
+                return None, None
+
+            # Get public key (safe - this is public information)
+            public_key = verifier.get_ed25519_public_key_sync()
+            logger.info(f"Got Ed25519 public key from CIRISVerify ({len(public_key)} bytes)")
+
+            # Create signing callback that delegates to CIRISVerify
+            def signing_callback(data: bytes) -> bytes:
+                """Sign data using CIRISVerify (key never leaves secure element)."""
+                result: bytes = verifier.sign_ed25519_sync(data)
+                return result
+
+            return public_key, signing_callback
+
+        except ImportError as e:
+            logger.warning(f"CIRISVerify not available: {e}")
+            return None, None
+        except Exception as e:
+            logger.warning(f"Could not access CIRISVerify: {e}")
+            return None, None
+
+    def _get_test_seed(self) -> Optional[bytes]:
+        """
+        Get Ed25519 seed from environment (TESTING ONLY).
+
+        In production, this should return None - use CIRISVerify instead.
+        """
         seed_hex = os.getenv("WALLET_ED25519_SEED")
         if seed_hex:
             try:
+                logger.warning("Using WALLET_ED25519_SEED from environment - TESTING ONLY")
                 return bytes.fromhex(seed_hex)
             except ValueError:
                 logger.warning("Invalid WALLET_ED25519_SEED format")
-
-        # TODO: Get from CIRISVerify in production
-        # For now, return None which will use placeholder
         return None
 
     def get_services_to_register(self) -> List[AdapterServiceRegistration]:

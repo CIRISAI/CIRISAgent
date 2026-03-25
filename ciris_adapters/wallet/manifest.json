@@ -1,0 +1,88 @@
+{
+  "module": {
+    "name": "wallet",
+    "version": "1.0.0",
+    "description": "Generic money tools supporting crypto (x402/USDC) and fiat (Chapa/ETB) providers",
+    "author": "CIRIS Team"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "wallet.tool_service.WalletToolService",
+      "capabilities": [
+        "tool:wallet",
+        "tool:wallet:send_money",
+        "tool:wallet:request_money",
+        "tool:wallet:get_statement",
+        "execute_tool",
+        "get_available_tools",
+        "context_enrichment"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:wallet",
+    "tool:wallet:send_money",
+    "tool:wallet:request_money",
+    "tool:wallet:get_statement",
+    "provider:x402",
+    "provider:chapa",
+    "currency:USDC",
+    "currency:ETB"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.ToolService"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ],
+    "external_packages": []
+  },
+  "exports": {
+    "tool_service": "wallet.tool_service.WalletToolService",
+    "adapter": "wallet.adapter.WalletAdapter"
+  },
+  "configuration": {
+    "x402_network": {
+      "type": "string",
+      "env": "WALLET_X402_NETWORK",
+      "default": "base-sepolia",
+      "description": "EVM network for x402 (base-mainnet or base-sepolia)"
+    },
+    "x402_treasury_address": {
+      "type": "string",
+      "env": "WALLET_X402_TREASURY_ADDRESS",
+      "default": null,
+      "description": "Treasury wallet address for receiving payments"
+    },
+    "chapa_secret_key": {
+      "type": "string",
+      "env": "WALLET_CHAPA_SECRET_KEY",
+      "default": null,
+      "description": "Chapa API secret key"
+    },
+    "chapa_callback_url": {
+      "type": "string",
+      "env": "WALLET_CHAPA_CALLBACK_URL",
+      "default": null,
+      "description": "Base URL for Chapa payment callbacks"
+    },
+    "default_provider": {
+      "type": "string",
+      "env": "WALLET_DEFAULT_PROVIDER",
+      "default": "x402",
+      "description": "Default provider when currency doesn't specify"
+    }
+  },
+  "metadata": {
+    "context_enrichment_tools": ["get_statement"],
+    "requires_approval_tools": ["send_money"],
+    "supported_currencies": ["USDC", "ETH", "ETB"],
+    "supported_providers": ["x402", "chapa"],
+    "data_source": true,
+    "contains_pii": true,
+    "gdpr_applicable": true
+  }
+}

@@ -321,6 +321,80 @@ GOOGLE_PLAY_SERVICES_AVAILABLE="true"
     return save_path
 
 
+def prompt_language_and_location() -> tuple[str, Optional[str], Optional[str], Optional[str]]:
+    """Interactively prompt for language and location preferences.
+
+    Users choose their own level of location granularity.
+
+    Returns:
+        Tuple of (language_code, country, region, city) - any location part may be None
+    """
+    print("\n" + "=" * 70)
+    print("LANGUAGE & LOCATION")
+    print("=" * 70)
+    print()
+    print("Help CIRIS respond in your preferred language and understand your context.")
+    print()
+
+    # Language selection
+    languages = [
+        ("en", "English"),
+        ("am", "Amharic (አማርኛ)"),
+        ("ar", "Arabic (العربية)"),
+        ("de", "German (Deutsch)"),
+        ("es", "Spanish (Español)"),
+        ("fr", "French (Français)"),
+        ("hi", "Hindi (हिन्दी)"),
+        ("it", "Italian (Italiano)"),
+        ("ja", "Japanese (日本語)"),
+        ("ko", "Korean (한국어)"),
+        ("pt", "Portuguese (Português)"),
+        ("ru", "Russian (Русский)"),
+        ("sw", "Swahili (Kiswahili)"),
+        ("tr", "Turkish (Türkçe)"),
+        ("zh", "Chinese (中文)"),
+    ]
+    print("Preferred language:")
+    for i, (code, name) in enumerate(languages, 1):
+        print(f"  {i:2d}) {name}")
+    print(f"  {len(languages) + 1:2d}) Other (enter ISO 639-1 code)")
+    print()
+
+    choice = input(f"Select language [1-{len(languages) + 1}] (default: 1 - English): ").strip() or "1"
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(languages):
+            language = languages[idx][0]
+            print(f"  Selected: {languages[idx][1]}")
+        else:
+            language = input("Enter ISO 639-1 language code (e.g., 'nl', 'vi'): ").strip().lower() or "en"
+    except ValueError:
+        language = "en"
+
+    # Location - user chooses granularity
+    print()
+    print("Location (optional - share as much or as little as you like):")
+    print("  1) Country only")
+    print("  2) Country + Region/State")
+    print("  3) Country + Region + City")
+    print("  4) Prefer not to say")
+    print()
+
+    loc_choice = input("Select [1-4] (default: 4): ").strip() or "4"
+    country: Optional[str] = None
+    region: Optional[str] = None
+    city: Optional[str] = None
+
+    if loc_choice in ("1", "2", "3"):
+        country = input("Country (e.g., Ethiopia, US, Japan): ").strip() or None
+        if loc_choice in ("2", "3") and country:
+            region = input("Region/State (e.g., Amhara, California, Tokyo): ").strip() or None
+            if loc_choice == "3" and region:
+                city = input("City (e.g., Addis Ababa, San Francisco): ").strip() or None
+
+    return (language, country, region, city)
+
+
 def run_setup_wizard() -> Path:
     """Run the interactive setup wizard.
 
@@ -348,6 +422,9 @@ def run_setup_wizard() -> Path:
             print("Setup cancelled. Using existing configuration.")
             return config_path
 
+    # Get language and location preferences
+    language, country, region, city = prompt_language_and_location()
+
     # Get LLM configuration
     llm_provider, llm_api_key, llm_base_url, llm_model = prompt_llm_configuration()
 
@@ -360,6 +437,18 @@ def run_setup_wizard() -> Path:
         llm_base_url=llm_base_url,
         llm_model=llm_model,
     )
+
+    # Append language/location preferences to .env
+    with open(save_path, "a") as f:
+        f.write("\n# User Preferences (from setup wizard)\n")
+        f.write(f'CIRIS_PREFERRED_LANGUAGE="{language}"\n')
+        if country:
+            location_parts = [country]
+            if region:
+                location_parts.append(region)
+            if city:
+                location_parts.append(city)
+            f.write(f'CIRIS_USER_LOCATION="{", ".join(location_parts)}"\n')
 
     print()
     print("=" * 70)

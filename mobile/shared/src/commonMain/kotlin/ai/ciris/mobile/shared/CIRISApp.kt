@@ -2494,7 +2494,8 @@ private fun CIRISTopBar(
                     DropdownMenuItem(
                         text = { Text("Tools") },
                         onClick = { activeCategory = NavCategory.NONE; onToolsClick() },
-                        leadingIcon = { Icon(Icons.Default.Build, null) }
+                        leadingIcon = { Icon(Icons.Default.Build, null) },
+                        modifier = Modifier.testableClickable("menu_tools") { activeCategory = NavCategory.NONE; onToolsClick() }
                     )
                 }
             }
@@ -2502,7 +2503,10 @@ private fun CIRISTopBar(
             // Category 2: Config & Credits
             Box {
                 IconButton(
-                    onClick = { activeCategory = if (activeCategory == NavCategory.CONFIG) NavCategory.NONE else NavCategory.CONFIG }
+                    onClick = { activeCategory = if (activeCategory == NavCategory.CONFIG) NavCategory.NONE else NavCategory.CONFIG },
+                    modifier = Modifier.testableClickable("btn_config_menu") {
+                        activeCategory = if (activeCategory == NavCategory.CONFIG) NavCategory.NONE else NavCategory.CONFIG
+                    }
                 ) {
                     Icon(
                         imageVector = Icons.Default.Settings,
@@ -2535,17 +2539,20 @@ private fun CIRISTopBar(
                     DropdownMenuItem(
                         text = { Text("App Settings") },
                         onClick = { activeCategory = NavCategory.NONE; onSettingsClick() },
-                        leadingIcon = { Icon(Icons.Default.Settings, null) }
+                        leadingIcon = { Icon(Icons.Default.Settings, null) },
+                        modifier = Modifier.testableClickable("menu_settings") { activeCategory = NavCategory.NONE; onSettingsClick() }
                     )
                     DropdownMenuItem(
                         text = { Text("Agent Config") },
                         onClick = { activeCategory = NavCategory.NONE; onConfigClick() },
-                        leadingIcon = { Icon(Icons.Default.Settings, null) }
+                        leadingIcon = { Icon(Icons.Default.Settings, null) },
+                        modifier = Modifier.testableClickable("menu_config") { activeCategory = NavCategory.NONE; onConfigClick() }
                     )
                     DropdownMenuItem(
                         text = { Text("Buy Credits") },
                         onClick = { activeCategory = NavCategory.NONE; onBillingClick() },
-                        leadingIcon = { Icon(Icons.Default.Star, null) }
+                        leadingIcon = { Icon(Icons.Default.Star, null) },
+                        modifier = Modifier.testableClickable("menu_billing") { activeCategory = NavCategory.NONE; onBillingClick() }
                     )
                 }
             }
@@ -2553,7 +2560,10 @@ private fun CIRISTopBar(
             // Category 3: Data & Privacy
             Box {
                 IconButton(
-                    onClick = { activeCategory = if (activeCategory == NavCategory.DATA) NavCategory.NONE else NavCategory.DATA }
+                    onClick = { activeCategory = if (activeCategory == NavCategory.DATA) NavCategory.NONE else NavCategory.DATA },
+                    modifier = Modifier.testableClickable("btn_data_menu") {
+                        activeCategory = if (activeCategory == NavCategory.DATA) NavCategory.NONE else NavCategory.DATA
+                    }
                 ) {
                     Icon(
                         imageVector = Icons.Default.Info,
@@ -2574,27 +2584,32 @@ private fun CIRISTopBar(
                     DropdownMenuItem(
                         text = { Text("Memory") },
                         onClick = { activeCategory = NavCategory.NONE; onMemoryClick() },
-                        leadingIcon = { Icon(Icons.Default.Star, null) }
+                        leadingIcon = { Icon(Icons.Default.Star, null) },
+                        modifier = Modifier.testableClickable("menu_memory") { activeCategory = NavCategory.NONE; onMemoryClick() }
                     )
                     DropdownMenuItem(
                         text = { Text("Sessions") },
                         onClick = { activeCategory = NavCategory.NONE; onSessionsClick() },
-                        leadingIcon = { Icon(Icons.Default.List, null) }
+                        leadingIcon = { Icon(Icons.Default.List, null) },
+                        modifier = Modifier.testableClickable("menu_sessions") { activeCategory = NavCategory.NONE; onSessionsClick() }
                     )
                     DropdownMenuItem(
                         text = { Text("Consent") },
                         onClick = { activeCategory = NavCategory.NONE; onConsentClick() },
-                        leadingIcon = { Icon(Icons.Default.Check, null) }
+                        leadingIcon = { Icon(Icons.Default.Check, null) },
+                        modifier = Modifier.testableClickable("menu_consent") { activeCategory = NavCategory.NONE; onConsentClick() }
                     )
                     DropdownMenuItem(
                         text = { Text("Audit Trail") },
                         onClick = { activeCategory = NavCategory.NONE; onAuditClick() },
-                        leadingIcon = { Icon(Icons.Default.List, null) }
+                        leadingIcon = { Icon(Icons.Default.List, null) },
+                        modifier = Modifier.testableClickable("menu_audit") { activeCategory = NavCategory.NONE; onAuditClick() }
                     )
                     DropdownMenuItem(
                         text = { Text("Data Management") },
                         onClick = { activeCategory = NavCategory.NONE; onDataManagementClick() },
-                        leadingIcon = { Icon(Icons.Default.Info, null) }
+                        leadingIcon = { Icon(Icons.Default.Info, null) },
+                        modifier = Modifier.testableClickable("menu_data_management") { activeCategory = NavCategory.NONE; onDataManagementClick() }
                     )
                 }
             }
@@ -2602,7 +2617,10 @@ private fun CIRISTopBar(
             // Category 4: Governance
             Box {
                 IconButton(
-                    onClick = { activeCategory = if (activeCategory == NavCategory.GOVERNANCE) NavCategory.NONE else NavCategory.GOVERNANCE }
+                    onClick = { activeCategory = if (activeCategory == NavCategory.GOVERNANCE) NavCategory.NONE else NavCategory.GOVERNANCE },
+                    modifier = Modifier.testableClickable("btn_governance_menu") {
+                        activeCategory = if (activeCategory == NavCategory.GOVERNANCE) NavCategory.NONE else NavCategory.GOVERNANCE
+                    }
                 ) {
                     Icon(
                         imageVector = Icons.Default.Person,
@@ -2623,12 +2641,14 @@ private fun CIRISTopBar(
                     DropdownMenuItem(
                         text = { Text("Human Deferrals") },
                         onClick = { activeCategory = NavCategory.NONE; onWiseAuthorityClick() },
-                        leadingIcon = { Icon(Icons.Default.Person, null) }
+                        leadingIcon = { Icon(Icons.Default.Person, null) },
+                        modifier = Modifier.testableClickable("menu_wise_authority") { activeCategory = NavCategory.NONE; onWiseAuthorityClick() }
                     )
                     DropdownMenuItem(
                         text = { Text("Users") },
                         onClick = { activeCategory = NavCategory.NONE; onUsersClick() },
-                        leadingIcon = { Icon(Icons.Default.Person, null) }
+                        leadingIcon = { Icon(Icons.Default.Person, null) },
+                        modifier = Modifier.testableClickable("menu_users") { activeCategory = NavCategory.NONE; onUsersClick() }
                     )
                 }
             }
@@ -2660,37 +2680,44 @@ private fun CIRISTopBar(
                     DropdownMenuItem(
                         text = { Text("Telemetry") },
                         onClick = { activeCategory = NavCategory.NONE; onTelemetryClick() },
-                        leadingIcon = { Icon(Icons.Default.Info, null) }
+                        leadingIcon = { Icon(Icons.Default.Info, null) },
+                        modifier = Modifier.testableClickable("menu_telemetry") { activeCategory = NavCategory.NONE; onTelemetryClick() }
                     )
                     DropdownMenuItem(
                         text = { Text("Services") },
                         onClick = { activeCategory = NavCategory.NONE; onServicesClick() },
-                        leadingIcon = { Icon(Icons.Default.Build, null) }
+                        leadingIcon = { Icon(Icons.Default.Build, null) },
+                        modifier = Modifier.testableClickable("menu_services") { activeCategory = NavCategory.NONE; onServicesClick() }
                     )
                     DropdownMenuItem(
                         text = { Text("Logs") },
                         onClick = { activeCategory = NavCategory.NONE; onLogsClick() },
-                        leadingIcon = { Icon(Icons.Default.List, null) }
+                        leadingIcon = { Icon(Icons.Default.List, null) },
+                        modifier = Modifier.testableClickable("menu_logs") { activeCategory = NavCategory.NONE; onLogsClick() }
                     )
                     DropdownMenuItem(
                         text = { Text("System") },
                         onClick = { activeCategory = NavCategory.NONE; onSystemClick() },
-                        leadingIcon = { Icon(Icons.Default.Info, null) }
+                        leadingIcon = { Icon(Icons.Default.Info, null) },
+                        modifier = Modifier.testableClickable("menu_system") { activeCategory = NavCategory.NONE; onSystemClick() }
                     )
                     DropdownMenuItem(
                         text = { Text("Runtime") },
                         onClick = { activeCategory = NavCategory.NONE; onRuntimeClick() },
-                        leadingIcon = { Icon(Icons.Default.PlayArrow, null) }
+                        leadingIcon = { Icon(Icons.Default.PlayArrow, null) },
+                        modifier = Modifier.testableClickable("menu_runtime") { activeCategory = NavCategory.NONE; onRuntimeClick() }
                     )
                     DropdownMenuItem(
                         text = { Text("Tickets") },
                         onClick = { activeCategory = NavCategory.NONE; onTicketsClick() },
-                        leadingIcon = { Icon(Icons.Default.List, null) }
+                        leadingIcon = { Icon(Icons.Default.List, null) },
+                        modifier = Modifier.testableClickable("menu_tickets") { activeCategory = NavCategory.NONE; onTicketsClick() }
                     )
                     DropdownMenuItem(
                         text = { Text("Scheduler") },
                         onClick = { activeCategory = NavCategory.NONE; onSchedulerClick() },
-                        leadingIcon = { Icon(Icons.Default.Check, null) }
+                        leadingIcon = { Icon(Icons.Default.Check, null) },
+                        modifier = Modifier.testableClickable("menu_scheduler") { activeCategory = NavCategory.NONE; onSchedulerClick() }
                     )
                 }
             }

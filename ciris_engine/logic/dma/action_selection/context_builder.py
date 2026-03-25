@@ -382,12 +382,16 @@ Adhere strictly to the schema for your JSON output.
         Full parameter schemas are provided separately in action_parameter_schemas.
         """
         if HandlerActionType.TOOL not in permitted_actions:
+            logger.info("[CONTEXT] TOOL action not in permitted_actions, skipping tool summaries")
             return ""
 
         cached_tools = self._get_cached_tools()
         if not cached_tools:
-            logger.debug("[CONTEXT] No cached tools available for tool summaries")
+            logger.warning("[CONTEXT] No cached tools available for tool summaries - tools may not have been pre-cached!")
             return ""
+
+        logger.info(f"[CONTEXT] Building tool summaries for {len(cached_tools)} cached tools")
+        logger.info(f"[CONTEXT] Cached tool names: {list(cached_tools.keys())}")
 
         # Build concise summaries using when_to_use (not full parameters)
         summaries = ["\n\n## Quick Tool Guide (when to use each tool):"]
@@ -395,8 +399,11 @@ Adhere strictly to the schema for your JSON output.
             summary = self._get_tool_summary(tool_key, tool_info)
             if summary:
                 summaries.append(summary)
+                logger.debug(f"[CONTEXT] Tool summary: {summary[:80]}...")
 
-        return "\n".join(summaries) if len(summaries) > 1 else ""
+        result = "\n".join(summaries) if len(summaries) > 1 else ""
+        logger.info(f"[CONTEXT] Tool summaries section: {len(result)} chars, {len(summaries)-1} tools")
+        return result
 
     def _get_installable_tools_str(self) -> str:
         """Get list of tools that are available for installation but not currently usable.

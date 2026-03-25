@@ -255,6 +255,60 @@ def _create_founding_partnership(user_id: str) -> None:
     logger.info(f"✅ Founding partnership created for setup user: {user_id}")
 
 
+def _store_user_preferences(user_id: str, setup: SetupCompleteRequest) -> None:
+    """Store language and location preferences from setup wizard into graph memory.
+
+    These preferences are stored as a graph node so the agent can access them
+    during conversation to match the user's language and provide location-aware responses.
+    """
+    from ciris_engine.logic.persistence import add_graph_node
+    from ciris_engine.logic.services.lifecycle.time.service import TimeService
+    from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+
+    attributes: dict[str, str] = {}
+
+    if setup.preferred_language:
+        attributes["preferred_language"] = setup.preferred_language
+    if setup.location_country:
+        attributes["location_country"] = setup.location_country
+    if setup.location_region:
+        attributes["location_region"] = setup.location_region
+    if setup.location_city:
+        attributes["location_city"] = setup.location_city
+    if setup.timezone:
+        attributes["timezone"] = setup.timezone
+
+    if not attributes:
+        return
+
+    # Build location string at user-chosen granularity
+    location_parts = []
+    if setup.location_city:
+        location_parts.append(setup.location_city)
+    if setup.location_region:
+        location_parts.append(setup.location_region)
+    if setup.location_country:
+        location_parts.append(setup.location_country)
+    if location_parts:
+        attributes["location"] = ", ".join(location_parts)
+
+    now = datetime.now(timezone.utc)
+    node = GraphNode(
+        id=f"preferences/{user_id}",
+        type=NodeType.CONCEPT,
+        scope=GraphScope.LOCAL,
+        attributes=attributes,
+        updated_by="setup_wizard",
+        updated_at=now,
+    )
+
+    time_service = TimeService()
+    add_graph_node(node, time_service, None)
+    lang = attributes.get("preferred_language", "not set")
+    loc = attributes.get("location", "not set")
+    logger.info(f"Stored user preferences for {user_id}: lang={lang}, location={loc}")
+
+
 async def _log_wa_list(auth_service: Any, phase: str) -> None:
     """Log list of WAs for debugging purposes."""
     was = await auth_service.list_was(active_only=False)
@@ -319,6 +373,9 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
         else:
             canonical_user_id = setup.admin_username
         _create_founding_partnership(canonical_user_id)
+
+        # Store user preferences (language & location) in graph memory
+        _store_user_preferences(canonical_user_id, setup)
 
         # Ensure system WA exists
         await _ensure_system_wa(auth_service)
@@ -486,6 +543,20 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
             f.write("\n# Adapter-Specific Configuration\n")
             for key, value in setup.adapter_config.items():
                 f.write(f"{key}={value}\n")
+
+        # User preferences (language & location)
+        if setup.preferred_language:
+            f.write("\n# User Preferences\n")
+            f.write(f'CIRIS_PREFERRED_LANGUAGE="{setup.preferred_language}"\n')
+        if setup.location_country:
+            location_parts = [setup.location_country]
+            if setup.location_region:
+                location_parts.append(setup.location_region)
+            if setup.location_city:
+                location_parts.append(setup.location_city)
+            f.write(f'CIRIS_USER_LOCATION="{", ".join(location_parts)}"\n')
+        if setup.timezone:
+            f.write(f'CIRIS_USER_TIMEZONE="{setup.timezone}"\n')
 
         # Write optional configuration sections
         _write_backup_llm_config(f, setup)

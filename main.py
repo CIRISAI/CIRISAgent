@@ -27,6 +27,16 @@ try:
 
 except ImportError:
     pass  # dotenv is optional; skip if not installed
+
+# =============================================================================
+# CRITICAL: Set CIRIS_HOME environment variable BEFORE any ciris_engine imports
+# This must happen early because CIRISVerify (verifier_singleton) requires it.
+# Supports: Linux, macOS, Windows, WSL, Android, iOS, Docker/managed deployments
+# =============================================================================
+from ciris_engine.logic.utils.path_resolution import ensure_ciris_home_env
+
+_ciris_home = ensure_ciris_home_env()
+
 import asyncio
 import atexit
 import json

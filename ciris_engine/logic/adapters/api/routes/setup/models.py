@@ -293,6 +293,23 @@ class SetupCompleteRequest(BaseModel):
     # Application Configuration
     agent_port: int = Field(default=8080, description="Agent API port")
 
+    # User Preferences (language & location at user-selected granularity)
+    preferred_language: Optional[str] = Field(
+        None, description="ISO 639-1 language code (e.g., 'en', 'am', 'es', 'fr')"
+    )
+    location_country: Optional[str] = Field(
+        None, description="ISO 3166-1 alpha-2 country code (e.g., 'US', 'ET', 'JP')"
+    )
+    location_region: Optional[str] = Field(
+        None, description="Region/state/province name (user-chosen granularity, may be omitted)"
+    )
+    location_city: Optional[str] = Field(
+        None, description="City name (user-chosen granularity, may be omitted)"
+    )
+    timezone: Optional[str] = Field(
+        None, description="IANA timezone (e.g., 'America/Chicago', 'Africa/Addis_Ababa')"
+    )
+
     # Node Connection (set by "Connect to Node" device auth flow)
     node_url: Optional[str] = Field(None, description="CIRISNode URL (e.g., https://node.ciris.ai)")
     identity_template: Optional[str] = Field(None, description="Registry-provisioned identity template ID")

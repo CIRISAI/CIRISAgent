@@ -17,6 +17,7 @@ def _convert_user_profile_to_dict(profile: Any) -> dict[str, Any]:
             "nick": profile.display_name,
             "interest": profile.notes or "",
             "channel": "",  # Not stored in UserProfile schema
+            "preferred_language": profile.preferred_language,
         }
     return cast(dict[str, Any], profile)
 
@@ -62,6 +63,10 @@ def _format_single_profile(user_key: str, profile_data: dict[str, Any]) -> str:
     channel = profile_data.get("channel")
     if channel:
         profile_summary += f", Primary Channel: '{channel}'"
+
+    preferred_language = profile_data.get("preferred_language")
+    if preferred_language and preferred_language != "en":
+        profile_summary += f", Preferred Language: '{preferred_language}'"
 
     return profile_summary
 

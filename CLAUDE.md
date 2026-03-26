@@ -393,6 +393,34 @@ dma_guidance=ToolDMAGuidance(
 
 **NOTE: "mobile" is a misnomer.** The `mobile/` directory contains the **unified CIRIS agent UX** - a Kotlin Multiplatform (KMP) client targeting Android, iOS, Windows, macOS, and Linux. It's the cross-platform user interface for interacting with CIRIS agents.
 
+### Unified Entry Point (`ciris-agent`)
+
+The `ciris-agent` command is the **unified entry point** that starts both the Python backend and the desktop GUI:
+
+```bash
+# Unified: Start API server + launch desktop app (DEFAULT)
+ciris-agent
+
+# Server-only modes (headless)
+ciris-agent --server              # API server only
+ciris-agent --adapter api         # Same as --server
+ciris-agent --adapter discord     # Discord bot mode
+
+# Separate commands
+ciris-server                      # Headless API server only
+ciris-desktop                     # Desktop app only (connects to running server)
+```
+
+**How it works (from `ciris_engine/cli.py`):**
+1. Starts Python API server on port 8080 via `main.py --adapter api`
+2. Waits briefly to detect startup failures
+3. Launches desktop JAR via `desktop_launcher.py`
+4. On exit, shuts down server gracefully
+
+**Desktop JAR location:**
+- Production: `ciris_engine/desktop_app/CIRIS-*.jar` (bundled in pip package)
+- Development: `mobile/desktopApp/build/compose/jars/CIRIS-*.jar`
+
 ### Mobile QA Runner (ALWAYS USE THIS)
 
 When debugging mobile app issues, **always** use the QA runner to pull logs:
@@ -470,11 +498,18 @@ adb install -r mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk
 The desktop app includes an embedded HTTP server for programmatic UI testing:
 
 ```bash
-# Start with test server (default port 8091)
+# Via unified entry point (starts server + desktop with test mode)
+export CIRIS_TEST_MODE=true
+ciris-agent
+
+# Via Gradle (development - desktop only, connects to existing server)
 export CIRIS_TEST_MODE=true
 cd mobile && ./gradlew :desktopApp:run
 
-# Custom port
+# Build development JAR first (if needed)
+cd mobile && ./gradlew :desktopApp:packageUberJarForCurrentOS
+
+# Custom test server port
 export CIRIS_TEST_PORT=9000
 ```
 

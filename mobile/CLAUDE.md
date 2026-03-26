@@ -86,14 +86,21 @@ The desktop app includes an embedded HTTP server for automated UI testing and dr
 ### Enabling Test Mode
 
 ```bash
-# Start with test server (default port 8091)
+# Via unified entry point (starts Python backend + desktop app)
+export CIRIS_TEST_MODE=true
+ciris-agent
+
+# Via Gradle (development - desktop only, needs separate backend)
 export CIRIS_TEST_MODE=true
 ./gradlew :desktopApp:run
 
-# Custom port
+# Build development JAR (outputs to build/compose/jars/CIRIS-*.jar)
+./gradlew :desktopApp:packageUberJarForCurrentOS
+
+# Custom test server port
 export CIRIS_TEST_MODE=true
 export CIRIS_TEST_PORT=9000
-./gradlew :desktopApp:run
+ciris-agent
 ```
 
 ### Test Server Endpoints

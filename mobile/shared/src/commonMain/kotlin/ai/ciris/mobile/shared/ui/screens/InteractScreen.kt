@@ -643,7 +643,7 @@ private fun EnhancedStatusBar(
                     color = Color.Transparent
                 ) {
                     Text(
-                        text = status,
+                        text = localizedCognitiveState(status),
                         fontSize = 10.sp,
                         color = theme.textSecondary,
                         modifier = Modifier.padding(4.dp)
@@ -666,7 +666,7 @@ private fun EnhancedStatusBar(
                         horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Text(
-                            text = "VIZ",
+                            text = localizedString("mobile.interact_viz_label"),
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Medium,
                             color = when (visualizationMode) {
@@ -676,7 +676,11 @@ private fun EnhancedStatusBar(
                             }
                         )
                         Text(
-                            text = visualizationMode.label,
+                            text = when (visualizationMode) {
+                                VisualizationMode.OFF -> localizedString("mobile.interact_viz_mode_off")
+                                VisualizationMode.BACKGROUND -> localizedString("mobile.interact_viz_mode_bg")
+                                VisualizationMode.FOREGROUND -> localizedString("mobile.interact_viz_mode_fg")
+                            },
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                             color = when (visualizationMode) {
@@ -1987,6 +1991,22 @@ private fun formatFileSize(bytes: Long): String {
             val rounded = (mb * 10).toLong() / 10.0
             "${rounded}MB"
         }
+    }
+}
+
+/**
+ * Localize cognitive state names (WORK, PLAY, SOLITUDE, etc.)
+ */
+@Composable
+private fun localizedCognitiveState(state: String): String {
+    return when (state.uppercase()) {
+        "WORK" -> localizedString("mobile.interact_state_work")
+        "PLAY" -> localizedString("mobile.interact_state_play")
+        "SOLITUDE" -> localizedString("mobile.interact_state_solitude")
+        "DREAM" -> localizedString("mobile.interact_state_dream")
+        "WAKEUP" -> localizedString("mobile.interact_state_wakeup")
+        "SHUTDOWN" -> localizedString("mobile.interact_state_shutdown")
+        else -> state  // Fallback to original if unknown
     }
 }
 

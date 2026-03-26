@@ -603,6 +603,19 @@
     "interact_viz_memory_graph": "Grafico di Memoria",
     "interact_viz_local": "Ambito locale",
     "interact_viz_identity": "Ambito identità",
-    "interact_viz_environ": "Ambiente"
+    "interact_viz_environ": "Ambiente",
+    "interact_viz_label": "VIS",
+    "interact_viz_mode_off": "OFF",
+    "interact_viz_mode_bg": "SFD",
+    "interact_viz_mode_fg": "PRM",
+    "interact_viz_desc_off": "Visualizzazione disattivata",
+    "interact_viz_desc_bg": "Modalità sfondo",
+    "interact_viz_desc_fg": "Modalità primo piano",
+    "interact_state_work": "LAVORO",
+    "interact_state_play": "GIOCO",
+    "interact_state_solitude": "SOLITUDINE",
+    "interact_state_dream": "SOGNO",
+    "interact_state_wakeup": "RISVEGLIO",
+    "interact_state_shutdown": "SPEGNIMENTO"
   }
 }

@@ -612,6 +612,19 @@
     "interact_viz_memory_graph": "[EN] Memory Graph",
     "interact_viz_local": "[EN] Local scope",
     "interact_viz_identity": "[EN] Identity scope",
-    "interact_viz_environ": "[EN] Environment"
+    "interact_viz_environ": "[EN] Environment",
+    "interact_viz_label": "VIS",
+    "interact_viz_mode_off": "AUS",
+    "interact_viz_mode_bg": "HG",
+    "interact_viz_mode_fg": "VG",
+    "interact_viz_desc_off": "Visualisierung aus",
+    "interact_viz_desc_bg": "Hintergrundmodus",
+    "interact_viz_desc_fg": "Vordergrundmodus",
+    "interact_state_work": "ARBEIT",
+    "interact_state_play": "SPIEL",
+    "interact_state_solitude": "EINSAMKEIT",
+    "interact_state_dream": "TRAUM",
+    "interact_state_wakeup": "AUFWACHEN",
+    "interact_state_shutdown": "ABSCHALTUNG"
   }
 }

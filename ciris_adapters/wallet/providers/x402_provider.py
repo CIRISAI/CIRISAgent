@@ -274,7 +274,7 @@ class X402Provider(WalletProvider):
         This method is only for testing when we have direct access to the seed.
         """
         try:
-            from eth_keys import keys as eth_keys
+            from eth_keys import keys as eth_keys  # type: ignore[import-not-found]
 
             # HKDF-extract
             prk = hmac.new(self.DOMAIN_SEPARATOR, seed, hashlib.sha256).digest()

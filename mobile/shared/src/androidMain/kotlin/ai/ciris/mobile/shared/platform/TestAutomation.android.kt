@@ -75,3 +75,9 @@ actual fun Modifier.testable(tag: String, text: String?): Modifier = this.testTa
  */
 actual fun Modifier.testableClickable(tag: String, text: String?, onClick: () -> Unit): Modifier =
     this.testTag(tag).clickable { onClick() }
+
+/**
+ * Android implementation - just applies testTag (component handles its own clicks).
+ */
+actual fun Modifier.testableWithHandler(tag: String, onClick: () -> Unit): Modifier =
+    this.testTag(tag)

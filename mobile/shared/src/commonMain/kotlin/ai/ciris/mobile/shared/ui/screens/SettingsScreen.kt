@@ -14,6 +14,7 @@ import ai.ciris.mobile.shared.viewmodels.SUPPORTED_LANGUAGES
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.platform.testableWithHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -2422,6 +2423,10 @@ private fun PreferencesSection() {
                     onDismissRequest = { languageExpanded = false }
                 ) {
                     SUPPORTED_LANGUAGES.forEach { language ->
+                        val onSelectLanguage = {
+                            localization?.setLanguage(language.code)
+                            languageExpanded = false
+                        }
                         DropdownMenuItem(
                             text = {
                                 Column {
@@ -2433,10 +2438,7 @@ private fun PreferencesSection() {
                                     )
                                 }
                             },
-                            onClick = {
-                                localization?.setLanguage(language.code)
-                                languageExpanded = false
-                            },
+                            onClick = onSelectLanguage,
                             leadingIcon = {
                                 if (currentLanguage.code == language.code) {
                                     Icon(
@@ -2446,7 +2448,7 @@ private fun PreferencesSection() {
                                     )
                                 }
                             },
-                            modifier = Modifier.testable("language_${language.code}")
+                            modifier = Modifier.testableWithHandler("language_${language.code}", onSelectLanguage)
                         )
                     }
                 }

@@ -124,12 +124,40 @@ def _get_wallet_provider_from_app(request: Request) -> Any:
     return None
 
 
+def _validate_recipient(recipient: str) -> Optional[str]:
+    """Validate recipient address format. Returns error message or None if valid."""
+    if not recipient.startswith("0x") or len(recipient) != 42:
+        return "Invalid recipient address format. Must be 0x followed by 40 hex characters."
+    return None
+
+
+def _parse_transfer_amount(amount_str: str) -> tuple[Optional[Decimal], Optional[str]]:
+    """Parse and validate transfer amount. Returns (amount, error_message)."""
+    try:
+        amount = Decimal(amount_str)
+        if amount <= 0:
+            return None, "Amount must be positive"
+        return amount, None
+    except Exception:
+        return None, "Invalid amount format"
+
+
+def _get_spending_authority(provider: Any) -> Any:
+    """Get spending authority from provider, defaulting to level 0 if not available."""
+    spending_authority = getattr(provider, '_spending_authority', None)
+    if not spending_authority:
+        from ciris_adapters.wallet.providers.x402_provider import SpendingAuthority
+        spending_authority = SpendingAuthority.from_attestation(0)
+        logger.info("[WALLET_TRANSFER] No spending_authority on provider - using receive-only defaults (level 0)")
+    return spending_authority
+
+
 # ============================================================================
 # Routes
 # ============================================================================
 
 
-@router.get("/status", response_model=WalletStatusResponse)
+@router.get("/status")
 async def get_wallet_status(
     request: Request,
     auth: AuthAdminDep,
@@ -249,7 +277,7 @@ async def get_wallet_status(
         )
 
 
-@router.post("/transfer", response_model=TransferResponse)
+@router.post("/transfer")
 async def transfer_usdc(
     transfer_request: TransferRequest,
     request: Request,
@@ -263,7 +291,8 @@ async def transfer_usdc(
 
     Requires appropriate attestation level for the amount.
     """
-    logger.info(f"[WALLET_TRANSFER] Transfer request: {transfer_request.amount} USDC to {transfer_request.recipient}")
+    # Log transfer request without user-controlled data to prevent log injection
+    logger.info("[WALLET_TRANSFER] Transfer request received")
 
     try:
         provider = _get_wallet_provider_from_app(request)
@@ -278,47 +307,38 @@ async def transfer_usdc(
             )
 
         # Validate recipient address format
-        if not transfer_request.recipient.startswith("0x") or len(transfer_request.recipient) != 42:
+        recipient_error = _validate_recipient(transfer_request.recipient)
+        if recipient_error:
             return TransferResponse(
                 success=False,
                 amount=transfer_request.amount,
                 currency="USDC",
                 recipient=transfer_request.recipient,
-                error="Invalid recipient address format. Must be 0x followed by 40 hex characters.",
+                error=recipient_error,
             )
 
-        # Parse amount
-        try:
-            amount = Decimal(transfer_request.amount)
-            if amount <= 0:
-                raise ValueError("Amount must be positive")
-        except Exception:
+        # Parse and validate amount
+        amount, amount_error = _parse_transfer_amount(transfer_request.amount)
+        if amount_error:
             return TransferResponse(
                 success=False,
                 amount=transfer_request.amount,
                 currency="USDC",
                 recipient=transfer_request.recipient,
-                error="Invalid amount format",
+                error=amount_error,
             )
 
         # Check spending authority
-        spending_authority = getattr(provider, '_spending_authority', None)
-        if not spending_authority:
-            # Default to level 0 (receive-only) if no spending_authority
-            from ciris_adapters.wallet.providers.x402_provider import SpendingAuthority
-            spending_authority = SpendingAuthority.from_attestation(0)
-            logger.info("[WALLET_TRANSFER] No spending_authority on provider - using receive-only defaults (level 0)")
-
-        if spending_authority:
-            can_spend, error_msg = spending_authority.can_spend(amount)
-            if not can_spend:
-                return TransferResponse(
-                    success=False,
-                    amount=transfer_request.amount,
-                    currency="USDC",
-                    recipient=transfer_request.recipient,
-                    error=error_msg,
-                )
+        spending_authority = _get_spending_authority(provider)
+        can_spend, spend_error = spending_authority.can_spend(amount)
+        if not can_spend:
+            return TransferResponse(
+                success=False,
+                amount=transfer_request.amount,
+                currency="USDC",
+                recipient=transfer_request.recipient,
+                error=spend_error,
+            )
 
         # Execute transfer
         try:
@@ -366,7 +386,7 @@ async def transfer_usdc(
         )
 
 
-@router.post("/swap-for-gas", response_model=SwapResponse)
+@router.post("/swap-for-gas")
 async def swap_usdc_for_eth(
     swap_request: SwapRequest,
     request: Request,
@@ -381,7 +401,8 @@ async def swap_usdc_for_eth(
 
     Typical usage: Swap $2 USDC for ~0.0005 ETH (enough for ~10-20 transfers).
     """
-    logger.info(f"[WALLET_SWAP] Swap request: {swap_request.usdc_amount} USDC → ETH")
+    # Log swap request without user-controlled data to prevent log injection
+    logger.info("[WALLET_SWAP] Swap request received")
 
     try:
         provider = _get_wallet_provider_from_app(request)

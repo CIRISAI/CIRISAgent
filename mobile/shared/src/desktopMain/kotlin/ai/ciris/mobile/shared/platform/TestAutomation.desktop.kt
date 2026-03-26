@@ -172,3 +172,34 @@ actual fun Modifier.testableClickable(tag: String, text: String?, onClick: () ->
             .clickable { onClick() }
     }
 }
+
+/**
+ * Desktop implementation of testableWithHandler modifier.
+ * Registers click handler WITHOUT adding clickable - for components that handle clicks internally.
+ */
+actual fun Modifier.testableWithHandler(tag: String, onClick: () -> Unit): Modifier = composed {
+    // Register click handler when test mode enabled
+    if (TestAutomation.isEnabled()) {
+        TestAutomation.registerClickHandler(tag, onClick)
+    }
+
+    if (TestAutomation.isEnabled()) {
+        this
+            .testTag(tag)
+            .onGloballyPositioned { coordinates ->
+                val position = coordinates.positionInWindow()
+                val size = coordinates.size
+
+                TestAutomation.registerElement(
+                    testTag = tag,
+                    x = position.x.roundToInt(),
+                    y = position.y.roundToInt(),
+                    width = size.width,
+                    height = size.height,
+                    text = null
+                )
+            }
+    } else {
+        this.testTag(tag)
+    }
+}

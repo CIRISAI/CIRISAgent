@@ -288,6 +288,7 @@ class UserSettingsResponse(BaseModel):
     """User's personal settings (user-modifiable preferences)."""
 
     user_preferred_name: Optional[str] = Field(None, description="User's preferred display name")
+    preferred_language: Optional[str] = Field(None, description="ISO 639-1 language code (e.g., 'en', 'am', 'es')")
     location: Optional[str] = Field(None, description="User's location preference")
     interaction_preferences: Optional[str] = Field(None, description="User's custom interaction preferences")
     marketing_opt_in: bool = Field(False, description="User consent for marketing communications")
@@ -298,6 +299,7 @@ class UpdateUserSettingsRequest(BaseModel):
     """Request to update user's personal settings."""
 
     user_preferred_name: Optional[str] = Field(None, description="User's preferred display name")
+    preferred_language: Optional[str] = Field(None, description="ISO 639-1 language code (e.g., 'en', 'am', 'es')")
     location: Optional[str] = Field(None, description="User's location preference")
     interaction_preferences: Optional[str] = Field(None, description="User's custom interaction preferences")
     marketing_opt_in: Optional[bool] = Field(None, description="User consent for marketing communications")
@@ -526,6 +528,7 @@ async def get_my_settings(
         # Extract user settings from node attributes
         return UserSettingsResponse(
             user_preferred_name=attrs.get("user_preferred_name"),
+            preferred_language=attrs.get("preferred_language"),
             location=attrs.get("location"),
             interaction_preferences=attrs.get("interaction_preferences"),
             marketing_opt_in=attrs.get("marketing_opt_in", False),
@@ -574,6 +577,8 @@ async def update_my_settings(
         attrs_to_update: JSONDict = {}
         if request.user_preferred_name is not None:
             attrs_to_update["user_preferred_name"] = request.user_preferred_name
+        if request.preferred_language is not None:
+            attrs_to_update["preferred_language"] = request.preferred_language
         if request.location is not None:
             attrs_to_update["location"] = request.location
         if request.interaction_preferences is not None:
@@ -623,6 +628,7 @@ async def update_my_settings(
 
         return UserSettingsResponse(
             user_preferred_name=final_attrs.get("user_preferred_name"),
+            preferred_language=final_attrs.get("preferred_language"),
             location=final_attrs.get("location"),
             interaction_preferences=final_attrs.get("interaction_preferences"),
             marketing_opt_in=final_attrs.get("marketing_opt_in", False),

@@ -443,6 +443,10 @@
     "interact_field_result": "[EN] Result",
     "interact_field_content": "[EN] Content",
     "interact_field_reason": "[EN] Reason: {reason}",
-    "interact_field_questions": "[EN] Questions:"
+    "interact_field_questions": "[EN] Questions:",
+    "settings_benefit_signin_is_key": "您的登录即是您的 API 密钥",
+    "settings_benefit_auto_model": "自动模型选择",
+    "settings_benefit_rate_limiting": "速率限制和配额管理",
+    "settings_benefit_cost_managed": "费用由 CIRIS 控制"
   }
 }

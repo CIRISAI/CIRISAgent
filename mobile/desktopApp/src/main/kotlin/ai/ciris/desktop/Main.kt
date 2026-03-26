@@ -2,6 +2,7 @@ package ai.ciris.desktop
 
 import ai.ciris.desktop.testing.TestAutomationServer
 import ai.ciris.mobile.shared.CIRISApp
+import ai.ciris.mobile.shared.localization.LocalizationResourceLoader
 import ai.ciris.mobile.shared.platform.TestAutomation
 import ai.ciris.mobile.shared.platform.createEnvFileUpdater
 import ai.ciris.mobile.shared.platform.createPythonRuntime
@@ -18,10 +19,29 @@ import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.res.painterResource
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
+import java.io.File
 
 fun main() {
     // Set macOS application name (menu bar + dock)
     System.setProperty("apple.awt.application.name", "CIRIS Agent")
+
+    // Initialize localization directory for development
+    // Try to find the localization directory relative to the project root
+    val localizationPaths = listOf(
+        File("localization"),                                      // Current dir
+        File("../localization"),                                   // Parent
+        File("../../localization"),                                // Grandparent (from mobile)
+        File("../../../localization"),                             // From mobile/desktopApp
+        File(System.getProperty("user.dir"), "localization"),      // Working dir
+        File(System.getProperty("user.home"), "CIRISAgent/localization"),  // Home
+    )
+    for (path in localizationPaths) {
+        if (path.exists() && path.isDirectory) {
+            println("[Desktop] Found localization directory: ${path.absolutePath}")
+            LocalizationResourceLoader.init(path)
+            break
+        }
+    }
 
     // Create the runtime early so we can shut it down on exit
     val pythonRuntime = createPythonRuntime()

@@ -443,6 +443,10 @@
     "interact_field_result": "ውጤት",
     "interact_field_content": "ይዘት",
     "interact_field_reason": "ምክንያት: {reason}",
-    "interact_field_questions": "ጥያቄዎች:"
+    "interact_field_questions": "ጥያቄዎች:",
+    "settings_benefit_signin_is_key": "የመግቢያ መታወቂያዎ ኤፒአይ ቁልፍዎ ነው",
+    "settings_benefit_auto_model": "ራስ-ሰር ሞዴል ምርጫ",
+    "settings_benefit_rate_limiting": "ገደብ እና ኮታዎች ይመራሉ",
+    "settings_benefit_cost_managed": "ወጪ በ CIRIS ይመራል"
   }
 }

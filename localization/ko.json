@@ -443,6 +443,10 @@
     "interact_field_result": "[EN] Result",
     "interact_field_content": "[EN] Content",
     "interact_field_reason": "[EN] Reason: {reason}",
-    "interact_field_questions": "[EN] Questions:"
+    "interact_field_questions": "[EN] Questions:",
+    "settings_benefit_signin_is_key": "로그인이 곧 API 키입니다",
+    "settings_benefit_auto_model": "자동 모델 선택",
+    "settings_benefit_rate_limiting": "속도 제한 및 할당량 관리됨",
+    "settings_benefit_cost_managed": "비용은 CIRIS에서 관리"
   }
 }

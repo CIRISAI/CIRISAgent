@@ -443,6 +443,10 @@
     "interact_field_result": "[EN] Result",
     "interact_field_content": "[EN] Content",
     "interact_field_reason": "[EN] Reason: {reason}",
-    "interact_field_questions": "[EN] Questions:"
+    "interact_field_questions": "[EN] Questions:",
+    "settings_benefit_signin_is_key": "Tu inicio de sesión ES tu clave API",
+    "settings_benefit_auto_model": "Selección automática de modelo",
+    "settings_benefit_rate_limiting": "Límites de tasa y cuotas gestionados",
+    "settings_benefit_cost_managed": "Costo controlado por CIRIS"
   }
 }

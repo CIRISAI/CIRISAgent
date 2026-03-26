@@ -157,6 +157,48 @@ val SUPPORTED_LANGUAGES = listOf(
 )
 
 /**
+ * Supported currency for display and conversion.
+ * Uses ISO 4217 codes.
+ */
+data class SupportedCurrency(
+    val code: String,        // ISO 4217 code (e.g., "USD", "EUR")
+    val symbol: String,      // Currency symbol (e.g., "$", "€")
+    val name: String,        // English name (e.g., "US Dollar")
+    val nativeName: String,  // Native/local name
+    val decimals: Int = 2    // Decimal places for display
+)
+
+/**
+ * Available currencies for wallet display conversion.
+ * Sorted by common usage. USDC is the native wallet currency.
+ * Exchange rates are fetched at runtime from CurrencyManager.
+ */
+val SUPPORTED_CURRENCIES = listOf(
+    // Native crypto
+    SupportedCurrency("USDC", "$", "USDC", "USD Coin", 2),
+    // Major fiat
+    SupportedCurrency("USD", "$", "US Dollar", "US Dollar", 2),
+    SupportedCurrency("EUR", "€", "Euro", "Euro", 2),
+    SupportedCurrency("GBP", "£", "British Pound", "Pound Sterling", 2),
+    SupportedCurrency("JPY", "¥", "Japanese Yen", "円", 0),
+    SupportedCurrency("CNY", "¥", "Chinese Yuan", "人民币", 2),
+    // Regional
+    SupportedCurrency("ETB", "Br", "Ethiopian Birr", "ብር", 2),
+    SupportedCurrency("INR", "₹", "Indian Rupee", "रुपया", 2),
+    SupportedCurrency("KRW", "₩", "South Korean Won", "원", 0),
+    SupportedCurrency("BRL", "R$", "Brazilian Real", "Real", 2),
+    SupportedCurrency("MXN", "$", "Mexican Peso", "Peso Mexicano", 2),
+    SupportedCurrency("RUB", "₽", "Russian Ruble", "Рубль", 2),
+    SupportedCurrency("TRY", "₺", "Turkish Lira", "Türk Lirası", 2),
+    SupportedCurrency("ZAR", "R", "South African Rand", "Rand", 2),
+    SupportedCurrency("NGN", "₦", "Nigerian Naira", "Naira", 2),
+    SupportedCurrency("KES", "KSh", "Kenyan Shilling", "Shilingi", 2),
+    // Crypto
+    SupportedCurrency("BTC", "₿", "Bitcoin", "Bitcoin", 8),
+    SupportedCurrency("ETH", "Ξ", "Ethereum", "Ethereum", 6)
+)
+
+/**
  * CIRISVerify setup state for the optional verification step.
  */
 @Serializable

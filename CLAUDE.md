@@ -389,7 +389,9 @@ dma_guidance=ToolDMAGuidance(
 - `ciris_adapters/home_assistant/` - Context enrichment example
 - `ciris_adapters/wallet/` - Financial tools example
 
-## Mobile Development
+## Unified Agent UX (`mobile/`)
+
+**NOTE: "mobile" is a misnomer.** The `mobile/` directory contains the **unified CIRIS agent UX** - a Kotlin Multiplatform (KMP) client targeting Android, iOS, Windows, macOS, and Linux. It's the cross-platform user interface for interacting with CIRIS agents.
 
 ### Mobile QA Runner (ALWAYS USE THIS)
 
@@ -462,6 +464,29 @@ adb install -r mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk
 # Or use ADB from Android SDK
 ~/Android/Sdk/platform-tools/adb install -r ...
 ```
+
+### Desktop UI Test Mode
+
+The desktop app includes an embedded HTTP server for programmatic UI testing:
+
+```bash
+# Start with test server (default port 8091)
+export CIRIS_TEST_MODE=true
+cd mobile && ./gradlew :desktopApp:run
+
+# Custom port
+export CIRIS_TEST_PORT=9000
+```
+
+**Test Server Endpoints (`http://localhost:8091`):**
+- `GET /health` - Health check
+- `GET /screen` - Current screen name
+- `GET /tree` - Full UI element tree with positions
+- `POST /click` - Click element: `{"testTag": "btn_login"}`
+- `POST /input` - Input text: `{"testTag": "input_user", "text": "admin"}`
+- `POST /wait` - Wait for element: `{"testTag": "btn_send", "timeoutMs": 5000}`
+
+**Full documentation:** `mobile/desktopApp/src/main/kotlin/ai/ciris/desktop/testing/README.md`
 
 ## Development Workflow
 

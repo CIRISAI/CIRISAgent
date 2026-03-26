@@ -1,11 +1,16 @@
 package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.localization.LocalCurrency
+import ai.ciris.mobile.shared.localization.LocalLocalization
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.ui.theme.BrightnessPreference
 import ai.ciris.mobile.shared.ui.theme.ColorTheme
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import ai.ciris.mobile.shared.viewmodels.SettingsViewModel
 import ai.ciris.mobile.shared.viewmodels.VerifyStatusResponse
+import ai.ciris.mobile.shared.viewmodels.SUPPORTED_CURRENCIES
+import ai.ciris.mobile.shared.viewmodels.SUPPORTED_LANGUAGES
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
@@ -104,9 +109,10 @@ fun SettingsScreen(
         viewModel.refresh()
     }
 
+    val savedSuccessMessage = localizedString("mobile.settings_saved_successfully")
     LaunchedEffect(saveSuccess) {
         if (saveSuccess) {
-            snackbarHostState.showSnackbar("Settings saved successfully")
+            snackbarHostState.showSnackbar(savedSuccessMessage)
             viewModel.clearSuccess()
             isEditing = false
         }
@@ -131,15 +137,10 @@ fun SettingsScreen(
     if (showResetConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showResetConfirmDialog = false },
-            title = { Text("Re-run Setup Wizard?") },
+            title = { Text(localizedString("mobile.settings_rerun_setup_confirm_title")) },
             text = {
                 Text(
-                    "This will reset your configuration and restart the app. " +
-                    "Your data (conversations, memory, audit logs) will be kept.\n\n" +
-                    "Use this to:\n" +
-                    "• Switch between CIRIS Proxy and BYOK mode\n" +
-                    "• Change LLM providers or API keys\n" +
-                    "• Fix authentication issues"
+                    localizedString("mobile.settings_rerun_setup_confirm_message")
                 )
             },
             confirmButton = {
@@ -153,7 +154,7 @@ fun SettingsScreen(
                         viewModel.rerunSetupWizard { onResetSetup() }
                     }
                 ) {
-                    Text("Re-run Setup")
+                    Text(localizedString("mobile.settings_rerun_setup_button"))
                 }
             },
             dismissButton = {
@@ -161,7 +162,7 @@ fun SettingsScreen(
                     onClick = { showResetConfirmDialog = false },
                     modifier = Modifier.testableClickable("btn_reset_cancel") { showResetConfirmDialog = false }
                 ) {
-                    Text("Cancel")
+                    Text(localizedString("mobile.settings_cancel"))
                 }
             }
         )
@@ -170,7 +171,7 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(localizedString("mobile.settings_title")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -178,7 +179,7 @@ fun SettingsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("mobile.settings_back")
                         )
                     }
                 },
@@ -189,7 +190,7 @@ fun SettingsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("mobile.settings_refresh")
                         )
                     }
                 }
@@ -211,7 +212,7 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     CircularProgressIndicator()
-                    Text("Loading configuration...")
+                    Text(localizedString("mobile.settings_loading_config"))
                 }
             }
         } else {
@@ -225,7 +226,7 @@ fun SettingsScreen(
             ) {
                 // LLM Configuration Section - Mode dependent
                 Text(
-                    text = "AI Configuration",
+                    text = localizedString("mobile.settings_ai_config"),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -260,6 +261,11 @@ fun SettingsScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
+                // Preferences Section (Language & Currency)
+                PreferencesSection()
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
                 // Display Settings Section
                 DisplaySettingsSection(viewModel = viewModel)
 
@@ -267,7 +273,7 @@ fun SettingsScreen(
 
                 // CIRIS Authentication Section
                 Text(
-                    text = "CIRIS Authentication",
+                    text = localizedString("mobile.settings_ciris_auth"),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -281,7 +287,7 @@ fun SettingsScreen(
 
                 // Account Section
                 Text(
-                    text = "Account",
+                    text = localizedString("mobile.settings_account"),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -299,14 +305,12 @@ fun SettingsScreen(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "Authentication",
+                            text = localizedString("mobile.settings_authentication"),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "Your Sign in with $providerName account is your API key. " +
-                                "Authentication is handled automatically — no separate API key is needed. " +
-                                "CIRIS verifies your identity securely with $providerName on each request.",
+                            text = localizedString("mobile.settings_authentication_desc", "provider", providerName),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                         )
@@ -326,14 +330,14 @@ fun SettingsScreen(
                         viewModel.logout { onLogout() }
                     }
                 ) {
-                    Text("Logout")
+                    Text(localizedString("mobile.settings_logout"))
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
                 // Setup Section
                 Text(
-                    text = "Setup",
+                    text = localizedString("mobile.settings_setup"),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -350,16 +354,12 @@ fun SettingsScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "Re-run Setup Wizard",
+                            text = localizedString("mobile.settings_rerun_setup_wizard"),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Reconfigure LLM settings without losing data. Your conversations, memory, and audit logs are preserved.\n\n" +
-                                   "Use this to:\n" +
-                                   "• Switch between CIRIS Proxy and BYOK mode\n" +
-                                   "• Change LLM providers or API keys\n" +
-                                   "• Fix authentication issues",
+                            text = localizedString("mobile.settings_rerun_setup_desc"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -381,7 +381,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(Modifier.width(8.dp))
                             }
-                            Text(if (isResetting) "Resetting..." else "Re-run Setup Wizard")
+                            Text(if (isResetting) localizedString("mobile.settings_resetting") else localizedString("mobile.settings_rerun_setup_wizard"))
                         }
                     }
                 }
@@ -407,19 +407,19 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Data Management",
+                                text = localizedString("mobile.settings_data_management"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Delete account data, manage opt-in traces, exercise GDPR rights",
+                                text = localizedString("mobile.settings_data_management_desc"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         Icon(
                             imageVector = Icons.Filled.ArrowForward,
-                            contentDescription = "Go to Data Management",
+                            contentDescription = localizedString("mobile.settings_data_management_goto"),
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -429,7 +429,7 @@ fun SettingsScreen(
 
                 // App Info
                 Text(
-                    text = "App Info",
+                    text = localizedString("mobile.settings_app_info"),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -441,10 +441,10 @@ fun SettingsScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        InfoRow("Version", "2.1.0 (KMP)")
-                        InfoRow("Platform", "Kotlin Multiplatform")
-                        InfoRow("UI", "Compose Multiplatform")
-                        InfoRow("Mode", if (isCirisProxy) "CIRIS Proxy" else "BYOK")
+                        InfoRow(localizedString("mobile.settings_version"), "2.1.0 (KMP)")
+                        InfoRow(localizedString("mobile.settings_platform"), "Kotlin Multiplatform")
+                        InfoRow(localizedString("mobile.settings_ui"), "Compose Multiplatform")
+                        InfoRow(localizedString("mobile.settings_mode"), if (isCirisProxy) localizedString("mobile.settings_mode_proxy") else localizedString("mobile.settings_mode_byok"))
                     }
                 }
             }
@@ -479,16 +479,14 @@ private fun CirisProxyInfoCard() {
             )
 
             Text(
-                text = "Using CIRIS AI Proxy",
+                text = localizedString("mobile.settings_using_proxy"),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
 
             val provider = getOAuthProviderName()
             Text(
-                text = "Your AI requests are routed through CIRIS proxy services. " +
-                       "Your $provider account authenticates you automatically — " +
-                       "no separate API key is needed. CIRIS handles LLM access securely.",
+                text = localizedString("mobile.settings_proxy_desc", "provider", provider),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center
@@ -500,7 +498,7 @@ private fun CirisProxyInfoCard() {
             )
 
             Text(
-                text = "Benefits:",
+                text = localizedString("mobile.settings_benefits"),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
@@ -509,10 +507,10 @@ private fun CirisProxyInfoCard() {
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                BenefitItem("Sign-in is your API key — nothing else needed")
-                BenefitItem("Automatic model selection")
-                BenefitItem("Built-in rate limiting")
-                BenefitItem("Cost managed by CIRIS")
+                BenefitItem(localizedString("mobile.settings_benefit_signin_is_key"))
+                BenefitItem(localizedString("mobile.settings_benefit_auto_model"))
+                BenefitItem(localizedString("mobile.settings_benefit_rate_limiting"))
+                BenefitItem(localizedString("mobile.settings_benefit_cost_managed"))
             }
         }
     }
@@ -574,7 +572,7 @@ private fun ByokConfigSection(
                 tint = MaterialTheme.colorScheme.onSecondaryContainer
             )
             Text(
-                text = "Using your own API key (BYOK mode)",
+                text = localizedString("mobile.settings_using_byok"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer
             )
@@ -630,10 +628,10 @@ private fun ByokConfigSection(
         onExpandedChange = { modelExpanded = it }
     ) {
         OutlinedTextField(
-            value = llmModel.ifEmpty { "Select model" },
+            value = llmModel.ifEmpty { localizedString("mobile.settings_select_model") },
             onValueChange = {},
             readOnly = true,
-            label = { Text("Model") },
+            label = { Text(localizedString("mobile.settings_model")) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded) },
             modifier = Modifier
                 .fillMaxWidth()
@@ -671,7 +669,7 @@ private fun ByokConfigSection(
                 viewModel.onBaseUrlChanged(it)
                 onEditingChange(true)
             },
-            label = { Text("Base URL") },
+            label = { Text(localizedString("mobile.settings_base_url")) },
             placeholder = {
                 Text(
                     if (llmProvider == "local") "http://localhost:11434/v1"
@@ -699,7 +697,7 @@ private fun ByokConfigSection(
                     onClick = { onShowApiKeyChange(!showApiKey) },
                     modifier = Modifier.testableClickable("btn_toggle_api_key") { onShowApiKeyChange(!showApiKey) }
                 ) {
-                    Text(if (showApiKey) "Hide" else "Show")
+                    Text(if (showApiKey) localizedString("mobile.settings_hide") else localizedString("mobile.settings_show"))
                 }
             },
             modifier = Modifier.fillMaxWidth().testable("input_api_key")
@@ -719,7 +717,7 @@ private fun ByokConfigSection(
             )
             Spacer(Modifier.width(8.dp))
         }
-        Text(if (isSaving) "Saving..." else "Save Settings")
+        Text(if (isSaving) localizedString("mobile.settings_saving") else localizedString("mobile.settings_save"))
     }
 }
 
@@ -767,7 +765,7 @@ private fun BackupLlmConfigCard(config: ai.ciris.mobile.shared.api.LlmConfigData
                     tint = MaterialTheme.colorScheme.onTertiaryContainer
                 )
                 Text(
-                    text = "Backup LLM Configuration",
+                    text = localizedString("mobile.settings_backup_llm"),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onTertiaryContainer
@@ -775,7 +773,7 @@ private fun BackupLlmConfigCard(config: ai.ciris.mobile.shared.api.LlmConfigData
             }
 
             Text(
-                text = "If the primary LLM provider fails, CIRIS will automatically fall back to this backup.",
+                text = localizedString("mobile.settings_backup_llm_desc"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
             )
@@ -787,21 +785,21 @@ private fun BackupLlmConfigCard(config: ai.ciris.mobile.shared.api.LlmConfigData
 
             config.backupBaseUrl?.let { url ->
                 val provider = when {
-                    url.contains("groq.com") -> "Groq"
-                    url.contains("together") -> "Together AI"
-                    url.contains("openai.com") -> "OpenAI"
-                    url.contains("anthropic") -> "Anthropic"
+                    url.contains("groq.com") -> localizedString("mobile.settings_provider_groq")
+                    url.contains("together") -> localizedString("mobile.settings_provider_together")
+                    url.contains("openai.com") -> localizedString("mobile.settings_provider_openai")
+                    url.contains("anthropic") -> localizedString("mobile.settings_provider_anthropic")
                     url.contains("ciris.ai") -> "CIRIS Proxy"
                     else -> url.take(30)
                 }
-                InfoRowTertiary("Provider", provider)
+                InfoRowTertiary(localizedString("mobile.settings_provider"), provider)
             }
 
             config.backupModel?.let { model ->
-                InfoRowTertiary("Model", model)
+                InfoRowTertiary(localizedString("mobile.settings_model"), model)
             }
 
-            InfoRowTertiary("API Key", if (config.backupApiKeySet) "Configured" else "Not set")
+            InfoRowTertiary(localizedString("mobile.settings_api_key"), if (config.backupApiKeySet) localizedString("mobile.settings_configured") else localizedString("mobile.settings_not_set"))
         }
     }
 }
@@ -875,7 +873,7 @@ private fun CirisJwtInfoCard(
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "CIRIS Access Token",
+                    text = localizedString("mobile.settings_ciris_access_token"),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -883,8 +881,7 @@ private fun CirisJwtInfoCard(
 
             // Explanation
             Text(
-                text = "When using CIRIS Proxy, your Google Sign-In token is exchanged for a CIRIS access token. " +
-                       "This token authenticates you to the local agent and the CIRIS AI proxy.",
+                text = localizedString("mobile.settings_token_info_desc"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -904,7 +901,7 @@ private fun CirisJwtInfoCard(
                         strokeWidth = 2.dp
                     )
                     Text(
-                        text = "Loading token info...",
+                        text = localizedString("mobile.settings_loading_token"),
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -918,7 +915,7 @@ private fun CirisJwtInfoCard(
                     color = if (info.isJwt) semantic.surfaceSuccess else semantic.surfaceWarning
                 ) {
                     Text(
-                        text = if (info.isJwt) "JWT Token" else "Opaque Token",
+                        text = if (info.isJwt) localizedString("mobile.settings_jwt_token") else localizedString("mobile.settings_opaque_token"),
                         fontSize = 10.sp,
                         color = if (info.isJwt) semantic.onSuccess else semantic.onWarning,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -928,8 +925,8 @@ private fun CirisJwtInfoCard(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 // Token details
-                InfoRow("Token Type", info.tokenType)
-                InfoRow("Token ID", info.tokenIdShort)
+                InfoRow(localizedString("mobile.settings_token_type"), info.tokenType)
+                InfoRow(localizedString("mobile.settings_token_id"), info.tokenIdShort)
 
                 if (info.expiresAt != null) {
                     val expiryColor = if (info.isExpired) semantic.error else semantic.success
@@ -938,7 +935,7 @@ private fun CirisJwtInfoCard(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "Expires",
+                            text = localizedString("mobile.settings_expires"),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -952,7 +949,7 @@ private fun CirisJwtInfoCard(
                 }
 
                 if (info.issuer != null) {
-                    InfoRow("Issuer", info.issuer)
+                    InfoRow(localizedString("mobile.settings_issuer"), info.issuer)
                 }
 
                 // Warning for old/problematic tokens
@@ -966,18 +963,18 @@ private fun CirisJwtInfoCard(
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
                                 text = if (info.hasSigningKeyIssue)
-                                    "Token Signing Key Rotated"
+                                    localizedString("mobile.settings_token_key_rotated")
                                 else
-                                    "Token Expired",
+                                    localizedString("mobile.settings_token_expired"),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
                                 color = semantic.error
                             )
                             Text(
                                 text = if (info.hasSigningKeyIssue)
-                                    "Google has rotated its signing keys. Your token was signed with an old key that's no longer valid. Re-run the setup wizard to get a fresh token."
+                                    localizedString("mobile.settings_token_key_rotated_desc")
                                 else
-                                    "Your access token has expired. Re-run the setup wizard to refresh authentication.",
+                                    localizedString("mobile.settings_token_expired_desc"),
                                 fontSize = 11.sp,
                                 color = semantic.onError
                             )
@@ -986,7 +983,7 @@ private fun CirisJwtInfoCard(
                 }
             } else {
                 Text(
-                    text = "No access token found",
+                    text = localizedString("mobile.settings_no_token"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -1214,7 +1211,7 @@ private fun TrustSecurityCard(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "Attestation Check",
+                            text = localizedString("mobile.settings_attestation_check"),
                             fontWeight = FontWeight.Bold,
                             color = semantic.success,
                             fontSize = 12.sp
@@ -1317,7 +1314,7 @@ private fun TrustSecurityCard(
                 if (error != null && !loading) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Tap Copy to share logs for debugging",
+                        text = localizedString("mobile.settings_copy_logs"),
                         fontSize = 10.sp,
                         color = semantic.warning
                     )
@@ -1335,13 +1332,13 @@ private fun TrustSecurityCard(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "CIRISVerify Status Unknown",
+                    text = localizedString("mobile.settings_verify_status_unknown"),
                     fontWeight = FontWeight.Bold,
                     color = semantic.onWarning
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = error ?: verifyStatus?.error ?: "Unable to check CIRISVerify status",
+                    text = error ?: verifyStatus?.error ?: localizedString("mobile.settings_unable_check_verify"),
                     fontSize = 13.sp,
                     color = semantic.warning
                 )
@@ -1349,7 +1346,7 @@ private fun TrustSecurityCard(
                 verifyStatus?.diagnosticInfo?.let { diag ->
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Debug: $diag",
+                        text = localizedString("mobile.settings_debug", "info", diag),
                         fontSize = 10.sp,
                         color = semantic.onWarning,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
@@ -1378,7 +1375,7 @@ private fun TrustSecurityCard(
                     Text("🛡", fontSize = 20.sp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "CIRISVerify Active",
+                        text = localizedString("mobile.settings_verify_active"),
                         fontWeight = FontWeight.Bold,
                         color = TrustColors.EmeraldDark
                     )
@@ -1407,13 +1404,13 @@ private fun TrustSecurityCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Hardware",
+                        text = localizedString("mobile.settings_hardware"),
                         fontSize = 11.sp,
                         color = TrustColors.EmeraldText,
                         fontWeight = FontWeight.Medium
                     )
                     Text(
-                        text = status.hardwareType?.replace("_", " ") ?: "Unknown",
+                        text = status.hardwareType?.replace("_", " ") ?: localizedString("mobile.settings_unknown"),
                         fontSize = 13.sp,
                         color = TrustColors.EmeraldDark
                     )
@@ -1421,7 +1418,7 @@ private fun TrustSecurityCard(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Key Status",
+                        text = localizedString("mobile.settings_key_status"),
                         fontSize = 11.sp,
                         color = TrustColors.EmeraldText,
                         fontWeight = FontWeight.Medium
@@ -1449,7 +1446,7 @@ private fun TrustSecurityCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Attestation",
+                        text = localizedString("mobile.settings_attestation"),
                         fontSize = 11.sp,
                         color = TrustColors.EmeraldText,
                         fontWeight = FontWeight.Medium
@@ -1471,7 +1468,7 @@ private fun TrustSecurityCard(
                 status.keyId?.let { keyId ->
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Key ID",
+                            text = localizedString("mobile.settings_key_id"),
                             fontSize = 11.sp,
                             color = TrustColors.EmeraldText,
                             fontWeight = FontWeight.Medium
@@ -1499,7 +1496,7 @@ private fun TrustSecurityCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Attestation Checks (Level ${status.maxLevel}/5)",
+                            text = localizedString("mobile.settings_attestation_checks", "level", status.maxLevel.toString()),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = TrustColors.EmeraldDark
@@ -1552,7 +1549,7 @@ private fun TrustSecurityCard(
 
                     // DMV analogy header
                     Text(
-                        text = "Like a DMV check for AI — each level builds trust",
+                        text = localizedString("mobile.settings_attestation_levels_desc"),
                         fontSize = 10.sp,
                         color = Color.Gray
                     )
@@ -1577,14 +1574,14 @@ private fun TrustSecurityCard(
                                     modifier = Modifier.width(16.dp)
                                 )
                                 Text(
-                                    text = "Level 1: Binary Loaded",
+                                    text = localizedString("mobile.settings_level_1"),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = level1Color
                                 )
                             }
                             Text(
-                                text = "CIRISVerify engine is running and responding",
+                                text = localizedString("mobile.settings_verify_running"),
                                 fontSize = 10.sp,
                                 color = Color.Gray,
                                 modifier = Modifier.padding(start = 16.dp)
@@ -1615,7 +1612,7 @@ private fun TrustSecurityCard(
                                     modifier = Modifier.width(16.dp)
                                 )
                                 Text(
-                                    text = "Level 2: Environment",
+                                    text = localizedString("mobile.settings_level_2"),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = level2Color
@@ -1623,14 +1620,14 @@ private fun TrustSecurityCard(
                             }
                             // Show platform info if available
                             val envDescription = buildString {
-                                append("Platform: ")
-                                append(status.platformOs?.uppercase() ?: "Unknown")
+                                append(localizedString("mobile.settings_platform_label"))
+                                append(status.platformOs?.uppercase() ?: localizedString("mobile.settings_unknown"))
                                 if (status.platformArch != null) {
                                     append(" (${status.platformArch})")
                                 }
                                 // Add HW security info
                                 append(" • HW: ")
-                                append(status.hardwareType?.replace("_", " ") ?: "Unknown")
+                                append(status.hardwareType?.replace("_", " ") ?: localizedString("mobile.settings_unknown"))
                             }
                             Text(
                                 text = envDescription,
@@ -1640,7 +1637,7 @@ private fun TrustSecurityCard(
                             )
                             // Show what's checked
                             Text(
-                                text = "Validates: API keys, config, platform integrity (VM detection)",
+                                text = localizedString("mobile.settings_level_2_desc"),
                                 fontSize = 9.sp,
                                 color = Color.Gray,
                                 modifier = Modifier.padding(start = 16.dp)
@@ -1672,14 +1669,14 @@ private fun TrustSecurityCard(
                                     modifier = Modifier.width(16.dp)
                                 )
                                 Text(
-                                    text = "Level 3: Registry Cross-Validation ($networkPassed/3)",
+                                    text = localizedString("mobile.settings_level_3", "passed", networkPassed.toString()),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = level3Color
                                 )
                             }
                             Text(
-                                text = "HTTPS authoritative, DNS advisory (need 2/3 agreement)",
+                                text = localizedString("mobile.settings_https_authoritative"),
                                 fontSize = 10.sp,
                                 color = Color.Gray,
                                 modifier = Modifier.padding(start = 16.dp)
@@ -1693,7 +1690,7 @@ private fun TrustSecurityCard(
                             }
                             if (networkPassed < 2) {
                                 Text(
-                                    text = "Need 2/3 sources to agree",
+                                    text = localizedString("mobile.settings_level_3_desc"),
                                     fontSize = 10.sp,
                                     color = semantic.error,
                                     modifier = Modifier.padding(start = 8.dp, top = 2.dp)
@@ -1727,7 +1724,7 @@ private fun TrustSecurityCard(
                                     modifier = Modifier.width(16.dp)
                                 )
                                 Text(
-                                    text = "Level 4: File Integrity",
+                                    text = localizedString("mobile.settings_level_4"),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = level4Color
@@ -1735,16 +1732,16 @@ private fun TrustSecurityCard(
                             }
                             // Show detailed integrity status - Level 4 checks against REGISTRY manifest
                             val integrityDescription = when {
-                                !level4Passed -> status.integrityFailureReason ?: "File integrity check failed"
-                                level4Unverified -> "Cannot verify against registry (network unavailable)"
+                                !level4Passed -> status.integrityFailureReason ?: localizedString("mobile.settings_integrity_failed")
+                                level4Unverified -> localizedString("mobile.settings_integrity_unverified")
                                 status.filesChecked != null && status.filesChecked > 0 && status.totalFiles != null && status.totalFiles > 0 ->
-                                    "Verified ${status.filesPassed ?: 0}/${status.filesChecked} files (${status.attestationMode})"
+                                    localizedString("mobile.settings_integrity_verified_count", mapOf("passed" to "${status.filesPassed ?: 0}", "checked" to "${status.filesChecked}", "mode" to status.attestationMode))
                                 status.filesChecked != null && status.filesChecked > 0 ->
-                                    "Verified ${status.filesPassed ?: 0} files (${status.attestationMode})"
-                                else -> "Software matches registry-hosted manifest"
+                                    localizedString("mobile.settings_integrity_verified", mapOf("passed" to "${status.filesPassed ?: 0}", "mode" to status.attestationMode))
+                                else -> localizedString("mobile.settings_integrity_matches")
                             }
                             Text(
-                                text = "Spot-check file hashes against hosted registry manifest",
+                                text = localizedString("mobile.settings_level_4_desc"),
                                 fontSize = 9.sp,
                                 color = Color.Gray,
                                 modifier = Modifier.padding(start = 16.dp)
@@ -1801,15 +1798,15 @@ private fun TrustSecurityCard(
                                     modifier = Modifier.width(16.dp)
                                 )
                                 Text(
-                                    text = "Level 5: Full Trust",
+                                    text = localizedString("mobile.settings_level_5"),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = level5Color
                                 )
                             }
                             val level5Description = when {
-                                level5Unverified -> "Passed locally but unverified (lower level check failed)"
-                                else -> "Genesis key from CIRISPortal + untampered audit chain"
+                                level5Unverified -> localizedString("mobile.settings_level_5_unverified")
+                                else -> localizedString("mobile.settings_level_5_desc")
                             }
                             Text(
                                 text = level5Description,
@@ -1840,7 +1837,7 @@ private fun TrustSecurityCard(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Portal Key",
+                                    text = localizedString("mobile.settings_portal_key"),
                                     fontSize = 10.sp,
                                     color = portalKeyColor
                                 )
@@ -1853,7 +1850,7 @@ private fun TrustSecurityCard(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Audit Trail",
+                                    text = localizedString("mobile.settings_audit_trail"),
                                     fontSize = 10.sp,
                                     color = auditColor
                                 )
@@ -1870,7 +1867,7 @@ private fun TrustSecurityCard(
                             ) {
                                 Column(modifier = Modifier.padding(8.dp)) {
                                     Text(
-                                        text = "Platform Attestation",
+                                        text = localizedString("mobile.settings_platform_attestation"),
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = TrustColors.EmeraldDark
@@ -1878,7 +1875,7 @@ private fun TrustSecurityCard(
                                     Row(modifier = Modifier.padding(top = 2.dp)) {
                                         status.platformOs?.let { os ->
                                             Text(
-                                                text = "OS: $os",
+                                                text = localizedString("mobile.settings_os", "os", os),
                                                 fontSize = 9.sp,
                                                 color = Color.Gray
                                             )
@@ -1888,7 +1885,7 @@ private fun TrustSecurityCard(
                                         }
                                         status.platformArch?.let { arch ->
                                             Text(
-                                                text = "Arch: $arch",
+                                                text = localizedString("mobile.settings_arch", "arch", arch),
                                                 fontSize = 9.sp,
                                                 color = Color.Gray
                                             )
@@ -1901,7 +1898,7 @@ private fun TrustSecurityCard(
                     // Mode indicator
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Mode: ${status.attestationMode.replaceFirstChar { it.uppercase() }}",
+                        text = localizedString("mobile.settings_mode_label", "mode", status.attestationMode.replaceFirstChar { it.uppercase() }),
                         fontSize = 9.sp,
                         color = Color.Gray,
                         modifier = Modifier.padding(start = 16.dp)
@@ -1983,22 +1980,21 @@ private fun TrustSecurityCard(
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
                         Text(
-                            text = "Portal Key Not Active",
+                            text = localizedString("mobile.settings_portal_key_not_active"),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = semantic.onWarning
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "The purchased portal key was not saved to the Android Keystore. " +
-                                   "This may be a bug in CIRISVerify key persistence.",
+                            text = localizedString("mobile.settings_portal_key_not_active_desc"),
                             fontSize = 11.sp,
                             color = semantic.warning
                         )
                         status.diagnosticInfo?.let { diag ->
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Debug: $diag",
+                                text = localizedString("mobile.settings_debug", "info", diag),
                                 fontSize = 10.sp,
                                 color = semantic.onWarning,
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
@@ -2016,7 +2012,7 @@ private fun TrustSecurityCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "CIRISVerify provides cryptographic attestation of agent identity for the Coherence Ratchet and CIRIS Scoring.",
+                    text = localizedString("mobile.settings_verify_description"),
                     fontSize = 11.sp,
                     color = TrustColors.EmeraldText,
                     modifier = Modifier.padding(8.dp)
@@ -2030,7 +2026,7 @@ private fun TrustSecurityCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Learn more",
+                    text = localizedString("mobile.settings_learn_more"),
                     fontSize = 11.sp,
                     color = TrustColors.EmeraldText,
                     textDecoration = TextDecoration.Underline,
@@ -2043,23 +2039,25 @@ private fun TrustSecurityCard(
     }
 }
 
+@Composable
 private fun getKeyStatusLabel(keyStatus: String): Pair<String, Color> {
     val semantic = SemanticColors.Default
     return when (keyStatus) {
-        "portal_active" -> "Portal Key Active" to semantic.success
-        "portal_pending" -> "Portal Key Pending" to semantic.warning
-        "ephemeral" -> "Ephemeral Key" to semantic.info
-        else -> "No Key" to semantic.inactive
+        "portal_active" -> localizedString("mobile.settings_portal_key_active") to semantic.success
+        "portal_pending" -> localizedString("mobile.settings_portal_key_pending") to semantic.warning
+        "ephemeral" -> localizedString("mobile.settings_ephemeral_key") to semantic.info
+        else -> localizedString("mobile.settings_no_key") to semantic.inactive
     }
 }
 
+@Composable
 private fun getAttestationLabel(attestation: String): Pair<String, Color> {
     val semantic = SemanticColors.Default
     return when (attestation) {
-        "verified" -> "Verified" to semantic.success
-        "pending" -> "Pending" to semantic.warning
-        "failed" -> "Failed" to semantic.error
-        else -> "Not Attempted" to semantic.inactive
+        "verified" -> localizedString("mobile.settings_verified") to semantic.success
+        "pending" -> localizedString("mobile.settings_pending") to semantic.warning
+        "failed" -> localizedString("mobile.settings_failed") to semantic.error
+        else -> localizedString("mobile.settings_not_attempted") to semantic.inactive
     }
 }
 
@@ -2113,7 +2111,7 @@ private fun AttestationSection(
                 modifier = Modifier.width(16.dp)
             )
             Text(
-                text = "Level $level: $title",
+                text = "L$level: $title",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 color = if (passed) semantic.success else semantic.error
@@ -2157,7 +2155,7 @@ private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
     val brightnessPreference by viewModel.brightnessPreference.collectAsState()
 
     Text(
-        text = "Theme",
+        text = localizedString("mobile.settings_theme"),
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.primary
     )
@@ -2178,12 +2176,12 @@ private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Live Memory Background",
+                        text = localizedString("mobile.settings_live_memory_bg"),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium
                     )
                     Text(
-                        text = "Animated 3D memory graph behind chat",
+                        text = localizedString("mobile.settings_live_memory_bg_desc"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2201,12 +2199,12 @@ private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
 
             // Color theme selection
             Text(
-                text = "Color Palette",
+                text = localizedString("mobile.settings_color_palette"),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = "Changes apply immediately to app and graph",
+                text = localizedString("mobile.settings_color_palette_desc"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -2243,7 +2241,7 @@ private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
 
             // Brightness preference
             Text(
-                text = "Brightness",
+                text = localizedString("mobile.settings_brightness"),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium
             )
@@ -2352,6 +2350,193 @@ private fun ColorThemeChip(
                        else MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
                 maxLines = 1
+            )
+        }
+    }
+}
+
+/**
+ * Preferences section - Language and Currency selection.
+ * Changes apply immediately to the app.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PreferencesSection() {
+    val localization = LocalLocalization.current
+    val currency = LocalCurrency.current
+
+    // Get current selections
+    val currentLanguage by localization?.currentLanguageInfo?.collectAsState()
+        ?: remember { mutableStateOf(SUPPORTED_LANGUAGES.first { it.code == "en" }) }
+    val currentCurrency by currency?.currentCurrencyInfo?.collectAsState()
+        ?: remember { mutableStateOf(SUPPORTED_CURRENCIES.first { it.code == "USD" }) }
+
+    // Dropdown expanded states
+    var languageExpanded by remember { mutableStateOf(false) }
+    var currencyExpanded by remember { mutableStateOf(false) }
+
+    Text(
+        text = localizedString("mobile.settings_preferences"),
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary
+    )
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Language selection
+            Text(
+                text = localizedString("mobile.settings_language"),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = localizedString("mobile.settings_language_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Language dropdown
+            ExposedDropdownMenuBox(
+                expanded = languageExpanded,
+                onExpandedChange = { languageExpanded = it },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = "${currentLanguage.nativeName} (${currentLanguage.englishName})",
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageExpanded) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor()
+                        .testable("dropdown_language")
+                )
+                ExposedDropdownMenu(
+                    expanded = languageExpanded,
+                    onDismissRequest = { languageExpanded = false }
+                ) {
+                    SUPPORTED_LANGUAGES.forEach { language ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(language.nativeName, fontWeight = FontWeight.Medium)
+                                    Text(
+                                        language.englishName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
+                            onClick = {
+                                localization?.setLanguage(language.code)
+                                languageExpanded = false
+                            },
+                            leadingIcon = {
+                                if (currentLanguage.code == language.code) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = localizedString("mobile.settings_selected"),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            },
+                            modifier = Modifier.testable("language_${language.code}")
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Currency selection
+            Text(
+                text = localizedString("mobile.settings_display_currency"),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = localizedString("mobile.settings_display_currency_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Currency dropdown
+            ExposedDropdownMenuBox(
+                expanded = currencyExpanded,
+                onExpandedChange = { currencyExpanded = it },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = "${currentCurrency.symbol} ${currentCurrency.code} - ${currentCurrency.name}",
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyExpanded) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor()
+                        .testable("dropdown_currency")
+                )
+                ExposedDropdownMenu(
+                    expanded = currencyExpanded,
+                    onDismissRequest = { currencyExpanded = false }
+                ) {
+                    SUPPORTED_CURRENCIES.forEach { curr ->
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = curr.symbol,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.width(24.dp)
+                                    )
+                                    Column {
+                                        Text(curr.code, fontWeight = FontWeight.Medium)
+                                        Text(
+                                            curr.name,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            },
+                            onClick = {
+                                currency?.setCurrency(curr.code)
+                                currencyExpanded = false
+                            },
+                            leadingIcon = {
+                                if (currentCurrency.code == curr.code) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = localizedString("mobile.settings_selected"),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            },
+                            modifier = Modifier.testable("currency_${curr.code}")
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Exchange rate info
+            Text(
+                text = localizedString("mobile.settings_currency_disclaimer"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
         }
     }

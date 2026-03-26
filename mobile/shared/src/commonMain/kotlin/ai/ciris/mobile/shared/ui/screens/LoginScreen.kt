@@ -1,8 +1,15 @@
 package ai.ciris.mobile.shared.ui.screens
-import ai.ciris.mobile.shared.platform.PlatformLogger
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.platform.TestAutomation
+import ai.ciris.mobile.shared.platform.getOAuthProviderName
+import ai.ciris.mobile.shared.platform.isDesktop
+import ai.ciris.mobile.shared.platform.isIOS
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.ui.components.LanguageSelector
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,15 +28,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.testTag
-import ai.ciris.mobile.shared.platform.testable
-import ai.ciris.mobile.shared.platform.testableClickable
-import ai.ciris.mobile.shared.platform.TestAutomation
 import androidx.compose.ui.unit.sp
-import ai.ciris.mobile.shared.platform.getOAuthProviderName
-import ai.ciris.mobile.shared.platform.isDesktop
-import ai.ciris.mobile.shared.platform.isIOS
-import ai.ciris.mobile.shared.ui.theme.SemanticColors
 
 /**
  * Login Screen - Cross-platform login for Android, iOS, and Desktop
@@ -75,11 +74,31 @@ fun LoginScreen(
     // For desktop, always show login form (not OAuth buttons)
     val isDesktopMode = isDesktop()
 
+    // Localized strings
+    val loginTitle = localizedString("mobile.login_title")
+    val loginTagline = localizedString("mobile.login_tagline")
+    val providerName = getOAuthProviderName()
+    val signinProvider = localizedString("mobile.login_signin_provider", "provider", providerName)
+    val localLoginText = localizedString("mobile.login_local")
+    val hostedInfo = localizedString("mobile.login_ciris_hosted_info", "provider", providerName)
+    val marketingText = localizedString("mobile.login_marketing_optin")
+    val privacyText = localizedString("mobile.login_privacy")
+    val footerText = localizedString("mobile.login_footer")
+
     Surface(
         modifier = modifier.fillMaxSize(),
         color = LoginColors.Background
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
+            // Language selector in top-right corner
+            LanguageSelector(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .testable("login_language_selector"),
+                compact = true
+            )
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -97,7 +116,7 @@ fun LoginScreen(
 
                 // App name
                 Text(
-                    text = "CIRIS Agent",
+                    text = loginTitle,
                     color = LoginColors.White,
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Bold,
@@ -106,7 +125,7 @@ fun LoginScreen(
 
                 // Tagline
                 Text(
-                    text = "Ethical AI Assistant",
+                    text = loginTagline,
                     color = LoginColors.White.copy(alpha = 0.8f),
                     fontSize = 16.sp,
                     modifier = Modifier.padding(top = 4.dp)
@@ -147,7 +166,6 @@ fun LoginScreen(
                     )
                 } else {
                     // Mobile mode - show OAuth buttons
-                    val providerName = getOAuthProviderName()
                     Button(
                         onClick = onGoogleSignIn,
                         colors = ButtonDefaults.buttonColors(
@@ -161,7 +179,7 @@ fun LoginScreen(
                             .testable(if (isIOS()) "btn_apple_signin" else "btn_google_signin")
                     ) {
                         Text(
-                            text = "Sign in with $providerName",
+                            text = signinProvider,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Medium
                         )
@@ -193,7 +211,7 @@ fun LoginScreen(
                             .testable("btn_local_login")
                     ) {
                         Text(
-                            text = "Local Login",
+                            text = localLoginText,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Medium
                         )
@@ -203,7 +221,7 @@ fun LoginScreen(
 
                     // Info text
                     Text(
-                        text = "CIRIS hosted LLM services require $providerName login.\nBring your own API key works with either option.",
+                        text = hostedInfo,
                         color = LoginColors.White.copy(alpha = 0.7f),
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center,
@@ -228,7 +246,7 @@ fun LoginScreen(
                             )
                         )
                         Text(
-                            text = "Send me product updates and announcements",
+                            text = marketingText,
                             color = LoginColors.White.copy(alpha = 0.8f),
                             fontSize = 12.sp,
                             modifier = Modifier.padding(start = 4.dp)
@@ -239,20 +257,22 @@ fun LoginScreen(
 
                     // Privacy link
                     Text(
-                        text = "View Privacy Policy",
+                        text = privacyText,
                         color = LoginColors.Accent,
                         fontSize = 12.sp,
-                        modifier = Modifier.clickable {
-                            PlatformLogger.i("LoginScreen", "[PrivacyPolicy] Privacy policy link clicked")
-                            onPrivacyPolicy()
-                        }
+                        modifier = Modifier
+                            .clickable {
+                                PlatformLogger.i("LoginScreen", "[PrivacyPolicy] Privacy policy link clicked")
+                                onPrivacyPolicy()
+                            }
+                            .testable("btn_privacy_policy")
                     )
                 }
             }
 
             // Footer
             Text(
-                text = "Powered by CIRIS AI",
+                text = footerText,
                 color = LoginColors.White.copy(alpha = 0.6f),
                 fontSize = 12.sp,
                 modifier = Modifier
@@ -278,6 +298,13 @@ private fun LocalLoginForm(
     errorMessage: String?,
     focusManager: androidx.compose.ui.focus.FocusManager
 ) {
+    // Localized strings
+    val usernameLabel = localizedString("mobile.login_username")
+    val passwordLabel = localizedString("mobile.login_password")
+    val loginText = localizedString("mobile.login_submit")
+    val backText = localizedString("mobile.login_back")
+    val credentialsHint = localizedString("mobile.login_credentials_hint")
+
     // Observe text input requests for test automation
     val textInputRequest by TestAutomation.textInputRequests.collectAsState()
 
@@ -324,7 +351,7 @@ private fun LocalLoginForm(
         OutlinedTextField(
             value = username,
             onValueChange = onUsernameChange,
-            label = { Text("Username", color = LoginColors.White.copy(alpha = 0.7f)) },
+            label = { Text(usernameLabel, color = LoginColors.White.copy(alpha = 0.7f)) },
             singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = LoginColors.White,
@@ -353,7 +380,7 @@ private fun LocalLoginForm(
         OutlinedTextField(
             value = password,
             onValueChange = onPasswordChange,
-            label = { Text("Password", color = LoginColors.White.copy(alpha = 0.7f)) },
+            label = { Text(passwordLabel, color = LoginColors.White.copy(alpha = 0.7f)) },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             colors = OutlinedTextFieldDefaults.colors(
@@ -396,7 +423,7 @@ private fun LocalLoginForm(
                 .testableClickable("btn_login_submit") { onSubmit() }
         ) {
             Text(
-                text = "Login",
+                text = loginText,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -411,7 +438,7 @@ private fun LocalLoginForm(
                 modifier = Modifier.testable("btn_login_back")
             ) {
                 Text(
-                    text = "Back to login options",
+                    text = backText,
                     color = LoginColors.White.copy(alpha = 0.8f),
                     fontSize = 14.sp
                 )
@@ -422,7 +449,7 @@ private fun LocalLoginForm(
 
         // Info text
         Text(
-            text = "Enter the credentials you created during setup",
+            text = credentialsHint,
             color = LoginColors.White.copy(alpha = 0.7f),
             fontSize = 12.sp,
             textAlign = TextAlign.Center

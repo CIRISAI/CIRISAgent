@@ -19,6 +19,13 @@ import ai.ciris.mobile.shared.platform.createSecureStorage
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
 import ai.ciris.mobile.shared.platform.getOAuthProviderId
 import ai.ciris.mobile.shared.platform.platformLog
+import ai.ciris.mobile.shared.localization.CurrencyHelper
+import ai.ciris.mobile.shared.localization.CurrencyManager
+import ai.ciris.mobile.shared.localization.LocalCurrency
+import ai.ciris.mobile.shared.localization.LocalLocalization
+import ai.ciris.mobile.shared.localization.LocalizationHelper
+import ai.ciris.mobile.shared.localization.LocalizationManager
+import ai.ciris.mobile.shared.localization.createLocalizationResourceLoader
 import ai.ciris.mobile.shared.ui.components.AdapterWizardDialog
 import ai.ciris.mobile.shared.ui.components.CIRISSignet
 import ai.ciris.mobile.shared.ui.screens.*
@@ -295,6 +302,29 @@ fun CIRISApp(
 
     val coroutineScope = rememberCoroutineScope()
     val apiClient = remember { CIRISApiClient(baseUrl, accessToken) }
+
+    // Initialize localization manager for runtime language switching
+    val resourceLoader = remember { createLocalizationResourceLoader() }
+    val localizationManager = remember {
+        LocalizationManager(coroutineScope, secureStorage, resourceLoader).also {
+            LocalizationHelper.setManager(it)
+        }
+    }
+
+    // Initialize currency manager for wallet display
+    val currencyManager = remember {
+        CurrencyManager(coroutineScope, secureStorage).also {
+            CurrencyHelper.setManager(it)
+        }
+    }
+
+    // Initialize localization and currency on startup
+    LaunchedEffect(Unit) {
+        PlatformLogger.i(TAG, "Initializing localization...")
+        localizationManager.initialize()
+        PlatformLogger.i(TAG, "Initializing currency...")
+        currencyManager.initialize()
+    }
 
     // Track the current auth token - will be updated after login/setup
     var currentAccessToken by remember { mutableStateOf<String?>(null) }
@@ -840,8 +870,13 @@ fun CIRISApp(
         )
     }
 
-    MaterialTheme(colorScheme = colorScheme) {
-        when (currentScreen) {
+    // Provide localization and currency to entire Compose tree
+    CompositionLocalProvider(
+        LocalLocalization provides localizationManager,
+        LocalCurrency provides currencyManager
+    ) {
+        MaterialTheme(colorScheme = colorScheme) {
+            when (currentScreen) {
             Screen.Startup -> {
                 StartupScreen(viewModel = startupViewModel)
             }
@@ -2366,6 +2401,7 @@ fun CIRISApp(
             }
         }
     }
+    } // CompositionLocalProvider
 }
 
 /**

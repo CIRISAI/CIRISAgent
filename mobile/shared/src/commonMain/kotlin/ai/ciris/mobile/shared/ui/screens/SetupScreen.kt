@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.Platform
 import ai.ciris.mobile.shared.models.SetupMode
 import ai.ciris.mobile.shared.models.filterAdaptersForPlatform
@@ -323,7 +324,7 @@ fun SetupScreen(
                         .padding(16.dp)
                 ) {
                     Text(
-                        text = if (isAlreadyConfigured) "Setup Already Complete" else "Setup Error",
+                        text = if (isAlreadyConfigured) localizedString("mobile.setup_already_complete") else localizedString("mobile.setup_error"),
                         fontWeight = FontWeight.Bold,
                         color = if (isAlreadyConfigured) semantic.onWarning else SetupColors.ErrorDark
                     )
@@ -348,7 +349,7 @@ fun SetupScreen(
                                 containerColor = SetupColors.Primary
                             )
                         ) {
-                            Text("Continue to App")
+                            Text(localizedString("mobile.setup_continue_app"))
                         }
                     }
                 }
@@ -527,7 +528,7 @@ private fun WelcomeStep(
             modifier = Modifier.padding(bottom = 16.dp)
         ) {
             Text(
-                text = "✓ 100% Free & Open Source",
+                text = "✓ ${localizedString("mobile.setup_free_badge")}",
                 color = SetupColors.SuccessText,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
@@ -550,7 +551,7 @@ private fun WelcomeStep(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Register Your Agent Identity",
+                        text = localizedString("mobile.setup_register_title"),
                         color = SetupColors.SuccessDark,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
@@ -560,7 +561,7 @@ private fun WelcomeStep(
                         color = SetupColors.SuccessLight
                     ) {
                         Text(
-                            text = "OPTIONAL",
+                            text = localizedString("mobile.setup_register_optional"),
                             color = SetupColors.SuccessDark,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Medium,
@@ -569,7 +570,7 @@ private fun WelcomeStep(
                     }
                 }
                 Text(
-                    text = "Join the CIRIS community and enable cryptographic attestation against the public infrastructure and your audit log.",
+                    text = localizedString("mobile.setup_register_desc"),
                     color = SetupColors.SuccessText,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
@@ -578,14 +579,14 @@ private fun WelcomeStep(
 
                 // Benefits list
                 Column(modifier = Modifier.padding(bottom = 12.dp)) {
-                    BenefitRow("Audit trail — cryptographically-signed traces begin")
-                    BenefitRow("Coherence Ratchet — coordinated deception becomes mathematically harder over time")
-                    BenefitRow("CIRIS Scoring — measures integrity across interactions")
-                    BenefitRow("Community template (Ally) included")
+                    BenefitRow(localizedString("mobile.setup_register_audit"))
+                    BenefitRow(localizedString("mobile.setup_register_ratchet"))
+                    BenefitRow(localizedString("mobile.setup_register_scoring"))
+                    BenefitRow(localizedString("mobile.setup_register_template"))
                 }
 
                 Text(
-                    text = "\$1.00 refundable bond + \$0.50 processing fee",
+                    text = localizedString("mobile.setup_register_bond"),
                     color = SetupColors.SuccessDark,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
@@ -606,11 +607,11 @@ private fun WelcomeStep(
                         viewModel.enterNodeFlow()
                     }
                 ) {
-                    Text("Connect to CIRIS Portal", fontWeight = FontWeight.Bold)
+                    Text(localizedString("mobile.setup_register_connect"), fontWeight = FontWeight.Bold)
                 }
 
                 Text(
-                    text = "Identity keys are bound to your agent — transfers not yet supported",
+                    text = localizedString("mobile.setup_register_key_note"),
                     color = SetupColors.TextSecondary,
                     fontSize = 11.sp,
                     textAlign = TextAlign.Center,
@@ -620,7 +621,7 @@ private fun WelcomeStep(
                 )
 
                 Text(
-                    text = "For licensed deployment, contact sales@ciris.ai",
+                    text = localizedString("mobile.setup_register_sales"),
                     color = SetupColors.TextSecondary,
                     fontSize = 11.sp,
                     textAlign = TextAlign.Center,
@@ -631,7 +632,7 @@ private fun WelcomeStep(
 
                 // Skip option
                 Text(
-                    text = "Skip for now - you can register later in Settings",
+                    text = localizedString("mobile.setup_register_skip"),
                     color = SetupColors.TextSecondary,
                     fontSize = 11.sp,
                     textAlign = TextAlign.Center,
@@ -644,7 +645,7 @@ private fun WelcomeStep(
 
         // Main description
         Text(
-            text = "CIRIS is an ethical AI assistant that runs on your device. Your conversations and data stay private.",
+            text = localizedString("setup.welcome_desc"),
             color = SetupColors.TextPrimary,
             fontSize = 16.sp,
             textAlign = TextAlign.Center,
@@ -662,14 +663,14 @@ private fun WelcomeStep(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "ℹ️ What CIRIS Is",
+                    text = "ℹ️ ${localizedString("mobile.setup_what_ciris")}",
                     color = SetupColors.InfoDark,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 Text(
-                    text = "CIRIS is an AI tool, not a friend, therapist, or human substitute. For emotional support, please reach out to real people in your life or professional services.",
+                    text = localizedString("mobile.setup_what_ciris_desc"),
                     color = SetupColors.InfoText,
                     fontSize = 13.sp,
                     lineHeight = 18.sp
@@ -698,14 +699,14 @@ private fun WelcomeStep(
                             modifier = Modifier.padding(end = 12.dp)
                         )
                         Text(
-                            text = "You're ready to go!",
+                            text = localizedString("mobile.setup_google_ready"),
                             color = SetupColors.SuccessDark,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     Text(
-                        text = "Since you signed in with ${getOAuthProviderName()}, CIRIS can start working right away. Free access is limited and includes web search via privacy-protecting providers (Exa, Brave).",
+                        text = localizedString("mobile.setup_google_desc", mapOf("provider" to getOAuthProviderName())),
                         color = SetupColors.SuccessText,
                         fontSize = 14.sp,
                         lineHeight = 20.sp
@@ -713,7 +714,7 @@ private fun WelcomeStep(
 
                     // Expandable details
                     Text(
-                        text = if (detailsExpanded) "▼ Details" else "▶ Details",
+                        text = if (detailsExpanded) "▼ ${localizedString("mobile.setup_details_expand")}" else "▶ ${localizedString("mobile.setup_details_expand")}",
                         color = SetupColors.SuccessDark,
                         fontSize = 13.sp,
                         modifier = Modifier
@@ -723,7 +724,7 @@ private fun WelcomeStep(
 
                     AnimatedVisibility(visible = detailsExpanded) {
                         Text(
-                            text = "• Your conversations are never sent for external AI training\n• With your consent, CIRIS can learn locally on your device to better assist you\n• All data stays on your device unless you explicitly share it\n• You control what CIRIS remembers about you",
+                            text = localizedString("mobile.setup_details_content"),
                             color = SetupColors.SuccessText,
                             fontSize = 13.sp,
                             lineHeight = 18.sp,
@@ -743,14 +744,14 @@ private fun WelcomeStep(
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
-                        text = "Quick Setup Required",
+                        text = localizedString("mobile.setup_required_title"),
                         color = SetupColors.InfoDark,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                     Text(
-                        text = "To power AI conversations, you'll need to connect an AI provider (like OpenAI or Anthropic). This takes about 2 minutes.",
+                        text = localizedString("mobile.setup_required_desc"),
                         color = SetupColors.InfoText,
                         fontSize = 14.sp,
                         lineHeight = 20.sp
@@ -767,14 +768,14 @@ private fun WelcomeStep(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "How it works",
+                    text = localizedString("mobile.setup_how_title"),
                     color = SetupColors.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 Text(
-                    text = "CIRIS runs entirely on your device. However, AI reasoning requires powerful servers. CIRIS connects to privacy-respecting AI providers that never train on your data and never store your conversations.",
+                    text = localizedString("mobile.setup_how_desc"),
                     color = SetupColors.TextSecondary,
                     fontSize = 14.sp,
                     lineHeight = 20.sp
@@ -851,7 +852,7 @@ private fun NodeAuthStep(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "Register Agent",
+            text = localizedString("mobile.setup_node_register"),
             color = SetupColors.TextPrimary,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
@@ -872,7 +873,7 @@ private fun NodeAuthStep(
                     modifier = Modifier.padding(16.dp)
                 )
                 Text(
-                    text = "Connecting to portal...",
+                    text = localizedString("mobile.setup_node_connecting"),
                     color = SetupColors.TextSecondary,
                     fontSize = 14.sp
                 )
@@ -893,7 +894,7 @@ private fun NodeAuthStep(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "Click to open in browser, or copy to open in another app:",
+                            text = localizedString("mobile.setup_node_open_browser"),
                             color = SetupColors.InfoDark,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
@@ -938,7 +939,7 @@ private fun NodeAuthStep(
                                     openUrlInBrowser(fullVerificationUrl)
                                 }
                             ) {
-                                Text("Open in Browser", fontSize = 13.sp)
+                                Text(localizedString("mobile.setup_node_open"), fontSize = 13.sp)
                             }
 
                             // Copy to clipboard button
@@ -961,7 +962,7 @@ private fun NodeAuthStep(
                                 }
                             ) {
                                 Text(
-                                    if (showCopiedToast) "Copied!" else "Copy URL",
+                                    if (showCopiedToast) localizedString("mobile.setup_node_copied") else localizedString("mobile.setup_node_copy"),
                                     fontSize = 13.sp
                                 )
                             }
@@ -990,13 +991,13 @@ private fun NodeAuthStep(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Checking authorization...",
+                        text = localizedString("mobile.setup_node_checking"),
                         color = SetupColors.TextSecondary,
                         fontSize = 14.sp
                     )
                 } else {
                     Text(
-                        text = "After completing authorization in your browser, tap the button below:",
+                        text = localizedString("mobile.setup_node_after_auth"),
                         color = SetupColors.TextSecondary,
                         fontSize = 14.sp,
                         textAlign = TextAlign.Center,
@@ -1042,7 +1043,7 @@ private fun NodeAuthStep(
                             }
                     ) {
                         Text(
-                            "All Done!",
+                            localizedString("mobile.setup_node_all_done"),
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -1069,7 +1070,7 @@ private fun NodeAuthStep(
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text(
-                            text = "✓ Agent Authorized",
+                            text = "✓ ${localizedString("mobile.setup_node_authorized")}",
                             color = SetupColors.SuccessDark,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
@@ -1101,7 +1102,7 @@ private fun NodeAuthStep(
 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Tap Next to configure your LLM provider.",
+                    text = localizedString("mobile.setup_node_next_hint"),
                     color = SetupColors.TextSecondary,
                     fontSize = 14.sp,
                     textAlign = TextAlign.Center
@@ -1116,7 +1117,7 @@ private fun NodeAuthStep(
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text(
-                            text = "Connection Failed",
+                            text = localizedString("mobile.setup_node_failed"),
                             color = SetupColors.ErrorDark,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
@@ -1147,7 +1148,7 @@ private fun NodeAuthStep(
                         }
                     }
                 ) {
-                    Text("Retry")
+                    Text(localizedString("startup.startup_retry"))
                 }
             }
         }
@@ -1176,7 +1177,7 @@ private fun LlmConfigurationStep(
             .verticalScroll(rememberScrollState())
     ) {
         Text(
-            text = "AI Configuration",
+            text = localizedString("setup.llm_title"),
             color = SetupColors.TextPrimary,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
@@ -1184,7 +1185,7 @@ private fun LlmConfigurationStep(
         )
 
         Text(
-            text = "Configure how CIRIS connects to AI services.",
+            text = localizedString("setup.llm_desc"),
             color = SetupColors.TextSecondary,
             fontSize = 14.sp,
             modifier = Modifier.padding(bottom = 24.dp)
@@ -2211,7 +2212,7 @@ private fun AccountConfirmationStep(
             .verticalScroll(rememberScrollState())
     ) {
         Text(
-            text = "Confirm Setup",
+            text = localizedString("setup.confirm_title"),
             color = SetupColors.TextPrimary,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
@@ -2219,7 +2220,7 @@ private fun AccountConfirmationStep(
         )
 
         Text(
-            text = "Review your configuration and complete setup.",
+            text = localizedString("setup.confirm_desc"),
             color = SetupColors.TextSecondary,
             fontSize = 14.sp,
             modifier = Modifier.padding(bottom = 24.dp)
@@ -2480,7 +2481,7 @@ private fun NavigationButtons(
                         contentColor = SetupColors.TextSecondary
                     )
                 ) {
-                    Text("Back")
+                    Text(localizedString("setup.back"))
                 }
             }
 
@@ -2510,9 +2511,9 @@ private fun NavigationButtons(
                             (isNodeFlow && currentStep == SetupStep.OPTIONAL_FEATURES)
                         Text(
                             when {
-                                currentStep == SetupStep.WELCOME -> "Continue →"
-                                isFinalStep -> "Finish Setup"
-                                else -> "Next"
+                                currentStep == SetupStep.WELCOME -> "${localizedString("setup.continue")} →"
+                                isFinalStep -> localizedString("setup.finish")
+                                else -> localizedString("setup.next")
                             }
                         )
                     }
@@ -2544,14 +2545,14 @@ private fun PreferencesStep(
     ) {
         // Header
         Text(
-            text = "Language & Location",
+            text = localizedString("setup.prefs_title"),
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             color = SetupColors.TextPrimary
         )
 
         Text(
-            text = "Help CIRIS respond in your preferred language and understand your context.",
+            text = localizedString("setup.prefs_desc"),
             fontSize = 14.sp,
             color = SetupColors.TextSecondary
         )
@@ -2564,7 +2565,7 @@ private fun PreferencesStep(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Preferred Language",
+                    text = localizedString("setup.prefs_language_label"),
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 16.sp,
                     color = SetupColors.TextPrimary
@@ -2626,14 +2627,14 @@ private fun PreferencesStep(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Location (Optional)",
+                    text = localizedString("setup.prefs_location_label"),
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 16.sp,
                     color = SetupColors.TextPrimary
                 )
 
                 Text(
-                    text = "Share as much or as little as you like",
+                    text = localizedString("setup.prefs_location_hint"),
                     fontSize = 12.sp,
                     color = SetupColors.TextSecondary,
                     modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
@@ -2671,10 +2672,10 @@ private fun PreferencesStep(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = when (granularity) {
-                                    LocationGranularity.NONE -> "Prefer not to say"
-                                    LocationGranularity.COUNTRY -> "Country only"
-                                    LocationGranularity.REGION -> "Country + Region/State"
-                                    LocationGranularity.CITY -> "Country + Region + City"
+                                    LocationGranularity.NONE -> localizedString("setup.prefs_location_none")
+                                    LocationGranularity.COUNTRY -> localizedString("setup.prefs_location_country")
+                                    LocationGranularity.REGION -> localizedString("setup.prefs_location_region")
+                                    LocationGranularity.CITY -> localizedString("setup.prefs_location_city")
                                 },
                                 color = SetupColors.TextPrimary
                             )
@@ -2689,8 +2690,8 @@ private fun PreferencesStep(
                     OutlinedTextField(
                         value = state.country,
                         onValueChange = { viewModel.setCountry(it) },
-                        label = { Text("Country") },
-                        placeholder = { Text("e.g., Ethiopia, US, Japan") },
+                        label = { Text(localizedString("setup.prefs_country_label")) },
+                        placeholder = { Text(localizedString("setup.prefs_country_hint")) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
@@ -2700,8 +2701,8 @@ private fun PreferencesStep(
                         OutlinedTextField(
                             value = state.region,
                             onValueChange = { viewModel.setRegion(it) },
-                            label = { Text("Region/State") },
-                            placeholder = { Text("e.g., Amhara, California, Tokyo") },
+                            label = { Text(localizedString("setup.prefs_region_label")) },
+                            placeholder = { Text(localizedString("setup.prefs_region_hint")) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
@@ -2712,8 +2713,8 @@ private fun PreferencesStep(
                         OutlinedTextField(
                             value = state.city,
                             onValueChange = { viewModel.setCity(it) },
-                            label = { Text("City") },
-                            placeholder = { Text("e.g., Addis Ababa, San Francisco") },
+                            label = { Text(localizedString("setup.prefs_city_label")) },
+                            placeholder = { Text(localizedString("setup.prefs_city_hint")) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )

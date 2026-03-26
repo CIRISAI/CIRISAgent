@@ -443,6 +443,10 @@
     "interact_field_result": "[EN] Result",
     "interact_field_content": "[EN] Content",
     "interact_field_reason": "[EN] Reason: {reason}",
-    "interact_field_questions": "[EN] Questions:"
+    "interact_field_questions": "[EN] Questions:",
+    "settings_benefit_signin_is_key": "Ваш вход — это ваш API-ключ",
+    "settings_benefit_auto_model": "Автоматический выбор модели",
+    "settings_benefit_rate_limiting": "Управление лимитами и квотами",
+    "settings_benefit_cost_managed": "Стоимость контролируется CIRIS"
   }
 }

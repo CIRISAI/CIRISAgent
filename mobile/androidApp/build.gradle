@@ -138,6 +138,26 @@ android {
     }
 }
 
+// Sync localization JSON files from main repo to assets
+// This ensures mobile has all translated strings available at runtime
+task syncLocalizationAssets(type: Sync) {
+    description = "Sync localization JSON files from main repo to assets"
+
+    from("../../localization") {
+        include "*.json"
+        // Exclude manifest.json (not needed at runtime)
+        exclude "manifest.json"
+    }
+    into "src/main/assets/localization"
+}
+
+// Make preBuild depend on localization sync
+tasks.whenTaskAdded { task ->
+    if (task.name == "preBuild") {
+        task.dependsOn syncLocalizationAssets
+    }
+}
+
 // Sync Python sources from main repo before building
 // This ensures mobile always uses the latest ciris_engine and ciris_adapters
 task syncPythonSources(type: Sync) {

@@ -443,6 +443,10 @@
     "interact_field_result": "[EN] Result",
     "interact_field_content": "[EN] Content",
     "interact_field_reason": "[EN] Reason: {reason}",
-    "interact_field_questions": "[EN] Questions:"
+    "interact_field_questions": "[EN] Questions:",
+    "settings_benefit_signin_is_key": "Kuingia kwako NI ufunguo wako wa API",
+    "settings_benefit_auto_model": "Uchaguzi wa mfano wa kiotomatiki",
+    "settings_benefit_rate_limiting": "Vikomo vya kiwango na mgawo vinasimamiwa",
+    "settings_benefit_cost_managed": "Gharama inadhibitiwa na CIRIS"
   }
 }

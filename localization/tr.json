@@ -443,6 +443,10 @@
     "interact_field_result": "[EN] Result",
     "interact_field_content": "[EN] Content",
     "interact_field_reason": "[EN] Reason: {reason}",
-    "interact_field_questions": "[EN] Questions:"
+    "interact_field_questions": "[EN] Questions:",
+    "settings_benefit_signin_is_key": "Girişiniz API anahtarınızdır",
+    "settings_benefit_auto_model": "Otomatik model seçimi",
+    "settings_benefit_rate_limiting": "Hız sınırları ve kotalar yönetilir",
+    "settings_benefit_cost_managed": "Maliyet CIRIS tarafından kontrol edilir"
   }
 }

@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.localization.LocalCurrency
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
@@ -232,6 +233,11 @@ private fun WalletErrorCard(error: String, onRetry: () -> Unit) {
 
 @Composable
 private fun WalletBalanceCard(status: WalletStatusResponse) {
+    // Get currency manager for conversion
+    val currencyManager = LocalCurrency.current
+    val currentCurrencyInfo by currencyManager?.currentCurrencyInfo?.collectAsState()
+        ?: remember { mutableStateOf(null) }
+
     val bgColor = when {
         status.isReceiveOnly -> SemanticColors.Default.surfaceWarning
         status.balance != "0.00" && status.balance != "0" -> SemanticColors.Default.surfaceSuccess
@@ -242,6 +248,11 @@ private fun WalletBalanceCard(status: WalletStatusResponse) {
         status.balance != "0.00" && status.balance != "0" -> SemanticColors.Default.onSuccess
         else -> SemanticColors.Default.inactive
     }
+
+    // Convert balance to selected currency
+    val usdcAmount = status.balance.toDoubleOrNull() ?: 0.0
+    val convertedBalance = currencyManager?.convertFromUsdc(usdcAmount)
+    val showConversion = currentCurrencyInfo?.code != "USDC" && currentCurrencyInfo?.code != "USD"
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -258,13 +269,29 @@ private fun WalletBalanceCard(status: WalletStatusResponse) {
                 // Wallet emoji
                 Text(text = "💰", fontSize = 48.sp)
 
-                // USDC Balance (primary)
-                Text(
-                    text = "${status.balance} ${status.currency}",
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = textColor
-                )
+                // Converted Balance (primary, if different currency selected)
+                if (showConversion && convertedBalance != null) {
+                    Text(
+                        text = convertedBalance,
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = textColor
+                    )
+                    // Original USDC balance (secondary)
+                    Text(
+                        text = "${status.balance} ${status.currency}",
+                        fontSize = 16.sp,
+                        color = textColor.copy(alpha = 0.7f)
+                    )
+                } else {
+                    // USDC Balance (primary)
+                    Text(
+                        text = "${status.balance} ${status.currency}",
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = textColor
+                    )
+                }
 
                 // ETH Balance (for gas)
                 Row(

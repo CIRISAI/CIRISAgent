@@ -58,3 +58,18 @@ compose.desktop {
 kotlin {
     jvmToolchain(17)
 }
+
+// Sync localization JSON files from main repo to resources
+tasks.register<Sync>("syncLocalizationResources") {
+    description = "Sync localization JSON files from main repo to resources"
+    from("../../localization") {
+        include("*.json")
+        exclude("manifest.json")
+    }
+    into("src/main/resources/localization")
+}
+
+// Ensure localization resources are synced before processing resources
+tasks.named("processResources") {
+    dependsOn("syncLocalizationResources")
+}

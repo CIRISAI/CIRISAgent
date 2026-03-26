@@ -107,6 +107,13 @@ def register_all_initialization_steps(
 
     init_manager.register_step(
         phase=InitializationPhase.SERVICES,
+        name="Populate Context Enrichment Cache",
+        handler=lambda: populate_context_enrichment_cache(runtime),
+        critical=False,  # Non-critical - context enrichment can run on-demand
+    )
+
+    init_manager.register_step(
+        phase=InitializationPhase.SERVICES,
         name="Initialize Maintenance Service",
         handler=lambda: initialize_maintenance_service(runtime),
         critical=True,
@@ -736,6 +743,41 @@ async def initialize_maintenance_service(runtime: Any) -> None:
     logger.info("Maintenance service verified available")
 
     await runtime._perform_startup_maintenance()
+
+
+async def populate_context_enrichment_cache(runtime: Any) -> None:
+    """Populate the context enrichment cache at startup.
+
+    This pre-runs context enrichment tools (like ha_list_entities, get_statement)
+    so their results are cached and immediately available for the first thought.
+    This prevents startup latency where the first thought has to wait 200-400ms
+    for each enrichment tool.
+
+    Non-critical: If this fails, enrichment will run on first thought instead.
+    """
+    from ciris_engine.logic.setup.first_run import is_first_run
+
+    if is_first_run():
+        logger.info("First-run mode: Skipping context enrichment cache population")
+        return
+
+    try:
+        # Collect available tools first
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            _collect_available_tools,
+            populate_enrichment_cache_at_startup,
+        )
+
+        available_tools = await _collect_available_tools(runtime)
+        if not available_tools:
+            logger.info("No adapter tools available, skipping enrichment cache population")
+            return
+
+        await populate_enrichment_cache_at_startup(runtime, available_tools)
+        logger.info("Context enrichment cache populated successfully")
+    except Exception as e:
+        # Non-critical - just log and continue
+        logger.warning(f"Failed to populate context enrichment cache: {e}")
 
 
 async def build_components(runtime: Any) -> None:

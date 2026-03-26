@@ -171,6 +171,52 @@ class AttestationResult(BaseModel):
     cached_at: Optional[datetime] = Field(default=None, description="When this result was cached")
     cache_ttl_seconds: int = Field(default=3600, description="Cache TTL in seconds (default 1 hour)")
 
+    # =========================================================================
+    # CIRISVerify 1.2.x: Hardware Trust Detection
+    # =========================================================================
+    # Detects SoC-level vulnerabilities that compromise TEE trust (e.g., CVE-2026-20435)
+
+    # Hardware trust status (THE KEY FLAG for wallet operations)
+    hardware_trust_degraded: bool = Field(
+        default=False,
+        description="True if hardware security is compromised (vulnerable SoC, rooted, emulator). "
+        "When true, wallet operations should be receive-only.",
+    )
+    trust_degradation_reason: Optional[str] = Field(
+        default=None,
+        description="Human-readable reason for trust degradation (e.g., 'Vulnerable MediaTek SoC detected')",
+    )
+
+    # Hardware info
+    soc_manufacturer: Optional[str] = Field(default=None, description="SoC manufacturer (mediatek, qualcomm, etc.)")
+    soc_model: Optional[str] = Field(default=None, description="SoC model identifier (mt6893, sm8550, etc.)")
+    security_patch_level: Optional[str] = Field(
+        default=None, description="Android security patch level (YYYY-MM-DD format)"
+    )
+    is_emulator: bool = Field(default=False, description="Device is an emulator")
+    is_suspicious_emulator: bool = Field(
+        default=False, description="Device shows signs of sophisticated emulator (hiding detection)"
+    )
+    bootloader_unlocked: Optional[bool] = Field(default=None, description="Bootloader is unlocked (if detectable)")
+    tee_implementation: Optional[str] = Field(
+        default=None, description="TEE implementation (TrustZone, StrongBox, Keymaster, etc.)"
+    )
+    is_rooted: bool = Field(default=False, description="Device shows signs of root access")
+
+    # Hardware limitations (why trust is degraded)
+    hardware_limitations: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description="List of HardwareLimitation objects explaining trust degradation. "
+        "Each contains: limitation_type, manufacturer, advisory (CVE details), reason, current_patch, minimum_patch",
+    )
+
+    # Security advisories (CVE details for UI display)
+    security_advisories: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description="List of SecurityAdvisory objects for vulnerable hardware. "
+        "Each contains: cve, title, impact, software_patchable, min_patch_level",
+    )
+
 
 class AttestationCacheStatus(BaseModel):
     """Status of the attestation cache."""

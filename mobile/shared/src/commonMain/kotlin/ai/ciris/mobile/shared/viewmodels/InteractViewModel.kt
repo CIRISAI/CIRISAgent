@@ -94,6 +94,20 @@ data class TrustStatus(
     val levelPending: Boolean = false  // True when waiting for Play Integrity
 )
 
+/**
+ * Wallet status for wallet badge display
+ */
+data class WalletStatus(
+    val isLoaded: Boolean = false,
+    val hasWallet: Boolean = false,
+    val balance: String = "0.00",
+    val currency: String = "USDC",
+    val provider: String = "x402",
+    val network: String = "base-sepolia",
+    val address: String? = null,
+    val isReceiveOnly: Boolean = false  // True if hardware trust degraded
+)
+
 class InteractViewModel(
     private val apiClient: CIRISApiClient
 ) : ViewModel() {
@@ -203,6 +217,10 @@ class InteractViewModel(
     // Trust status for shield display
     private val _trustStatus = MutableStateFlow(TrustStatus())
     val trustStatus: StateFlow<TrustStatus> = _trustStatus.asStateFlow()
+
+    // Wallet status for wallet badge display
+    private val _walletStatus = MutableStateFlow(WalletStatus())
+    val walletStatus: StateFlow<WalletStatus> = _walletStatus.asStateFlow()
 
     // File attachments for current message
     private val _attachedFiles = MutableStateFlow<List<PickedFile>>(emptyList())

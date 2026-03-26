@@ -309,6 +309,10 @@ class SetupCompleteRequest(BaseModel):
     timezone: Optional[str] = Field(
         None, description="IANA timezone (e.g., 'America/Chicago', 'Africa/Addis_Ababa')"
     )
+    share_location_in_traces: bool = Field(
+        default=False,
+        description="Whether user consents to include location data in anonymized telemetry traces",
+    )
 
     # Node Connection (set by "Connect to Node" device auth flow)
     node_url: Optional[str] = Field(None, description="CIRISNode URL (e.g., https://node.ciris.ai)")

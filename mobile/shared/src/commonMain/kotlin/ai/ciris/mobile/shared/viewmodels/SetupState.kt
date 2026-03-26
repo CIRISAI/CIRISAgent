@@ -40,7 +40,14 @@ enum class SetupStep {
     NODE_AUTH,
 
     /**
-     * Step 2: LLM mode selection (CIRIS_PROXY vs BYOK) and configuration.
+     * Step 2: Language and location preferences.
+     * Helps CIRIS communicate in the user's preferred language.
+     * Location is optional and provides contextual awareness.
+     */
+    PREFERENCES,
+
+    /**
+     * Step 3: LLM mode selection (CIRIS_PROXY vs BYOK) and configuration.
      */
     LLM_CONFIGURATION,
 
@@ -104,6 +111,52 @@ enum class DeviceAuthStatus {
 }
 
 /**
+ * Location sharing granularity for user preferences.
+ * Mirrors the CLI wizard's location options from wizard.py:377-382.
+ */
+@Serializable
+enum class LocationGranularity {
+    NONE,           // Prefer not to say
+    COUNTRY,        // Country only
+    REGION,         // Country + Region/State
+    CITY            // Country + Region + City
+}
+
+/**
+ * Supported language for the PREFERENCES step.
+ * Mirrors localization/manifest.json (15 languages).
+ * ISO 639-1 codes with native names for display.
+ */
+data class SupportedLanguage(
+    val code: String,        // ISO 639-1 code (e.g., "en", "am")
+    val nativeName: String,  // Name in native script (e.g., "English", "አማርኛ")
+    val englishName: String  // Name in English for accessibility
+)
+
+/**
+ * Available languages for selection in the PREFERENCES step.
+ * Sorted alphabetically by English name for consistent ordering.
+ * Matches localization/manifest.json.
+ */
+val SUPPORTED_LANGUAGES = listOf(
+    SupportedLanguage("am", "አማርኛ", "Amharic"),
+    SupportedLanguage("ar", "العربية", "Arabic"),
+    SupportedLanguage("zh", "中文", "Chinese"),
+    SupportedLanguage("en", "English", "English"),
+    SupportedLanguage("fr", "Français", "French"),
+    SupportedLanguage("de", "Deutsch", "German"),
+    SupportedLanguage("hi", "हिन्दी", "Hindi"),
+    SupportedLanguage("it", "Italiano", "Italian"),
+    SupportedLanguage("ja", "日本語", "Japanese"),
+    SupportedLanguage("ko", "한국어", "Korean"),
+    SupportedLanguage("pt", "Português", "Portuguese"),
+    SupportedLanguage("ru", "Русский", "Russian"),
+    SupportedLanguage("es", "Español", "Spanish"),
+    SupportedLanguage("sw", "Kiswahili", "Swahili"),
+    SupportedLanguage("tr", "Türkçe", "Turkish")
+)
+
+/**
  * CIRISVerify setup state for the optional verification step.
  */
 @Serializable
@@ -144,6 +197,17 @@ data class SetupFormState(
     val googleEmail: String? = null,
     val googleUserId: String? = null,
     val oauthProvider: String = "google", // "google" or "apple"
+
+    // Language and location preferences (from PREFERENCES step)
+    // Mirrors CLI wizard fields from wizard.py:324-395
+    val preferredLanguage: String = "en",  // ISO 639-1 code
+    val locationGranularity: LocationGranularity = LocationGranularity.NONE,
+    val country: String = "",
+    val region: String = "",
+    val city: String = "",
+    // Consent to share location data in telemetry/traces
+    // When enabled, location is included in anonymized telemetry
+    val shareLocationInTraces: Boolean = false,
 
     // LLM mode selection (CIRIS_PROXY or BYOK)
     val setupMode: SetupMode? = null,
@@ -241,6 +305,11 @@ data class SetupFormState(
                 deviceAuth.status == DeviceAuthStatus.COMPLETE
             }
 
+            SetupStep.PREFERENCES -> {
+                // Language has a default, location is optional - always valid
+                true
+            }
+
             SetupStep.LLM_CONFIGURATION -> {
                 if (setupMode == SetupMode.CIRIS_PROXY) {
                     // CIRIS proxy mode - need Google auth token
@@ -297,6 +366,11 @@ data class SetupFormState(
                     DeviceAuthStatus.WAITING -> "Waiting for authorization in browser..."
                     DeviceAuthStatus.COMPLETE -> null
                 }
+            }
+
+            SetupStep.PREFERENCES -> {
+                // Preferences are optional - no validation errors
+                null
             }
 
             SetupStep.LLM_CONFIGURATION -> {
@@ -613,7 +687,49 @@ data class VerifyStatusResponse(
     val diskAgentMismatch: Map<String, JsonElement>? = null,
     /** Files that don't match registry */
     @SerialName("registry_mismatch_files")
-    val registryMismatchFiles: Map<String, JsonElement>? = null
+    val registryMismatchFiles: Map<String, JsonElement>? = null,
+
+    // =========================================================================
+    // CIRISVerify 1.2.x: Hardware Trust Detection
+    // =========================================================================
+    // Detects SoC-level vulnerabilities (CVE-2026-20435, CVE-2026-21385) that compromise TEE
+
+    /** THE KEY FLAG - True if hardware security is compromised. When true, wallet is RECEIVE-ONLY. */
+    @SerialName("hardware_trust_degraded")
+    val hardwareTrustDegraded: Boolean = false,
+    /** Human-readable reason (e.g., "Vulnerable MediaTek SoC detected") */
+    @SerialName("trust_degradation_reason")
+    val trustDegradationReason: String? = null,
+    /** SoC manufacturer (mediatek, qualcomm, samsung, etc.) */
+    @SerialName("soc_manufacturer")
+    val socManufacturer: String? = null,
+    /** SoC model identifier (mt6893, sm8550, etc.) */
+    @SerialName("soc_model")
+    val socModel: String? = null,
+    /** Android security patch level (YYYY-MM-DD) */
+    @SerialName("security_patch_level")
+    val securityPatchLevel: String? = null,
+    /** Device is an emulator */
+    @SerialName("is_emulator")
+    val isEmulator: Boolean = false,
+    /** Sophisticated emulator hiding detection */
+    @SerialName("is_suspicious_emulator")
+    val isSuspiciousEmulator: Boolean = false,
+    /** Bootloader is unlocked (if detectable) */
+    @SerialName("bootloader_unlocked")
+    val bootloaderUnlocked: Boolean? = null,
+    /** TEE implementation (TrustZone, StrongBox, etc.) */
+    @SerialName("tee_implementation")
+    val teeImplementation: String? = null,
+    /** Device shows signs of root access */
+    @SerialName("is_rooted")
+    val isRooted: Boolean = false,
+    /** List of limitations explaining why trust is degraded */
+    @SerialName("hardware_limitations")
+    val hardwareLimitations: List<HardwareLimitationData>? = null,
+    /** CVE details for vulnerable hardware */
+    @SerialName("security_advisories")
+    val securityAdvisories: List<SecurityAdvisoryData>? = null
 ) {
     /**
      * Calculate actual achieved attestation level (0-5).
@@ -678,4 +794,47 @@ data class CheckDetail(
 data class SourceErrorDetail(
     val category: String = "unknown",
     val details: String = ""
+)
+
+/**
+ * CIRISVerify 1.2.x: Hardware limitation explaining trust degradation.
+ * Each limitation may have an associated security advisory (CVE).
+ */
+@Serializable
+data class HardwareLimitationData(
+    /** Type: Emulator, VulnerableSoC, OutdatedPatchLevel, RootedDevice, etc. */
+    @SerialName("limitation_type")
+    val limitationType: String,
+    /** Affected manufacturer (mediatek, qualcomm, etc.) */
+    val manufacturer: String? = null,
+    /** Associated security advisory if applicable */
+    val advisory: SecurityAdvisoryData? = null,
+    /** Human-readable explanation */
+    val reason: String? = null,
+    /** Current security patch level on device */
+    @SerialName("current_patch")
+    val currentPatch: String? = null,
+    /** Minimum required patch level to remediate */
+    @SerialName("minimum_patch")
+    val minimumPatch: String? = null
+)
+
+/**
+ * CIRISVerify 1.2.x: Security advisory for hardware vulnerabilities.
+ * Contains CVE details for UI display.
+ */
+@Serializable
+data class SecurityAdvisoryData(
+    /** CVE identifier (e.g., "CVE-2026-20435") */
+    val cve: String,
+    /** Brief title (e.g., "MediaTek TEE Key Extraction") */
+    val title: String,
+    /** Impact description (e.g., "Key extraction possible in <45s") */
+    val impact: String,
+    /** Whether a software patch can fix this (false for silicon-level vulns) */
+    @SerialName("software_patchable")
+    val softwarePatchable: Boolean,
+    /** Minimum patch level that fixes (if software_patchable) */
+    @SerialName("min_patch_level")
+    val minPatchLevel: String? = null
 )

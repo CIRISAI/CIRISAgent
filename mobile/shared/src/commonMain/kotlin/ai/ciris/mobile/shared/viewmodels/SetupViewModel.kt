@@ -139,6 +139,57 @@ class SetupViewModel : ViewModel() {
         _state.value = _state.value.copy(userPassword = password)
     }
 
+    // ========== Language & Location Preferences ==========
+    // Mirrors CLI wizard: ciris_engine/logic/setup/wizard.py:324-395
+
+    /**
+     * Set the preferred language (ISO 639-1 code).
+     * Examples: "en", "am", "es", "ja", "zh"
+     */
+    fun setPreferredLanguage(language: String) {
+        _state.value = _state.value.copy(preferredLanguage = language)
+    }
+
+    /**
+     * Set the location sharing granularity.
+     */
+    fun setLocationGranularity(granularity: LocationGranularity) {
+        _state.value = _state.value.copy(locationGranularity = granularity)
+    }
+
+    /**
+     * Set the user's country.
+     * Only used when locationGranularity >= COUNTRY.
+     */
+    fun setCountry(country: String) {
+        _state.value = _state.value.copy(country = country)
+    }
+
+    /**
+     * Set the user's region/state.
+     * Only used when locationGranularity >= REGION.
+     */
+    fun setRegion(region: String) {
+        _state.value = _state.value.copy(region = region)
+    }
+
+    /**
+     * Set the user's city.
+     * Only used when locationGranularity == CITY.
+     */
+    fun setCity(city: String) {
+        _state.value = _state.value.copy(city = city)
+    }
+
+    /**
+     * Set consent to share location data in telemetry traces.
+     * When enabled, location info is included in anonymized telemetry
+     * for contextual analysis (timezone patterns, regional usage, etc.).
+     */
+    fun setShareLocationInTraces(share: Boolean) {
+        _state.value = _state.value.copy(shareLocationInTraces = share)
+    }
+
     // ========== Step Navigation ==========
     // Source: SetupWizardActivity.kt:77-97
 
@@ -156,19 +207,21 @@ class SetupViewModel : ViewModel() {
         }
 
         val nextStep = if (currentState.isNodeFlow) {
-            // Node flow: WELCOME → NODE_AUTH → LLM → OPTIONAL_FEATURES → COMPLETE
+            // Node flow: WELCOME → NODE_AUTH → PREFERENCES → LLM → OPTIONAL_FEATURES → COMPLETE
             // (CIRISVerify is always bundled, no install step needed)
             when (currentState.currentStep) {
                 SetupStep.WELCOME -> SetupStep.NODE_AUTH
-                SetupStep.NODE_AUTH -> SetupStep.LLM_CONFIGURATION
+                SetupStep.NODE_AUTH -> SetupStep.PREFERENCES
+                SetupStep.PREFERENCES -> SetupStep.LLM_CONFIGURATION
                 SetupStep.LLM_CONFIGURATION -> SetupStep.OPTIONAL_FEATURES
                 SetupStep.OPTIONAL_FEATURES -> SetupStep.COMPLETE
                 else -> SetupStep.COMPLETE
             }
         } else {
-            // Normal flow: WELCOME → LLM → OPTIONAL_FEATURES → ACCOUNT → COMPLETE
+            // Normal flow: WELCOME → PREFERENCES → LLM → OPTIONAL_FEATURES → ACCOUNT → COMPLETE
             when (currentState.currentStep) {
-                SetupStep.WELCOME -> SetupStep.LLM_CONFIGURATION
+                SetupStep.WELCOME -> SetupStep.PREFERENCES
+                SetupStep.PREFERENCES -> SetupStep.LLM_CONFIGURATION
                 SetupStep.LLM_CONFIGURATION -> SetupStep.OPTIONAL_FEATURES
                 SetupStep.OPTIONAL_FEATURES -> SetupStep.ACCOUNT_AND_CONFIRMATION
                 SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.COMPLETE
@@ -190,20 +243,22 @@ class SetupViewModel : ViewModel() {
         val currentState = _state.value
 
         val prevStep = if (currentState.isNodeFlow) {
-            // Node flow: COMPLETE → OPTIONAL_FEATURES → LLM → NODE_AUTH → WELCOME
+            // Node flow: COMPLETE → OPTIONAL_FEATURES → LLM → PREFERENCES → NODE_AUTH → WELCOME
             when (currentState.currentStep) {
                 SetupStep.WELCOME -> SetupStep.WELCOME
                 SetupStep.NODE_AUTH -> SetupStep.WELCOME
-                SetupStep.LLM_CONFIGURATION -> SetupStep.NODE_AUTH
+                SetupStep.PREFERENCES -> SetupStep.NODE_AUTH
+                SetupStep.LLM_CONFIGURATION -> SetupStep.PREFERENCES
                 SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
                 SetupStep.COMPLETE -> SetupStep.OPTIONAL_FEATURES
                 else -> SetupStep.WELCOME
             }
         } else {
-            // Normal flow
+            // Normal flow: COMPLETE → ACCOUNT → OPTIONAL_FEATURES → LLM → PREFERENCES → WELCOME
             when (currentState.currentStep) {
                 SetupStep.WELCOME -> SetupStep.WELCOME
-                SetupStep.LLM_CONFIGURATION -> SetupStep.WELCOME
+                SetupStep.PREFERENCES -> SetupStep.WELCOME
+                SetupStep.LLM_CONFIGURATION -> SetupStep.PREFERENCES
                 SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
                 SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.OPTIONAL_FEATURES
                 SetupStep.COMPLETE -> SetupStep.ACCOUNT_AND_CONFIRMATION
@@ -1123,6 +1178,13 @@ class SetupViewModel : ViewModel() {
                 oauth_external_id = currentState.googleUserId,
                 oauth_email = currentState.googleEmail,
 
+                // Language and location preferences
+                preferred_language = currentState.preferredLanguage,
+                location_country = currentState.country.takeIf { it.isNotEmpty() && currentState.locationGranularity >= LocationGranularity.COUNTRY },
+                location_region = currentState.region.takeIf { it.isNotEmpty() && currentState.locationGranularity >= LocationGranularity.REGION },
+                location_city = currentState.city.takeIf { it.isNotEmpty() && currentState.locationGranularity >= LocationGranularity.CITY },
+                share_location_in_traces = currentState.shareLocationInTraces,
+
                 // Node flow fields
                 node_url = nodeFlowData?.nodeUrl,
                 identity_template = nodeFlowData?.identityTemplate,
@@ -1183,6 +1245,13 @@ class SetupViewModel : ViewModel() {
                 oauth_provider = if (isOAuthUser) currentState.oauthProvider else null,
                 oauth_external_id = if (isOAuthUser) currentState.googleUserId else null,
                 oauth_email = if (isOAuthUser) currentState.googleEmail else null,
+
+                // Language and location preferences
+                preferred_language = currentState.preferredLanguage,
+                location_country = currentState.country.takeIf { it.isNotEmpty() && currentState.locationGranularity >= LocationGranularity.COUNTRY },
+                location_region = currentState.region.takeIf { it.isNotEmpty() && currentState.locationGranularity >= LocationGranularity.REGION },
+                location_city = currentState.city.takeIf { it.isNotEmpty() && currentState.locationGranularity >= LocationGranularity.CITY },
+                share_location_in_traces = currentState.shareLocationInTraces,
 
                 // Node flow fields
                 node_url = nodeFlowData?.nodeUrl,

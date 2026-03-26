@@ -1251,6 +1251,10 @@ fun CIRISApp(
                             platformLog(TAG, "[INFO] Opening Trust page")
                             currentScreen = Screen.Trust
                         },
+                        onOpenWalletPage = {
+                            platformLog(TAG, "[INFO] Opening Wallet page")
+                            currentScreen = Screen.Wallet
+                        },
                         onOpenBilling = {
                             platformLog(TAG, "[INFO] Opening Billing page from credits")
                             currentScreen = Screen.Billing
@@ -2350,6 +2354,16 @@ fun CIRISApp(
                     deviceAttestationCallback = deviceAttestationCallback
                 )
             }
+
+            Screen.Wallet -> {
+                WalletPage(
+                    apiClient = apiClient,
+                    onNavigateBack = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Wallet] Navigating back to Interact")
+                        currentScreen = Screen.Interact
+                    }
+                )
+            }
         }
     }
 }
@@ -2755,6 +2769,7 @@ private sealed class Screen {
     object Runtime : Screen()
     object Users : Screen()
     object Trust : Screen()
+    object Wallet : Screen()
     object Tickets : Screen()
     object Scheduler : Screen()
     object Tools : Screen()

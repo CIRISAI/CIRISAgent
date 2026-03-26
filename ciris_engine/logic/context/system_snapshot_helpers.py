@@ -40,6 +40,118 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# 0. CONTEXT ENRICHMENT CACHE
+# =============================================================================
+
+# Module-level cache for context enrichment results
+# This prevents re-executing tools on every thought, providing instant access
+# to cached data like wallet balances, HA entities, etc.
+
+
+class EnrichmentCacheEntry(BaseModel):
+    """Cache entry for context enrichment results."""
+
+    data: Any
+    cached_at: datetime
+    ttl_seconds: float
+
+    def is_expired(self) -> bool:
+        """Check if cache entry has expired."""
+        age = (datetime.now(timezone.utc) - self.cached_at).total_seconds()
+        return age > self.ttl_seconds
+
+
+class ContextEnrichmentCache:
+    """Thread-safe cache for context enrichment results.
+
+    Features:
+    - Per-tool TTL configuration
+    - Startup population for instant context availability
+    - Manual refresh capability
+    - Cache statistics for monitoring
+    """
+
+    DEFAULT_TTL = 30.0  # Default 30 second TTL
+    MIN_TTL = 5.0  # Minimum TTL to prevent excessive polling
+    MAX_TTL = 300.0  # Maximum TTL of 5 minutes
+
+    def __init__(self) -> None:
+        self._cache: Dict[str, EnrichmentCacheEntry] = {}
+        self._hit_count = 0
+        self._miss_count = 0
+        self._startup_populated = False
+
+    def get(self, key: str) -> Optional[Any]:
+        """Get cached value if not expired."""
+        entry = self._cache.get(key)
+        if entry and not entry.is_expired():
+            self._hit_count += 1
+            logger.debug(f"[ENRICHMENT_CACHE] HIT: {key}")
+            return entry.data
+        if entry:
+            # Expired - clean up
+            del self._cache[key]
+        self._miss_count += 1
+        logger.debug(f"[ENRICHMENT_CACHE] MISS: {key}")
+        return None
+
+    def set(self, key: str, data: Any, ttl_seconds: Optional[float] = None) -> None:
+        """Store value in cache with TTL."""
+        ttl = ttl_seconds if ttl_seconds is not None else self.DEFAULT_TTL
+        ttl = max(self.MIN_TTL, min(ttl, self.MAX_TTL))  # Clamp to bounds
+
+        self._cache[key] = EnrichmentCacheEntry(
+            data=data,
+            cached_at=datetime.now(timezone.utc),
+            ttl_seconds=ttl,
+        )
+        logger.debug(f"[ENRICHMENT_CACHE] SET: {key} (TTL={ttl}s)")
+
+    def invalidate(self, key: str) -> None:
+        """Invalidate a specific cache entry."""
+        if key in self._cache:
+            del self._cache[key]
+            logger.debug(f"[ENRICHMENT_CACHE] INVALIDATED: {key}")
+
+    def clear(self) -> None:
+        """Clear all cache entries."""
+        self._cache.clear()
+        logger.info("[ENRICHMENT_CACHE] Cleared all entries")
+
+    @property
+    def stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        total = self._hit_count + self._miss_count
+        hit_rate = (self._hit_count / total * 100) if total > 0 else 0.0
+        return {
+            "entries": len(self._cache),
+            "hits": self._hit_count,
+            "misses": self._miss_count,
+            "hit_rate_pct": round(hit_rate, 1),
+            "startup_populated": self._startup_populated,
+        }
+
+    @property
+    def is_populated(self) -> bool:
+        """Check if cache has been populated (at startup or otherwise)."""
+        return len(self._cache) > 0 or self._startup_populated
+
+    def mark_startup_populated(self) -> None:
+        """Mark that startup population has completed."""
+        self._startup_populated = True
+        logger.info(f"[ENRICHMENT_CACHE] Startup population complete: {len(self._cache)} entries")
+
+
+# Singleton cache instance
+_enrichment_cache = ContextEnrichmentCache()
+
+
+def get_enrichment_cache() -> ContextEnrichmentCache:
+    """Get the global context enrichment cache."""
+    return _enrichment_cache
+
+
+# =============================================================================
 # 1. THOUGHT PROCESSING
 # =============================================================================
 
@@ -1034,6 +1146,9 @@ async def _run_context_enrichment_tools(
     They are automatically executed during context gathering to provide additional
     information for action selection (e.g., listing available Home Assistant entities).
 
+    This function uses caching to prevent re-executing slow tools on every thought.
+    Cache TTL can be configured per-tool via context_enrichment_params._cache_ttl.
+
     Args:
         runtime: The runtime object with service_registry and bus_manager
         available_tools: Already collected available tools by adapter type
@@ -1042,6 +1157,7 @@ async def _run_context_enrichment_tools(
         Dict mapping "adapter_type:tool_name" to tool execution results
     """
     enrichment_results: Dict[str, Any] = {}
+    cache = get_enrichment_cache()
 
     if not _validate_runtime_capabilities(runtime):
         return enrichment_results
@@ -1054,19 +1170,65 @@ async def _run_context_enrichment_tools(
         return enrichment_results
 
     tool_services = _get_tool_services(runtime.service_registry)
+    cache_hits = 0
+    cache_misses = 0
 
     for adapter_type, tool in enrichment_tools:
+        tool_key = f"{adapter_type}:{tool.name}"
         try:
-            tool_key, result = await _execute_enrichment_tool(tool_services, adapter_type, tool)
+            # Check cache first (fast path)
+            cached_result = cache.get(tool_key)
+            if cached_result is not None:
+                enrichment_results[tool_key] = cached_result
+                cache_hits += 1
+                continue
+
+            # Cache miss - execute tool
+            cache_misses += 1
+            _, result = await _execute_enrichment_tool(tool_services, adapter_type, tool)
             if result is not None:
+                # Get TTL from tool params (default: 30s)
+                params = tool.context_enrichment_params or {}
+                ttl_raw = params.get("_cache_ttl")
+                ttl: Optional[float] = None
+                if isinstance(ttl_raw, (int, float)):
+                    ttl = float(ttl_raw)
+                cache.set(tool_key, result, ttl)
                 enrichment_results[tool_key] = result
         except Exception as e:
-            tool_key = f"{adapter_type}:{tool.name}"
             logger.error(f"[CONTEXT_ENRICHMENT] Failed to execute {tool_key}: {e}")
             enrichment_results[tool_key] = {"error": str(e)}
 
-    logger.info(f"[CONTEXT_ENRICHMENT] Collected {len(enrichment_results)} enrichment results")
+    logger.info(
+        f"[CONTEXT_ENRICHMENT] Collected {len(enrichment_results)} enrichment results "
+        f"(cache: {cache_hits} hits, {cache_misses} misses)"
+    )
     return enrichment_results
+
+
+async def populate_enrichment_cache_at_startup(
+    runtime: Any, available_tools: Dict[str, List[ToolInfo]]
+) -> None:
+    """Populate the context enrichment cache at startup.
+
+    This should be called during runtime initialization to ensure
+    cached data is immediately available for the first thought.
+    """
+    cache = get_enrichment_cache()
+    if cache.is_populated:
+        logger.info("[ENRICHMENT_CACHE] Cache already populated, skipping startup population")
+        return
+
+    logger.info("[ENRICHMENT_CACHE] Starting startup population...")
+
+    # Run enrichment tools to populate cache
+    results = await _run_context_enrichment_tools(runtime, available_tools)
+
+    cache.mark_startup_populated()
+    logger.info(
+        f"[ENRICHMENT_CACHE] Startup population complete: "
+        f"{len(results)} tools cached, stats: {cache.stats}"
+    )
 
 
 # =============================================================================

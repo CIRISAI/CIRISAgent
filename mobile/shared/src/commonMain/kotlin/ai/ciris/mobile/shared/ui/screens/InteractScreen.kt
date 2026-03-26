@@ -11,6 +11,7 @@ import ai.ciris.mobile.shared.viewmodels.InteractViewModel
 import ai.ciris.mobile.shared.viewmodels.LlmHealthStatus
 import ai.ciris.mobile.shared.viewmodels.TimelineEvent
 import ai.ciris.mobile.shared.viewmodels.TrustStatus
+import ai.ciris.mobile.shared.viewmodels.WalletStatus
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -96,6 +97,7 @@ fun InteractScreen(
     onNavigateBack: () -> Unit,
     onSessionExpired: () -> Unit = {},
     onOpenTrustPage: () -> Unit = {},
+    onOpenWalletPage: () -> Unit = {},
     onOpenBilling: () -> Unit = {},
     onOpenSystem: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
@@ -131,6 +133,7 @@ fun InteractScreen(
     val llmHealth by viewModel.llmHealth.collectAsState()
     val creditStatus by viewModel.creditStatus.collectAsState()
     val trustStatus by viewModel.trustStatus.collectAsState()
+    val walletStatus by viewModel.walletStatus.collectAsState()
     val attachedFiles by viewModel.attachedFiles.collectAsState()
     val pipelineState by viewModel.pipelineState.collectAsState()
 
@@ -302,10 +305,12 @@ fun InteractScreen(
                 llmHealth = llmHealth,
                 creditStatus = creditStatus,
                 trustStatus = trustStatus,
+                walletStatus = walletStatus,
                 visualizationMode = visualizationMode,
                 onVisualizationToggle = { visualizationMode = visualizationMode.next() },
                 onShutdown = { viewModel.shutdown(emergency = false) },
                 onEmergencyStop = { viewModel.shutdown(emergency = true) },
+                onWalletClick = onOpenWalletPage,
                 onTrustShieldClick = onOpenTrustPage,
                 onCreditsClick = onOpenBilling,
                 onLocalClick = onOpenSystem,
@@ -528,6 +533,7 @@ fun InteractScreen(
  * - Connection status (local server)
  * - LLM provider health
  * - CIRIS credits (if CIRIS proxy)
+ * - Wallet badge (balance display)
  * - Trust shield (X/5 level)
  * - Shutdown controls
  */
@@ -538,10 +544,12 @@ private fun EnhancedStatusBar(
     llmHealth: LlmHealthStatus,
     creditStatus: CreditStatus,
     trustStatus: TrustStatus,
+    walletStatus: WalletStatus,
     visualizationMode: VisualizationMode,
     onVisualizationToggle: () -> Unit,
     onShutdown: () -> Unit,
     onEmergencyStop: () -> Unit,
+    onWalletClick: () -> Unit,
     onTrustShieldClick: () -> Unit,
     onCreditsClick: () -> Unit,
     onLocalClick: () -> Unit,
@@ -600,6 +608,13 @@ private fun EnhancedStatusBar(
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
+
+                // Wallet badge (to the left of trust shield)
+                WalletBadge(
+                    walletStatus = walletStatus,
+                    onClick = onWalletClick,
+                    theme = theme
+                )
 
                 // Trust shield
                 TrustShield(
@@ -813,6 +828,56 @@ private fun CreditsIndicator(
                 fontSize = 10.sp,
                 color = creditsColor,
                 fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+/**
+ * Wallet badge - shows wallet status and USDC balance
+ * Colors: Green = funded, Amber = receive-only, Gray = not configured/empty
+ */
+@Composable
+private fun WalletBadge(
+    walletStatus: WalletStatus,
+    onClick: () -> Unit,
+    theme: InteractTheme,
+    modifier: Modifier = Modifier
+) {
+    val hasBalance = walletStatus.balance != "0.00" && walletStatus.balance != "0"
+    val badgeColor = when {
+        walletStatus.isReceiveOnly -> theme.trustLevel4  // Receive-only (hardware degraded) - amber
+        hasBalance -> theme.trustLevel5                   // Has funds - green
+        walletStatus.hasWallet -> theme.trustDefault      // Empty wallet - gray
+        else -> theme.trustDefault                        // Not configured - gray
+    }
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(4.dp),
+        color = badgeColor.copy(alpha = 0.15f),
+        modifier = modifier.testableClickable("btn_wallet_badge") { onClick() }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            // Wallet emoji
+            Text(text = "💰", fontSize = 12.sp)
+
+            // Balance or status text
+            val displayText = when {
+                !walletStatus.hasWallet -> "Setup"
+                walletStatus.isReceiveOnly -> "Recv"
+                hasBalance -> walletStatus.balance
+                else -> "0"
+            }
+            Text(
+                text = displayText,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = badgeColor
             )
         }
     }

@@ -197,6 +197,7 @@ class TestSystemSnapshotLocalizedTimes:
         batch_data.license_disclosure_severity = None
         batch_data.verify_attestation = None  # No attestation in tests
         batch_data.attestation_summary = None  # No attestation summary in tests
+        batch_data.wallet_summary = None  # No wallet data in tests
 
         # Fixed time for testing
         fixed_utc_time = datetime(2025, 6, 15, 14, 30, 0, tzinfo=timezone.utc)

@@ -437,8 +437,9 @@ class TestSetupWizard:
             return_value=env_file,
         )
 
-        # Mock inputs: yes to overwrite, option 1 (OpenAI), skip API key
-        inputs = iter(["y", "1", ""])
+        # Mock inputs: yes to overwrite, language 1 (English), location 4 (prefer not to say),
+        # option 1 (OpenAI), skip API key
+        inputs = iter(["y", "1", "4", "1", ""])
         mocker.patch("builtins.input", side_effect=inputs)
 
         from ciris_engine.logic.setup.wizard import run_setup_wizard

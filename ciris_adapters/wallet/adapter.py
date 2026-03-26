@@ -26,9 +26,8 @@ from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, RuntimeAdapterStatus
 from ciris_engine.schemas.runtime.enums import ServiceType
 
-from .config import ChapaProviderConfig, WalletAdapterConfig, X402ProviderConfig
-from .providers.chapa_provider import ChapaProvider
-from .providers.x402_provider import X402Provider
+from .config import WalletAdapterConfig
+from .providers.registry import create_provider, get_loaded_providers, ProviderLoadError
 from .tool_service import WalletToolService
 
 logger = logging.getLogger(__name__)
@@ -80,55 +79,141 @@ class WalletAdapter(Service):
         )
 
     def _load_config_from_env(self) -> WalletAdapterConfig:
-        """Load configuration from environment variables."""
-        x402_config = X402ProviderConfig(
-            enabled=os.getenv("WALLET_X402_ENABLED", "true").lower() == "true",
-            network=os.getenv("WALLET_X402_NETWORK", "base-sepolia"),
-            treasury_address=os.getenv("WALLET_X402_TREASURY_ADDRESS"),
-            facilitator_url=os.getenv(
-                "WALLET_X402_FACILITATOR_URL", "https://x402.org/facilitator"
-            ),
+        """Load configuration from environment variables.
+
+        Only creates config objects for providers that are explicitly enabled.
+        Providers are lazy-loaded, so unused providers don't consume memory.
+
+        MVP Default: x402 (USDC on Base L2) is enabled by default.
+        Other providers must be explicitly enabled via environment variables.
+        """
+        # Import config classes lazily to match provider pattern
+        from .config import (
+            X402ProviderConfig,
+            ChapaProviderConfig,
+            MPesaProviderConfig,
+            RazorpayProviderConfig,
+            PIXProviderConfig,
+            WiseProviderConfig,
+            StripeProviderConfig,
         )
 
-        chapa_secret = os.getenv("WALLET_CHAPA_SECRET_KEY")
-        chapa_config = ChapaProviderConfig(
-            enabled=os.getenv("WALLET_CHAPA_ENABLED", "true").lower() == "true",
-            secret_key=chapa_secret if chapa_secret else None,
-            callback_base_url=os.getenv("WALLET_CHAPA_CALLBACK_URL"),
-            merchant_name=os.getenv("WALLET_CHAPA_MERCHANT_NAME", "CIRIS"),
-        )
+        # Build provider configs dict - only include enabled providers
+        provider_configs: Dict[str, Any] = {}
+
+        # x402 (USDC on Base L2) - ENABLED BY DEFAULT for MVP
+        # Disable explicitly with WALLET_X402_ENABLED=false
+        if os.getenv("WALLET_X402_ENABLED", "true").lower() == "true":
+            provider_configs["x402"] = X402ProviderConfig(
+                enabled=True,
+                network=os.getenv("WALLET_X402_NETWORK", "base-sepolia"),
+                rpc_url=os.getenv("WALLET_X402_RPC_URL"),
+                treasury_address=os.getenv("WALLET_X402_TREASURY_ADDRESS"),
+                facilitator_url=os.getenv(
+                    "WALLET_X402_FACILITATOR_URL", "https://x402.org/facilitator"
+                ),
+            )
+
+        # Chapa (ETB - Ethiopia)
+        if os.getenv("WALLET_CHAPA_ENABLED", "false").lower() == "true":
+            chapa_secret = os.getenv("WALLET_CHAPA_SECRET_KEY")
+            provider_configs["chapa"] = ChapaProviderConfig(
+                enabled=True,
+                secret_key=chapa_secret if chapa_secret else None,
+                callback_base_url=os.getenv("WALLET_CHAPA_CALLBACK_URL"),
+                merchant_name=os.getenv("WALLET_CHAPA_MERCHANT_NAME", "CIRIS"),
+            )
+
+        # M-Pesa (KES - Kenya/Africa)
+        if os.getenv("WALLET_MPESA_ENABLED", "false").lower() == "true":
+            provider_configs["mpesa"] = MPesaProviderConfig(
+                enabled=True,
+                consumer_key=os.getenv("WALLET_MPESA_CONSUMER_KEY"),
+                consumer_secret=os.getenv("WALLET_MPESA_CONSUMER_SECRET"),
+                shortcode=os.getenv("WALLET_MPESA_SHORTCODE"),
+                passkey=os.getenv("WALLET_MPESA_PASSKEY"),
+                environment=os.getenv("WALLET_MPESA_ENVIRONMENT", "sandbox"),
+                callback_base_url=os.getenv("WALLET_MPESA_CALLBACK_URL"),
+            )
+
+        # Razorpay (INR - India)
+        if os.getenv("WALLET_RAZORPAY_ENABLED", "false").lower() == "true":
+            provider_configs["razorpay"] = RazorpayProviderConfig(
+                enabled=True,
+                key_id=os.getenv("WALLET_RAZORPAY_KEY_ID"),
+                key_secret=os.getenv("WALLET_RAZORPAY_KEY_SECRET"),
+                webhook_secret=os.getenv("WALLET_RAZORPAY_WEBHOOK_SECRET"),
+            )
+
+        # PIX (BRL - Brazil)
+        if os.getenv("WALLET_PIX_ENABLED", "false").lower() == "true":
+            provider_configs["pix"] = PIXProviderConfig(
+                enabled=True,
+                provider=os.getenv("WALLET_PIX_PROVIDER", "mercadopago"),
+                access_token=os.getenv("WALLET_PIX_ACCESS_TOKEN"),
+                callback_base_url=os.getenv("WALLET_PIX_CALLBACK_URL"),
+            )
+
+        # Wise (Global transfers)
+        if os.getenv("WALLET_WISE_ENABLED", "false").lower() == "true":
+            provider_configs["wise"] = WiseProviderConfig(
+                enabled=True,
+                api_token=os.getenv("WALLET_WISE_API_TOKEN"),
+                profile_id=os.getenv("WALLET_WISE_PROFILE_ID"),
+                environment=os.getenv("WALLET_WISE_ENVIRONMENT", "sandbox"),
+            )
+
+        # Stripe (Global cards)
+        if os.getenv("WALLET_STRIPE_ENABLED", "false").lower() == "true":
+            provider_configs["stripe"] = StripeProviderConfig(
+                enabled=True,
+                secret_key=os.getenv("WALLET_STRIPE_SECRET_KEY"),
+                publishable_key=os.getenv("WALLET_STRIPE_PUBLISHABLE_KEY"),
+                webhook_secret=os.getenv("WALLET_STRIPE_WEBHOOK_SECRET"),
+            )
 
         return WalletAdapterConfig(
-            x402=x402_config,
-            chapa=chapa_config,
+            provider_configs=provider_configs,
             default_provider=os.getenv("WALLET_DEFAULT_PROVIDER", "x402"),
         )
 
     def _init_providers(self) -> None:
-        """Initialize enabled wallet providers."""
-        # Initialize x402 provider if enabled
-        if self.adapter_config.x402.enabled:
-            # Get Ed25519 public key from CIRISVerify (secure - key never leaves vault)
-            public_key, signing_callback = self._get_ciris_verify_key()
+        """Lazily initialize enabled wallet providers.
 
-            x402_provider = X402Provider(
-                config=self.adapter_config.x402,
-                ed25519_public_key=public_key,
-                ed25519_seed=self._get_test_seed(),  # Fallback for testing only
-                signing_callback=signing_callback,
-            )
-            self._providers["x402"] = x402_provider
+        Providers are loaded on-demand using the registry, so only
+        the providers actually configured get imported into memory.
+        """
+        provider_configs = self.adapter_config.provider_configs
 
-            if public_key:
-                logger.info("x402 provider configured with CIRISVerify key")
-            else:
-                logger.info("x402 provider configured (no CIRISVerify - test mode)")
+        for provider_name, config in provider_configs.items():
+            if not config.enabled:
+                continue
 
-        # Initialize Chapa provider if enabled
-        if self.adapter_config.chapa.enabled:
-            chapa_provider = ChapaProvider(config=self.adapter_config.chapa)
-            self._providers["chapa"] = chapa_provider
-            logger.info("Chapa provider configured")
+            try:
+                # Build provider-specific kwargs
+                kwargs: Dict[str, Any] = {}
+
+                # x402 needs special handling for CIRISVerify
+                if provider_name == "x402":
+                    public_key, signing_callback = self._get_ciris_verify_key()
+                    kwargs["ed25519_public_key"] = public_key
+                    kwargs["ed25519_seed"] = self._get_test_seed()
+                    kwargs["signing_callback"] = signing_callback
+
+                    if public_key:
+                        logger.info("x402 provider configured with CIRISVerify key")
+                    else:
+                        logger.info("x402 provider configured (no CIRISVerify - test mode)")
+
+                # Lazy load and create the provider
+                provider = create_provider(provider_name, config=config, **kwargs)
+                self._providers[provider_name] = provider
+                logger.info(f"Loaded provider: {provider_name}")
+
+            except ProviderLoadError as e:
+                logger.error(f"Failed to load provider {provider_name}: {e}")
+            except Exception as e:
+                logger.error(f"Error initializing provider {provider_name}: {e}")
 
     def _get_ciris_verify_key(self) -> tuple[Optional[bytes], Optional[Callable[[bytes], bytes]]]:
         """
@@ -255,13 +340,16 @@ class WalletAdapter(Service):
 
     def get_config(self) -> AdapterConfig:
         """Get adapter configuration."""
+        # Get loaded provider names from registry
+        loaded = get_loaded_providers()
+
         return AdapterConfig(
             adapter_type="wallet",
             enabled=self._running,
             settings={
                 "providers": list(self._providers.keys()),
-                "x402_network": self.adapter_config.x402.network,
-                "chapa_enabled": self.adapter_config.chapa.enabled,
+                "loaded_providers": loaded,
+                "default_provider": self.adapter_config.default_provider,
             },
         )
 

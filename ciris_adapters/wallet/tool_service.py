@@ -307,6 +307,7 @@ or implement webhook callbacks for real-time notification.
                 "include_balance": True,
                 "include_history": False,  # Don't flood context with history
                 "include_details": False,
+                "_cache_ttl": 60.0,  # Cache balance for 60s (balance monitor updates every 30s)
             },
             documentation=ToolDocumentation(
                 quick_start="Get statement: get_statement include_balance=true include_history=true",

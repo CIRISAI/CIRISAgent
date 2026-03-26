@@ -31,6 +31,7 @@ class TransactionStatus(str, Enum):
     FAILED = "failed"
     CANCELLED = "cancelled"
     EXPIRED = "expired"
+    REFUNDED = "refunded"
 
 
 class PaymentRequestStatus(str, Enum):

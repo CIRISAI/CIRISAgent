@@ -186,6 +186,15 @@ data class CompleteSetupRequest(
     val oauth_external_id: String? = null, // Google user ID
     val oauth_email: String? = null,       // Google email
 
+    // Language and location preferences (from PREFERENCES step)
+    // Mirrors Python: ciris_engine/logic/adapters/api/routes/setup/models.py:296-311
+    val preferred_language: String? = null,    // ISO 639-1 code (e.g., "en", "am", "es")
+    val location_country: String? = null,      // Country name
+    val location_region: String? = null,       // Region/state name
+    val location_city: String? = null,         // City name
+    val timezone: String? = null,              // IANA timezone (auto-detected)
+    val share_location_in_traces: Boolean = false,  // Consent to include location in telemetry
+
     // Node flow fields (Connect to Node / Portal provisioning)
     val node_url: String? = null,                      // Portal URL from node flow
     val identity_template: String? = null,             // Portal-assigned template

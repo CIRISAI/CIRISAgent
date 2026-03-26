@@ -265,7 +265,7 @@ def _store_user_preferences(user_id: str, setup: SetupCompleteRequest) -> None:
     from ciris_engine.logic.services.lifecycle.time.service import TimeService
     from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
-    attributes: dict[str, str] = {}
+    attributes: dict[str, Any] = {}
 
     if setup.preferred_language:
         attributes["preferred_language"] = setup.preferred_language
@@ -277,8 +277,10 @@ def _store_user_preferences(user_id: str, setup: SetupCompleteRequest) -> None:
         attributes["location_city"] = setup.location_city
     if setup.timezone:
         attributes["timezone"] = setup.timezone
+    # Store location sharing consent as a boolean
+    attributes["share_location_in_traces"] = setup.share_location_in_traces
 
-    if not attributes:
+    if not attributes or (len(attributes) == 1 and "share_location_in_traces" in attributes and not setup.share_location_in_traces):
         return
 
     # Build location string at user-chosen granularity
@@ -306,7 +308,8 @@ def _store_user_preferences(user_id: str, setup: SetupCompleteRequest) -> None:
     add_graph_node(node, time_service, None)
     lang = attributes.get("preferred_language", "not set")
     loc = attributes.get("location", "not set")
-    logger.info(f"Stored user preferences for {user_id}: lang={lang}, location={loc}")
+    share_loc = attributes.get("share_location_in_traces", False)
+    logger.info(f"Stored user preferences for {user_id}: lang={lang}, location={loc}, share_location={share_loc}")
 
 
 async def _log_wa_list(auth_service: Any, phase: str) -> None:
@@ -545,8 +548,9 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
                 f.write(f"{key}={value}\n")
 
         # User preferences (language & location)
+        if setup.preferred_language or setup.location_country or setup.timezone or setup.share_location_in_traces:
+            f.write("\n# User Preferences (from setup wizard PREFERENCES step)\n")
         if setup.preferred_language:
-            f.write("\n# User Preferences\n")
             f.write(f'CIRIS_PREFERRED_LANGUAGE="{setup.preferred_language}"\n')
         if setup.location_country:
             location_parts = [setup.location_country]
@@ -557,6 +561,13 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
             f.write(f'CIRIS_USER_LOCATION="{", ".join(location_parts)}"\n')
         if setup.timezone:
             f.write(f'CIRIS_USER_TIMEZONE="{setup.timezone}"\n')
+        # Location sharing consent for telemetry
+        if setup.share_location_in_traces:
+            consent_timestamp = datetime.now(timezone.utc).isoformat()
+            f.write("\n# Location Data Sharing Consent\n")
+            f.write("CIRIS_SHARE_LOCATION_IN_TRACES=true\n")
+            f.write(f"CIRIS_LOCATION_CONSENT_TIMESTAMP={consent_timestamp}\n")
+            logger.info(f"[SETUP] Location sharing consent enabled: {consent_timestamp}")
 
         # Write optional configuration sections
         _write_backup_llm_config(f, setup)

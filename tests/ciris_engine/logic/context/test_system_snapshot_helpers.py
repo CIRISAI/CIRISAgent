@@ -1181,6 +1181,14 @@ class TestUserManagement:
 class TestContextEnrichment:
     """Test context enrichment tool execution."""
 
+    @pytest.fixture(autouse=True)
+    def clear_enrichment_cache(self):
+        """Clear the enrichment cache before each test."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+        get_enrichment_cache().clear()
+        yield
+        get_enrichment_cache().clear()
+
     @pytest.mark.asyncio
     async def test_run_context_enrichment_with_no_runtime(self):
         """Test context enrichment returns empty when runtime is None."""

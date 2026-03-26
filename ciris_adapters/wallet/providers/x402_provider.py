@@ -23,7 +23,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, ClassVar, Dict, List, Optional
 
 from ..config import X402ProviderConfig
 from ..schemas import (
@@ -64,7 +64,7 @@ class SpendingAuthority:
     security_advisories: Optional[List[Dict[str, Any]]] = None
 
     # Attestation Level → Spending Limits (per integration guide)
-    SPENDING_LIMITS: Dict[int, tuple[Decimal, Decimal]] = {
+    SPENDING_LIMITS: ClassVar[Dict[int, tuple[Decimal, Decimal]]] = {
         5: (Decimal("100.00"), Decimal("1000.00")),  # Full trust
         4: (Decimal("100.00"), Decimal("1000.00")),  # High trust (advisory logged)
         3: (Decimal("50.00"), Decimal("500.00")),    # Medium trust
@@ -201,6 +201,24 @@ class X402Provider(WalletProvider):
             f"X402Provider created for network: {config.network}"
         )
 
+        # Derive wallet address immediately (no async needed - pure computation)
+        self._derive_wallet_address()
+
+    def _derive_wallet_address(self) -> None:
+        """Derive EVM wallet address from Ed25519 key (sync - can call from __init__)."""
+        if self._ed25519_public_key:
+            self._evm_address = self._derive_evm_address_from_pubkey(self._ed25519_public_key)
+            logger.info(f"Derived wallet address from public key: {self._evm_address}")
+        elif self._ed25519_seed:
+            self._evm_address = self._derive_evm_address_from_seed(self._ed25519_seed)
+            logger.info(f"Derived wallet address from seed: {self._evm_address}")
+        else:
+            logger.warning("No Ed25519 key provided - wallet will use placeholder address")
+            # Use a deterministic placeholder for display (all zeros)
+            placeholder = hashlib.sha256(b"ciris-wallet-placeholder").digest()[:20]
+            self._evm_address = self._to_checksum_address(placeholder.hex())
+            logger.info(f"Using placeholder address: {self._evm_address}")
+
     @property
     def provider_id(self) -> str:
         return "x402"
@@ -276,25 +294,16 @@ class X402Provider(WalletProvider):
             return self._derive_evm_address_from_pubkey(seed)
 
     async def initialize(self) -> bool:
-        """Initialize the provider and derive wallet address."""
-        logger.info(f"Initializing X402Provider on {self.config.network}")
+        """Initialize async components (balance monitor, etc.).
 
-        # Priority: public_key (secure) > seed (testing only)
-        if self._ed25519_public_key:
-            self._evm_address = self._derive_evm_address_from_pubkey(self._ed25519_public_key)
-            logger.info(f"Derived wallet address from public key: {self._evm_address}")
-            if not self._signing_callback:
-                logger.warning("No signing callback - send operations will fail (receive-only mode)")
-        elif self._ed25519_seed:
-            logger.warning("Using Ed25519 seed directly - this should only be used for testing!")
-            self._evm_address = self._derive_evm_address_from_seed(self._ed25519_seed)
-            logger.info(f"Derived wallet address from seed: {self._evm_address}")
-        else:
-            logger.warning("No Ed25519 key provided - wallet will use placeholder address")
-            # Generate a deterministic placeholder for testing
-            placeholder = hashlib.sha256(b"CIRIS-no-key-placeholder").digest()[:20]
-            self._evm_address = self._to_checksum_address(placeholder.hex())
-            logger.info(f"Using placeholder address: {self._evm_address}")
+        Note: Wallet address is already derived in __init__ (sync).
+        This method starts background tasks that require async.
+        """
+        logger.info(f"Initializing X402Provider async components on {self.config.network}")
+
+        # Warn if no signing callback (receive-only mode)
+        if self._ed25519_public_key and not self._signing_callback:
+            logger.warning("No signing callback - send operations will fail (receive-only mode)")
 
         self._initialized = True
 
@@ -417,7 +426,8 @@ class X402Provider(WalletProvider):
             # On Android, this needs Build.* properties passed via JNI
             # For now, try the sync method which works on desktop
             # Check for 1.2.x features with hasattr for backwards compatibility
-            if hasattr(verifier, "has_hardware_info_support") and verifier.has_hardware_info_support():
+            has_hw_support = getattr(verifier, "has_hardware_info_support", lambda: False)
+            if callable(has_hw_support) and has_hw_support():
                 hw_info = getattr(verifier, "get_hardware_info_sync", lambda: None)()
 
                 if hw_info is not None and hw_info.hardware_trust_degraded:

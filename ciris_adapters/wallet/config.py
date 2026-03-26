@@ -38,7 +38,7 @@ class X402ProviderConfig(BaseModel):
 
     enabled: bool = Field(default=False, description="Whether x402 provider is enabled")
     network: str = Field(
-        default="base-sepolia",
+        default="base-mainnet",
         description="EVM network (base-mainnet or base-sepolia)",
     )
     rpc_url: Optional[str] = Field(

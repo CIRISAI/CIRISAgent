@@ -175,9 +175,13 @@ def load_adapters_from_bootstrap(runtime: Any) -> None:
     # and must be available before any other adapter initializes
     _load_single_adapter(runtime, "ciris_verify", "ciris_verify")
 
+    # Wallet adapter auto-loads silently if present — provides self-custody wallet
+    # derived from CIRISVerify signing key (Identity = Wallet)
+    _load_single_adapter(runtime, "wallet", "wallet")
+
     for load_request in runtime.bootstrap.adapters:
-        # Skip ciris_verify if someone explicitly listed it — already loaded above
-        if load_request.adapter_type == "ciris_verify":
+        # Skip internal adapters if someone explicitly listed them — already loaded above
+        if load_request.adapter_type in ("ciris_verify", "wallet"):
             continue
 
         from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext

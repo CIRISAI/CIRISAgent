@@ -1,78 +1,78 @@
 {
-  "last_updated": "2026-03-25T22:16:26.341733+00:00",
+  "last_updated": "2026-03-26T01:54:49.340866+00:00",
   "version": "2.0.0-beta",
   "modules": {
     "_comment_core": "=== CORE API MODULES ===",
     "auth": {
-      "last_run": "2026-03-25T22:16:26.341708+00:00",
+      "last_run": "2026-03-26T01:54:49.330031+00:00",
       "passed": 3,
       "failed": 0,
       "total": 3,
       "status": "passing",
-      "duration_seconds": 22.53,
+      "duration_seconds": 4.01,
       "context": "Tests authentication system including login with username/password, JWT token generation/validation, token refresh, and logout. Validates OAuth integration readiness and API key authentication."
     },
     "telemetry": {
-      "last_run": "2026-02-27T14:41:53.925209+00:00",
-      "passed": 9,
+      "last_run": "2026-03-26T01:54:49.330473+00:00",
+      "passed": 4,
       "failed": 0,
-      "total": 9,
+      "total": 4,
       "status": "passing",
-      "duration_seconds": 9.67,
+      "duration_seconds": 4.01,
       "context": "Tests telemetry collection and aggregation including unified metrics endpoint, service health status for all 22 core services, TSDB storage, and metrics export formats (OTLP, Prometheus)."
     },
     "agent": {
-      "last_run": "2026-02-27T14:41:53.925698+00:00",
-      "passed": 12,
+      "last_run": "2026-03-26T01:54:49.338568+00:00",
+      "passed": 8,
       "failed": 0,
-      "total": 12,
+      "total": 8,
       "status": "passing",
-      "duration_seconds": 9.67,
+      "duration_seconds": 4.01,
       "context": "Tests agent interaction endpoints including message submission, response retrieval, conversation history, queue status, thought processing, and the H3ERE reasoning pipeline integration."
     },
     "system": {
-      "last_run": "2026-02-27T14:41:53.926357+00:00",
-      "passed": 23,
-      "failed": 0,
-      "total": 23,
-      "status": "passing",
-      "duration_seconds": 9.67,
-      "context": "Tests system management endpoints including health checks, runtime control (pause/resume), configuration management, emergency shutdown, and service status monitoring."
-    },
-    "memory": {
-      "last_run": "2026-02-27T14:41:53.926960+00:00",
-      "passed": 6,
-      "failed": 0,
-      "total": 6,
-      "status": "passing",
-      "duration_seconds": 9.67,
-      "context": "Tests graph memory system including memorize/recall/forget operations, node and relationship management, user-scoped memory isolation, and query API with filtering."
-    },
-    "audit": {
-      "last_run": "2026-02-27T14:41:53.927422+00:00",
+      "last_run": "2026-03-26T01:54:49.339017+00:00",
       "passed": 5,
       "failed": 0,
       "total": 5,
       "status": "passing",
-      "duration_seconds": 9.67,
+      "duration_seconds": 4.01,
+      "context": "Tests system management endpoints including health checks, runtime control (pause/resume), configuration management, emergency shutdown, and service status monitoring."
+    },
+    "memory": {
+      "last_run": "2026-03-26T01:54:49.339393+00:00",
+      "passed": 3,
+      "failed": 0,
+      "total": 3,
+      "status": "passing",
+      "duration_seconds": 4.01,
+      "context": "Tests graph memory system including memorize/recall/forget operations, node and relationship management, user-scoped memory isolation, and query API with filtering."
+    },
+    "audit": {
+      "last_run": "2026-03-26T01:54:49.339819+00:00",
+      "passed": 3,
+      "failed": 0,
+      "total": 3,
+      "status": "passing",
+      "duration_seconds": 4.01,
       "context": "Tests cryptographic audit trail including Ed25519 signed entries, hash chain integrity, event querying with filters, and immutable decision ledger compliance."
     },
     "tools": {
-      "last_run": "2026-03-07T05:07:02.935577+00:00",
+      "last_run": "2026-03-26T01:54:49.340549+00:00",
       "passed": 1,
       "failed": 0,
       "total": 1,
       "status": "passing",
-      "duration_seconds": 21.53,
+      "duration_seconds": 4.01,
       "context": "Tests tool registration and discovery via ToolBus including listing available tools, tool metadata retrieval, and tool service integration from adapters."
     },
     "guidance": {
-      "last_run": "2026-02-27T14:41:53.928165+00:00",
+      "last_run": "2026-03-26T01:54:49.340858+00:00",
       "passed": 2,
       "failed": 0,
       "total": 2,
       "status": "passing",
-      "duration_seconds": 9.67,
+      "duration_seconds": 4.01,
       "context": "Tests WiseAuthority guidance system including deferral request handling, guidance history retrieval, human oversight escalation, and WA certificate validation."
     },
     "consent": {

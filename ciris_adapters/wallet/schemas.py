@@ -108,6 +108,9 @@ class Balance(BaseModel):
     available: Decimal = Field(..., description="Available balance")
     pending: Decimal = Field(default=Decimal("0"), description="Pending balance")
     total: Decimal = Field(..., description="Total balance (available + pending)")
+    metadata: Optional[Dict[str, Any]] = Field(
+        None, description="Additional balance metadata (e.g., eth_balance for gas)"
+    )
 
 
 class AccountDetails(BaseModel):

@@ -267,6 +267,47 @@ class InteractViewModel(
         startHealthPolling()
         startSseStream()
         startFileInjectionObserver()
+        fetchWalletStatus()
+    }
+
+    /**
+     * Fetch wallet adapter status from the adapters list.
+     * Updates WalletStatus based on whether wallet adapter is loaded.
+     */
+    private fun fetchWalletStatus() {
+        val method = "fetchWalletStatus"
+        viewModelScope.launch {
+            try {
+                logInfo(method, "Fetching adapters list to check wallet status")
+                val adaptersData = apiClient.listAdapters()
+                val walletAdapter = adaptersData.adapters.find {
+                    it.adapterType.equals("wallet", ignoreCase = true)
+                }
+
+                if (walletAdapter != null) {
+                    logInfo(method, "Wallet adapter found: isRunning=${walletAdapter.isRunning}")
+                    _walletStatus.value = WalletStatus(
+                        isLoaded = true,
+                        hasWallet = walletAdapter.isRunning,
+                        balance = "0.00",  // TODO: Fetch actual balance from wallet API
+                        currency = "USDC",
+                        provider = "x402",
+                        network = "base-sepolia",
+                        address = null,
+                        isReceiveOnly = false
+                    )
+                } else {
+                    logInfo(method, "Wallet adapter not found in adapters list")
+                    _walletStatus.value = WalletStatus(
+                        isLoaded = true,
+                        hasWallet = false
+                    )
+                }
+            } catch (e: Exception) {
+                logWarn(method, "Failed to fetch wallet status: ${e.message}")
+                _walletStatus.value = WalletStatus(isLoaded = true, hasWallet = false)
+            }
+        }
     }
 
     fun onInputTextChanged(text: String) {

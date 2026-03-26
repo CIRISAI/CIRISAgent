@@ -1,18 +1,21 @@
-"""Tests for device_auth helper functions extracted for cognitive complexity reduction."""
+"""Tests for device_auth helper functions - Self-Custody Key Registration (FSD-002).
 
-import base64
+These tests verify the self-custody key management flow where:
+- Agent generates its own Ed25519 keypair via CIRISVerify
+- Private key is TPM-protected and NEVER leaves the agent
+- Only the PUBLIC key is registered with Portal
+- Portal NEVER issues or receives private keys
+"""
+
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from ciris_engine.logic.adapters.api.routes.setup.device_auth import (
-    _decode_private_key,
-    _generate_attestation_proof,
-    _get_key_fingerprint,
-    _handle_activation_response,
-    _log_key_type_status,
+    _get_public_key_from_verifier,
     _run_on_large_stack,
+    _sign_with_verifier,
     _validate_portal_url,
 )
 
@@ -48,29 +51,6 @@ class TestValidatePortalUrl:
             _validate_portal_url("not-a-url")
 
 
-class TestDecodePrivateKey:
-    """Tests for _decode_private_key validation."""
-
-    def test_decodes_valid_32_byte_key(self):
-        """Should decode valid 32-byte Ed25519 key."""
-        key_bytes = os.urandom(32)
-        key_b64 = base64.b64encode(key_bytes).decode()
-        result = _decode_private_key(key_b64)
-        assert result == key_bytes
-
-    def test_rejects_wrong_length_key(self):
-        """Should reject keys that aren't 32 bytes."""
-        key_bytes = os.urandom(16)  # Wrong length
-        key_b64 = base64.b64encode(key_bytes).decode()
-        result = _decode_private_key(key_b64)
-        assert result is None
-
-    def test_rejects_invalid_base64(self):
-        """Should reject invalid base64."""
-        result = _decode_private_key("not-valid-base64!!!")
-        assert result is None
-
-
 class TestRunOnLargeStack:
     """Tests for _run_on_large_stack thread management."""
 
@@ -96,290 +76,200 @@ class TestRunOnLargeStack:
         assert result == ["executed"]
 
 
-class TestLogKeyTypeStatus:
-    """Tests for _log_key_type_status logging."""
+class TestGetPublicKeyFromVerifier:
+    """Tests for _get_public_key_from_verifier (self-custody)."""
 
-    def test_logs_warning_for_unexpected_key_type(self, caplog):
-        """Should log warning for unexpected key types."""
-        _log_key_type_status({"key_type": "unexpected"})
-        assert "unexpected key_type" in caplog.text
-
-    def test_logs_info_for_registry_unavailable(self, caplog):
-        """Should log info when registry is unavailable."""
-        import logging
-
-        with caplog.at_level(logging.INFO):
-            _log_key_type_status({"key_type": "registry_unavailable"})
-        assert "registry unavailable" in caplog.text
-
-    def test_no_warning_for_portal_key_type(self, caplog):
-        """Should not log warning for valid portal key type."""
-        _log_key_type_status({"key_type": "portal"})
-        assert "unexpected" not in caplog.text
-
-
-class TestHandleActivationResponse:
-    """Tests for _handle_activation_response."""
-
-    def test_handles_success_response(self, caplog):
-        """Should log success for 200 response."""
-        import logging
-
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"activated": True, "key_id": "test-key"}
-
-        with caplog.at_level(logging.INFO):
-            _handle_activation_response(mock_response)
-        assert "activated=True" in caplog.text
-
-    def test_handles_key_reuse_error(self, caplog):
-        """Should log error for KEY REUSE."""
-        mock_response = MagicMock()
-        mock_response.status_code = 403
-        mock_response.json.return_value = {"error": "KEY REUSE DETECTED"}
-
-        _handle_activation_response(mock_response)
-        assert "KEY REUSE DETECTED" in caplog.text
-
-    def test_handles_other_403_error(self, caplog):
-        """Should log warning for other 403 errors."""
-        mock_response = MagicMock()
-        mock_response.status_code = 403
-        mock_response.json.return_value = {"error": "access denied"}
-
-        _handle_activation_response(mock_response)
-        assert "rejected" in caplog.text
-
-    def test_handles_other_error_codes(self, caplog):
-        """Should log warning for other error codes."""
-        mock_response = MagicMock()
-        mock_response.status_code = 500
-
-        _handle_activation_response(mock_response)
-        assert "HTTP 500" in caplog.text
-
-
-class TestGetKeyFingerprint:
-    """Tests for _get_key_fingerprint."""
-
-    def test_returns_fingerprint_when_available(self):
-        """Should return SHA256 fingerprint of public key."""
+    def test_returns_public_key_when_available(self):
+        """Should return public key from CIRISVerify."""
         mock_verifier = MagicMock()
-        mock_verifier.get_ed25519_public_key_sync.return_value = b"test_public_key_32bytes_here!!!"
+        test_pubkey = b"public_key_32_bytes_here_!!!!!!"
+        mock_verifier.get_ed25519_public_key_sync.return_value = test_pubkey
 
-        result = _get_key_fingerprint(mock_verifier)
-        assert result is not None
-        assert len(result) == 64  # SHA256 hex
-
-    def test_returns_none_when_method_missing(self):
-        """Should return None if verifier doesn't support fingerprint."""
-        mock_verifier = MagicMock(spec=[])  # No methods
-
-        result = _get_key_fingerprint(mock_verifier)
-        assert result is None
-
-    def test_returns_none_on_exception(self):
-        """Should return None on exception."""
-        mock_verifier = MagicMock()
-        mock_verifier.get_ed25519_public_key_sync.side_effect = Exception("error")
-
-        result = _get_key_fingerprint(mock_verifier)
-        assert result is None
-
-
-class TestGenerateAttestationProof:
-    """Tests for _generate_attestation_proof."""
-
-    def test_uses_run_attestation_sync_when_available(self):
-        """Should use run_attestation_sync if available."""
-        mock_verifier = MagicMock()
-        mock_verifier.run_attestation_sync.return_value = {"key_type": "portal"}
-
-        result = _generate_attestation_proof(mock_verifier, b"challenge", "fingerprint")
-        assert result == {"key_type": "portal"}
-        mock_verifier.run_attestation_sync.assert_called_once()
-
-    def test_falls_back_to_export_attestation_sync(self):
-        """Should fall back to export_attestation_sync."""
-        mock_verifier = MagicMock(spec=["export_attestation_sync"])
-        mock_verifier.export_attestation_sync.return_value = {"key_type": "persisted"}
-
-        result = _generate_attestation_proof(mock_verifier, b"challenge", None)
-        assert result == {"key_type": "persisted"}
-        mock_verifier.export_attestation_sync.assert_called_once()
-
-
-class TestImportKeyAndGenerateAttestation:
-    """Tests for _import_key_and_generate_attestation."""
-
-    def test_successful_key_import_and_attestation(self):
-        """Should import key and generate attestation successfully."""
-        from ciris_engine.logic.adapters.api.routes.setup.device_auth import _import_key_and_generate_attestation
-
-        mock_verifier = MagicMock()
-        mock_verifier.has_key_sync.return_value = True
-        mock_verifier.get_ed25519_public_key_sync.return_value = b"public_key_32_bytes_here_!!!!!!"
-        mock_verifier.run_attestation_sync.return_value = {"key_type": "portal"}
-
-        # Patch get_verifier singleton (the function now uses get_verifier, not direct CIRISVerify)
         with patch(
             "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
             return_value=mock_verifier,
         ):
-            with patch(
-                "ciris_engine.logic.audit.signing_protocol.reset_unified_signing_key",
-                MagicMock(),
-            ):
-                proof, error = _import_key_and_generate_attestation(os.urandom(32), os.urandom(32))
+            pubkey, error = _get_public_key_from_verifier()
 
-        assert proof == {"key_type": "portal"}
+        assert pubkey == test_pubkey
         assert error is None
-        mock_verifier.import_key_sync.assert_called_once()
 
-    def test_key_import_exception_returns_error(self):
-        """Should return error when get_verifier returns None."""
-        from ciris_engine.logic.adapters.api.routes.setup.device_auth import _import_key_and_generate_attestation
-
-        # Mock get_verifier to return None
+    def test_returns_error_when_verifier_unavailable(self):
+        """Should return error when CIRISVerify singleton not available."""
         with patch(
             "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
             return_value=None,
         ):
-            proof, error = _import_key_and_generate_attestation(os.urandom(32), os.urandom(32))
+            pubkey, error = _get_public_key_from_verifier()
 
-        assert proof is None
+        assert pubkey is None
         assert error is not None
         assert "not available" in str(error)
 
-    def test_key_import_success_but_has_key_fails(self, caplog):
-        """Should log error when has_key_sync returns False after import."""
-        from ciris_engine.logic.adapters.api.routes.setup.device_auth import _import_key_and_generate_attestation
-
+    def test_returns_error_when_no_public_key(self):
+        """Should return error when no public key available."""
         mock_verifier = MagicMock()
-        mock_verifier.has_key_sync.return_value = False  # Key import failed silently
-        mock_verifier.run_attestation_sync.return_value = {"key_type": "unknown"}
+        mock_verifier.get_ed25519_public_key_sync.return_value = None
 
         with patch(
             "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
             return_value=mock_verifier,
         ):
-            with patch(
-                "ciris_engine.logic.audit.signing_protocol.reset_unified_signing_key",
-                MagicMock(),
-            ):
-                proof, error = _import_key_and_generate_attestation(os.urandom(32), os.urandom(32))
+            pubkey, error = _get_public_key_from_verifier()
 
-        assert "CRITICAL" in caplog.text or proof is not None  # Either logs error or returns proof
+        assert pubkey is None
+        assert error is not None
+        assert "No Ed25519 public key" in str(error)
 
 
-class TestSubmitActivationToPortal:
-    """Tests for _submit_activation_to_portal."""
+class TestSignWithVerifier:
+    """Tests for _sign_with_verifier (self-custody signing)."""
 
-    @pytest.mark.asyncio
-    async def test_successful_portal_submission(self):
-        """Should submit activation to portal successfully."""
-        from ciris_engine.logic.adapters.api.routes.setup.device_auth import _submit_activation_to_portal
+    def test_signs_message_successfully(self):
+        """Should sign message using CIRISVerify."""
+        mock_verifier = MagicMock()
+        test_signature = b"signature_64_bytes_here_abcdefgh" * 2
+        mock_verifier.sign_sync.return_value = test_signature
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"activated": True, "key_id": "test-key"}
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
+            return_value=mock_verifier,
+        ):
+            signature, error = _sign_with_verifier(b"test message")
 
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_response
+        assert signature == test_signature
+        assert error is None
+        mock_verifier.sign_sync.assert_called_once_with(b"test message")
 
-        # Create proper async context manager mock
-        mock_client_cm = MagicMock()
-        mock_client_cm.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client_cm.__aexit__ = AsyncMock(return_value=None)
+    def test_returns_error_when_verifier_unavailable(self):
+        """Should return error when CIRISVerify singleton not available."""
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
+            return_value=None,
+        ):
+            signature, error = _sign_with_verifier(b"test message")
 
-        # httpx is imported inline, so patch at module level
-        with patch("httpx.AsyncClient", return_value=mock_client_cm):
-            await _submit_activation_to_portal("https://portal.ciris.ai", "device-code-123", {"key_type": "portal"})
+        assert signature is None
+        assert error is not None
+        assert "not available" in str(error)
 
-            mock_client.post.assert_called_once()
+    def test_returns_error_when_sign_sync_missing(self):
+        """Should return error when sign_sync method not available."""
+        mock_verifier = MagicMock(spec=[])  # No methods
 
-    @pytest.mark.asyncio
-    async def test_portal_submission_http_error(self, caplog):
-        """Should log warning on HTTP error."""
-        import httpx
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
+            return_value=mock_verifier,
+        ):
+            signature, error = _sign_with_verifier(b"test message")
 
-        from ciris_engine.logic.adapters.api.routes.setup.device_auth import _submit_activation_to_portal
-
-        mock_client = AsyncMock()
-        mock_client.post.side_effect = httpx.HTTPError("Connection failed")
-
-        mock_client_cm = MagicMock()
-        mock_client_cm.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client_cm.__aexit__ = AsyncMock(return_value=None)
-
-        with patch("httpx.AsyncClient", return_value=mock_client_cm):
-            await _submit_activation_to_portal("https://portal.ciris.ai", "device-code-123", {"key_type": "portal"})
-
-            assert "Failed to submit" in caplog.text
+        assert signature is None
+        assert error is not None
+        assert "sign_sync not available" in str(error)
 
 
-class TestActivateKeyInline:
-    """Tests for _activate_key_inline."""
+class TestRegisterSelfCustodyKey:
+    """Tests for _register_self_custody_key (FSD-002 flow)."""
 
     @pytest.mark.asyncio
-    async def test_invalid_portal_url_returns_early(self, caplog):
-        """Should return early on invalid portal URL."""
-        from ciris_engine.logic.adapters.api.routes.setup.device_auth import _activate_key_inline
+    async def test_invalid_portal_url_returns_none(self, caplog):
+        """Should return None on invalid portal URL."""
+        from ciris_engine.logic.adapters.api.routes.setup.device_auth import _register_self_custody_key
 
-        key_b64 = base64.b64encode(os.urandom(32)).decode()
-        await _activate_key_inline(key_b64, "device-code", "https://evil.com")
+        result = await _register_self_custody_key("device-code", "https://evil.com")
 
+        assert result is None
         assert "Invalid portal URL" in caplog.text
 
     @pytest.mark.asyncio
-    async def test_invalid_key_returns_early(self, caplog):
-        """Should return early on invalid key."""
-        from ciris_engine.logic.adapters.api.routes.setup.device_auth import _activate_key_inline
+    async def test_returns_none_when_public_key_unavailable(self, caplog):
+        """Should return None when public key cannot be retrieved."""
+        from ciris_engine.logic.adapters.api.routes.setup.device_auth import _register_self_custody_key
 
-        key_b64 = base64.b64encode(os.urandom(16)).decode()  # Wrong length
-        await _activate_key_inline(key_b64, "device-code", "https://portal.ciris.ai")
-
-        assert "invalid key length" in caplog.text
-
-    @pytest.mark.asyncio
-    async def test_activation_timeout_handled(self, caplog):
-        """Should handle CIRISVerify timeout gracefully."""
-        from ciris_engine.logic.adapters.api.routes.setup.device_auth import _activate_key_inline
-
-        key_b64 = base64.b64encode(os.urandom(32)).decode()
-
-        # Mock _run_on_large_stack to simulate timeout (no proof returned)
         def mock_run_on_large_stack(func, timeout):
-            pass  # Don't call func, simulating timeout
+            func()
 
         with patch(
             "ciris_engine.logic.adapters.api.routes.setup.device_auth._run_on_large_stack",
             side_effect=mock_run_on_large_stack,
         ):
-            await _activate_key_inline(key_b64, "device-code", "https://portal.ciris.ai")
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.setup.device_auth._get_public_key_from_verifier",
+                return_value=(None, RuntimeError("CIRISVerify not available")),
+            ):
+                result = await _register_self_custody_key("device-code", "https://portal.ciris.ai")
 
-        assert "timed out" in caplog.text or "skipped" in caplog.text
+        assert result is None
+        assert "Key registration skipped" in caplog.text
 
     @pytest.mark.asyncio
-    async def test_successful_activation_flow(self, caplog):
-        """Should complete full activation flow successfully."""
-        import logging
+    async def test_returns_none_when_signing_fails(self, caplog):
+        """Should return None when registration signing fails."""
+        from ciris_engine.logic.adapters.api.routes.setup.device_auth import _register_self_custody_key
 
-        from ciris_engine.logic.adapters.api.routes.setup.device_auth import _activate_key_inline
-
-        key_b64 = base64.b64encode(os.urandom(32)).decode()
-
-        # Simulate successful key import that sets result
         def mock_run_on_large_stack(func, timeout):
             func()
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"activated": True}
+        call_count = [0]
+
+        def mock_get_public_key():
+            return b"test_public_key_32_bytes_here!!", None
+
+        def mock_sign(msg):
+            # First call succeeds, simulating we get the key
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return None, RuntimeError("Signing failed")
+            return None, RuntimeError("Signing failed")
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.device_auth._run_on_large_stack",
+            side_effect=mock_run_on_large_stack,
+        ):
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.setup.device_auth._get_public_key_from_verifier",
+                return_value=(b"test_public_key_32_bytes_here!!", None),
+            ):
+                with patch(
+                    "ciris_engine.logic.adapters.api.routes.setup.device_auth._sign_with_verifier",
+                    return_value=(None, RuntimeError("Signing failed")),
+                ):
+                    result = await _register_self_custody_key("device-code", "https://portal.ciris.ai")
+
+        assert result is None
+        assert "Registration signing failed" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_successful_registration_flow(self, caplog):
+        """Should complete full self-custody registration flow successfully."""
+        import logging
+
+        from ciris_engine.logic.adapters.api.routes.setup.device_auth import _register_self_custody_key
+
+        def mock_run_on_large_stack(func, timeout):
+            func()
+
+        # Mock successful Portal responses
+        mock_register_response = MagicMock()
+        mock_register_response.status_code = 200
+        mock_register_response.json.return_value = {
+            "key_id": "test-key-id",
+            "activation_challenge": "0102030405060708",
+            "public_key_fingerprint": "abc123",
+        }
+        mock_register_response.headers = {"content-type": "application/json"}
+
+        mock_activate_response = MagicMock()
+        mock_activate_response.status_code = 200
+        mock_activate_response.json.return_value = {
+            "activated": True,
+            "key_id": "test-key-id",
+            "message": "Key activated",
+        }
+        mock_activate_response.headers = {"content-type": "application/json"}
 
         mock_client = AsyncMock()
-        mock_client.post.return_value = mock_response
+        mock_client.post.side_effect = [mock_register_response, mock_activate_response]
 
         mock_client_cm = MagicMock()
         mock_client_cm.__aenter__ = AsyncMock(return_value=mock_client)
@@ -390,25 +280,86 @@ class TestActivateKeyInline:
             side_effect=mock_run_on_large_stack,
         ):
             with patch(
-                "ciris_engine.logic.adapters.api.routes.setup.device_auth._import_key_and_generate_attestation",
-                return_value=({"key_type": "portal"}, None),
+                "ciris_engine.logic.adapters.api.routes.setup.device_auth._get_public_key_from_verifier",
+                return_value=(b"test_public_key_32_bytes_here!!", None),
             ):
-                # httpx is imported inline, so patch at module level
-                with patch("httpx.AsyncClient", return_value=mock_client_cm):
-                    with caplog.at_level(logging.INFO):
-                        await _activate_key_inline(key_b64, "device-code", "https://portal.ciris.ai")
+                with patch(
+                    "ciris_engine.logic.adapters.api.routes.setup.device_auth._sign_with_verifier",
+                    return_value=(b"signature_64_bytes_here_abcdefgh" * 2, None),
+                ):
+                    with patch("httpx.AsyncClient", return_value=mock_client_cm):
+                        with caplog.at_level(logging.INFO):
+                            result = await _register_self_custody_key("device-code", "https://portal.ciris.ai")
 
-                    # Check that activation was submitted
-                    mock_client.post.assert_called_once()
+        assert result == "test-key-id"
+        assert "Key ACTIVATED" in caplog.text
+        # Verify both register-key and activate-key were called
+        assert mock_client.post.call_count == 2
 
 
-class TestGetKeyFingerprintEdgeCases:
-    """Additional edge case tests for _get_key_fingerprint."""
+class TestSelfCustodySecurityInvariants:
+    """Tests ensuring private keys never leave the agent (FSD-002 security)."""
 
-    def test_returns_none_when_pubkey_is_none(self):
-        """Should return None when public key is None."""
-        mock_verifier = MagicMock()
-        mock_verifier.get_ed25519_public_key_sync.return_value = None
+    @pytest.mark.asyncio
+    async def test_private_key_never_sent_to_portal(self):
+        """Verify that only PUBLIC key is sent to Portal, never private."""
+        from ciris_engine.logic.adapters.api.routes.setup.device_auth import _register_self_custody_key
 
-        result = _get_key_fingerprint(mock_verifier)
-        assert result is None
+        def mock_run_on_large_stack(func, timeout):
+            func()
+
+        captured_requests = []
+
+        async def capture_post(url, json=None):
+            captured_requests.append({"url": url, "json": json})
+            mock_response = MagicMock()
+            if "register-key" in url:
+                mock_response.status_code = 200
+                mock_response.json.return_value = {
+                    "key_id": "test-key-id",
+                    "activation_challenge": "0102030405060708",
+                    "public_key_fingerprint": "abc123",
+                }
+            else:
+                mock_response.status_code = 200
+                mock_response.json.return_value = {"activated": True, "key_id": "test-key-id"}
+            mock_response.headers = {"content-type": "application/json"}
+            return mock_response
+
+        mock_client = AsyncMock()
+        mock_client.post = capture_post
+
+        mock_client_cm = MagicMock()
+        mock_client_cm.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client_cm.__aexit__ = AsyncMock(return_value=None)
+
+        # 32-byte test public key (Ed25519 public keys are 32 bytes)
+        test_pubkey = b"public_key_32_bytes_test_here!!!"  # Exactly 32 bytes
+        assert len(test_pubkey) == 32, f"Test key must be 32 bytes, got {len(test_pubkey)}"
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.device_auth._run_on_large_stack",
+            side_effect=mock_run_on_large_stack,
+        ):
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.setup.device_auth._get_public_key_from_verifier",
+                return_value=(test_pubkey, None),
+            ):
+                with patch(
+                    "ciris_engine.logic.adapters.api.routes.setup.device_auth._sign_with_verifier",
+                    return_value=(b"s" * 64, None),  # 64-byte signature
+                ):
+                    with patch("httpx.AsyncClient", return_value=mock_client_cm):
+                        await _register_self_custody_key("device-code", "https://portal.ciris.ai")
+
+        # Verify no private key fields in any request
+        for req in captured_requests:
+            json_data = req.get("json", {})
+            assert "private" not in str(json_data).lower(), "Private key found in request!"
+            assert "ed25519_private" not in str(json_data).lower(), "Private key found in request!"
+
+            # Verify only public key is sent
+            if "register-key" in req["url"]:
+                assert "ed25519_public_key" in json_data
+                # Public key should be hex-encoded (32 bytes = 64 hex chars)
+                assert len(json_data["ed25519_public_key"]) == 64, f"Expected 64 hex chars, got {len(json_data['ed25519_public_key'])}"

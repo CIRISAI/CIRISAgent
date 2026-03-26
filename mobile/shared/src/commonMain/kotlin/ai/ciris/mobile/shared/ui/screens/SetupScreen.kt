@@ -23,6 +23,8 @@ import ai.ciris.mobile.shared.viewmodels.ModelInfo
 import ai.ciris.mobile.shared.viewmodels.SetupStep
 import ai.ciris.mobile.shared.viewmodels.SetupFormState
 import ai.ciris.mobile.shared.viewmodels.SetupViewModel
+import ai.ciris.mobile.shared.viewmodels.SUPPORTED_LANGUAGES
+import ai.ciris.mobile.shared.viewmodels.LocationGranularity
 import androidx.compose.animation.AnimatedVisibility
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -299,6 +301,7 @@ fun SetupScreen(
                         apiClient = apiClient
                     )
                     SetupStep.NODE_AUTH -> NodeAuthStep(viewModel, state, apiClient)
+                    SetupStep.PREFERENCES -> PreferencesStep(viewModel, state)
                     SetupStep.LLM_CONFIGURATION -> LlmConfigurationStep(viewModel, state, apiClient)
                     SetupStep.OPTIONAL_FEATURES -> OptionalFeaturesStep(viewModel, state)
                     SetupStep.ACCOUNT_AND_CONFIRMATION -> AccountConfirmationStep(viewModel, state)
@@ -1827,13 +1830,16 @@ private fun OptionalFeaturesStep(
                         OutlinedTextField(
                             value = state.publicApiEmail,
                             onValueChange = { viewModel.setPublicApiEmail(it) },
-                            placeholder = { Text("your@email.com") },
+                            placeholder = { Text("your@email.com", color = SetupColors.TextSecondary) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testable("input_public_api_email"),
                             colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = SetupColors.TextPrimary,
+                                unfocusedTextColor = SetupColors.TextPrimary,
+                                cursorColor = SetupColors.Primary,
                                 focusedBorderColor = SetupColors.Primary,
                                 unfocusedBorderColor = SetupColors.SuccessBorder
                             )
@@ -2511,6 +2517,227 @@ private fun NavigationButtons(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Preferences Step - Language and Location selection
+ * Mirrors the CLI wizard's language/location prompts (wizard.py:324-395)
+ */
+@Composable
+private fun PreferencesStep(
+    viewModel: SetupViewModel,
+    state: SetupFormState,
+    modifier: Modifier = Modifier
+) {
+    val scrollState = rememberScrollState()
+    var showLanguageDropdown by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(scrollState),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        // Header
+        Text(
+            text = "Language & Location",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = SetupColors.TextPrimary
+        )
+
+        Text(
+            text = "Help CIRIS respond in your preferred language and understand your context.",
+            fontSize = 14.sp,
+            color = SetupColors.TextSecondary
+        )
+
+        // Language Selection
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SetupColors.GrayLight,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Preferred Language",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 16.sp,
+                    color = SetupColors.TextPrimary
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Language dropdown
+                Box {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.White,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showLanguageDropdown = true }
+                            .border(1.dp, SetupColors.TextSecondary.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val selectedLang = SUPPORTED_LANGUAGES.find { it.code == state.preferredLanguage }
+                            Text(
+                                text = selectedLang?.let { "${it.nativeName} (${it.englishName})" } ?: "English",
+                                color = SetupColors.TextPrimary
+                            )
+                            Text(text = "▼", color = SetupColors.TextSecondary)
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = showLanguageDropdown,
+                        onDismissRequest = { showLanguageDropdown = false }
+                    ) {
+                        SUPPORTED_LANGUAGES.forEach { lang ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text("${lang.nativeName} (${lang.englishName})")
+                                },
+                                onClick = {
+                                    viewModel.setPreferredLanguage(lang.code)
+                                    showLanguageDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Location Selection
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SetupColors.GrayLight,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Location (Optional)",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 16.sp,
+                    color = SetupColors.TextPrimary
+                )
+
+                Text(
+                    text = "Share as much or as little as you like",
+                    fontSize = 12.sp,
+                    color = SetupColors.TextSecondary,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                )
+
+                // Location granularity options
+                LocationGranularity.entries.forEach { granularity ->
+                    val isSelected = state.locationGranularity == granularity
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isSelected) SetupColors.SuccessLight else Color.White,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clickable { viewModel.setLocationGranularity(granularity) }
+                            .border(
+                                1.dp,
+                                if (isSelected) SetupColors.SuccessBorder else SetupColors.TextSecondary.copy(alpha = 0.3f),
+                                RoundedCornerShape(8.dp)
+                            )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = { viewModel.setLocationGranularity(granularity) },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = SetupColors.SuccessDark
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = when (granularity) {
+                                    LocationGranularity.NONE -> "Prefer not to say"
+                                    LocationGranularity.COUNTRY -> "Country only"
+                                    LocationGranularity.REGION -> "Country + Region/State"
+                                    LocationGranularity.CITY -> "Country + Region + City"
+                                },
+                                color = SetupColors.TextPrimary
+                            )
+                        }
+                    }
+                }
+
+                // Location text fields (shown based on granularity)
+                if (state.locationGranularity != LocationGranularity.NONE) {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OutlinedTextField(
+                        value = state.country,
+                        onValueChange = { viewModel.setCountry(it) },
+                        label = { Text("Country") },
+                        placeholder = { Text("e.g., Ethiopia, US, Japan") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    if (state.locationGranularity in listOf(LocationGranularity.REGION, LocationGranularity.CITY)) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = state.region,
+                            onValueChange = { viewModel.setRegion(it) },
+                            label = { Text("Region/State") },
+                            placeholder = { Text("e.g., Amhara, California, Tokyo") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    }
+
+                    if (state.locationGranularity == LocationGranularity.CITY) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = state.city,
+                            onValueChange = { viewModel.setCity(it) },
+                            label = { Text("City") },
+                            placeholder = { Text("e.g., Addis Ababa, San Francisco") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    }
+                }
+            }
+        }
+
+        // Privacy note
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = SetupColors.InfoLight,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(text = "ℹ️", fontSize = 16.sp)
+                Text(
+                    text = "Location is used only for context (weather, time zones) and is never shared without consent.",
+                    fontSize = 12.sp,
+                    color = SetupColors.InfoText
+                )
             }
         }
     }

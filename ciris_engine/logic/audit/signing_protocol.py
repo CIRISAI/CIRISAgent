@@ -431,45 +431,28 @@ class UnifiedSigningKey:
             logger.info("CIRISVerify ready - will create ephemeral key on first sign")
 
     def load_provisioned_key(self, ed25519_private_key_b64: str) -> None:
-        """Load signing key from Portal provisioning.
+        """DEPRECATED: Load signing key from Portal provisioning.
 
-        CIRISVerify is the ONLY key storage. The key is imported into CIRISVerify
-        which handles hardware/software storage internally.
+        This method is DEPRECATED and will raise an error.
+
+        CIRIS now uses SELF-CUSTODY key management (FSD-002):
+        - Agent generates its own Ed25519 keypair via CIRISVerify
+        - Private key is TPM-protected and NEVER leaves the agent
+        - Only the PUBLIC key is registered with Portal
+        - Portal NEVER issues or receives private keys
 
         Args:
-            ed25519_private_key_b64: Base64-encoded 32-byte Ed25519 private key from Portal
+            ed25519_private_key_b64: DEPRECATED - not used
+
+        Raises:
+            NotImplementedError: Always. Use self-custody flow instead.
         """
-        private_bytes = base64.b64decode(ed25519_private_key_b64)
-        if len(private_bytes) != 32:
-            raise ValueError(f"Expected 32-byte Ed25519 private key, got {len(private_bytes)} bytes")
-
-        # Import directly into CIRISVerify vault
-        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
-
-        client = get_verifier()
-        if client is None:
-            raise RuntimeError("CIRISVerify singleton not available - cannot import provisioned key")
-
-        # Import the portal-issued key
-        client.import_key_sync(private_bytes)
-
-        # Validate by fetching public key
-        pub_key = client.get_ed25519_public_key_sync()
-        if pub_key is None:
-            raise RuntimeError("Key import succeeded but could not retrieve public key")
-
-        # Set up the signer
-        verify_signer = CIRISVerifySigner()
-        verify_signer._client = client
-        verify_signer._public_key_cache = pub_key
-        verify_signer._algo_name = "Ed25519"
-        verify_signer._key_id = verify_signer._compute_key_id(pub_key)
-        self._signer = verify_signer
-        self._initialized = True
-        logger.info(f"Imported Portal key into CIRISVerify (key_id={verify_signer.key_id})")
-
-        # Register public key in audit_signing_keys table
-        self._notify_key_registered()
+        raise NotImplementedError(
+            "load_provisioned_key is DEPRECATED (FSD-002 Self-Custody). "
+            "Portal no longer issues private keys. Agents generate their own keys "
+            "and register the PUBLIC key with Portal. The private key never leaves "
+            "the agent. See FSD-002_SELF_CUSTODY_KEYS.md for the new flow."
+        )
 
     def _notify_key_registered(self) -> None:
         """Notify that a key has been registered/changed.

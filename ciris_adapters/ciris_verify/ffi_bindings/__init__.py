@@ -44,6 +44,9 @@ from .types import (
     ValidationStatus,
     PythonModuleHashes,
     PythonIntegrityResult,
+    SecurityAdvisory,
+    HardwareLimitation,
+    HardwareInfo,
 )
 from .exceptions import (
     CIRISVerifyError,
@@ -108,7 +111,7 @@ def get_library_version() -> str:
     return __version__
 
 
-__version__ = "1.1.27"
+__version__ = "1.2.3"
 __all__ = [
     "CIRISVerify",
     "MockCIRISVerify",
@@ -128,6 +131,9 @@ __all__ = [
     "ValidationStatus",
     "PythonModuleHashes",
     "PythonIntegrityResult",
+    "SecurityAdvisory",
+    "HardwareLimitation",
+    "HardwareInfo",
     "CIRISVerifyError",
     "BinaryNotFoundError",
     "BinaryTamperedError",

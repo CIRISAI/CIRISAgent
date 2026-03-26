@@ -106,7 +106,7 @@ class WalletAdapter(Service):
         if os.getenv("WALLET_X402_ENABLED", "true").lower() == "true":
             provider_configs["x402"] = X402ProviderConfig(
                 enabled=True,
-                network=os.getenv("WALLET_X402_NETWORK", "base-sepolia"),
+                network=os.getenv("WALLET_X402_NETWORK", "base-mainnet"),
                 rpc_url=os.getenv("WALLET_X402_RPC_URL"),
                 treasury_address=os.getenv("WALLET_X402_TREASURY_ADDRESS"),
                 facilitator_url=os.getenv(
@@ -310,8 +310,74 @@ class WalletAdapter(Service):
         await self.tool_service.start()
         logger.info("WalletToolService started")
 
+        # Register balance change callback for audit logging
+        self._register_balance_audit_callback()
+
         self._running = True
         logger.info("Wallet adapter started")
+
+    def _register_balance_audit_callback(self) -> None:
+        """Register callback to emit audit events when funds are received."""
+        x402_provider = self._providers.get("x402")
+        if x402_provider and hasattr(x402_provider, "register_balance_callback"):
+            x402_provider.register_balance_callback(self._on_funds_received)
+            logger.info("Registered balance audit callback for x402 provider")
+
+    def _on_funds_received(
+        self,
+        provider_id: str,
+        new_balance: Any,
+        incoming_tx: Optional[Any]
+    ) -> None:
+        """Handle balance change and emit audit event for received funds."""
+        if incoming_tx is None:
+            return  # No incoming transaction, just balance refresh
+
+        # Emit audit event asynchronously
+        asyncio.create_task(self._emit_funds_received_audit(provider_id, new_balance, incoming_tx))
+
+    async def _emit_funds_received_audit(
+        self,
+        provider_id: str,
+        new_balance: Any,
+        incoming_tx: Any
+    ) -> None:
+        """Emit audit event for received funds to all 3 sinks."""
+        try:
+            # Get audit service from runtime
+            audit_service = None
+            if self.runtime and hasattr(self.runtime, "service_initializer"):
+                audit_service = getattr(self.runtime.service_initializer, "audit_service", None)
+
+            if not audit_service:
+                logger.warning("[WALLET_AUDIT] Cannot log funds_received - audit_service not available")
+                return
+
+            from ciris_engine.schemas.audit import EventPayload
+
+            # Get wallet address from x402 provider
+            wallet_address = None
+            x402_provider = self._providers.get("x402")
+            if x402_provider:
+                wallet_address = getattr(x402_provider, "_evm_address", None)
+
+            # Create audit event payload
+            event_data = EventPayload(
+                action=f"received {incoming_tx.amount} {incoming_tx.currency}",
+                result="success",
+                service_name="wallet_balance_monitor",
+                user_id=wallet_address,
+            )
+
+            # Log to all 3 audit sinks (graph, SQLite hash chain, file)
+            await audit_service.log_event("wallet_funds_received", event_data)
+            logger.info(
+                f"[WALLET_AUDIT] Logged funds_received: +{incoming_tx.amount} {incoming_tx.currency} "
+                f"to {wallet_address}, new_balance={new_balance.total}"
+            )
+
+        except Exception as e:
+            logger.error(f"[WALLET_AUDIT] Failed to emit funds_received audit: {e}")
 
     async def stop(self) -> None:
         """Stop the Wallet adapter."""
@@ -329,9 +395,23 @@ class WalletAdapter(Service):
 
         For Wallet, we just wait for the agent task to complete.
         Payment operations are request-driven, not continuous.
+
+        Args:
+            agent_task: The main agent task to wait for, or None in first-run mode.
         """
         logger.info("Wallet adapter lifecycle started")
         try:
+            # Guard against None agent_task (first-run mode)
+            # This shouldn't happen with the runtime fix, but defensive coding
+            if agent_task is None:
+                logger.warning("Wallet adapter: agent_task is None (first-run mode), staying idle")
+                # In first-run mode, just wait indefinitely until cancelled
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    pass
+                return
+
             await agent_task
         except asyncio.CancelledError:
             logger.info("Wallet adapter lifecycle cancelled")

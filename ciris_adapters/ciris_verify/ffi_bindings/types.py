@@ -343,3 +343,98 @@ class PythonIntegrityResult(BaseModel):
     unexpected_modules: list = Field(default_factory=list, description="Modules not in registry manifest")
     missing_modules: list = Field(default_factory=list, description="Modules in manifest but not provided")
     error: Optional[str] = Field(default=None, description="Error message if verification failed")
+
+
+class SecurityAdvisory(BaseModel):
+    """Security advisory affecting hardware trust (v1.2.0+).
+
+    Contains details about CVEs and vulnerabilities that affect
+    hardware-rooted security on specific SoCs.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    cve: str = Field(..., description="CVE identifier (e.g., 'CVE-2026-20435')")
+    title: str = Field(..., description="Short description of the vulnerability")
+    impact: str = Field(..., description="Impact on CIRISVerify attestation")
+    software_patchable: bool = Field(..., description="Whether this can be patched via software")
+    min_patch_level: Optional[str] = Field(default=None, description="Min patch level if patchable")
+
+
+class HardwareLimitation(BaseModel):
+    """Hardware security limitation that affects attestation level (v1.2.0+).
+
+    Devices with hardware limitations have their attestation level capped
+    to SOFTWARE_ONLY, similar to emulator detection.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    # Limitation type - one of these will be set
+    limitation_type: str = Field(..., description="Type: Emulator, VulnerableSoC, WeakTEE, RootedDevice, UnlockedBootloader, OutdatedPatchLevel")
+
+    # For VulnerableSoC
+    manufacturer: Optional[str] = Field(default=None, description="SoC manufacturer (for VulnerableSoC)")
+    advisory: Optional[SecurityAdvisory] = Field(default=None, description="Security advisory (for VulnerableSoC)")
+
+    # For WeakTEE
+    reason: Optional[str] = Field(default=None, description="Reason (for WeakTEE)")
+
+    # For OutdatedPatchLevel
+    current_patch: Optional[str] = Field(default=None, description="Current patch level")
+    minimum_patch: Optional[str] = Field(default=None, description="Minimum required patch level")
+
+    def description(self) -> str:
+        """Human-readable description of this limitation."""
+        if self.limitation_type == "Emulator":
+            return "Running in emulator - no hardware security"
+        elif self.limitation_type == "VulnerableSoC":
+            return f"{self.manufacturer} SoC affected by {self.advisory.cve if self.advisory else 'unknown CVE'}"
+        elif self.limitation_type == "WeakTEE":
+            return f"TEE security weakness: {self.reason}"
+        elif self.limitation_type == "RootedDevice":
+            return "Device is rooted - hardware security bypassed"
+        elif self.limitation_type == "UnlockedBootloader":
+            return "Bootloader unlocked - secure boot compromised"
+        elif self.limitation_type == "OutdatedPatchLevel":
+            return f"Security patch {self.current_patch} is below minimum {self.minimum_patch}"
+        return f"Unknown limitation: {self.limitation_type}"
+
+    def caps_attestation(self) -> bool:
+        """Whether this limitation caps attestation at SOFTWARE_ONLY level."""
+        # OutdatedPatchLevel is a warning only, doesn't cap
+        return self.limitation_type != "OutdatedPatchLevel"
+
+
+class HardwareInfo(BaseModel):
+    """Complete hardware information for a device (v1.2.0+).
+
+    Provides platform-specific hardware detection including:
+    - Emulator/VM detection
+    - Root/jailbreak detection
+    - SoC vulnerability detection (e.g., MediaTek CVE-2026-20435)
+    - TEE implementation identification
+    """
+    model_config = ConfigDict(frozen=True)
+
+    platform: str = Field(..., description="Platform: android, ios, linux, windows, macos")
+    soc_manufacturer: Optional[str] = Field(default=None, description="SoC manufacturer")
+    soc_model: Optional[str] = Field(default=None, description="SoC model")
+    security_patch_level: Optional[str] = Field(default=None, description="Android security patch (YYYY-MM-DD)")
+    is_emulator: bool = Field(default=False, description="Running in emulator/VM")
+    is_suspicious_emulator: bool = Field(default=False, description="Mobile emulator (suspicious)")
+    bootloader_unlocked: Optional[bool] = Field(default=None, description="Bootloader unlocked (Android)")
+    tee_implementation: Optional[str] = Field(default=None, description="TEE: Trustonic, Qualcomm, Apple SEP, etc.")
+    is_rooted: bool = Field(default=False, description="Device is rooted/jailbroken")
+    limitations: List[HardwareLimitation] = Field(default_factory=list, description="Detected limitations")
+    hardware_trust_degraded: bool = Field(default=False, description="Hardware trust is degraded")
+    trust_degradation_reason: Optional[str] = Field(default=None, description="Why trust is degraded")
+
+    def should_cap_attestation(self) -> bool:
+        """Check if attestation should be capped at software-only level."""
+        return self.hardware_trust_degraded
+
+    def security_summary(self) -> str:
+        """Get summary of security concerns."""
+        if not self.limitations:
+            return "No known hardware security limitations"
+        concerns = [lim.description() for lim in self.limitations]
+        return f"Hardware security concerns: {'; '.join(concerns)}"

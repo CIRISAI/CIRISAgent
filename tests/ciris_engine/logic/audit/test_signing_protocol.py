@@ -349,8 +349,8 @@ class TestUnifiedSigningKey:
             assert payload["algorithm"] == "ed25519"
             assert payload["description"] == "test description"
 
-    def test_load_provisioned_key(self):
-        """Test loading a Portal-provisioned key."""
+    def test_load_provisioned_key_deprecated(self):
+        """Test load_provisioned_key raises NotImplementedError (FSD-002 Self-Custody)."""
         mock_client = MagicMock()
         mock_client.get_ed25519_public_key_sync.return_value = b"d" * 32
 
@@ -360,11 +360,9 @@ class TestUnifiedSigningKey:
 
         with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
             key = UnifiedSigningKey()
-            key.load_provisioned_key(test_key_b64)
-
-            mock_client.import_key_sync.assert_called_once_with(test_key)
-            assert key._initialized is True
-            assert key._signer is not None
+            # FSD-002: Portal no longer issues private keys, agents generate their own
+            with pytest.raises(NotImplementedError, match="DEPRECATED"):
+                key.load_provisioned_key(test_key_b64)
 
 
 class TestGlobalSigningKey:
@@ -478,8 +476,8 @@ class TestKeyRegistrationCallback:
 
         callback.assert_not_called()
 
-    def test_callback_called_on_portal_key_import(self):
-        """Test callback is called when importing Portal key."""
+    def test_portal_key_import_deprecated(self):
+        """Test Portal key import raises NotImplementedError (FSD-002 Self-Custody)."""
         mock_client = MagicMock()
         mock_client.get_ed25519_public_key_sync.return_value = b"x" * 32
 
@@ -490,14 +488,9 @@ class TestKeyRegistrationCallback:
         with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
             key = UnifiedSigningKey()
             key.set_key_registration_callback(callback)
-            key.load_provisioned_key(test_key_b64)
-
-            callback.assert_called_once()
-            call_kwargs = callback.call_args.kwargs
-            assert "key_id" in call_kwargs
-            assert call_kwargs["key_id"].startswith("agent-")
-            assert call_kwargs["algorithm"] == "ed25519"
-            assert call_kwargs["public_key_base64"] == base64.b64encode(b"x" * 32).decode()
+            # FSD-002: Portal no longer issues private keys
+            with pytest.raises(NotImplementedError, match="DEPRECATED"):
+                key.load_provisioned_key(test_key_b64)
 
     def test_callback_called_on_ephemeral_key_creation(self):
         """Test callback is called when ephemeral key is created during initialize."""
@@ -538,8 +531,8 @@ class TestKeyRegistrationCallback:
 
             callback.assert_not_called()
 
-    def test_callback_exception_logged_not_raised(self):
-        """Test callback exception is logged but not propagated."""
+    def test_callback_exception_on_deprecated_method(self):
+        """Test load_provisioned_key raises NotImplementedError (FSD-002 Self-Custody)."""
         mock_client = MagicMock()
         mock_client.get_ed25519_public_key_sync.return_value = b"t" * 32
 
@@ -552,8 +545,6 @@ class TestKeyRegistrationCallback:
             key = UnifiedSigningKey()
             key.set_key_registration_callback(failing_callback)
 
-            # Should not raise - exception is caught and logged
-            key.load_provisioned_key(test_key_b64)
-
-            # Key should still be loaded successfully
-            assert key._initialized is True
+            # FSD-002: Portal no longer issues private keys
+            with pytest.raises(NotImplementedError, match="DEPRECATED"):
+                key.load_provisioned_key(test_key_b64)

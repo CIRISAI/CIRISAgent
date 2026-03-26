@@ -12,6 +12,7 @@ import ai.ciris.mobile.shared.viewmodels.LlmHealthStatus
 import ai.ciris.mobile.shared.viewmodels.TimelineEvent
 import ai.ciris.mobile.shared.viewmodels.TrustStatus
 import ai.ciris.mobile.shared.viewmodels.WalletStatus
+import ai.ciris.mobile.shared.platform.PlatformLogger
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -844,6 +845,11 @@ private fun WalletBadge(
     theme: InteractTheme,
     modifier: Modifier = Modifier
 ) {
+    // Log wallet status for debugging
+    LaunchedEffect(walletStatus) {
+        PlatformLogger.d("WalletBadge", "WalletStatus: isLoaded=${walletStatus.isLoaded}, hasWallet=${walletStatus.hasWallet}, balance=${walletStatus.balance}, provider=${walletStatus.provider}, isReceiveOnly=${walletStatus.isReceiveOnly}")
+    }
+
     val hasBalance = walletStatus.balance != "0.00" && walletStatus.balance != "0"
     val badgeColor = when {
         walletStatus.isReceiveOnly -> theme.trustLevel4  // Receive-only (hardware degraded) - amber

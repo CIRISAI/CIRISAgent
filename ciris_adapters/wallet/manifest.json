@@ -3,7 +3,9 @@
     "name": "wallet",
     "version": "1.0.0",
     "description": "Generic money tools supporting crypto (x402/USDC) and fiat (Chapa/ETB) providers",
-    "author": "CIRIS Team"
+    "author": "CIRIS Team",
+    "auto_load": true,
+    "internal_only": true
   },
   "services": [
     {
@@ -37,8 +39,7 @@
     ],
     "schemas": [
       "ciris_engine.schemas.adapters.tools"
-    ],
-    "external_packages": []
+    ]
   },
   "exports": {
     "tool_service": "wallet.tool_service.WalletToolService",

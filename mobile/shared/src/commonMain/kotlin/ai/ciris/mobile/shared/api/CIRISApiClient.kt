@@ -40,11 +40,13 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 /**
  * Result of loading an adapter directly.
@@ -67,6 +69,19 @@ data class LlmConfigData(
     val backupBaseUrl: String?,
     val backupModel: String?,
     val backupApiKeySet: Boolean
+)
+
+/**
+ * Result of a wallet USDC transfer.
+ */
+data class WalletTransferResult(
+    val success: Boolean,
+    val transactionId: String? = null,
+    val txHash: String? = null,
+    val amount: String,
+    val currency: String,
+    val recipient: String,
+    val error: String? = null
 )
 
 /**
@@ -2437,6 +2452,117 @@ class CIRISApiClient(
         } catch (e: Exception) {
             logException(method, e)
             throw e
+        }
+    }
+
+    // ===== Wallet API =====
+
+    suspend fun getWalletStatus(): ai.ciris.mobile.shared.ui.screens.WalletStatusResponse {
+        val method = "getWalletStatus"
+        logInfo(method, "Fetching wallet status")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+
+            val response = client.get("$baseUrl/v1/wallet/status") {
+                header("Authorization", "Bearer $accessToken")
+            }
+
+            if (response.status != HttpStatusCode.OK) {
+                logError(method, "API returned non-success status: ${response.status}")
+                client.close()
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val jsonString = response.bodyAsText()
+            client.close()
+
+            val json = Json.parseToJsonElement(jsonString).jsonObject
+
+            val walletStatus = ai.ciris.mobile.shared.ui.screens.WalletStatusResponse(
+                hasWallet = json["has_wallet"]?.jsonPrimitive?.boolean ?: false,
+                provider = json["provider"]?.jsonPrimitive?.contentOrNull ?: "x402",
+                network = json["network"]?.jsonPrimitive?.contentOrNull ?: "base-sepolia",
+                currency = json["currency"]?.jsonPrimitive?.contentOrNull ?: "USDC",
+                balance = json["balance"]?.jsonPrimitive?.contentOrNull ?: "0.00",
+                address = json["address"]?.jsonPrimitive?.contentOrNull,
+                isReceiveOnly = json["is_receive_only"]?.jsonPrimitive?.boolean ?: true,
+                hardwareTrustDegraded = json["hardware_trust_degraded"]?.jsonPrimitive?.boolean ?: false,
+                trustDegradationReason = json["trust_degradation_reason"]?.jsonPrimitive?.contentOrNull,
+                attestationLevel = json["attestation_level"]?.jsonPrimitive?.int ?: 0,
+                maxTransactionLimit = json["max_transaction_limit"]?.jsonPrimitive?.contentOrNull ?: "0.00",
+                dailyLimit = json["daily_limit"]?.jsonPrimitive?.contentOrNull ?: "0.00"
+            )
+
+            logInfo(method, "Wallet status: address=${walletStatus.address}, balance=${walletStatus.balance}, level=${walletStatus.attestationLevel}")
+            walletStatus
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    suspend fun transferUsdc(recipient: String, amount: String, memo: String? = null): WalletTransferResult {
+        val method = "transferUsdc"
+        logInfo(method, "Transferring $amount USDC to $recipient")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+
+            val response = client.post("$baseUrl/v1/wallet/transfer") {
+                header("Authorization", "Bearer $accessToken")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("recipient", recipient)
+                    put("amount", amount)
+                    if (memo != null) put("memo", memo)
+                })
+            }
+
+            val jsonString = response.bodyAsText()
+            client.close()
+
+            val json = Json.parseToJsonElement(jsonString).jsonObject
+
+            val result = WalletTransferResult(
+                success = json["success"]?.jsonPrimitive?.boolean ?: false,
+                transactionId = json["transaction_id"]?.jsonPrimitive?.contentOrNull,
+                txHash = json["tx_hash"]?.jsonPrimitive?.contentOrNull,
+                amount = json["amount"]?.jsonPrimitive?.contentOrNull ?: amount,
+                currency = json["currency"]?.jsonPrimitive?.contentOrNull ?: "USDC",
+                recipient = json["recipient"]?.jsonPrimitive?.contentOrNull ?: recipient,
+                error = json["error"]?.jsonPrimitive?.contentOrNull
+            )
+
+            if (result.success) {
+                logInfo(method, "Transfer successful: txHash=${result.txHash}")
+            } else {
+                logError(method, "Transfer failed: ${result.error}")
+            }
+            result
+        } catch (e: Exception) {
+            logException(method, e)
+            WalletTransferResult(
+                success = false,
+                amount = amount,
+                currency = "USDC",
+                recipient = recipient,
+                error = e.message ?: "Unknown error"
+            )
         }
     }
 

@@ -31,6 +31,7 @@ import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.localization.LocalizationHelper
 
 /**
  * View mode for memory exploration.
@@ -320,7 +321,7 @@ private fun MemoryFiltersSection(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                MEMORY_SCOPES.forEach { scope ->
+                getMemoryScopes().forEach { scope ->
                     FilterChip(
                         selected = filter.scope == scope.value,
                         onClick = { onFilterChange(filter.copy(scope = scope.value)) },
@@ -639,8 +640,12 @@ private fun getNodeTypeColor(type: String): Color {
     }
 }
 
-// Constants
-private val MEMORY_SCOPES = listOf(
+// Constants - scope values (labels are localized at render time)
+private val MEMORY_SCOPE_VALUES = listOf("local", "identity", "environment", "community")
+
+// Composable function to get localized scope options
+@Composable
+private fun getMemoryScopes(): List<ScopeOption> = listOf(
     ScopeOption("local", localizedString("memory_scope_local")),
     ScopeOption("identity", localizedString("memory_scope_identity")),
     ScopeOption("environment", localizedString("memory_scope_environment")),
@@ -717,8 +722,8 @@ data class MemoryNodeData(
                 val date = it.substringBefore("T")
                 val time = it.substringAfter("T").substringBefore(".").substringBefore("Z")
                 "$date $time"
-            } ?: localizedString("memory_label_unknown")
+            } ?: LocalizationHelper.getString("memory_label_unknown")
         } catch (e: Exception) {
-            createdAt ?: localizedString("memory_label_unknown")
+            createdAt ?: LocalizationHelper.getString("memory_label_unknown")
         }
 }

@@ -85,7 +85,7 @@ fun AdapterWizardDialog(
                     title = {
                         Text(
                             when {
-                                wizardSession != null -> localizedString("mobile.adapter_configure", "type" to wizardSession.adapterType)
+                                wizardSession != null -> localizedString("mobile.adapter_configure", mapOf("type" to wizardSession.adapterType))
                                 else -> localizedString("mobile.adapter_add")
                             }
                         )
@@ -279,7 +279,7 @@ private fun AdapterTypeCard(
                 )
                 if (adapter.requiresConfiguration) {
                     Text(
-                        text = localizedString("mobile.adapter_steps_count", "count" to adapter.stepCount.toString()),
+                        text = localizedString("mobile.adapter_steps_count", "count", adapter.stepCount.toString()),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -316,7 +316,7 @@ private fun AdapterTypeCard(
                         onClick = {},
                         label = {
                             Text(
-                                localizedString("mobile.adapter_loaded_count", "count" to adapter.loadedInstances.toString()),
+                                localizedString("mobile.adapter_loaded_count", "count", adapter.loadedInstances.toString()),
                                 style = MaterialTheme.typography.labelSmall
                             )
                         },
@@ -348,7 +348,7 @@ private fun AdapterTypeCard(
             // Show missing dependencies warning
             if (adapter.missingDependencies.isNotEmpty()) {
                 Text(
-                    text = localizedString("mobile.adapter_missing_deps", "deps" to adapter.missingDependencies.joinToString(", ")),
+                    text = localizedString("mobile.adapter_missing_deps", "deps", adapter.missingDependencies.joinToString(", ")),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 4.dp)
@@ -390,7 +390,7 @@ private fun WizardStepContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = localizedString("mobile.adapter_step_count", "current" to (session.currentStepIndex + 1).toString(), "total" to session.totalSteps.toString()),
+                text = localizedString("mobile.adapter_step_count", mapOf("current" to (session.currentStepIndex + 1).toString(), "total" to session.totalSteps.toString())),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

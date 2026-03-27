@@ -3,6 +3,7 @@ package ai.ciris.mobile.shared.ui.screens
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.localization.LocalCurrency
 import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.localization.LocalizationHelper
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
@@ -703,25 +704,32 @@ private fun WalletTransferCard(
                 )
             }
 
+            // Pre-capture localized strings for use in onClick lambda
+            val errorEnterRecipient = localizedString("wallet_enter_recipient")
+            val errorInvalidFormat = localizedString("wallet_invalid_format")
+            val errorEnterAmount = localizedString("wallet_enter_amount")
+            val errorInvalidAmount = localizedString("wallet_invalid_amount")
+            val errorTransferFailed = localizedString("wallet_transfer_failed")
+
             // Send button
             Button(
                 onClick = {
                     // Validate inputs
                     if (recipientAddress.isBlank()) {
-                        transferError = localizedString("wallet_enter_recipient")
+                        transferError = errorEnterRecipient
                         return@Button
                     }
                     if (!recipientAddress.startsWith("0x") || recipientAddress.length != 42) {
-                        transferError = localizedString("wallet_invalid_format")
+                        transferError = errorInvalidFormat
                         return@Button
                     }
                     if (amount.isBlank()) {
-                        transferError = localizedString("wallet_enter_amount")
+                        transferError = errorEnterAmount
                         return@Button
                     }
                     val amountValue = amount.toDoubleOrNull()
                     if (amountValue == null || amountValue <= 0) {
-                        transferError = localizedString("wallet_invalid_amount")
+                        transferError = errorInvalidAmount
                         return@Button
                     }
 
@@ -739,17 +747,18 @@ private fun WalletTransferCard(
                             )
 
                             if (result.success) {
-                                transferSuccess = localizedString("wallet_transfer_success", mapOf("tx" to (result.txHash ?: result.transactionId)))
+                                val txId = result.txHash ?: result.transactionId ?: ""
+                                transferSuccess = LocalizationHelper.getString("wallet_transfer_success", mapOf("tx" to txId))
                                 // Clear form
                                 recipientAddress = ""
                                 amount = ""
                                 memo = ""
                                 onTransferComplete()
                             } else {
-                                transferError = result.error ?: localizedString("wallet_transfer_failed")
+                                transferError = result.error ?: errorTransferFailed
                             }
                         } catch (e: Exception) {
-                            transferError = e.message ?: localizedString("wallet_transfer_failed")
+                            transferError = e.message ?: errorTransferFailed
                         } finally {
                             isTransferring = false
                         }

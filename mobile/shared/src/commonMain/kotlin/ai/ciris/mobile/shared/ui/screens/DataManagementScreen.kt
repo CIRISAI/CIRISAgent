@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.localization.LocalizationHelper
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.viewmodels.DataManagementViewModel
 import androidx.compose.foundation.clickable
@@ -75,9 +76,9 @@ fun DataManagementScreen(
     LaunchedEffect(lensDeletionResult) {
         lensDeletionResult?.let { result ->
             val message = if (result.success) {
-                localizedString("mobile.data_deletion_success")
+                LocalizationHelper.getString("mobile.data_deletion_success")
             } else {
-                "${localizedString("mobile.data_deletion_failed")}: ${result.message}"
+                "${LocalizationHelper.getString("mobile.data_deletion_failed")}: ${result.message}"
             }
             snackbarHostState.showSnackbar(message)
             viewModel.clearDeletionResult()

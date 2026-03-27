@@ -835,6 +835,10 @@ private fun CreateTicketDialog(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
+                // Pre-capture localized strings for onClick lambda
+                val errorEmailRequired = localizedString("mobile.tickets_email_required")
+                val errorEmailInvalid = localizedString("mobile.tickets_email_invalid")
+
                 // Buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -851,11 +855,11 @@ private fun CreateTicketDialog(
                         onClick = {
                             // Validate email
                             if (email.isBlank()) {
-                                emailError = localizedString("mobile.tickets_email_required")
+                                emailError = errorEmailRequired
                                 return@Button
                             }
                             if (!email.contains("@") || !email.contains(".")) {
-                                emailError = localizedString("mobile.tickets_email_invalid")
+                                emailError = errorEmailInvalid
                                 return@Button
                             }
                             onConfirm(

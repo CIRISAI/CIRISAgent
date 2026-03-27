@@ -197,6 +197,43 @@ cd mobile/iosApp && xcodebuild -scheme iosApp
 
 **→ [Mobile Development Guide](mobile/README.md)** - Full build instructions and architecture
 
+## Localization
+
+CIRIS supports **14 languages** with full pipeline localization - the entire ethical reasoning system operates in the user's preferred language:
+
+**Supported Languages:** Amharic (am), Arabic (ar), Chinese (zh), English (en), French (fr), German (de), Hindi (hi), Italian (it), Japanese (ja), Korean (ko), Portuguese (pt), Russian (ru), Swahili (sw), Turkish (tr)
+
+**What's Localized:**
+- **ACCORD** - The complete ethical framework (~1150 lines per language)
+- **DMA Prompts** - All 6 Decision Making Algorithm prompts (PDMA, CSDMA, DSDMA, IDMA, ASPDMA, TSASPDMA)
+- **Comprehensive Guide** - Runtime instructions for the AI
+- **Conscience Strings** - Ponder questions and ethical reflection prompts
+- **Mobile UI** - Full UI localization via `localization/*.json`
+
+**Setting Language:**
+```bash
+# Environment variable
+export CIRIS_PREFERRED_LANGUAGE=am  # Amharic
+ciris-agent --adapter api
+
+# Or set during setup wizard (saved to .env)
+```
+
+**Files:**
+```
+localization/              # Mobile UI strings (JSON)
+ciris_engine/data/localized/
+├── accord_1.2b_{lang}.txt           # Localized ACCORD
+└── CIRIS_COMPREHENSIVE_GUIDE_{lang}.md
+ciris_engine/logic/dma/prompts/localized/{lang}/
+├── pdma_ethical.yml       # Ethical evaluation
+├── csdma_common_sense.yml # Common sense checks
+├── dsdma_base.yml         # Domain-specific
+├── idma.yml               # Intuition/coherence
+├── action_selection_pdma.yml
+└── tsaspdma.yml           # Tool selection
+```
+
 ## Deployment Ready
 
 ✅ **22 core services** with message bus architecture

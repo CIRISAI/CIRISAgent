@@ -244,6 +244,37 @@ Only for multi-provider services:
 - **DREAM** - Deep introspection
 - **SHUTDOWN** - Graceful termination
 
+## Localization
+
+CIRIS supports 14 languages with full pipeline localization. The entire ethical reasoning system operates in the user's preferred language.
+
+### Supported Languages
+`am` (Amharic), `ar` (Arabic), `de` (German), `es` (Spanish), `fr` (French), `hi` (Hindi), `it` (Italian), `ja` (Japanese), `ko` (Korean), `pt` (Portuguese), `ru` (Russian), `sw` (Swahili), `tr` (Turkish), `zh` (Chinese)
+
+### Key Files
+- **UI Strings**: `localization/{lang}.json` - Mobile/API UI strings
+- **ACCORD**: `ciris_engine/data/localized/accord_1.2b_{lang}.txt`
+- **Guides**: `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_{lang}.md`
+- **DMA Prompts**: `ciris_engine/logic/dma/prompts/localized/{lang}/*.yml`
+
+### Setting Language
+```bash
+export CIRIS_PREFERRED_LANGUAGE=am  # Set before starting server
+```
+
+### How It Works
+1. `get_preferred_language()` reads `CIRIS_PREFERRED_LANGUAGE` env var
+2. `DMAPromptLoader` auto-detects language on first load
+3. Each DMA calls `get_localized_accord_text(lang)` for localized ACCORD
+4. Conscience strings use `get_string(lang, "conscience.ponder_*")`
+
+### Testing Localization
+```bash
+# Run streaming test with Amharic
+CIRIS_PREFERRED_LANGUAGE=am python3 -m tools.qa_runner streaming --verbose
+# Look for Amharic text: ከመጀመሪያው ጥያቄ በፊት...
+```
+
 ## Development Tools
 
 ### Grace - Sustainable Development Companion

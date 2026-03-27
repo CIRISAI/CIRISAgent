@@ -42,12 +42,16 @@ enum class VisualizationMode {
  * Each stage maps to a reasoning stream SSE event type and is drawn
  * as a horizontal ring around the memory cylinder. Rings glow when
  * their corresponding event fires, then fade over GLOW_DURATION_MS.
+ *
+ * The glowBoost multiplier allows certain events (like TSASPDMA) to
+ * re-activate a ring with extra brightness (e.g., 1.5x normal glow).
  */
 data class PipelineStage(
     val eventType: String,
     val label: String,
     val color: Color,
-    val activatedAtMs: Long = 0L  // 0 = never activated
+    val activatedAtMs: Long = 0L,  // 0 = never activated
+    val glowBoost: Float = 1.0f    // Multiplier for glow intensity (1.0 = normal, 1.5 = boosted)
 ) {
     companion object {
         /** How long a ring glows after activation (ms) */
@@ -55,6 +59,9 @@ data class PipelineStage(
 
         /** Number of vertical struts around the cylinder */
         const val STRUT_COUNT = 12
+
+        /** Glow boost for TSASPDMA re-activation of ASPDMA ring */
+        const val TSASPDMA_BOOST = 1.6f
 
         /** All H3ERE pipeline stages in order (top to bottom on cylinder) */
         fun defaultStages(): List<PipelineStage> = listOf(
@@ -78,16 +85,25 @@ data class PipelineState(
 ) {
     /**
      * Return a new state with the given event type activated at the current time.
+     * @param boost Optional glow intensity multiplier (default 1.0)
      */
-    fun activate(eventType: String, currentTimeMs: Long): PipelineState {
+    fun activate(eventType: String, currentTimeMs: Long, boost: Float = 1.0f): PipelineState {
         val updated = stages.map { stage ->
             if (stage.eventType == eventType) {
-                stage.copy(activatedAtMs = currentTimeMs)
+                stage.copy(activatedAtMs = currentTimeMs, glowBoost = boost)
             } else {
                 stage
             }
         }
         return copy(stages = updated, version = version + 1)
+    }
+
+    /**
+     * Activate ASPDMA with TSASPDMA boost (re-lights SELECT ring brighter).
+     * Called when tsaspdma_result event is received.
+     */
+    fun activateWithTsaspdmaBoost(currentTimeMs: Long): PipelineState {
+        return activate("aspdma_result", currentTimeMs, PipelineStage.TSASPDMA_BOOST)
     }
 
     /**

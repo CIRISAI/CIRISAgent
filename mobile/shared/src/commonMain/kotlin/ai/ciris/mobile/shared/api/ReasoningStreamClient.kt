@@ -26,7 +26,9 @@ class ReasoningStreamClient(
         "thought_start" to "🤔",
         "snapshot_and_context" to "📋",
         "dma_results" to "⚖️",
+        "idma_result" to "🔮",       // Identity/Intuition DMA - crystal ball for epistemic diversity check
         "aspdma_result" to "🎯",
+        "tsaspdma_result" to "🔧",   // Tool-Specific ASPDMA - wrench for tool parameter refinement
         "conscience_result" to "🧭",
         "action_result" to "⚡"
     )

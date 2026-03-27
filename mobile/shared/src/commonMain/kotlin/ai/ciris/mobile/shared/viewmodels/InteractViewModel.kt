@@ -1272,7 +1272,9 @@ class InteractViewModel(
             "thought_start" -> LocalizationHelper.getString("mobile.processing_thinking")
             "snapshot_and_context" -> LocalizationHelper.getString("mobile.processing_context")
             "dma_results" -> LocalizationHelper.getString("mobile.processing_evaluating")
+            "idma_result" -> LocalizationHelper.getString("mobile.processing_idma")
             "aspdma_result" -> LocalizationHelper.getString("mobile.processing_selecting", mapOf("action" to (action ?: "...")))
+            "tsaspdma_result" -> LocalizationHelper.getString("mobile.processing_tsaspdma")
             "conscience_result" -> LocalizationHelper.getString("mobile.processing_ethics")
             "action_result" -> {
                 when {
@@ -1351,6 +1353,11 @@ class InteractViewModel(
                                     _pipelineState.value = _pipelineState.value
                                         .reset()
                                         .activate(event.eventType, now)
+                                } else if (event.eventType == "tsaspdma_result") {
+                                    // TSASPDMA re-lights ASPDMA ring with extra brightness
+                                    // (Tool-Specific ASPDMA refines the tool selection)
+                                    _pipelineState.value = _pipelineState.value
+                                        .activateWithTsaspdmaBoost(now)
                                 } else {
                                     _pipelineState.value = _pipelineState.value
                                         .activate(event.eventType, now)

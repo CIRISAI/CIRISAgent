@@ -2321,7 +2321,9 @@ private fun EmojiLegendDialog(
                 LegendRow("🤔", localizedString("mobile.interact_legend_thought_start"))
                 LegendRow("📋", localizedString("mobile.interact_legend_snapshot"))
                 LegendRow("⚖️", localizedString("mobile.interact_legend_dma"))
+                LegendRow("🔮", localizedString("mobile.interact_legend_idma"))
                 LegendRow("🎯", localizedString("mobile.interact_legend_action_selection"))
+                LegendRow("🔧", localizedString("mobile.interact_legend_tsaspdma"))
                 LegendRow("🧭", localizedString("mobile.interact_legend_conscience"))
 
                 Spacer(modifier = Modifier.height(8.dp))

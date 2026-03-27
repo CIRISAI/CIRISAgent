@@ -632,10 +632,12 @@ private fun DrawScope.drawPipelineScaffolding(
         val ringRadius = cylinderRadius * radiusFactor
 
         // Calculate glow intensity (1.0 when just activated, fading to 0)
+        // Apply glowBoost multiplier (e.g., TSASPDMA boosts ASPDMA to 1.6x brightness)
         val glowIntensity = if (stage.activatedAtMs > 0) {
             val elapsed = currentTimeMs - stage.activatedAtMs
             if (elapsed < PipelineStage.GLOW_DURATION_MS) {
-                1f - (elapsed.toFloat() / PipelineStage.GLOW_DURATION_MS)
+                val baseGlow = 1f - (elapsed.toFloat() / PipelineStage.GLOW_DURATION_MS)
+                (baseGlow * stage.glowBoost).coerceAtMost(2.0f)  // Cap at 2x to prevent over-saturation
             } else 0f
         } else 0f
 

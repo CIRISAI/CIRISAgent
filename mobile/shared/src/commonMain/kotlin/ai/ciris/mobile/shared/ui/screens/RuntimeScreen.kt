@@ -456,19 +456,20 @@ private fun H3EREPipelineCard(
                 fontWeight = FontWeight.Bold
             )
 
-            // Pipeline steps visualization
+            // Pipeline steps visualization - 11 step points
+            // H3ERE: 7 core steps + 2 optional recursive + setup + completion
             val steps = listOf(
-                "START_ROUND" to "0. Start Round",
-                "GATHER_CONTEXT" to "1. Gather Context",
-                "PERFORM_DMAS" to "2. Perform DMAs",
-                "PERFORM_ASPDMA" to "3. Perform ASPDMA",
-                "CONSCIENCE_EXECUTION" to "4. Conscience Execution",
-                "RECURSIVE_ASPDMA" to "3B. Recursive ASPDMA",
-                "RECURSIVE_CONSCIENCE" to "4B. Recursive Conscience",
-                "FINALIZE_ACTION" to "5. Finalize Action",
-                "PERFORM_ACTION" to "6. Perform Action",
-                "ACTION_COMPLETE" to "7. Action Complete",
-                "ROUND_COMPLETE" to "8. Round Complete"
+                "START_ROUND" to localizedString("mobile.step_start_round"),
+                "GATHER_CONTEXT" to localizedString("mobile.step_gather_context"),
+                "PERFORM_DMAS" to localizedString("mobile.step_perform_dmas"),
+                "PERFORM_ASPDMA" to localizedString("mobile.step_perform_aspdma"),
+                "CONSCIENCE_EXECUTION" to localizedString("mobile.step_conscience_execution"),
+                "RECURSIVE_ASPDMA" to localizedString("mobile.step_recursive_aspdma"),
+                "RECURSIVE_CONSCIENCE" to localizedString("mobile.step_recursive_conscience"),
+                "FINALIZE_ACTION" to localizedString("mobile.step_finalize_action"),
+                "PERFORM_ACTION" to localizedString("mobile.step_perform_action"),
+                "ACTION_COMPLETE" to localizedString("mobile.step_action_complete"),
+                "ROUND_COMPLETE" to localizedString("mobile.step_round_complete")
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

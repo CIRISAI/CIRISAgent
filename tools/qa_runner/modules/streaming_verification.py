@@ -918,6 +918,16 @@ class StreamingVerificationModule:
                                         "llm_calls",
                                         "models_used",
                                         "api_bases_used",  # API endpoint tracking (v1.8.14+)
+                                        # Coherence/entropy data from conscience checks (v2.3.0+)
+                                        # None for exempt actions like RECALL, TASK_COMPLETE
+                                        "coherence_passed",
+                                        "coherence_score",
+                                        "coherence_threshold",
+                                        "coherence_reason",
+                                        "entropy_passed",
+                                        "entropy_score",
+                                        "entropy_threshold",
+                                        "entropy_reason",
                                     },
                                 }
 

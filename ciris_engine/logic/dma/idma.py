@@ -18,7 +18,8 @@ from typing import Any, Dict, List, Optional
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import ACCORD_TEXT, ACCORD_TEXT_COMPRESSED
+from ciris_engine.logic.utils import ACCORD_TEXT_COMPRESSED
+from ciris_engine.logic.utils.constants import get_localized_accord_text
 from ciris_engine.protocols.dma.base import IDMAProtocol
 from ciris_engine.schemas.dma.results import IDMAResult
 from ciris_engine.schemas.runtime.models import ImageContent
@@ -81,10 +82,11 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         """Assemble prompt messages for IDMA evaluation."""
         messages: List[JSONDict] = []
 
-        # Add accord based on mode - 'full', 'compressed', or 'none'
+        # Add accord based on mode - 'full', 'compressed', or 'none' (use localized ACCORD)
         accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
         if accord_mode == "full":
-            messages.append({"role": "system", "content": ACCORD_TEXT})
+            localized_accord = get_localized_accord_text(self.prompt_loader.language)
+            messages.append({"role": "system", "content": localized_accord})
         elif accord_mode == "compressed":
             messages.append({"role": "system", "content": ACCORD_TEXT_COMPRESSED})
 

@@ -262,7 +262,8 @@ def get_prompt_loader(language: Optional[str] = None) -> DMAPromptLoader:
 
     Args:
         language: Optional language code. If provided and different from current,
-                  updates the loader's language setting.
+                  updates the loader's language setting. If None on first call,
+                  uses the user's preferred language from CIRIS_PREFERRED_LANGUAGE.
 
     Returns:
         DMAPromptLoader instance configured for the specified language.
@@ -270,9 +271,19 @@ def get_prompt_loader(language: Optional[str] = None) -> DMAPromptLoader:
     global _default_loader, _current_language
 
     if _default_loader is None:
-        lang = language or _current_language
+        # If no language specified, check the user's preferred language
+        if language is None:
+            try:
+                from ciris_engine.logic.utils.localization import get_preferred_language
+
+                lang = get_preferred_language()
+            except ImportError:
+                lang = DEFAULT_LANGUAGE
+        else:
+            lang = language
         _default_loader = DMAPromptLoader(language=lang)
         _current_language = lang
+        logger.info(f"DMA prompt loader initialized with language: {lang}")
     elif language and language != _current_language:
         _default_loader.set_language(language)
         _current_language = language

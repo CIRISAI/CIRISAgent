@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.AdapterDetailsData
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
@@ -66,7 +67,7 @@ fun AdaptersScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Adapters") },
+                title = { Text(localizedString("mobile.nav_adapters")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -74,7 +75,7 @@ fun AdaptersScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -86,7 +87,7 @@ fun AdaptersScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.RefreshIcon,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -104,7 +105,7 @@ fun AdaptersScreen(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Add,
-                    contentDescription = "Add Adapter"
+                    contentDescription = localizedString("mobile.adapter_tap_add")
                 )
             }
         }
@@ -138,13 +139,13 @@ fun AdaptersScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "No Adapters",
+                            text = localizedString("mobile.adapter_no_adapters"),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Tap + to add your first adapter",
+                            text = localizedString("mobile.adapter_tap_add"),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -186,8 +187,8 @@ fun AdaptersScreen(
     showRemoveDialog?.let { adapter ->
         AlertDialog(
             onDismissRequest = { showRemoveDialog = null },
-            title = { Text("Remove Adapter") },
-            text = { Text("Are you sure you want to remove adapter ${adapter.name}?") },
+            title = { Text(localizedString("mobile.adapter_remove_title")) },
+            text = { Text(localizedString("mobile.adapter_remove_confirm", mapOf("name" to adapter.name))) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -198,12 +199,12 @@ fun AdaptersScreen(
                         containerColor = MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Text("Remove")
+                    Text(localizedString("mobile.common_remove"))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showRemoveDialog = null }) {
-                    Text("Cancel")
+                    Text(localizedString("mobile.common_cancel"))
                 }
             }
         )
@@ -242,7 +243,7 @@ private fun AdapterStatusHeader(
                         )
                 )
                 Text(
-                    text = if (isConnected) "Connected" else "Disconnected",
+                    text = localizedString(if (isConnected) "mobile.interact_connected" else "mobile.interact_disconnected"),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     color = if (isConnected) SemanticColors.Default.success else SemanticColors.Default.error
@@ -250,7 +251,7 @@ private fun AdapterStatusHeader(
             }
 
             Text(
-                text = "$adapterCount adapters",
+                text = "$adapterCount ${localizedString("mobile.nav_adapters").lowercase()}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -329,7 +330,7 @@ private fun AdapterCard(
                     )
                     Icon(
                         imageVector = Icons.Filled.KeyboardArrowDown,
-                        contentDescription = if (isExpanded) "Collapse" else "Expand",
+                        contentDescription = if (isExpanded) localizedString("mobile.interact_close") else localizedString("mobile.interact_attach_file"),
                         modifier = Modifier.rotate(rotationAngle),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -351,7 +352,7 @@ private fun AdapterCard(
                 ) {
                     // Adapter ID
                     Text(
-                        text = "ID: ${adapter.id}",
+                        text = localizedString("mobile.adapter_id", mapOf("id" to adapter.id)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -365,7 +366,7 @@ private fun AdapterCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Configuration",
+                            text = localizedString("mobile.adapter_config"),
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Medium
                         )
@@ -379,7 +380,7 @@ private fun AdapterCard(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Edit")
+                            Text(localizedString("mobile.common_edit"))
                         }
                     }
 
@@ -405,7 +406,7 @@ private fun AdapterCard(
                         }
                     } else {
                         Text(
-                            text = "No configuration",
+                            text = localizedString("mobile.adapter_no_config"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -415,7 +416,7 @@ private fun AdapterCard(
 
                     // Services section
                     Text(
-                        text = "Services Enabled",
+                        text = localizedString("mobile.adapter_services"),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium
                     )
@@ -448,7 +449,7 @@ private fun AdapterCard(
                         }
                     } else {
                         Text(
-                            text = "None",
+                            text = localizedString("mobile.common_none"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -458,7 +459,7 @@ private fun AdapterCard(
 
                     // Tools section
                     Text(
-                        text = "Tools Provided",
+                        text = localizedString("mobile.adapter_tools"),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium
                     )
@@ -488,7 +489,7 @@ private fun AdapterCard(
                         }
                     } else {
                         Text(
-                            text = "None",
+                            text = localizedString("mobile.common_none"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -498,7 +499,7 @@ private fun AdapterCard(
                     details?.metrics?.let { metrics ->
                         HorizontalDivider()
                         Text(
-                            text = "Metrics",
+                            text = localizedString("mobile.adapter_metrics"),
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Medium
                         )
@@ -544,7 +545,7 @@ private fun AdapterCard(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Reload")
+                    Text(localizedString("mobile.adapter_reload"))
                 }
 
                 OutlinedButton(
@@ -560,7 +561,7 @@ private fun AdapterCard(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Remove")
+                    Text(localizedString("mobile.common_remove"))
                 }
             }
         }

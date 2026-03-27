@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.background
@@ -53,7 +54,7 @@ fun AuditScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("System Audit Trail") },
+                title = { Text(localizedString("mobile.screen_system_audit")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -61,7 +62,7 @@ fun AuditScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("common_back")
                         )
                     }
                 },
@@ -71,7 +72,7 @@ fun AuditScreen(
                         onClick = { showFilters = !showFilters },
                         modifier = Modifier.testableClickable("btn_audit_toggle_filters") { showFilters = !showFilters }
                     ) {
-                        Text(if (showFilters) "Hide Filters" else "Filters")
+                        Text(if (showFilters) localizedString("settings_hide") + " " + localizedString("graph_filters") else localizedString("graph_filters"))
                     }
                     IconButton(
                         onClick = onRefresh,
@@ -80,7 +81,7 @@ fun AuditScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("common_refresh")
                         )
                     }
                 },
@@ -155,12 +156,12 @@ fun AuditScreen(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = "No audit entries found",
+                                    text = localizedString("audit_no_entries"),
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = "Try adjusting your filters",
+                                    text = localizedString("audit_try_filters"),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
@@ -189,7 +190,7 @@ fun AuditScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "Load more entries...",
+                                    text = localizedString("audit_load_more"),
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             }
@@ -239,32 +240,32 @@ private fun AuditFiltersSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Severity:",
+                    text = localizedString("filter_severity"),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.width(70.dp)
                 )
                 FilterChip(
                     selected = filter.severity == null,
                     onClick = { onFilterChange(filter.copy(severity = null)) },
-                    label = { Text("All") },
+                    label = { Text(localizedString("filter_all")) },
                     modifier = Modifier.testableClickable("btn_filter_severity_all") { onFilterChange(filter.copy(severity = null)) }
                 )
                 FilterChip(
                     selected = filter.severity == "info",
                     onClick = { onFilterChange(filter.copy(severity = "info")) },
-                    label = { Text("Info") },
+                    label = { Text(localizedString("filter_info")) },
                     modifier = Modifier.testableClickable("btn_filter_severity_info") { onFilterChange(filter.copy(severity = "info")) }
                 )
                 FilterChip(
                     selected = filter.severity == "warning",
                     onClick = { onFilterChange(filter.copy(severity = "warning")) },
-                    label = { Text("Warn") },
+                    label = { Text(localizedString("filter_warn")) },
                     modifier = Modifier.testableClickable("btn_filter_severity_warning") { onFilterChange(filter.copy(severity = "warning")) }
                 )
                 FilterChip(
                     selected = filter.severity == "error",
                     onClick = { onFilterChange(filter.copy(severity = "error")) },
-                    label = { Text("Error") },
+                    label = { Text(localizedString("filter_error")) },
                     modifier = Modifier.testableClickable("btn_filter_severity_error") { onFilterChange(filter.copy(severity = "error")) }
                 )
             }
@@ -276,26 +277,26 @@ private fun AuditFiltersSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Outcome:",
+                    text = localizedString("filter_outcome"),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.width(70.dp)
                 )
                 FilterChip(
                     selected = filter.outcome == null,
                     onClick = { onFilterChange(filter.copy(outcome = null)) },
-                    label = { Text("All") },
+                    label = { Text(localizedString("filter_all")) },
                     modifier = Modifier.testableClickable("btn_filter_outcome_all") { onFilterChange(filter.copy(outcome = null)) }
                 )
                 FilterChip(
                     selected = filter.outcome == "success",
                     onClick = { onFilterChange(filter.copy(outcome = "success")) },
-                    label = { Text("Success") },
+                    label = { Text(localizedString("filter_success")) },
                     modifier = Modifier.testableClickable("btn_filter_outcome_success") { onFilterChange(filter.copy(outcome = "success")) }
                 )
                 FilterChip(
                     selected = filter.outcome == "failure",
                     onClick = { onFilterChange(filter.copy(outcome = "failure")) },
-                    label = { Text("Failure") },
+                    label = { Text(localizedString("filter_failure")) },
                     modifier = Modifier.testableClickable("btn_filter_outcome_failure") { onFilterChange(filter.copy(outcome = "failure")) }
                 )
             }
@@ -307,7 +308,7 @@ private fun AuditFiltersSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Limit:",
+                    text = localizedString("filter_limit"),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.width(70.dp)
                 )
@@ -326,7 +327,7 @@ private fun AuditFiltersSection(
                 onClick = { onFilterChange(AuditFilter()) },
                 modifier = Modifier.align(Alignment.End).testableClickable("btn_filter_clear") { onFilterChange(AuditFilter()) }
             ) {
-                Text("Clear Filters")
+                Text(localizedString("filter_clear"))
             }
         }
     }
@@ -346,7 +347,7 @@ private fun AuditStatsBar(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
-            text = "Showing $displayedEntries entries",
+            text = localizedString("audit_showing").replace("{count}", displayedEntries.toString()),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -402,7 +403,7 @@ private fun AuditEntryCard(
                 // Expand/collapse icon
                 Icon(
                     imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                    contentDescription = if (isExpanded) localizedString("interact_close") else localizedString("setup_details_expand"),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -473,7 +474,7 @@ private fun AuditEntryCard(
                 // Ponder questions (full list)
                 if (!entry.ponderQuestions.isNullOrEmpty()) {
                     Text(
-                        text = "Questions",
+                        text = localizedString("audit_questions"),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -492,15 +493,15 @@ private fun AuditEntryCard(
                 // Tool details
                 if (!entry.toolName.isNullOrEmpty()) {
                     Text(
-                        text = "Tool Execution",
+                        text = localizedString("audit_tool_execution"),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    SecurityInfoRow(label = "Tool", value = entry.toolName)
+                    SecurityInfoRow(label = localizedString("interact_action_tool"), value = entry.toolName)
                     entry.toolParameters?.let { params ->
                         Text(
-                            text = "Parameters:",
+                            text = localizedString("audit_parameters"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp)
@@ -521,7 +522,7 @@ private fun AuditEntryCard(
                     }
                     entry.toolResult?.let { result ->
                         Text(
-                            text = "Result:",
+                            text = localizedString("audit_result"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 8.dp)
@@ -539,17 +540,17 @@ private fun AuditEntryCard(
                 // Security info
                 if (entry.hashChain != null || entry.signature != null) {
                     Text(
-                        text = "Security",
+                        text = localizedString("audit_security"),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
 
                     entry.hashChain?.let { hash ->
-                        SecurityInfoRow(label = "Hash Chain", value = hash.take(24) + "...")
+                        SecurityInfoRow(label = localizedString("audit_hash_chain"), value = hash.take(24) + "...")
                     }
                     entry.signature?.let { sig ->
-                        SecurityInfoRow(label = "Signature", value = sig.take(24) + "...")
+                        SecurityInfoRow(label = localizedString("audit_signature"), value = sig.take(24) + "...")
                     }
                     entry.storageSources?.let { sources ->
                         SecurityInfoRow(label = "Storage", value = sources.joinToString(", "))
@@ -561,7 +562,7 @@ private fun AuditEntryCard(
                 // Context JSON
                 if (entry.contextJson.isNotEmpty()) {
                     Text(
-                        text = "Context",
+                        text = localizedString("audit_context"),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold
                     )

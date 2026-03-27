@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
@@ -50,7 +51,7 @@ fun RuntimeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Runtime Control") },
+                title = { Text(localizedString("mobile.screen_runtime_control")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -58,7 +59,7 @@ fun RuntimeScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("common_back")
                         )
                     }
                 },
@@ -70,7 +71,7 @@ fun RuntimeScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("common_refresh")
                         )
                     }
                 },
@@ -138,7 +139,7 @@ fun RuntimeScreen(
             if (runtimeData.activeTasks.isNotEmpty()) {
                 item {
                     Text(
-                        text = "Active Tasks",
+                        text = localizedString("mobile.runtime_active_tasks"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -193,7 +194,7 @@ private fun PipelineControlCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Pipeline Control",
+                    text = localizedString("mobile.runtime_pipeline_control"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -245,7 +246,7 @@ private fun PipelineControlCard(
                         containerColor = colors.warning
                     )
                 ) {
-                    Text("Pause")
+                    Text(localizedString("mobile.runtime_pause"))
                 }
 
                 Button(
@@ -258,7 +259,7 @@ private fun PipelineControlCard(
                         containerColor = colors.success
                     )
                 ) {
-                    Text("Resume")
+                    Text(localizedString("mobile.runtime_resume"))
                 }
 
                 Button(
@@ -277,7 +278,7 @@ private fun PipelineControlCard(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Step")
+                    Text(localizedString("mobile.runtime_step"))
                 }
             }
         }
@@ -301,7 +302,7 @@ private fun PipelineStatusCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Pipeline Status",
+                text = localizedString("mobile.runtime_pipeline_status"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -313,14 +314,14 @@ private fun PipelineStatusCard(
             ) {
                 // Cognitive State
                 StatusMetric(
-                    label = "Cognitive State",
+                    label = localizedString("system.system_cognitive_state"),
                     value = cognitiveState,
                     color = getCognitiveStateColor(cognitiveState)
                 )
 
                 // Queue Depth
                 StatusMetric(
-                    label = "Queue Depth",
+                    label = localizedString("system.system_queue_depth"),
                     value = queueDepth.toString(),
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -332,21 +333,21 @@ private fun PipelineStatusCard(
             ) {
                 // Current Step
                 StatusMetric(
-                    label = "Current Step",
-                    value = currentStepPoint?.let { getStepDisplayName(it) } ?: "None",
+                    label = localizedString("mobile.runtime_current_step"),
+                    value = currentStepPoint?.let { getStepDisplayName(it) } ?: localizedString("common_none"),
                     color = colors.info
                 )
 
                 // Step Time
                 StatusMetric(
-                    label = "Step Time",
-                    value = lastStepTime?.let { "${it}ms" } ?: "N/A",
+                    label = localizedString("mobile.runtime_step_time"),
+                    value = lastStepTime?.let { localizedString("mobile.runtime_time", mapOf("ms" to it.toString())) } ?: "N/A",
                     color = colors.success
                 )
 
                 // Tokens
                 StatusMetric(
-                    label = "Tokens",
+                    label = localizedString("mobile.runtime_tokens_label"),
                     value = tokensUsed?.toString() ?: "N/A",
                     color = colors.accent
                 )
@@ -407,7 +408,7 @@ private fun StreamStatusCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Real-time Stream",
+                    text = localizedString("mobile.runtime_realtime"),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
                 )
@@ -420,14 +421,14 @@ private fun StreamStatusCard(
                 )
 
                 Text(
-                    text = if (isConnected) "CONNECTED" else "DISCONNECTED",
+                    text = if (isConnected) localizedString("mobile.interact_connected") else localizedString("mobile.interact_disconnected"),
                     style = MaterialTheme.typography.bodySmall,
                     color = statusColor
                 )
             }
 
             Text(
-                text = "$updatesReceived updates",
+                text = localizedString("mobile.runtime_updates", mapOf("count" to updatesReceived.toString())),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -450,7 +451,7 @@ private fun H3EREPipelineCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "H3ERE Pipeline (11 Step Points)",
+                text = localizedString("mobile.runtime_h3ere"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -522,7 +523,7 @@ private fun H3EREPipelineCard(
                                 color = colors.warning.copy(alpha = 0.2f)
                             ) {
                                 Text(
-                                    text = "conditional",
+                                    text = localizedString("mobile.runtime_conditional"),
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = colors.warning
@@ -534,7 +535,7 @@ private fun H3EREPipelineCard(
             }
 
             Text(
-                text = "Note: Steps 3B & 4B are conditional - only executed when conscience evaluation fails.",
+                text = localizedString("mobile.runtime_note"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -567,13 +568,13 @@ private fun AdminWarningCard(
             )
             Column {
                 Text(
-                    text = "Admin Access Required",
+                    text = localizedString("mobile.runtime_admin_required"),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = colors.warning
                 )
                 Text(
-                    text = "Runtime control operations require Administrator privileges. You can view the current state but cannot modify runtime execution.",
+                    text = localizedString("mobile.runtime_admin_hint"),
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.warning.copy(alpha = 0.8f)
                 )
@@ -601,7 +602,7 @@ private fun TaskCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Task: ${task.taskId.take(12)}...",
+                    text = localizedString("mobile.runtime_task", mapOf("id" to task.taskId.take(12))),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -626,7 +627,7 @@ private fun TaskCard(
             }
 
             Text(
-                text = "${task.thoughtCount} thoughts | Updated: ${task.lastUpdated}",
+                text = localizedString("mobile.runtime_task_info", mapOf("count" to task.thoughtCount.toString(), "updated" to task.lastUpdated)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -654,7 +655,7 @@ private fun StepDetailsCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Last Step Details",
+                    text = localizedString("mobile.runtime_last_step"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -688,14 +689,14 @@ private fun StepDetailsCard(
                 ) {
                     stepResult.processingTimeMs?.let { time ->
                         Text(
-                            text = "Time: ${time}ms",
+                            text = localizedString("mobile.runtime_time", mapOf("ms" to time.toString())),
                             style = MaterialTheme.typography.bodySmall,
                             color = colors.success
                         )
                     }
                     stepResult.tokensUsed?.let { tokens ->
                         Text(
-                            text = "Tokens: $tokens",
+                            text = localizedString("mobile.runtime_tokens", mapOf("count" to tokens.toString())),
                             style = MaterialTheme.typography.bodySmall,
                             color = colors.accent
                         )
@@ -724,18 +725,18 @@ private fun InstructionsCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "How to use Runtime Control",
+                text = localizedString("mobile.runtime_how_to"),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
                 color = colors.info
             )
 
             val instructions = listOf(
-                "Real-time Stream: Connects to reasoning stream for live updates",
-                "H3ERE Pipeline: 11 step points (0-10) with conditional recursive steps",
-                "Pause/Resume: Control processing while maintaining stream connection",
-                "Single Step: Execute one pipeline step (when paused)",
-                "Live Visualization: See reasoning process in real-time"
+                localizedString("mobile.runtime_instruction_1"),
+                localizedString("mobile.runtime_instruction_2"),
+                localizedString("mobile.runtime_instruction_3"),
+                localizedString("mobile.runtime_instruction_4"),
+                localizedString("mobile.runtime_instruction_5")
             )
 
             instructions.forEachIndexed { index, instruction ->

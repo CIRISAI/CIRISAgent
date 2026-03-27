@@ -311,7 +311,7 @@ fun StartupScreen(
                         horizontalAlignment = Alignment.Start
                     ) {
                         Text(
-                            text = "Engine Failed to Start",
+                            text = localizedString("mobile.startup_engine_failed"),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = CIRISColors.ErrorRed,
@@ -328,7 +328,7 @@ fun StartupScreen(
 
                         // Debug info section
                         Text(
-                            text = "Debug Information",
+                            text = localizedString("mobile.startup_debug_info"),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = CIRISColors.TextTertiary,
@@ -347,7 +347,7 @@ fun StartupScreen(
 
                         // Help text
                         Text(
-                            text = "If this persists, please report at:\ngithub.com/CIRISAI/CIRISAgent/issues",
+                            text = localizedString("mobile.startup_report_hint"),
                             fontSize = 10.sp,
                             color = CIRISColors.TextDim,
                             textAlign = TextAlign.Start

@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.localization.LocalizationHelper
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -107,7 +108,7 @@ class SessionsViewModel(
             } catch (e: Exception) {
                 logError(method, "Failed to fetch cognitive state: ${e::class.simpleName}: ${e.message}")
                 logError(method, "Stack trace: ${e.stackTraceToString().take(500)}")
-                _errorMessage.value = "Failed to fetch state: ${e.message}"
+                _errorMessage.value = LocalizationHelper.getString("mobile.sessions_error_fetch_failed", mapOf("error" to (e.message ?: "Unknown error")))
             } finally {
                 _isLoading.value = false
             }
@@ -178,7 +179,7 @@ class SessionsViewModel(
 
         _isTransitioning.value = true
         _errorMessage.value = null
-        _statusMessage.value = "Transitioning to $targetState..."
+        _statusMessage.value = LocalizationHelper.getString("mobile.sessions_transitioning", mapOf("state" to targetState))
 
         viewModelScope.launch {
             try {
@@ -191,12 +192,13 @@ class SessionsViewModel(
                 if (response.success) {
                     _previousState.value = response.previousState
                     _currentState.value = response.currentState
-                    _statusMessage.value = "Transitioned to ${response.currentState}"
+                    val successMessage = LocalizationHelper.getString("mobile.sessions_transitioned", mapOf("state" to response.currentState))
+                    _statusMessage.value = successMessage
                     logInfo(method, "Successfully transitioned to ${response.currentState}")
 
                     // Clear status message after delay
                     delay(3000)
-                    if (_statusMessage.value?.contains("Transitioned") == true) {
+                    if (_statusMessage.value == successMessage) {
                         _statusMessage.value = null
                     }
                 } else {
@@ -210,10 +212,10 @@ class SessionsViewModel(
                 logError(method, "Stack trace: ${e.stackTraceToString().take(500)}")
 
                 val errorMsg = when {
-                    e.message?.contains("400") == true -> "Invalid state requested"
-                    e.message?.contains("401") == true -> "Authentication required"
-                    e.message?.contains("503") == true -> "State transition not supported"
-                    else -> "Failed to transition: ${e.message}"
+                    e.message?.contains("400") == true -> LocalizationHelper.getString("mobile.sessions_error_invalid_state")
+                    e.message?.contains("401") == true -> LocalizationHelper.getString("mobile.sessions_error_auth_required")
+                    e.message?.contains("503") == true -> LocalizationHelper.getString("mobile.sessions_error_not_supported")
+                    else -> LocalizationHelper.getString("mobile.sessions_error_failed", mapOf("error" to (e.message ?: "Unknown error")))
                 }
                 _errorMessage.value = errorMsg
                 _statusMessage.value = errorMsg

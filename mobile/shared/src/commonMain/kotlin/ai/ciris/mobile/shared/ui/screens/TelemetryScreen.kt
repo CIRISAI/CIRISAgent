@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.AuthType
 import ai.ciris.mobile.shared.models.ExportDestination
 import ai.ciris.mobile.shared.models.ExportDestinationCreate
@@ -76,7 +77,7 @@ fun TelemetryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("System Telemetry") },
+                title = { Text(localizedString("mobile.screen_system_telemetry")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -84,7 +85,7 @@ fun TelemetryScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -96,7 +97,7 @@ fun TelemetryScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -126,7 +127,7 @@ fun TelemetryScreen(
             // Resource usage
             item {
                 Text(
-                    text = "Resource Usage",
+                    text = localizedString("mobile.telemetry_resource"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -143,7 +144,7 @@ fun TelemetryScreen(
             // Activity metrics
             item {
                 Text(
-                    text = "Activity (24h)",
+                    text = localizedString("mobile.telemetry_activity"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -161,7 +162,7 @@ fun TelemetryScreen(
             if (telemetryData.serviceHealthItems.isNotEmpty()) {
                 item {
                     Text(
-                        text = "Service Health",
+                        text = localizedString("mobile.telemetry_health"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -180,14 +181,14 @@ fun TelemetryScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Export Destinations",
+                        text = localizedString("mobile.telemetry_export"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     IconButton(onClick = onAddDestination) {
                         Icon(
                             imageVector = Icons.Default.Add,
-                            contentDescription = "Add Destination",
+                            contentDescription = localizedString("mobile.common_create"),
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -203,7 +204,7 @@ fun TelemetryScreen(
                         )
                     ) {
                         Text(
-                            text = "No export destinations configured. Tap + to add one.",
+                            text = localizedString("mobile.telemetry_no_export"),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(16.dp)
@@ -270,7 +271,7 @@ private fun ServicesOverviewCard(
                         SemanticColors.Default.warning
                 )
                 Text(
-                    text = "Services Online",
+                    text = localizedString("mobile.telemetry_online"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -294,7 +295,7 @@ private fun ServicesOverviewCard(
                     color = getCognitiveStateColor(cognitiveState)
                 )
                 Text(
-                    text = "State",
+                    text = localizedString("mobile.telemetry_state"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -319,7 +320,7 @@ private fun ResourceUsageCard(
         ) {
             // CPU
             ResourceUsageRow(
-                label = "CPU",
+                label = "CPU", // Keep English for technical term
                 value = "$cpuPercent%",
                 progress = cpuPercent / 100f,
                 color = getUsageColor(cpuPercent)
@@ -328,7 +329,7 @@ private fun ResourceUsageCard(
             // Memory (assume 4GB max)
             val memoryPercent = (memoryMb * 100 / 4096).coerceIn(0, 100)
             ResourceUsageRow(
-                label = "Memory",
+                label = "Memory", // Keep English for technical term
                 value = "$memoryMb MB",
                 progress = memoryPercent / 100f,
                 color = getUsageColor(memoryPercent)
@@ -338,7 +339,7 @@ private fun ResourceUsageCard(
             val diskGb = diskUsedMb / 1024.0
             val diskPercent = ((diskUsedMb / 10240.0) * 100).toInt().coerceIn(0, 100)
             ResourceUsageRow(
-                label = "Disk",
+                label = "Disk", // Keep English for technical term
                 value = if (diskGb >= 1.0) "${((diskGb * 10).toInt() / 10.0)} GB" else "${diskUsedMb.toInt()} MB",
                 progress = diskPercent / 100f,
                 color = getUsageColor(diskPercent)
@@ -399,10 +400,10 @@ private fun ActivityMetricsCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            MetricRow("Messages Processed", messagesProcessed.toString())
-            MetricRow("Tasks Completed", tasksCompleted.toString())
+            MetricRow("Messages Processed", messagesProcessed.toString()) // Keep English for technical term
+            MetricRow("Tasks Completed", tasksCompleted.toString()) // Keep English for technical term
             MetricRow(
-                "Errors",
+                "Errors", // Keep English for technical term
                 errors.toString(),
                 valueColor = if (errors > 0) SemanticColors.Default.error else Color.Unspecified
             )
@@ -630,21 +631,21 @@ private fun ExportDestinationCard(
                 IconButton(onClick = onTest) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Test",
+                        contentDescription = "Test", // Keep English for accessibility
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
                 IconButton(onClick = onEdit) {
                     Icon(
                         imageVector = Icons.Default.Edit,
-                        contentDescription = "Edit",
+                        contentDescription = localizedString("mobile.common_edit"),
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
                 IconButton(onClick = onDelete) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete",
+                        contentDescription = localizedString("mobile.common_delete"),
                         tint = SemanticColors.Default.error
                     )
                 }
@@ -678,7 +679,7 @@ private fun ExportDestinationDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(if (destination == null) "Add Export Destination" else "Edit Destination")
+            Text(if (destination == null) localizedString("mobile.common_create") + " " + localizedString("mobile.telemetry_export") else localizedString("mobile.common_edit") + " " + localizedString("mobile.telemetry_export"))
         },
         text = {
             Column(
@@ -691,7 +692,7 @@ private fun ExportDestinationDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Name") },
+                    label = { Text(localizedString("mobile.telemetry_name")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -700,7 +701,7 @@ private fun ExportDestinationDialog(
                 OutlinedTextField(
                     value = endpoint,
                     onValueChange = { endpoint = it },
-                    label = { Text("Endpoint URL") },
+                    label = { Text(localizedString("mobile.telemetry_endpoint")) },
                     placeholder = { Text("https://otlp.example.com/v1") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -714,7 +715,7 @@ private fun ExportDestinationDialog(
                     OutlinedTextField(
                         value = format.name,
                         onValueChange = {},
-                        label = { Text("Format") },
+                        label = { Text(localizedString("mobile.telemetry_format")) },
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = formatExpanded) },
                         modifier = Modifier
@@ -739,7 +740,7 @@ private fun ExportDestinationDialog(
 
                 // Signals checkboxes
                 Text(
-                    text = "Signals",
+                    text = localizedString("mobile.telemetry_signals"),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -766,7 +767,7 @@ private fun ExportDestinationDialog(
                     OutlinedTextField(
                         value = authType.name,
                         onValueChange = {},
-                        label = { Text("Auth Type") },
+                        label = { Text(localizedString("mobile.telemetry_auth_type")) },
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = authTypeExpanded) },
                         modifier = Modifier
@@ -795,7 +796,7 @@ private fun ExportDestinationDialog(
                         OutlinedTextField(
                             value = authValue,
                             onValueChange = { authValue = it },
-                            label = { Text("Bearer Token") },
+                            label = { Text(localizedString("mobile.telemetry_bearer")) },
                             singleLine = true,
                             visualTransformation = PasswordVisualTransformation(),
                             modifier = Modifier.fillMaxWidth()
@@ -805,7 +806,7 @@ private fun ExportDestinationDialog(
                         OutlinedTextField(
                             value = authValue,
                             onValueChange = { authValue = it },
-                            label = { Text("Credentials (user:password)") },
+                            label = { Text(localizedString("mobile.telemetry_credentials")) },
                             singleLine = true,
                             visualTransformation = PasswordVisualTransformation(),
                             modifier = Modifier.fillMaxWidth()
@@ -815,7 +816,7 @@ private fun ExportDestinationDialog(
                         OutlinedTextField(
                             value = authHeader,
                             onValueChange = { authHeader = it },
-                            label = { Text("Header Name") },
+                            label = { Text(localizedString("mobile.telemetry_header_name")) },
                             placeholder = { Text("X-API-Key") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
@@ -823,7 +824,7 @@ private fun ExportDestinationDialog(
                         OutlinedTextField(
                             value = authValue,
                             onValueChange = { authValue = it },
-                            label = { Text("Header Value") },
+                            label = { Text(localizedString("mobile.telemetry_header_value")) },
                             singleLine = true,
                             visualTransformation = PasswordVisualTransformation(),
                             modifier = Modifier.fillMaxWidth()
@@ -836,7 +837,7 @@ private fun ExportDestinationDialog(
                 OutlinedTextField(
                     value = intervalSeconds,
                     onValueChange = { intervalSeconds = it.filter { c -> c.isDigit() } },
-                    label = { Text("Push Interval (seconds)") },
+                    label = { Text(localizedString("mobile.telemetry_interval")) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
@@ -848,7 +849,7 @@ private fun ExportDestinationDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Enabled")
+                    Text(localizedString("mobile.common_enabled"))
                     Switch(
                         checked = enabled,
                         onCheckedChange = { enabled = it }
@@ -875,12 +876,12 @@ private fun ExportDestinationDialog(
                 },
                 enabled = isValid
             ) {
-                Text("Save")
+                Text(localizedString("mobile.common_save"))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(localizedString("mobile.common_cancel"))
             }
         }
     )

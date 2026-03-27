@@ -3,6 +3,7 @@ package ai.ciris.mobile.shared.ui.screens
 import ai.ciris.mobile.shared.api.SOPMetadataData
 import ai.ciris.mobile.shared.api.TicketData
 import ai.ciris.mobile.shared.api.TicketStatsData
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.viewmodels.TicketsFilter
@@ -76,7 +77,7 @@ fun TicketsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Tickets & Privacy") },
+                title = { Text(localizedString("mobile.screen_tickets")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -84,7 +85,7 @@ fun TicketsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -94,7 +95,7 @@ fun TicketsScreen(
                         modifier = Modifier.testableClickable("btn_tickets_toggle_filters") { showFilters = !showFilters }
                     ) {
                         Text(
-                            if (showFilters) "Hide Filters" else "Filters",
+                            if (showFilters) localizedString("mobile.tickets_hide_filters") else localizedString("mobile.tickets_filters"),
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                     }
@@ -105,7 +106,7 @@ fun TicketsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -188,7 +189,7 @@ fun TicketsScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "No tickets found",
+                                text = localizedString("mobile.tickets_no_tickets"),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -234,26 +235,26 @@ private fun TicketStatsRow(stats: TicketStatsData) {
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         StatCard(
-            label = "Pending",
+            label = localizedString("mobile.tickets_stat_pending"),
             value = stats.pending.toString(),
             color = semantic.pending,
             modifier = Modifier.weight(1f)
         )
         StatCard(
-            label = "In Progress",
+            label = localizedString("mobile.tickets_stat_progress"),
             value = stats.inProgress.toString(),
             color = semantic.info,
             modifier = Modifier.weight(1f)
         )
         StatCard(
-            label = "Completed",
+            label = localizedString("mobile.tickets_stat_completed"),
             value = stats.completed.toString(),
             color = semantic.success,
             modifier = Modifier.weight(1f)
         )
         if (stats.urgent > 0) {
             StatCard(
-                label = "Urgent",
+                label = localizedString("mobile.tickets_stat_urgent"),
                 value = stats.urgent.toString(),
                 color = semantic.error,
                 modifier = Modifier.weight(1f)
@@ -323,10 +324,10 @@ private fun TicketFiltersSection(
                 modifier = Modifier.weight(1f)
             ) {
                 OutlinedTextField(
-                    value = filter.status?.replaceFirstChar { it.uppercase() } ?: "All Status",
+                    value = filter.status?.replaceFirstChar { it.uppercase() } ?: localizedString("mobile.tickets_all_status"),
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Status") },
+                    label = { Text(localizedString("mobile.filter_status")) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = statusExpanded) },
                     modifier = Modifier.menuAnchor()
                 )
@@ -335,7 +336,7 @@ private fun TicketFiltersSection(
                     onDismissRequest = { statusExpanded = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("All Status") },
+                        text = { Text(localizedString("mobile.tickets_all_status")) },
                         onClick = {
                             onFilterChange(filter.copy(status = null))
                             statusExpanded = false
@@ -360,10 +361,10 @@ private fun TicketFiltersSection(
                 modifier = Modifier.weight(1f)
             ) {
                 OutlinedTextField(
-                    value = filter.ticketType?.uppercase() ?: "All Types",
+                    value = filter.ticketType?.uppercase() ?: localizedString("mobile.tickets_all_types"),
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Type") },
+                    label = { Text(localizedString("mobile.filter_type")) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeExpanded) },
                     modifier = Modifier.menuAnchor()
                 )
@@ -372,7 +373,7 @@ private fun TicketFiltersSection(
                     onDismissRequest = { typeExpanded = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("All Types") },
+                        text = { Text(localizedString("mobile.tickets_all_types")) },
                         onClick = {
                             onFilterChange(filter.copy(ticketType = null))
                             typeExpanded = false
@@ -429,14 +430,14 @@ private fun TicketCard(
                         Badge(
                             containerColor = SemanticColors.Default.error
                         ) {
-                            Text("URGENT", fontSize = 10.sp)
+                            Text(localizedString("mobile.tickets_urgent"), fontSize = 10.sp)
                         }
                     }
                 }
                 // Expand/collapse icon
                 Icon(
                     imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                    contentDescription = if (isExpanded) localizedString("mobile.tickets_collapse") else localizedString("mobile.tickets_expand"),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -483,7 +484,7 @@ private fun TicketCard(
 
             // Submitted time
             Text(
-                text = "Submitted: ${formatTimestamp(ticket.submittedAt)}",
+                text = localizedString("mobile.tickets_submitted").replace("{date}", formatTimestamp(ticket.submittedAt)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -495,31 +496,31 @@ private fun TicketCard(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Priority
-                DetailRow(label = "Priority", value = ticket.priority.toString())
+                DetailRow(label = localizedString("mobile.tickets_priority"), value = ticket.priority.toString())
 
                 // Deadline
                 ticket.deadline?.let {
-                    DetailRow(label = "Deadline", value = formatTimestamp(it))
+                    DetailRow(label = localizedString("mobile.tickets_deadline_label"), value = formatTimestamp(it))
                 }
 
                 // User identifier
                 ticket.userIdentifier?.let {
-                    DetailRow(label = "User ID", value = it)
+                    DetailRow(label = localizedString("mobile.tickets_user_id"), value = it)
                 }
 
                 // Last updated
-                DetailRow(label = "Last Updated", value = formatTimestamp(ticket.lastUpdated))
+                DetailRow(label = localizedString("mobile.tickets_last_updated"), value = formatTimestamp(ticket.lastUpdated))
 
                 // Completed at
                 ticket.completedAt?.let {
-                    DetailRow(label = "Completed", value = formatTimestamp(it))
+                    DetailRow(label = localizedString("mobile.tickets_completed"), value = formatTimestamp(it))
                 }
 
                 // Notes
                 ticket.notes?.let {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Notes",
+                        text = localizedString("mobile.tickets_notes"),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -537,7 +538,7 @@ private fun TicketCard(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
                     ) {
                         Text(
-                            text = "Automated",
+                            text = localizedString("mobile.tickets_automated"),
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             fontSize = 12.sp
                         )
@@ -552,11 +553,11 @@ private fun TicketCard(
 private fun StatusBadge(status: String) {
     val semantic = SemanticColors.Default
     val (color, text) = when (status) {
-        "pending" -> Pair(semantic.pending, "Pending")
-        "in_progress" -> Pair(semantic.info, "In Progress")
-        "completed" -> Pair(semantic.success, "Completed")
-        "failed" -> Pair(semantic.error, "Failed")
-        "cancelled" -> Pair(semantic.inactive, "Cancelled")
+        "pending" -> Pair(semantic.pending, localizedString("mobile.tickets_status_pending"))
+        "in_progress" -> Pair(semantic.info, localizedString("mobile.tickets_status_progress"))
+        "completed" -> Pair(semantic.success, localizedString("mobile.tickets_status_completed"))
+        "failed" -> Pair(semantic.error, localizedString("mobile.tickets_status_failed"))
+        "cancelled" -> Pair(semantic.inactive, localizedString("mobile.tickets_status_cancelled"))
         else -> Pair(semantic.inactive, status.replaceFirstChar { it.uppercase() })
     }
 
@@ -615,7 +616,7 @@ private fun SOPProfilesSection(
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         Text(
-            text = "Data Privacy Request Types",
+            text = localizedString("mobile.tickets_types_title"),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
@@ -685,7 +686,7 @@ private fun SOPCard(
 
             // Description
             Text(
-                text = metadata.description.ifEmpty { "Process ${metadata.ticketType} requests" },
+                text = metadata.description.ifEmpty { localizedString("mobile.tickets_process_type").replace("{type}", metadata.ticketType) },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
@@ -702,14 +703,14 @@ private fun SOPCard(
                 // Deadline
                 metadata.deadlineDays?.let { days ->
                     Text(
-                        text = "${days}d deadline",
+                        text = localizedString("mobile.tickets_days_deadline").replace("{days}", days.toString()),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.tertiary
                     )
                 }
                 // Stages
                 Text(
-                    text = "${metadata.stageCount} stages",
+                    text = localizedString("mobile.tickets_stages_count").replace("{count}", metadata.stageCount.toString()),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -729,7 +730,7 @@ private fun SOPCard(
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Create", fontSize = 12.sp)
+                Text(localizedString("mobile.common_create"), fontSize = 12.sp)
             }
         }
     }
@@ -763,7 +764,7 @@ private fun CreateTicketDialog(
             ) {
                 // Header
                 Text(
-                    text = "Create ${sopMetadata?.displayName ?: sop}",
+                    text = localizedString("mobile.tickets_create").replace("{type}", sopMetadata?.displayName ?: sop),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -785,8 +786,8 @@ private fun CreateTicketDialog(
                         email = it
                         emailError = null
                     },
-                    label = { Text("Email *") },
-                    placeholder = { Text("user@example.com") },
+                    label = { Text(localizedString("mobile.tickets_email")) },
+                    placeholder = { Text(localizedString("mobile.tickets_email_placeholder")) },
                     isError = emailError != null,
                     supportingText = emailError?.let { { Text(it) } },
                     singleLine = true,
@@ -800,8 +801,8 @@ private fun CreateTicketDialog(
                 OutlinedTextField(
                     value = userIdentifier,
                     onValueChange = { userIdentifier = it },
-                    label = { Text("User Identifier") },
-                    placeholder = { Text("Optional - account ID, username, etc.") },
+                    label = { Text(localizedString("mobile.tickets_user_id")) },
+                    placeholder = { Text(localizedString("mobile.tickets_user_hint")) },
                     singleLine = true,
                     enabled = !isCreating,
                     modifier = Modifier.fillMaxWidth()
@@ -813,8 +814,8 @@ private fun CreateTicketDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("Notes") },
-                    placeholder = { Text("Optional - additional context") },
+                    label = { Text(localizedString("mobile.tickets_notes_label")) },
+                    placeholder = { Text(localizedString("mobile.tickets_notes_hint")) },
                     minLines = 2,
                     maxLines = 4,
                     enabled = !isCreating,
@@ -826,7 +827,7 @@ private fun CreateTicketDialog(
                 // Info about deadline
                 sopMetadata?.deadlineDays?.let { days ->
                     Text(
-                        text = "This request will have a $days day deadline",
+                        text = localizedString("mobile.tickets_deadline").replace("{days}", days.toString()),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -843,18 +844,18 @@ private fun CreateTicketDialog(
                         onClick = onDismiss,
                         enabled = !isCreating
                     ) {
-                        Text("Cancel")
+                        Text(localizedString("mobile.common_cancel"))
                     }
 
                     Button(
                         onClick = {
                             // Validate email
                             if (email.isBlank()) {
-                                emailError = "Email is required"
+                                emailError = localizedString("mobile.tickets_email_required")
                                 return@Button
                             }
                             if (!email.contains("@") || !email.contains(".")) {
-                                emailError = "Invalid email format"
+                                emailError = localizedString("mobile.tickets_email_invalid")
                                 return@Button
                             }
                             onConfirm(
@@ -872,7 +873,7 @@ private fun CreateTicketDialog(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                         }
-                        Text("Create Request")
+                        Text(localizedString("mobile.tickets_create_request"))
                     }
                 }
             }

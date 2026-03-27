@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.viewmodels
 
+import ai.ciris.mobile.shared.localization.LocalizationHelper
 import ai.ciris.mobile.shared.models.CommunicationAdapter
 import ai.ciris.mobile.shared.models.ConfigSessionData
 import ai.ciris.mobile.shared.models.DiscoveredItemData
@@ -402,10 +403,10 @@ data class SetupFormState(
 
             SetupStep.NODE_AUTH -> {
                 when (deviceAuth.status) {
-                    DeviceAuthStatus.ERROR -> deviceAuth.error ?: "Device authorization failed"
-                    DeviceAuthStatus.IDLE -> "Enter a node URL to connect"
-                    DeviceAuthStatus.CONNECTING -> "Connecting to node..."
-                    DeviceAuthStatus.WAITING -> "Waiting for authorization in browser..."
+                    DeviceAuthStatus.ERROR -> deviceAuth.error ?: LocalizationHelper.getString("setup_validation_device_failed")
+                    DeviceAuthStatus.IDLE -> LocalizationHelper.getString("setup_validation_node_url")
+                    DeviceAuthStatus.CONNECTING -> LocalizationHelper.getString("setup_validation_node_connecting")
+                    DeviceAuthStatus.WAITING -> LocalizationHelper.getString("setup_validation_node_waiting")
                     DeviceAuthStatus.COMPLETE -> null
                 }
             }
@@ -417,11 +418,11 @@ data class SetupFormState(
 
             SetupStep.LLM_CONFIGURATION -> {
                 when {
-                    setupMode == null -> "Please select an AI mode"
+                    setupMode == null -> LocalizationHelper.getString("setup_validation_select_mode")
                     setupMode == SetupMode.CIRIS_PROXY && googleIdToken == null ->
-                        "Google sign-in required for free AI"
+                        LocalizationHelper.getString("setup_validation_google_required")
                     setupMode == SetupMode.BYOK && llmProvider != "LocalAI" && llmApiKey.isEmpty() ->
-                        "API Key is required"
+                        LocalizationHelper.getString("setup_validation_api_key_required")
                     else -> null
                 }
             }
@@ -434,9 +435,9 @@ data class SetupFormState(
             SetupStep.ACCOUNT_AND_CONFIRMATION -> {
                 if (!isGoogleAuth) {
                     when {
-                        username.isEmpty() -> "Username is required"
-                        userPassword.isEmpty() -> "Password is required"
-                        userPassword.length < 8 -> "Password must be at least 8 characters"
+                        username.isEmpty() -> LocalizationHelper.getString("setup_validation_username_required")
+                        userPassword.isEmpty() -> LocalizationHelper.getString("setup_validation_password_required")
+                        userPassword.length < 8 -> LocalizationHelper.getString("setup_validation_password_length")
                         else -> null
                     }
                 } else {

@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.viewmodels.DataManagementViewModel
 import androidx.compose.foundation.clickable
@@ -74,9 +75,9 @@ fun DataManagementScreen(
     LaunchedEffect(lensDeletionResult) {
         lensDeletionResult?.let { result ->
             val message = if (result.success) {
-                "Trace deletion requested successfully"
+                localizedString("mobile.data_deletion_success")
             } else {
-                "Deletion failed: ${result.message}"
+                "${localizedString("mobile.data_deletion_failed")}: ${result.message}"
             }
             snackbarHostState.showSnackbar(message)
             viewModel.clearDeletionResult()
@@ -87,19 +88,9 @@ fun DataManagementScreen(
     if (showFactoryResetDialog) {
         AlertDialog(
             onDismissRequest = { showFactoryResetDialog = false },
-            title = { Text("Delete Account & Data?") },
+            title = { Text(localizedString("mobile.data_delete_confirm")) },
             text = {
-                Text(
-                    "This will permanently delete all local data:\n\n" +
-                    "\u2022 Conversations and chat history\n" +
-                    "\u2022 Memory and knowledge graph\n" +
-                    "\u2022 Audit logs and signing keys\n" +
-                    "\u2022 All configuration\n\n" +
-                    "Transaction records (amounts, dates, credit balance) are retained " +
-                    "server-side for 10 years as required by EU AI Act and tax compliance " +
-                    "(see ciris.ai/privacy). No conversation content is ever stored on our servers.\n\n" +
-                    "This cannot be undone."
-                )
+                Text(localizedString("mobile.data_delete_confirm_body"))
             },
             confirmButton = {
                 Button(
@@ -115,7 +106,7 @@ fun DataManagementScreen(
                         viewModel.factoryReset()
                     }
                 ) {
-                    Text("Delete Account & Data")
+                    Text(localizedString("mobile.data_delete_account"))
                 }
             },
             dismissButton = {
@@ -125,7 +116,7 @@ fun DataManagementScreen(
                         showFactoryResetDialog = false
                     }
                 ) {
-                    Text("Cancel")
+                    Text(localizedString("mobile.common_cancel"))
                 }
             }
         )
@@ -135,24 +126,19 @@ fun DataManagementScreen(
     if (showDeleteTracesDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteTracesDialog = false },
-            title = { Text("Delete Opt-In Traces?") },
+            title = { Text(localizedString("mobile.data_delete_traces")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "This will request deletion of all traces sent to CIRISLens under your agent ID.\n\n" +
-                        "Your agent ID hash: ${accordSettings?.agentIdHash ?: "Loading..."}\n\n" +
-                        "This action:\n" +
-                        "\u2022 Sends a deletion request to CIRISLens\n" +
-                        "\u2022 Revokes your opt-in consent (stops future collection)\n" +
-                        "\u2022 Is irreversible\n\n" +
-                        "You can re-enable trace collection later if desired."
+                        localizedString("mobile.data_delete_traces_body")
+                            .replace("{hash}", accordSettings?.agentIdHash ?: localizedString("mobile.common_loading"))
                     )
 
                     OutlinedTextField(
                         value = deletionReason,
                         onValueChange = { deletionReason = it },
-                        label = { Text("Reason (optional)") },
-                        placeholder = { Text("e.g., \"Leaving service\", \"Privacy preference\"") },
+                        label = { Text(localizedString("mobile.data_reason")) },
+                        placeholder = { Text(localizedString("mobile.data_reason_placeholder")) },
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 2
                     )
@@ -174,7 +160,7 @@ fun DataManagementScreen(
                         deletionReason = ""
                     }
                 ) {
-                    Text("Delete Traces")
+                    Text(localizedString("mobile.data_delete_traces_button"))
                 }
             },
             dismissButton = {
@@ -188,7 +174,7 @@ fun DataManagementScreen(
                         deletionReason = ""
                     }
                 ) {
-                    Text("Cancel")
+                    Text(localizedString("mobile.common_cancel"))
                 }
             }
         )
@@ -197,7 +183,7 @@ fun DataManagementScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Data Management") },
+                title = { Text(localizedString("mobile.nav_data_management")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -205,7 +191,7 @@ fun DataManagementScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -216,7 +202,7 @@ fun DataManagementScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 }
@@ -237,7 +223,7 @@ fun DataManagementScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     CircularProgressIndicator()
-                    Text("Loading data management info...")
+                    Text(localizedString("mobile.data_loading"))
                 }
             }
         } else {
@@ -251,14 +237,13 @@ fun DataManagementScreen(
             ) {
                 // Header
                 Text(
-                    text = "Your Data Rights",
+                    text = localizedString("mobile.data_rights_title"),
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
 
                 Text(
-                    text = "CIRIS respects your data rights under GDPR, CCPA, and the EU AI Act. " +
-                            "Use these options to manage or delete your data.",
+                    text = localizedString("mobile.data_rights_desc_full"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -268,7 +253,7 @@ fun DataManagementScreen(
 
                 // Section 1: Delete Opt-In Traces
                 Text(
-                    text = "CIRISLens Trace Data",
+                    text = localizedString("mobile.data_lens_title"),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -286,7 +271,7 @@ fun DataManagementScreen(
 
                 // Section 2: Delete Local Account & Data
                 Text(
-                    text = "Local Device Data",
+                    text = localizedString("mobile.data_local_title"),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -333,22 +318,20 @@ private fun DeleteTracesCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "CIRISAccord Trace Collection",
+                text = localizedString("mobile.data_accord_title"),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold
             )
 
             // Info text - always show
             Text(
-                text = "CIRISAccord is an opt-in research partnership. When enabled, anonymized " +
-                        "interaction traces help improve AI safety research. Traces are stored " +
-                        "under a hashed agent ID, not your name or email.",
+                text = localizedString("mobile.data_accord_desc_full"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Text(
-                text = "Learn more: ciris.ai/ciris-scoring",
+                text = localizedString("mobile.data_accord_learn"),
                 style = MaterialTheme.typography.bodySmall.copy(
                     textDecoration = TextDecoration.Underline
                 ),
@@ -364,19 +347,19 @@ private fun DeleteTracesCard(
 
                 // Status info
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    InfoRow("Agent ID Hash", settings.agentIdHash)
-                    InfoRow("Events Sent to Lens", settings.eventsSent.toString())
+                    InfoRow(localizedString("mobile.data_agent_hash_label"), settings.agentIdHash)
+                    InfoRow(localizedString("mobile.data_events_sent"), settings.eventsSent.toString())
                     if (settings.eventsReceived > 0 || settings.eventsQueued > 0) {
-                        InfoRow("Events Captured", settings.eventsReceived.toString())
+                        InfoRow(localizedString("mobile.data_events_captured"), settings.eventsReceived.toString())
                         if (settings.eventsQueued > 0) {
-                            InfoRow("Events Queued", settings.eventsQueued.toString())
+                            InfoRow(localizedString("mobile.data_events_queued"), settings.eventsQueued.toString())
                         }
                     }
                     settings.traceLevel?.let { level ->
-                        InfoRow("Detail Level", level)
+                        InfoRow(localizedString("mobile.data_detail_level"), level)
                     }
                     settings.endpointUrl?.let { url ->
-                        InfoRow("Endpoint", url.take(40) + if (url.length > 40) "..." else "")
+                        InfoRow(localizedString("mobile.data_endpoint"), url.take(40) + if (url.length > 40) "..." else "")
                     }
                 }
 
@@ -390,15 +373,15 @@ private fun DeleteTracesCard(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Trace Collection",
+                            text = localizedString("mobile.data_trace_collection"),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium
                         )
                         Text(
                             text = if (isConsentActive)
-                                "Anonymized traces are being sent to CIRISLens"
+                                localizedString("mobile.data_traces_active")
                             else
-                                "Trace collection is disabled",
+                                localizedString("mobile.data_traces_disabled"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -418,18 +401,17 @@ private fun DeleteTracesCard(
                 val traceCount = settings.eventsSent
 
                 Text(
-                    text = "Request Data Deletion from CIRISLens",
+                    text = localizedString("mobile.data_delete_lens"),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
                 )
 
                 Text(
                     text = if (traceCount > 0) {
-                        "Request deletion of all $traceCount traces sent to CIRISLens and revoke consent. " +
-                            "This is irreversible."
+                        localizedString("mobile.data_delete_lens_desc_count")
+                            .replace("{count}", traceCount.toString())
                     } else {
-                        "Send a deletion request to CIRISLens for any traces associated with your agent ID " +
-                            "and revoke consent. This ensures no data is retained."
+                        localizedString("mobile.data_delete_lens_desc_zero")
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -454,8 +436,8 @@ private fun DeleteTracesCard(
                         Spacer(Modifier.width(8.dp))
                     }
                     Text(
-                        if (isDeleting) "Processing..."
-                        else "Delete Traces & Revoke Consent"
+                        if (isDeleting) localizedString("mobile.data_processing")
+                        else localizedString("mobile.data_delete_traces_revoke")
                     )
                 }
             }
@@ -482,7 +464,7 @@ private fun DeleteTracesCard(
                         )
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text(if (isLoadingAdapter) "Enabling..." else "Enable CIRISAccord")
+                    Text(if (isLoadingAdapter) localizedString("mobile.data_enabling") else localizedString("mobile.data_enable_accord"))
                 }
             }
         }
@@ -510,29 +492,20 @@ private fun DeleteLocalDataCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Delete Account & Data",
+                text = localizedString("mobile.data_delete_account"),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
 
             Text(
-                text = "Permanently deletes all local data including:\n\n" +
-                        "\u2022 Conversations and chat history\n" +
-                        "\u2022 Memory and knowledge graph\n" +
-                        "\u2022 Audit logs and signing keys\n" +
-                        "\u2022 All configuration\n\n" +
-                        "All agent data \u2014 conversations, memory graphs, and configuration \u2014 " +
-                        "is stored exclusively on this device and is completely removed by this action.",
+                text = localizedString("mobile.data_delete_local_desc"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
             )
 
             Text(
-                text = "Transaction records (amounts, dates, account email) are retained " +
-                        "server-side for 10 years as required by EU AI Act and tax " +
-                        "compliance. No conversation content is ever stored on our servers. " +
-                        "To request deletion of billing records, contact privacy@ciris.ai.",
+                text = localizedString("mobile.data_billing_note_full"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
             )
@@ -555,7 +528,7 @@ private fun DeleteLocalDataCard(
                     )
                     Spacer(Modifier.width(8.dp))
                 }
-                Text(if (isResetting) "Deleting..." else "Delete Account & Data")
+                Text(if (isResetting) localizedString("mobile.data_deleting") else localizedString("mobile.data_delete_account"))
             }
         }
     }
@@ -580,23 +553,19 @@ private fun PrivacyInfoCard() {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "How CIRIS Handles Your Data",
+                text = localizedString("mobile.data_how_title"),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold
             )
 
             // LLM zero data retention
             Text(
-                text = "LLM Services",
+                text = localizedString("mobile.data_llm_title"),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = "All LLM providers (Groq, OpenRouter, Together AI) are configured " +
-                        "for zero data retention. Your conversations are processed and " +
-                        "immediately discarded \u2014 never stored on remote servers or used " +
-                        "to train AI models. If you use your own API key (BYOK), the same " +
-                        "zero-retention policy applies via our provider configuration.",
+                text = localizedString("mobile.data_llm_desc_full"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -605,16 +574,12 @@ private fun PrivacyInfoCard() {
 
             // Local data
             Text(
-                text = "Local Device Data",
+                text = localizedString("mobile.data_local_title"),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = "All conversations, memory graphs, audit logs, and configuration " +
-                        "are stored exclusively on this device. CIRIS servers never receive " +
-                        "or store your conversation content. Audit trails are retained " +
-                        "indefinitely on-device with a cryptographic hash chain for integrity. " +
-                        "You can delete all local data at any time using the option below.",
+                text = localizedString("mobile.data_local_desc_full"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -623,15 +588,12 @@ private fun PrivacyInfoCard() {
 
             // Billing records
             Text(
-                text = "Billing & Transaction Records",
+                text = localizedString("mobile.data_billing_title"),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = "Transaction records (amounts, dates, account email) are processed " +
-                        "via Stripe and retained for 10 years as required by EU AI Act and " +
-                        "tax compliance. These records never contain conversation content. " +
-                        "To request deletion of billing records, contact privacy@ciris.ai.",
+                text = localizedString("mobile.data_billing_desc_full"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -640,19 +602,12 @@ private fun PrivacyInfoCard() {
 
             // Your rights
             Text(
-                text = "Your Rights",
+                text = localizedString("mobile.data_your_rights"),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = "Under GDPR and CCPA, you have the right to:\n" +
-                        "\u2022 Access \u2014 request a copy of your data\n" +
-                        "\u2022 Erasure \u2014 request deletion (90-day decay protocol)\n" +
-                        "\u2022 Rectification \u2014 correct inaccurate data\n" +
-                        "\u2022 Portability \u2014 export in JSON/CSV format\n" +
-                        "\u2022 Restriction \u2014 limit how your data is processed\n" +
-                        "\u2022 Object \u2014 opt out of specific processing\n\n" +
-                        "DSAR requests are responded to within 30 days.",
+                text = localizedString("mobile.data_your_rights_desc_full"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -661,7 +616,7 @@ private fun PrivacyInfoCard() {
 
             // Contact & links
             Text(
-                text = "Contact: privacy@ciris.ai",
+                text = localizedString("mobile.data_contact"),
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.primary,
@@ -671,7 +626,7 @@ private fun PrivacyInfoCard() {
             )
 
             Text(
-                text = "Full Privacy Policy: ciris.ai/privacy",
+                text = localizedString("mobile.data_privacy_policy"),
                 style = MaterialTheme.typography.bodySmall.copy(
                     textDecoration = TextDecoration.Underline
                 ),

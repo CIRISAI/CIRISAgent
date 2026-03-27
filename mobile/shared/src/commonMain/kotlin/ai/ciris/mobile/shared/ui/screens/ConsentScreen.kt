@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.unit.dp
+import ai.ciris.mobile.shared.localization.localizedString
 
 /**
  * Consent management screen for GDPR/privacy controls
@@ -51,7 +52,7 @@ fun ConsentScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Consent Management") },
+                title = { Text(localizedString("screen_consent_management")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -59,7 +60,7 @@ fun ConsentScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("common_back")
                         )
                     }
                 },
@@ -71,7 +72,7 @@ fun ConsentScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("common_refresh")
                         )
                     }
                 },
@@ -132,7 +133,7 @@ fun ConsentScreen(
                 // Stream selection
                 item {
                     Text(
-                        text = "Choose Your Consent Stream",
+                        text = localizedString("consent_choose_stream"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -163,7 +164,7 @@ fun ConsentScreen(
                 if (consentData.auditEntries.isNotEmpty()) {
                     item {
                         Text(
-                            text = "Consent History",
+                            text = localizedString("consent_history"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -177,7 +178,7 @@ fun ConsentScreen(
                 // Privacy notice
                 item {
                     Text(
-                        text = "You can only view and manage your own consent settings.",
+                        text = localizedString("consent_view_only"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
@@ -194,13 +195,13 @@ fun ConsentScreen(
         val stream = consentData.availableStreams.find { it.id == streamId }
         AlertDialog(
             onDismissRequest = { showStreamConfirmDialog = null },
-            title = { Text("Change Consent Stream") },
+            title = { Text(localizedString("consent_change_title")) },
             text = {
                 Text(
                     when (streamId) {
-                        "anonymous" -> "Switching to ANONYMOUS will anonymize your data while allowing statistical contributions. Continue?"
-                        "temporary" -> "Switching to TEMPORARY will set a 14-day auto-forget period. Continue?"
-                        else -> "Are you sure you want to change your consent stream to ${stream?.name ?: streamId}?"
+                        "anonymous" -> localizedString("consent_switch_anonymous")
+                        "temporary" -> localizedString("consent_switch_temporary")
+                        else -> localizedString("consent_switch_stream", mapOf("stream" to (stream?.name ?: streamId)))
                     }
                 )
             },
@@ -215,7 +216,7 @@ fun ConsentScreen(
                         showStreamConfirmDialog = null
                     }
                 ) {
-                    Text("Confirm")
+                    Text(localizedString("common_confirm"))
                 }
             },
             dismissButton = {
@@ -223,7 +224,7 @@ fun ConsentScreen(
                     onClick = { showStreamConfirmDialog = null },
                     modifier = Modifier.testableClickable("btn_stream_cancel") { showStreamConfirmDialog = null }
                 ) {
-                    Text("Cancel")
+                    Text(localizedString("common_cancel"))
                 }
             }
         )
@@ -270,7 +271,7 @@ private fun CurrentConsentBanner(
 
                 if (currentStream == "temporary" && expiresAt != null) {
                     Text(
-                        text = "Expires: $expiresAt",
+                        text = localizedString("consent_expires", mapOf("date" to expiresAt)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -278,7 +279,7 @@ private fun CurrentConsentBanner(
 
                 if (partnershipPending) {
                     Text(
-                        text = "Partnership request pending...",
+                        text = localizedString("consent_partnership_pending"),
                         style = MaterialTheme.typography.bodySmall,
                         color = SemanticColors.Default.warning
                     )
@@ -302,14 +303,14 @@ private fun NoConsentNotice(modifier: Modifier = Modifier) {
                 .padding(16.dp)
         ) {
             Text(
-                text = "Consent Record Not Yet Created",
+                text = localizedString("consent_not_created"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = SemanticColors.Default.onWarning
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Your consent record will be automatically created after your first interaction with CIRIS. This ensures meaningful engagement before establishing a consent relationship.",
+                text = localizedString("consent_not_created_desc"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = SemanticColors.Default.onWarning
             )
@@ -331,14 +332,14 @@ private fun PartnershipPendingBanner(modifier: Modifier = Modifier) {
                 .padding(16.dp)
         ) {
             Text(
-                text = "Partnership Request Pending",
+                text = localizedString("consent_pending_title"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = SemanticColors.Default.onSuccess
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Your partnership request is being reviewed. You will be notified when a decision is made.",
+                text = localizedString("consent_pending_desc"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = SemanticColors.Default.onSuccess
             )
@@ -361,16 +362,16 @@ private fun ConsentInfoCard(modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "About Consent Streams",
+                text = localizedString("consent_about_title"),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "CIRIS offers three consent streams to give you control over your data:",
+                text = localizedString("consent_about_desc"),
                 style = MaterialTheme.typography.bodySmall
             )
             Text(
-                text = "TEMPORARY: Basic interactions with 14-day auto-forget\nPARTNERED: Mutual growth with full personalization\nANONYMOUS: Help others while removing identity",
+                text = localizedString("consent_streams_desc"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -444,7 +445,7 @@ private fun StreamCard(
             // Duration info
             stream.durationDays?.let { days ->
                 Text(
-                    text = "Duration: $days days",
+                    text = localizedString("consent_duration", mapOf("days" to days.toString())),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -452,7 +453,7 @@ private fun StreamCard(
 
             if (stream.requiresApproval) {
                 Text(
-                    text = "Requires agent approval",
+                    text = localizedString("consent_requires_approval"),
                     style = MaterialTheme.typography.labelSmall,
                     color = SemanticColors.Default.warning
                 )
@@ -477,9 +478,9 @@ private fun StreamCard(
             ) {
                 Text(
                     when {
-                        isActive -> "Current Stream"
-                        stream.id == "partnered" -> "Request Partnership"
-                        else -> "Switch Stream"
+                        isActive -> localizedString("consent_current_stream")
+                        stream.id == "partnered" -> localizedString("consent_request_partnership")
+                        else -> localizedString("consent_switch_stream_button")
                     }
                 )
             }
@@ -499,7 +500,7 @@ private fun ImpactDashboardCard(
                 .padding(16.dp)
         ) {
             Text(
-                text = "Your Impact",
+                text = localizedString("consent_impact"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -510,24 +511,29 @@ private fun ImpactDashboardCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
+                val interactionsLabel = localizedString("consent_interactions")
+                val patternsLabel = localizedString("consent_patterns")
+                val usersHelpedLabel = localizedString("consent_users_helped")
+                val scoreLabel = localizedString("consent_score")
+
                 ImpactMetric(
                     value = impact.totalInteractions.toString(),
-                    label = "Interactions",
+                    label = interactionsLabel,
                     color = MaterialTheme.colorScheme.primary
                 )
                 ImpactMetric(
                     value = impact.patternsContributed.toString(),
-                    label = "Patterns",
+                    label = patternsLabel,
                     color = SemanticColors.Default.success
                 )
                 ImpactMetric(
                     value = impact.usersHelped.toString(),
-                    label = "Users Helped",
+                    label = usersHelpedLabel,
                     color = SemanticColors.Default.info
                 )
                 ImpactMetric(
                     value = "${((impact.impactScore * 10).toInt() / 10.0)}",
-                    label = "Score",
+                    label = scoreLabel,
                     color = SemanticColors.Default.accentSecondary
                 )
             }
@@ -586,7 +592,7 @@ private fun AuditTrailCard(
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = entry.reason ?: "No reason provided",
+                            text = entry.reason ?: localizedString("consent_reason_none"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -598,7 +604,7 @@ private fun AuditTrailCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "by ${entry.initiatedBy}",
+                            text = localizedString("consent_by", mapOf("user" to entry.initiatedBy)),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

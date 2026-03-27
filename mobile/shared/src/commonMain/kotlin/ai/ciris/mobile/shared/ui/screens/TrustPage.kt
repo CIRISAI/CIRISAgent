@@ -1,4 +1,5 @@
 package ai.ciris.mobile.shared.ui.screens
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
@@ -108,7 +109,7 @@ fun TrustPage(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Trust & Security") },
+                title = { Text(localizedString("screen_trust_security")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -195,7 +196,7 @@ fun TrustPage(
 
                     // Learn more link
                     Text(
-                        text = "Learn more about CIRISVerify",
+                        text = localizedString("trust_learn_more"),
                         fontSize = 14.sp,
                         color = SemanticColors.Default.info,
                         textDecoration = TextDecoration.Underline,
@@ -245,7 +246,7 @@ private fun LoadingCard() {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             CircularProgressIndicator(color = SemanticColors.Default.success)
-            Text("Running attestation checks...", color = SemanticColors.Default.inactive)
+            Text(localizedString("trust_running"), color = SemanticColors.Default.inactive)
         }
     }
 }
@@ -261,7 +262,7 @@ private fun ErrorCard(error: String, onRetry: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "Attestation Failed",
+                text = localizedString("trust_failed"),
                 fontWeight = FontWeight.Bold,
                 color = SemanticColors.Default.error
             )
@@ -275,7 +276,7 @@ private fun ErrorCard(error: String, onRetry: () -> Unit) {
                 modifier = Modifier.testableClickable("btn_trust_retry") { onRetry() },
                 colors = ButtonDefaults.buttonColors(containerColor = SemanticColors.Default.error)
             ) {
-                Text("Retry")
+                Text(localizedString("common_retry"))
             }
         }
     }
@@ -328,7 +329,7 @@ private fun TrustSummaryCard(
             Text(text = "🛡", fontSize = 48.sp)
 
             Text(
-                text = "Attestation Level $level/5",
+                text = localizedString("trust_level").replace("{level}", level.toString()),
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = textColor
@@ -356,7 +357,7 @@ private fun TrustSummaryCard(
                         color = textColor.copy(alpha = 0.1f)
                     ) {
                         Text(
-                            text = "Agent v$agentVer",
+                            text = localizedString("trust_agent_ver").replace("{version}", agentVer),
                             fontSize = 12.sp,
                             color = textColor,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -369,7 +370,7 @@ private fun TrustSummaryCard(
                         color = textColor.copy(alpha = 0.1f)
                     ) {
                         Text(
-                            text = "CIRISVerify v$version",
+                            text = localizedString("trust_verify_ver").replace("{version}", version),
                             fontSize = 12.sp,
                             color = textColor,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -382,7 +383,7 @@ private fun TrustSummaryCard(
             // Timestamp badge showing when attestation was performed
             status.cachedAt?.let { timestamp ->
                 Text(
-                    text = "Verify Last Ran: ${formatAttestationTimestamp(timestamp)}",
+                    text = localizedString("trust_last_ran").replace("{time}", formatAttestationTimestamp(timestamp)),
                     fontSize = 11.sp,
                     color = textColor.copy(alpha = 0.6f)
                 )
@@ -419,7 +420,7 @@ private fun LevelDebugExpansion(status: VerifyStatusResponse, textColor: Color) 
                 color = textColor.copy(alpha = 0.6f)
             )
             Text(
-                text = "Level Debug",
+                text = localizedString("trust_level_debug"),
                 fontSize = 10.sp,
                 color = textColor.copy(alpha = 0.6f)
             )
@@ -443,7 +444,7 @@ private fun LevelDebugExpansion(status: VerifyStatusResponse, textColor: Color) 
                 ) {
                     // Description text explaining attestation levels
                     Text(
-                        text = "L1: Verify binary+func manifests | L2: HW-backed keys | L3: 3-source key agreement | L4: Agent manifest | L5: Audit+portal",
+                        text = localizedString("trust_level_explain"),
                         fontSize = 9.sp,
                         color = textColor.copy(alpha = 0.7f),
                         modifier = Modifier.padding(bottom = 4.dp)
@@ -490,7 +491,10 @@ private fun LevelDebugExpansion(status: VerifyStatusResponse, textColor: Color) 
                     }
                     val match = calc == status.maxLevel
                     Text(
-                        text = "Calc: L$calc | API: L${status.maxLevel} | Pending: ${status.levelPending}",
+                        text = localizedString("trust_calc_debug")
+                            .replace("{calc}", calc.toString())
+                            .replace("{api}", status.maxLevel.toString())
+                            .replace("{pending}", status.levelPending.toString()),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
@@ -545,13 +549,13 @@ private fun AttestationLevelsCard(status: VerifyStatusResponse) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Attestation Checks",
+                text = localizedString("trust_checks"),
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
 
             Text(
-                text = "Like a DMV check for AI - each level builds trust",
+                text = localizedString("trust_checks_desc"),
                 fontSize = 12.sp,
                 color = Color(0xFF6B7280)
             )
@@ -639,13 +643,13 @@ private fun DeviceAttestationCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Device Attestation",
+                text = localizedString("trust_device"),
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
 
             Text(
-                text = "Single-party device integrity verification from platform vendor",
+                text = localizedString("trust_device_desc"),
                 fontSize = 12.sp,
                 color = Color(0xFF6B7280)
             )
@@ -709,7 +713,7 @@ private fun DeviceAttestationCard(
                                 color = color
                             )
                             Text(
-                                text = "Google Play Integrity",
+                                text = localizedString("trust_play_integrity"),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = color
@@ -741,7 +745,7 @@ private fun DeviceAttestationCard(
                         }
 
                         Text(
-                            text = "Validates: genuine app, unmodified device, Google Play Services",
+                            text = localizedString("trust_play_validates"),
                             fontSize = 11.sp,
                             color = Color(0xFF9CA3AF),
                             modifier = Modifier.padding(start = 22.dp)
@@ -768,14 +772,14 @@ private fun DeviceAttestationCard(
                                 color = Color(0xFF6B7280)
                             )
                             Text(
-                                text = "Apple App Attest",
+                                text = localizedString("trust_app_attest"),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color(0xFF6B7280)
                             )
                         }
                         Text(
-                            text = "Not yet implemented - coming soon",
+                            text = localizedString("trust_app_attest_soon"),
                             fontSize = 12.sp,
                             color = Color(0xFF9CA3AF),
                             modifier = Modifier.padding(start = 22.dp)
@@ -785,7 +789,7 @@ private fun DeviceAttestationCard(
                 else -> {
                     // Desktop/other - no device attestation available
                     Text(
-                        text = "Device attestation not available on ${status.platformOs ?: "this platform"}",
+                        text = localizedString("trust_device_unavailable").replace("{platform}", status.platformOs ?: "this platform"),
                         fontSize = 12.sp,
                         color = Color(0xFF9CA3AF)
                     )
@@ -794,7 +798,7 @@ private fun DeviceAttestationCard(
 
             // Disclaimer
             Text(
-                text = "Device attestation is independent of software attestation levels above",
+                text = localizedString("trust_device_independent"),
                 fontSize = 11.sp,
                 color = Color(0xFF9CA3AF)
             )
@@ -938,7 +942,7 @@ private fun PlatformInfoCard(status: VerifyStatusResponse) {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("Platform Attestation", fontWeight = FontWeight.Bold)
+            Text(localizedString("trust_platform"), fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 status.platformOs?.let {
                     Text("OS: $it", fontSize = 12.sp, color = Color(0xFF6B7280))
@@ -961,12 +965,12 @@ private fun FileIntegrityCard(status: VerifyStatusResponse) {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("File Integrity Details", fontWeight = FontWeight.Bold)
+            Text(localizedString("trust_file_integrity"), fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Checked: ${status.filesChecked}", fontSize = 12.sp, color = Color(0xFF6B7280))
-                Text("Passed: ${status.filesPassed ?: 0}", fontSize = 12.sp, color = Color(0xFF059669))
+                Text(localizedString("trust_checked").replace("{count}", status.filesChecked.toString()), fontSize = 12.sp, color = Color(0xFF6B7280))
+                Text(localizedString("trust_passed").replace("{count}", (status.filesPassed ?: 0).toString()), fontSize = 12.sp, color = Color(0xFF059669))
                 if ((status.filesFailed ?: 0) > 0) {
-                    Text("Failed: ${status.filesFailed}", fontSize = 12.sp, color = Color(0xFFDC2626))
+                    Text(localizedString("trust_failed_count").replace("{count}", status.filesFailed.toString()), fontSize = 12.sp, color = Color(0xFFDC2626))
                 }
             }
             status.integrityFailureReason?.let { reason ->
@@ -1364,7 +1368,7 @@ private fun L1Content(status: VerifyStatusResponse) {
     val failedFuncs = status.functionsFailedList ?: emptyList()
     if (failedFuncs.isNotEmpty()) {
         Text(
-            text = "Failed functions:",
+            text = localizedString("trust_failed_functions"),
             fontSize = 10.sp,
             fontWeight = FontWeight.Medium,
             color = Color(0xFFDC2626),
@@ -2098,7 +2102,7 @@ private fun L5Content(status: VerifyStatusResponse, onCopyDiagnostics: () -> Uni
     // Show hint when at L4 and registry key not found - user can upgrade to L5
     if (status.maxLevel == 4 && keyStatus.contains("not_found", ignoreCase = true)) {
         Text(
-            text = "Re-run wizard via Settings to purchase agent identity key for possible 5/5 attestation",
+            text = localizedString("trust_wizard_hint"),
             fontSize = 10.sp,
             color = Color(0xFF2563EB),
             fontStyle = FontStyle.Italic,
@@ -2122,7 +2126,7 @@ private fun L5Content(status: VerifyStatusResponse, onCopyDiagnostics: () -> Uni
         horizontalArrangement = Arrangement.End
     ) {
         Text(
-            text = "Copy Diagnostics",
+            text = localizedString("trust_copy_diagnostics"),
             fontSize = 11.sp,
             color = Color(0xFF2563EB),
             modifier = Modifier
@@ -2244,7 +2248,7 @@ private fun ExplanationDropdown(
                 // What it does
                 Column {
                     Text(
-                        text = "What it checks:",
+                        text = localizedString("trust_what_checks"),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF1E40AF)
@@ -2260,7 +2264,7 @@ private fun ExplanationDropdown(
                 // Why it matters
                 Column {
                     Text(
-                        text = "Why it matters:",
+                        text = localizedString("trust_why_matters"),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF1E40AF)
@@ -2276,7 +2280,7 @@ private fun ExplanationDropdown(
                 // How it works
                 Column {
                     Text(
-                        text = "How it works:",
+                        text = localizedString("trust_how_works"),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF1E40AF)
@@ -2301,7 +2305,7 @@ private fun VerificationDetailsCard(status: VerifyStatusResponse) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Verification Details",
+                text = localizedString("trust_details"),
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
@@ -2558,7 +2562,7 @@ private fun DiagnosticsLogCard(
                     modifier = Modifier.testableClickable("btn_copy_diagnostics") { onCopy() },
                     enabled = !diagnostics.isNullOrEmpty()
                 ) {
-                    Text("Copy")
+                    Text(localizedString("common_copy"))
                 }
             }
 
@@ -2577,7 +2581,7 @@ private fun DiagnosticsLogCard(
                         val hasContent = !diagnostics.isNullOrEmpty() && diagnostics != "null"
                         if (!hasContent) {
                             Text(
-                                text = "No diagnostics available. Tap refresh to re-run attestation.",
+                                text = localizedString("trust_no_diagnostics"),
                                 fontSize = 11.sp,
                                 fontFamily = FontFamily.Monospace,
                                 color = Color(0xFF9CA3AF)
@@ -2604,7 +2608,7 @@ private fun DiagnosticsLogCard(
                     }
                 }
                 Text(
-                    text = "This log shows the full CIRISVerify attestation output",
+                    text = localizedString("trust_log_desc"),
                     fontSize = 10.sp,
                     color = Color(0xFF9CA3AF),
                     modifier = Modifier.padding(top = 4.dp)
@@ -2625,12 +2629,12 @@ private fun KeyStatusWarningCard(status: VerifyStatusResponse) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "Identity Key Not Active",
+                text = localizedString("trust_key_inactive"),
                 fontWeight = FontWeight.Bold,
                 color = SemanticColors.Default.onWarning
             )
             Text(
-                text = "Key status: ${status.keyStatus}",
+                text = localizedString("trust_key_status").replace("{status}", status.keyStatus),
                 fontSize = 12.sp,
                 color = SemanticColors.Default.warning
             )
@@ -2659,12 +2663,12 @@ private fun DisclaimerCard() {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "CIRISVerify provides cryptographic attestation of agent identity for the Coherence Ratchet and CIRIS Scoring.",
+                text = localizedString("trust_verify_desc"),
                 fontSize = 12.sp,
                 color = SemanticColors.Default.onSuccess
             )
             Text(
-                text = "CIRISVerify provides cryptographic attestation under defined threat models and does not guarantee absolute security.",
+                text = localizedString("trust_verify_disclaimer"),
                 fontSize = 11.sp,
                 color = SemanticColors.Default.inactive,
                 fontWeight = FontWeight.Normal
@@ -2694,7 +2698,7 @@ private fun RawDetailsCard(
                     fontWeight = FontWeight.Medium
                 )
                 TextButton(onClick = onCopy) {
-                    Text("Copy")
+                    Text(localizedString("common_copy"))
                 }
             }
 

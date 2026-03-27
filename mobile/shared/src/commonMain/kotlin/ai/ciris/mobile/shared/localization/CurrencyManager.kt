@@ -6,11 +6,11 @@ import ai.ciris.mobile.shared.viewmodels.SUPPORTED_CURRENCIES
 import ai.ciris.mobile.shared.viewmodels.SupportedCurrency
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import kotlin.math.pow
 import kotlin.math.roundToLong
 
@@ -115,7 +115,7 @@ class CurrencyManager(
             return
         }
 
-        scope.launch(Dispatchers.IO) {
+        scope.launch(Dispatchers.Default) {
             _currentCurrency.value = currencyCode
             _currentCurrencyInfo.value = currencyInfo
             secureStorage.save(PREF_KEY_CURRENCY, currencyCode)
@@ -217,7 +217,7 @@ class CurrencyManager(
     fun updateRates(rates: Map<String, Double>) {
         scope.launch {
             _exchangeRates.value = rates
-            _lastRateUpdate.value = System.currentTimeMillis()
+            _lastRateUpdate.value = Clock.System.now().toEpochMilliseconds()
             PlatformLogger.i(TAG, "Exchange rates updated: ${rates.size} currencies")
         }
     }

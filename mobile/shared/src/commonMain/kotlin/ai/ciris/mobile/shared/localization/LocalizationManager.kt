@@ -116,7 +116,7 @@ class LocalizationManager(
             return
         }
 
-        scope.launch(Dispatchers.IO) {
+        scope.launch(Dispatchers.Default) {
             PlatformLogger.i(TAG, "Setting language to: ${languageInfo.englishName} ($languageCode)")
 
             // Load strings for the new language (use cache if available)
@@ -192,7 +192,7 @@ class LocalizationManager(
         } else {
             // Try to load in background for next rotation, use English for now
             currentStrings = englishStrings
-            scope.launch(Dispatchers.IO) {
+            scope.launch(Dispatchers.Default) {
                 loadStrings(languageCode)?.let { loaded ->
                     languageStringsCache[languageCode] = loaded
                 }
@@ -210,7 +210,7 @@ class LocalizationManager(
      * Called when leaving startup screen to restore the actual user preference.
      */
     fun resetToPersistedLanguage() {
-        scope.launch(Dispatchers.IO) {
+        scope.launch(Dispatchers.Default) {
             val savedLanguage = secureStorage.get(PREF_KEY_LANGUAGE).getOrNull()
             val targetLanguage = if (savedLanguage != null && SUPPORTED_LANGUAGES.any { it.code == savedLanguage }) {
                 savedLanguage

@@ -2,6 +2,14 @@ package ai.ciris.mobile.shared.localization
 
 import ai.ciris.mobile.shared.viewmodels.SupportedCurrency
 import androidx.compose.runtime.*
+import kotlin.math.roundToLong
+
+private fun formatDouble(value: Double): String {
+    val rounded = (value * 100).roundToLong()
+    val intPart = rounded / 100
+    val decPart = (rounded % 100).let { if (it < 0) -it else it }
+    return "$intPart.${decPart.toString().padStart(2, '0')}"
+}
 
 /**
  * CompositionLocal for accessing the CurrencyManager throughout the Compose tree.
@@ -38,7 +46,7 @@ fun convertedCurrency(usdcAmount: Double): String {
         currency.convertFromUsdc(usdcAmount)
     } else {
         // Fallback if currency manager not available
-        "$${"%.2f".format(usdcAmount)}"
+        "$${formatDouble(usdcAmount)}"
     }
 }
 
@@ -53,7 +61,7 @@ fun convertedCurrency(usdcAmount: Double): String {
 fun convertedCurrencyTo(usdcAmount: Double, currencyCode: String): String {
     val currency = LocalCurrency.current
     return currency?.convertFromUsdcTo(usdcAmount, currencyCode)
-        ?: "$${"%.2f".format(usdcAmount)}"
+        ?: "$${formatDouble(usdcAmount)}"
 }
 
 /**
@@ -91,7 +99,7 @@ object CurrencyHelper {
     }
 
     fun convertFromUsdc(usdcAmount: Double): String {
-        return manager?.convertFromUsdc(usdcAmount) ?: "$${"%.2f".format(usdcAmount)}"
+        return manager?.convertFromUsdc(usdcAmount) ?: "$${formatDouble(usdcAmount)}"
     }
 
     fun getCurrentCurrency(): String {

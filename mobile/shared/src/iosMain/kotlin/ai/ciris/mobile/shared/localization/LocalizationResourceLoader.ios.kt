@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.localization
 
 import ai.ciris.mobile.shared.platform.PlatformLogger
+import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import platform.Foundation.*
@@ -9,6 +10,7 @@ import platform.Foundation.*
  * iOS implementation of LocalizationResourceLoader.
  * Loads localization JSON files from the app bundle.
  */
+@OptIn(ExperimentalForeignApi::class)
 actual class LocalizationResourceLoader {
     companion object {
         private const val TAG = "LocalizationResourceLoader"

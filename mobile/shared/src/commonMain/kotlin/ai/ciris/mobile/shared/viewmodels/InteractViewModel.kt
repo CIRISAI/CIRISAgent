@@ -4,6 +4,7 @@ import ai.ciris.api.models.DocumentPayload
 import ai.ciris.api.models.ImagePayload
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.ReasoningEvent
+import ai.ciris.mobile.shared.localization.LocalizationHelper
 import ai.ciris.mobile.shared.api.ReasoningStreamClient
 import ai.ciris.mobile.shared.ui.screens.graph.PipelineState
 import ai.ciris.mobile.shared.auth.TokenManager
@@ -387,7 +388,7 @@ class InteractViewModel(
         viewModelScope.launch {
             try {
                 _isSending.value = true
-                _processingStatus.value = "Sending message..."
+                _processingStatus.value = LocalizationHelper.getString("mobile.processing_sending")
                 _inputText.value = ""
                 _attachedFiles.value = emptyList()
 
@@ -445,7 +446,7 @@ class InteractViewModel(
                     _processingStatus.value = ""
                 } else {
                     logWarn(method, "Empty response from agent")
-                    _processingStatus.value = "Waiting for response..."
+                    _processingStatus.value = LocalizationHelper.getString("mobile.processing_waiting_response")
                 }
 
             } catch (e: Exception) {
@@ -461,7 +462,7 @@ class InteractViewModel(
                 if (isTimeoutError) {
                     // Timeout is expected for async processing - message will arrive via SSE
                     logInfo(method, "Timeout during send - response will arrive via SSE")
-                    _processingStatus.value = "Processing..."
+                    _processingStatus.value = LocalizationHelper.getString("mobile.processing_generic")
                 } else {
                     val errorMessage = ChatMessage(
                         id = generateMessageId(),
@@ -540,7 +541,7 @@ class InteractViewModel(
                             logInfo(method, "Agent ready with state: ${_agentStatus.value}")
                         }
                     } else {
-                        _agentStatus.value = "Starting..."
+                        _agentStatus.value = LocalizationHelper.getString("mobile.processing_starting")
                     }
 
                     if (_isConnected.value != wasConnected) {
@@ -1268,24 +1269,24 @@ class InteractViewModel(
         logDebug(method, "Event: $eventType, action: $action")
 
         val statusText = when (eventType) {
-            "thought_start" -> "Thinking..."
-            "snapshot_and_context" -> "Gathering context..."
-            "dma_results" -> "Evaluating..."
-            "aspdma_result" -> "Selecting action: ${action ?: "..."}"
-            "conscience_result" -> "Checking ethics..."
+            "thought_start" -> LocalizationHelper.getString("mobile.processing_thinking")
+            "snapshot_and_context" -> LocalizationHelper.getString("mobile.processing_context")
+            "dma_results" -> LocalizationHelper.getString("mobile.processing_evaluating")
+            "aspdma_result" -> LocalizationHelper.getString("mobile.processing_selecting", mapOf("action" to (action ?: "...")))
+            "conscience_result" -> LocalizationHelper.getString("mobile.processing_ethics")
             "action_result" -> {
                 when {
-                    action?.contains("speak") == true -> "Speaking..."
-                    action?.contains("task_complete") == true -> "Complete"
-                    action?.contains("memorize") == true -> "Saving to memory..."
-                    action?.contains("recall") == true -> "Recalling..."
-                    action?.contains("tool") == true -> "Using tool..."
-                    action?.contains("ponder") == true -> "Pondering..."
-                    action?.contains("defer") == true -> "Deferred"
+                    action?.contains("speak") == true -> LocalizationHelper.getString("mobile.processing_speaking")
+                    action?.contains("task_complete") == true -> LocalizationHelper.getString("status.completed")
+                    action?.contains("memorize") == true -> LocalizationHelper.getString("mobile.processing_memorizing")
+                    action?.contains("recall") == true -> LocalizationHelper.getString("mobile.processing_recalling")
+                    action?.contains("tool") == true -> LocalizationHelper.getString("mobile.processing_tool")
+                    action?.contains("ponder") == true -> LocalizationHelper.getString("mobile.processing_pondering")
+                    action?.contains("defer") == true -> LocalizationHelper.getString("mobile.interact_action_defer")
                     else -> "Executing: ${action ?: "action"}"
                 }
             }
-            "idle" -> "Idle"
+            "idle" -> LocalizationHelper.getString("mobile.interact_legend_idle")
             else -> eventType.replace("_", " ").replaceFirstChar { it.uppercase() }
         }
 

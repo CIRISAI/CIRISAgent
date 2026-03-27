@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClientProtocol
+import ai.ciris.mobile.shared.localization.LocalizationHelper
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.PythonRuntimeProtocol
 import androidx.lifecycle.ViewModel
@@ -125,7 +126,7 @@ class StartupViewModel(
     private suspend fun initializePython() {
         PlatformLogger.i(TAG, "[STARTUP] Step 1: initializePython()")
         _phase.value = StartupPhase.LOADING_RUNTIME
-        _statusMessage.value = "Starting Python interpreter..."
+        _statusMessage.value = LocalizationHelper.getString("mobile.status_starting_python")
 
         val result = pythonRuntime.initialize(pythonHomePath)
         if (result.isFailure) {
@@ -144,7 +145,7 @@ class StartupViewModel(
      */
     private suspend fun startFastAPIServer() {
         _phase.value = StartupPhase.STARTING_SERVER
-        _statusMessage.value = "Connecting to CIRIS..."
+        _statusMessage.value = LocalizationHelper.getString("mobile.status_connecting_ciris")
 
         // Wire output callback to parse service startup lines
         val servicePattern = Regex("""\[SERVICE (\d+)/(\d+)\] (\S+) STARTED""")
@@ -240,7 +241,7 @@ class StartupViewModel(
         }
 
         _phase.value = StartupPhase.LOADING_SERVICES
-        _statusMessage.value = "Loading services..."
+        _statusMessage.value = LocalizationHelper.getString("mobile.status_loading_services")
 
         var attempts = 0
         val maxAttempts = 300 // 60 seconds max (300 * 200ms)
@@ -552,7 +553,7 @@ class StartupViewModel(
      */
     fun resetForResume() {
         _phase.value = StartupPhase.LOADING_SERVICES
-        _statusMessage.value = "Resuming services..."
+        _statusMessage.value = LocalizationHelper.getString("mobile.status_resuming_services")
         _errorMessage.value = null
         _hasError.value = false
         // Don't reset service count - it will be updated as remaining services start

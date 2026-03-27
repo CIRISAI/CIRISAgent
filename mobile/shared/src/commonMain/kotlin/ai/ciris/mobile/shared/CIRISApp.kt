@@ -570,7 +570,7 @@ fun CIRISApp(
 
                 // Wait for agent to reach WORK state
                 // NOTE: Don't call setPhase() here - it would cancel this LaunchedEffect!
-                startupViewModel.setStatus("Waiting for agent...")
+                startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_waiting_agent"))
 
                 var agentReady = false
                 var pollAttempts = 0
@@ -596,7 +596,7 @@ fun CIRISApp(
                     } catch (e: Exception) {
                         if (pollAttempts % 10 == 0) {
                             PlatformLogger.d(TAG, " Waiting for server... (${e.message?.take(30)})")
-                            startupViewModel.setStatus("Connecting to backend...")
+                            startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_connecting_backend"))
                         }
                     }
                     kotlinx.coroutines.delay(200)
@@ -622,7 +622,7 @@ fun CIRISApp(
             // Check if this is first run via API
             // Keep timer running and show status while waiting for backend
             startupViewModel.setKeepTimerAlive(true)
-            startupViewModel.setStatus("Checking setup status...")
+            startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_checking_setup"))
 
             isFirstRun = checkFirstRunStatus(
                 baseUrl = baseUrl,
@@ -649,7 +649,7 @@ fun CIRISApp(
                 platformLog(TAG, "[INFO] Not first run, attempting to load and validate stored token")
                 // NOTE: Don't change phase here - it would restart the LaunchedEffect and cancel this coroutine!
                 // Just update the status message which is shown on the startup screen
-                startupViewModel.setStatus("Authenticating...")
+                startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_authenticating"))
 
                 // Add timeout for token loading (shouldn't take more than 5 seconds)
                 val tokenResult = try {
@@ -669,7 +669,7 @@ fun CIRISApp(
                 tokenResult.onSuccess { storedToken ->
                         if (storedToken != null) {
                             platformLog(TAG, "[INFO] Loaded stored token: ${storedToken.take(8)}...${storedToken.takeLast(4)}")
-                            startupViewModel.setStatus("Token loaded, checking validity...")
+                            startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_token_loaded"))
 
                             // Check token validity and refresh if needed
                             // NOTE: storedToken is a CIRIS access token, not a Google ID token
@@ -677,7 +677,7 @@ fun CIRISApp(
                             // which gets a Google ID token, then onTokenRefreshed callback
                             // exchanges it for a new CIRIS token
                             tokenExchangeComplete = true // Assume no exchange needed initially
-                            startupViewModel.setStatus("Checking token expiry...")
+                            startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_checking_expiry"))
                             val tokenValid = tokenManager.checkAndRefreshToken(storedToken)
 
                             if (tokenValid) {
@@ -685,7 +685,7 @@ fun CIRISApp(
                                 if (!tokenExchangeComplete) {
                                     // Token was refreshed - wait for Google->CIRIS exchange to complete
                                     PlatformLogger.i(TAG, " Token was refreshed, waiting for CIRIS token exchange...")
-                                    startupViewModel.setStatus("Refreshing token...")
+                                    startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_refreshing_token"))
                                     var waitCount = 0
                                     while (!tokenExchangeComplete && waitCount < 50) {
                                         kotlinx.coroutines.delay(100)
@@ -705,7 +705,7 @@ fun CIRISApp(
                                     // Token was valid without refresh - but we need to verify it works with the backend
                                     // (backend may have restarted, invalidating old tokens)
                                     PlatformLogger.i(TAG, " Stored token not expired, verifying with backend...")
-                                    startupViewModel.setStatus("Verifying token with backend...")
+                                    startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_verifying_token"))
                                     apiClient.setAccessToken(storedToken)
 
                                     // Test API call to verify token is actually accepted
@@ -721,7 +721,7 @@ fun CIRISApp(
                                         val errorMsg = e.message ?: ""
                                         if (errorMsg.contains("401") || errorMsg.contains("Unauthorized", ignoreCase = true)) {
                                             PlatformLogger.w(TAG, " Token rejected by backend (401) - triggering refresh")
-                                            startupViewModel.setStatus("Token rejected (401), refreshing...")
+                                            startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_token_rejected"))
                                             tokenManager.on401Error()
                                             // Wait for refresh to complete - callback will set apiClient token
                                             var refreshWait = 0
@@ -756,7 +756,7 @@ fun CIRISApp(
                                 // The status message is sufficient for user feedback
                                 // Keep timer running during backend polling
                                 startupViewModel.setKeepTimerAlive(true)
-                                startupViewModel.setStatus("Waiting for agent...")
+                                startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_waiting_agent"))
 
                                 // Poll for WORK state with timeout
                                 var agentReady = false
@@ -784,7 +784,7 @@ fun CIRISApp(
                                         // Server not ready yet, keep polling
                                         if (pollAttempts % 10 == 0) {
                                             PlatformLogger.d(TAG, " Waiting for server... (${e.message?.take(30)})")
-                                            startupViewModel.setStatus("Connecting to backend...")
+                                            startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_connecting_backend"))
                                         }
                                     }
                                     kotlinx.coroutines.delay(200)
@@ -909,7 +909,7 @@ fun CIRISApp(
                             // Use platform-specific Google sign-in
                             platformLog(TAG, "[INFO][onGoogleSignIn] Callback is not null, calling onGoogleSignInRequested...")
                             isLoginLoading = true
-                            loginStatusMessage = "Signing in with ${getOAuthProviderName()}..."
+                            loginStatusMessage = LocalizationHelper.getString("mobile.status_signing_in", mapOf("provider" to getOAuthProviderName()))
                             loginErrorMessage = null
 
                             googleSignInCallback.onGoogleSignInRequested { result ->
@@ -1049,7 +1049,7 @@ fun CIRISApp(
                         // Handle local login form submission
                         platformLog(TAG, "[INFO][onLocalLoginSubmit] Logging in with username: $username")
                         isLoginLoading = true
-                        loginStatusMessage = "Logging in..."
+                        loginStatusMessage = LocalizationHelper.getString("mobile.status_logging_in")
                         loginErrorMessage = null
 
                         coroutineScope.launch {
@@ -2430,7 +2430,7 @@ private suspend fun checkFirstRunStatus(
             attempts++
             if (attempts <= maxRetries) {
                 platformLog("checkFirstRunStatus", "[INFO] Connection error, retrying in 500ms... (${e::class.simpleName})")
-                onStatusUpdate?.invoke("Waiting for backend... (attempt $attempts)")
+                onStatusUpdate?.invoke(LocalizationHelper.getString("mobile.startup_waiting_backend", mapOf("attempt" to attempts.toString())))
                 kotlinx.coroutines.delay(500)
             } else {
                 platformLog("checkFirstRunStatus", "[ERROR] Failed to check setup status after ${maxRetries + 1} attempts: ${e::class.simpleName}: ${e.message}")

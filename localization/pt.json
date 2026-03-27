@@ -608,5 +608,14 @@
     "settings_pending": "Pendente",
     "settings_failed": "Falhou",
     "settings_not_attempted": "Não Tentado"
+  },
+  "conscience": {
+    "ponder_attempted": "Tentei {action}",
+    "ponder_conscience_failed": "falha da consciência",
+    "ponder_bypass_failed": "falha ao contornar a consciência",
+    "ponder_alternative_approach": "Que abordagem alternativa se alinharia melhor com meus princípios?",
+    "ponder_forced_retry": "PONDER forçado após nova tentativa de consciência",
+    "override_rationale": "Substituído por {conscience_name}: Precisa reconsiderar {action}",
+    "forced_ponder_rationale": "PONDER forçado após nova tentativa de consciência para evitar loops"
   }
 }

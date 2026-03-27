@@ -608,5 +608,14 @@
     "interact_legend_control_actions": "제어 작업",
     "interact_legend_memory_actions": "메모리 작업",
     "interact_viz_memory_graph": "메모리 그래프"
+  },
+  "conscience": {
+    "ponder_attempted": "{action}을(를) 시도했습니다",
+    "ponder_conscience_failed": "양심 확인 실패",
+    "ponder_bypass_failed": "양심 우회 실패",
+    "ponder_alternative_approach": "제 원칙과 더 잘 맞는 대안적 접근 방식은 무엇일까요?",
+    "ponder_forced_retry": "양심 재시도 후 강제 PONDER",
+    "override_rationale": "{conscience_name}에 의해 재정의됨: {action}을(를) 재고해야 함",
+    "forced_ponder_rationale": "루프 방지를 위한 양심 재시도 후 강제 PONDER"
   }
 }

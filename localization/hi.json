@@ -608,5 +608,14 @@
     "startup_services": "सेवाएं शुरू हो रही हैं",
     "startup_services_count": "{online}/{total} सेवाएं ऑनलाइन",
     "startup_retry": "पुनः प्रयास करें"
+  },
+  "conscience": {
+    "ponder_attempted": "मैंने {action} करने का प्रयास किया",
+    "ponder_conscience_failed": "विवेक जांच विफल रही",
+    "ponder_bypass_failed": "विवेक को बायपास करना विफल रहा",
+    "ponder_alternative_approach": "कौन सा वैकल्पिक दृष्टिकोण मेरे सिद्धांतों के साथ बेहतर तरीके से संरेखित होगा?",
+    "ponder_forced_retry": "विवेक पुनः प्रयास के बाद मजबूर PONDER",
+    "override_rationale": "{conscience_name} द्वारा ओवरराइड किया गया: {action} पर पुनर्विचार करने की आवश्यकता है",
+    "forced_ponder_rationale": "लूप को रोकने के लिए विवेक पुनः प्रयास के बाद मजबूर PONDER"
   }
 }

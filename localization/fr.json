@@ -594,5 +594,14 @@
     "settings_pending": "En attente",
     "settings_failed": "Échoué",
     "settings_not_attempted": "Non tenté"
+  },
+  "conscience": {
+    "ponder_attempted": "J'ai tenté de {action}",
+    "ponder_conscience_failed": "échec de la conscience",
+    "ponder_bypass_failed": "échec du contournement de la conscience",
+    "ponder_alternative_approach": "Quelle approche alternative s'alignerait mieux avec mes principes ?",
+    "ponder_forced_retry": "PONDER forcé après une nouvelle tentative de conscience",
+    "override_rationale": "Remplacé par {conscience_name} : Besoin de reconsidérer {action}",
+    "forced_ponder_rationale": "PONDER forcé après une nouvelle tentative de conscience pour éviter les boucles"
   }
 }

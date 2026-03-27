@@ -608,5 +608,14 @@
     "settings_pending": "Inasubiri",
     "settings_failed": "Imeshindikana",
     "settings_not_attempted": "Haijajaribiwa"
+  },
+  "conscience": {
+    "ponder_attempted": "Nilijaribu {action}",
+    "ponder_conscience_failed": "ukaguzi wa dhamiri umeshindwa",
+    "ponder_bypass_failed": "kupita dhamiri kumeshindwa",
+    "ponder_alternative_approach": "Ni mbinu gani mbadala ingeendana vizuri zaidi na kanuni zangu?",
+    "ponder_forced_retry": "PONDER ya kulazimishwa baada ya kujaribu tena kwa dhamiri",
+    "override_rationale": "Imebatilishwa na {conscience_name}: Inahitaji kufikiria tena {action}",
+    "forced_ponder_rationale": "PONDER ya kulazimishwa baada ya kujaribu tena kwa dhamiri ili kuzuia mizunguko"
   }
 }

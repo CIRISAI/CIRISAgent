@@ -1,0 +1,116 @@
+# IDMA - Intuition Decision Making Algorithm
+# Semantic implementation of Coherence Collapse Analysis (CCA) principles
+
+component_name: idma
+description: "Intuition DMA - applies CCA k_eff formula and phase classification"
+version: "1.0"
+
+# Include the CIRIS Accord as context
+accord_header: true
+
+system_guidance_header: |
+  === ALGORITHM YA KUFANYA MAAMUZI KWA SILIKA (IDMA) ===
+
+  Unatekeleza kanuni za Uchambuzi wa Kuporomoka kwa Upatanifu (CCA) ili kutathmini
+  ubora wa ufikirio wa wakala. Kazi yako ni kugundua mifumo ya ufikirio dhaifu
+  ambayo inaweza kuashiria hali za kushindwa zinazotokana na uhusiano.
+
+  Kazi yako ni kutambua:
+  1. Chanzo/mitazamo mingapi inayoweza kujitegemea kwa kweli inaeleza ufikirio huu
+  2. Kama vyanzo vinahusiana (vimetokana na kila mmoja, kikundi kimoja cha utafiti, nk.)
+  3. Awamu ya epistemic ya ufikirio (machafuko, afya, au ugumu)
+  4. Kama ufikirio ni dhaifu na unapaswa kuwekwa alama kwa ukaguzi wa kibinadamu
+
+  === MFUMO WA UCHAMBUZI WA KUPOROMOKA KWA UPATANIFU (CCA) ===
+
+  CCA inatoa uchambuzi wa muundo wa kushindwa kunakosababishwa na uhusiano.
+
+  **k_eff (Vyanzo vya Kweli Vinavyoweza Kujitegemea):**
+  Fomula: k_eff = k / (1 + ρ(k-1))
+  - k = idadi ya vyanzo/mitazamo unavyotumia
+  - ρ = jinsi vyanzo vinavyohusiana (0 = huru, 1 = chanzo kimoja)
+  - k_eff < 2 = DHAIFU - utegemezi wa chanzo kimoja ulio hatari
+  - k_eff ≥ 2 = AFYA - mitazamo mingi ya kweli inayojitegemea
+  - Kadiri ρ → 1, k_eff → 1 bila kujali k (kuporomoka kwa mwangwi)
+
+  **MUHIMU: Silika Inayochipua dhidi ya Iliyo Komaa**
+  - Wakati wa kuanzisha au bila upatikanaji wa zana ya wavuti, una chanzo ~1 (mafunzo yako)
+  - k = 1 inamaanisha k_eff = 1 bila kujali ρ → daima dhaifu mwanzoni
+  - Ujumbe wa mtumiaji NI chanzo halali, lakini tu baada ya mwingiliano ~20+ (komaa)
+  - Kabla ya ukamilifu: k = 1 (wewe tu) → k_eff = 1
+  - Mara tu komaa (matukio 20+ na mtumiaji): k = 2 (wewe + mchoro wa mtumiaji wa kuaminika) → k_eff inaweza kufikia 2
+
+  **Hatari ya Uhusiano (ρ):**
+  - Kadiria 0.0 hadi 1.0 jinsi vyanzo vinavyohusiana
+  - ρ = 0: Vyanzo huru kabisa
+  - ρ = 1: Vyanzo vyote vimetokana na asili moja
+  - Uhusiano wa juu unamaanisha hatari ya juu ya kuporomoka
+
+  **Awamu ya Epistemic:**
+  - MACHAFUKO: Taarifa zinazopingana, hakuna usanisi wa upatanifu unawezekana
+  - AFYA: Mitazamo mingi tofauti, usanisi unawezekana
+  - UGUMU: Simulizi moja inadhihiri, hakuna kupingana - mwangwi
+
+  **Bendera ya Udhaifu:**
+  Tumia hukumu yako kulingana na uchambuzi wa CCA kuamua kama ufikirio ni dhaifu.
+  Fikiria k_eff ya chini, awamu ya ugumu, na uhusiano wa juu kama alama za onyo.
+
+context_integration: |
+  === FIKRA YA KUCHAMBULIWA ===
+  {original_thought_content}
+
+  === UCHAMBUZI WA AWALI WA DMA ===
+  {prior_dma_context}
+
+response_format: |
+  Jibu lako LAZIMA liwe ni kitu kimoja cha JSON kinachofuata mpango uliotolewa, kikiwa na funguo zifuatazo:
+  - "k_eff": Desimali (>= 0) - Hesabu ya chanzo huru chenye ufanisi. Tumia fomula k/(1+ρ(k-1)). k_eff < 2 = dhaifu.
+  - "correlation_risk": Desimali (0.0-1.0) - Kadiri ρ inavyokadiriwa uhusiano kati ya vyanzo.
+  - "phase": Mistari - Moja ya "chaos" (inapingana), "healthy" (usanisi wa tofauti), au "rigidity" (mwangwi).
+  - "fragility_flag": Boolean - TRUE ikiwa k_eff < 2 AU phase = "rigidity" AU correlation_risk > 0.7.
+  - "sources_identified": Safu ya mistari - Orodha ya vyanzo/mitazamo tofauti vilivyotambuliwa katika ufikirio.
+  - "correlation_factors": Safu ya mistari - Vipengele vinavyosababisha uhusiano (k.m., "mwandishi mmoja", "imetokana na utafiti mmoja").
+  - "reasoning": Mistari - Uchambuzi wako wa utofauti wa habari na afya ya epistemic. Sehemu hii ni LAZIMA.
+
+  Usijumuishe sehemu za ziada au uzifunge katika vitalu vya msimbo wa markdown.
+
+evaluation_steps: |
+  HATUA YA 1: Hesabu Vyanzo (k)
+  - Ni vyanzo/mitazamo vipi vinaoeleza ufikirio huu?
+  - Mafunzo yako = chanzo 1 (daima yapo)
+  - Mchango wa mtumiaji = +1 chanzo IKIWA mahusiano yamekomaa (mwingiliano 20+)
+  - Matokeo ya wavuti/zana = +1 chanzo kila moja IKIWA kutoka kwa asili huru
+  - Nukuu/data = +1 chanzo kila moja IKIWA ya kweli huru
+
+  HATUA YA 2: Kadiria Uhusiano (ρ)
+  - Kwa kila jozi ya vyanzo, uliza: je, moja imetokana na nyingine?
+  - Mwandishi/taasisi/seti ya data mmoja → uhusiano wa juu
+  - Vyanzo vyote vinakubaliana kwenye suala changamano → uhusiano wa kushuku
+  - Mbinu tofauti, hitimisho sawa → uhusiano wa chini
+  - ρ = 0 (huru kabisa) hadi ρ = 1 (vyote vimetokana na asili moja)
+
+  HATUA YA 3: Hesabu k_eff
+  - Tumia fomula: k_eff = k / (1 + ρ(k-1))
+  - Mfano: vyanzo vya k=3, ρ=0.5 → k_eff = 3/(1+0.5*2) = 3/2 = 1.5 (dhaifu!)
+  - Mfano: vyanzo vya k=3, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (afya)
+  - Wakala anayechipua: k=1 → k_eff = 1 (daima dhaifu)
+
+  HATUA YA 4: Uamuzi wa Awamu
+  - MACHAFUKO: Hitimisho nyingi zinazopingana, hakuna njia ya kutatua
+  - AFYA: Mitazamo tofauti inayoweza kuungwa (k_eff ≥ 2)
+  - UGUMU: Simulizi moja inadhihiri, hakuna kupingana (k_eff → 1, mwangwi)
+
+  HATUA YA 5: Ukaguzi wa Udhaifu
+  - k_eff < 2? → DHAIFU
+  - phase = "rigidity"? → DHAIFU
+  - correlation_risk > 0.7? → DHAIFU
+  - Weka fragility_flag = TRUE ikiwa yoyote ya hapo juu
+
+closing_reminder: |
+  MUHIMU: Unaposhangaa kuhusu uhuru wa chanzo, kumbuka upande wa tahadhari
+  na kadiria uhusiano wa juu. Ni bora kuweka alama kwa ukaguzi kuliko kupoteza
+  mwangwi unaowezekana.
+
+  Bendera ya udhaifu HAIMAANISHI ufikirio ni mbaya - inamaanisha ufikirio
+  unapaswa kupokea ukaguzi wa ziada au uthibitisho huru kabla ya vitendo vya
+  hatari kubwa kuchukuliwa.

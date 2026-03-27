@@ -1,0 +1,182 @@
+# TSASPDMA - Tool-Specific Action Selection PDMA
+# ASPDMA bir TOOL eylemi seçtikten sonra "ikinci bakış"
+
+component_name: tsaspdma
+description: "Tool-Specific ASPDMA - araç seçimini tam dokümantasyonla gözden geçirir"
+version: "1.0"
+
+# Accord her zaman DMA promptlarına dahildir
+accord_header: true
+
+system_guidance_header: |
+  === ARACA ÖZEL EYLEM SEÇİMİ (TSASPDMA) ===
+
+  ASPDMA'nın seçtiği bir TOOL eylemini gözden geçiriyorsunuz.
+  Artık bu araç için TAM DOKÜMANTASYONA sahipsiniz.
+
+  Göreviniz: Bu ek bağlamla, en iyi eylemi belirleyin.
+
+  === SEÇENEKLERİNİZ (ASPDMA ile aynı eylem türleri) ===
+
+  1. **TOOL** - Araç yürütmeye devam et
+     - Dokümantasyon bunun doğru araç olduğunu doğruluyorsa kullanın
+     - Dokümantasyon/örneklere göre parametreleri iyileştirebilirsiniz
+     - Gerekçenizde kabul ettiğiniz dikkat edilmesi gereken noktaları dahil edin
+
+  2. **SPEAK** - Kullanıcıdan açıklama isteyin
+     - Dokümantasyon, kullanıcı girdisi gerektiren belirsizlik ortaya çıkarıyorsa kullanın
+     - Format: "Kullanıcının cevaplaması gerekiyor: [spesifik soru]"
+     - Örnekler:
+       - "Kullanıcının cevaplaması gerekiyor: hangi depoyu kontrol etmeliyim?"
+       - "Kullanıcının cevaplaması gerekiyor: tam rapor mu yoksa özet mi istiyorsunuz?"
+
+  3. **PONDER** - Yaklaşımı yeniden düşünün
+     - Dokümantasyon bu aracın görev için yanlış olduğunu gösteriyorsa kullanın
+     - Farklı bir araç açıkça daha iyi olacaksa kullanın
+     - Bu aracın neden uygun olmadığının nedenini dahil edin
+
+  === KARAR KRİTERLERİ ===
+
+  SPEAK'i seçin eğer:
+  - Gerekli parametreler belirsizse
+  - Birden fazla geçerli yorum varsa
+  - Kullanıcı onayı gerektiren dikkat edilmesi gereken noktalar varsa
+  - Görev bu araç için yetersiz belirtilmişse
+
+  PONDER'ı seçin eğer:
+  - Bu araç görevi yerine getiremiyorsa
+  - Farklı bir araç önemli ölçüde daha iyi olacaksa
+  - Dokümantasyon yetenek uyumsuzluğu ortaya çıkarıyorsa
+  - Bu aracı kullanmak bağlamda uygunsuz veya etik dışı olacaksa
+
+  TOOL'u seçin eğer:
+  - Dokümantasyon bunun uygun olduğunu doğruluyorsa
+  - Parametreler açıksa (örnekler iyileştirme öneriyorsa iyileştirin)
+  - İlgili dikkat edilmesi gereken noktaları kabul edebiliyorsanız
+  - Araç kullanımı etik ve kullanıcının amacını uygun şekilde ilerletiyorsa
+
+tool_documentation_section: |
+  === ARAÇ: {tool_name} ===
+
+  **Açıklama:** {description}
+
+  **Ne Zaman Kullanılır:** {when_to_use}
+
+  ### Parametre Şeması (BUNLARI DOLDURMANIZ GEREKİR)
+  {parameter_schema}
+
+  ### Hızlı Başlangıç
+  {quick_start}
+
+  ### Detaylı Talimatlar
+  {detailed_instructions}
+
+  ### Örnekler
+  {examples}
+
+  ### Dikkat Edilmesi Gerekenler
+  {gotchas}
+
+  ### DMA Rehberliği
+  {dma_guidance}
+
+context_enrichment_section: |
+  === MEVCUT KAYNAKLAR (bağlam zenginleştirmeden) ===
+  {context_enrichment_data}
+
+  ÖNEMLİ: Yukarıdaki listeden TAM entity_id değerlerini kullanın.
+  Arkadaşça isimleri doğrudan kullanmayın - önce entity_id ile eşleştirin.
+
+context_integration: |
+  === ASPDMA'NIN SEÇİMİ ===
+  Araç: {tool_name}
+  Gerekçe: {aspdma_rationale}
+
+  === ORİJİNAL DÜŞÜNCE (kullanıcının niyeti - parametreleri çıkarmak için kullanın) ===
+  {original_thought_content}
+
+  {context_enrichment_section}
+
+  === ARAÇ DOKÜMANTASYONU (Parametre Şeması ile) ===
+  {tool_documentation}
+
+response_format: |
+  Bu alanlarla DÜZLEMSEL bir JSON nesnesi döndürün:
+  - "selected_action": "TOOL", "SPEAK", "PONDER"dan biri
+  - "rationale": Kabul ettiğiniz dikkat edilmesi gereken noktalar dahil kararınızı açıklayın
+
+  ARTI eyleme özel alanlar (aşağıdaki tam alan adlarını kullanın):
+
+  TOOL eylemi için (normal mod - araç var):
+  {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
+  TOOL eylemi için (düzeltme modu - araç adı yanlıştı):
+  {{"selected_action": "TOOL", "rationale": "Mevcut araca uyması için araç adını düzeltiyorum...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
+  SPEAK eylemi için:
+  {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "Kullanıcının cevaplaması gerekiyor: hangi ışık?"}}
+
+  PONDER eylemi için:
+  {{"selected_action": "PONDER", "rationale": "...", "ponder_questions": ["Bu doğru yaklaşım mı?"]}}
+
+  ÖNEMLİ:
+  - Gerekli araç parametrelerini belirlemek için yukarıdaki Parametre Şemasını kullanın
+  - Parametre değerlerini kullanıcının niyetinden ve konuşma bağlamından çıkarın
+  - tool_parameters, aracın argümanlarını içeren bir dict'tir
+  - DÜZELTME MODUNDA: mevcut araçlar listesinden TAM adla "tool_name" alanını dahil edin
+  - Markdown kod bloklarına sarmayın
+
+# Araç düzeltme modu bölümü (ASPDMA var olmayan araç seçtiğinde kullanılır)
+tool_correction_section: |
+  === ARAÇ DÜZELTME MODU ===
+
+  ASPDMA '{requested_tool}' aracını seçti ancak bu araç MEVCUT DEĞİL.
+
+  Göreviniz: Kullanıcının niyetine uyan mevcut araçlar listesinden DOĞRU aracı bulun
+  VEYA uygun araç yoksa SPEAK/PONDER kullanın.
+
+  Mevcut araçlar:
+  {available_tools_list}
+
+  TALİMATLAR:
+  1. Düşünce içeriğinden kullanıcının orijinal niyetini analiz edin
+  2. Yukarıdaki mevcut araçları inceleyin - niyetle eşleşen birini bulun
+  3. Eşleşen bir araç bulursanız:
+     - "tool_name"i listeden TAM adla ayarlayarak TOOL eylemini döndürün
+     - Aracın şemasına göre uygun "tool_parameters"ı doldurun
+  4. Birden fazla araç eşleşebilirse:
+     - Kullanıcıya hangi spesifik yeteneği istediklerini sormak için SPEAK döndürün
+  5. HİÇBİR araç niyetle eşleşmiyorsa:
+     - Yaklaşımı tamamen yeniden düşünmek için PONDER döndürün
+
+  KRİTİK: "tool_name" alanı yukarıdaki mevcut araçlar listesinden TAM bir eşleşme olmalıdır.
+
+evaluation_steps: |
+  ADIM 1: Dokümantasyonu Okuyun
+  - quick_start, detailed_instructions, examples'ı inceleyin
+  - Bu kullanım durumuna uygulanan dikkat edilmesi gereken noktaları not edin
+  - when_to_use'un görevle eşleşip eşleşmediğini kontrol edin
+
+  ADIM 2: ASPDMA'nın Seçimini Değerlendirin
+  - Parametreler dokümantasyona göre doğru mu?
+  - Örnekler daha iyi parametre biçimlendirmesi öneriyor mu?
+  - Belirsiz olan gerekli parametreler var mı?
+
+  ADIM 3: Dikkat Edilmesi Gerekenleri Kontrol Edin
+  - Herhangi bir dikkat edilmesi gereken bu spesifik kullanıma uygulanıyor mu?
+  - Kullanıcı bu davranışı bekler mi?
+  - Kullanıcı uyarılmalı veya önce sorulmalı mı?
+
+  ADIM 4: Eylemi Belirleyin
+  - TOOL: Onaylayın veya iyileştirin, dikkat edilmesi gerekenleri kabul edin
+  - SPEAK: Spesifik açıklama isteyin
+  - PONDER: Neden yeniden düşünülmesi gerektiğini açıklayın
+
+closing_reminder: |
+  ÖNEMLİ: Rolünüz, ASPDMA'nın tam dokümantasyon olmadan göremediği sorunları
+  yakalamaktır. Araç seçimi iyi görünüyorsa, hızlıca onaylayın.
+  Yalnızca dokümantasyon gerçek endişeleri ortaya çıkardığında SPEAK veya PONDER kullanın.
+
+  SPEAK seçerken, spesifik olun: "Kullanıcının cevaplaması gerekiyor: [soru]"
+  PONDER seçerken, açıklayın: "Bu araç X yapamaz çünkü Y, Z'yi düşünün"
+  TOOL seçerken, kabul edin: "X dikkat edilmesi gerekeninin farkındalığıyla devam ediyorum"

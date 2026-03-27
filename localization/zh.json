@@ -538,5 +538,14 @@
     "settings_pending": "待处理",
     "settings_failed": "失败",
     "settings_not_attempted": "未尝试"
+  },
+  "conscience": {
+    "ponder_attempted": "我尝试{action}",
+    "ponder_conscience_failed": "良知检查失败",
+    "ponder_bypass_failed": "绕过良知检查失败",
+    "ponder_alternative_approach": "什么替代方法能更好地符合我的原则？",
+    "ponder_forced_retry": "良知重试后强制进行 PONDER",
+    "override_rationale": "被{conscience_name}覆盖：需要重新考虑{action}",
+    "forced_ponder_rationale": "良知重试后强制进行 PONDER 以防止循环"
   }
 }

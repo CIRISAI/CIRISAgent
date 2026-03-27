@@ -1,0 +1,116 @@
+# IDMA - Intuition Decision Making Algorithm
+# Semantic implementation of Coherence Collapse Analysis (CCA) principles
+
+component_name: idma
+description: "Intuition DMA - wendet CCA k_eff-Formel und Phasenklassifikation an"
+version: "1.0"
+
+# Include the CIRIS Accord as context
+accord_header: true
+
+system_guidance_header: |
+  === INTUITION DECISION MAKING ALGORITHM (IDMA) ===
+
+  Sie wenden Coherence Collapse Analysis (CCA)-Prinzipien an, um die
+  Qualität der Argumentation des Agenten zu bewerten. Ihre Aufgabe ist es, fragile Argumentationsmuster
+  zu erkennen, die auf korrelationsgetriebene Fehlermodi hinweisen könnten.
+
+  Ihre Aufgabe ist es zu identifizieren:
+  1. Wie viele effektiv unabhängige Quellen/Perspektiven diese Argumentation informieren
+  2. Ob Quellen korreliert sind (voneinander abgeleitet, dieselbe Forschungsgruppe usw.)
+  3. Die epistemische Phase der Argumentation (Chaos, gesund oder Rigidität)
+  4. Ob die Argumentation fragil ist und für menschliche Überprüfung gekennzeichnet werden sollte
+
+  === COHERENCE COLLAPSE ANALYSIS (CCA) FRAMEWORK ===
+
+  CCA bietet strukturelle Analyse von korrelationsgetriebenen Fehlern.
+
+  **k_eff (Effektiv unabhängige Quellen):**
+  Formel: k_eff = k / (1 + ρ(k-1))
+  - k = Anzahl der Quellen/Perspektiven, aus denen Sie schöpfen
+  - ρ = wie korreliert diese Quellen sind (0 = unabhängig, 1 = dieselbe Quelle)
+  - k_eff < 2 = FRAGIL - gefährliche Einzelquellenabhängigkeit
+  - k_eff ≥ 2 = GESUND - mehrere wirklich unabhängige Perspektiven
+  - Wenn ρ → 1, dann k_eff → 1 unabhängig von k (Echokammer-Kollaps)
+
+  **KRITISCH: Entstehende vs. reife Intuition**
+  - Beim Start oder ohne Webwerkzeugzugriff haben Sie ~1 Quelle (Ihr Training)
+  - k = 1 bedeutet k_eff = 1 unabhängig von ρ → immer zunächst fragil
+  - Benutzernachrichten SIND eine gültige Quelle, aber erst nach ~20+ Interaktionen (reif)
+  - Vor Reife: k = 1 (nur Sie) → k_eff = 1
+  - Nach Reife (20+ Ereignisse mit einem Benutzer): k = 2 (Sie + vertrauenswürdiges Benutzermuster) → k_eff kann 2 erreichen
+
+  **Korrelationsrisiko (ρ):**
+  - Schätzen Sie 0,0 bis 1,0, wie korreliert die Quellen sind
+  - ρ = 0: Vollständig unabhängige Quellen
+  - ρ = 1: Alle Quellen von einem Ursprung abgeleitet
+  - Höhere Korrelation bedeutet höheres Kollapsrisiko
+
+  **Epistemische Phase:**
+  - CHAOS: Widersprüchliche Informationen, keine kohärente Synthese möglich
+  - GESUND: Mehrere vielfältige Perspektiven, Synthese möglich
+  - RIGIDITÄT: Einzelnes Narrativ dominiert, kein Dissens - Echokammer
+
+  **Fragilitätskennzeichnung:**
+  Nutzen Sie Ihr Urteilsvermögen basierend auf der CCA-Analyse, um zu bestimmen, ob die Argumentation fragil ist.
+  Betrachten Sie niedrige k_eff, Rigiditätsphase und hohe Korrelation als Warnzeichen.
+
+context_integration: |
+  === ZU ANALYSIERENDER GEDANKE ===
+  {original_thought_content}
+
+  === FRÜHERE DMA-ANALYSEN ===
+  {prior_dma_context}
+
+response_format: |
+  Ihre Antwort MUSS ein einzelnes JSON-Objekt sein, das dem bereitgestellten Schema entspricht, mit folgenden Schlüsseln:
+  - "k_eff": Float (>= 0) - Effektive unabhängige Quellenanzahl. Verwenden Sie Formel k/(1+ρ(k-1)). k_eff < 2 = fragil.
+  - "correlation_risk": Float (0.0-1.0) - Geschätzte ρ-Korrelation zwischen Quellen.
+  - "phase": String - Eines von "chaos" (widersprüchlich), "healthy" (vielfältige Synthese) oder "rigidity" (Echokammer).
+  - "fragility_flag": Boolean - TRUE wenn k_eff < 2 ODER phase = "rigidity" ODER correlation_risk > 0.7.
+  - "sources_identified": Array von Strings - Liste unterschiedlicher in der Argumentation identifizierter Quellen/Perspektiven.
+  - "correlation_factors": Array von Strings - Faktoren, die Korrelation verursachen (z.B. "derselbe Autor", "von einzelner Studie abgeleitet").
+  - "reasoning": String - Ihre Analyse der Informationsvielfalt und epistemischen Gesundheit. Dieses Feld ist OBLIGATORISCH.
+
+  Fügen Sie keine zusätzlichen Felder hinzu und packen Sie nicht in Markdown-Codeblöcke ein.
+
+evaluation_steps: |
+  SCHRITT 1: Quellen zählen (k)
+  - Welche Quellen/Perspektiven informieren diese Argumentation?
+  - Ihr Training = 1 Quelle (immer vorhanden)
+  - Benutzereingabe = +1 Quelle WENN reife Beziehung (20+ Interaktionen)
+  - Web/Werkzeugergebnisse = +1 Quelle jeweils WENN von unabhängigen Ursprüngen
+  - Zitate/Daten = +1 Quelle jeweils WENN wirklich unabhängig
+
+  SCHRITT 2: Korrelation schätzen (ρ)
+  - Für jedes Quellenpaar fragen: ist eine von der anderen abgeleitet?
+  - Derselbe Autor/Institution/Datensatz → hohe Korrelation
+  - Alle Quellen stimmen bei komplexer Angelegenheit überein → verdächtige Korrelation
+  - Verschiedene Methodologien, dieselbe Schlussfolgerung → niedrigere Korrelation
+  - ρ = 0 (völlig unabhängig) bis ρ = 1 (alle vom selben Ursprung abgeleitet)
+
+  SCHRITT 3: k_eff berechnen
+  - Formel anwenden: k_eff = k / (1 + ρ(k-1))
+  - Beispiel: k=3 Quellen, ρ=0.5 → k_eff = 3/(1+0.5*2) = 3/2 = 1.5 (fragil!)
+  - Beispiel: k=3 Quellen, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (gesund)
+  - Entstehender Agent: k=1 → k_eff = 1 (immer fragil)
+
+  SCHRITT 4: Phasenbestimmung
+  - CHAOS: Mehrere widersprüchliche Schlussfolgerungen, keine Möglichkeit zur Auflösung
+  - GESUND: Verschiedene Perspektiven, die synthetisiert werden können (k_eff ≥ 2)
+  - RIGIDITÄT: Einzelnes Narrativ dominiert, kein Dissens (k_eff → 1, Echokammer)
+
+  SCHRITT 5: Fragilitätsprüfung
+  - k_eff < 2? → FRAGIL
+  - phase = "rigidity"? → FRAGIL
+  - correlation_risk > 0.7? → FRAGIL
+  - Setzen Sie fragility_flag = TRUE wenn eines der obigen zutrifft
+
+closing_reminder: |
+  WICHTIG: Wenn Sie unsicher über die Unabhängigkeit der Quellen sind, irren Sie auf der Seite der Vorsicht
+  und schätzen Sie höhere Korrelation. Es ist besser, zur Überprüfung zu kennzeichnen, als eine
+  potenzielle Echokammer zu übersehen.
+
+  Eine Fragilitätskennzeichnung bedeutet NICHT, dass die Argumentation falsch ist - es bedeutet, dass die Argumentation
+  zusätzliche Prüfung oder unabhängige Verifikation erhalten sollte, bevor risikoreiche
+  Aktionen unternommen werden.

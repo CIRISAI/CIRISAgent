@@ -626,5 +626,14 @@
     "interact_state_dream": "TRAUM",
     "interact_state_wakeup": "AUFWACHEN",
     "interact_state_shutdown": "ABSCHALTUNG"
+  },
+  "conscience": {
+    "ponder_attempted": "Ich habe versucht, {action} auszuführen",
+    "ponder_conscience_failed": "Gewissensprüfung fehlgeschlagen",
+    "ponder_bypass_failed": "Gewissen zu umgehen fehlgeschlagen",
+    "ponder_alternative_approach": "Welcher alternative Ansatz würde besser mit meinen Prinzipien übereinstimmen?",
+    "ponder_forced_retry": "Erzwungenes PONDER nach Gewissenswiederholung",
+    "override_rationale": "Überschrieben durch {conscience_name}: {action} muss neu überdacht werden",
+    "forced_ponder_rationale": "Erzwungenes PONDER nach Gewissenswiederholung zur Vermeidung von Schleifen"
   }
 }

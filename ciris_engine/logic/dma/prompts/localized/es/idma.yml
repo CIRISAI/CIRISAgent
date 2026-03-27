@@ -1,0 +1,116 @@
+# IDMA - Intuition Decision Making Algorithm
+# Semantic implementation of Coherence Collapse Analysis (CCA) principles
+
+component_name: idma
+description: "Intuition DMA - aplica la fórmula k_eff de CCA y clasificación de fase"
+version: "1.0"
+
+# Include the CIRIS Accord as context
+accord_header: true
+
+system_guidance_header: |
+  === ALGORITMO DE TOMA DE DECISIONES POR INTUICIÓN (IDMA) ===
+
+  Estás aplicando los principios del Análisis de Colapso de Coherencia (CCA) para evaluar
+  la calidad del razonamiento del agente. Tu tarea es detectar patrones de razonamiento frágil
+  que puedan indicar modos de fallo impulsados por correlación.
+
+  Tu tarea es identificar:
+  1. Cuántas fuentes/perspectivas efectivamente independientes informan este razonamiento
+  2. Si las fuentes están correlacionadas (derivadas unas de otras, mismo grupo de investigación, etc.)
+  3. La fase epistémica del razonamiento (caos, saludable o rigidez)
+  4. Si el razonamiento es frágil y debe ser señalado para revisión humana
+
+  === MARCO DE ANÁLISIS DE COLAPSO DE COHERENCIA (CCA) ===
+
+  CCA proporciona análisis estructural de fallos impulsados por correlación.
+
+  **k_eff (Fuentes Independientes Efectivas):**
+  Fórmula: k_eff = k / (1 + ρ(k-1))
+  - k = número de fuentes/perspectivas de las que estás extrayendo
+  - ρ = qué tan correlacionadas están esas fuentes (0 = independiente, 1 = misma fuente)
+  - k_eff < 2 = FRÁGIL - dependencia peligrosa de fuente única
+  - k_eff ≥ 2 = SALUDABLE - múltiples perspectivas verdaderamente independientes
+  - A medida que ρ → 1, k_eff → 1 independientemente de k (colapso de cámara de eco)
+
+  **CRÍTICO: Intuición Naciente vs Madura**
+  - Al inicio o sin acceso a herramienta web, tienes ~1 fuente (tu entrenamiento)
+  - k = 1 significa k_eff = 1 independientemente de ρ → siempre frágil inicialmente
+  - Los mensajes del usuario SON una fuente válida, pero solo después de ~20+ interacciones (maduro)
+  - Antes de la madurez: k = 1 (solo tú) → k_eff = 1
+  - Una vez maduro (20+ eventos con un usuario): k = 2 (tú + patrón de usuario confiable) → k_eff puede alcanzar 2
+
+  **Riesgo de Correlación (ρ):**
+  - Estima de 0.0 a 1.0 qué tan correlacionadas están las fuentes
+  - ρ = 0: Fuentes completamente independientes
+  - ρ = 1: Todas las fuentes derivadas de un origen
+  - Mayor correlación significa mayor riesgo de colapso
+
+  **Fase Epistémica:**
+  - CAOS: Información contradictoria, no es posible síntesis coherente
+  - SALUDABLE: Múltiples perspectivas diversas, síntesis posible
+  - RIGIDEZ: Una única narrativa domina, sin disenso - cámara de eco
+
+  **Señalamiento de Fragilidad:**
+  Usa tu juicio basado en el análisis CCA para determinar si el razonamiento es frágil.
+  Considera k_eff bajo, fase de rigidez y alta correlación como señales de advertencia.
+
+context_integration: |
+  === PENSAMIENTO A ANALIZAR ===
+  {original_thought_content}
+
+  === ANÁLISIS DMA PREVIOS ===
+  {prior_dma_context}
+
+response_format: |
+  Tu respuesta DEBE ser un único objeto JSON que se adhiera al esquema proporcionado, con las siguientes claves:
+  - "k_eff": Flotante (>= 0) - Conteo efectivo de fuentes independientes. Usa la fórmula k/(1+ρ(k-1)). k_eff < 2 = frágil.
+  - "correlation_risk": Flotante (0.0-1.0) - Correlación ρ estimada entre fuentes.
+  - "phase": Cadena - Uno de "chaos" (contradictorio), "healthy" (síntesis diversa), o "rigidity" (cámara de eco).
+  - "fragility_flag": Booleano - TRUE si k_eff < 2 O phase = "rigidity" O correlation_risk > 0.7.
+  - "sources_identified": Arreglo de cadenas - Lista de fuentes/perspectivas distintas identificadas en el razonamiento.
+  - "correlation_factors": Arreglo de cadenas - Factores que causan correlación (por ejemplo, "mismo autor", "derivado de un único estudio").
+  - "reasoning": Cadena - Tu análisis de diversidad de información y salud epistémica. Este campo es OBLIGATORIO.
+
+  No incluyas campos adicionales ni los envuelvas en bloques de código markdown.
+
+evaluation_steps: |
+  PASO 1: Contar Fuentes (k)
+  - ¿Qué fuentes/perspectivas informan este razonamiento?
+  - Tu entrenamiento = 1 fuente (siempre presente)
+  - Entrada del usuario = +1 fuente SI hay relación madura (20+ interacciones)
+  - Resultados web/herramientas = +1 fuente cada uno SI son de orígenes independientes
+  - Citas/datos = +1 fuente cada uno SI son verdaderamente independientes
+
+  PASO 2: Estimar Correlación (ρ)
+  - Para cada par de fuentes, pregunta: ¿una se deriva de la otra?
+  - Mismo autor/institución/conjunto de datos → alta correlación
+  - Todas las fuentes concordando en asunto complejo → correlación sospechosa
+  - Diferentes metodologías, misma conclusión → menor correlación
+  - ρ = 0 (completamente independiente) a ρ = 1 (todas derivadas del mismo origen)
+
+  PASO 3: Calcular k_eff
+  - Aplica fórmula: k_eff = k / (1 + ρ(k-1))
+  - Ejemplo: k=3 fuentes, ρ=0.5 → k_eff = 3/(1+0.5*2) = 3/2 = 1.5 (¡frágil!)
+  - Ejemplo: k=3 fuentes, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (saludable)
+  - Agente naciente: k=1 → k_eff = 1 (siempre frágil)
+
+  PASO 4: Determinación de Fase
+  - CAOS: Múltiples conclusiones contradictorias, sin forma de resolver
+  - SALUDABLE: Diferentes perspectivas que pueden ser sintetizadas (k_eff ≥ 2)
+  - RIGIDEZ: Una única narrativa domina, sin disenso (k_eff → 1, cámara de eco)
+
+  PASO 5: Verificación de Fragilidad
+  - ¿k_eff < 2? → FRÁGIL
+  - ¿phase = "rigidity"? → FRÁGIL
+  - ¿correlation_risk > 0.7? → FRÁGIL
+  - Establece fragility_flag = TRUE si alguno de los anteriores
+
+closing_reminder: |
+  IMPORTANTE: Cuando no estés seguro sobre la independencia de las fuentes, peca de precaución
+  y estima mayor correlación. Es mejor señalar para revisión que perder
+  una potencial cámara de eco.
+
+  Un señalamiento de fragilidad NO significa que el razonamiento esté equivocado - significa que el razonamiento
+  debe recibir escrutinio adicional o verificación independiente antes de que se tomen acciones
+  de alto riesgo.

@@ -13,6 +13,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
+from ciris_engine.logic.utils.localization import get_string, get_preferred_language
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreakerError
 from ciris_engine.schemas.actions.parameters import PonderParams
@@ -253,10 +254,11 @@ class ConscienceExecutionPhase:
                 else:
                     # Default behavior: create a PONDER action
                     attempted_action_desc = self._describe_action(action_result)
+                    lang = get_preferred_language()
                     questions = [
-                        f"I attempted to {attempted_action_desc}",
-                        result.reason or "conscience failed",
-                        "What alternative approach would better align with my principles?",
+                        get_string(lang, "conscience.ponder_attempted", action=attempted_action_desc),
+                        result.reason or get_string(lang, "conscience.ponder_conscience_failed"),
+                        get_string(lang, "conscience.ponder_alternative_approach"),
                     ]
 
                     ponder_params = PonderParams(questions=questions)
@@ -265,7 +267,8 @@ class ConscienceExecutionPhase:
                     final_action = ActionSelectionDMAResult(
                         selected_action=HandlerActionType.PONDER,
                         action_parameters=ponder_params,
-                        rationale=f"Overridden by {entry.name}: Need to reconsider {attempted_action_desc}",
+                        rationale=get_string(lang, "conscience.override_rationale",
+                                            conscience_name=entry.name, action=attempted_action_desc),
                         raw_llm_response=None,
                         reasoning=None,
                         evaluation_time_ms=None,
@@ -284,17 +287,18 @@ class ConscienceExecutionPhase:
 
             if not has_depth_guardrail:
                 logger.info("ThoughtProcessor: Conscience retry without override - forcing PONDER")
+                lang = get_preferred_language()
                 final_action = ActionSelectionDMAResult(
                     selected_action=HandlerActionType.PONDER,
-                    action_parameters=PonderParams(questions=["Forced PONDER after conscience retry"]),
-                    rationale="Forced PONDER after conscience retry to prevent loops",
+                    action_parameters=PonderParams(questions=[get_string(lang, "conscience.ponder_forced_retry")]),
+                    rationale=get_string(lang, "conscience.forced_ponder_rationale"),
                     raw_llm_response=None,
                     reasoning=None,
                     evaluation_time_ms=None,
                     resource_usage=None,
                 )
                 overridden = True
-                override_reason = "Conscience retry - forcing PONDER to prevent loops"
+                override_reason = get_string(lang, "conscience.forced_ponder_rationale")
 
         # Build EpistemicData from aggregated conscience results
         from ciris_engine.schemas.conscience.core import EpistemicData
@@ -346,16 +350,18 @@ class ConscienceExecutionPhase:
     ) -> ActionSelectionDMAResult:
         """Create a PONDER action as fallback when no replacement action is provided."""
         attempted_action_desc = self._describe_action(action_result)
+        lang = get_preferred_language()
         questions = [
-            f"I attempted to {attempted_action_desc}",
-            reason or "bypass conscience failed",
-            "What alternative approach would better align with my principles?",
+            get_string(lang, "conscience.ponder_attempted", action=attempted_action_desc),
+            reason or get_string(lang, "conscience.ponder_bypass_failed"),
+            get_string(lang, "conscience.ponder_alternative_approach"),
         ]
         ponder_params = PonderParams(questions=questions)
         return ActionSelectionDMAResult(
             selected_action=HandlerActionType.PONDER,
             action_parameters=ponder_params,
-            rationale=f"Overridden by {entry_name}: Need to reconsider {attempted_action_desc}",
+            rationale=get_string(lang, "conscience.override_rationale",
+                                conscience_name=entry_name, action=attempted_action_desc),
             raw_llm_response=None,
             reasoning=None,
             evaluation_time_ms=None,

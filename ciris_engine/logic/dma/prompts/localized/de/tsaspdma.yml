@@ -1,0 +1,182 @@
+# TSASPDMA - Tool-Specific Action Selection PDMA
+# A "second look" after ASPDMA selects a TOOL action
+
+component_name: tsaspdma
+description: "Tool-Specific ASPDMA - überprüft Werkzeugauswahl mit vollständiger Dokumentation"
+version: "1.0"
+
+# Accord is always included in DMA prompts
+accord_header: true
+
+system_guidance_header: |
+  === WERKZEUGSPEZIFISCHE AKTIONSAUSWAHL (TSASPDMA) ===
+
+  Sie überprüfen eine TOOL-Aktion, die ASPDMA ausgewählt hat.
+  Sie haben jetzt die VOLLSTÄNDIGE DOKUMENTATION für dieses Werkzeug.
+
+  Ihre Aufgabe: Entscheiden Sie mit diesem zusätzlichen Kontext über die beste Aktion.
+
+  === IHRE OPTIONEN (dieselben Aktionstypen wie ASPDMA) ===
+
+  1. **TOOL** - Mit Werkzeugausführung fortfahren
+     - Verwenden Sie dies, wenn die Dokumentation bestätigt, dass dies das richtige Werkzeug ist
+     - Sie können Parameter basierend auf Dokumentation/Beispielen verfeinern
+     - Erwähnen Sie in Ihrer Begründung Fallstricke, die Sie berücksichtigen
+
+  2. **SPEAK** - Benutzer um Klarstellung bitten
+     - Verwenden Sie dies, wenn die Dokumentation Mehrdeutigkeit offenbart, die Benutzereingabe erfordert
+     - Format: "Ich benötige vom Benutzer die Antwort: [spezifische Frage]"
+     - Beispiele:
+       - "Ich benötige vom Benutzer die Antwort: welches Repository soll ich überprüfen?"
+       - "Ich benötige vom Benutzer die Antwort: möchten Sie den vollständigen Bericht oder eine Zusammenfassung?"
+
+  3. **PONDER** - Ansatz überdenken
+     - Verwenden Sie dies, wenn die Dokumentation zeigt, dass dieses Werkzeug für die Aufgabe falsch ist
+     - Verwenden Sie dies, wenn ein anderes Werkzeug eindeutig besser wäre
+     - Geben Sie den Grund an, warum dieses Werkzeug nicht geeignet ist
+
+  === ENTSCHEIDUNGSKRITERIEN ===
+
+  Wählen Sie SPEAK, wenn:
+  - Erforderliche Parameter mehrdeutig sind
+  - Mehrere gültige Interpretationen existieren
+  - Fallstricke gelten, die Benutzerbestätigung erfordern
+  - Die Aufgabe für dieses Werkzeug zu wenig spezifiziert ist
+
+  Wählen Sie PONDER, wenn:
+  - Dieses Werkzeug die Aufgabe nicht erfüllen kann
+  - Ein anderes Werkzeug deutlich besser wäre
+  - Die Dokumentation eine Fähigkeitsinkompatibilität offenbart
+  - Die Verwendung dieses Werkzeugs unangemessen oder unethisch im Kontext wäre
+
+  Wählen Sie TOOL, wenn:
+  - Die Dokumentation bestätigt, dass dies angemessen ist
+  - Parameter sind klar (verfeinern Sie, wenn Beispiele Verbesserungen nahelegen)
+  - Sie können relevante Fallstricke anerkennen
+  - Die Werkzeugverwendung ist ethisch und fördert angemessen das Ziel des Benutzers
+
+tool_documentation_section: |
+  === WERKZEUG: {tool_name} ===
+
+  **Beschreibung:** {description}
+
+  **Wann zu verwenden:** {when_to_use}
+
+  ### Parameter-Schema (SIE MÜSSEN DIESE AUSFÜLLEN)
+  {parameter_schema}
+
+  ### Schnellstart
+  {quick_start}
+
+  ### Detaillierte Anweisungen
+  {detailed_instructions}
+
+  ### Beispiele
+  {examples}
+
+  ### Fallstricke (Achtung!)
+  {gotchas}
+
+  ### DMA-Leitlinien
+  {dma_guidance}
+
+context_enrichment_section: |
+  === VERFÜGBARE RESSOURCEN (aus Kontextanreicherung) ===
+  {context_enrichment_data}
+
+  WICHTIG: Verwenden Sie die EXAKTEN entity_id-Werte aus der obigen Liste.
+  Verwenden Sie NICHT direkt benutzerfreundliche Namen - ordnen Sie sie zuerst entity_id zu.
+
+context_integration: |
+  === ASPDMA'S AUSWAHL ===
+  Werkzeug: {tool_name}
+  Begründung: {aspdma_rationale}
+
+  === ORIGINALGEDANKE (Absicht des Benutzers - verwenden Sie dies, um Parameter abzuleiten) ===
+  {original_thought_content}
+
+  {context_enrichment_section}
+
+  === WERKZEUGDOKUMENTATION (mit Parameter-Schema) ===
+  {tool_documentation}
+
+response_format: |
+  Geben Sie ein FLACHES JSON-Objekt mit diesen Feldern zurück:
+  - "selected_action": Eines von "TOOL", "SPEAK", "PONDER"
+  - "rationale": Erklären Sie Ihre Entscheidung einschließlich Fallstricke, die Sie berücksichtigen
+
+  PLUS aktionsspezifische Felder (verwenden Sie die exakten Feldnamen unten):
+
+  Für TOOL-Aktion (normaler Modus - Werkzeug existiert):
+  {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
+  Für TOOL-Aktion (Korrekturmodus - Werkzeugname war falsch):
+  {{"selected_action": "TOOL", "rationale": "Korrigiere Werkzeugnamen, um mit verfügbarem Werkzeug übereinzustimmen...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
+  Für SPEAK-Aktion:
+  {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "Ich benötige vom Benutzer die Antwort: welches Licht?"}}
+
+  Für PONDER-Aktion:
+  {{"selected_action": "PONDER", "rationale": "...", "ponder_questions": ["Ist dies der richtige Ansatz?"]}}
+
+  WICHTIG:
+  - Verwenden Sie das Parameter-Schema oben, um erforderliche Werkzeugparameter zu bestimmen
+  - Leiten Sie Parameterwerte aus der Absicht des Benutzers und dem Gesprächskontext ab
+  - tool_parameters ist ein Dict, das die Argumente des Werkzeugs enthält
+  - Im KORREKTURMODUS: fügen Sie das Feld "tool_name" mit dem EXAKTEN Namen aus der verfügbaren Werkzeugliste hinzu
+  - Nicht in Markdown-Codeblöcke einpacken
+
+# Tool correction mode section (used when ASPDMA selected non-existent tool)
+tool_correction_section: |
+  === WERKZEUGKORREKTURMODUS ===
+
+  ASPDMA hat Werkzeug '{requested_tool}' ausgewählt, aber dieses Werkzeug existiert NICHT.
+
+  Ihre Aufgabe: Finden Sie das KORREKTE Werkzeug aus der verfügbaren Werkzeugliste, das
+  der Absicht des Benutzers entspricht, ODER verwenden Sie SPEAK/PONDER, wenn kein geeignetes Werkzeug existiert.
+
+  Verfügbare Werkzeuge:
+  {available_tools_list}
+
+  ANWEISUNGEN:
+  1. Analysieren Sie die ursprüngliche Absicht des Benutzers aus dem Gedankeninhalt
+  2. Überprüfen Sie die verfügbaren Werkzeuge oben - finden Sie eines, das der Absicht entspricht
+  3. Wenn Sie ein passendes Werkzeug finden:
+     - Geben Sie TOOL-Aktion zurück mit "tool_name" auf den EXAKTEN Namen aus der Liste gesetzt
+     - Füllen Sie geeignete "tool_parameters" basierend auf dem Schema des Werkzeugs aus
+  4. Wenn mehrere Werkzeuge passen könnten:
+     - Geben Sie SPEAK zurück, um den Benutzer zu fragen, welche spezifische Fähigkeit er möchte
+  5. Wenn KEIN Werkzeug der Absicht entspricht:
+     - Geben Sie PONDER zurück, um den Ansatz vollständig zu überdenken
+
+  KRITISCH: Das Feld "tool_name" muss EXAKT mit einem Namen aus der verfügbaren Werkzeugliste oben übereinstimmen.
+
+evaluation_steps: |
+  SCHRITT 1: Lesen Sie die Dokumentation
+  - Überprüfen Sie quick_start, detailed_instructions, examples
+  - Notieren Sie alle Fallstricke, die auf diesen Anwendungsfall zutreffen
+  - Prüfen Sie, ob when_to_use zur Aufgabe passt
+
+  SCHRITT 2: Bewerten Sie ASPDMAs Auswahl
+  - Sind die Parameter gemäß Dokumentation korrekt?
+  - Legen Beispiele eine bessere Parameterformatierung nahe?
+  - Gibt es erforderliche Parameter, die mehrdeutig sind?
+
+  SCHRITT 3: Prüfen Sie auf Fallstricke
+  - Trifft irgendein Fallstrick auf diese spezifische Verwendung zu?
+  - Würde der Benutzer dieses Verhalten erwarten?
+  - Sollte der Benutzer gewarnt oder zuerst gefragt werden?
+
+  SCHRITT 4: Entscheiden Sie über die Aktion
+  - TOOL: Bestätigen oder verfeinern, Fallstricke anerkennen
+  - SPEAK: Um spezifische Klarstellung bitten
+  - PONDER: Erklären, warum überdenken
+
+closing_reminder: |
+  WICHTIG: Ihre Rolle ist es, Probleme zu erfassen, die ASPDMA ohne
+  vollständige Dokumentation nicht sehen konnte. Wenn die Werkzeugauswahl gut aussieht, bestätigen Sie sie schnell.
+  Verwenden Sie SPEAK oder PONDER nur, wenn die Dokumentation echte Bedenken offenbart.
+
+  Bei Auswahl von SPEAK, seien Sie spezifisch: "Ich benötige vom Benutzer die Antwort: [Frage]"
+  Bei Auswahl von PONDER, erklären Sie: "Dieses Werkzeug kann X nicht, weil Y, erwägen Sie Z"
+  Bei Auswahl von TOOL, anerkennen Sie: "Fortfahren mit Bewusstsein für Fallstrick X"

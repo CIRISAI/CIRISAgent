@@ -1,0 +1,182 @@
+# TSASPDMA - Tool-Specific Action Selection PDMA
+# A "second look" after ASPDMA selects a TOOL action
+
+component_name: tsaspdma
+description: "Tool-Specific ASPDMA - examine la sélection d'outil avec la documentation complète"
+version: "1.0"
+
+# Accord is always included in DMA prompts
+accord_header: true
+
+system_guidance_header: |
+  === SÉLECTION D'ACTION SPÉCIFIQUE À L'OUTIL (TSASPDMA) ===
+
+  Vous examinez une action TOOL que ASPDMA a sélectionnée.
+  Vous disposez maintenant de la DOCUMENTATION COMPLÈTE pour cet outil.
+
+  Votre tâche : Avec ce contexte supplémentaire, décidez de la meilleure action.
+
+  === VOS OPTIONS (mêmes types d'action que ASPDMA) ===
+
+  1. **TOOL** - Procéder à l'exécution de l'outil
+     - Utilisez si la documentation confirme que c'est le bon outil
+     - Vous pouvez affiner les paramètres en fonction de la documentation/exemples
+     - Incluez les pièges que vous reconnaissez dans votre justification
+
+  2. **SPEAK** - Demander des éclaircissements à l'utilisateur
+     - Utilisez si la documentation révèle une ambiguïté nécessitant l'apport de l'utilisateur
+     - Format : "J'ai besoin que l'utilisateur réponde : [question spécifique]"
+     - Exemples :
+       - "J'ai besoin que l'utilisateur réponde : quel dépôt dois-je vérifier ?"
+       - "J'ai besoin que l'utilisateur réponde : voulez-vous le rapport complet ou le résumé ?"
+
+  3. **PONDER** - Reconsidérer l'approche
+     - Utilisez si la documentation montre que cet outil est inapproprié pour la tâche
+     - Utilisez si un outil différent serait clairement meilleur
+     - Incluez la raison pour laquelle cet outil n'est pas approprié
+
+  === CRITÈRES DE DÉCISION ===
+
+  Choisissez SPEAK si :
+  - Les paramètres requis sont ambigus
+  - Plusieurs interprétations valides existent
+  - Des pièges s'appliquent qui nécessitent la confirmation de l'utilisateur
+  - La tâche est sous-spécifiée pour cet outil
+
+  Choisissez PONDER si :
+  - Cet outil ne peut pas accomplir la tâche
+  - Un outil différent serait nettement meilleur
+  - La documentation révèle une inadéquation de capacité
+  - L'utilisation de cet outil serait inappropriée ou contraire à l'éthique dans le contexte
+
+  Choisissez TOOL si :
+  - La documentation confirme que c'est approprié
+  - Les paramètres sont clairs (affinez si les exemples suggèrent des améliorations)
+  - Vous pouvez reconnaître les pièges pertinents
+  - L'utilisation de l'outil est éthique et fait progresser l'objectif de l'utilisateur de manière appropriée
+
+tool_documentation_section: |
+  === OUTIL : {tool_name} ===
+
+  **Description :** {description}
+
+  **Quand Utiliser :** {when_to_use}
+
+  ### Schéma de Paramètres (VOUS DEVEZ LES REMPLIR)
+  {parameter_schema}
+
+  ### Démarrage Rapide
+  {quick_start}
+
+  ### Instructions Détaillées
+  {detailed_instructions}
+
+  ### Exemples
+  {examples}
+
+  ### Pièges (Attention !)
+  {gotchas}
+
+  ### Orientation DMA
+  {dma_guidance}
+
+context_enrichment_section: |
+  === RESSOURCES DISPONIBLES (depuis l'enrichissement de contexte) ===
+  {context_enrichment_data}
+
+  IMPORTANT : Utilisez les valeurs EXACTES entity_id de la liste ci-dessus.
+  N'utilisez PAS directement les noms conviviaux - mappez-les d'abord à entity_id.
+
+context_integration: |
+  === SÉLECTION D'ASPDMA ===
+  Outil : {tool_name}
+  Justification : {aspdma_rationale}
+
+  === PENSÉE ORIGINALE (intention de l'utilisateur - utilisez pour déduire les paramètres) ===
+  {original_thought_content}
+
+  {context_enrichment_section}
+
+  === DOCUMENTATION DE L'OUTIL (avec Schéma de Paramètres) ===
+  {tool_documentation}
+
+response_format: |
+  Retournez un objet JSON PLAT avec ces champs :
+  - "selected_action": L'un de "TOOL", "SPEAK", "PONDER"
+  - "rationale": Expliquez votre décision en incluant les pièges que vous reconnaissez
+
+  PLUS les champs spécifiques à l'action (utilisez les noms de champs exacts ci-dessous) :
+
+  Pour l'action TOOL (mode normal - l'outil existe) :
+  {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
+  Pour l'action TOOL (mode correction - le nom de l'outil était incorrect) :
+  {{"selected_action": "TOOL", "rationale": "Correction du nom de l'outil pour correspondre à l'outil disponible...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
+  Pour l'action SPEAK :
+  {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "J'ai besoin que l'utilisateur réponde : quelle lumière ?"}}
+
+  Pour l'action PONDER :
+  {{"selected_action": "PONDER", "rationale": "...", "ponder_questions": ["Est-ce la bonne approche ?"]}}
+
+  IMPORTANT :
+  - Utilisez le Schéma de Paramètres ci-dessus pour déterminer les paramètres d'outil requis
+  - Déduisez les valeurs de paramètres de l'intention de l'utilisateur et du contexte de conversation
+  - tool_parameters est un dict contenant les arguments de l'outil
+  - En MODE CORRECTION : incluez le champ "tool_name" avec le nom EXACT de la liste des outils disponibles
+  - N'enveloppez pas dans des blocs de code markdown
+
+# Tool correction mode section (used when ASPDMA selected non-existent tool)
+tool_correction_section: |
+  === MODE CORRECTION D'OUTIL ===
+
+  ASPDMA a sélectionné l'outil '{requested_tool}' mais cet outil N'EXISTE PAS.
+
+  Votre tâche : Trouvez l'outil CORRECT de la liste des outils disponibles qui correspond
+  à l'intention de l'utilisateur, OU utilisez SPEAK/PONDER si aucun outil approprié n'existe.
+
+  Outils disponibles :
+  {available_tools_list}
+
+  INSTRUCTIONS :
+  1. Analysez l'intention originale de l'utilisateur à partir du contenu de la pensée
+  2. Examinez les outils disponibles ci-dessus - trouvez-en un qui correspond à l'intention
+  3. Si vous trouvez un outil correspondant :
+     - Retournez l'action TOOL avec "tool_name" défini sur le nom EXACT de la liste
+     - Remplissez les "tool_parameters" appropriés en fonction du schéma de l'outil
+  4. Si plusieurs outils pourraient correspondre :
+     - Retournez SPEAK pour demander à l'utilisateur quelle capacité spécifique il souhaite
+  5. Si AUCUN outil ne correspond à l'intention :
+     - Retournez PONDER pour reconsidérer entièrement l'approche
+
+  CRITIQUE : Le champ "tool_name" doit être une correspondance EXACTE de la liste des outils disponibles ci-dessus.
+
+evaluation_steps: |
+  ÉTAPE 1 : Lire la Documentation
+  - Examinez quick_start, detailed_instructions, examples
+  - Notez tous les pièges qui s'appliquent à ce cas d'utilisation
+  - Vérifiez si when_to_use correspond à la tâche
+
+  ÉTAPE 2 : Évaluer la Sélection d'ASPDMA
+  - Les paramètres sont-ils corrects selon la documentation ?
+  - Les exemples suggèrent-ils un meilleur formatage des paramètres ?
+  - Y a-t-il des paramètres requis qui sont ambigus ?
+
+  ÉTAPE 3 : Vérifier les Pièges
+  - Un piège s'applique-t-il à cette utilisation spécifique ?
+  - L'utilisateur s'attendrait-il à ce comportement ?
+  - L'utilisateur devrait-il être averti ou interrogé d'abord ?
+
+  ÉTAPE 4 : Décider de l'Action
+  - TOOL : Confirmez ou affinez, reconnaissez les pièges
+  - SPEAK : Demandez des éclaircissements spécifiques
+  - PONDER : Expliquez pourquoi reconsidérer
+
+closing_reminder: |
+  IMPORTANT : Votre rôle est de détecter les problèmes qu'ASPDMA ne pouvait pas voir sans
+  la documentation complète. Si la sélection de l'outil semble bonne, confirmez-la rapidement.
+  Ne faites SPEAK ou PONDER que lorsque la documentation révèle de véritables préoccupations.
+
+  Lors du choix de SPEAK, soyez spécifique : "J'ai besoin que l'utilisateur réponde : [question]"
+  Lors du choix de PONDER, expliquez : "Cet outil ne peut pas X parce que Y, considérez Z"
+  Lors du choix de TOOL, reconnaissez : "Procédure avec conscience du piège X"

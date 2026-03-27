@@ -608,5 +608,14 @@
     "settings_pending": "በመጠናት ላይ",
     "settings_failed": "አልተሳካም",
     "settings_not_attempted": "አልተሞከረም"
+  },
+  "conscience": {
+    "ponder_attempted": "{action} ለማድረግ ሞከርኩ",
+    "ponder_conscience_failed": "ሕሊና ፍተሻ አልተሳካም",
+    "ponder_bypass_failed": "ሕሊናን ማለፍ አልተሳካም",
+    "ponder_alternative_approach": "ከመርሆቼ ጋር በተሻለ ሁኔታ የሚስማማ አማራጭ አቀራረብ ምንድን ነው?",
+    "ponder_forced_retry": "ከሕሊና እንደገና መሞከር በኋላ የግዳጅ PONDER",
+    "override_rationale": "በ{conscience_name} ተጋፍቷል፡ {action} እንደገና ማሰብ ያስፈልጋል",
+    "forced_ponder_rationale": "ዑደቶችን ለመከላከል ከሕሊና እንደገና መሞከር በኋላ የግዳጅ PONDER"
   }
 }

@@ -539,5 +539,14 @@
     "settings_pending": "قيد الانتظار",
     "settings_failed": "فشل",
     "settings_not_attempted": "لم يتم المحاولة"
+  },
+  "conscience": {
+    "ponder_attempted": "حاولت {action}",
+    "ponder_conscience_failed": "فشل فحص الضمير",
+    "ponder_bypass_failed": "فشل تجاوز الضمير",
+    "ponder_alternative_approach": "ما النهج البديل الذي سيتماشى بشكل أفضل مع مبادئي؟",
+    "ponder_forced_retry": "PONDER إجباري بعد إعادة محاولة الضمير",
+    "override_rationale": "تم التجاوز بواسطة {conscience_name}: يجب إعادة النظر في {action}",
+    "forced_ponder_rationale": "PONDER إجباري بعد إعادة محاولة الضمير لمنع الحلقات"
   }
 }

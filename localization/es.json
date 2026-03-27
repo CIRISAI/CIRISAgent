@@ -608,5 +608,14 @@
     "interact_legend_control_actions": "Acciones de Control",
     "interact_legend_memory_actions": "Acciones de Memoria",
     "interact_viz_memory_graph": "Gráfico de Memoria"
+  },
+  "conscience": {
+    "ponder_attempted": "Intenté {action}",
+    "ponder_conscience_failed": "falló la conciencia",
+    "ponder_bypass_failed": "falló al evitar la conciencia",
+    "ponder_alternative_approach": "¿Qué enfoque alternativo se alinearía mejor con mis principios?",
+    "ponder_forced_retry": "PONDER forzado después de reintento de conciencia",
+    "override_rationale": "Anulado por {conscience_name}: Necesito reconsiderar {action}",
+    "forced_ponder_rationale": "PONDER forzado después de reintento de conciencia para prevenir bucles"
   }
 }

@@ -608,5 +608,14 @@
     "interact_legend_control_actions": "Контрольные действия",
     "interact_legend_memory_actions": "Действия с памятью",
     "interact_viz_memory_graph": "Граф памяти"
+  },
+  "conscience": {
+    "ponder_attempted": "Я попытался {action}",
+    "ponder_conscience_failed": "проверка совести не удалась",
+    "ponder_bypass_failed": "обход совести не удался",
+    "ponder_alternative_approach": "Какой альтернативный подход лучше соответствовал бы моим принципам?",
+    "ponder_forced_retry": "Принудительное PONDER после повторной попытки совести",
+    "override_rationale": "Переопределено {conscience_name}: Необходимо пересмотреть {action}",
+    "forced_ponder_rationale": "Принудительное PONDER после повторной попытки совести для предотвращения циклов"
   }
 }

@@ -626,5 +626,14 @@
     "settings_pending": "保留中",
     "settings_failed": "失敗",
     "settings_not_attempted": "未試行"
+  },
+  "conscience": {
+    "ponder_attempted": "{action}を試みました",
+    "ponder_conscience_failed": "良心の確認が失敗しました",
+    "ponder_bypass_failed": "良心の回避が失敗しました",
+    "ponder_alternative_approach": "私の原則により適合する代替アプローチは何でしょうか？",
+    "ponder_forced_retry": "良心の再試行後に強制的な PONDER",
+    "override_rationale": "{conscience_name}によって上書きされました：{action}を再考する必要があります",
+    "forced_ponder_rationale": "ループを防ぐために良心の再試行後に強制的な PONDER"
   }
 }

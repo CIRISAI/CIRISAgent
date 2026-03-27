@@ -608,5 +608,14 @@
     "interact_legend_control_actions": "Kontrol Eylemleri",
     "interact_legend_memory_actions": "Bellek Eylemleri",
     "interact_viz_memory_graph": "Bellek Grafiği"
+  },
+  "conscience": {
+    "ponder_attempted": "{action} yapmayı denedim",
+    "ponder_conscience_failed": "vicdan kontrolü başarısız oldu",
+    "ponder_bypass_failed": "vicdanı atlamak başarısız oldu",
+    "ponder_alternative_approach": "Hangi alternatif yaklaşım ilkelerimle daha iyi uyumlu olurdu?",
+    "ponder_forced_retry": "Vicdan yeniden denemeden sonra zorla PONDER",
+    "override_rationale": "{conscience_name} tarafından geçersiz kılındı: {action} yeniden değerlendirilmeli",
+    "forced_ponder_rationale": "Döngüleri önlemek için vicdan yeniden denemeden sonra zorla PONDER"
   }
 }

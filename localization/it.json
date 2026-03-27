@@ -617,5 +617,14 @@
     "interact_state_dream": "SOGNO",
     "interact_state_wakeup": "RISVEGLIO",
     "interact_state_shutdown": "SPEGNIMENTO"
+  },
+  "conscience": {
+    "ponder_attempted": "Ho tentato di {action}",
+    "ponder_conscience_failed": "verifica della coscienza fallita",
+    "ponder_bypass_failed": "bypass della coscienza fallito",
+    "ponder_alternative_approach": "Quale approccio alternativo si allineerebbe meglio con i miei principi?",
+    "ponder_forced_retry": "PONDER forzato dopo nuovo tentativo di coscienza",
+    "override_rationale": "Sovrascritto da {conscience_name}: Necessita riconsiderare {action}",
+    "forced_ponder_rationale": "PONDER forzato dopo nuovo tentativo di coscienza per prevenire loop"
   }
 }

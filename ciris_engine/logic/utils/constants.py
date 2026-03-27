@@ -1,10 +1,14 @@
 import logging
 from pathlib import Path
+from typing import Optional
 
 from ciris_engine.logic.config.env_utils import get_env_var
 from ciris_engine.logic.utils.path_resolution import is_android, is_ios
 
 logger = logging.getLogger(__name__)
+
+# Default language
+DEFAULT_LANGUAGE = "en"
 
 # DEFAULT_WA removed - use WA_USER_IDS for Discord user IDs instead
 WA_USER_IDS = get_env_var("WA_USER_IDS", "537080239679864862")  # Comma-separated list of WA user IDs
@@ -16,19 +20,30 @@ API_DEFERRAL_CHANNEL_ID = get_env_var("API_DEFERRAL_CHANNEL_ID")
 WA_API_USER = get_env_var("WA_API_USER", "somecomputerguy")  # API username for WA
 
 
-def _load_platform_guide(base_path: Path) -> str:
-    """Load the appropriate runtime guide based on platform.
+def _load_platform_guide(base_path: Path, lang: str = DEFAULT_LANGUAGE) -> str:
+    """Load the appropriate runtime guide based on platform and language.
 
     On mobile (Android/iOS), tries to load CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md first,
     falls back to the legacy Android guide, then the standard guide.
 
+    For non-English languages, tries to load localized versions first from
+    ciris_engine/data/localized/ directory.
+
     Args:
         base_path: The base directory containing the guide files
+        lang: ISO 639-1 language code (e.g., 'en', 'am', 'es')
 
     Returns:
         The guide content as a string, or empty string if not found
     """
     guide_files = []
+
+    # For non-English, try localized guides first
+    if lang != DEFAULT_LANGUAGE:
+        localized_dir = Path(__file__).resolve().parents[2] / "data" / "localized"
+        if is_android() or is_ios():
+            guide_files.append(localized_dir / f"CIRIS_COMPREHENSIVE_GUIDE_MOBILE_{lang}.md")
+        guide_files.append(localized_dir / f"CIRIS_COMPREHENSIVE_GUIDE_{lang}.md")
 
     # Platform-specific guide takes priority on mobile
     if is_android() or is_ios():
@@ -55,15 +70,28 @@ def _load_platform_guide(base_path: Path) -> str:
     return ""
 
 
-def _load_accord_file(filename: str) -> str:
-    """Load an accord file from package data.
+def _load_accord_file(filename: str, localized_dir: Optional[Path] = None) -> str:
+    """Load an accord file from package data or localized directory.
 
     Args:
         filename: Name of the accord file to load
+        localized_dir: Optional path to check for localized version first
 
     Returns:
         Accord content as string, or empty string if not found
     """
+    # Try localized directory first if specified
+    if localized_dir:
+        localized_path = localized_dir / filename
+        if localized_path.exists():
+            try:
+                with open(localized_path, "r", encoding="utf-8") as f:
+                    logger.debug("Loaded localized accord from: %s", localized_path)
+                    return f.read()
+            except Exception as exc:
+                logger.debug("Could not load localized accord %s: %s", localized_path, exc)
+
+    # Fall back to package data
     try:
         try:
             # Python 3.9+ - preferred method
@@ -78,6 +106,40 @@ def _load_accord_file(filename: str) -> str:
     except Exception as exc:
         logger.warning("Could not load accord file %s: %s", filename, exc)
         return ""
+
+
+def get_localized_accord_text(lang: str = DEFAULT_LANGUAGE) -> str:
+    """Get the ACCORD text in the specified language.
+
+    Args:
+        lang: ISO 639-1 language code (e.g., 'en', 'am', 'es')
+
+    Returns:
+        ACCORD text with platform-appropriate guide, in requested language if available.
+        Falls back to English if localized version not found.
+    """
+    localized_dir = None
+    accord_filename = "accord_1.2b.txt"
+
+    # For non-English, try to load from localized directory
+    if lang != DEFAULT_LANGUAGE:
+        localized_dir = Path(__file__).resolve().parents[2] / "data" / "localized"
+        accord_filename = f"accord_1.2b_{lang}.txt"
+        if not (localized_dir / accord_filename).exists():
+            # Fall back to English
+            logger.debug("Localized accord not found for %s, falling back to English", lang)
+            localized_dir = None
+            accord_filename = "accord_1.2b.txt"
+
+    accord_content = _load_accord_file(accord_filename, localized_dir)
+
+    # Load platform-appropriate guide in the same language
+    guide_base_path = Path(__file__).resolve().parents[3]
+    guide_content = _load_platform_guide(guide_base_path, lang)
+
+    if guide_content:
+        return accord_content + "\n\n---\n\n" + guide_content
+    return accord_content
 
 
 # Load accord text from package data using importlib.resources

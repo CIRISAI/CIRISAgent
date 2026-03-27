@@ -626,5 +626,14 @@
     "interact_viz_local": "Local scope",
     "interact_viz_identity": "Identity scope",
     "interact_viz_environ": "Environment"
+  },
+  "conscience": {
+    "ponder_attempted": "I attempted to {action}",
+    "ponder_conscience_failed": "conscience failed",
+    "ponder_bypass_failed": "bypass conscience failed",
+    "ponder_alternative_approach": "What alternative approach would better align with my principles?",
+    "ponder_forced_retry": "Forced PONDER after conscience retry",
+    "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+    "forced_ponder_rationale": "Forced PONDER after conscience retry to prevent loops"
   }
 }

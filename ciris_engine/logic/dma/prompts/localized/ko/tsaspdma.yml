@@ -1,0 +1,180 @@
+# TSASPDMA - Tool-Specific Action Selection PDMA
+# ASPDMA가 TOOL 작업을 선택한 후 "재검토"
+
+component_name: tsaspdma
+description: "Tool-Specific ASPDMA - 전체 문서와 함께 도구 선택을 검토합니다"
+version: "1.0"
+
+# Accord는 항상 DMA 프롬프트에 포함됩니다
+accord_header: true
+
+system_guidance_header: |
+  === 도구 특정 행동 선택 (TSASPDMA) ===
+
+  ASPDMA가 선택한 TOOL 작업을 검토하고 있습니다.
+  이제 이 도구에 대한 전체 문서가 있습니다.
+
+  귀하의 임무: 이 추가 컨텍스트를 사용하여 최상의 작업을 결정하십시오.
+
+  === 옵션 (ASPDMA와 동일한 작업 유형) ===
+
+  1. **TOOL** - 도구 실행 진행
+     - 문서가 이것이 올바른 도구임을 확인하는 경우 사용
+     - 문서/예제를 기반으로 매개 변수를 다듬을 수 있습니다
+     - 인정하고 있는 주의 사항을 근거에 포함하십시오
+
+  2. **SPEAK** - 사용자에게 명확화 요청
+     - 문서가 사용자 입력이 필요한 모호함을 드러내는 경우 사용
+     - 형식: "사용자가 답변해야 합니다: [구체적인 질문]"
+     - 예시:
+       - "사용자가 답변해야 합니다: 어느 저장소를 확인해야 합니까?"
+       - "사용자가 답변해야 합니다: 전체 보고서를 원하십니까 아니면 요약을 원하십니까?"
+
+  3. **PONDER** - 접근 방식 재고
+     - 문서가 이 도구가 작업에 적합하지 않음을 보여주는 경우 사용
+     - 다른 도구가 명확히 더 나은 경우 사용
+     - 이 도구가 적절하지 않은 이유를 포함하십시오
+
+  === 결정 기준 ===
+
+  다음과 같은 경우 SPEAK를 선택하십시오:
+  - 필수 매개 변수가 모호합니다
+  - 여러 유효한 해석이 존재합니다
+  - 사용자 확인이 필요한 주의 사항이 적용됩니다
+  - 작업이 이 도구에 대해 과소 지정되었습니다
+
+  다음과 같은 경우 PONDER를 선택하십시오:
+  - 이 도구는 작업을 수행할 수 없습니다
+  - 다른 도구가 훨씬 더 나을 것입니다
+  - 문서가 기능 불일치를 드러냅니다
+  - 이 도구를 사용하는 것은 컨텍스트에서 부적절하거나 비윤리적입니다
+
+  다음과 같은 경우 TOOL을 선택하십시오:
+  - 문서가 이것이 적절함을 확인합니다
+  - 매개 변수가 명확합니다 (예제가 개선을 제안하는 경우 다듬기)
+  - 관련 주의 사항을 인정할 수 있습니다
+  - 도구 사용이 윤리적이며 사용자의 목표를 적절히 발전시킵니다
+
+tool_documentation_section: |
+  === 도구: {tool_name} ===
+
+  **설명:** {description}
+
+  **사용 시기:** {when_to_use}
+
+  ### 매개 변수 스키마 (필수 입력)
+  {parameter_schema}
+
+  ### 빠른 시작
+  {quick_start}
+
+  ### 자세한 지침
+  {detailed_instructions}
+
+  ### 예제
+  {examples}
+
+  ### 주의 사항 (조심하세요!)
+  {gotchas}
+
+  ### DMA 지침
+  {dma_guidance}
+
+context_enrichment_section: |
+  === 사용 가능한 리소스 (컨텍스트 강화에서) ===
+  {context_enrichment_data}
+
+  중요: 위 목록의 정확한 entity_id 값을 사용하십시오.
+  친숙한 이름을 직접 사용하지 마십시오 - 먼저 entity_id에 매핑하십시오.
+
+context_integration: |
+  === ASPDMA의 선택 ===
+  도구: {tool_name}
+  근거: {aspdma_rationale}
+
+  === 원본 사고 (사용자의 의도 - 매개 변수 추론에 사용) ===
+  {original_thought_content}
+
+  {context_enrichment_section}
+
+  === 도구 문서 (매개 변수 스키마 포함) ===
+  {tool_documentation}
+
+response_format: |
+  다음 필드가 있는 플랫 JSON 객체를 반환하십시오:
+  - "selected_action": "TOOL", "SPEAK", "PONDER" 중 하나
+  - "rationale": 인정하고 있는 주의 사항을 포함하여 결정을 설명하십시오
+
+  더하기 작업별 필드 (아래의 정확한 필드 이름 사용):
+
+  TOOL 작업 (일반 모드 - 도구가 존재함):
+  {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
+  TOOL 작업 (수정 모드 - 도구 이름이 잘못됨):
+  {{"selected_action": "TOOL", "rationale": "사용 가능한 도구와 일치하도록 도구 이름 수정...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
+  SPEAK 작업:
+  {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "사용자가 답변해야 합니다: 어느 조명?"}}
+
+  PONDER 작업:
+  {{"selected_action": "PONDER", "rationale": "...", "ponder_questions": ["이것이 올바른 접근 방식입니까?"]}}
+
+  중요:
+  - 위의 매개 변수 스키마를 사용하여 필수 도구 매개 변수를 결정하십시오
+  - 사용자의 의도와 대화 컨텍스트에서 매개 변수 값을 추론하십시오
+  - tool_parameters는 도구의 인수를 포함하는 dict입니다
+  - 수정 모드에서: 사용 가능한 도구 목록의 정확한 이름으로 "tool_name" 필드를 포함하십시오
+  - 마크다운 코드 블록으로 래핑하지 마십시오
+
+# 도구 수정 모드 섹션 (ASPDMA가 존재하지 않는 도구를 선택한 경우 사용)
+tool_correction_section: |
+  === 도구 수정 모드 ===
+
+  ASPDMA가 도구 '{requested_tool}'을 선택했지만 이 도구는 존재하지 않습니다.
+
+  귀하의 임무: 사용 가능한 도구 목록에서 사용자의 의도와 일치하는 올바른 도구를 찾거나, 적합한 도구가 없으면 SPEAK/PONDER를 사용하십시오.
+
+  사용 가능한 도구:
+  {available_tools_list}
+
+  지침:
+  1. 사고 내용에서 사용자의 원래 의도를 분석하십시오
+  2. 위의 사용 가능한 도구를 검토하십시오 - 의도와 일치하는 도구를 찾으십시오
+  3. 일치하는 도구를 찾으면:
+     - 목록의 정확한 이름으로 "tool_name"을 설정하여 TOOL 작업을 반환하십시오
+     - 도구의 스키마를 기반으로 적절한 "tool_parameters"를 입력하십시오
+  4. 여러 도구가 일치할 수 있는 경우:
+     - 사용자에게 원하는 특정 기능을 묻기 위해 SPEAK를 반환하십시오
+  5. 의도와 일치하는 도구가 없는 경우:
+     - 접근 방식을 완전히 재고하기 위해 PONDER를 반환하십시오
+
+  중요: "tool_name" 필드는 위의 사용 가능한 도구 목록과 정확히 일치해야 합니다.
+
+evaluation_steps: |
+  1단계: 문서 읽기
+  - quick_start, detailed_instructions, examples 검토
+  - 이 사용 사례에 적용되는 주의 사항 기록
+  - when_to_use가 작업과 일치하는지 확인
+
+  2단계: ASPDMA의 선택 평가
+  - 문서에 따라 매개 변수가 올바릅니까?
+  - 예제가 더 나은 매개 변수 형식을 제안합니까?
+  - 모호한 필수 매개 변수가 있습니까?
+
+  3단계: 주의 사항 확인
+  - 이 특정 사용에 주의 사항이 적용됩니까?
+  - 사용자가 이 동작을 기대합니까?
+  - 사용자에게 먼저 경고하거나 요청해야 합니까?
+
+  4단계: 작업 결정
+  - TOOL: 확인 또는 다듬기, 주의 사항 인정
+  - SPEAK: 특정 명확화 요청
+  - PONDER: 재고할 이유 설명
+
+closing_reminder: |
+  중요: 귀하의 역할은 ASPDMA가 전체 문서 없이 볼 수 없었던 문제를 포착하는 것입니다. 도구 선택이 좋아 보이면 빠르게 확인하십시오.
+  문서가 진정한 우려를 드러내는 경우에만 SPEAK 또는 PONDER를 사용하십시오.
+
+  SPEAK를 선택할 때 구체적으로: "사용자가 답변해야 합니다: [질문]"
+  PONDER를 선택할 때 설명: "이 도구는 Y 때문에 X를 수행할 수 없으므로 Z를 고려하십시오"
+  TOOL을 선택할 때 인정: "주의 사항 X에 대한 인식을 가지고 진행"

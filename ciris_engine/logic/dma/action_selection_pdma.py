@@ -8,6 +8,7 @@ from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils.constants import ACCORD_TEXT_COMPRESSED, get_localized_accord_text
+from ciris_engine.logic.utils.localization import get_preferred_language
 from ciris_engine.protocols.dma.base import ActionSelectionDMAProtocol
 from ciris_engine.protocols.faculties import EpistemicFaculty
 from ciris_engine.schemas.actions.parameters import PonderParams
@@ -203,7 +204,8 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         """Build accord text with thought type metadata (uses localized ACCORD)."""
         accord_mode = self.get_accord_mode()
         if accord_mode == "full":
-            accord_text = get_localized_accord_text(self.prompt_loader.language)
+            lang = get_preferred_language()
+            accord_text = get_localized_accord_text(lang)
         elif accord_mode == "compressed":
             accord_text = ACCORD_TEXT_COMPRESSED
         else:

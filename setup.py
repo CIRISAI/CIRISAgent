@@ -131,13 +131,17 @@ setup(
     package_data={
         "ciris_engine.data": [
             "accord_1.2b.txt",  # Accord text file (v1.2-Beta)
+            "accord_1.2b_compressed.txt",  # Compressed accord for testing
             "localized/*.json",  # Backend localization files (copied from /localization/)
+            "localized/*.txt",  # Localized ACCORD text files
+            "localized/*.md",  # Localized comprehensive guides
         ],
         "ciris_engine.config": [
             "*.json",  # Pricing and configuration data
         ],
         "ciris_engine.logic.dma": [
-            "prompts/*.yml",  # DMA prompt templates
+            "prompts/*.yml",  # DMA prompt templates (English)
+            "prompts/localized/*/*.yml",  # Localized DMA prompt templates
         ],
         "ciris_engine.logic.persistence": [
             "migrations/sqlite/*.sql",  # SQLite database migrations

@@ -374,7 +374,7 @@
     "login_privacy": "Ver Política de Privacidad",
     "login_footer": "Impulsado por CIRIS AI",
     "login_username": "Nombre de usuario",
-    "login_password": "Contraseña",
+    "login_password_label": "Contraseña",
     "login_submit": "Iniciar sesión",
     "login_back": "Volver a opciones de inicio de sesión",
     "login_credentials_hint": "Ingresa las credenciales que creaste durante la configuración",

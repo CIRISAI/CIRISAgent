@@ -374,7 +374,7 @@
     "login_privacy": "Посмотреть Политику конфиденциальности",
     "login_footer": "Работает на CIRIS AI",
     "login_username": "Имя пользователя",
-    "login_password": "Пароль",
+    "login_password_label": "Пароль",
     "login_submit": "Войти",
     "login_back": "Вернуться к вариантам входа",
     "login_credentials_hint": "Введите учётные данные, созданные во время настройки",

@@ -180,7 +180,7 @@ Example:
   "mobile.login_welcome": "خوش آمدید",
   "mobile.login_enter_credentials": "اپنی اسناد درج کریں",
   "mobile.login_username": "صارف نام",
-  "mobile.login_password": "پاس ورڈ",
+  "mobile.login_password_label": "پاس ورڈ",
   "mobile.login_submit": "داخل ہوں",
   "mobile.error_network": "نیٹ ورک کی خرابی: {0}"
 }

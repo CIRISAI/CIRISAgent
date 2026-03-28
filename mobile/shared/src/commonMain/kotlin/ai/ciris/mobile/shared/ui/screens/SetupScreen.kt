@@ -2324,7 +2324,7 @@ private fun AccountConfirmationStep(
                 value = state.userPassword,
                 onValueChange = { viewModel.setUserPassword(it) },
                 modifier = Modifier.fillMaxWidth().testable("input_password"),
-                label = { Text(localizedString("mobile.login_password")) },
+                label = { Text(localizedString("mobile.login_password_label")) },
                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
                     TextButton(

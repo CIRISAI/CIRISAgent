@@ -374,7 +374,7 @@
     "login_privacy": "Visualizza Informativa sulla Privacy",
     "login_footer": "Powered by CIRIS AI",
     "login_username": "Nome utente",
-    "login_password": "Password",
+    "login_password_label": "Password",
     "login_submit": "Accedi",
     "login_back": "Torna alle opzioni di accesso",
     "login_credentials_hint": "Inserisci le credenziali che hai creato durante la configurazione",

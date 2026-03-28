@@ -373,7 +373,7 @@
     "login_privacy": "የግላዊነት መመሪያን ይመልከቱ",
     "login_footer": "በ CIRIS AI የተጎለበተ",
     "login_username": "የተጠቃሚ ስም",
-    "login_password": "የይለፍ ቃል",
+    "login_password_label": "የይለፍ ቃል",
     "login_submit": "ግባ",
     "login_back": "ወደ መግቢያ አማራጮች ተመለስ",
     "login_credentials_hint": "በማዋቀር ወቅት የፈጠሯቸውን ምስክርነቶች ያስገቡ",

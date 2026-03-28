@@ -374,7 +374,7 @@
     "login_privacy": "गोपनीयता नीति देखें",
     "login_footer": "CIRIS AI द्वारा संचालित",
     "login_username": "उपयोगकर्ता नाम",
-    "login_password": "पासवर्ड",
+    "login_password_label": "पासवर्ड",
     "login_submit": "लॉगिन",
     "login_back": "लॉगिन विकल्पों पर वापस जाएं",
     "login_credentials_hint": "सेटअप के दौरान बनाए गए क्रेडेंशियल दर्ज करें",

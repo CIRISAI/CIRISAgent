@@ -527,6 +527,71 @@ def get_template_directory() -> Path:
     return get_package_root() / "ciris_templates"
 
 
+# Hardcoded env filename - never user-controlled
+_ENV_FILENAME = ".env"
+
+
+def _get_allowed_env_directories() -> list[Path]:
+    """Get explicit list of directories where .env files may exist.
+
+    This function returns a hardcoded list of allowed directories,
+    preventing path traversal attacks by not using user-controlled paths
+    directly in file operations.
+
+    Returns:
+        List of allowed directories (resolved to absolute paths)
+    """
+    allowed: list[Path] = []
+
+    # Managed mode: /app/ is the only allowed location
+    if is_managed():
+        allowed.append(Path("/app").resolve())
+        return allowed
+
+    # Development mode: CWD (verified to be a git repo)
+    if is_development_mode():
+        cwd = Path.cwd().resolve()
+        # Only allow if it's a git repo (development mode check)
+        if (cwd / ".git").exists():
+            allowed.append(cwd)
+
+    # User home directory based locations
+    home = Path.home().resolve()
+    allowed.append(home / "ciris")
+
+    # CIRIS_HOME if set and validated
+    ciris_home_env = os.environ.get("CIRIS_HOME")
+    if ciris_home_env:
+        try:
+            ciris_home = validate_path_safety(Path(ciris_home_env), CIRIS_HOME_ENV_CONTEXT)
+            allowed.append(ciris_home)
+        except ValueError:
+            pass  # Invalid CIRIS_HOME, skip it
+
+    return allowed
+
+
+def _is_path_in_allowed_env_dirs(path: Path) -> bool:
+    """Check if a path's parent directory is in the allowed list.
+
+    Args:
+        path: Path to check (should end in .env)
+
+    Returns:
+        True if the path's parent is in allowed directories
+    """
+    try:
+        resolved = path.resolve()
+        parent = resolved.parent
+    except (ValueError, OSError):
+        return False
+
+    for allowed_dir in _get_allowed_env_directories():
+        if parent == allowed_dir:
+            return True
+    return False
+
+
 def get_env_file_path() -> Optional[Path]:
     """Get the path to the .env file.
 
@@ -543,19 +608,19 @@ def get_env_file_path() -> Optional[Path]:
     if is_android() or is_ios():
         return None
 
-    # Managed mode
+    # Managed mode - hardcoded path
     if is_managed():
-        env_path = Path("/app/.env")
+        env_path = Path("/app") / _ENV_FILENAME
         return env_path if env_path.exists() else None
 
-    # Development mode
+    # Development mode - construct from CWD + hardcoded filename
     if is_development_mode():
-        env_path = Path.cwd() / ".env"
+        env_path = Path.cwd() / _ENV_FILENAME
         return env_path if env_path.exists() else None
 
     # Installed mode - check CIRIS_HOME then ~/ciris/
     ciris_home = get_ciris_home()
-    env_path = ciris_home / ".env"
+    env_path = ciris_home / _ENV_FILENAME
     if env_path.exists():
         return env_path
 
@@ -650,23 +715,32 @@ def sync_env_var(var_name: str, value: str, persist_to_file: bool = True) -> boo
     if not persist_to_file:
         return True
 
-    env_path = get_env_file_path()
-    if not env_path:
+    # Get env file path - returns None on mobile or if .env doesn't exist
+    env_path_candidate = get_env_file_path()
+    if not env_path_candidate:
         logger.debug(f"[env_sync] No .env file available (mobile or missing), skipped file persistence for {var_name}")
         return True  # Not an error - mobile doesn't use .env
 
-    # Security: env_path is validated by get_env_file_path() -> get_ciris_home() -> validate_path_safety()
-    # which blocks system directories (/etc, /bin, etc.) and resolves symlinks/traversal.
-    # The ".env" suffix is hardcoded, not user-controlled.
-    # Re-validate here to satisfy static analysis tools (defense in depth).
+    # Security: Verify the path is in an allowed directory and uses hardcoded filename.
+    # This prevents path traversal by ensuring we only write to known-safe locations.
     try:
-        env_path = validate_path_safety(env_path, context=".env file path")
+        env_path = validate_path_safety(env_path_candidate, context=".env file path")
     except ValueError as e:
         logger.warning(f"[env_sync] Invalid .env path: {e}")
         return False
 
+    # Additional check: verify path is in explicit allowlist (defense in depth)
+    if not _is_path_in_allowed_env_dirs(env_path):
+        logger.warning(f"[env_sync] .env path not in allowed directories: {env_path}")
+        return False
+
+    # Verify filename is exactly ".env" (hardcoded, not user-controlled)
+    if env_path.name != _ENV_FILENAME:
+        logger.warning(f"[env_sync] Invalid .env filename: {env_path.name}")
+        return False
+
     try:
-        # Read current contents
+        # Read current contents - path is now verified safe
         content = env_path.read_text()
 
         # Sanitize value for safe .env file inclusion

@@ -300,7 +300,7 @@ private fun LocalLoginForm(
 ) {
     // Localized strings
     val usernameLabel = localizedString("mobile.login_username")
-    val passwordLabel = localizedString("mobile.login_password")
+    val passwordLabel = localizedString("mobile.login_password_label")
     val loginText = localizedString("mobile.login_submit")
     val backText = localizedString("mobile.login_back")
     val credentialsHint = localizedString("mobile.login_credentials_hint")

@@ -374,7 +374,7 @@
     "login_privacy": "عرض سياسة الخصوصية",
     "login_footer": "مدعوم من CIRIS AI",
     "login_username": "اسم المستخدم",
-    "login_password": "كلمة المرور",
+    "login_password_label": "كلمة المرور",
     "login_submit": "تسجيل الدخول",
     "login_back": "العودة إلى خيارات تسجيل الدخول",
     "login_credentials_hint": "أدخل بيانات الاعتماد التي أنشأتها أثناء الإعداد",

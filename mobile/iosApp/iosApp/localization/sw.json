@@ -373,7 +373,7 @@
     "login_privacy": "Tazama Sera ya Faragha",
     "login_footer": "Inaendeshwa na CIRIS AI",
     "login_username": "Jina la mtumiaji",
-    "login_password": "Nenosiri",
+    "login_password_label": "Nenosiri",
     "login_submit": "Ingia",
     "login_back": "Rudi kwenye chaguo za kuingia",
     "login_credentials_hint": "Ingiza hati ulizoundai wakati wa usanidi",

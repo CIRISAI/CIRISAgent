@@ -374,7 +374,7 @@
     "login_privacy": "Gizlilik Politikasını Görüntüle",
     "login_footer": "CIRIS AI tarafından desteklenmektedir",
     "login_username": "Kullanıcı adı",
-    "login_password": "Şifre",
+    "login_password_label": "Şifre",
     "login_submit": "Giriş Yap",
     "login_back": "Giriş seçeneklerine dön",
     "login_credentials_hint": "Kurulum sırasında oluşturduğunuz kimlik bilgilerini girin",

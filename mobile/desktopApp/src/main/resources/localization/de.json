@@ -374,7 +374,7 @@
     "login_privacy": "Datenschutzerklärung anzeigen",
     "login_footer": "Bereitgestellt von CIRIS AI",
     "login_username": "Benutzername",
-    "login_password": "Passwort",
+    "login_password_label": "Passwort",
     "login_submit": "Anmelden",
     "login_back": "Zurück zu Anmeldeoptionen",
     "login_credentials_hint": "Geben Sie die Anmeldedaten ein, die Sie während der Einrichtung erstellt haben",

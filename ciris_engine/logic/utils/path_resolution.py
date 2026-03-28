@@ -68,6 +68,27 @@ ALLOWED_PATH_EXCEPTIONS = frozenset(
 # Context string for CIRIS_HOME validation errors
 CIRIS_HOME_ENV_CONTEXT = "CIRIS_HOME environment variable"
 
+# Allowlist of valid ISO 639-1 language codes supported by CIRIS
+# This is the ONLY source of truth for valid language codes - user input MUST match
+SUPPORTED_LANGUAGE_CODES = frozenset({
+    "am",  # Amharic
+    "ar",  # Arabic
+    "de",  # German
+    "en",  # English
+    "es",  # Spanish
+    "fr",  # French
+    "hi",  # Hindi
+    "it",  # Italian
+    "ja",  # Japanese
+    "ko",  # Korean
+    "pt",  # Portuguese
+    "ru",  # Russian
+    "sw",  # Swahili
+    "tr",  # Turkish
+    "ur",  # Urdu
+    "zh",  # Chinese
+})
+
 
 def validate_path_safety(path: Path, context: str = "path") -> Path:
     """Validate that a path is safe to use for file operations.
@@ -647,6 +668,71 @@ def _sanitize_env_value(value: str) -> str:
     return sanitized
 
 
+def _parse_and_sanitize_env_content(content: str) -> dict[str, str]:
+    """Parse .env file content and return sanitized key-value pairs.
+
+    This function validates each line of the .env file to ensure:
+    1. Only valid environment variable names are accepted
+    2. Values are sanitized to prevent injection
+
+    This breaks the taint chain by reconstructing the content from
+    validated components rather than passing through raw user-controllable data.
+
+    Args:
+        content: Raw content read from .env file
+
+    Returns:
+        Dictionary of validated var_name -> sanitized_value pairs
+    """
+    import re
+
+    result: dict[str, str] = {}
+
+    for line in content.split("\n"):
+        # Skip empty lines and comments
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        # Parse VAR=value or VAR="value" format
+        match = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)=(.*)$', line)
+        if not match:
+            # Skip malformed lines (potential injection attempts)
+            continue
+
+        var_name = match.group(1)
+        raw_value = match.group(2)
+
+        # Validate variable name
+        if not _validate_env_var_name(var_name):
+            continue
+
+        # Strip quotes if present
+        if raw_value.startswith('"') and raw_value.endswith('"'):
+            raw_value = raw_value[1:-1]
+        elif raw_value.startswith("'") and raw_value.endswith("'"):
+            raw_value = raw_value[1:-1]
+
+        # Sanitize the value
+        sanitized_value = _sanitize_env_value(raw_value)
+        result[var_name] = sanitized_value
+
+    return result
+
+
+def _reconstruct_env_content(env_vars: dict[str, str]) -> str:
+    """Reconstruct .env file content from validated key-value pairs.
+
+    Args:
+        env_vars: Dictionary of var_name -> value pairs (already sanitized)
+
+    Returns:
+        Safe .env file content
+    """
+    lines = [f'{name}="{value}"' for name, value in sorted(env_vars.items())]
+    return "\n".join(lines) + "\n" if lines else ""
+
+
 def _validate_env_var_name(var_name: str) -> bool:
     """Validate that var_name is a safe environment variable name.
 
@@ -741,30 +827,61 @@ def sync_env_var(var_name: str, value: str, persist_to_file: bool = True) -> boo
 
     try:
         # Read current contents - path is now verified safe
-        content = env_path.read_text()
+        raw_content = env_path.read_text()
 
-        # Sanitize value for safe .env file inclusion
+        # SECURITY: Parse and sanitize existing content to break taint chain.
+        # This ensures we don't pass through any malicious content from the file.
+        env_vars = _parse_and_sanitize_env_content(raw_content)
+
+        # Sanitize the new value and add/update it
         safe_value = _sanitize_env_value(value)
+        env_vars[var_name] = safe_value
 
-        # Check if variable exists
-        pattern = rf'^{re.escape(var_name)}=.*$'
-        if re.search(pattern, content, re.MULTILINE):
-            # Update existing variable
-            content = re.sub(pattern, f'{var_name}="{safe_value}"', content, flags=re.MULTILINE)
-        else:
-            # Add new variable
-            if not content.endswith("\n"):
-                content += "\n"
-            content += f'{var_name}="{safe_value}"\n'
+        # Reconstruct clean content from validated components
+        clean_content = _reconstruct_env_content(env_vars)
 
-        # Write back
-        env_path.write_text(content)
+        # Write back - content is now fully sanitized
+        env_path.write_text(clean_content)
         logger.info(f"[env_sync] Persisted {var_name} to .env file")
         return True
 
     except Exception as e:
         logger.warning(f"[env_sync] Failed to persist {var_name} to .env: {e}")
         return False
+
+
+def _validate_language_code(language_code: str) -> str:
+    """Validate and normalize a language code against the allowlist.
+
+    This is a SECURITY function that prevents arbitrary user input from
+    flowing into file operations. Only codes in SUPPORTED_LANGUAGE_CODES
+    are allowed.
+
+    Args:
+        language_code: User-provided language code
+
+    Returns:
+        The validated, normalized language code (lowercase)
+
+    Raises:
+        ValueError: If language_code is not in the allowlist
+    """
+    if not isinstance(language_code, str):
+        raise ValueError(f"Language code must be a string, got {type(language_code).__name__}")
+
+    # Normalize to lowercase for comparison
+    normalized = language_code.lower().strip()
+
+    # Validate against allowlist - this breaks the taint chain
+    if normalized not in SUPPORTED_LANGUAGE_CODES:
+        raise ValueError(
+            f"Invalid language code '{sanitize_for_log(language_code)}'. "
+            f"Supported codes: {', '.join(sorted(SUPPORTED_LANGUAGE_CODES))}"
+        )
+
+    # Return the validated code from the allowlist (not user input)
+    # This ensures the returned value is known-safe
+    return normalized
 
 
 def sync_language_preference(language_code: str) -> bool:
@@ -780,9 +897,16 @@ def sync_language_preference(language_code: str) -> bool:
 
     Returns:
         True if successful
+
+    Raises:
+        ValueError: If language_code is not a supported code
     """
-    # Sync to environment and .env file
-    sync_env_var("CIRIS_PREFERRED_LANGUAGE", language_code)
+    # SECURITY: Validate language code against allowlist before any file operations.
+    # This sanitizes user input and breaks the taint chain from HTTP request to file write.
+    validated_code = _validate_language_code(language_code)
+
+    # Sync to environment and .env file - using validated code only
+    sync_env_var("CIRIS_PREFERRED_LANGUAGE", validated_code)
 
     # Update the DMA prompt loader
     try:

@@ -35,7 +35,7 @@ def keccak256(data: bytes) -> bytes:
     """
     # Try pysha3 first (has correct keccak_256)
     try:
-        import sha3  # type: ignore[import-not-found]
+        import sha3
         result = sha3.keccak_256(data).digest()
         return bytes(result)
     except ImportError:
@@ -51,7 +51,7 @@ def keccak256(data: bytes) -> bytes:
 
     # Last resort: try eth_hash if available (from eth-utils)
     try:
-        from eth_hash.auto import keccak as eth_keccak  # type: ignore[import-not-found]
+        from eth_hash.auto import keccak as eth_keccak
         result = eth_keccak(data)
         return bytes(result)
     except ImportError:
@@ -131,9 +131,28 @@ CHAIN_CONFIG: Dict[str, ChainConfigEntry] = {
 # ERC-20 function selectors
 BALANCE_OF_SELECTOR = "0x70a08231"  # keccak256("balanceOf(address)")[:4]
 TRANSFER_SELECTOR = "0xa9059cbb"     # keccak256("transfer(address,uint256)")[:4]
+APPROVE_SELECTOR = "0x095ea7b3"      # keccak256("approve(address,uint256)")[:4]
+ALLOWANCE_SELECTOR = "0xdd62ed3e"    # keccak256("allowance(address,address)")[:4]
+
+# Uniswap V3 function selectors
+# exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))
+EXACT_INPUT_SINGLE_SELECTOR = "0x04e45aaf"
 
 # USDC has 6 decimals
 USDC_DECIMALS = 6
+
+# WETH address (same on Base mainnet and testnet)
+WETH_ADDRESS = "0x4200000000000000000000000000000000000006"
+
+# Uniswap V3 SwapRouter02 addresses
+UNISWAP_ROUTER: Dict[str, str] = {
+    "base-mainnet": "0x2626664c2603336E57B271c5C0b26F421741e481",
+    "base-sepolia": "0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4",
+}
+
+# Pool fee tier (0.3% = 3000, 0.05% = 500, 1% = 10000)
+# USDC/ETH typically uses 0.3% fee tier on Base
+DEFAULT_POOL_FEE = 3000
 
 
 class ChainClient:
@@ -161,6 +180,9 @@ class ChainClient:
         self.explorer: str = config["explorer"]
         self.timeout = timeout
         self._request_id = 0
+
+        # Uniswap router for this network
+        self.uniswap_router: str = UNISWAP_ROUTER.get(network, UNISWAP_ROUTER["base-mainnet"])
 
         logger.info(f"ChainClient initialized for {network} (chain_id={self.chain_id})")
 
@@ -486,3 +508,151 @@ class ChainClient:
         hex_tx = "0x" + encoded.hex()
         logger.debug(f"[ChainClient] Signed transaction: {hex_tx[:50]}...")
         return hex_tx
+
+    # =========================================================================
+    # ERC-20 Approval Methods
+    # =========================================================================
+
+    def build_erc20_approve(
+        self,
+        spender: str,
+        amount: int,
+    ) -> bytes:
+        """
+        Build ERC-20 approve calldata.
+
+        Args:
+            spender: Address to approve spending
+            amount: Amount to approve (in raw units, e.g., 1000000 for 1 USDC)
+
+        Returns:
+            ABI-encoded calldata for approve(address,uint256)
+        """
+        selector = bytes.fromhex(APPROVE_SELECTOR[2:])
+        padded_spender = bytes.fromhex(spender.lower().replace("0x", "").zfill(64))
+        padded_amount = amount.to_bytes(32, "big")
+
+        return selector + padded_spender + padded_amount
+
+    async def get_allowance(self, owner: str, spender: str, token_address: str) -> int:
+        """
+        Get current ERC-20 allowance.
+
+        Args:
+            owner: Token owner address
+            spender: Approved spender address
+            token_address: ERC-20 token contract address
+
+        Returns:
+            Current allowance in raw token units
+        """
+        try:
+            # Encode allowance(address,address) call
+            padded_owner = owner.lower().replace("0x", "").zfill(64)
+            padded_spender = spender.lower().replace("0x", "").zfill(64)
+            call_data = f"{ALLOWANCE_SELECTOR}{padded_owner}{padded_spender}"
+
+            result = await self._rpc_call(
+                "eth_call",
+                [{"to": token_address, "data": call_data}, "latest"],
+            )
+
+            allowance = int(result, 16)
+            logger.debug(f"[ChainClient] Allowance for {owner} → {spender}: {allowance}")
+            return allowance
+        except Exception as e:
+            logger.error(f"[ChainClient] Failed to get allowance: {e}")
+            return 0
+
+    # =========================================================================
+    # Uniswap V3 Swap Methods
+    # =========================================================================
+
+    def build_uniswap_exact_input_single(
+        self,
+        token_in: str,
+        token_out: str,
+        fee: int,
+        recipient: str,
+        amount_in: int,
+        amount_out_minimum: int,
+        sqrt_price_limit_x96: int = 0,
+    ) -> bytes:
+        """
+        Build Uniswap V3 exactInputSingle calldata.
+
+        Args:
+            token_in: Input token address (e.g., USDC)
+            token_out: Output token address (e.g., WETH)
+            fee: Pool fee tier (500, 3000, or 10000)
+            recipient: Address to receive output tokens
+            amount_in: Input amount in raw token units
+            amount_out_minimum: Minimum output amount (slippage protection)
+            sqrt_price_limit_x96: Price limit (0 = no limit)
+
+        Returns:
+            ABI-encoded calldata for exactInputSingle
+        """
+        selector = bytes.fromhex(EXACT_INPUT_SINGLE_SELECTOR[2:])
+
+        # Encode the struct parameters as a tuple
+        # (address tokenIn, address tokenOut, uint24 fee, address recipient,
+        #  uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)
+        params = (
+            bytes.fromhex(token_in.lower().replace("0x", "").zfill(64)) +      # tokenIn
+            bytes.fromhex(token_out.lower().replace("0x", "").zfill(64)) +     # tokenOut
+            fee.to_bytes(32, "big") +                                           # fee (uint24 padded)
+            bytes.fromhex(recipient.lower().replace("0x", "").zfill(64)) +     # recipient
+            amount_in.to_bytes(32, "big") +                                     # amountIn
+            amount_out_minimum.to_bytes(32, "big") +                            # amountOutMinimum
+            sqrt_price_limit_x96.to_bytes(32, "big")                            # sqrtPriceLimitX96
+        )
+
+        return selector + params
+
+    async def get_eth_price_usdc(self) -> Decimal:
+        """
+        Get approximate ETH/USDC price from chain.
+
+        For MVP, we use a simple price estimate. Production would query
+        the Uniswap pool or an oracle.
+
+        Returns:
+            ETH price in USDC
+        """
+        # TODO: Query Uniswap pool for actual price
+        # For now, use a conservative estimate
+        return Decimal("2000")
+
+    def calculate_min_eth_out(
+        self,
+        usdc_amount: Decimal,
+        eth_price: Decimal,
+        slippage_percent: Decimal = Decimal("2"),
+    ) -> int:
+        """
+        Calculate minimum ETH output for slippage protection.
+
+        Args:
+            usdc_amount: USDC amount being swapped
+            eth_price: Current ETH/USDC price
+            slippage_percent: Maximum acceptable slippage (default 2%)
+
+        Returns:
+            Minimum ETH in wei
+        """
+        # Expected ETH = USDC / price
+        expected_eth = usdc_amount / eth_price
+
+        # Apply slippage tolerance
+        slippage_multiplier = Decimal("1") - (slippage_percent / Decimal("100"))
+        min_eth = expected_eth * slippage_multiplier
+
+        # Convert to wei (18 decimals)
+        min_eth_wei = int(min_eth * Decimal(10**18))
+
+        logger.debug(
+            f"[ChainClient] Swap {usdc_amount} USDC → min {min_eth:.6f} ETH "
+            f"(price={eth_price}, slippage={slippage_percent}%)"
+        )
+        return min_eth_wei

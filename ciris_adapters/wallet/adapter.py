@@ -18,6 +18,7 @@ KEY ARCHITECTURE: CIRISVerify is the ONLY source for wallet primitives
 
 import asyncio
 import logging
+from decimal import Decimal
 from typing import Any, Callable, Dict, List, Optional
 
 from ciris_engine.logic.adapters.base import Service
@@ -344,11 +345,20 @@ class WalletAdapter(Service):
         logger.info("Wallet adapter started")
 
     def _register_balance_audit_callback(self) -> None:
-        """Register callback to emit audit events when funds are received."""
+        """Register callbacks to emit audit events when funds are received."""
         x402_provider = self._providers.get("x402")
-        if x402_provider and hasattr(x402_provider, "register_balance_callback"):
+        if not x402_provider:
+            return
+
+        # Register sync balance callback
+        if hasattr(x402_provider, "register_balance_callback"):
             x402_provider.register_balance_callback(self._on_funds_received)
             logger.info("Registered balance audit callback for x402 provider")
+
+        # Register async audit callback with spam prevention
+        if hasattr(x402_provider, "set_receive_audit_callback"):
+            x402_provider.set_receive_audit_callback(self._audit_receive_with_spam_prevention)
+            logger.info("Registered async receive audit callback for x402 provider")
 
     def _on_funds_received(
         self,
@@ -356,50 +366,72 @@ class WalletAdapter(Service):
         new_balance: Any,
         incoming_tx: Optional[Any]
     ) -> None:
-        """Handle balance change and emit audit event for received funds."""
+        """Handle balance change and emit audit event for received funds.
+
+        NOTE: This is a legacy sync callback. The async audit with spam prevention
+        is now handled by set_receive_audit_callback on the provider.
+        """
         if incoming_tx is None:
             return
 
-        asyncio.create_task(self._emit_funds_received_audit(provider_id, new_balance, incoming_tx))
+        # Log balance change event (non-audit)
+        logger.info(
+            f"[WALLET_BALANCE] Balance changed for {provider_id}: "
+            f"new_total={new_balance.total}, "
+            f"incoming={incoming_tx.amount if incoming_tx else 'N/A'}"
+        )
 
-    async def _emit_funds_received_audit(
+    async def _audit_receive_with_spam_prevention(
         self,
-        provider_id: str,
-        new_balance: Any,
-        incoming_tx: Any
+        sender: str,
+        amount: Decimal,
+        currency: str,
+        tx_hash: Optional[str]
     ) -> None:
-        """Emit audit event for received funds."""
+        """
+        Audit a received payment using the wallet audit helper.
+
+        Uses spam prevention to filter:
+        - Dust amounts (< $0.01 USDC)
+        - Duplicate receives within 30 seconds
+        """
         try:
+            from .audit import get_wallet_audit_helper
+
+            # Get audit service from runtime
             audit_service = None
             if self.runtime and hasattr(self.runtime, "service_initializer"):
                 audit_service = getattr(self.runtime.service_initializer, "audit_service", None)
 
             if not audit_service:
-                logger.warning("[WALLET_AUDIT] Cannot log funds_received - audit_service not available")
-                return
+                # Try getting from runtime directly
+                audit_service = getattr(self.runtime, "audit_service", None)
 
-            from ciris_engine.schemas.audit import EventPayload
+            # Get audit helper with service
+            audit_helper = get_wallet_audit_helper(audit_service)
 
-            wallet_address = None
+            # Get network from x402 provider
+            network = "base-mainnet"
             x402_provider = self._providers.get("x402")
-            if x402_provider:
-                wallet_address = getattr(x402_provider, "_evm_address", None)
+            if x402_provider and hasattr(x402_provider, "config"):
+                network = getattr(x402_provider.config, "network", "base-mainnet")
 
-            event_data = EventPayload(
-                action=f"received {incoming_tx.amount} {incoming_tx.currency}",
-                result="success",
-                service_name="wallet_balance_monitor",
-                user_id=wallet_address,
+            # Audit with spam prevention (dust filter, dedup filter)
+            audited = await audit_helper.audit_receive(
+                sender=sender,
+                amount=amount,
+                currency=currency,
+                tx_hash=tx_hash,
+                network=network,
             )
 
-            await audit_service.log_event("wallet_funds_received", event_data)
-            logger.info(
-                f"[WALLET_AUDIT] Logged funds_received: +{incoming_tx.amount} {incoming_tx.currency} "
-                f"to {wallet_address}, new_balance={new_balance.total}"
-            )
+            if audited:
+                logger.info(f"[WALLET_AUDIT] Audited receive: +{amount} {currency} from {sender[:10]}...")
+            else:
+                logger.debug(f"[WALLET_AUDIT] Skipped receive audit (spam prevention): {amount} {currency}")
 
         except Exception as e:
-            logger.error(f"[WALLET_AUDIT] Failed to emit funds_received audit: {e}")
+            logger.error(f"[WALLET_AUDIT] Failed to audit receive: {e}")
 
     async def stop(self) -> None:
         """Stop the Wallet adapter."""

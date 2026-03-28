@@ -33,10 +33,65 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
 /**
- * Wallet status response from API
+ * Gas cost estimate for a standard transfer.
+ */
+@Serializable
+data class GasEstimate(
+    val gasPriceGwei: String = "0.00",
+    val usdcTransferGas: Int = 65000,
+    val ethTransferGas: Int = 21000,
+    val usdcTransferCostEth: String = "0.000000",
+    val usdcTransferCostUsd: String = "0.00",
+    val ethPriceUsd: String = "2000"
+)
+
+/**
+ * Spending progress for session and daily limits.
+ */
+@Serializable
+data class SpendingProgress(
+    val sessionSpent: String = "0.00",
+    val sessionRemaining: String = "500.00",
+    val sessionLimit: String = "500.00",
+    val sessionResetMinutes: Int = 60,
+    val dailySpent: String = "0.00",
+    val dailyRemaining: String = "1000.00",
+    val dailyResetHours: Int = 24
+)
+
+/**
+ * Summary of a recent transaction.
+ */
+@Serializable
+data class TransactionSummary(
+    val transactionId: String,
+    val type: String,  // "send" or "receive"
+    val amount: String,
+    val currency: String,
+    val recipient: String? = null,
+    val sender: String? = null,
+    val status: String,  // "pending", "confirmed", "failed"
+    val timestamp: String,
+    val explorerUrl: String? = null
+)
+
+/**
+ * Security advisory affecting hardware trust.
+ */
+@Serializable
+data class SecurityAdvisoryData(
+    val cve: String? = null,
+    val title: String,
+    val impact: String,
+    val remediation: String? = null
+)
+
+/**
+ * Wallet status response from API with comprehensive state.
  */
 @Serializable
 data class WalletStatusResponse(
+    // Core wallet info
     val hasWallet: Boolean = false,
     val provider: String = "x402",
     val network: String = "base-mainnet",
@@ -45,12 +100,26 @@ data class WalletStatusResponse(
     val ethBalance: String = "0.00",
     val needsGas: Boolean = true,
     val address: String? = null,
+
+    // Attestation and limits
     val isReceiveOnly: Boolean = false,
-    val hardwareTrustDegraded: Boolean = false,
-    val trustDegradationReason: String? = null,
     val attestationLevel: Int = 0,
     val maxTransactionLimit: String = "0.00",
-    val dailyLimit: String = "0.00"
+    val dailyLimit: String = "0.00",
+
+    // Hardware trust status
+    val hardwareTrustDegraded: Boolean = false,
+    val trustDegradationReason: String? = null,
+    val securityAdvisories: List<SecurityAdvisoryData> = emptyList(),
+
+    // Spending progress (new)
+    val spending: SpendingProgress? = null,
+
+    // Gas estimates (new)
+    val gasEstimate: GasEstimate? = null,
+
+    // Recent transactions (new)
+    val recentTransactions: List<TransactionSummary> = emptyList()
 )
 
 /**
@@ -155,9 +224,17 @@ fun WalletPage(
                         WalletAddressCard(address = status.address, network = status.network)
                     }
 
-                    // Get Gas card (show when ETH balance is too low for transfers)
+                    // Spending progress card (shows session/daily limits usage)
+                    if (status.spending != null && !status.isReceiveOnly) {
+                        SpendingProgressCard(spending = status.spending)
+                    }
+
+                    // Gas estimate card (show when ETH balance is too low for transfers)
                     if (status.needsGas && status.address != null && !status.isReceiveOnly) {
-                        GetGasCard(walletAddress = status.address)
+                        GetGasCard(
+                            walletAddress = status.address,
+                            gasEstimate = status.gasEstimate
+                        )
                     }
 
                     // Transfer card (only show if not receive-only and has address)
@@ -181,12 +258,20 @@ fun WalletPage(
                         )
                     }
 
-                    // Limits card
+                    // Limits and attestation card
                     WalletLimitsCard(status = status)
 
-                    // Hardware trust warning
+                    // Recent transactions card
+                    if (status.recentTransactions.isNotEmpty()) {
+                        TransactionHistoryCard(transactions = status.recentTransactions)
+                    }
+
+                    // Hardware trust warning with security advisories
                     if (status.hardwareTrustDegraded) {
-                        HardwareTrustWarningCard(reason = status.trustDegradationReason)
+                        HardwareTrustWarningCard(
+                            reason = status.trustDegradationReason,
+                            advisories = status.securityAdvisories
+                        )
                     }
                 }
             }
@@ -491,7 +576,10 @@ private fun WalletLimitsCard(status: WalletStatusResponse) {
 }
 
 @Composable
-private fun HardwareTrustWarningCard(reason: String?) {
+private fun HardwareTrustWarningCard(
+    reason: String?,
+    advisories: List<SecurityAdvisoryData> = emptyList()
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = SemanticColors.Default.surfaceWarning)
@@ -522,6 +610,65 @@ private fun HardwareTrustWarningCard(reason: String?) {
                     color = SemanticColors.Default.onWarning.copy(alpha = 0.9f)
                 )
 
+                // Security advisories
+                if (advisories.isNotEmpty()) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        color = SemanticColors.Default.onWarning.copy(alpha = 0.3f)
+                    )
+                    Text(
+                        text = "Security Advisories:",
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 12.sp,
+                        color = SemanticColors.Default.onWarning
+                    )
+                    advisories.forEach { advisory ->
+                        Column(
+                            modifier = Modifier.padding(start = 8.dp, top = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = "•", fontSize = 12.sp, color = SemanticColors.Default.onWarning)
+                                Text(
+                                    text = advisory.title,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 11.sp,
+                                    color = SemanticColors.Default.onWarning
+                                )
+                                if (advisory.cve != null) {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = SemanticColors.Default.error.copy(alpha = 0.2f)
+                                    ) {
+                                        Text(
+                                            text = advisory.cve,
+                                            fontSize = 9.sp,
+                                            color = SemanticColors.Default.error,
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            Text(
+                                text = advisory.impact,
+                                fontSize = 10.sp,
+                                color = SemanticColors.Default.onWarning.copy(alpha = 0.8f)
+                            )
+                            if (advisory.remediation != null) {
+                                Text(
+                                    text = "Fix: ${advisory.remediation}",
+                                    fontSize = 10.sp,
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                    color = SemanticColors.Default.onWarning.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Text(
                     text = localizedString("wallet_sending_disabled"),
                     fontSize = 12.sp,
@@ -533,7 +680,171 @@ private fun HardwareTrustWarningCard(reason: String?) {
 }
 
 @Composable
-private fun GetGasCard(walletAddress: String) {
+private fun SpendingProgressCard(spending: SpendingProgress) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Spending Progress",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
+            )
+
+            // Session spending
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = "Session", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text = "$${spending.sessionSpent} / $${spending.sessionLimit}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                val sessionProgress = try {
+                    spending.sessionSpent.toFloat() / spending.sessionLimit.toFloat()
+                } catch (e: Exception) { 0f }
+                LinearProgressIndicator(
+                    progress = { sessionProgress.coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                    color = if (sessionProgress > 0.8f) SemanticColors.Default.warning else SemanticColors.Default.success,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+                Text(
+                    text = "Resets in ${spending.sessionResetMinutes} min",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+
+            // Daily spending
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = "Daily", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text = "$${spending.dailySpent} / $${spending.dailyRemaining.toDoubleOrNull()?.let { spending.dailySpent.toDoubleOrNull()?.plus(it)?.toString() } ?: spending.dailyRemaining}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                val dailyLimit = (spending.dailySpent.toDoubleOrNull() ?: 0.0) + (spending.dailyRemaining.toDoubleOrNull() ?: 1000.0)
+                val dailyProgress = try {
+                    (spending.dailySpent.toDoubleOrNull() ?: 0.0) / dailyLimit
+                } catch (e: Exception) { 0.0 }
+                LinearProgressIndicator(
+                    progress = { dailyProgress.toFloat().coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                    color = if (dailyProgress > 0.8) SemanticColors.Default.warning else SemanticColors.Default.success,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+                Text(
+                    text = "Resets in ${spending.dailyResetHours} hours",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TransactionHistoryCard(transactions: List<TransactionSummary>) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Recent Transactions",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
+            )
+
+            transactions.forEach { tx ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Direction icon
+                        Text(
+                            text = if (tx.type == "send") "↗️" else "↙️",
+                            fontSize = 16.sp
+                        )
+                        Column {
+                            Text(
+                                text = if (tx.type == "send") "Sent" else "Received",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = tx.recipient?.take(10)?.plus("...") ?: tx.sender?.take(10)?.plus("...") ?: "",
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "${if (tx.type == "send") "-" else "+"}${tx.amount} ${tx.currency}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (tx.type == "send") SemanticColors.Default.error else SemanticColors.Default.success
+                        )
+                        // Status badge
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = when (tx.status) {
+                                "confirmed" -> SemanticColors.Default.success.copy(alpha = 0.2f)
+                                "pending" -> SemanticColors.Default.warning.copy(alpha = 0.2f)
+                                else -> SemanticColors.Default.error.copy(alpha = 0.2f)
+                            }
+                        ) {
+                            Text(
+                                text = tx.status,
+                                fontSize = 9.sp,
+                                color = when (tx.status) {
+                                    "confirmed" -> SemanticColors.Default.success
+                                    "pending" -> SemanticColors.Default.warning
+                                    else -> SemanticColors.Default.error
+                                },
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+                if (tx != transactions.last()) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GetGasCard(
+    walletAddress: String,
+    gasEstimate: GasEstimate? = null
+) {
     val clipboardManager = LocalClipboardManager.current
     var showCopied by remember { mutableStateOf(false) }
 
@@ -564,6 +875,38 @@ private fun GetGasCard(walletAddress: String) {
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )
+            }
+
+            // Gas estimate display
+            if (gasEstimate != null) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "Transfer Cost Estimate",
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 12.sp
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = "Gas Price:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(text = "${gasEstimate.gasPriceGwei} gwei", fontSize = 11.sp)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = "USDC Transfer:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(text = "${gasEstimate.usdcTransferCostEth} ETH (~$${gasEstimate.usdcTransferCostUsd})", fontSize = 11.sp)
+                        }
+                    }
+                }
             }
 
             Text(
@@ -630,7 +973,50 @@ private fun WalletTransferCard(
     var isTransferring by remember { mutableStateOf(false) }
     var transferError by remember { mutableStateOf<String?>(null) }
     var transferSuccess by remember { mutableStateOf<String?>(null) }
+
+    // Address validation state
+    var addressValidation by remember { mutableStateOf<ai.ciris.mobile.shared.api.AddressValidationResult?>(null) }
+    var isValidatingAddress by remember { mutableStateOf(false) }
+
+    // Duplicate check state
+    var duplicateCheck by remember { mutableStateOf<ai.ciris.mobile.shared.api.DuplicateCheckResult?>(null) }
+    var showDuplicateWarning by remember { mutableStateOf(false) }
+
     val coroutineScope = rememberCoroutineScope()
+
+    // Validate address when it changes (debounced)
+    LaunchedEffect(recipientAddress) {
+        if (recipientAddress.length == 42 && recipientAddress.startsWith("0x")) {
+            kotlinx.coroutines.delay(300) // Debounce
+            isValidatingAddress = true
+            try {
+                addressValidation = apiClient.validateAddress(recipientAddress)
+            } catch (e: Exception) {
+                PlatformLogger.e("WalletTransfer", "Address validation failed: ${e.message}")
+            } finally {
+                isValidatingAddress = false
+            }
+        } else {
+            addressValidation = null
+        }
+    }
+
+    // Check for duplicate when amount changes (if address is valid)
+    LaunchedEffect(amount, recipientAddress) {
+        if (recipientAddress.length == 42 && amount.isNotBlank()) {
+            val amountValue = amount.toDoubleOrNull()
+            if (amountValue != null && amountValue > 0) {
+                kotlinx.coroutines.delay(500) // Debounce
+                try {
+                    duplicateCheck = apiClient.checkDuplicateTransaction(recipientAddress, amount, currency)
+                } catch (e: Exception) {
+                    PlatformLogger.e("WalletTransfer", "Duplicate check failed: ${e.message}")
+                }
+            }
+        } else {
+            duplicateCheck = null
+        }
+    }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -651,7 +1037,7 @@ private fun WalletTransferCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
 
-            // Recipient address field
+            // Recipient address field with validation feedback
             OutlinedTextField(
                 value = recipientAddress,
                 onValueChange = { recipientAddress = it; transferError = null; transferSuccess = null },
@@ -660,7 +1046,35 @@ private fun WalletTransferCard(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 enabled = !isTransferring,
-                isError = transferError != null && recipientAddress.isNotEmpty()
+                isError = addressValidation?.let { !it.valid || !it.checksumValid } ?: false,
+                trailingIcon = {
+                    when {
+                        isValidatingAddress -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        addressValidation?.valid == true && addressValidation?.checksumValid == true -> Text("✓", color = SemanticColors.Default.success, fontSize = 18.sp)
+                        addressValidation?.valid == true && addressValidation?.checksumValid == false -> Text("⚠", color = SemanticColors.Default.warning, fontSize = 18.sp)
+                        addressValidation?.valid == false -> Text("✗", color = SemanticColors.Default.error, fontSize = 18.sp)
+                        else -> {}
+                    }
+                },
+                supportingText = {
+                    Column {
+                        // Show validation status
+                        when {
+                            addressValidation?.isZeroAddress == true -> {
+                                Text("⚠ Zero address - funds will be burned!", color = SemanticColors.Default.error, fontSize = 10.sp)
+                            }
+                            addressValidation?.checksumValid == false && addressValidation?.computedChecksum != null -> {
+                                Text("⚠ Invalid checksum. Use: ${addressValidation?.computedChecksum}", color = SemanticColors.Default.warning, fontSize = 10.sp)
+                            }
+                            addressValidation?.error != null -> {
+                                Text(addressValidation?.error ?: "", color = SemanticColors.Default.error, fontSize = 10.sp)
+                            }
+                            addressValidation?.checksumValid == true -> {
+                                Text("✓ Valid EIP-55 checksum", color = SemanticColors.Default.success, fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
             )
 
             // Amount field
@@ -672,8 +1086,37 @@ private fun WalletTransferCard(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 enabled = !isTransferring,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 supportingText = { Text(localizedString("wallet_max", mapOf("amount" to maxAmount, "currency" to currency))) }
             )
+
+            // Duplicate transaction warning
+            if (duplicateCheck?.isDuplicate == true) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = SemanticColors.Default.surfaceWarning)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("⚠", fontSize = 20.sp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Possible Duplicate",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 13.sp,
+                                color = SemanticColors.Default.onWarning
+                            )
+                            Text(
+                                text = duplicateCheck?.warning ?: "You sent this amount to this address recently.",
+                                fontSize = 11.sp,
+                                color = SemanticColors.Default.onWarning.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                }
+            }
 
             // Optional memo field
             OutlinedTextField(
@@ -723,6 +1166,11 @@ private fun WalletTransferCard(
                         transferError = errorInvalidFormat
                         return@Button
                     }
+                    // Block if address is zero address
+                    if (addressValidation?.isZeroAddress == true) {
+                        transferError = "Cannot send to zero address - funds would be burned"
+                        return@Button
+                    }
                     if (amount.isBlank()) {
                         transferError = errorEnterAmount
                         return@Button
@@ -753,6 +1201,8 @@ private fun WalletTransferCard(
                                 recipientAddress = ""
                                 amount = ""
                                 memo = ""
+                                addressValidation = null
+                                duplicateCheck = null
                                 onTransferComplete()
                             } else {
                                 transferError = result.error ?: errorTransferFailed

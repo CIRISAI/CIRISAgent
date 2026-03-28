@@ -21,19 +21,21 @@ Key security features:
 3. Software fallback with secure storage on desktop/server
 4. Attestation-gated spending (Level 0-5 → $0-$100/tx)
 5. Hardware trust check - degraded trust → receive-only mode
+6. All sends/receives audited via audit service with spam prevention
 
 Dependencies:
 - ciris-verify>=1.3.1       # Unified wallet signing (secp256k1 + EVM support)
 - httpx                     # RPC client for Base L2
 """
 
+import asyncio
 import logging
 import os
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Callable, ClassVar, Dict, List, Optional
+from typing import Any, Awaitable, Callable, ClassVar, Dict, List, Optional, Union
 
 from ..config import X402ProviderConfig
 from ..schemas import (
@@ -57,6 +59,16 @@ logger = logging.getLogger(__name__)
 # Type alias for EVM signing callback from CIRISVerify
 # (tx_hash: bytes, chain_id: int) -> signature: bytes (65 bytes: r || s || v)
 EVMSigningCallback = Callable[[bytes, int], bytes]
+
+# Type alias for async audit callback for receives
+# (sender: str, amount: Decimal, currency: str, tx_hash: Optional[str]) -> Coroutine
+# Using Coroutine instead of Awaitable for create_task compatibility
+from collections.abc import Coroutine as CoroutineType
+
+AsyncReceiveAuditCallback = Callable[
+    [str, Decimal, str, Optional[str]],
+    CoroutineType[Any, Any, None]
+]
 
 
 @dataclass
@@ -191,6 +203,9 @@ class X402Provider(WalletProvider):
         self._balance_monitor: Optional[BalanceMonitor] = None
         self._balance_change_callbacks: List[Any] = []
 
+        # Async audit callback for receives (set by wallet adapter)
+        self._receive_audit_callback: Optional[AsyncReceiveAuditCallback] = None
+
         # Cached spending authority (refreshed on attestation change)
         self._spending_authority: Optional[SpendingAuthority] = None
 
@@ -267,6 +282,25 @@ class X402Provider(WalletProvider):
             )
             self._transactions.insert(0, incoming_tx)
 
+            # Trigger async audit callback for receives (with spam prevention)
+            if self._receive_audit_callback:
+                try:
+                    # Schedule async audit in event loop
+                    loop = asyncio.get_event_loop()
+                    loop.create_task(
+                        self._receive_audit_callback(
+                            incoming_tx.sender or "unknown",
+                            abs(incoming_tx.amount),
+                            incoming_tx.currency,
+                            incoming_tx.transaction_id,
+                        )
+                    )
+                except RuntimeError:
+                    # No event loop running - skip audit
+                    logger.debug("[X402] No event loop for receive audit")
+                except Exception as e:
+                    logger.error(f"[X402] Failed to schedule receive audit: {e}")
+
     async def _fetch_balance_from_chain(self) -> Balance:
         """Fetch balance from blockchain via RPC."""
         try:
@@ -298,6 +332,20 @@ class X402Provider(WalletProvider):
     def register_balance_callback(self, callback: Any) -> None:
         """Register a callback for balance changes."""
         self._balance_change_callbacks.append(callback)
+
+    def set_receive_audit_callback(self, callback: AsyncReceiveAuditCallback) -> None:
+        """
+        Set the async audit callback for received funds.
+
+        The callback will be invoked (with spam prevention) when:
+        - An incoming transfer is detected via balance monitor
+        - Amount is above dust threshold
+
+        Args:
+            callback: Async function(sender, amount, currency, tx_hash) -> None
+        """
+        self._receive_audit_callback = callback
+        logger.info("[X402] Receive audit callback registered")
 
     async def cleanup(self) -> None:
         """Cleanup provider resources."""

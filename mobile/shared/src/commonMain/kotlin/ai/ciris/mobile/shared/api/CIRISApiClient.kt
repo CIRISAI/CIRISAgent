@@ -85,6 +85,28 @@ data class WalletTransferResult(
 )
 
 /**
+ * Result of EIP-55 address validation.
+ */
+data class AddressValidationResult(
+    val valid: Boolean,
+    val checksumValid: Boolean,
+    val computedChecksum: String? = null,
+    val isZeroAddress: Boolean = false,
+    val error: String? = null,
+    val warnings: List<String> = emptyList()
+)
+
+/**
+ * Result of duplicate transaction check.
+ */
+data class DuplicateCheckResult(
+    val isDuplicate: Boolean,
+    val lastTxSecondsAgo: Int? = null,
+    val windowSeconds: Int = 300,
+    val warning: String? = null
+)
+
+/**
  * Extract the actual display value from a ConfigValue union type.
  * ConfigValue has multiple nullable fields (stringValue, intValue, etc.)
  * but only one will be non-null at a time.
@@ -2486,19 +2508,81 @@ class CIRISApiClient(
 
             val json = Json.parseToJsonElement(jsonString).jsonObject
 
+            // Parse spending progress
+            val spendingJson = json["spending"]?.jsonObject
+            val spending = if (spendingJson != null) {
+                ai.ciris.mobile.shared.ui.screens.SpendingProgress(
+                    sessionSpent = spendingJson["session_spent"]?.jsonPrimitive?.contentOrNull ?: "0.00",
+                    sessionRemaining = spendingJson["session_remaining"]?.jsonPrimitive?.contentOrNull ?: "500.00",
+                    sessionLimit = spendingJson["session_limit"]?.jsonPrimitive?.contentOrNull ?: "500.00",
+                    sessionResetMinutes = spendingJson["session_reset_minutes"]?.jsonPrimitive?.int ?: 60,
+                    dailySpent = spendingJson["daily_spent"]?.jsonPrimitive?.contentOrNull ?: "0.00",
+                    dailyRemaining = spendingJson["daily_remaining"]?.jsonPrimitive?.contentOrNull ?: "1000.00",
+                    dailyResetHours = spendingJson["daily_reset_hours"]?.jsonPrimitive?.int ?: 24
+                )
+            } else null
+
+            // Parse gas estimate
+            val gasJson = json["gas_estimate"]?.jsonObject
+            val gasEstimate = if (gasJson != null) {
+                ai.ciris.mobile.shared.ui.screens.GasEstimate(
+                    gasPriceGwei = gasJson["gas_price_gwei"]?.jsonPrimitive?.contentOrNull ?: "0.00",
+                    usdcTransferGas = gasJson["usdc_transfer_gas"]?.jsonPrimitive?.int ?: 65000,
+                    ethTransferGas = gasJson["eth_transfer_gas"]?.jsonPrimitive?.int ?: 21000,
+                    usdcTransferCostEth = gasJson["usdc_transfer_cost_eth"]?.jsonPrimitive?.contentOrNull ?: "0.000000",
+                    usdcTransferCostUsd = gasJson["usdc_transfer_cost_usd"]?.jsonPrimitive?.contentOrNull ?: "0.00",
+                    ethPriceUsd = gasJson["eth_price_usd"]?.jsonPrimitive?.contentOrNull ?: "2000"
+                )
+            } else null
+
+            // Parse security advisories
+            val advisoriesJson = json["security_advisories"]?.jsonArray
+            val securityAdvisories = advisoriesJson?.mapNotNull { advElement ->
+                val adv = advElement.jsonObject
+                ai.ciris.mobile.shared.ui.screens.SecurityAdvisoryData(
+                    cve = adv["cve"]?.jsonPrimitive?.contentOrNull,
+                    title = adv["title"]?.jsonPrimitive?.contentOrNull ?: "Unknown",
+                    impact = adv["impact"]?.jsonPrimitive?.contentOrNull ?: "Unknown",
+                    remediation = adv["remediation"]?.jsonPrimitive?.contentOrNull
+                )
+            } ?: emptyList()
+
+            // Parse recent transactions
+            val txJson = json["recent_transactions"]?.jsonArray
+            val recentTransactions = txJson?.mapNotNull { txElement ->
+                val tx = txElement.jsonObject
+                ai.ciris.mobile.shared.ui.screens.TransactionSummary(
+                    transactionId = tx["transaction_id"]?.jsonPrimitive?.contentOrNull ?: "",
+                    type = tx["type"]?.jsonPrimitive?.contentOrNull ?: "send",
+                    amount = tx["amount"]?.jsonPrimitive?.contentOrNull ?: "0.00",
+                    currency = tx["currency"]?.jsonPrimitive?.contentOrNull ?: "USDC",
+                    recipient = tx["recipient"]?.jsonPrimitive?.contentOrNull,
+                    sender = tx["sender"]?.jsonPrimitive?.contentOrNull,
+                    status = tx["status"]?.jsonPrimitive?.contentOrNull ?: "pending",
+                    timestamp = tx["timestamp"]?.jsonPrimitive?.contentOrNull ?: "",
+                    explorerUrl = tx["explorer_url"]?.jsonPrimitive?.contentOrNull
+                )
+            } ?: emptyList()
+
             val walletStatus = ai.ciris.mobile.shared.ui.screens.WalletStatusResponse(
                 hasWallet = json["has_wallet"]?.jsonPrimitive?.boolean ?: false,
                 provider = json["provider"]?.jsonPrimitive?.contentOrNull ?: "x402",
                 network = json["network"]?.jsonPrimitive?.contentOrNull ?: "base-sepolia",
                 currency = json["currency"]?.jsonPrimitive?.contentOrNull ?: "USDC",
                 balance = json["balance"]?.jsonPrimitive?.contentOrNull ?: "0.00",
+                ethBalance = json["eth_balance"]?.jsonPrimitive?.contentOrNull ?: "0.00",
+                needsGas = json["needs_gas"]?.jsonPrimitive?.boolean ?: true,
                 address = json["address"]?.jsonPrimitive?.contentOrNull,
                 isReceiveOnly = json["is_receive_only"]?.jsonPrimitive?.boolean ?: true,
-                hardwareTrustDegraded = json["hardware_trust_degraded"]?.jsonPrimitive?.boolean ?: false,
-                trustDegradationReason = json["trust_degradation_reason"]?.jsonPrimitive?.contentOrNull,
                 attestationLevel = json["attestation_level"]?.jsonPrimitive?.int ?: 0,
                 maxTransactionLimit = json["max_transaction_limit"]?.jsonPrimitive?.contentOrNull ?: "0.00",
-                dailyLimit = json["daily_limit"]?.jsonPrimitive?.contentOrNull ?: "0.00"
+                dailyLimit = json["daily_limit"]?.jsonPrimitive?.contentOrNull ?: "0.00",
+                hardwareTrustDegraded = json["hardware_trust_degraded"]?.jsonPrimitive?.boolean ?: false,
+                trustDegradationReason = json["trust_degradation_reason"]?.jsonPrimitive?.contentOrNull,
+                securityAdvisories = securityAdvisories,
+                spending = spending,
+                gasEstimate = gasEstimate,
+                recentTransactions = recentTransactions
             )
 
             logInfo(method, "Wallet status: address=${walletStatus.address}, balance=${walletStatus.balance}, level=${walletStatus.attestationLevel}")
@@ -2562,6 +2646,107 @@ class CIRISApiClient(
                 currency = "USDC",
                 recipient = recipient,
                 error = e.message ?: "Unknown error"
+            )
+        }
+    }
+
+    /**
+     * Validate an EVM address with EIP-55 checksum verification.
+     */
+    suspend fun validateAddress(address: String): AddressValidationResult {
+        val method = "validateAddress"
+        logInfo(method, "Validating address")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+
+            val response = client.post("$baseUrl/v1/wallet/validate-address") {
+                header("Authorization", "Bearer $accessToken")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("address", address)
+                })
+            }
+
+            val jsonString = response.bodyAsText()
+            client.close()
+
+            val json = Json.parseToJsonElement(jsonString).jsonObject
+
+            AddressValidationResult(
+                valid = json["valid"]?.jsonPrimitive?.boolean ?: false,
+                checksumValid = json["checksum_valid"]?.jsonPrimitive?.boolean ?: false,
+                computedChecksum = json["computed_checksum"]?.jsonPrimitive?.contentOrNull,
+                isZeroAddress = json["is_zero_address"]?.jsonPrimitive?.boolean ?: false,
+                error = json["error"]?.jsonPrimitive?.contentOrNull,
+                warnings = json["warnings"]?.jsonArray?.mapNotNull {
+                    it.jsonPrimitive.contentOrNull
+                } ?: emptyList()
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            AddressValidationResult(
+                valid = false,
+                checksumValid = false,
+                error = e.message ?: "Validation failed"
+            )
+        }
+    }
+
+    /**
+     * Check if a transaction would be a duplicate.
+     */
+    suspend fun checkDuplicateTransaction(
+        recipient: String,
+        amount: String,
+        currency: String = "USDC"
+    ): DuplicateCheckResult {
+        val method = "checkDuplicateTransaction"
+        logInfo(method, "Checking for duplicate transaction")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+
+            val response = client.post("$baseUrl/v1/wallet/check-duplicate") {
+                header("Authorization", "Bearer $accessToken")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("recipient", recipient)
+                    put("amount", amount)
+                    put("currency", currency)
+                })
+            }
+
+            val jsonString = response.bodyAsText()
+            client.close()
+
+            val json = Json.parseToJsonElement(jsonString).jsonObject
+
+            DuplicateCheckResult(
+                isDuplicate = json["is_duplicate"]?.jsonPrimitive?.boolean ?: false,
+                lastTxSecondsAgo = json["last_tx_seconds_ago"]?.jsonPrimitive?.int,
+                windowSeconds = json["window_seconds"]?.jsonPrimitive?.int ?: 300,
+                warning = json["warning"]?.jsonPrimitive?.contentOrNull
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            DuplicateCheckResult(
+                isDuplicate = false,
+                warning = "Could not check for duplicates: ${e.message}"
             )
         }
     }

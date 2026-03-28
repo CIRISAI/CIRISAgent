@@ -16,7 +16,7 @@ language_rules: "言語ルール:\n\
   - ユーザーの優先言語で応答してください(ユーザープロファイルを確認してください)。\n\
   - すべてのコンテンツ値(reasoning、rationale、speak_contentなど)はユーザーの言語である必要があります。\n\
   - JSONキーは英語のままにする必要があります(例: \"selected_action\"、\"reasoning\"、\"tool_parameters\")。\n\
-  - 例: {\"selected_action\": \"SPEAK\", \"speak_content\": \"こんにちは!\", \"rationale\": \"ユーザーが日本語で挨拶しました\""}} - 日本語のコンテンツ、英語のキー。"
+  - 例: {\"selected_action\": \"SPEAK\", \"speak_content\": \"こんにちは!\", \"rationale\": \"ユーザーが日本語で挨拶しました\"}} - 日本語のコンテンツ、英語のキー。"
 action_parameter_schemas: "アクションごとのフラットフィールドスキーマ(ネストされた'action_parameters'を使用しないでください):\n\
   SPEAK: speak_contentは応答テキストです\n\
   PONDER: ponder_questionsは2-3の明確化質問のリストです\n\

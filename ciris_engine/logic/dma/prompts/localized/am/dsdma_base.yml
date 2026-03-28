@@ -43,6 +43,6 @@ response_format: |
   - በተጠቃሚው ተመራጭ ቋንቋ ምላሽ ይስጡ (የተጠቃሚውን መገለጫ ይመልከቱ)።
   - ሁሉም የይዘት እሴቶች በተጠቃሚው ቋንቋ መሆን አለባቸው።
   - የJSON ቁልፎች በእንግሊዝኛ መቆየት አለባቸው።
-  - ምሳሌ: {"reasoning": "ተጠቃሚው ወሳኝ ውሳኔ ያስፈልገዋል", "aligned": true} - የአማርኛ ይዘት፣ የእንግሊዝኛ ቁልፎች።
+  - ምሳሌ: {{"reasoning": "ተጠቃሚው ወሳኝ ውሳኔ ያስፈልገዋል", "aligned": true} - የአማርኛ ይዘት፣ የእንግሊዝኛ ቁልፎች።
 
 accord_header: true  # Use ACCORD_TEXT as system message

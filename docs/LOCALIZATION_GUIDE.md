@@ -211,6 +211,24 @@ mkdir -p ciris_engine/logic/dma/prompts/localized/ur
 2. Translate `description` and `system_prompt` fields
 3. Keep `name` and technical identifiers in English
 4. Use glossary terms for action verbs
+5. **CRITICAL: Escape JSON braces** - Use `{{` and `}}` for JSON examples
+
+### JSON Brace Escaping (CRITICAL)
+
+Python's `.format()` method interprets `{` and `}` as placeholders. JSON examples in prompts will cause `KeyError` if not escaped.
+
+```yaml
+# WRONG - causes KeyError: '"reasoning"'
+- Example: {"reasoning": "ተጠቃሚው...", "stakeholders": "..."}
+
+# CORRECT - properly escaped with double braces
+- Example: {{"reasoning": "ተጠቃሚው...", "stakeholders": "..."}}
+```
+
+**Validation**: Run tests before committing:
+```bash
+pytest tests/ciris_engine/logic/dma/test_prompt_formatting.py -v
+```
 
 Example (`pdma.yml` for Urdu):
 ```yaml

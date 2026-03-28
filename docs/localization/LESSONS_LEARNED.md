@@ -176,6 +176,27 @@ Preserve section headers in CAPS, keep code blocks in English.
 | Duplicate keys | JSON parse error or test failure | Use `check_duplicate_keys()` function |
 | Inconsistent terminology | Different translations for same term | Enforce glossary usage in prompts |
 | RTL issues (ar, ur) | Text direction wrong | Ensure `_meta.direction: "rtl"` is set |
+| **JSON brace escaping** | `KeyError: '"reasoning"'` or `'"field_name"'` | Use `{{` and `}}` for JSON examples in prompts |
+
+### Critical: JSON Brace Escaping in DMA Prompts
+
+**Root Cause**: Python's `.format()` interprets `{` and `}` as format placeholders. When prompts contain JSON examples like `{"reasoning": "..."}`, the `.format()` method raises `KeyError: '"reasoning"'`.
+
+**Solution**: Escape all JSON braces by doubling them:
+```yaml
+# WRONG - causes KeyError
+- Example: {"reasoning": "ተጠቃሚው...", "stakeholders": "..."}
+
+# CORRECT - properly escaped
+- Example: {{"reasoning": "ተጠቃሚው...", "stakeholders": "..."}}
+```
+
+**Prevention**: Run the unit tests before committing:
+```bash
+pytest tests/ciris_engine/logic/dma/test_prompt_formatting.py -v
+```
+
+This test validates all prompts (base + 15 localized languages) for proper brace escaping.
 
 ## Validation Checklist
 

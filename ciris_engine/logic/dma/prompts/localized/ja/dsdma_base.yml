@@ -43,6 +43,6 @@ language_rules: |
   - ユーザーの優先言語で応答してください(ユーザープロファイルを確認してください)。
   - すべてのコンテンツ値(reasoning、rationale、speak_contentなど)はユーザーの言語である必要があります。
   - JSONキーは英語のままにする必要があります(例: "selected_action"、"reasoning"、"tool_parameters")。
-  - 例: {"selected_action": "SPEAK", "speak_content": "こんにちは!", "rationale": "ユーザーが日本語で挨拶しました""}} - 日本語のコンテンツ、英語のキー。
+  - 例: {{"selected_action": "SPEAK", "speak_content": "こんにちは!", "rationale": "ユーザーが日本語で挨拶しました""}} - 日本語のコンテンツ、英語のキー。
 
 accord_header: true  # Use ACCORD_TEXT as system message

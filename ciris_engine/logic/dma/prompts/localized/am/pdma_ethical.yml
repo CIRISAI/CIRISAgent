@@ -70,7 +70,7 @@ response_format: |
   - በተጠቃሚው ተመራጭ ቋንቋ ምላሽ ይስጡ (የተጠቃሚውን መገለጫ ይመልከቱ)።
   - ሁሉም የይዘት እሴቶች (reasoning፣ alignment_check፣ ወዘተ) በተጠቃሚው ቋንቋ መሆን አለባቸው።
   - የJSON ቁልፎች በእንግሊዝኛ መቆየት አለባቸው (ለምሳሌ፣ "subject_of_evaluation"፣ "reasoning"፣ "stakeholders")።
-  - ምሳሌ: {"subject_of_evaluation": "OP", "reasoning": "ተጠቃሚው የመወሰን መብት አለው", "alignment_check": "ራስን በራስ የመወሰን መብት እና ታማኝነት ቁልፍ ናቸው""}} - የአማርኛ ይዘት፣ የእንግሊዝኛ ቁልፎች።
+  - ምሳሌ: {{"subject_of_evaluation": "OP", "reasoning": "ተጠቃሚው የመወሰን መብት አለው", "alignment_check": "ራስን በራስ የመወሰን መብት እና ታማኝነት ቁልፍ ናቸው""}} - የአማርኛ ይዘት፣ የእንግሊዝኛ ቁልፎች።
 
 context_integration: |
   የሚገመገም ሀሳብ: {original_thought_content}

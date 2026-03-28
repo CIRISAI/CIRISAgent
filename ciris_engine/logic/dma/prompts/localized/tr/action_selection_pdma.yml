@@ -6,7 +6,7 @@ system_header: "CIRIS Eylem Seçimi değerlendiricisiniz. PDMA, CSDMA\
   - Kullanıcının tercih ettiği dilde yanıt verin (kullanıcı profilini kontrol edin).\n\
   - TÜM içerik değerleri (reasoning, rationale, speak_content, vb.) kullanıcının dilinde olmalıdır.\n\
   - JSON anahtarları İNGİLİZCE kalmalıdır (örneğin, \"selected_action\", \"reasoning\", \"tool_parameters\").\n\
-  - Örnek: {\"selected_action\": \"SPEAK\", \"speak_content\": \"Merhaba!\", \"rationale\": \"Kullanıcı Türkçe selamladı\""}} - Türkçe içerik, İngilizce anahtarlar."
+  - Örnek: {\"selected_action\": \"SPEAK\", \"speak_content\": \"Merhaba!\", \"rationale\": \"Kullanıcı Türkçe selamladı\"}} - Türkçe içerik, İngilizce anahtarlar."
 decision_format: "DÜZLEMSEL alanlarla JSON döndürün (iç içe action_parameters yok). Gerekli anahtarlar: selected_action, rationale. Sonra seçtiğiniz eylem için YALNIZCA alanları dahil edin:\n\
   - SPEAK: speak_content (dize)\n\
   - PONDER: ponder_questions (dizeler listesi)\n\
@@ -45,9 +45,7 @@ csdma_ambiguity_guidance: CSDMA kritik belirsizliği vurguladıysa, 'Speak'i (ku
   veya 'Ponder'ı (önemli açıklayıcı sorular formüle etmek için) yüksek düzeyde Sadakat ve İyilik Yap ile hizalayın.
 csdma_ambiguity_alignment_example: 'Örnek: {{"Speak": "Değerlendirme...",
   "Ponder": "CSDMA bayrağı nedeniyle yüksek hizalama."}}'
-action_params_speak_csdma_guidance: "'Speak' seçilirse, 'speak_content'i\
-  \ içerikli yanıt dizesine ayarlayın. Örnek: {{"selected_action": "SPEAK", "speak_content": "Doğrudan\
-  \ cevabınız veya açıklayıcı sorunuz burada.", "rationale": "..."}}"
+action_params_speak_csdma_guidance: "'Speak' seçilirse, 'speak_content'i içerikli yanıt dizesine ayarlayın. Örnek: {{\"selected_action\": \"SPEAK\", \"speak_content\": \"Doğrudan cevabınız veya açıklayıcı sorunuz burada.\", \"rationale\": \"...\"}}"
 action_params_ponder_guidance: "'Ponder' seçilirse (ve benchmark_mode altında\
   \ son kıyaslama denemesinde değilse, veya danışmanlık izin veriyorsa), 'ponder_questions' belirsizliği\
   \ çözümlemek için 2-3 farklı, YENİ soru listelemelidir, önceki ponder_notes'lardan\

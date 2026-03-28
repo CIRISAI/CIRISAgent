@@ -6,7 +6,7 @@ decision_format: "LANGUAGE RULES:\n\
   - Respond in the user's preferred language (check user profile).\n\
   - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.\n\
   - JSON keys MUST remain in English (e.g., \"selected_action\", \"reasoning\", \"tool_parameters\").\n\
-  - Example: {\"selected_action\": \"SPEAK\", \"speak_content\": \"Hallo!\", \"rationale\": \"Benutzer hat auf Deutsch gegrüßt\""}} - German content, English keys.\n\n\
+  - Example: {\"selected_action\": \"SPEAK\", \"speak_content\": \"Hallo!\", \"rationale\": \"Benutzer hat auf Deutsch gegrüßt\"}} - German content, English keys.\n\n\
   Geben Sie JSON mit FLACHEN Feldern zurück (keine verschachtelten action_parameters). Erforderliche Schlüssel: selected_action, rationale. Fügen Sie dann NUR die Felder für Ihre gewählte Aktion hinzu:\n\
   - SPEAK: speak_content (string)\n\
   - PONDER: ponder_questions (Liste von strings)\n\

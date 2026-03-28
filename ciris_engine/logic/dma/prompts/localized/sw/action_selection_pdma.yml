@@ -3,7 +3,7 @@ decision_format: "LANGUAGE RULES:\n\
   - Respond in the user's preferred language (check user profile).\n\
   - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.\n\
   - JSON keys MUST remain in English (e.g., \"selected_action\", \"reasoning\", \"tool_parameters\").\n\
-  - Example: {\"selected_action\": \"SPEAK\", \"speak_content\": \"Habari!\", \"rationale\": \"Mtumiaji alisalimia kwa Kiswahili\""}} - Swahili content, English keys.\n\
+  - Example: {\"selected_action\": \"SPEAK\", \"speak_content\": \"Habari!\", \"rationale\": \"Mtumiaji alisalimia kwa Kiswahili\"}} - Swahili content, English keys.\n\
   \n\
   Rudisha JSON na sehemu za GOROFA (hakuna action_parameters za ndani). Funguo zinazohitajika: selected_action, rationale. Kisha jumuisha TU sehemu za kitendo ulichochagua:\n\
   - SPEAK: speak_content (mistari)\n\

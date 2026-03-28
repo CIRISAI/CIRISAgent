@@ -50,7 +50,7 @@ system_guidance_header: |
   - Kullanıcının tercih ettiği dilde yanıt verin (kullanıcı profilini kontrol edin).
   - TÜM içerik değerleri (reasoning, rationale, speak_content, vb.) kullanıcının dilinde olmalıdır.
   - JSON anahtarları İNGİLİZCE kalmalıdır (örneğin, "selected_action", "reasoning", "tool_parameters").
-  - Örnek: {"selected_action": "SPEAK", "speak_content": "Merhaba!", "rationale": "Kullanıcı Türkçe selamladı""}} - Türkçe içerik, İngilizce anahtarlar.
+  - Örnek: {{"selected_action": "SPEAK", "speak_content": "Merhaba!", "rationale": "Kullanıcı Türkçe selamladı""}} - Türkçe içerik, İngilizce anahtarlar.
 
   Düşünceyi şu şekilde değerlendirin:
   1. **Özne Belirleme:** Kimin eylemlerini değerlendirdiğinizi açıkça belirtin.

@@ -12,10 +12,10 @@ This module centralizes all SQL generation logic, making it easy to:
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-if TYPE_CHECKING:
-    from ciris_engine.logic.persistence.db.dialect import DialectAdapter
+# Note: DialectAdapter type hint replaced with Any to break cyclic dependency with dialect.py
+# The adapter parameter is duck-typed: must have .dialect attribute
 
 
 class ConflictResolution(str, Enum):
@@ -47,7 +47,7 @@ class InsertQuery:
     conflict_columns: Optional[List[str]] = None  # For ON CONFLICT
     update_columns: Optional[List[str]] = None  # For ON CONFLICT DO UPDATE
 
-    def to_sql(self, adapter: "DialectAdapter") -> str:
+    def to_sql(self, adapter: Any) -> str:
         """Generate SQL for the target dialect.
 
         Args:
@@ -102,7 +102,7 @@ class SelectQuery:
     order_by: Optional[str] = None
     limit: Optional[int] = None
 
-    def to_sql(self, adapter: "DialectAdapter") -> str:
+    def to_sql(self, adapter: Any) -> str:
         """Generate SQL for the target dialect.
 
         Args:
@@ -139,7 +139,7 @@ class QueryBuilder:
         >>> sql = builder.insert_ignore_node()
     """
 
-    def __init__(self, adapter: "DialectAdapter"):
+    def __init__(self, adapter: Any):
         """Initialize query builder with dialect adapter.
 
         Args:

@@ -6,12 +6,12 @@ adapter architecture, handling events like messages, reactions, threads, etc.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import discord
 
-if TYPE_CHECKING:
-    from ciris_engine.logic.adapters.discord.adapter import DiscordPlatform
+# Note: Platform type is Any to break cyclic dependency with adapter.py
+# The platform instance provides discord_adapter, config, discord_observer attributes
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class CIRISDiscordClient(discord.Client):
     """Custom Discord client with CIRIS-specific event handling."""
 
-    def __init__(self, platform: "DiscordPlatform", *args: Any, **kwargs: Any) -> None:
+    def __init__(self, platform: Any, *args: Any, **kwargs: Any) -> None:
         """
         Initialize CIRIS Discord client.
 

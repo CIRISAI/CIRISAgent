@@ -261,6 +261,7 @@ class QARunner:
             QAModule.FILTERS,
             QAModule.HANDLERS,
             QAModule.DEFERRAL,
+            QAModule.WALLET,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -891,6 +892,7 @@ class QARunner:
         from .modules.system_messages_tests import SystemMessagesTests
         from .modules.utility_adapters_tests import UtilityAdaptersTests
         from .modules.vision_tests import VisionTests
+        from .modules.wallet_tests import WalletTests
 
         all_passed = True
 
@@ -929,6 +931,7 @@ class QARunner:
             QAModule.FILTERS: FilterTestModule,
             QAModule.HANDLERS: HandlerTestModule,
             QAModule.DEFERRAL: DeferralTestModule,
+            QAModule.WALLET: WalletTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):

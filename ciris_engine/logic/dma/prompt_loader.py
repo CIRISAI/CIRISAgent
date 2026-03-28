@@ -3,9 +3,13 @@ Prompt Loader for DMA Systems
 
 This module provides functionality to load prompts from YAML files,
 separating prompt content from business logic for better maintainability.
+
+Supports localized prompts by checking for language-specific versions in
+prompts/localized/{lang}/ directories.
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import Any, Optional
 
@@ -16,16 +20,30 @@ from ciris_engine.schemas.dma.prompts import PromptCollection
 logger = logging.getLogger(__name__)
 
 
-class DMAPromptLoader:
-    """Loads and manages DMA prompts from YAML files."""
+def _sanitize_for_log(value: str, max_length: int = 20) -> str:
+    """Sanitize a value for safe inclusion in log messages."""
+    sanitized = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', value)
+    return sanitized[:max_length] + "..." if len(sanitized) > max_length else sanitized
 
-    def __init__(self, prompts_dir: Optional[str] = None):
+# Default language for prompts
+DEFAULT_LANGUAGE = "en"
+
+
+class DMAPromptLoader:
+    """Loads and manages DMA prompts from YAML files.
+
+    Supports localized prompts by checking for language-specific versions.
+    """
+
+    def __init__(self, prompts_dir: Optional[str] = None, language: str = DEFAULT_LANGUAGE):
         """
         Initialize the prompt loader.
 
         Args:
             prompts_dir: Optional custom prompts directory path.
                         If None, uses the default prompts/ directory relative to this file.
+            language: ISO 639-1 language code (e.g., 'en', 'am', 'es').
+                     If localized version exists, it will be used; otherwise falls back to English.
         """
         if prompts_dir is None:
             # Default to prompts/ directory in same location as this file
@@ -33,8 +51,21 @@ class DMAPromptLoader:
         else:
             self.prompts_dir = Path(prompts_dir)
 
+        self.language = language
+        self.localized_dir = self.prompts_dir / "localized" / language
+
         if not self.prompts_dir.exists():
             logger.warning(f"Prompts directory does not exist: {self.prompts_dir}")
+
+    def set_language(self, language: str) -> None:
+        """Update the language for prompt loading.
+
+        Args:
+            language: ISO 639-1 language code
+        """
+        self.language = language
+        self.localized_dir = self.prompts_dir / "localized" / language
+        logger.debug(f"DMA prompt language set to: {language}")
 
     def _normalize_accord_mode(self, value: Any) -> str:
         """Normalize accord_header value to accord_mode string.
@@ -63,6 +94,9 @@ class DMAPromptLoader:
         """
         Load a prompt template from a YAML file.
 
+        Checks for localized version first if language is not English.
+        Falls back to English version if localized version not found.
+
         Args:
             template_name: Name of the template file (without .yml extension)
 
@@ -73,21 +107,39 @@ class DMAPromptLoader:
             FileNotFoundError: If the template file doesn't exist
             yaml.YAMLError: If the YAML file is malformed
         """
-        template_path = self.prompts_dir / f"{template_name}.yml"
+        template_path = None
+
+        # Try localized version first if not English
+        if self.language != DEFAULT_LANGUAGE and self.localized_dir.exists():
+            localized_path = self.localized_dir / f"{template_name}.yml"
+            if localized_path.exists():
+                template_path = localized_path
+                logger.debug(f"Using localized prompt template: {localized_path}")
+
+        # Fall back to default (English) version
+        if template_path is None:
+            template_path = self.prompts_dir / f"{template_name}.yml"
+            if self.language != DEFAULT_LANGUAGE:
+                logger.debug(f"Localized prompt not found for {self.language}, using English: {template_path}")
 
         if not template_path.exists():
+            logger.error(f"[DMA-PROMPT] Template file NOT FOUND: {template_path}")
             raise FileNotFoundError(f"Prompt template not found: {template_path}")
 
         try:
+            logger.info(f"[DMA-PROMPT] Loading template from: {template_path}")
             with open(template_path, "r", encoding="utf-8") as f:
-                template_data = yaml.safe_load(f)
+                raw_content = f.read()
+                logger.info(f"[DMA-PROMPT] Read {len(raw_content)} chars from {template_name}.yml")
+                template_data = yaml.safe_load(raw_content)
 
             if not isinstance(template_data, dict):
+                logger.error(f"[DMA-PROMPT] Invalid template format: expected dict, got {type(template_data)}")
                 raise ValueError(
                     f"Invalid template format in {template_path}: expected dict, got {type(template_data)}"
                 )
 
-            logger.debug(f"Loaded prompt template: {template_name}")
+            logger.info(f"[DMA-PROMPT] Parsed template {template_name}: keys={list(template_data.keys())}")
 
             # Convert dict to PromptCollection
             prompt_collection = PromptCollection(
@@ -214,11 +266,51 @@ class DMAPromptLoader:
 
 # Global instance for convenience
 _default_loader = None
+_current_language = DEFAULT_LANGUAGE
 
 
-def get_prompt_loader() -> DMAPromptLoader:
-    """Get the default prompt loader instance."""
-    global _default_loader
+def get_prompt_loader(language: Optional[str] = None) -> DMAPromptLoader:
+    """Get the default prompt loader instance.
+
+    Args:
+        language: Optional language code. If provided and different from current,
+                  updates the loader's language setting. If None on first call,
+                  uses the user's preferred language from CIRIS_PREFERRED_LANGUAGE.
+
+    Returns:
+        DMAPromptLoader instance configured for the specified language.
+    """
+    global _default_loader, _current_language
+
     if _default_loader is None:
-        _default_loader = DMAPromptLoader()
+        # If no language specified, check the user's preferred language
+        if language is None:
+            try:
+                from ciris_engine.logic.utils.localization import get_preferred_language
+
+                lang = get_preferred_language()
+            except ImportError:
+                lang = DEFAULT_LANGUAGE
+        else:
+            lang = language
+        _default_loader = DMAPromptLoader(language=lang)
+        _current_language = lang
+        logger.info(f"DMA prompt loader initialized with language: {lang}")
+    elif language and language != _current_language:
+        _default_loader.set_language(language)
+        _current_language = language
+
     return _default_loader
+
+
+def set_prompt_language(language: str) -> None:
+    """Set the language for DMA prompts globally.
+
+    Args:
+        language: ISO 639-1 language code (e.g., 'en', 'am', 'es')
+    """
+    global _default_loader, _current_language
+    _current_language = language
+    if _default_loader is not None:
+        _default_loader.set_language(language)
+    logger.info(f"DMA prompt language set to: {_sanitize_for_log(language)}")

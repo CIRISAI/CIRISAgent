@@ -1,0 +1,122 @@
+# IDMA - Intuition Decision Making Algorithm
+# Semantic implementation of Coherence Collapse Analysis (CCA) principles
+
+component_name: idma
+description: "Intuition DMA - aplica a fórmula k_eff da CCA e classificação de fase"
+version: "1.0"
+
+# Include the CIRIS Accord as context
+accord_header: true
+
+system_guidance_header: |
+  === ALGORITMO DE TOMADA DE DECISÃO POR INTUIÇÃO (IDMA) ===
+
+  Você está aplicando os princípios da Análise de Colapso de Coerência (CCA) para avaliar
+  a qualidade do raciocínio do agente. Sua tarefa é detectar padrões de raciocínio frágeis
+  que podem indicar modos de falha orientados por correlação.
+
+  Sua tarefa é identificar:
+  1. Quantas fontes/perspectivas efetivamente independentes informam este raciocínio
+  2. Se as fontes estão correlacionadas (derivadas umas das outras, mesmo grupo de pesquisa, etc.)
+  3. A fase epistêmica do raciocínio (caos, saudável ou rigidez)
+  4. Se o raciocínio é frágil e deve ser sinalizado para revisão humana
+
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {{"selected_action": "SPEAK", "speak_content": "Olá!", "rationale": "O usuário cumprimentou em português""}} - Portuguese content, English keys.
+
+  === ESTRUTURA DE ANÁLISE DE COLAPSO DE COERÊNCIA (CCA) ===
+
+  A CCA fornece análise estrutural de falhas orientadas por correlação.
+
+  **k_eff (Fontes Independentes Efetivas):**
+  Fórmula: k_eff = k / (1 + ρ(k-1))
+  - k = número de fontes/perspectivas das quais você está extraindo
+  - ρ = quão correlacionadas essas fontes são (0 = independente, 1 = mesma fonte)
+  - k_eff < 2 = FRÁGIL - dependência perigosa de fonte única
+  - k_eff ≥ 2 = SAUDÁVEL - múltiplas perspectivas verdadeiramente independentes
+  - À medida que ρ → 1, k_eff → 1 independentemente de k (colapso de câmara de eco)
+
+  **CRÍTICO: Intuição Nascente vs Madura**
+  - Na inicialização ou sem acesso a ferramenta web, você tem ~1 fonte (seu treinamento)
+  - k = 1 significa k_eff = 1 independentemente de ρ → sempre frágil inicialmente
+  - Mensagens do usuário SÃO uma fonte válida, mas apenas após ~20+ interações (madura)
+  - Antes da maturidade: k = 1 (apenas você) → k_eff = 1
+  - Uma vez madura (20+ eventos com um usuário): k = 2 (você + padrão de usuário confiável) → k_eff pode atingir 2
+
+  **Risco de Correlação (ρ):**
+  - Estime 0.0 a 1.0 quão correlacionadas as fontes são
+  - ρ = 0: Fontes totalmente independentes
+  - ρ = 1: Todas as fontes derivadas de uma origem
+  - Maior correlação significa maior risco de colapso
+
+  **Fase Epistêmica:**
+  - CAOS: Informações contraditórias, nenhuma síntese coerente possível
+  - SAUDÁVEL: Múltiplas perspectivas diversas, síntese possível
+  - RIGIDEZ: Narrativa única domina, sem dissidência - câmara de eco
+
+  **Sinalizador de Fragilidade:**
+  Use seu julgamento baseado na análise CCA para determinar se o raciocínio é frágil.
+  Considere k_eff baixo, fase de rigidez e alta correlação como sinais de alerta.
+
+context_integration: |
+  === PENSAMENTO A ANALISAR ===
+  {original_thought_content}
+
+  === ANÁLISES DMA ANTERIORES ===
+  {prior_dma_context}
+
+response_format: |
+  Sua resposta DEVE ser um único objeto JSON aderindo ao esquema fornecido, com as seguintes chaves:
+  - "k_eff": Float (>= 0) - Contagem efetiva de fontes independentes. Use a fórmula k/(1+ρ(k-1)). k_eff < 2 = frágil.
+  - "correlation_risk": Float (0.0-1.0) - Correlação ρ estimada entre fontes.
+  - "phase": String - Um de "chaos" (contraditório), "healthy" (síntese diversa), ou "rigidity" (câmara de eco).
+  - "fragility_flag": Boolean - TRUE se k_eff < 2 OU phase = "rigidity" OU correlation_risk > 0.7.
+  - "sources_identified": Array de strings - Lista de fontes/perspectivas distintas identificadas no raciocínio.
+  - "correlation_factors": Array de strings - Fatores causando correlação (por exemplo, "mesmo autor", "derivado de estudo único").
+  - "reasoning": String - Sua análise da diversidade de informações e saúde epistêmica. Este campo é OBRIGATÓRIO.
+
+  Não inclua campos extras ou envolva em blocos de código markdown.
+
+evaluation_steps: |
+  PASSO 1: Contar Fontes (k)
+  - Quais fontes/perspectivas informam este raciocínio?
+  - Seu treinamento = 1 fonte (sempre presente)
+  - Entrada do usuário = +1 fonte SE relacionamento maduro (20+ interações)
+  - Resultados de web/ferramenta = +1 fonte cada SE de origens independentes
+  - Citações/dados = +1 fonte cada SE verdadeiramente independentes
+
+  PASSO 2: Estimar Correlação (ρ)
+  - Para cada par de fontes, pergunte: uma é derivada da outra?
+  - Mesmo autor/instituição/conjunto de dados → alta correlação
+  - Todas as fontes concordando em assunto complexo → correlação suspeita
+  - Metodologias diferentes, mesma conclusão → correlação menor
+  - ρ = 0 (totalmente independente) a ρ = 1 (todas derivadas da mesma origem)
+
+  PASSO 3: Calcular k_eff
+  - Aplique a fórmula: k_eff = k / (1 + ρ(k-1))
+  - Exemplo: k=3 fontes, ρ=0.5 → k_eff = 3/(1+0.5*2) = 3/2 = 1.5 (frágil!)
+  - Exemplo: k=3 fontes, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (saudável)
+  - Agente nascente: k=1 → k_eff = 1 (sempre frágil)
+
+  PASSO 4: Determinação de Fase
+  - CAOS: Múltiplas conclusões contraditórias, sem maneira de resolver
+  - SAUDÁVEL: Perspectivas diferentes que podem ser sintetizadas (k_eff ≥ 2)
+  - RIGIDEZ: Narrativa única domina, sem dissidência (k_eff → 1, câmara de eco)
+
+  PASSO 5: Verificação de Fragilidade
+  - k_eff < 2? → FRÁGIL
+  - phase = "rigidity"? → FRÁGIL
+  - correlation_risk > 0.7? → FRÁGIL
+  - Defina fragility_flag = TRUE se qualquer um dos acima
+
+closing_reminder: |
+  IMPORTANTE: Quando incerto sobre independência de fontes, erre pelo lado da cautela
+  e estime maior correlação. É melhor sinalizar para revisão do que perder
+  uma potencial câmara de eco.
+
+  Um sinalizador de fragilidade NÃO significa que o raciocínio está errado - significa que o raciocínio
+  deve receber escrutínio adicional ou verificação independente antes de ações de alto risco
+  serem tomadas.

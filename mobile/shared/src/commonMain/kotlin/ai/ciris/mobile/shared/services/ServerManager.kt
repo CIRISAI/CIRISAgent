@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.services
 
+import ai.ciris.mobile.shared.localization.LocalizationHelper
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import kotlinx.coroutines.delay
 
@@ -104,7 +105,7 @@ class ServerManager(
         var totalWaitMs = 0L
 
         PlatformLogger.d(TAG, " [SmartStartup] Starting shutdown negotiation (max retries: $maxRetries)")
-        onStatus?.invoke("Shutting down existing server...")
+        onStatus?.invoke(LocalizationHelper.getString("mobile.status_shutting_down"))
 
         while (retryCount < maxRetries) {
             try {
@@ -122,12 +123,12 @@ class ServerManager(
                 when (responseCode) {
                     200 -> {
                         PlatformLogger.d(TAG, " [SmartStartup] ✓ Shutdown initiated: ${shutdownResponse.reason}")
-                        onStatus?.invoke("Shutdown initiated")
+                        onStatus?.invoke(LocalizationHelper.getString("mobile.status_shutdown_initiated"))
                         return true
                     }
                     202 -> {
                         PlatformLogger.d(TAG, " [SmartStartup] ✓ Server already shutting down: ${shutdownResponse.reason}")
-                        onStatus?.invoke("Server already shutting down")
+                        onStatus?.invoke(LocalizationHelper.getString("mobile.status_server_already_shutting_down"))
                         return true
                     }
                     409 -> {
@@ -138,7 +139,8 @@ class ServerManager(
 
                         PlatformLogger.d(TAG, " [SmartStartup] Server busy (resume ${resumeElapsed}s / ${resumeTimeout}s), " +
                                 "retry in ${retryDelay}ms...")
-                        onStatus?.invoke("Server initializing... waiting (${resumeElapsed.toInt()}s)")
+                        onStatus?.invoke(LocalizationHelper.getString("mobile.status_server_initializing_waiting")
+                            .replace("{elapsed}", resumeElapsed.toInt().toString()))
 
                         delay(retryDelay)
                         totalWaitMs += retryDelay
@@ -218,7 +220,7 @@ class ServerManager(
     ): Boolean {
         return try {
             PlatformLogger.d(TAG, " [SmartStartup] Trying authenticated shutdown...")
-            onStatus?.invoke("Trying authenticated shutdown...")
+            onStatus?.invoke(LocalizationHelper.getString("mobile.status_auth_shutdown"))
 
             // Get saved token from platform-specific storage
             val savedToken = platformGetAuthToken()
@@ -234,28 +236,29 @@ class ServerManager(
             when (responseCode) {
                 in 200..299 -> {
                     PlatformLogger.d(TAG, " [SmartStartup] ✓ Auth shutdown successful")
-                    onStatus?.invoke("Shutdown successful")
+                    onStatus?.invoke(LocalizationHelper.getString("mobile.status_shutdown_successful"))
                     true
                 }
                 401 -> {
                     PlatformLogger.d(TAG, " [SmartStartup] ✗ Auth failed (401) - token invalid or cleared")
-                    onStatus?.invoke("Auth failed - no valid token")
+                    onStatus?.invoke(LocalizationHelper.getString("mobile.status_auth_failed_no_token"))
                     false
                 }
                 403 -> {
                     PlatformLogger.d(TAG, " [SmartStartup] ✗ Forbidden (403) - insufficient permissions")
-                    onStatus?.invoke("Shutdown forbidden")
+                    onStatus?.invoke(LocalizationHelper.getString("mobile.status_shutdown_forbidden"))
                     false
                 }
                 else -> {
                     PlatformLogger.d(TAG, " [SmartStartup] ✗ Auth shutdown failed with $responseCode")
-                    onStatus?.invoke("Shutdown failed")
+                    onStatus?.invoke(LocalizationHelper.getString("mobile.status_shutdown_failed"))
                     false
                 }
             }
         } catch (e: Exception) {
             PlatformLogger.d(TAG, " [SmartStartup] ✗ Auth shutdown exception: ${e.message}")
-            onStatus?.invoke("Shutdown error: ${e.message}")
+            onStatus?.invoke(LocalizationHelper.getString("mobile.status_shutdown_error")
+                .replace("{error}", e.message ?: "Unknown"))
             false
         }
     }

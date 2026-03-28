@@ -11,7 +11,7 @@ from ciris_engine.logic.formatters import (
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import ACCORD_TEXT, ACCORD_TEXT_COMPRESSED
+from ciris_engine.logic.utils import get_accord_text
 from ciris_engine.protocols.dma.base import CSDMAProtocol
 from ciris_engine.schemas.dma.results import CSDMAResult
 from ciris_engine.schemas.runtime.models import ImageContent
@@ -86,12 +86,11 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         """
         messages: List[JSONDict] = []
 
-        # Add accord based on mode - 'full', 'compressed', or 'none'
+        # Add accord based on mode (centralized in get_accord_text)
         accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
-        if accord_mode == "full":
-            messages.append({"role": "system", "content": ACCORD_TEXT})
-        elif accord_mode == "compressed":
-            messages.append({"role": "system", "content": ACCORD_TEXT_COMPRESSED})
+        accord_text = get_accord_text(accord_mode)
+        if accord_text:
+            messages.append({"role": "system", "content": accord_text})
 
         # Check for template override of system_prompt (e.g., HE-300 format instructions)
         template_system_override = None
@@ -153,6 +152,8 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
     def _extract_context_data(self, context: Optional[Any]) -> tuple[str, str, str]:
         """Extract context strings from context object.
 
+        Also syncs user's language preference to the DMA prompt loader.
+
         Args:
             context: Context object with system_snapshot and/or user_profiles
 
@@ -168,16 +169,29 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         if not context:
             return system_snapshot_str, user_profiles_str, context_summary
 
+        # Track user profiles for language sync
+        user_profiles = None
+
         if hasattr(context, "system_snapshot") and context.system_snapshot:
             system_snapshot_str = format_system_snapshot(context.system_snapshot)
             if hasattr(context.system_snapshot, "user_profiles") and context.system_snapshot.user_profiles:
-                user_profiles_str = format_user_profiles(context.system_snapshot.user_profiles)
+                user_profiles = context.system_snapshot.user_profiles
+                user_profiles_str = format_user_profiles(user_profiles)
 
             agent_identity = getattr(context.system_snapshot, "agent_identity", None)
             if agent_identity:
                 context_summary = self._build_context_summary(agent_identity)
         elif hasattr(context, "user_profiles") and context.user_profiles:
-            user_profiles_str = format_user_profiles(context.user_profiles)
+            user_profiles = context.user_profiles
+            user_profiles_str = format_user_profiles(user_profiles)
+
+        # Sync user's language preference to prompt loader
+        if user_profiles and len(user_profiles) > 0:
+            user_lang = getattr(user_profiles[0], "preferred_language", None)
+            if user_lang and user_lang != self.prompt_loader.language:
+                from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+                set_prompt_language(user_lang)
+                logger.debug(f"CSDMA: Synced prompt language to user preference: {user_lang}")
 
         return system_snapshot_str, user_profiles_str, context_summary
 

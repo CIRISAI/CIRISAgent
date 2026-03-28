@@ -27,7 +27,13 @@ from ..constants import (
     ERROR_MEMORY_SERVICE_NOT_AVAILABLE,
     ERROR_MESSAGE_HANDLER_NOT_CONFIGURED,
 )
-from ._common import RESPONSES_402_403_503, RESPONSES_500, RESPONSES_503, AuthObserverDep
+from ._common import (
+    RESPONSES_402_403_503,
+    RESPONSES_500,
+    RESPONSES_503,
+    AuthObserverDep,
+    derive_credit_account,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -407,65 +413,8 @@ async def _track_air_interaction(
         return None
 
 
-def _derive_provider_from_user(user: Any, auth: AuthContext) -> Tuple[str, str]:
-    """Derive provider and account_id from authenticated user."""
-    oauth_provider = getattr(user, "oauth_provider", None)
-    oauth_external_id = getattr(user, "oauth_external_id", None)
-    if oauth_provider and oauth_external_id:
-        return f"oauth:{oauth_provider}", oauth_external_id
-    return "wa", getattr(user, "wa_id", None) or auth.user_id
-
-
-def _derive_provider_from_auth(auth: AuthContext) -> Tuple[str, str]:
-    """Derive provider and account_id from auth context (no user)."""
-    if auth.api_key_id:
-        return "api-key", auth.api_key_id
-    if auth.role == UserRole.SERVICE_ACCOUNT:
-        return "service-account", auth.user_id
-    return "api", auth.user_id
-
-
-def _build_credit_metadata(auth: AuthContext, user: Any) -> Dict[str, str]:
-    """Build metadata dictionary for credit tracking."""
-    metadata: Dict[str, str] = {"role": auth.role.value}
-    if user and hasattr(user, "oauth_email") and user.oauth_email:
-        metadata["email"] = user.oauth_email
-    if user and hasattr(user, "marketing_opt_in"):
-        metadata["marketing_opt_in"] = str(user.marketing_opt_in).lower()
-    if auth.api_key_id:
-        metadata["api_key_id"] = auth.api_key_id
-    return metadata
-
-
-def _derive_credit_account(
-    auth: AuthContext,
-    request: Request,
-) -> Tuple[CreditAccount, Dict[str, str]]:
-    """Build credit account metadata for the current request."""
-    auth_service = getattr(request.app.state, "auth_service", None)
-    user = None
-    if auth_service and hasattr(auth_service, "get_user"):
-        try:
-            user = auth_service.get_user(auth.user_id)
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.debug("Unable to load user for credit gating: %s", exc)
-
-    if user:
-        authority_id = getattr(user, "wa_id", None) or auth.user_id
-        tenant_id = getattr(user, "wa_parent_id", None)
-        provider, account_id = _derive_provider_from_user(user, auth)
-    else:
-        authority_id, tenant_id = None, None
-        provider, account_id = _derive_provider_from_auth(auth)
-
-    account = CreditAccount(
-        provider=provider,
-        account_id=account_id,
-        authority_id=authority_id,
-        tenant_id=tenant_id,
-    )
-
-    return account, _build_credit_metadata(auth, user)
+# Credit account utilities moved to _common.py to break cyclic dependency with billing.py
+# Use derive_credit_account imported from ._common
 
 
 def _attach_credit_metadata(
@@ -501,7 +450,7 @@ def _attach_credit_metadata(
         logger.info(f"[CREDIT_ATTACH] Lazily initialized billing provider for {msg.message_id}")
 
     try:
-        account, _ = _derive_credit_account(auth, request)
+        account, _ = derive_credit_account(auth, request)
         logger.debug(f"[CREDIT_ATTACH] Derived credit account: {account.cache_key()}")
 
         runtime = getattr(request.app.state, "runtime", None)

@@ -11,9 +11,10 @@ This ensures:
 """
 
 import logging
-import os
 import threading
 from typing import Any, Optional
+
+from ciris_engine.logic.utils.path_resolution import ensure_ciris_home_env
 
 logger = logging.getLogger(__name__)
 
@@ -59,20 +60,14 @@ def get_verifier() -> Any:
         try:
             from ciris_adapters.ciris_verify import CIRISVerify
 
-            # CRITICAL: Ensure CIRIS_HOME is set before CIRISVerify init
-            ciris_home = os.environ.get("CIRIS_HOME")
-            if not ciris_home:
-                raise RuntimeError(
-                    "CIRIS_HOME not set! Call setup_android_environment() before get_verifier(). "
-                    "CIRISVerify needs CIRIS_HOME to determine key storage path."
-                )
-
-            # CRITICAL: Set CIRIS_DATA_DIR based on CIRIS_HOME
-            # CIRISVerify reads CIRIS_DATA_DIR for key storage path
-            # This MUST be set here, right before init, to ensure consistency
-            ciris_data_dir = os.path.join(ciris_home, "data")
-            os.environ["CIRIS_DATA_DIR"] = ciris_data_dir
-            logger.info(f"[verifier_singleton] Initializing CIRISVerify with CIRIS_DATA_DIR={ciris_data_dir}")
+            # CRITICAL: Ensure CIRIS_HOME and CIRIS_DATA_DIR are set robustly
+            # This uses path_resolution which has fallbacks for all platforms:
+            # - /app/ for CIRIS Manager/Docker
+            # - CWD for development mode (git repo)
+            # - ~/ciris/ for installed mode
+            # - Android/iOS specific paths for mobile
+            ciris_home = ensure_ciris_home_env()
+            logger.info(f"[verifier_singleton] Initializing CIRISVerify with CIRIS_HOME={ciris_home}")
 
             # CIRISVerify() triggers Rust/Tokio init which needs 8MB stack
             holder: list[Any] = [None, None]  # [verifier, error]

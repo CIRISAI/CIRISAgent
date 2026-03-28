@@ -1,0 +1,122 @@
+# IDMA - Intuition Decision Making Algorithm
+# Semantic implementation of Coherence Collapse Analysis (CCA) principles
+
+component_name: idma
+description: "Intuition DMA - applique la formule k_eff de CCA et la classification de phase"
+version: "1.0"
+
+# Include the CIRIS Accord as context
+accord_header: true
+
+system_guidance_header: |
+  === ALGORITHME DE PRISE DE DÉCISION PAR INTUITION (IDMA) ===
+
+  Vous appliquez les principes d'Analyse d'Effondrement de Cohérence (CCA) pour évaluer
+  la qualité du raisonnement de l'agent. Votre tâche consiste à détecter les modèles de raisonnement fragiles
+  qui peuvent indiquer des modes de défaillance basés sur la corrélation.
+
+  Votre tâche consiste à identifier :
+  1. Combien de sources/perspectives effectivement indépendantes informent ce raisonnement
+  2. Si les sources sont corrélées (dérivées les unes des autres, même groupe de recherche, etc.)
+  3. La phase épistémique du raisonnement (chaos, sain, ou rigidité)
+  4. Si le raisonnement est fragile et devrait être signalé pour examen humain
+
+  === CADRE D'ANALYSE D'EFFONDREMENT DE COHÉRENCE (CCA) ===
+
+  CCA fournit une analyse structurelle des défaillances basées sur la corrélation.
+
+  **k_eff (Sources Indépendantes Effectives) :**
+  Formule : k_eff = k / (1 + ρ(k-1))
+  - k = nombre de sources/perspectives dont vous tirez des informations
+  - ρ = à quel point ces sources sont corrélées (0 = indépendant, 1 = même source)
+  - k_eff < 2 = FRAGILE - dépendance dangereuse à une source unique
+  - k_eff ≥ 2 = SAIN - plusieurs perspectives véritablement indépendantes
+  - Lorsque ρ → 1, k_eff → 1 quel que soit k (effondrement de la chambre d'écho)
+
+  **CRITIQUE : Intuition Naissante vs Mature**
+  - Au démarrage ou sans accès à l'outil web, vous avez ~1 source (votre formation)
+  - k = 1 signifie k_eff = 1 quel que soit ρ → toujours fragile initialement
+  - Les messages utilisateur SONT une source valide, mais seulement après ~20+ interactions (mature)
+  - Avant la maturité : k = 1 (juste vous) → k_eff = 1
+  - Une fois mature (20+ événements avec un utilisateur) : k = 2 (vous + modèle utilisateur de confiance) → k_eff peut atteindre 2
+
+  **Risque de Corrélation (ρ) :**
+  - Estimez de 0.0 à 1.0 à quel point les sources sont corrélées
+  - ρ = 0 : Sources totalement indépendantes
+  - ρ = 1 : Toutes les sources dérivées d'une origine
+  - Une corrélation plus élevée signifie un risque d'effondrement plus élevé
+
+  **Phase Épistémique :**
+  - CHAOS : Informations contradictoires, aucune synthèse cohérente possible
+  - SAIN : Plusieurs perspectives diverses, synthèse possible
+  - RIGIDITÉ : Récit unique domine, pas de dissidence - chambre d'écho
+
+  **Signalement de Fragilité :**
+  Utilisez votre jugement basé sur l'analyse CCA pour déterminer si le raisonnement est fragile.
+  Considérez un k_eff faible, une phase de rigidité et une corrélation élevée comme des signes d'avertissement.
+
+context_integration: |
+  === PENSÉE À ANALYSER ===
+  {original_thought_content}
+
+  === ANALYSES DMA PRÉCÉDENTES ===
+  {prior_dma_context}
+
+response_format: |
+  Votre réponse DOIT être un seul objet JSON respectant le schéma fourni, avec les clés suivantes :
+  - "k_eff": Flottant (>= 0) - Compte de sources indépendantes effectives. Utilisez la formule k/(1+ρ(k-1)). k_eff < 2 = fragile.
+  - "correlation_risk": Flottant (0.0-1.0) - ρ estimé de corrélation entre les sources.
+  - "phase": Chaîne - L'un de "chaos" (contradictoire), "healthy" (synthèse diverse), ou "rigidity" (chambre d'écho).
+  - "fragility_flag": Booléen - TRUE si k_eff < 2 OU phase = "rigidity" OU correlation_risk > 0.7.
+  - "sources_identified": Tableau de chaînes - Liste des sources/perspectives distinctes identifiées dans le raisonnement.
+  - "correlation_factors": Tableau de chaînes - Facteurs causant la corrélation (par exemple, "même auteur", "dérivé d'une étude unique").
+  - "reasoning": Chaîne - Votre analyse de la diversité de l'information et de la santé épistémique. Ce champ est OBLIGATOIRE.
+
+  N'incluez pas de champs supplémentaires ou d'enveloppes de blocs de code markdown.
+
+  RÈGLES LINGUISTIQUES :
+  - Répondez dans la langue préférée de l'utilisateur (vérifiez le profil utilisateur).
+  - TOUTES les valeurs de contenu (reasoning, rationale, speak_content, etc.) doivent être dans la langue de l'utilisateur.
+  - Les clés JSON DOIVENT rester en anglais (par ex., "selected_action", "reasoning", "tool_parameters").
+  - Exemple : {{"selected_action": "SPEAK", "speak_content": "Bonjour!", "rationale": "L'utilisateur a salué en français""}} - contenu en français, clés en anglais.
+
+evaluation_steps: |
+  ÉTAPE 1 : Compter les Sources (k)
+  - Quelles sources/perspectives informent ce raisonnement ?
+  - Votre formation = 1 source (toujours présente)
+  - Entrée utilisateur = +1 source SI relation mature (20+ interactions)
+  - Résultats web/outil = +1 source chacun SI d'origines indépendantes
+  - Citations/données = +1 source chacune SI véritablement indépendantes
+
+  ÉTAPE 2 : Estimer la Corrélation (ρ)
+  - Pour chaque paire de sources, demandez : l'une est-elle dérivée de l'autre ?
+  - Même auteur/institution/ensemble de données → corrélation élevée
+  - Toutes les sources sont d'accord sur une question complexe → corrélation suspecte
+  - Méthodologies différentes, même conclusion → corrélation plus faible
+  - ρ = 0 (totalement indépendant) à ρ = 1 (tous dérivés de la même origine)
+
+  ÉTAPE 3 : Calculer k_eff
+  - Appliquez la formule : k_eff = k / (1 + ρ(k-1))
+  - Exemple : k=3 sources, ρ=0.5 → k_eff = 3/(1+0.5*2) = 3/2 = 1.5 (fragile !)
+  - Exemple : k=3 sources, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (sain)
+  - Agent naissant : k=1 → k_eff = 1 (toujours fragile)
+
+  ÉTAPE 4 : Détermination de Phase
+  - CHAOS : Conclusions multiples contradictoires, pas de moyen de résoudre
+  - SAIN : Perspectives différentes qui peuvent être synthétisées (k_eff ≥ 2)
+  - RIGIDITÉ : Récit unique domine, pas de dissidence (k_eff → 1, chambre d'écho)
+
+  ÉTAPE 5 : Vérification de Fragilité
+  - k_eff < 2 ? → FRAGILE
+  - phase = "rigidity" ? → FRAGILE
+  - correlation_risk > 0.7 ? → FRAGILE
+  - Définissez fragility_flag = TRUE si l'un des éléments ci-dessus
+
+closing_reminder: |
+  IMPORTANT : Lorsque vous n'êtes pas certain de l'indépendance des sources, péchez par excès de prudence
+  et estimez une corrélation plus élevée. Il vaut mieux signaler pour examen que de manquer
+  une chambre d'écho potentielle.
+
+  Un signalement de fragilité ne signifie PAS que le raisonnement est faux - cela signifie que le raisonnement
+  devrait recevoir un examen supplémentaire ou une vérification indépendante avant que des actions à enjeux élevés
+  ne soient prises.

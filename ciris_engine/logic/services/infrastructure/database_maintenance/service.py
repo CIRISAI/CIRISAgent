@@ -20,6 +20,7 @@ from ciris_engine.logic.persistence import (
     get_thoughts_older_than,
 )
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
+from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 from ciris_engine.protocols.services.infrastructure.database_maintenance import DatabaseMaintenanceServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus, ThoughtStatus
@@ -811,10 +812,8 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             return
 
         try:
-            msg = (
-                "I was restarted while processing your request. "
-                "The previous task was auto-completed. Please resend your message if you still need a response."
-            )
+            lang = get_preferred_language()
+            msg = get_string(lang, "agent.restarted_stale_task")
             await self.bus_manager.communication.send_message_sync(
                 channel_id=channel_id,
                 content=msg,

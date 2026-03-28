@@ -6,7 +6,7 @@ These are the foundational systems that enable everything else to work.
 """
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
+from typing import Any, Dict, List, Optional, Protocol
 
 from ciris_engine.protocols.runtime.base import ServiceProtocol
 from ciris_engine.schemas.infrastructure.base import (
@@ -24,8 +24,8 @@ from ciris_engine.schemas.infrastructure.base import (
     ServiceRegistration,
 )
 
-if TYPE_CHECKING:
-    from ciris_engine.logic.registries.base import ServiceRegistry
+# Note: ServiceRegistry import removed to break cyclic dependency
+# Use ServiceRegistryProtocol for type hints instead
 
 # ============================================================================
 # RUNTIME INFRASTRUCTURE
@@ -332,7 +332,7 @@ class RegistryAwareServiceProtocol(ServiceProtocol):
 
     class MyService(RegistryAwareServiceProtocol):
         def __init__(self):
-            self._service_registry: Optional[ServiceRegistry] = None
+            self._service_registry: Optional[ServiceRegistryProtocol] = None
             self._memory_bus: Optional[MemoryBus] = None
 
         async def attach_registry(self, registry: ServiceRegistryProtocol) -> None:

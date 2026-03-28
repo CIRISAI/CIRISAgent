@@ -33,6 +33,14 @@ class AuditEventType(str, Enum):
     SERVICE_LIFECYCLE = "service_lifecycle"
     ERROR_EVENT = "error_event"
 
+    # Wallet events
+    WALLET_FUNDS_RECEIVED = "wallet_funds_received"
+    WALLET_FUNDS_SENT = "wallet_funds_sent"
+    WALLET_TRANSFER_FAILED = "wallet_transfer_failed"
+    WALLET_SWAP_COMPLETED = "wallet_swap_completed"
+    WALLET_SWAP_FAILED = "wallet_swap_failed"
+    WALLET_SECURITY_EVENT = "wallet_security_event"
+
 
 class EventOutcome(str, Enum):
     """Outcome of an audited event"""

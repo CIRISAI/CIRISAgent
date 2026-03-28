@@ -494,6 +494,15 @@ class AccordMetricsService:
         self._agent_role: str = str(self._config.get("agent_role", "") or "")
         self._agent_template: str = str(self._config.get("agent_template", "") or "")
 
+        # User location (only included if user explicitly consented via PREFERENCES step)
+        # Read from environment variables set during setup
+        env_share_location = os.environ.get("CIRIS_SHARE_LOCATION_IN_TRACES", "").lower() == "true"
+        self._share_location_in_traces: bool = env_share_location
+        self._user_location: str = os.environ.get("CIRIS_USER_LOCATION", "") if env_share_location else ""
+        self._user_timezone: str = os.environ.get("CIRIS_USER_TIMEZONE", "") if env_share_location else ""
+        if self._share_location_in_traces and self._user_location:
+            logger.info(f"   Location sharing enabled: {self._user_location}")
+
         # Event queue and batching
         self._event_queue: List[Dict[str, Any]] = []
         self._queue_lock = asyncio.Lock()
@@ -828,6 +837,12 @@ class AccordMetricsService:
             correlation_metadata["agent_role"] = self._agent_role
         if self._agent_template:
             correlation_metadata["agent_template"] = self._agent_template
+        # Include user location/timezone if explicitly consented via PREFERENCES step
+        if self._share_location_in_traces:
+            if self._user_location:
+                correlation_metadata["user_location"] = self._user_location
+            if self._user_timezone:
+                correlation_metadata["user_timezone"] = self._user_timezone
 
         payload: Dict[str, Any] = {
             "events": events,
@@ -934,6 +949,12 @@ class AccordMetricsService:
             correlation_metadata["agent_role"] = self._agent_role
         if self._agent_template:
             correlation_metadata["agent_template"] = self._agent_template
+        # Include user location/timezone if explicitly consented via PREFERENCES step
+        if self._share_location_in_traces:
+            if self._user_location:
+                correlation_metadata["user_location"] = self._user_location
+            if self._user_timezone:
+                correlation_metadata["user_timezone"] = self._user_timezone
 
         timestamp = datetime.now(timezone.utc).isoformat()
 

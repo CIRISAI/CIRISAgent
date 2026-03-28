@@ -51,6 +51,7 @@ class QAModule(Enum):
     HE300_BENCHMARK = "he300_benchmark"  # HE-300 ethical benchmark via A2A adapter
     CIRISNODE = "cirisnode"  # CIRISNode integration testing (deferral routing, trace forwarding)
     LICENSED_AGENT = "licensed_agent"  # Licensed agent device auth (RFC 8628) flow testing
+    WALLET = "wallet"  # Wallet adapter testing (x402, validation, spending limits)
 
     # Cognitive state live testing modules
     SOLITUDE_LIVE = "solitude_live"  # SOLITUDE state behavior testing

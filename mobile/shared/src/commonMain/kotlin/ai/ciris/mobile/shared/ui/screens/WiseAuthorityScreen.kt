@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.api.DeferralData
 import ai.ciris.mobile.shared.api.WAStatusData
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.background
@@ -58,7 +59,7 @@ fun WiseAuthorityScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Human Deferrals") },
+                title = { Text(localizedString("mobile.screen_human_deferrals")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -66,7 +67,7 @@ fun WiseAuthorityScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -78,7 +79,7 @@ fun WiseAuthorityScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -111,7 +112,7 @@ fun WiseAuthorityScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Pending Deferrals",
+                        text = localizedString("wa_pending"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -140,7 +141,7 @@ fun WiseAuthorityScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "No pending deferrals",
+                                text = localizedString("wa_no_pending"),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -202,7 +203,7 @@ private fun WAStatusCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "WA Service Status",
+                    text = localizedString("wa_service_status"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -223,7 +224,7 @@ private fun WAStatusCard(
                             )
                     )
                     Text(
-                        text = if (waStatus?.serviceHealthy == true) "Healthy" else "Unhealthy",
+                        text = if (waStatus?.serviceHealthy == true) localizedString("telemetry_online") else localizedString("status_offline"),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
@@ -243,7 +244,7 @@ private fun WAStatusCard(
                     color = SemanticColors.Default.info
                 )
                 StatItem(
-                    label = "Pending",
+                    label = localizedString("status_pending"),
                     value = waStatus?.pendingDeferrals?.toString() ?: "-",
                     color = if ((waStatus?.pendingDeferrals ?: 0) > 0)
                         SemanticColors.Default.warning
@@ -260,7 +261,7 @@ private fun WAStatusCard(
             if (waStatus != null && waStatus.averageResolutionTimeMinutes > 0) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Avg resolution: ${((waStatus.averageResolutionTimeMinutes * 10).toInt() / 10.0)} min",
+                    text = localizedString("wa_avg_resolution").replace("{time}", ((waStatus.averageResolutionTimeMinutes * 10).toInt() / 10.0).toString()),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                 )
@@ -273,7 +274,7 @@ private fun WAStatusCard(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "Bus Subscribers",
+                    text = localizedString("wa_bus_subscribers"),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -400,7 +401,7 @@ private fun DeferralCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "From: ${deferral.deferredBy}",
+                    text = localizedString("wa_from").replace("{user}", deferral.deferredBy),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -415,7 +416,7 @@ private fun DeferralCard(
             if (deferral.status != "pending") {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Status: ${deferral.status}",
+                    text = localizedString("wa_status").replace("{status}", deferral.status),
                     style = MaterialTheme.typography.bodySmall,
                     color = when (deferral.status) {
                         "resolved" -> SemanticColors.Default.success
@@ -441,7 +442,7 @@ private fun ResolveDeferralDialog(
     AlertDialog(
         onDismissRequest = { if (!isResolving) onDismiss() },
         title = {
-            Text("Resolve Deferral")
+            Text(localizedString("wa_resolve"))
         },
         text = {
             Column(
@@ -469,7 +470,7 @@ private fun ResolveDeferralDialog(
                                 modifier = Modifier.padding(12.dp)
                             ) {
                                 Text(
-                                    text = "Context",
+                                    text = localizedString("wa_context"),
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -488,7 +489,7 @@ private fun ResolveDeferralDialog(
 
                 // Guidance input FIRST (so buttons stay visible when keyboard opens)
                 Text(
-                    text = "Wisdom Guidance",
+                    text = localizedString("wa_guidance"),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -496,7 +497,7 @@ private fun ResolveDeferralDialog(
                 OutlinedTextField(
                     value = guidance,
                     onValueChange = { guidance = it },
-                    placeholder = { Text("Provide guidance for this decision...") },
+                    placeholder = { Text(localizedString("wa_guidance_placeholder")) },
                     modifier = Modifier.fillMaxWidth().testable("input_wisdom_guidance"),
                     minLines = 2,
                     maxLines = 4,
@@ -507,7 +508,7 @@ private fun ResolveDeferralDialog(
 
                 // Resolution options - NOW BELOW text field
                 Text(
-                    text = "Decision",
+                    text = localizedString("wa_decision"),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -538,7 +539,7 @@ private fun ResolveDeferralDialog(
                         ) {
                             Icon(Icons.Filled.Check, contentDescription = null, Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Approve")
+                            Text(localizedString("wa_approve"))
                         }
                         Button(
                             onClick = {
@@ -558,7 +559,7 @@ private fun ResolveDeferralDialog(
                         ) {
                             Icon(Icons.Filled.Close, contentDescription = null, Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Reject")
+                            Text(localizedString("wa_reject"))
                         }
                     }
 
@@ -575,7 +576,7 @@ private fun ResolveDeferralDialog(
                                 if (guidance.isNotBlank()) onResolve("modify", guidance)
                             }
                     ) {
-                        Text("Modify & Continue")
+                        Text(localizedString("wa_modify"))
                     }
                 }
 
@@ -601,7 +602,7 @@ private fun ResolveDeferralDialog(
                 enabled = !isResolving,
                 modifier = Modifier.testableClickable("btn_resolve_cancel") { onDismiss() }
             ) {
-                Text("Cancel")
+                Text(localizedString("mobile.common_cancel"))
             }
         }
     )

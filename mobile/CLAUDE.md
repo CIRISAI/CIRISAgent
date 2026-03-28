@@ -1,6 +1,6 @@
-# CIRIS Cross-Platform Client (Kotlin Multiplatform)
+# CIRIS Unified Agent UX (Kotlin Multiplatform)
 
-**NOTE: "mobile" is a misnomer.** This is a **cross-platform client** targeting:
+**NOTE: "mobile" is a misnomer.** This is the **unified CIRIS agent UX** - the cross-platform user interface for interacting with CIRIS agents, targeting:
 - **Android** (phone, tablet)
 - **iOS** (iPhone, iPad)
 - **Windows** (x64)
@@ -78,6 +78,90 @@ The Python backend outputs status messages to stdout that drive UI animations:
 # Desktop tests
 ./gradlew :shared:desktopTest
 ```
+
+## Desktop UI Test Automation
+
+The desktop app includes an embedded HTTP server for automated UI testing and driving the UI programmatically.
+
+### Enabling Test Mode
+
+```bash
+# Via unified entry point (starts Python backend + desktop app)
+export CIRIS_TEST_MODE=true
+ciris-agent
+
+# Via Gradle (development - desktop only, needs separate backend)
+export CIRIS_TEST_MODE=true
+./gradlew :desktopApp:run
+
+# Build development JAR (outputs to build/compose/jars/CIRIS-*.jar)
+./gradlew :desktopApp:packageUberJarForCurrentOS
+
+# Custom test server port
+export CIRIS_TEST_MODE=true
+export CIRIS_TEST_PORT=9000
+ciris-agent
+```
+
+### Test Server Endpoints
+
+The server runs on `http://localhost:8091` by default:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check (`{"status":"ok","testMode":true}`) |
+| `/screen` | GET | Current screen name (`{"screen":"Login"}`) |
+| `/tree` | GET | Full UI element tree with positions |
+| `/click` | POST | Click element by testTag |
+| `/input` | POST | Input text to element |
+| `/wait` | POST | Wait for element to appear |
+| `/element/{tag}` | GET | Get specific element info |
+
+### Example: Automated Login
+
+```bash
+# Check current screen
+curl http://localhost:8091/screen
+
+# Enter credentials
+curl -X POST http://localhost:8091/input \
+  -H "Content-Type: application/json" \
+  -d '{"testTag": "input_username", "text": "admin"}'
+
+curl -X POST http://localhost:8091/input \
+  -H "Content-Type: application/json" \
+  -d '{"testTag": "input_password", "text": "password"}'
+
+# Submit login
+curl -X POST http://localhost:8091/click \
+  -H "Content-Type: application/json" \
+  -d '{"testTag": "btn_login_submit"}'
+
+# Wait for chat screen
+curl -X POST http://localhost:8091/wait \
+  -H "Content-Type: application/json" \
+  -d '{"testTag": "input_message", "timeoutMs": 10000}'
+```
+
+### Adding Testable Elements
+
+Use the `testable` modifier (cross-platform):
+
+```kotlin
+import ai.ciris.mobile.shared.platform.testable
+
+Button(
+    onClick = { ... },
+    modifier = Modifier.testable("my_button")
+)
+```
+
+This modifier:
+- **Desktop + test mode**: Tracks element position for automation
+- **Desktop + normal mode**: Applies `testTag` only
+- **Mobile**: Applies `testTag` only
+
+**Full API documentation:** `desktopApp/src/main/kotlin/ai/ciris/desktop/testing/README.md`
 
 ## Build Targets
 

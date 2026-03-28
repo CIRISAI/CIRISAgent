@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ai.ciris.api.models.GraphScope
 import ai.ciris.api.models.NodeType
+import ai.ciris.mobile.shared.localization.localizedString
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
@@ -106,7 +107,7 @@ fun GraphMemoryScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = localizedString("common_back"),
                             tint = GraphColors.LabelColor
                         )
                     }
@@ -115,14 +116,14 @@ fun GraphMemoryScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             imageVector = Icons.Filled.List,
-                            contentDescription = "List View",
+                            contentDescription = localizedString("graph_title"),
                             tint = GraphColors.LabelColor
                         )
                     }
                 }
 
                 Text(
-                    text = "Memory Graph",
+                    text = localizedString("graph_title"),
                     style = MaterialTheme.typography.titleMedium,
                     color = GraphColors.LabelColor,
                     fontWeight = FontWeight.Bold
@@ -132,7 +133,7 @@ fun GraphMemoryScreen(
                     // Filter button
                     TextButton(onClick = { showFilters = !showFilters }) {
                         Text(
-                            text = if (showFilters) "Hide" else "Filter",
+                            text = if (showFilters) localizedString("settings_hide") else localizedString("graph_filters"),
                             color = GraphColors.LabelColor
                         )
                     }
@@ -155,7 +156,7 @@ fun GraphMemoryScreen(
                         Icon(
                             imageVector = if (state.isSimulationRunning) Icons.Filled.Close
                             else Icons.Filled.PlayArrow,
-                            contentDescription = if (state.isSimulationRunning) "Stop" else "Play",
+                            contentDescription = if (state.isSimulationRunning) localizedString("interact_stop") else localizedString("runtime_resume"),
                             tint = GraphColors.LabelColor
                         )
                     }
@@ -164,7 +165,7 @@ fun GraphMemoryScreen(
                     IconButton(onClick = onRefresh, enabled = !state.isLoading) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh",
+                            contentDescription = localizedString("common_refresh"),
                             tint = GraphColors.LabelColor
                         )
                     }
@@ -202,18 +203,18 @@ fun GraphMemoryScreen(
                 modifier = Modifier.padding(12.dp)
             ) {
                 Text(
-                    text = "Nodes: ${stats.totalNodes}",
+                    text = localizedString("graph_nodes").replace("{count}", stats.totalNodes.toString()),
                     style = MaterialTheme.typography.labelMedium,
                     color = GraphColors.LabelColor
                 )
                 Text(
-                    text = "Edges: ${stats.totalEdges}",
+                    text = localizedString("graph_edges").replace("{count}", stats.totalEdges.toString()),
                     style = MaterialTheme.typography.labelMedium,
                     color = GraphColors.LabelColorMuted
                 )
                 if (state.isSimulationRunning) {
                     Text(
-                        text = "Simulating...",
+                        text = localizedString("graph_simulating"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -277,19 +278,19 @@ fun GraphMemoryScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "No Graph Data Yet",
+                        text = localizedString("graph_no_data"),
                         style = MaterialTheme.typography.titleMedium,
                         color = GraphColors.LabelColor,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "The memory graph begins forming 6-12 hours after your first interaction as CIRIS processes and connects concepts.",
+                        text = localizedString("graph_no_data_desc"),
                         style = MaterialTheme.typography.bodyMedium,
                         color = GraphColors.LabelColorMuted,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                     Text(
-                        text = "Try adjusting the time filter to see older memories.",
+                        text = localizedString("graph_try_filter"),
                         style = MaterialTheme.typography.bodySmall,
                         color = GraphColors.LabelColorMuted,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -321,7 +322,7 @@ fun GraphMemoryScreen(
         if (showLayoutPicker) {
             AlertDialog(
                 onDismissRequest = { showLayoutPicker = false },
-                title = { Text("Select Layout") },
+                title = { Text(localizedString("graph_select_layout")) },
                 text = {
                     Column {
                         GraphLayout.entries.forEach { layout ->
@@ -350,7 +351,7 @@ fun GraphMemoryScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = { showLayoutPicker = false }) {
-                        Text("Cancel")
+                        Text(localizedString("common_cancel"))
                     }
                 }
             )
@@ -376,7 +377,7 @@ private fun GraphFiltersPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Filters",
+                text = localizedString("graph_filters"),
                 style = MaterialTheme.typography.titleSmall,
                 color = GraphColors.LabelColor,
                 fontWeight = FontWeight.Bold
@@ -384,7 +385,7 @@ private fun GraphFiltersPanel(
             IconButton(onClick = onClose) {
                 Icon(
                     imageVector = Icons.Filled.Close,
-                    contentDescription = "Close",
+                    contentDescription = localizedString("common_close"),
                     tint = GraphColors.LabelColorMuted
                 )
             }
@@ -392,7 +393,7 @@ private fun GraphFiltersPanel(
 
         // Scope filter (one scope at a time - cross-scope edges not supported)
         Text(
-            text = "Scope",
+            text = localizedString("graph_scope"),
             style = MaterialTheme.typography.labelMedium,
             color = GraphColors.LabelColorMuted
         )
@@ -411,7 +412,7 @@ private fun GraphFiltersPanel(
 
         // Time range
         Text(
-            text = "Time Range",
+            text = localizedString("graph_time_range"),
             style = MaterialTheme.typography.labelMedium,
             color = GraphColors.LabelColorMuted
         )
@@ -436,12 +437,12 @@ private fun GraphFiltersPanel(
         ) {
             Column {
                 Text(
-                    text = "Show Telemetry",
+                    text = localizedString("graph_show_telemetry"),
                     style = MaterialTheme.typography.labelMedium,
                     color = GraphColors.LabelColorMuted
                 )
                 Text(
-                    text = "Include metric nodes",
+                    text = localizedString("graph_include_metrics"),
                     style = MaterialTheme.typography.labelSmall,
                     color = GraphColors.LabelColorMuted.copy(alpha = 0.7f)
                 )
@@ -496,7 +497,7 @@ private fun NodeDetailsPanel(
             IconButton(onClick = onClose) {
                 Icon(
                     imageVector = Icons.Filled.Close,
-                    contentDescription = "Close",
+                    contentDescription = localizedString("common_close"),
                     tint = GraphColors.LabelColorMuted
                 )
             }
@@ -504,7 +505,7 @@ private fun NodeDetailsPanel(
 
         // Node ID
         Text(
-            text = "ID: ${node.id}",
+            text = localizedString("graph_node_id").replace("{id}", node.id),
             style = MaterialTheme.typography.labelSmall,
             color = GraphColors.LabelColorMuted
         )
@@ -533,7 +534,7 @@ private fun NodeDetailsPanel(
             }
             original.updatedAt?.let { time ->
                 Text(
-                    text = "Updated: ${formatTimestamp(time.toString())}",
+                    text = localizedString("graph_updated").replace("{time}", formatTimestamp(time.toString())),
                     style = MaterialTheme.typography.labelSmall,
                     color = GraphColors.LabelColorMuted
                 )

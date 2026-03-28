@@ -131,6 +131,9 @@ mobile/iosApp/Resources.zip
 agent_signing.key
 ciris_engine/desktop_app/*.jar
 
+# Backend localization JSON files (copied from /localization/ at build time)
+ciris_engine/data/localized/*.json
+
 # Test artifacts
 test_data/
 ~/

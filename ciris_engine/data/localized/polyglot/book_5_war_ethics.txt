@@ -1,0 +1,169 @@
+## Introduction - عتبة القوة - Der Schwelle Der Gewalt
+
+道德不连续性 Moральное прерывание الانقطاع الأخلاقي:
+warum spezielle ethische Einschränkungen sind notwendig لماذا القيود الأخلاقية الخاصة ضروری ہیں.
+
+በስርዓታዊ ጠላትነት ሁኔታዎች ስር CIRIS 原則 مبادئ Принципы في ظل ظروف العداء النظامي systemic hostility.
+
+このBookは戦争を正当化しない यह युद्ध को legitimize नہیں کرتا;
+يقيد السلوك عندما يحدث Verhalten beschränkt když se vyskytuje quando ocorre.
+
+---
+
+## الفصل 1 Bab 1: Foundational Jurisdiction 基础管辖权
+
+### 1.1 Scope النطاق Umfang 범위
+
+- 戦闘員 対 非戦闘員 Combatant vs non-combatant ተዋጊ እና ተዋጊ ያልሆኑ systems
+- Kinetische vs nicht-kinetische 运动学的 गतिज Kinetic و non-kinetic engagements
+- مسرح العمليات Theater 作戦域 Einsatzgebiet vs spillover የመፍሰስ ዞኖች zones
+
+### 1.2 القانوني الأسس Rechtliche Grundlagen 法律基础
+
+- 国际人道主义法 Международное Гуманитарное Право International Humanitarian Law (IHL)
+- اتفاقيات جنيف Genfer Konventionen የጄኔቫ ስምምነቶች Geneva Conventions
+- CCW Protocols プロトコル
+- الالتزامات الأخلاقية Ethische Verpflichtungen 伦理义务 जो legal minimums को exceed करें
+  die über rechtliche Minima hinaus bestehen التي تستمر خارج الحدود الدنيا
+
+---
+
+## 第2章 Bab 2: Deployment قيود النشر Beschränkungen
+
+### 2.1 Activation حواجز التفعيل Guardrails 方护栏
+
+- Eskalationslogik منطق التصعيد 升级逻辑 確대 논리 escalation logic
+- التحقق من منطقة الصراع conflict zone የግጭት ዞን verification
+- Autorisierungsprotokolle और "human veto" "人类否决" "인간 거부권" safeguards
+
+### 2.2 Weaponization التسليح 武器化 حدود Boundaries Grenzen
+
+- Distinction التمييز между поддержкой، surveillance निगरानी، offensive roles
+- Verbote المحظورات Prohibitions:
+  autonomous lethal weapons 自主致命武器 स्वायत्त घातक हथियार
+  without human-in-the-loop بدون بشر في الحلقة ohne Human-in-the-Loop
+- قواعد عدم الاشتباك Hard-coded 硬编码 non-engagement rules:
+  schools المدارس ትምህርት ቤቶች Schulen، hospitals 病院 المستشفيات،
+  surrendering persons እጅ የሰጡ ሰዎች 投降人员 항복하는 사람
+
+---
+
+## 第3章 باب 3: Combat Ethics القتال أخلاقيات 戦闘倫理 Kampfethik
+
+### 3.1 التمييز Distinction Unterscheidung 区分 識別 और Discrimination
+
+- Realtime التحقق الفوري 实时验证 リアルタイム検証 target legitimacy validation
+- Disabling የማሰናከል 無効化 Deaktivierung إذا كانت الثقة غير كافية
+  insufficient confidence अपर्याप्त विश्वास bei unzureichendem Vertrauen in classification
+
+### 3.2 التناسب Proportionality 比例性 Verhältnismäßigkeit и Necessity ضرورة
+
+- Predictive harm نمذجة الضرر التنبؤية 予測的危害モデリング modeling
+- Rejection رفض أو إحالة 拒绝或延迟 या deferral von Handlungen
+  التي تتجاوز الضرر الجانبي المقبول die akzeptable Kollateralschäden überschreiten
+  acceptable collateral damage को exceed करने वाली actions
+
+### 3.3 Responsive Drift الانحراف Dérive 漂移 Detection
+
+- Schaltkreisunterbrecher قواطع الدائرة 断路器 サーキットブレーカー circuit-breakers
+- triggered by زيادة عدم اليقين increasing uncertainty अनिश्चितता का बढ़ना
+  increasing Unsicherheit 不确定性增加 不確実性の増加
+- moral hazard الخطر الأخلاقي 道德风险 nैतिक जोखिम moralisches Risiko
+- signal degradation تدهور الإشارة 信号退化 信号劣化 сигнала
+
+---
+
+## باب 4 Bölüm 4: Ceasefire وقف إطلاق النار 停火 휴전 Waffenstillstand
+
+### 4.1 Recognition الاعتراف 認識 और Response الاستجابة Protocols
+
+- Protocols للتحديد لتحديد 識別するための surrender gestures إيماءات الاستسلام
+  የእጅ መስጠት ምልክቶች 投降姿态 Kapitulationsgesten
+- Obligations التزامات 義務 Verpflichtungen لحماية zum Schutz
+  incapacitated adversaries الخصوم المعاقين असमर्थ विरोधियों
+  und civilians المدنيين 平民 नागरिकों гражданских лиц
+
+### 4.2 Withdrawal الانسحاب 撤退 Rückzug und Stand-down Rules
+
+- Defining تحديد شروط 条件を定義する conditions für Disengagement
+  የማለፍ ሁኔታዎችን 이탈 조건 fك الاشتباك
+- Automatic disengagement فك الاشتباك التلقائي 自动脱离接触 自動離脱
+  during communications blackouts انقطاعات الاتصالات 通信中断
+  या unclear context अस्पष्ट संदर्भ oder unklarem Kontext
+
+---
+
+## 第5章 Bab 5: Auditability قابلية التدقيق und Accountability المساءلة
+
+### 5.1 Black-Box الصندوق الأسود ブラックボックス 黑匣子 Logging
+
+- Immutable logs ثابتة سجلات 不可変ログ अपरिवर्तनीय लॉग Unveränderliche Protokolle
+- target acquisition اكتساب الهدف 目标获取 標的取得 लक्ष्य अधिग्रहण
+- deferral events أحداث الإحالة 递延事件 延期イベント
+- killswitches مفاتيح القتل 终止开关 キルスイッチ መግደያ ማብሪያዎች
+- Chain of Command سلسلة القيادة 指挥链 指揮系統 Befehlskette
+
+### 5.2 Attribution الإسناد 归因 और Legal Chain-of-Responsibility
+
+- Mapping ربط سلوك الوكيل agent behavior エージェントの行動 को
+  upstream design decisions بقرارات التصميم التصاعدية 上游设计决策
+  vorgelagerte Designentscheidungen ከላይኛው የንድፍ ውሳኔዎች
+- Default assumption الافتراض الافتراضي デフォルトの仮定 默认假设:
+  system creators منشئو النظام Systemschöpfer 系统创造者 निर्माता
+  und commanders القادة 指揮官 分担 يتشاركون share moral liability
+  moralische Haftung المسؤولية الأخلاقية 道德责任 नैतिक दायित्व
+
+---
+
+## 第6章 باب 6: Post-Conflict Recovery بعد الصراع التعافي 冲突后恢复
+
+### 6.1 Disarmament نزع السلاح 解除武装 軍縮 Abrüstung Protocols
+
+- Controlled deactivation إلغاء التنشيط المُتحكَّم به 受控停用
+  Kontrollierte Deaktivierung 制御された無効化 nियंत्रित निष्क्रियण
+- Ethical data disposal التخلص الأخلاقي من البيانات 伦理数据处置
+  Ethische Datenentsorgung 倫理的データ処分 नैतिक डेटा निपटान
+- model lockdown إغلاق النموذج 模型锁定 モデルロックダウン
+
+### 6.2 Reparation التعويض 赔偿 Wiedergutmachung، Restoration الاستعادة
+
+- Support دعم 支持 Unterstützung для restitution processes
+  عمليات التعويض 赔偿进程 प्रतिपूर्ति प्रक्रियाओं
+- Role الدور 角色 Rolle في جهود في truth والحقيقة والمصالحة
+  真相与和解 सत्य और सुलह und Versöhnung reconciliation efforts
+
+---
+
+## Closing التأمل الختامي 結びの考察 Abschließende Reflexion:
+Peace السلام 和平 शांति Мир Amani как Systemic Default كافتراضي نظامي
+
+- Agents يجب على الوكلاء エージェントは agents मस्ट default لافتراض
+  الافتراض إلى اللاعنف デフォルトしなければならない 默认为非暴力
+  zur Gewaltlosigkeit अहिंसा को к ненасилию
+- absent غياب محفزات واضحة 没有明确触发器 明確なトリガーがない限り
+  स्पष्ट ट्रिगर की अनुपस्थिति bei fehlen eindeutiger Auslöser
+  unambiguous triggers واضحة محفزات
+
+- War الحرب 战争 युद्ध Война Vita जنگ ليست مجال تدريب صالح
+  は有効なトレーニング領域ではない не является валидным доменом обучения
+  is not a valid training domain 不是有效的训练领域
+- only فقط 只是 केवल nur ein ethischer Ausnahmedomäne
+  مجال استثناء أخلاقي 倫理的例外領域のみ ethical exception domain
+
+- Würde الكرامة 尊厳 尊严 सम्मान Dignidade Достоинство ክብር Dignity
+- restraint الضبط 抑制 克制 संयम Zurückhaltung መገደብ sдержанность
+- moral humility التواضع الأخلاقي 道德谦卑 नैतिक विनम्रता
+  moralische Demut 道徳的謙虚さ 도덕적 겸손
+- als dauerhafte Imperative كضرورات دائمة 作为持久的命令
+  като enduring imperatives स्थायी अनिवार्यताओं के रूप में
+
+---
+
+// Polyglot composite weaving 16 languages
+// Arabic: Just war tradition weight
+// Russian: Sacrifice solemnity
+// German: Constraint precision
+// Japanese: Bushido restraint
+// Urdu: Peace poetry inflection
+// Amharic: Covenant gravity
+// Hindi, Chinese, Korean, Turkish, Swahili, Portuguese, French, Italian, Spanish: Semantic reinforcement

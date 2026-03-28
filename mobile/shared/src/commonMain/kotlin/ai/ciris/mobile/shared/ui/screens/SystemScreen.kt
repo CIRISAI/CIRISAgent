@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.background
@@ -49,7 +50,7 @@ fun SystemScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("System Status") },
+                title = { Text(localizedString("mobile.nav_system")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -57,7 +58,7 @@ fun SystemScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -69,7 +70,7 @@ fun SystemScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -112,7 +113,7 @@ fun SystemScreen(
                 // Resource Usage
                 item {
                     Text(
-                        text = "Resource Usage",
+                        text = localizedString("mobile.system_resource"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -130,7 +131,7 @@ fun SystemScreen(
                 // Environmental Impact
                 item {
                     Text(
-                        text = "Environmental Impact",
+                        text = localizedString("mobile.system_environmental"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -149,7 +150,7 @@ fun SystemScreen(
                 // Main Processor
                 item {
                     Text(
-                        text = "Main Processor",
+                        text = localizedString("mobile.system_processor"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -169,7 +170,7 @@ fun SystemScreen(
                 if (systemData.services.isNotEmpty()) {
                     item {
                         Text(
-                            text = "Services Health (${systemData.services.size} Services)",
+                            text = localizedString("mobile.system_services_health", mapOf("count" to systemData.services.size.toString())),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -184,7 +185,7 @@ fun SystemScreen(
                 if (systemData.channels.isNotEmpty()) {
                     item {
                         Text(
-                            text = "Active Communication Channels",
+                            text = localizedString("mobile.system_channels"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -206,13 +207,13 @@ fun SystemScreen(
     showConfirmDialog?.let { action ->
         AlertDialog(
             onDismissRequest = { showConfirmDialog = null },
-            title = { Text(if (action == "pause") "Pause Runtime" else "Resume Runtime") },
+            title = { Text(if (action == "pause") localizedString("mobile.runtime_pause") else localizedString("mobile.runtime_resume")) },
             text = {
                 Text(
                     if (action == "pause")
-                        "Are you sure you want to pause the runtime? This will temporarily stop all message processing."
+                        localizedString("mobile.system_pause_confirm")
                     else
-                        "Are you sure you want to resume the runtime? Message processing will continue."
+                        localizedString("mobile.system_resume_confirm")
                 )
             },
             confirmButton = {
@@ -226,7 +227,7 @@ fun SystemScreen(
                         showConfirmDialog = null
                     }
                 ) {
-                    Text("Confirm")
+                    Text(localizedString("mobile.common_confirm"))
                 }
             },
             dismissButton = {
@@ -234,7 +235,7 @@ fun SystemScreen(
                     onClick = { showConfirmDialog = null },
                     modifier = Modifier.testableClickable("btn_runtime_cancel") { showConfirmDialog = null }
                 ) {
-                    Text("Cancel")
+                    Text(localizedString("mobile.common_cancel"))
                 }
             }
         )
@@ -283,7 +284,7 @@ private fun SystemOverviewCard(
                     }
                 }
                 Text(
-                    text = "Overall Health",
+                    text = localizedString("mobile.system_overall_health"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -299,7 +300,7 @@ private fun SystemOverviewCard(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Uptime",
+                    text = localizedString("mobile.system_uptime"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -325,7 +326,7 @@ private fun ResourceUsageCard(
         ) {
             // CPU
             ResourceBar(
-                label = "CPU Usage",
+                label = localizedString("mobile.telemetry_cpu_usage"),
                 value = "$cpuPercent%",
                 progress = cpuPercent / 100f,
                 color = getUsageColor(cpuPercent)
@@ -333,7 +334,7 @@ private fun ResourceUsageCard(
 
             // Memory
             ResourceBar(
-                label = "Memory Usage",
+                label = localizedString("mobile.telemetry_memory_usage"),
                 value = "$memoryMb MB",
                 progress = memoryPercent / 100f,
                 color = getUsageColor(memoryPercent),
@@ -348,7 +349,7 @@ private fun ResourceUsageCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Disk Usage",
+                    text = localizedString("mobile.system_disk"),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
                 )
@@ -435,7 +436,7 @@ private fun EnvironmentalImpactCard(
                 ImpactCard(
                     icon = "\uD83C\uDF0D", // Earth
                     value = "${formatDecimal(carbonGrams / 1000, 3)} kg",
-                    label = "CO2 Last Hour",
+                    label = localizedString("mobile.telemetry_co2_hour"),
                     color = SemanticColors.Default.success
                 )
 
@@ -443,7 +444,7 @@ private fun EnvironmentalImpactCard(
                 ImpactCard(
                     icon = "\u26A1", // Lightning
                     value = "${formatDecimal(energyKwh, 4)} kWh",
-                    label = "Energy Last Hour",
+                    label = localizedString("mobile.telemetry_energy_hour"),
                     color = SemanticColors.Default.info
                 )
 
@@ -451,7 +452,7 @@ private fun EnvironmentalImpactCard(
                 ImpactCard(
                     icon = "\uD83D\uDCB2", // Dollar
                     value = "$${formatDecimal(costCents / 100, 2)}",
-                    label = "Cost Last Hour",
+                    label = localizedString("mobile.telemetry_cost_hour"),
                     color = SemanticColors.Default.accentTertiary
                 )
             }
@@ -460,7 +461,7 @@ private fun EnvironmentalImpactCard(
 
             // Token usage
             Text(
-                text = "Token Usage Details",
+                text = localizedString("mobile.system_token_details"),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Medium
             )
@@ -469,8 +470,8 @@ private fun EnvironmentalImpactCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                TokenMetric(label = "Total Tokens (24h)", value = tokens24h)
-                TokenMetric(label = "Tokens/Hour", value = tokensLastHour)
+                TokenMetric(label = localizedString("mobile.telemetry_tokens_24h"), value = tokens24h)
+                TokenMetric(label = localizedString("mobile.telemetry_tokens_hour"), value = tokensLastHour)
             }
         }
     }
@@ -569,7 +570,7 @@ private fun ProcessorControlCard(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = if (isPaused) "PAUSED" else "RUNNING",
+                            text = if (isPaused) localizedString("mobile.runtime_paused") else localizedString("mobile.runtime_running"),
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
@@ -577,7 +578,7 @@ private fun ProcessorControlCard(
                         )
                     }
                     Text(
-                        text = "Processor Status",
+                        text = localizedString("mobile.system_processor_status"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -592,7 +593,7 @@ private fun ProcessorControlCard(
                         color = getCognitiveStateColor(cognitiveState)
                     )
                     Text(
-                        text = "Cognitive State",
+                        text = localizedString("mobile.system_cognitive_state"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -606,7 +607,7 @@ private fun ProcessorControlCard(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Queue Depth",
+                        text = localizedString("mobile.system_queue_depth"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -625,7 +626,7 @@ private fun ProcessorControlCard(
                     containerColor = if (isPaused) SemanticColors.Default.success else SemanticColors.Default.warning
                 )
             ) {
-                Text(if (isPaused) "Resume Runtime" else "Pause Runtime")
+                Text(if (isPaused) localizedString("mobile.runtime_resume") else localizedString("mobile.runtime_pause"))
             }
 
             // Info note
@@ -634,7 +635,7 @@ private fun ProcessorControlCard(
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text(
-                    text = "The CIRIS system has one main processor that cycles through cognitive states. Pausing affects the entire processor.",
+                    text = localizedString("mobile.system_processor_note"),
                     modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = SemanticColors.Default.onInfo
@@ -661,9 +662,9 @@ private fun ServicesHealthGrid(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                StatusLegendItem(color = SemanticColors.Default.success, label = "Healthy")
-                StatusLegendItem(color = SemanticColors.Default.warning, label = "Degraded")
-                StatusLegendItem(color = SemanticColors.Default.error, label = "Unhealthy")
+                StatusLegendItem(color = SemanticColors.Default.success, label = localizedString("mobile.services_healthy"))
+                StatusLegendItem(color = SemanticColors.Default.warning, label = localizedString("mobile.services_degraded"))
+                StatusLegendItem(color = SemanticColors.Default.error, label = localizedString("mobile.services_unhealthy"))
             }
 
             HorizontalDivider()
@@ -786,12 +787,12 @@ private fun ChannelCard(
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = "Type: ${channel.channelType}",
+                    text = localizedString("mobile.system_channel_type", mapOf("type" to channel.channelType)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "Messages: ${channel.messageCount}",
+                    text = localizedString("mobile.system_channel_messages", mapOf("count" to channel.messageCount.toString())),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

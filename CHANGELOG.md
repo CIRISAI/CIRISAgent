@@ -5,6 +5,195 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-03-28
+
+### Added
+
+- **Full Pipeline Localization** - 14 languages with complete ethical reasoning in user's preferred language
+  - ACCORD ethical framework (~1150 lines per language)
+  - All 6 DMA prompts (PDMA, CSDMA, DSDMA, IDMA, ASPDMA, TSASPDMA)
+  - Comprehensive Guide runtime instructions
+  - Conscience strings and ponder questions
+  - KMP mobile/desktop UI (24+ screens, ~500 strings)
+  - Languages: Amharic, Arabic, Chinese, English, French, German, Hindi, Italian, Japanese, Korean, Portuguese, Russian, Swahili, Turkish
+
+- **Wallet Adapter** - Cryptocurrency payment integration
+  - x402/Chapa payment providers
+  - Auto-load keys from CIRISVerify secure element
+  - USDC transfers on Base network
+  - Gas fee guidance and warnings
+
+- **HA/MA Tool Documentation** - Full LLM context enrichment for all tools
+  - 10 Home Assistant tools with detailed_instructions, examples, gotchas
+  - 5 Music Assistant tools with search strategies and queue behavior docs
+
+- **Navigation & Weather Services** - Setup wizard integration
+  - OpenStreetMap routing and geocoding
+  - NOAA National Weather Service API
+
+### Changed
+
+- **Audit Trail Multi-Source Merging** - Proper deduplication across SQLite, Graph, and JSONL backends
+- **ASPDMA Schema** - Removed invalid `tool_parameters` field (TSASPDMA handles parameters)
+
+### Fixed
+
+- **Action Sequence Conscience** - Fixed action types stored as `"HandlerActionType.SPEAK"` instead of `"speak"`, preventing conscience from detecting repeated SPEAK actions
+- **DMA Prompt JSON Escaping** - Fixed `KeyError: '"reasoning"'` caused by unescaped JSON braces in LANGUAGE RULES examples (affects all 15 localized prompt sets)
+- **Error Visibility** - Added `emit_dma_failure` and `emit_circuit_breaker_open` calls for UI display
+- **ACCORD Mode** - Added `CIRIS_ACCORD_MODE` env var (compressed/full/none) with default "compressed"
+- **Env Var Security** - Added sanitization in `sync_env_var()` to prevent log injection
+- **Kotlin Composable Context** - Fixed `localizedString()` calls in non-composable contexts
+- **ASPDMA Language** - Use `get_preferred_language()` instead of prompt_loader
+
+## [2.2.9] - 2026-03-24
+
+### Added
+
+- **Founding Partnerships** - Backfill founding partnership status for pre-existing ROOT users
+- **Privacy Compliance** - Enhanced DSAR data management
+
+### Fixed
+
+- **Data Management Screen** - Fixed 404 errors and always-sync resources
+
+## [2.2.8] - 2026-03-22
+
+### Added
+
+- **HA Resilience** - Improved Home Assistant connection handling
+
+### Fixed
+
+- **iOS Version Display** - Correct version shown in app
+- **Bump Script** - Version alignment across all constants files
+
+## [2.2.7] - 2026-03-20
+
+### Added
+
+- **Music Assistant Tools** - Full MA integration with search, play, browse, queue, players
+- **HA Documentation** - Comprehensive tool documentation for LLM context
+- **DEFER Guidance** - Improved human deferral handling
+
+### Fixed
+
+- **LLM Response Parsing** - Better handling of malformed responses
+- **Mobile Settings** - Various UI improvements
+
+## [2.2.6] - 2026-03-18
+
+### Added
+
+- **H3ERE Pipeline Visualization** - Real-time reasoning pipeline display
+- **Conscience TOOL Loop Prevention** - Prevents infinite tool call loops
+
+### Fixed
+
+- **Timeline Deduplication** - Proper dedup of action entries
+- **PONDER Display** - Correct rendering of ponder actions
+- **Dream State** - Various dream mode fixes
+
+## [2.2.5] - 2026-03-16
+
+### Fixed
+
+- **FFI Initialization** - Fixed native library loading issues
+- **App Store Review** - Account deletion, auth clarity, purchase token refresh
+- **Telemetry Scheduler** - Improved scheduling reliability
+
+## [2.2.4] - 2026-03-14
+
+### Added
+
+- **Telemetry Push Scheduler** - Scheduled telemetry uploads
+
+### Fixed
+
+- **Dream State** - Various dream mode improvements
+- **Mobile Updates** - UI polish and bug fixes
+
+## [2.2.3] - 2026-03-12
+
+### Added
+
+- **Desktop Auto-Launch** - Unified `ciris-agent` entry point launches both server and desktop app
+- **Mobile Guide** - In-app help documentation
+
+### Fixed
+
+- **Graph Defaults** - Correct default settings for memory graph
+
+## [2.2.2] - 2026-03-11
+
+### Added
+
+- **Tickets Screen** - Privacy request management UI
+- **Scheduler Screen** - Task scheduling interface
+- **Human Deferrals** - Improved WA deferral handling
+
+## [2.2.1] - 2026-03-10
+
+### Fixed
+
+- **Mobile Stability** - Various crash fixes and performance improvements
+
+## [2.2.0] - 2026-03-09
+
+### Added
+
+- **Action Timeline** - Real-time audit trail visualization in mobile app
+  - ActionType enum with all 10 CIRIS verbs
+  - Color-coded ActionBubble component (green=L5, amber=L4, red=L1-3)
+  - SSE-triggered live updates
+
+- **Trust Page Enhancements**
+  - Level Debug expansion showing L1-L5 check details
+  - Agent version badge alongside CIRISVerify version
+  - Continuous polling for live attestation updates
+
+### Fixed
+
+- **Trust Shield Colors** - Match TrustPage (L1-3=red, L4=amber, L5=green)
+- **Double-Encoded JSON** - Fixed parsing for tool parameters
+- **Nested JSON Display** - Proper rendering in audit UI
+
+## [2.1.11] - 2026-03-08
+
+### Changed
+
+- **SDK Sync** - Updated SDK files for compatibility
+- **Mobile Manifest CI** - Improved CI for mobile builds
+- **iOS Support** - bump_version.py now handles iOS
+
+## [2.1.10] - 2026-03-07
+
+### Added
+
+- **Attestation Level Colors** - Visual indicators for trust levels
+- **CIRISVerify v1.1.24** - Updated verification library
+
+## [2.1.8] - 2026-03-06
+
+### Changed
+
+- **CIRISVerify v1.1.22** - Security and stability improvements
+- **Manifest Fixes** - Corrected mobile manifest handling
+- **Update Script** - Fixed auto-update issues
+
+## [2.1.6] - 2026-03-05
+
+### Changed
+
+- **CIRISVerify v1.1.21** - Minor improvements
+
+## [2.1.5] - 2026-03-04
+
+### Changed
+
+- **CIRISVerify v1.1.20** - Initial stable release
+- **CI Fixes** - Build pipeline improvements
+
 ## [2.0.1] - 2026-03-01
 
 ### Added

@@ -293,23 +293,52 @@ class SetupCompleteRequest(BaseModel):
     # Application Configuration
     agent_port: int = Field(default=8080, description="Agent API port")
 
+    # User Preferences (language & location at user-selected granularity)
+    preferred_language: Optional[str] = Field(
+        None, description="ISO 639-1 language code (e.g., 'en', 'am', 'es', 'fr')"
+    )
+    location_country: Optional[str] = Field(
+        None, description="ISO 3166-1 alpha-2 country code (e.g., 'US', 'ET', 'JP')"
+    )
+    location_region: Optional[str] = Field(
+        None, description="Region/state/province name (user-chosen granularity, may be omitted)"
+    )
+    location_city: Optional[str] = Field(
+        None, description="City name (user-chosen granularity, may be omitted)"
+    )
+    timezone: Optional[str] = Field(
+        None, description="IANA timezone (e.g., 'America/Chicago', 'Africa/Addis_Ababa')"
+    )
+    share_location_in_traces: bool = Field(
+        default=False,
+        description="Whether user consents to include location data in anonymized telemetry traces",
+    )
+
     # Node Connection (set by "Connect to Node" device auth flow)
     node_url: Optional[str] = Field(None, description="CIRISNode URL (e.g., https://node.ciris.ai)")
     identity_template: Optional[str] = Field(None, description="Registry-provisioned identity template ID")
     stewardship_tier: Optional[int] = Field(None, ge=1, le=5, description="Stewardship tier from provisioned template")
     approved_adapters: Optional[List[str]] = Field(None, description="Registry-approved adapter list")
     org_id: Optional[str] = Field(None, description="Organization ID from Portal ABAC resolution")
+
+    # DEPRECATED (FSD-002 Self-Custody): These fields are no longer used.
+    # Agents now generate their own keys and register the PUBLIC key with Portal.
+    # Portal NEVER sends or receives private keys.
     signing_key_provisioned: bool = Field(
         default=False,
-        description="If true, signing key was provisioned by Registry (skip local key generation)",
+        description="DEPRECATED: Always False. Self-custody agents generate their own keys.",
+        deprecated=True,
     )
     provisioned_signing_key_b64: Optional[str] = Field(
         None,
-        description="Base64-encoded Ed25519 private key from Registry (consumed and cleared after save)",
+        description="DEPRECATED: Always None. Portal never sends private keys (FSD-002 self-custody).",
+        deprecated=True,
     )
+
+    # Self-custody key ID from Portal registration
     signing_key_id: Optional[str] = Field(
         None,
-        description="Portal-issued signing key ID (stored in .env, private key stored in hardware keystore)",
+        description="Portal key ID (from self-custody registration). Private key stays in agent TPM.",
     )
 
     # Licensed module package (set by download-package flow)
@@ -394,15 +423,24 @@ class ConnectNodeResponse(BaseModel):
 
 
 class ConnectNodeStatusResponse(BaseModel):
-    """Response from device auth status polling."""
+    """Response from device auth status polling.
+
+    NOTE (FSD-002 Self-Custody): Portal no longer sends private keys.
+    The agent generates its own Ed25519 keypair and registers the PUBLIC key with Portal.
+    The `signing_key_b64` field is DEPRECATED and always None.
+    """
 
     status: str = Field(..., description="pending, complete, or error")
     # Fields below are only set when status == 'complete'
     template: Optional[str] = Field(None, description="Provisioned identity template ID")
     adapters: Optional[List[str]] = Field(None, description="Approved adapter list")
     org_id: Optional[str] = Field(None, description="Organization ID")
-    signing_key_b64: Optional[str] = Field(None, description="Base64-encoded Ed25519 private key (one-time)")
-    key_id: Optional[str] = Field(None, description="Key ID from Registry")
+    signing_key_b64: Optional[str] = Field(
+        None,
+        description="DEPRECATED: Always None. Portal never sends private keys (FSD-002 self-custody).",
+        deprecated=True,
+    )
+    key_id: Optional[str] = Field(None, description="Key ID from self-custody registration")
     stewardship_tier: Optional[int] = Field(None, description="Stewardship tier from template")
     # Licensed package info — agent downloads this after provisioning
     package_download_url: Optional[str] = Field(None, description="URL to download licensed module package zip")

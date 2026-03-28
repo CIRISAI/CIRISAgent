@@ -5,7 +5,7 @@ from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_snapshot, format_user_profiles
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import ACCORD_TEXT, ACCORD_TEXT_COMPRESSED
+from ciris_engine.logic.utils import get_accord_text
 from ciris_engine.protocols.dma.base import PDMAProtocol
 from ciris_engine.schemas.dma.results import EthicalDMAResult
 from ciris_engine.schemas.types import JSONDict
@@ -48,19 +48,33 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         logger.info(f"EthicalPDMAEvaluator initialized with model: {self.model_name}")
 
     def _build_context_strings(self, context: Any) -> tuple[str, str]:
-        """Extract system snapshot and user profile context strings."""
+        """Extract system snapshot and user profile context strings.
+
+        Also syncs user's language preference to the DMA prompt loader.
+        """
         if not context:
             return "", ""
 
         system_snapshot_str = ""
         user_profile_str = ""
+        user_profiles = None
 
         if hasattr(context, "system_snapshot") and context.system_snapshot:
             system_snapshot_str = format_system_snapshot(context.system_snapshot)
             if hasattr(context.system_snapshot, "user_profiles") and context.system_snapshot.user_profiles:
-                user_profile_str = format_user_profiles(context.system_snapshot.user_profiles)
+                user_profiles = context.system_snapshot.user_profiles
+                user_profile_str = format_user_profiles(user_profiles)
         elif hasattr(context, "user_profiles") and context.user_profiles:
-            user_profile_str = format_user_profiles(context.user_profiles)
+            user_profiles = context.user_profiles
+            user_profile_str = format_user_profiles(user_profiles)
+
+        # Sync user's language preference to prompt loader
+        if user_profiles and len(user_profiles) > 0:
+            user_lang = getattr(user_profiles[0], "preferred_language", None)
+            if user_lang and user_lang != self.prompt_loader.language:
+                from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+                set_prompt_language(user_lang)
+                logger.debug(f"PDMA: Synced prompt language to user preference: {user_lang}")
 
         return system_snapshot_str, user_profile_str
 
@@ -134,12 +148,11 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         prompt_start = time.time()
         messages: List[JSONDict] = []
 
-        # Add accord based on mode
+        # Add accord based on mode (centralized in get_accord_text)
         accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
-        if accord_mode == "full":
-            messages.append({"role": "system", "content": ACCORD_TEXT})
-        elif accord_mode == "compressed":
-            messages.append({"role": "system", "content": ACCORD_TEXT_COMPRESSED})
+        accord_text = get_accord_text(accord_mode)
+        if accord_text:
+            messages.append({"role": "system", "content": accord_text})
 
         system_message = self._build_system_message_text(original_thought_content, full_context_str)
         messages.append({"role": "system", "content": system_message})

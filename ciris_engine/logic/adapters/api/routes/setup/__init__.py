@@ -33,10 +33,10 @@ from .complete import _create_founding_partnership, _create_setup_users, _save_s
 
 # Device auth helpers - imported from device_auth.py module
 from .device_auth import (
-    _activate_key_inline,
     _clear_device_auth_session,
     _get_device_auth_session_path,
     _load_device_auth_session,
+    _register_self_custody_key,
     _save_device_auth_session,
     _submit_attestation_inline,
 )
@@ -153,7 +153,7 @@ __all__ = [
     "_save_device_auth_session",
     "_clear_device_auth_session",
     "_submit_attestation_inline",
-    "_activate_key_inline",
+    "_register_self_custody_key",
     # Complete helpers (for test compatibility)
     "_save_setup_config",
     "_create_setup_users",

@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ai.ciris.mobile.shared.localization.localizedString
 
 /**
  * Scheduler screen showing scheduled tasks and statistics.
@@ -47,7 +48,7 @@ fun SchedulerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Task Scheduler") },
+                title = { Text(localizedString("mobile.screen_task_scheduler")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -55,7 +56,7 @@ fun SchedulerScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -66,7 +67,7 @@ fun SchedulerScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Add,
-                            contentDescription = "Create Task"
+                            contentDescription = localizedString("mobile.scheduler_create_title")
                         )
                     }
                     IconButton(
@@ -76,7 +77,7 @@ fun SchedulerScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -94,7 +95,7 @@ fun SchedulerScreen(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Add,
-                    contentDescription = "Create Task"
+                    contentDescription = localizedString("mobile.scheduler_create_title")
                 )
             }
         }
@@ -156,12 +157,12 @@ fun SchedulerScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Scheduled Tasks",
+                        text = localizedString("mobile.scheduler_tasks"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "${state.tasks.size} tasks",
+                        text = localizedString("mobile.scheduler_task_count", "count", state.tasks.size.toString()),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -191,12 +192,12 @@ fun SchedulerScreen(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "No Scheduled Tasks",
+                                text = localizedString("mobile.scheduler_no_tasks"),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "Create a task to schedule automated actions",
+                                text = localizedString("mobile.scheduler_create_hint"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -228,14 +229,14 @@ fun SchedulerScreen(
 @Composable
 private fun CognitiveStateCard(state: String) {
     val semantic = SemanticColors.Default
-    val (color, description) = when (state.uppercase()) {
-        "WORK" -> Pair(semantic.success, "Processing tasks normally")
-        "PLAY" -> Pair(semantic.accentTertiary, "Creative/exploratory mode")
-        "SOLITUDE" -> Pair(semantic.inactive, "Reflection mode")
-        "DREAM" -> Pair(semantic.info, "Deep introspection")
-        "WAKEUP" -> Pair(semantic.warning, "Starting up")
-        "SHUTDOWN" -> Pair(semantic.error, "Shutting down")
-        else -> Pair(semantic.inactive, "Unknown state")
+    val (color, descriptionKey) = when (state.uppercase()) {
+        "WORK" -> Pair(semantic.success, "mobile.scheduler_state_work_desc")
+        "PLAY" -> Pair(semantic.accentTertiary, "mobile.scheduler_state_play_desc")
+        "SOLITUDE" -> Pair(semantic.inactive, "mobile.scheduler_state_solitude_desc")
+        "DREAM" -> Pair(semantic.info, "mobile.scheduler_state_dream_desc")
+        "WAKEUP" -> Pair(semantic.warning, "mobile.scheduler_state_wakeup_desc")
+        "SHUTDOWN" -> Pair(semantic.error, "mobile.scheduler_state_shutdown_desc")
+        else -> Pair(semantic.inactive, "mobile.scheduler_state_unknown_desc")
     }
 
     Card(
@@ -253,7 +254,7 @@ private fun CognitiveStateCard(state: String) {
         ) {
             Column {
                 Text(
-                    text = "Cognitive State",
+                    text = localizedString("mobile.scheduler_cognitive"),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -264,7 +265,7 @@ private fun CognitiveStateCard(state: String) {
                     color = color
                 )
                 Text(
-                    text = description,
+                    text = localizedString(descriptionKey),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -288,21 +289,21 @@ private fun SchedulerStatsRow(overview: SchedulerOverviewData) {
     ) {
         SchedulerStatCard(
             icon = Icons.Filled.DateRange,
-            label = "Pending",
+            label = localizedString("mobile.scheduler_stat_pending"),
             value = overview.pendingCount.toString(),
             color = if (overview.pendingCount > 0) semantic.warning else semantic.success,
             modifier = Modifier.weight(1f)
         )
         SchedulerStatCard(
             icon = Icons.Filled.Refresh,
-            label = "Recurring",
+            label = localizedString("mobile.scheduler_stat_recurring"),
             value = overview.recurringCount.toString(),
             color = semantic.info,
             modifier = Modifier.weight(1f)
         )
         SchedulerStatCard(
             icon = Icons.Filled.CheckCircle,
-            label = "Completed",
+            label = localizedString("mobile.scheduler_stat_completed"),
             value = overview.completedTotal.toString(),
             color = semantic.success,
             modifier = Modifier.weight(1f)
@@ -386,7 +387,11 @@ private fun ScheduledTaskCard(
                 ) {
                     Icon(
                         imageVector = if (task.isRecurring) Icons.Filled.Refresh else Icons.Filled.DateRange,
-                        contentDescription = if (task.isRecurring) "Recurring" else "One-time",
+                        contentDescription = if (task.isRecurring) {
+                            localizedString("mobile.scheduler_stat_recurring")
+                        } else {
+                            localizedString("mobile.scheduler_onetime")
+                        },
                         tint = statusColor,
                         modifier = Modifier.size(20.dp)
                     )
@@ -427,7 +432,7 @@ private fun ScheduledTaskCard(
                 )
                 if (task.deferralCount > 0) {
                     Text(
-                        text = "Deferred ${task.deferralCount}x",
+                        text = localizedString("mobile.scheduler_deferred", "count", task.deferralCount.toString()),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -452,7 +457,7 @@ private fun ScheduledTaskCard(
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Cancel")
+                        Text(localizedString("mobile.common_cancel"))
                     }
                 }
             }
@@ -477,7 +482,7 @@ private fun CreateTaskDialog(
 
     AlertDialog(
         onDismissRequest = { if (!isCreating) onDismiss() },
-        title = { Text("Create Scheduled Task") },
+        title = { Text(localizedString("mobile.scheduler_create_title")) },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -486,7 +491,7 @@ private fun CreateTaskDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Task Name") },
+                    label = { Text(localizedString("mobile.scheduler_name")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isCreating
@@ -496,7 +501,7 @@ private fun CreateTaskDialog(
                 OutlinedTextField(
                     value = goalDescription,
                     onValueChange = { goalDescription = it },
-                    label = { Text("Goal Description") },
+                    label = { Text(localizedString("mobile.scheduler_goal")) },
                     minLines = 2,
                     maxLines = 3,
                     modifier = Modifier.fillMaxWidth(),
@@ -507,12 +512,12 @@ private fun CreateTaskDialog(
                 OutlinedTextField(
                     value = triggerPrompt,
                     onValueChange = { triggerPrompt = it },
-                    label = { Text("Trigger Prompt") },
+                    label = { Text(localizedString("mobile.scheduler_trigger")) },
                     minLines = 2,
                     maxLines = 3,
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isCreating,
-                    supportingText = { Text("What CIRIS should do when task triggers") }
+                    supportingText = { Text(localizedString("mobile.scheduler_trigger_hint")) }
                 )
 
                 // Schedule type toggle
@@ -520,7 +525,7 @@ private fun CreateTaskDialog(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Recurring task")
+                    Text(localizedString("mobile.scheduler_recurring"))
                     Spacer(modifier = Modifier.weight(1f))
                     Switch(
                         checked = isRecurring,
@@ -534,11 +539,11 @@ private fun CreateTaskDialog(
                     OutlinedTextField(
                         value = scheduleCron,
                         onValueChange = { scheduleCron = it },
-                        label = { Text("Cron Expression") },
+                        label = { Text(localizedString("mobile.scheduler_cron")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !isCreating,
-                        supportingText = { Text("e.g., '0 9 * * *' for daily at 9am") }
+                        supportingText = { Text(localizedString("mobile.scheduler_cron_hint")) }
                     )
 
                     // Common cron presets
@@ -548,17 +553,17 @@ private fun CreateTaskDialog(
                     ) {
                         SuggestionChip(
                             onClick = { scheduleCron = "0 9 * * *" },
-                            label = { Text("Daily 9am") },
+                            label = { Text(localizedString("mobile.scheduler_daily_9am")) },
                             enabled = !isCreating
                         )
                         SuggestionChip(
                             onClick = { scheduleCron = "0 9 * * 1" },
-                            label = { Text("Weekly Mon") },
+                            label = { Text(localizedString("mobile.scheduler_weekly_mon")) },
                             enabled = !isCreating
                         )
                         SuggestionChip(
                             onClick = { scheduleCron = "0 */2 * * *" },
-                            label = { Text("Every 2h") },
+                            label = { Text(localizedString("mobile.scheduler_every_2h")) },
                             enabled = !isCreating
                         )
                     }
@@ -566,12 +571,12 @@ private fun CreateTaskDialog(
                     OutlinedTextField(
                         value = deferHours,
                         onValueChange = { deferHours = it.filter { c -> c.isDigit() } },
-                        label = { Text("Defer Hours") },
+                        label = { Text(localizedString("mobile.scheduler_defer_hours")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !isCreating,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        supportingText = { Text("Hours from now to execute") }
+                        supportingText = { Text(localizedString("mobile.scheduler_defer_hint")) }
                     )
                 }
 
@@ -610,7 +615,7 @@ private fun CreateTaskDialog(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Create")
+                    Text(localizedString("mobile.common_create"))
                 }
             }
         },
@@ -619,7 +624,7 @@ private fun CreateTaskDialog(
                 onClick = onDismiss,
                 enabled = !isCreating
             ) {
-                Text("Cancel")
+                Text(localizedString("mobile.common_cancel"))
             }
         }
     )

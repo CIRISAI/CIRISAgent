@@ -4,6 +4,8 @@ import ai.ciris.api.models.DocumentPayload
 import ai.ciris.api.models.ImagePayload
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.ReasoningEvent
+import ai.ciris.mobile.shared.localization.LocalizationHelper
+import ai.ciris.mobile.shared.localization.LocalizationManager
 import ai.ciris.mobile.shared.api.ReasoningStreamClient
 import ai.ciris.mobile.shared.ui.screens.graph.PipelineState
 import ai.ciris.mobile.shared.auth.TokenManager
@@ -94,6 +96,20 @@ data class TrustStatus(
     val levelPending: Boolean = false  // True when waiting for Play Integrity
 )
 
+/**
+ * Wallet status for wallet badge display
+ */
+data class WalletStatus(
+    val isLoaded: Boolean = false,
+    val hasWallet: Boolean = false,
+    val balance: String = "0.00",
+    val currency: String = "USDC",
+    val provider: String = "x402",
+    val network: String = "base-sepolia",
+    val address: String? = null,
+    val isReceiveOnly: Boolean = false  // True if hardware trust degraded
+)
+
 class InteractViewModel(
     private val apiClient: CIRISApiClient
 ) : ViewModel() {
@@ -181,8 +197,13 @@ class InteractViewModel(
     val timelineEvents: StateFlow<List<TimelineEvent>> = _timelineEvents.asStateFlow()
 
     // H3ERE pipeline scaffolding state - tracks which pipeline stages are active
+    // Labels are localized via LocalizationHelper for multilingual support
+    // Note: Initialize with default (English) labels - they will be updated when localization is ready
     private val _pipelineState = MutableStateFlow(PipelineState())
     val pipelineState: StateFlow<PipelineState> = _pipelineState.asStateFlow()
+
+    // Track language observation job
+    private var languageObserverJob: Job? = null
 
     // Show timeline popup
     private val _showTimeline = MutableStateFlow(false)
@@ -203,6 +224,10 @@ class InteractViewModel(
     // Trust status for shield display
     private val _trustStatus = MutableStateFlow(TrustStatus())
     val trustStatus: StateFlow<TrustStatus> = _trustStatus.asStateFlow()
+
+    // Wallet status for wallet badge display
+    private val _walletStatus = MutableStateFlow(WalletStatus())
+    val walletStatus: StateFlow<WalletStatus> = _walletStatus.asStateFlow()
 
     // File attachments for current message
     private val _attachedFiles = MutableStateFlow<List<PickedFile>>(emptyList())
@@ -234,6 +259,43 @@ class InteractViewModel(
     }
 
     /**
+     * Observe language changes from LocalizationManager and update pipeline labels.
+     * Call this from CIRISApp after localization manager is initialized.
+     *
+     * This is necessary because the ViewModel is created during composition,
+     * but LocalizationManager.initialize() runs in a LaunchedEffect AFTER composition.
+     * So we need to update pipeline labels when:
+     * 1. Localization finishes loading (strings become available)
+     * 2. User changes language
+     */
+    fun observeLanguageChanges(localizationManager: LocalizationManager) {
+        val method = "observeLanguageChanges"
+        if (languageObserverJob != null) {
+            logDebug(method, "Already observing language changes, skipping")
+            return
+        }
+        logInfo(method, "Starting language observation for pipeline localization")
+
+        languageObserverJob = viewModelScope.launch {
+            // Combine isLoading and currentLanguage to trigger on either change
+            kotlinx.coroutines.flow.combine(
+                localizationManager.isLoading,
+                localizationManager.currentLanguage
+            ) { isLoading, language ->
+                isLoading to language
+            }.collect { (isLoading, language) ->
+                if (!isLoading) {
+                    // Localization is ready, update pipeline labels
+                    logInfo(method, "Updating pipeline labels for language: $language")
+                    _pipelineState.value = _pipelineState.value.withLocalizedLabels { key ->
+                        LocalizationHelper.getString("mobile.$key")
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Start all polling and SSE streams.
      * Call this after the auth token has been set on the API client.
      */
@@ -249,6 +311,47 @@ class InteractViewModel(
         startHealthPolling()
         startSseStream()
         startFileInjectionObserver()
+        fetchWalletStatus()
+    }
+
+    /**
+     * Fetch wallet adapter status from the adapters list.
+     * Updates WalletStatus based on whether wallet adapter is loaded.
+     */
+    private fun fetchWalletStatus() {
+        val method = "fetchWalletStatus"
+        viewModelScope.launch {
+            try {
+                logInfo(method, "Fetching adapters list to check wallet status")
+                val adaptersData = apiClient.listAdapters()
+                val walletAdapter = adaptersData.adapters.find {
+                    it.adapterType.equals("wallet", ignoreCase = true)
+                }
+
+                if (walletAdapter != null) {
+                    logInfo(method, "Wallet adapter found: isRunning=${walletAdapter.isRunning}")
+                    _walletStatus.value = WalletStatus(
+                        isLoaded = true,
+                        hasWallet = walletAdapter.isRunning,
+                        balance = "0.00",  // TODO: Fetch actual balance from wallet API
+                        currency = "USDC",
+                        provider = "x402",
+                        network = "base-sepolia",
+                        address = null,
+                        isReceiveOnly = false
+                    )
+                } else {
+                    logInfo(method, "Wallet adapter not found in adapters list")
+                    _walletStatus.value = WalletStatus(
+                        isLoaded = true,
+                        hasWallet = false
+                    )
+                }
+            } catch (e: Exception) {
+                logWarn(method, "Failed to fetch wallet status: ${e.message}")
+                _walletStatus.value = WalletStatus(isLoaded = true, hasWallet = false)
+            }
+        }
     }
 
     fun onInputTextChanged(text: String) {
@@ -328,7 +431,7 @@ class InteractViewModel(
         viewModelScope.launch {
             try {
                 _isSending.value = true
-                _processingStatus.value = "Sending message..."
+                _processingStatus.value = LocalizationHelper.getString("mobile.processing_sending")
                 _inputText.value = ""
                 _attachedFiles.value = emptyList()
 
@@ -386,7 +489,7 @@ class InteractViewModel(
                     _processingStatus.value = ""
                 } else {
                     logWarn(method, "Empty response from agent")
-                    _processingStatus.value = "Waiting for response..."
+                    _processingStatus.value = LocalizationHelper.getString("mobile.processing_waiting_response")
                 }
 
             } catch (e: Exception) {
@@ -402,7 +505,7 @@ class InteractViewModel(
                 if (isTimeoutError) {
                     // Timeout is expected for async processing - message will arrive via SSE
                     logInfo(method, "Timeout during send - response will arrive via SSE")
-                    _processingStatus.value = "Processing..."
+                    _processingStatus.value = LocalizationHelper.getString("mobile.processing_generic")
                 } else {
                     val errorMessage = ChatMessage(
                         id = generateMessageId(),
@@ -481,7 +584,7 @@ class InteractViewModel(
                             logInfo(method, "Agent ready with state: ${_agentStatus.value}")
                         }
                     } else {
-                        _agentStatus.value = "Starting..."
+                        _agentStatus.value = LocalizationHelper.getString("mobile.processing_starting")
                     }
 
                     if (_isConnected.value != wasConnected) {
@@ -954,6 +1057,7 @@ class InteractViewModel(
                 val toolName = metadata?.get("tool_name")?.jsonPrimitiveContent() ?: "Unknown Tool"
                 val toolAdapter = metadata?.get("tool_adapter")?.jsonPrimitiveContent() ?: "unknown"
                 val toolParameters = parseToolParameters(metadata?.get("tool_parameters"))
+                val toolResult = metadata?.get("tool_result")?.jsonPrimitiveContent()
 
                 ActionDetails(
                     actionType = actionType,
@@ -962,7 +1066,8 @@ class InteractViewModel(
                     description = description,
                     toolName = toolName,
                     toolAdapter = toolAdapter,
-                    toolParameters = toolParameters
+                    toolParameters = toolParameters,
+                    toolResult = toolResult
                 )
             }
             ActionType.MEMORIZE, ActionType.RECALL, ActionType.FORGET -> {
@@ -1011,8 +1116,9 @@ class InteractViewModel(
                 val ponderTopic = metadata?.get("topic")?.jsonPrimitiveContent()
                     ?: metadata?.get("ponder_topic")?.jsonPrimitiveContent()
 
-                // Parse ponder_questions from the double-encoded parameters JSON string
-                val ponderQuestions = parsePonderQuestions(metadata?.get("parameters"))
+                // Parse ponder_questions - check direct metadata first, then nested in parameters
+                val ponderQuestions = parsePonderQuestionsDirect(metadata?.get("ponder_questions"))
+                    .ifEmpty { parsePonderQuestions(metadata?.get("parameters")) }
 
                 ActionDetails(
                     actionType = actionType,
@@ -1110,6 +1216,56 @@ class InteractViewModel(
     }
 
     /**
+     * Parse ponder questions directly from metadata (when merged from graph entries).
+     * Can be a JSON array, a JSON-encoded string array, or a double-encoded string.
+     */
+    private fun parsePonderQuestionsDirect(questionsElement: kotlinx.serialization.json.JsonElement?): List<String> {
+        if (questionsElement == null) return emptyList()
+
+        try {
+            // Case 1: Already a JSON array
+            if (questionsElement is kotlinx.serialization.json.JsonArray) {
+                return questionsElement.mapNotNull { element ->
+                    when (element) {
+                        is kotlinx.serialization.json.JsonPrimitive -> element.content
+                        else -> null
+                    }
+                }
+            }
+
+            // Case 2: JSON-encoded string - may be single or double encoded
+            var questionsStr = questionsElement.jsonPrimitiveContent() ?: return emptyList()
+
+            // Handle double-encoding: if it's a JSON string containing a JSON array string
+            // e.g., "\"[\\\"Q1\\\", \\\"Q2\\\"]\"" - parse first to get the inner string
+            if (questionsStr.startsWith("\"") || questionsStr.startsWith("\\\"")) {
+                try {
+                    val unescaped = kotlinx.serialization.json.Json.parseToJsonElement(questionsStr)
+                    if (unescaped is kotlinx.serialization.json.JsonPrimitive) {
+                        questionsStr = unescaped.content
+                    }
+                } catch (_: Exception) {
+                    // First unescape failed, continue with original string
+                }
+            }
+
+            // Now parse the array
+            val questionsJson = kotlinx.serialization.json.Json.parseToJsonElement(questionsStr)
+            if (questionsJson is kotlinx.serialization.json.JsonArray) {
+                return questionsJson.mapNotNull { element ->
+                    when (element) {
+                        is kotlinx.serialization.json.JsonPrimitive -> element.content
+                        else -> null
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logInfo("parsePonderQuestionsDirect", "Failed to parse: ${e.message}")
+        }
+        return emptyList()
+    }
+
+    /**
      * Parse ponder questions from double-encoded parameters JSON.
      * The parameters field contains a JSON string like:
      * "{\"ponder_questions\": \"[\\\"Question 1\\\", \\\"Question 2\\\"]\", ...}"
@@ -1156,24 +1312,26 @@ class InteractViewModel(
         logDebug(method, "Event: $eventType, action: $action")
 
         val statusText = when (eventType) {
-            "thought_start" -> "Thinking..."
-            "snapshot_and_context" -> "Gathering context..."
-            "dma_results" -> "Evaluating..."
-            "aspdma_result" -> "Selecting action: ${action ?: "..."}"
-            "conscience_result" -> "Checking ethics..."
+            "thought_start" -> LocalizationHelper.getString("mobile.processing_thinking")
+            "snapshot_and_context" -> LocalizationHelper.getString("mobile.processing_context")
+            "dma_results" -> LocalizationHelper.getString("mobile.processing_evaluating")
+            "idma_result" -> LocalizationHelper.getString("mobile.processing_idma")
+            "aspdma_result" -> LocalizationHelper.getString("mobile.processing_selecting", mapOf("action" to (action ?: "...")))
+            "tsaspdma_result" -> LocalizationHelper.getString("mobile.processing_tsaspdma")
+            "conscience_result" -> LocalizationHelper.getString("mobile.processing_ethics")
             "action_result" -> {
                 when {
-                    action?.contains("speak") == true -> "Speaking..."
-                    action?.contains("task_complete") == true -> "Complete"
-                    action?.contains("memorize") == true -> "Saving to memory..."
-                    action?.contains("recall") == true -> "Recalling..."
-                    action?.contains("tool") == true -> "Using tool..."
-                    action?.contains("ponder") == true -> "Pondering..."
-                    action?.contains("defer") == true -> "Deferred"
+                    action?.contains("speak") == true -> LocalizationHelper.getString("mobile.processing_speaking")
+                    action?.contains("task_complete") == true -> LocalizationHelper.getString("status.completed")
+                    action?.contains("memorize") == true -> LocalizationHelper.getString("mobile.processing_memorizing")
+                    action?.contains("recall") == true -> LocalizationHelper.getString("mobile.processing_recalling")
+                    action?.contains("tool") == true -> LocalizationHelper.getString("mobile.processing_tool")
+                    action?.contains("ponder") == true -> LocalizationHelper.getString("mobile.processing_pondering")
+                    action?.contains("defer") == true -> LocalizationHelper.getString("mobile.interact_action_defer")
                     else -> "Executing: ${action ?: "action"}"
                 }
             }
-            "idle" -> "Idle"
+            "idle" -> LocalizationHelper.getString("mobile.interact_legend_idle")
             else -> eventType.replace("_", " ").replaceFirstChar { it.uppercase() }
         }
 
@@ -1238,6 +1396,11 @@ class InteractViewModel(
                                     _pipelineState.value = _pipelineState.value
                                         .reset()
                                         .activate(event.eventType, now)
+                                } else if (event.eventType == "tsaspdma_result") {
+                                    // TSASPDMA re-lights ASPDMA ring with extra brightness
+                                    // (Tool-Specific ASPDMA refines the tool selection)
+                                    _pipelineState.value = _pipelineState.value
+                                        .activateWithTsaspdmaBoost(now)
                                 } else {
                                     _pipelineState.value = _pipelineState.value
                                         .activate(event.eventType, now)
@@ -1336,5 +1499,6 @@ class InteractViewModel(
         healthJob?.cancel()
         trustPollJob?.cancel()
         sseJob?.cancel()
+        languageObserverJob?.cancel()
     }
 }

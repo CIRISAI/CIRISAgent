@@ -533,7 +533,7 @@ async def get_credits(
     """
     import os
 
-    from ciris_engine.logic.adapters.api.routes.agent import _derive_credit_account
+    from ciris_engine.logic.adapters.api.routes._common import derive_credit_account
     from ciris_engine.schemas.services.credit_gate import CreditContext
 
     logger.debug("[BILLING_API] get_credits called")
@@ -551,7 +551,7 @@ async def get_credits(
 
     # Query credit provider
     resource_monitor = request.app.state.resource_monitor
-    account, _ = _derive_credit_account(auth, request)
+    account, _ = derive_credit_account(auth, request)
     context = CreditContext(agent_id=agent_id, channel_id="api:frontend", request_id=None)
 
     try:

@@ -735,17 +735,43 @@ def log_adapter_configuration_details(adapters: List[Any]) -> None:
 
 
 def create_adapter_lifecycle_tasks(adapters: List[Any], agent_task: Any) -> List[Any]:
-    """Create and start adapter lifecycle tasks."""
+    """Create and start adapter lifecycle tasks.
+
+    Args:
+        adapters: List of adapter instances
+        agent_task: The agent processor task, or None in first-run/setup mode
+
+    Returns:
+        List of lifecycle tasks
+
+    Note:
+        When agent_task is None (first-run mode), only adapters that explicitly
+        handle None in their run_lifecycle signature (e.g., API adapter) will
+        have their lifecycle started. Other adapters are skipped to prevent
+        crashes from `await None`.
+    """
     logger.info("Creating agent processor task...")
 
     adapter_tasks = []
     for adapter in adapters:
         adapter_name = adapter.__class__.__name__
 
-        if hasattr(adapter, "run_lifecycle"):
-            lifecycle_task = asyncio.create_task(adapter.run_lifecycle(agent_task), name=f"{adapter_name}LifecycleTask")
-            adapter_tasks.append(lifecycle_task)
-            logger.info(f"  → Starting {adapter_name} lifecycle...")
+        if not hasattr(adapter, "run_lifecycle"):
+            continue
+
+        # In first-run mode (agent_task=None), only start adapters that can handle it
+        # The API adapter explicitly handles None; others typically do `await agent_task`
+        # which crashes with "object NoneType can't be used in 'await' expression"
+        if agent_task is None:
+            # Check if adapter's run_lifecycle has Optional type hint or handles None
+            # API adapter is the canonical example that handles first-run mode
+            if "Api" not in adapter_name and "API" not in adapter_name:
+                logger.info(f"  → Skipping {adapter_name} lifecycle (first-run mode, no agent task)")
+                continue
+
+        lifecycle_task = asyncio.create_task(adapter.run_lifecycle(agent_task), name=f"{adapter_name}LifecycleTask")
+        adapter_tasks.append(lifecycle_task)
+        logger.info(f"  → Starting {adapter_name} lifecycle...")
 
     return adapter_tasks
 

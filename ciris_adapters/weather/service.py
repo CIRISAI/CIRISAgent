@@ -48,7 +48,12 @@ class WeatherToolService:
         self.base_url = "https://api.weather.gov"
 
         # User agent is required by NOAA
-        self.user_agent = os.getenv("CIRIS_NOAA_USER_AGENT", "CIRIS/1.0 (contact@ciris.ai)")
+        # Use PUBLIC_API_CONTACT_EMAIL from wizard, fall back to legacy env var
+        contact_email = os.getenv("PUBLIC_API_CONTACT_EMAIL", "")
+        if contact_email:
+            self.user_agent = f"CIRIS/2.3 ({contact_email})"
+        else:
+            self.user_agent = os.getenv("CIRIS_NOAA_USER_AGENT", "CIRIS/1.0 (contact@ciris.ai)")
 
         # Optional: OpenWeatherMap as backup (requires API key)
         self.owm_api_key = os.getenv("CIRIS_OPENWEATHERMAP_API_KEY")

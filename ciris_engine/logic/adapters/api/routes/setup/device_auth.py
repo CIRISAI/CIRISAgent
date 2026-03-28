@@ -3,10 +3,16 @@
 This module handles the device auth flow with CIRISPortal, including:
 - Session persistence for app restarts
 - CIRISVerify attestation submission
-- Key activation and binding
-- Licensed package download
+- Self-custody key registration (FSD-002)
+
+SECURITY: This module implements SELF-CUSTODY key management.
+- The agent generates its own Ed25519 keypair
+- Only the PUBLIC key is registered with Portal
+- The PRIVATE key NEVER leaves the agent
+- Portal NEVER issues or receives private keys
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -15,7 +21,7 @@ import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 
 from ciris_engine.schemas.api.responses import SuccessResponse
 
@@ -171,7 +177,33 @@ def _clear_device_auth_session() -> None:
 
 
 # ============================================================================
-# CIRISVerify Attestation (inline helpers for connect_node)
+# Large Stack Thread Helper (for Rust/Tokio compatibility)
+# ============================================================================
+
+
+def _run_on_large_stack(func: Any, timeout: float) -> None:
+    """Run function on a thread with large stack (8MB for Rust/Tokio)."""
+    import threading
+
+    is_android = os.environ.get("ANDROID_ROOT") is not None
+
+    if is_android:
+        t = threading.Thread(target=func, daemon=True)
+        t.start()
+        t.join(timeout=timeout)
+    else:
+        old_stack = threading.stack_size()
+        try:
+            threading.stack_size(8 * 1024 * 1024)
+            t = threading.Thread(target=func, daemon=True)
+            t.start()
+            t.join(timeout=timeout)
+        finally:
+            threading.stack_size(old_stack)
+
+
+# ============================================================================
+# CIRISVerify Attestation (Phase 1: Hardware attestation during device auth)
 # ============================================================================
 
 
@@ -184,8 +216,6 @@ async def _submit_attestation_inline(challenge_nonce: str, device_code: str, por
     Non-fatal: if CIRISVerify is unavailable (community mode) or Portal
     rejects the proof, we log and continue — the user can still authorize.
     """
-    import threading
-
     import httpx
 
     # Validate portal URL and get sanitized base (SSRF protection)
@@ -213,14 +243,7 @@ async def _submit_attestation_inline(challenge_nonce: str, device_code: str, por
         except Exception as e:
             attest_result[1] = e
 
-    old_stack = threading.stack_size()
-    try:
-        threading.stack_size(8 * 1024 * 1024)  # 8 MB
-        t = threading.Thread(target=_attest_on_large_stack, daemon=True)
-        t.start()
-        t.join(timeout=15)
-    finally:
-        threading.stack_size(old_stack)
+    _run_on_large_stack(_attest_on_large_stack, timeout=15)
 
     # CIRISVerify not available — skip gracefully (community mode)
     if attest_result[1] is not None or attest_result[0] is None:
@@ -282,196 +305,92 @@ async def _submit_attestation_inline(challenge_nonce: str, device_code: str, por
         logger.warning("[CIRISVerify] Failed to submit attestation to Portal: %s", e)
 
 
-def _decode_private_key(private_key_b64: str) -> Optional[bytes]:
-    """Decode and validate a base64-encoded Ed25519 private key."""
-    import base64
-
-    try:
-        key_bytes = base64.b64decode(private_key_b64)
-        if len(key_bytes) != 32:
-            logger.warning(
-                "Key activation skipped: invalid key length (%d bytes, expected 32)",
-                len(key_bytes),
-            )
-            return None
-        return key_bytes
-    except Exception as e:
-        logger.warning("Key activation skipped: failed to decode key: %s", e)
-        return None
+# ============================================================================
+# Self-Custody Key Registration (FSD-002)
+#
+# SECURITY ARCHITECTURE:
+# - Agent generates its own Ed25519 keypair via CIRISVerify
+# - Private key is TPM-protected and NEVER leaves the agent
+# - Only the PUBLIC key is registered with Portal
+# - Portal NEVER issues, receives, or handles private keys
+# - This eliminates key custody liability entirely
+# ============================================================================
 
 
-def _import_key_and_generate_attestation(
-    key_bytes: bytes, challenge_bytes: bytes
-) -> tuple[Optional[Dict[str, Any]], Optional[Exception]]:
-    """Import key into CIRISVerify and generate attestation proof.
+def _get_public_key_from_verifier() -> tuple[Optional[bytes], Optional[Exception]]:
+    """Get the Ed25519 public key from CIRISVerify.
 
-    Returns (proof_dict, error) - one will be None.
-    IMPORTANT: Uses the global CIRISVerify singleton to ensure the imported
-    key is visible to all other components (especially UnifiedSigningKey).
+    The keypair was already generated during CIRISVerify initialization.
+    We promote it to permanent identity by registering the PUBLIC key with Portal.
+    The PRIVATE key never leaves the agent (TPM-protected).
+
+    Returns:
+        (public_key_bytes, error) - error is None on success
     """
     try:
         from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
 
-        logger.info("[KEY-IMPORT] Getting CIRISVerify singleton...")
         verifier = get_verifier()
         if verifier is None:
             return None, RuntimeError("CIRISVerify singleton not available")
 
-        # Import the Portal-issued key
-        logger.info(f"[KEY-IMPORT] Calling import_key_sync() with {len(key_bytes)} byte key...")
-        verifier.import_key_sync(key_bytes)
-        logger.info("[KEY-IMPORT] import_key_sync() completed")
+        # Get the public key (this is what we register with Portal)
+        public_key = None
+        if hasattr(verifier, "get_ed25519_public_key_sync"):
+            public_key = verifier.get_ed25519_public_key_sync()
 
-        # Reset UnifiedSigningKey singleton to use portal key
-        from ciris_engine.logic.audit.signing_protocol import reset_unified_signing_key
+        if public_key is None:
+            return None, RuntimeError("No Ed25519 public key available from CIRISVerify")
 
-        reset_unified_signing_key()
-        logger.info("[KEY-IMPORT] UnifiedSigningKey singleton reset")
-
-        # Verify key was imported
-        if hasattr(verifier, "has_key_sync") and not verifier.has_key_sync():
-            logger.error("[KEY-IMPORT] CRITICAL: Key import succeeded but has_key_sync() returns False!")
-
-        # Get Ed25519 key fingerprint
-        key_fingerprint_hex = _get_key_fingerprint(verifier)
-
-        # Generate attestation proof
-        proof = _generate_attestation_proof(verifier, challenge_bytes, key_fingerprint_hex)
-
-        key_type = proof.get("key_type", "unknown") if isinstance(proof, dict) else "unknown"
-        logger.info(f"[KEY-IMPORT] Attestation generated: key_type={key_type}")
-        return proof, None
+        return public_key, None
 
     except Exception as e:
-        logger.error(f"[KEY-IMPORT] Exception during key import: {type(e).__name__}: {e}")
         return None, e
 
 
-def _get_key_fingerprint(verifier: Any) -> Optional[str]:
-    """Get Ed25519 key fingerprint from verifier."""
+def _sign_with_verifier(message: bytes) -> tuple[Optional[bytes], Optional[Exception]]:
+    """Sign a message using the CIRISVerify Ed25519 key.
+
+    The private key never leaves CIRISVerify (TPM-protected).
+
+    Returns:
+        (signature_bytes, error) - error is None on success
+    """
     try:
-        if hasattr(verifier, "get_ed25519_public_key_sync"):
-            import hashlib
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
 
-            ed25519_pubkey = verifier.get_ed25519_public_key_sync()
-            if ed25519_pubkey:
-                fingerprint = hashlib.sha256(ed25519_pubkey).hexdigest()
-                logger.info(f"[KEY-IMPORT] Ed25519 fingerprint: {fingerprint[:16]}...")
-                return fingerprint
-    except Exception as key_err:
-        logger.warning(f"[KEY-IMPORT] Could not get Ed25519 fingerprint: {key_err}")
-    return None
+        verifier = get_verifier()
+        if verifier is None:
+            return None, RuntimeError("CIRISVerify singleton not available")
 
-
-def _generate_attestation_proof(
-    verifier: Any, challenge_bytes: bytes, key_fingerprint_hex: Optional[str]
-) -> Dict[str, Any]:
-    """Generate attestation proof using CIRISVerify."""
-    import ciris_engine
-
-    agent_version = getattr(ciris_engine, "__version__", "0.0.0")
-    agent_root = os.environ.get("CIRIS_AGENT_ROOT", os.environ.get("CIRIS_HOME", "/app"))
-
-    if hasattr(verifier, "run_attestation_sync"):
-        result: Dict[str, Any] = verifier.run_attestation_sync(
-            challenge=challenge_bytes,
-            agent_version=agent_version,
-            agent_root=agent_root,
-            spot_check_count=0,
-            key_fingerprint=key_fingerprint_hex,
-        )
-        return result
-    else:
-        logger.warning("[KEY-IMPORT] run_attestation_sync not available, using export_attestation_sync")
-        result = verifier.export_attestation_sync(challenge_bytes)
-        return result
-
-
-def _run_on_large_stack(func: Any, timeout: float) -> None:
-    """Run function on a thread with large stack (8MB for Rust/Tokio)."""
-    import threading
-
-    is_android = os.environ.get("ANDROID_ROOT") is not None
-
-    if is_android:
-        t = threading.Thread(target=func, daemon=True)
-        t.start()
-        t.join(timeout=timeout)
-    else:
-        old_stack = threading.stack_size()
-        try:
-            threading.stack_size(8 * 1024 * 1024)
-            t = threading.Thread(target=func, daemon=True)
-            t.start()
-            t.join(timeout=timeout)
-        finally:
-            threading.stack_size(old_stack)
-
-
-def _log_key_type_status(proof_dict: Dict[str, Any]) -> None:
-    """Log the key type status from attestation proof."""
-    key_type = proof_dict.get("key_type", "unknown")
-    if key_type not in ("portal", "registry_unavailable"):
-        logger.warning(
-            "Key activation: unexpected key_type '%s' (expected 'portal' or 'registry_unavailable'). "
-            "Key may not have been imported correctly.",
-            key_type,
-        )
-    elif key_type == "registry_unavailable":
-        logger.info("Key activation: registry unavailable, key will be verified when online.")
-
-
-async def _submit_activation_to_portal(validated_portal_url: str, device_code: str, proof_dict: Dict[str, Any]) -> None:
-    """Submit key activation to Portal API."""
-    import httpx
-
-    # URL constructed from validated base + hardcoded path (SSRF-safe)
-    activate_url = f"{validated_portal_url}/api/device/activate"
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            activate_resp = await client.post(
-                activate_url,
-                json={"device_code": device_code, "attestation_proof": proof_dict},
-            )
-            _handle_activation_response(activate_resp)
-    except httpx.HTTPError as e:
-        logger.warning("Failed to submit key activation to Portal: %s", e)
-
-
-def _handle_activation_response(response: Any) -> None:
-    """Handle Portal activation response."""
-    if response.status_code == 200:
-        result_data = response.json()
-        logger.info(
-            "Portal key activation result: activated=%s, key_id=%s",
-            result_data.get("activated", False),
-            result_data.get("key_id", "unknown"),
-        )
-    elif response.status_code == 403:
-        result_data = response.json()
-        error = result_data.get("error", "unknown")
-        if "KEY REUSE" in error:
-            logger.error(
-                "KEY REUSE DETECTED: %s. This key was already activated "
-                "for another agent. Key reuse is forbidden for CIRIS agents.",
-                error,
-            )
+        # Sign using CIRISVerify's Ed25519 key
+        if hasattr(verifier, "sign_ed25519_sync"):
+            signature = verifier.sign_ed25519_sync(message)
+            return signature, None
+        elif hasattr(verifier, "sign_sync"):
+            signature = verifier.sign_sync(message)
+            return signature, None
         else:
-            logger.warning("Portal key activation rejected: %s", error)
-    else:
-        logger.warning("Portal key activation failed: HTTP %s", response.status_code)
+            return None, RuntimeError("CIRISVerify.sign_ed25519_sync not available")
+
+    except Exception as e:
+        return None, e
 
 
-async def _activate_key_inline(private_key_b64: str, device_code: str, portal_url: str) -> None:
-    """Phase 2: Key Activation - import Portal key and submit second attestation.
+async def _register_self_custody_key(device_code: str, portal_url: str) -> Optional[str]:
+    """Self-Custody Key Registration (FSD-002).
 
-    After receiving the signing key from Portal, we:
-    1. Import it into CIRISVerify
-    2. Generate a second attestation (signed with Portal key, key_type="portal")
-    3. Submit to /api/device/activate
+    After device auth completes, the agent:
+    1. Gets its Ed25519 PUBLIC key from CIRISVerify
+    2. Signs a registration message to prove possession
+    3. Calls Portal /api/device/register-key to register the public key
+    4. Signs the activation_challenge from Portal
+    5. Calls Portal /api/device/activate-key to activate
 
-    This creates a tamper-evident binding between the agent instance and its key.
-    Key reuse across agents is FORBIDDEN - Portal tracks all activations.
+    The PRIVATE key NEVER leaves the agent. Portal only sees the public key.
+
+    Returns:
+        key_id on success, None on failure
     """
     import httpx
 
@@ -479,39 +398,142 @@ async def _activate_key_inline(private_key_b64: str, device_code: str, portal_ur
     try:
         validated_portal_url = _validate_portal_url(portal_url)
     except ValueError as e:
-        logger.warning("Invalid portal URL for key activation: %s", e)
-        return
+        logger.warning("[SELF-CUSTODY] Invalid portal URL: %s", e)
+        return None
 
-    # Decode and validate the private key
-    key_bytes = _decode_private_key(private_key_b64)
-    if key_bytes is None:
-        return
+    # Step 1: Get public key from CIRISVerify
+    key_result: List[Any] = [None, None]  # [public_key, error]
 
-    # Generate challenge and run key import on large stack thread
-    challenge_bytes = os.urandom(32)
-    activation_result: List[Any] = [None, None]
+    def _get_public_key() -> None:
+        pub, err = _get_public_key_from_verifier()
+        key_result[0] = pub
+        key_result[1] = err
 
-    def _run_import() -> None:
-        proof, error = _import_key_and_generate_attestation(key_bytes, challenge_bytes)
-        activation_result[0] = proof
-        activation_result[1] = error
+    _run_on_large_stack(_get_public_key, timeout=15)
 
-    is_ios = os.environ.get("CIRIS_IOS_FRAMEWORK_PATH") is not None
-    timeout = 25 if is_ios else 15
-    _run_on_large_stack(_run_import, timeout)
+    public_key, error = key_result
+    if error is not None or public_key is None:
+        error_msg = str(error) if error else "Failed to get public key"
+        logger.warning("[SELF-CUSTODY] Key registration skipped: %s", error_msg)
+        return None
 
-    # Check for errors
-    proof_dict, error = activation_result
-    if error is not None or proof_dict is None:
-        error_msg = str(error) if error else "CIRISVerify activation timed out"
-        logger.warning("Key activation skipped: %s", error_msg)
-        return
+    public_key_hex = public_key.hex()
+    logger.info(
+        "[SELF-CUSTODY] Got Ed25519 public key: %s...",
+        public_key_hex[:16],
+    )
 
-    # Log key type status
-    _log_key_type_status(proof_dict)
+    # Step 2: Generate agent_hash (for binding identity to build)
+    agent_root = os.environ.get("CIRIS_AGENT_ROOT", os.environ.get("CIRIS_HOME", "/app"))
+    import ciris_engine
 
-    # Submit activation to Portal
-    await _submit_activation_to_portal(validated_portal_url, device_code, proof_dict)
+    agent_version = getattr(ciris_engine, "__version__", "0.0.0")
+    agent_hash = hashlib.sha256(f"{agent_root}:{agent_version}".encode()).hexdigest()
+
+    # Step 3: Sign a registration message to prove we control the private key
+    # Message format: "CIRIS_KEY_REGISTRATION:{device_code}:{public_key_hex}"
+    registration_message = f"CIRIS_KEY_REGISTRATION:{device_code}:{public_key_hex}".encode()
+
+    sign_result: List[Any] = [None, None]  # [signature, error]
+
+    def _sign_registration() -> None:
+        sig, err = _sign_with_verifier(registration_message)
+        sign_result[0] = sig
+        sign_result[1] = err
+
+    _run_on_large_stack(_sign_registration, timeout=15)
+
+    registration_signature, sign_error = sign_result
+    if sign_error is not None or registration_signature is None:
+        error_msg = str(sign_error) if sign_error else "Failed to sign registration"
+        logger.warning("[SELF-CUSTODY] Registration signing failed: %s", error_msg)
+        return None
+
+    # Step 4: Call Portal /api/device/register-key
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            register_resp = await client.post(
+                f"{validated_portal_url}/api/device/register-key",
+                json={
+                    "device_code": device_code,
+                    "ed25519_public_key": public_key_hex,
+                    "ed25519_signature": registration_signature.hex(),
+                    "agent_hash": agent_hash,
+                },
+            )
+
+            if register_resp.status_code != 200:
+                body = register_resp.json() if register_resp.headers.get("content-type", "").startswith("application/json") else {}
+                error_msg = body.get("error", f"HTTP {register_resp.status_code}")
+                logger.warning("[SELF-CUSTODY] Portal register-key failed: %s", error_msg)
+                return None
+
+            register_data = register_resp.json()
+            key_id: str | None = register_data.get("key_id")
+            activation_challenge_hex: str | None = register_data.get("activation_challenge")
+            fingerprint = register_data.get("public_key_fingerprint")
+
+            logger.info(
+                "[SELF-CUSTODY] Key registered: key_id=%s, fingerprint=%s",
+                key_id,
+                fingerprint,
+            )
+
+    except httpx.HTTPError as e:
+        logger.warning("[SELF-CUSTODY] Failed to register key with Portal: %s", e)
+        return None
+
+    if not key_id or not activation_challenge_hex:
+        logger.warning("[SELF-CUSTODY] Portal did not return key_id or activation_challenge")
+        return None
+
+    # Step 5: Sign the activation challenge
+    activation_challenge = bytes.fromhex(activation_challenge_hex)
+
+    def _sign_activation() -> None:
+        sig, err = _sign_with_verifier(activation_challenge)
+        sign_result[0] = sig
+        sign_result[1] = err
+
+    _run_on_large_stack(_sign_activation, timeout=15)
+
+    activation_signature, sign_error = sign_result
+    if sign_error is not None or activation_signature is None:
+        error_msg = str(sign_error) if sign_error else "Failed to sign activation challenge"
+        logger.warning("[SELF-CUSTODY] Activation signing failed: %s", error_msg)
+        return None
+
+    # Step 6: Call Portal /api/device/activate-key
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            activate_resp = await client.post(
+                f"{validated_portal_url}/api/device/activate-key",
+                json={
+                    "device_code": device_code,
+                    "key_id": key_id,
+                    "activation_challenge": activation_challenge_hex,
+                    "ed25519_signature": activation_signature.hex(),
+                    "agent_hash": agent_hash,
+                },
+            )
+
+            if activate_resp.status_code == 200:
+                result_data = activate_resp.json()
+                logger.info(
+                    "[SELF-CUSTODY] Key ACTIVATED: key_id=%s, message=%s",
+                    result_data.get("key_id"),
+                    result_data.get("message", "success"),
+                )
+                return key_id
+            else:
+                body = activate_resp.json() if activate_resp.headers.get("content-type", "").startswith("application/json") else {}
+                error_msg = body.get("error", f"HTTP {activate_resp.status_code}")
+                logger.warning("[SELF-CUSTODY] Portal activate-key failed: %s", error_msg)
+                return None
+
+    except httpx.HTTPError as e:
+        logger.warning("[SELF-CUSTODY] Failed to activate key with Portal: %s", e)
+        return None
 
 
 # ============================================================================

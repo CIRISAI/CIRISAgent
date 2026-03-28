@@ -430,6 +430,10 @@ class ADBHelper:
                 "StartupViewModel:*",
                 "TrustViewModel:*",
                 "TicketsViewModel:*",
+                # Localization
+                "LocalizationManager:*",
+                "LocalizationResourceLoader:*",
+                "LocalizedString:*",
                 "*:S",
             ]
         )

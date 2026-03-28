@@ -225,10 +225,8 @@ class ASPDMALLMResult(BaseModel):
     defer_until: Optional[str] = Field(None, description="ISO timestamp to reactivate (for DEFER)")
 
     # === TOOL parameters ===
-    tool_name: Optional[str] = Field(None, description="Tool name to invoke (for TOOL action).")
-    tool_parameters: Optional[Dict[str, Any]] = Field(
-        None, description="Tool parameters (for TOOL action). If provided by ASPDMA, TSASPDMA can skip extraction."
-    )
+    # NOTE: ASPDMA only selects the tool NAME. TSASPDMA extracts parameters using full tool documentation.
+    tool_name: Optional[str] = Field(None, description="Tool name to invoke (for TOOL action). TSASPDMA handles parameters.")
 
     # === OBSERVE parameters ===
     observe_active: bool = Field(True, description="Whether observation is active (for OBSERVE)")
@@ -356,7 +354,7 @@ def _create_params_for_action(
         HandlerActionType.TOOL: lambda: ToolParams(
             channel_id=channel_id,
             name=llm_result.tool_name or "unknown_tool",
-            parameters=llm_result.tool_parameters or {},
+            parameters={},  # ASPDMA only selects tool name; TSASPDMA extracts parameters
         ),
         HandlerActionType.OBSERVE: lambda: ObserveParams(
             channel_id=channel_id, active=llm_result.observe_active

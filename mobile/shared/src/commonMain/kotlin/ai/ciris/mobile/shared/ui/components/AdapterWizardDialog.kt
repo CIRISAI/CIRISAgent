@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.ui.components
 
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.ConfigFieldData
 import ai.ciris.mobile.shared.models.ConfigSessionData
 import ai.ciris.mobile.shared.models.DiscoveredItemData
@@ -84,8 +85,8 @@ fun AdapterWizardDialog(
                     title = {
                         Text(
                             when {
-                                wizardSession != null -> "Configure ${wizardSession.adapterType}"
-                                else -> "Add Adapter"
+                                wizardSession != null -> localizedString("mobile.adapter_configure", mapOf("type" to wizardSession.adapterType))
+                                else -> localizedString("mobile.adapter_add")
                             }
                         )
                     },
@@ -100,7 +101,7 @@ fun AdapterWizardDialog(
                         ) {
                             Icon(
                                 imageVector = if (wizardSession != null) Icons.Default.ArrowBack else Icons.Default.Close,
-                                contentDescription = if (wizardSession != null) "Back" else "Close"
+                                contentDescription = if (wizardSession != null) localizedString("mobile.common_back") else localizedString("mobile.common_close")
                             )
                         }
                     },
@@ -110,7 +111,7 @@ fun AdapterWizardDialog(
                                 onClick = onDismiss,
                                 modifier = Modifier.testableClickable("btn_wizard_dismiss") { onDismiss() }
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = "Close")
+                                Icon(Icons.Default.Close, contentDescription = localizedString("mobile.common_close"))
                             }
                         }
                     }
@@ -133,7 +134,7 @@ fun AdapterWizardDialog(
                                     verticalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
                                     CircularProgressIndicator()
-                                    Text("Loading...")
+                                    Text(localizedString("mobile.common_loading"))
                                 }
                             }
                         }
@@ -169,7 +170,7 @@ fun AdapterWizardDialog(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = error ?: "Unable to load adapter types",
+                                    text = error ?: localizedString("mobile.adapter_unable_load"),
                                     color = MaterialTheme.colorScheme.error
                                 )
                             }
@@ -193,7 +194,7 @@ private fun TypeSelectionContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "Select Adapter Type",
+            text = localizedString("mobile.adapter_select_type"),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold
         )
@@ -221,7 +222,7 @@ private fun TypeSelectionContent(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No loadable adapters available",
+                    text = localizedString("mobile.adapter_no_loadable"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -278,19 +279,19 @@ private fun AdapterTypeCard(
                 )
                 if (adapter.requiresConfiguration) {
                     Text(
-                        text = "${adapter.stepCount} steps",
+                        text = localizedString("mobile.adapter_steps_count", "count", adapter.stepCount.toString()),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else if (!adapter.dependenciesAvailable) {
                     Text(
-                        text = "Missing CLI",
+                        text = localizedString("mobile.adapter_missing_cli"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
                 } else {
                     Text(
-                        text = "Ready to load",
+                        text = localizedString("mobile.adapter_ready"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -315,7 +316,7 @@ private fun AdapterTypeCard(
                         onClick = {},
                         label = {
                             Text(
-                                "${adapter.loadedInstances} loaded",
+                                localizedString("mobile.adapter_loaded_count", "count", adapter.loadedInstances.toString()),
                                 style = MaterialTheme.typography.labelSmall
                             )
                         },
@@ -339,7 +340,7 @@ private fun AdapterTypeCard(
                 if (adapter.requiresOauth) {
                     SuggestionChip(
                         onClick = {},
-                        label = { Text("OAuth", style = MaterialTheme.typography.labelSmall) }
+                        label = { Text(localizedString("mobile.adapter_oauth"), style = MaterialTheme.typography.labelSmall) }
                     )
                 }
             }
@@ -347,7 +348,7 @@ private fun AdapterTypeCard(
             // Show missing dependencies warning
             if (adapter.missingDependencies.isNotEmpty()) {
                 Text(
-                    text = "Missing: ${adapter.missingDependencies.joinToString(", ")}",
+                    text = localizedString("mobile.adapter_missing_deps", "deps", adapter.missingDependencies.joinToString(", ")),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 4.dp)
@@ -389,7 +390,7 @@ private fun WizardStepContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Step ${session.currentStepIndex + 1} of ${session.totalSteps}",
+                text = localizedString("mobile.adapter_step_count", mapOf("current" to (session.currentStepIndex + 1).toString(), "total" to session.totalSteps.toString())),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -511,7 +512,7 @@ private fun WizardStepContent(
                             .testableClickable("btn_wizard_confirm") { onSubmit(emptyMap()) },
                         enabled = !isLoading
                     ) {
-                        Text("Confirm & Apply")
+                        Text(localizedString("mobile.adapter_confirm_apply"))
                     }
                 }
                 else -> {
@@ -531,7 +532,7 @@ private fun WizardStepContent(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No step data available",
+                    text = localizedString("mobile.adapter_no_step_data"),
                     color = MaterialTheme.colorScheme.error
                 )
             }
@@ -578,7 +579,7 @@ private fun DiscoveryStepContent(
                 ) {
                     CircularProgressIndicator()
                     Text(
-                        text = "Scanning network...",
+                        text = localizedString("mobile.adapter_scanning"),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -594,7 +595,7 @@ private fun DiscoveryStepContent(
                 if (discoveredItems.isNotEmpty()) {
                     item {
                         Text(
-                            text = "Found on your network:",
+                            text = localizedString("mobile.adapter_found_network"),
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold
                         )
@@ -620,7 +621,7 @@ private fun DiscoveryStepContent(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = "No devices found on network",
+                                    text = localizedString("mobile.adapter_no_devices"),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -634,7 +635,7 @@ private fun DiscoveryStepContent(
                                         modifier = Modifier.size(18.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Retry scan")
+                                    Text(localizedString("mobile.adapter_retry_scan"))
                                 }
                             }
                         }
@@ -645,7 +646,7 @@ private fun DiscoveryStepContent(
                 item {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Or enter URL manually:",
+                        text = localizedString("mobile.adapter_enter_url"),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -654,7 +655,7 @@ private fun DiscoveryStepContent(
                     OutlinedTextField(
                         value = manualUrl,
                         onValueChange = onManualUrlChange,
-                        label = { Text("URL") },
+                        label = { Text(localizedString("mobile.adapter_url_label")) },
                         placeholder = { Text("http://homeassistant.local:8123") },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -671,7 +672,7 @@ private fun DiscoveryStepContent(
                             .testableClickable("btn_submit_manual_url") { onSubmitManualUrl() },
                         enabled = manualUrl.isNotBlank() && !isLoading
                     ) {
-                        Text("Connect")
+                        Text(localizedString("mobile.adapter_connect"))
                     }
                 }
             }
@@ -913,13 +914,13 @@ private fun OAuthStepContent(
             CircularProgressIndicator()
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Waiting for authentication...",
+                text = localizedString("mobile.adapter_waiting_auth"),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Complete sign-in in your browser, then return here.",
+                text = localizedString("mobile.adapter_complete_signin"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -927,7 +928,7 @@ private fun OAuthStepContent(
             if (oauthUrl != null) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "If browser didn't open, tap below:",
+                    text = localizedString("mobile.adapter_browser_hint"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -940,12 +941,12 @@ private fun OAuthStepContent(
                         ai.ciris.mobile.shared.platform.openUrlInBrowser(oauthUrl)
                     }
                 ) {
-                    Text("Open Browser", style = MaterialTheme.typography.labelSmall)
+                    Text(localizedString("mobile.adapter_open_browser"), style = MaterialTheme.typography.labelSmall)
                 }
             }
         } else {
             Text(
-                text = "Tap below to sign in via your browser.",
+                text = localizedString("mobile.adapter_tap_signin"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -963,7 +964,7 @@ private fun OAuthStepContent(
                     .testableClickable("btn_oauth_sign_in") { onInitiateOAuth() },
                 enabled = !isLoading
             ) {
-                Text("Sign In")
+                Text(localizedString("mobile.adapter_sign_in"))
             }
         }
     }
@@ -1052,7 +1053,7 @@ private fun SelectStepContent(
                 },
             enabled = selectOptions.isNotEmpty()
         ) {
-            Text(if (isLastStep) "Complete" else "Next")
+            Text(if (isLastStep) localizedString("mobile.adapter_complete") else localizedString("mobile.common_next"))
         }
     }
 }
@@ -1095,7 +1096,7 @@ private fun InputStepContent(
                 (fieldValues[it.name] ?: it.defaultValue)?.isNotBlank() == true
             }
         ) {
-            Text(if (isLastStep) "Complete" else "Next")
+            Text(if (isLastStep) localizedString("mobile.adapter_complete") else localizedString("mobile.common_next"))
         }
     }
 }

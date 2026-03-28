@@ -261,24 +261,26 @@ def check_ciris_engine(status: Optional[StartupStatus] = None) -> bool:
 def setup_ios_environment() -> Path:
     """Configure environment for iOS on-device operation.
 
-    Sets up CIRIS_HOME and loads .env if present.
+    Uses the centralized ensure_ciris_home_env() for cross-platform CIRIS_HOME setup,
+    then adds iOS-specific configuration and loads .env if present.
+
     First-run detection is handled by is_first_run() which is iOS-aware.
     """
-    # Get the app's Documents directory for persistent storage
-    home = Path.home()
+    # Use centralized path resolution for CIRIS_HOME setup
+    # This handles all platforms: Android, iOS, Linux, macOS, Windows, Docker
+    from ciris_engine.logic.utils.path_resolution import ensure_ciris_home_env, get_logs_dir
 
-    # Use Documents directory for CIRIS data
-    ciris_home = home / "Documents" / "ciris"
-    ciris_home.mkdir(parents=True, exist_ok=True)
+    # This sets CIRIS_HOME, CIRIS_DATA_DIR, and creates directories
+    ciris_home = ensure_ciris_home_env()
+
+    # Ensure additional iOS-specific directories exist
     (ciris_home / "databases").mkdir(parents=True, exist_ok=True)
-    (ciris_home / "logs").mkdir(parents=True, exist_ok=True)
+    logs_dir = get_logs_dir()
+    logs_dir.mkdir(parents=True, exist_ok=True)
 
-    # Configure CIRIS environment - use standard paths
-    # CIRIS_HOME is used by path_resolution.py for iOS-aware path detection
-    os.environ.setdefault("CIRIS_HOME", str(ciris_home))
-    os.environ.setdefault("CIRIS_DATA_DIR", str(ciris_home))
+    # iOS-specific env vars (not handled by ensure_ciris_home_env)
     os.environ.setdefault("CIRIS_DB_PATH", str(ciris_home / "databases" / "ciris.db"))
-    os.environ.setdefault("CIRIS_LOG_DIR", str(ciris_home / "logs"))
+    os.environ.setdefault("CIRIS_LOG_DIR", str(logs_dir))
 
     # Load .env file if it exists (sets OPENAI_API_KEY, OPENAI_API_BASE, etc.)
     # First-run detection is handled by is_first_run() - don't duplicate logic here

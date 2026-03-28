@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.sp
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
+import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.localization.LocalizationHelper
 
 /**
  * View mode for memory exploration.
@@ -71,7 +73,7 @@ fun MemoryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Memory Graph Explorer") },
+                title = { Text(localizedString("mobile.screen_memory_explorer")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -79,7 +81,7 @@ fun MemoryScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -90,7 +92,7 @@ fun MemoryScreen(
                         modifier = Modifier.testableClickable("btn_memory_switch_graph") { onSwitchToGraph() }
                     ) {
                         Text(
-                            "Graph",
+                            localizedString("graph_title"),
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                     }
@@ -99,7 +101,7 @@ fun MemoryScreen(
                         modifier = Modifier.testableClickable("btn_memory_toggle_filters") { showFilters = !showFilters }
                     ) {
                         Text(
-                            if (showFilters) "Hide" else "Filter",
+                            if (showFilters) localizedString("settings_hide") else localizedString("graph_filters"),
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                     }
@@ -110,7 +112,7 @@ fun MemoryScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -134,9 +136,9 @@ fun MemoryScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     .testable("input_memory_search"),
-                placeholder = { Text("Search thoughts, tasks, observations...") },
+                placeholder = { Text(localizedString("memory_search_placeholder")) },
                 leadingIcon = {
-                    Icon(Icons.Filled.Search, contentDescription = "Search")
+                    Icon(Icons.Filled.Search, contentDescription = localizedString("logs_search_placeholder"))
                 },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
@@ -150,7 +152,7 @@ fun MemoryScreen(
                                 onSearch("")
                             }
                         ) {
-                            Icon(Icons.Filled.Close, contentDescription = "Clear")
+                            Icon(Icons.Filled.Close, contentDescription = localizedString("interact_clear"))
                         }
                     }
                 },
@@ -203,7 +205,7 @@ fun MemoryScreen(
             } else if (memoryState.searchResults.isNotEmpty()) {
                 // Search results
                 Text(
-                    text = "Search Results (${memoryState.searchResults.size})",
+                    text = localizedString("memory_search_results").replace("{count}", memoryState.searchResults.size.toString()),
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
@@ -228,7 +230,7 @@ fun MemoryScreen(
             } else if (memoryState.timelineNodes.isNotEmpty()) {
                 // Timeline view
                 Text(
-                    text = "Recent Memories",
+                    text = localizedString("memory_recent"),
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
@@ -266,20 +268,20 @@ fun MemoryScreen(
                         modifier = Modifier.padding(32.dp)
                     ) {
                         Text(
-                            text = "No Memories Yet",
+                            text = localizedString("memory_no_memories"),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Your memory graph begins forming after conversations with CIRIS. Memories are personal to your account.",
+                            text = localizedString("memory_no_memories_desc"),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Try the Graph view to visualize connections",
+                            text = localizedString("memory_try_graph"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -311,7 +313,7 @@ private fun MemoryFiltersSection(
         ) {
             // Scope filter
             Text(
-                text = "Scope",
+                text = localizedString("memory_scope"),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Medium
             )
@@ -319,7 +321,7 @@ private fun MemoryFiltersSection(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                MEMORY_SCOPES.forEach { scope ->
+                getMemoryScopes().forEach { scope ->
                     FilterChip(
                         selected = filter.scope == scope.value,
                         onClick = { onFilterChange(filter.copy(scope = scope.value)) },
@@ -333,7 +335,7 @@ private fun MemoryFiltersSection(
 
             // Node type filter
             Text(
-                text = "Node Type",
+                text = localizedString("memory_node_type"),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Medium
             )
@@ -344,7 +346,7 @@ private fun MemoryFiltersSection(
                 FilterChip(
                     selected = filter.nodeType == null,
                     onClick = { onFilterChange(filter.copy(nodeType = null)) },
-                    label = { Text("All") },
+                    label = { Text(localizedString("mobile.common_all")) },
                     modifier = Modifier.testableClickable("chip_memory_node_type_all") {
                         onFilterChange(filter.copy(nodeType = null))
                     }
@@ -363,7 +365,7 @@ private fun MemoryFiltersSection(
 
             // Time range filter
             Text(
-                text = "Time Range",
+                text = localizedString("memory_time_range"),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Medium
             )
@@ -409,7 +411,7 @@ private fun MemoryStatsCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Total Nodes",
+                    text = localizedString("memory_total_nodes"),
                     style = MaterialTheme.typography.labelMedium
                 )
                 Text(
@@ -519,7 +521,7 @@ private fun MemoryNodeCard(
 
             // Click hint
             Text(
-                text = "Tap to view details",
+                text = localizedString("memory_tap_details"),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -549,7 +551,7 @@ private fun NodeDetailsCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Node Details",
+                    text = localizedString("memory_details"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -557,26 +559,26 @@ private fun NodeDetailsCard(
                     onClick = onClose,
                     modifier = Modifier.testableClickable("btn_memory_close_details") { onClose() }
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close")
+                    Icon(Icons.Filled.Close, contentDescription = localizedString("mobile.common_close"))
                 }
             }
 
             Divider()
 
             // Node info
-            NodeInfoRow(label = "ID", value = node.id)
-            NodeInfoRow(label = "Type", value = node.type)
-            NodeInfoRow(label = "Scope", value = node.scope)
-            NodeInfoRow(label = "Created", value = node.formattedDate)
+            NodeInfoRow(label = localizedString("memory_label_id"), value = node.id)
+            NodeInfoRow(label = localizedString("memory_label_type"), value = node.type)
+            NodeInfoRow(label = localizedString("memory_label_scope"), value = node.scope)
+            NodeInfoRow(label = localizedString("memory_label_created"), value = node.formattedDate)
             node.updatedAt?.let { updated ->
-                NodeInfoRow(label = "Updated", value = updated)
+                NodeInfoRow(label = localizedString("memory_label_updated"), value = updated)
             }
 
             // Attributes
             if (node.attributesJson.isNotEmpty()) {
                 Divider()
                 Text(
-                    text = "Attributes",
+                    text = localizedString("memory_attributes"),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -638,12 +640,16 @@ private fun getNodeTypeColor(type: String): Color {
     }
 }
 
-// Constants
-private val MEMORY_SCOPES = listOf(
-    ScopeOption("local", "LOCAL"),
-    ScopeOption("identity", "IDENTITY"),
-    ScopeOption("environment", "ENVIRONMENT"),
-    ScopeOption("community", "COMMUNITY")
+// Constants - scope values (labels are localized at render time)
+private val MEMORY_SCOPE_VALUES = listOf("local", "identity", "environment", "community")
+
+// Composable function to get localized scope options
+@Composable
+private fun getMemoryScopes(): List<ScopeOption> = listOf(
+    ScopeOption("local", localizedString("memory_scope_local")),
+    ScopeOption("identity", localizedString("memory_scope_identity")),
+    ScopeOption("environment", localizedString("memory_scope_environment")),
+    ScopeOption("community", localizedString("memory_scope_community"))
 )
 
 private val NODE_TYPES = listOf(
@@ -716,8 +722,8 @@ data class MemoryNodeData(
                 val date = it.substringBefore("T")
                 val time = it.substringAfter("T").substringBefore(".").substringBefore("Z")
                 "$date $time"
-            } ?: "Unknown"
+            } ?: LocalizationHelper.getString("memory_label_unknown")
         } catch (e: Exception) {
-            createdAt ?: "Unknown"
+            createdAt ?: LocalizationHelper.getString("memory_label_unknown")
         }
 }

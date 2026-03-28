@@ -53,6 +53,25 @@ class SetupViewModel : ViewModel() {
     private val _llmModel = MutableLiveData<String>("")
     val llmModel: LiveData<String> = _llmModel
 
+    // === Language & Location Preferences ===
+    private val _preferredLanguage = MutableLiveData<String>("en")
+    val preferredLanguage: LiveData<String> = _preferredLanguage
+
+    private val _locationCountry = MutableLiveData<String?>()
+    val locationCountry: LiveData<String?> = _locationCountry
+
+    private val _locationRegion = MutableLiveData<String?>()
+    val locationRegion: LiveData<String?> = _locationRegion
+
+    private val _locationCity = MutableLiveData<String?>()
+    val locationCity: LiveData<String?> = _locationCity
+
+    private val _locationGranularity = MutableLiveData<String>("none")
+    val locationGranularity: LiveData<String> = _locationGranularity
+
+    private val _userTimezone = MutableLiveData<String?>()
+    val userTimezone: LiveData<String?> = _userTimezone
+
     // === User Account (only for non-Google users) ===
     private val _username = MutableLiveData<String>("")
     val username: LiveData<String> = _username
@@ -102,6 +121,41 @@ class SetupViewModel : ViewModel() {
     fun setLlmModel(model: String) {
         Log.d(TAG, "setLlmModel: $model")
         _llmModel.value = model
+    }
+
+    fun setPreferredLanguage(lang: String) {
+        Log.d(TAG, "setPreferredLanguage: $lang")
+        _preferredLanguage.value = lang
+    }
+
+    fun setLocationGranularity(granularity: String) {
+        Log.d(TAG, "setLocationGranularity: $granularity")
+        _locationGranularity.value = granularity
+        if (granularity == "none") {
+            _locationCountry.value = null
+            _locationRegion.value = null
+            _locationCity.value = null
+        }
+    }
+
+    fun setLocationCountry(country: String?) {
+        Log.d(TAG, "setLocationCountry: $country")
+        _locationCountry.value = country
+    }
+
+    fun setLocationRegion(region: String?) {
+        Log.d(TAG, "setLocationRegion: $region")
+        _locationRegion.value = region
+    }
+
+    fun setLocationCity(city: String?) {
+        Log.d(TAG, "setLocationCity: $city")
+        _locationCity.value = city
+    }
+
+    fun setUserTimezone(tz: String?) {
+        Log.d(TAG, "setUserTimezone: $tz")
+        _userTimezone.value = tz
     }
 
     fun setUsername(username: String) {
@@ -159,6 +213,11 @@ class SetupViewModel : ViewModel() {
         Log.i(TAG, "  llmApiKey.length: ${_llmApiKey.value?.length ?: 0}")
         Log.i(TAG, "  llmBaseUrl: ${_llmBaseUrl.value}")
         Log.i(TAG, "  llmModel: ${_llmModel.value}")
+        Log.i(TAG, "  preferredLanguage: ${_preferredLanguage.value}")
+        Log.i(TAG, "  locationGranularity: ${_locationGranularity.value}")
+        Log.i(TAG, "  locationCountry: ${_locationCountry.value}")
+        Log.i(TAG, "  locationRegion: ${_locationRegion.value}")
+        Log.i(TAG, "  locationCity: ${_locationCity.value}")
         Log.i(TAG, "  username: ${_username.value}")
         Log.i(TAG, "  showLocalUserFields: ${showLocalUserFields()}")
         Log.i(TAG, "  useCirisProxy: ${useCirisProxy()}")

@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ai.ciris.mobile.shared.localization.localizedString
 
 /**
  * Users management screen.
@@ -66,13 +67,13 @@ fun UsersScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Users") },
+                title = { Text(localizedString("mobile.screen_users")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
                         modifier = Modifier.testableClickable("btn_users_back") { onNavigateBack() }
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = localizedString("mobile.common_back"))
                     }
                 },
                 actions = {
@@ -82,7 +83,7 @@ fun UsersScreen(
                     ) {
                         Icon(
                             Icons.Filled.Search,
-                            contentDescription = "Filters",
+                            contentDescription = localizedString("users_filters"),
                             tint = if (hasActiveFilters(state.filter))
                                 MaterialTheme.colorScheme.primary
                             else
@@ -94,7 +95,7 @@ fun UsersScreen(
                         enabled = !state.isLoading,
                         modifier = Modifier.testableClickable("btn_users_refresh") { onRefresh() }
                     ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                        Icon(Icons.Filled.Refresh, contentDescription = localizedString("mobile.common_refresh"))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -166,12 +167,15 @@ fun UsersScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${state.pagination.totalItems} users",
+                        text = localizedString("users_count", mapOf("count" to state.pagination.totalItems.toString())),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Page ${state.pagination.page} of ${state.pagination.totalPages}",
+                        text = localizedString("users_page_count", mapOf(
+                            "page" to state.pagination.page.toString(),
+                            "total" to state.pagination.totalPages.toString()
+                        )),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -197,8 +201,8 @@ fun UsersScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = if (hasActiveFilters(state.filter)) "No users match your filters"
-                            else "No users found",
+                            text = if (hasActiveFilters(state.filter)) localizedString("users_no_filters")
+                            else localizedString("users_no_users"),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -259,9 +263,9 @@ private fun SearchBar(
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
-        placeholder = { Text("Search users...") },
+        placeholder = { Text(localizedString("users_search_placeholder")) },
         leadingIcon = {
-            Icon(Icons.Filled.Search, contentDescription = "Search")
+            Icon(Icons.Filled.Search, contentDescription = localizedString("users_filters"))
         },
         trailingIcon = {
             if (query.isNotEmpty()) {
@@ -269,7 +273,7 @@ private fun SearchBar(
                     onClick = { onQueryChange(""); onSearch() },
                     modifier = Modifier.testableClickable("btn_users_search_clear") { onQueryChange(""); onSearch() }
                 ) {
-                    Icon(Icons.Filled.Clear, contentDescription = "Clear")
+                    Icon(Icons.Filled.Clear, contentDescription = localizedString("users_search_clear"))
                 }
             }
         },
@@ -290,7 +294,7 @@ private fun FilterChipsRow(
     Column(modifier = modifier) {
         // API Role filter
         Text(
-            text = "API Role",
+            text = localizedString("users_api_role"),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 4.dp)
@@ -302,7 +306,7 @@ private fun FilterChipsRow(
             FilterChip(
                 selected = filter.apiRole == null,
                 onClick = { onFilterChange(filter.copy(apiRole = null)) },
-                label = { Text("All") },
+                label = { Text(localizedString("mobile.common_all")) },
                 modifier = Modifier.testableClickable("chip_api_role_all") { onFilterChange(filter.copy(apiRole = null)) }
             )
             APIRole.entries.forEach { role ->
@@ -319,7 +323,7 @@ private fun FilterChipsRow(
 
         // Auth type filter
         Text(
-            text = "Auth Type",
+            text = localizedString("users_auth_type"),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 4.dp)
@@ -331,7 +335,7 @@ private fun FilterChipsRow(
             FilterChip(
                 selected = filter.authType == null,
                 onClick = { onFilterChange(filter.copy(authType = null)) },
-                label = { Text("All") },
+                label = { Text(localizedString("mobile.common_all")) },
                 modifier = Modifier.testableClickable("chip_auth_type_all") { onFilterChange(filter.copy(authType = null)) }
             )
             listOf("password", "oauth", "api_key").forEach { authType ->
@@ -348,7 +352,7 @@ private fun FilterChipsRow(
 
         // Status filter
         Text(
-            text = "Status",
+            text = localizedString("users_status"),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 4.dp)
@@ -360,19 +364,19 @@ private fun FilterChipsRow(
             FilterChip(
                 selected = filter.isActive == null,
                 onClick = { onFilterChange(filter.copy(isActive = null)) },
-                label = { Text("All") },
+                label = { Text(localizedString("mobile.common_all")) },
                 modifier = Modifier.testableClickable("chip_status_all") { onFilterChange(filter.copy(isActive = null)) }
             )
             FilterChip(
                 selected = filter.isActive == true,
                 onClick = { onFilterChange(filter.copy(isActive = true)) },
-                label = { Text("Active") },
+                label = { Text(localizedString("users_active")) },
                 modifier = Modifier.testableClickable("chip_status_active") { onFilterChange(filter.copy(isActive = true)) }
             )
             FilterChip(
                 selected = filter.isActive == false,
                 onClick = { onFilterChange(filter.copy(isActive = false)) },
-                label = { Text("Inactive") },
+                label = { Text(localizedString("users_inactive")) },
                 modifier = Modifier.testableClickable("chip_status_inactive") { onFilterChange(filter.copy(isActive = false)) }
             )
         }
@@ -448,7 +452,7 @@ private fun UserListItem(
                     // WA Role badge (if present)
                     user.waRole?.let { waRole ->
                         RoleBadge(
-                            text = "WA:${waRole.value}",
+                            text = localizedString("users_wa_role", mapOf("role" to waRole.value)),
                             color = getWaRoleColor(waRole)
                         )
                     }
@@ -536,7 +540,7 @@ private fun UserDetailsPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "User Details",
+                text = localizedString("users_details"),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -544,7 +548,7 @@ private fun UserDetailsPanel(
                 onClick = onClose,
                 modifier = Modifier.testableClickable("btn_user_details_close") { onClose() }
             ) {
-                Icon(Icons.Filled.Close, contentDescription = "Close")
+                Icon(Icons.Filled.Close, contentDescription = localizedString("users_close"))
             }
         }
 
@@ -591,26 +595,26 @@ private fun UserDetailsPanel(
             Spacer(modifier = Modifier.height(24.dp))
 
             // Details grid
-            DetailRow(label = "User ID", value = user.userId)
-            DetailRow(label = "Auth Type", value = user.authType)
-            DetailRow(label = "API Role", value = user.apiRole.value)
+            DetailRow(label = localizedString("users_user_id"), value = user.userId)
+            DetailRow(label = localizedString("users_auth_type"), value = user.authType)
+            DetailRow(label = localizedString("users_api_role"), value = user.apiRole.value)
             user.waRole?.let {
-                DetailRow(label = "WA Role", value = it.value)
+                DetailRow(label = localizedString("users_api_role").replace("API", "WA"), value = it.value)
             }
             user.waId?.let {
-                DetailRow(label = "WA ID", value = it)
+                DetailRow(label = localizedString("users_api_role").replace("API Role", "WA ID"), value = it)
             }
-            DetailRow(label = "Status", value = if (user.isActive == true) "Active" else "Inactive")
-            DetailRow(label = "Created", value = formatTimestamp(user.createdAt.toString()))
+            DetailRow(label = localizedString("users_status"), value = if (user.isActive == true) localizedString("users_active") else localizedString("users_inactive"))
+            DetailRow(label = localizedString("users_created"), value = formatTimestamp(user.createdAt.toString()))
             user.lastLogin?.let {
-                DetailRow(label = "Last Login", value = formatTimestamp(it.toString()))
+                DetailRow(label = localizedString("users_last_login"), value = formatTimestamp(it.toString()))
             }
 
             // Permissions
             if (user.permissions.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Permissions",
+                    text = localizedString("users_permissions"),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -640,7 +644,7 @@ private fun UserDetailsPanel(
             user.customPermissions?.takeIf { it.isNotEmpty() }?.let { customPerms ->
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Custom Permissions",
+                    text = localizedString("users_custom_permissions"),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -670,7 +674,7 @@ private fun UserDetailsPanel(
             user.linkedOauthAccounts?.takeIf { it.isNotEmpty() }?.let { accounts ->
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Linked OAuth Accounts",
+                    text = localizedString("users_oauth_accounts"),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -752,7 +756,7 @@ private fun PaginationControls(
             enabled = pagination.page > 1,
             modifier = Modifier.testableClickable("btn_users_previous_page") { onPrevious() }
         ) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous")
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = localizedString("mobile.common_back"))
         }
 
         Text(
@@ -766,7 +770,7 @@ private fun PaginationControls(
             enabled = pagination.page < pagination.totalPages,
             modifier = Modifier.testableClickable("btn_users_next_page") { onNext() }
         ) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next")
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = localizedString("mobile.common_next"))
         }
     }
 }

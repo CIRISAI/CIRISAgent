@@ -318,6 +318,8 @@ class ActionInstructionGenerator:
         tools_info = []
         tools_info.append("\nAvailable tools (use EXACT tool_name shown, TSASPDMA will handle parameters):")
 
+        logger.info(f"[TOOL_PROMPT] Formatting {len(all_tools)} tools for ASPDMA prompt")
+
         for tool_key, tool_info_raw in all_tools.items():
             tool_info = get_dict({"info": tool_info_raw}, "info", {})
             tool_name = get_str(tool_info, "name", "")
@@ -336,7 +338,12 @@ class ActionInstructionGenerator:
                 tool_line += f" (from {tool_service})"
             tools_info.append(tool_line)
 
-        return "\n".join(tools_info)
+            # Log each tool being added to help debug tool selection issues
+            logger.info(f"[TOOL_PROMPT] Added to prompt: tool_name=\"{tool_name}\" when_to_use=\"{when_to_use[:60]}...\"")
+
+        final_tools_str = "\n".join(tools_info)
+        logger.info(f"[TOOL_PROMPT] Final tools section length: {len(final_tools_str)} chars")
+        return final_tools_str
 
     def _simplify_schema(self, schema: JSONDict) -> str:
         """Simplify a JSON schema to a readable format."""

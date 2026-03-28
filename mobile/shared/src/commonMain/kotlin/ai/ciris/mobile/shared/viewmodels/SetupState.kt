@@ -154,7 +154,8 @@ val SUPPORTED_LANGUAGES = listOf(
     SupportedLanguage("ru", "Русский", "Russian"),
     SupportedLanguage("es", "Español", "Spanish"),
     SupportedLanguage("sw", "Kiswahili", "Swahili"),
-    SupportedLanguage("tr", "Türkçe", "Turkish")
+    SupportedLanguage("tr", "Türkçe", "Turkish"),
+    SupportedLanguage("ur", "اردو", "Urdu")
 )
 
 /**

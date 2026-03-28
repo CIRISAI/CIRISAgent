@@ -417,9 +417,9 @@ async def update_llm_config(
             data={
                 "status": "updated",
                 "message": "LLM configuration updated successfully",
-                "provider": body.llm_provider,
-                "base_url": effective_base_url or "(default)",
-                "model": body.llm_model or "(unchanged)",
+                "provider": safe_provider,
+                "base_url": safe_base_url or "(default)",
+                "model": safe_model or "(unchanged)",
                 "config_path": str(config_path),
             }
         )

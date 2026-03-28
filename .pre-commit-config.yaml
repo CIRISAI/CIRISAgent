@@ -60,18 +60,18 @@ repos:
         always_run: false
         stages: [manual]
 
-  # Mypy - Type checking (informational, doesn't block)
+  # Mypy - Type checking (BLOCKING - catches errors before CI)
   - repo: local
     hooks:
       - id: mypy-check
-        name: mypy (type checking - informational)
+        name: mypy (type checking)
         entry: python tools/dev/mypy_precommit.py
         language: python
         types: [python]
         files: '^(ciris_engine|ciris_adapters)/.*\.py$'
         exclude: '^(tests|tools|scripts|docs|main\.py|grace\.py)'
         pass_filenames: true
-        always_run: false
+        always_run: true
         stages: [pre-commit]
         verbose: true
 

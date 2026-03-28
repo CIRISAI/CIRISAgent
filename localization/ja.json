@@ -767,7 +767,14 @@
     "users_created": "作成日",
     "users_last_login": "最終ログイン",
     "users_close": "閉じる",
-    "setup_waiting_browser": "ブラウザでの認証を待機中..."
+    "setup_waiting_browser": "ブラウザでの認証を待機中...",
+    "pipeline_label_think": "思考",
+    "pipeline_label_context": "文脈",
+    "pipeline_label_dma": "DMA",
+    "pipeline_label_idma": "IDMA",
+    "pipeline_label_select": "選択",
+    "pipeline_label_ethics": "倫理",
+    "pipeline_label_act": "実行"
   },
   "conscience": {
     "ponder_attempted": "{action}を試みました",

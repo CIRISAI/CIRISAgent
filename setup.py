@@ -9,11 +9,33 @@ Platform-specific wheels:
   the wheel is tagged with the matching platform (e.g., macosx_11_0_arm64).
   When no JAR is present, a pure-Python py3-none-any wheel is produced
   for headless server deployments.
+
+Localization:
+  The authoritative localization files are in /localization/*.json.
+  During build, these are copied to ciris_engine/data/localized/ for bundling.
 """
 
+import shutil
 from pathlib import Path
 
 from setuptools import find_packages, setup
+from setuptools.command.build_py import build_py as _build_py
+
+
+class _BuildPyWithLocalization(_build_py):
+    """Copy localization files to package data before building."""
+
+    def run(self):
+        # Copy localization files to package data directory
+        src_dir = Path(__file__).parent / "localization"
+        dst_dir = Path(__file__).parent / "ciris_engine" / "data" / "localized"
+        dst_dir.mkdir(parents=True, exist_ok=True)
+
+        if src_dir.exists():
+            for json_file in src_dir.glob("*.json"):
+                shutil.copy2(json_file, dst_dir / json_file.name)
+
+        super().run()
 
 try:
     from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
@@ -59,9 +81,9 @@ if _bdist_wheel is not None:
                 return "py3", "none", self._detected_platform
             return super().get_tag()
 
-    _cmdclass = {"bdist_wheel": _PlatformBdistWheel}
+    _cmdclass = {"bdist_wheel": _PlatformBdistWheel, "build_py": _BuildPyWithLocalization}
 else:
-    _cmdclass = {}
+    _cmdclass = {"build_py": _BuildPyWithLocalization}
 
 # Read the README for long description
 this_directory = Path(__file__).parent
@@ -109,6 +131,7 @@ setup(
     package_data={
         "ciris_engine.data": [
             "accord_1.2b.txt",  # Accord text file (v1.2-Beta)
+            "localized/*.json",  # Backend localization files (copied from /localization/)
         ],
         "ciris_engine.config": [
             "*.json",  # Pricing and configuration data

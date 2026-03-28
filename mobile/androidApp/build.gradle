@@ -185,10 +185,24 @@ task syncPythonSources(type: Sync) {
     exclude "**/adapters/discord/**"
 }
 
-// Make Python tasks depend on sync
+// Copy backend localization JSON files to ciris_engine/data/localized/
+// This ensures the Python backend has access to localized strings
+task syncBackendLocalization(type: Copy) {
+    description = "Copy localization JSON files to Python package data"
+
+    from("../../localization") {
+        include "*.json"
+    }
+    into "${buildDir}/python-src/ciris_engine/data/localized"
+}
+
+// Make syncBackendLocalization run after syncPythonSources
+syncBackendLocalization.dependsOn syncPythonSources
+
+// Make Python tasks depend on sync (including backend localization)
 tasks.whenTaskAdded { task ->
     if (task.name.contains("Python") && !task.name.contains("sync")) {
-        task.dependsOn syncPythonSources
+        task.dependsOn syncBackendLocalization
     }
 }
 

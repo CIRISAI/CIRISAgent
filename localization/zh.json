@@ -1274,7 +1274,14 @@
     "logs_service_label": "服务：",
     "logs_limit_label": "限制：",
     "logs_collapse": "折叠",
-    "logs_expand": "展开"
+    "logs_expand": "展开",
+    "pipeline_label_think": "思考",
+    "pipeline_label_context": "语境",
+    "pipeline_label_dma": "DMA",
+    "pipeline_label_idma": "IDMA",
+    "pipeline_label_select": "选择",
+    "pipeline_label_ethics": "伦理",
+    "pipeline_label_act": "执行"
   },
   "conscience": {
     "ponder_attempted": "我尝试{action}",

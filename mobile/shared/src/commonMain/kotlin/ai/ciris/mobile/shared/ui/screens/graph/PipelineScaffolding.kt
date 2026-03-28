@@ -45,10 +45,14 @@ enum class VisualizationMode {
  *
  * The glowBoost multiplier allows certain events (like TSASPDMA) to
  * re-activate a ring with extra brightness (e.g., 1.5x normal glow).
+ *
+ * Labels are localized via labelKey -> resolved label text.
+ * Vector font character sets are loaded per-language to render labels.
  */
 data class PipelineStage(
     val eventType: String,
-    val label: String,
+    val labelKey: String,         // Localization key (e.g., "pipeline_label_think")
+    val label: String,            // Resolved label text for rendering
     val color: Color,
     val activatedAtMs: Long = 0L,  // 0 = never activated
     val glowBoost: Float = 1.0f    // Multiplier for glow intensity (1.0 = normal, 1.5 = boosted)
@@ -63,16 +67,39 @@ data class PipelineStage(
         /** Glow boost for TSASPDMA re-activation of ASPDMA ring */
         const val TSASPDMA_BOOST = 1.6f
 
-        /** All H3ERE pipeline stages in order (top to bottom on cylinder) */
-        fun defaultStages(): List<PipelineStage> = listOf(
-            PipelineStage("thought_start", "THINK", Color(0xFF60A5FA)),       // Blue
-            PipelineStage("snapshot_and_context", "CONTEXT", Color(0xFF34D399)), // Green
-            PipelineStage("dma_results", "DMA", Color(0xFFFBBF24)),           // Yellow
-            PipelineStage("idma_result", "IDMA", Color(0xFFF97316)),          // Orange
-            PipelineStage("aspdma_result", "SELECT", Color(0xFFA78BFA)),      // Purple
-            PipelineStage("conscience_result", "ETHICS", Color(0xFF38BDF8)), // Sky
-            PipelineStage("action_result", "ACT", Color(0xFF4ADE80))          // Emerald
+        /** Stage definitions with localization keys and colors */
+        val STAGE_DEFINITIONS = listOf(
+            Triple("thought_start", "pipeline_label_think", Color(0xFF60A5FA)),       // Blue
+            Triple("snapshot_and_context", "pipeline_label_context", Color(0xFF34D399)), // Green
+            Triple("dma_results", "pipeline_label_dma", Color(0xFFFBBF24)),           // Yellow
+            Triple("idma_result", "pipeline_label_idma", Color(0xFFF97316)),          // Orange
+            Triple("aspdma_result", "pipeline_label_select", Color(0xFFA78BFA)),      // Purple
+            Triple("conscience_result", "pipeline_label_ethics", Color(0xFF38BDF8)), // Sky
+            Triple("action_result", "pipeline_label_act", Color(0xFF4ADE80))          // Emerald
         )
+
+        /** Default stages with English labels (fallback) */
+        fun defaultStages(): List<PipelineStage> = STAGE_DEFINITIONS.map { (eventType, labelKey, color) ->
+            PipelineStage(eventType, labelKey, defaultLabel(labelKey), color)
+        }
+
+        /** Create stages with localized labels */
+        fun localizedStages(labelResolver: (String) -> String): List<PipelineStage> =
+            STAGE_DEFINITIONS.map { (eventType, labelKey, color) ->
+                PipelineStage(eventType, labelKey, labelResolver(labelKey), color)
+            }
+
+        /** English fallback labels */
+        private fun defaultLabel(key: String): String = when (key) {
+            "pipeline_label_think" -> "THINK"
+            "pipeline_label_context" -> "CONTEXT"
+            "pipeline_label_dma" -> "DMA"
+            "pipeline_label_idma" -> "IDMA"
+            "pipeline_label_select" -> "SELECT"
+            "pipeline_label_ethics" -> "ETHICS"
+            "pipeline_label_act" -> "ACT"
+            else -> key
+        }
     }
 }
 
@@ -81,7 +108,8 @@ data class PipelineStage(
  */
 data class PipelineState(
     val stages: List<PipelineStage> = PipelineStage.defaultStages(),
-    val version: Int = 0  // Increments on each update to trigger recomposition
+    val version: Int = 0,  // Increments on each update to trigger recomposition
+    val labelResolver: ((String) -> String)? = null  // Optional label resolver for localization
 ) {
     /**
      * Return a new state with the given event type activated at the current time.
@@ -108,12 +136,36 @@ data class PipelineState(
 
     /**
      * Reset all stages (e.g., on new thought round).
+     * Preserves localization by using stored labelResolver.
      */
     fun reset(): PipelineState {
-        return copy(
-            stages = PipelineStage.defaultStages(),
-            version = version + 1
-        )
+        val newStages = if (labelResolver != null) {
+            PipelineStage.localizedStages(labelResolver)
+        } else {
+            PipelineStage.defaultStages()
+        }
+        return copy(stages = newStages, version = version + 1)
+    }
+
+    /**
+     * Update labels with new localization resolver.
+     * Call this when language changes.
+     */
+    fun withLocalizedLabels(resolver: (String) -> String): PipelineState {
+        val localizedStages = stages.map { stage ->
+            stage.copy(label = resolver(stage.labelKey))
+        }
+        return copy(stages = localizedStages, labelResolver = resolver, version = version + 1)
+    }
+
+    companion object {
+        /** Create a localized pipeline state */
+        fun localized(labelResolver: (String) -> String): PipelineState {
+            return PipelineState(
+                stages = PipelineStage.localizedStages(labelResolver),
+                labelResolver = labelResolver
+            )
+        }
     }
 }
 

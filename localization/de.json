@@ -1274,7 +1274,14 @@
     "setup_back_login": "Zurück zur Anmeldung",
     "setup_location_note": "Der Standort wird nur für Kontext (Wetter, Zeitzonen) verwendet und niemals ohne Einwilligung geteilt.",
     "setup_connecting_node": "Verbindung zum Node wird hergestellt...",
-    "setup_waiting_browser": "Warte auf Autorisierung im Browser..."
+    "setup_waiting_browser": "Warte auf Autorisierung im Browser...",
+    "pipeline_label_think": "DENKEN",
+    "pipeline_label_context": "KONTEXT",
+    "pipeline_label_dma": "DMA",
+    "pipeline_label_idma": "IDMA",
+    "pipeline_label_select": "WÄHLEN",
+    "pipeline_label_ethics": "ETHIK",
+    "pipeline_label_act": "AKTION"
   },
   "conscience": {
     "ponder_attempted": "Ich habe versucht, {action} auszuführen",

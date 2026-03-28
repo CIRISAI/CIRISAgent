@@ -5,6 +5,7 @@ import ai.ciris.api.models.ImagePayload
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.ReasoningEvent
 import ai.ciris.mobile.shared.localization.LocalizationHelper
+import ai.ciris.mobile.shared.localization.LocalizationManager
 import ai.ciris.mobile.shared.api.ReasoningStreamClient
 import ai.ciris.mobile.shared.ui.screens.graph.PipelineState
 import ai.ciris.mobile.shared.auth.TokenManager
@@ -196,8 +197,13 @@ class InteractViewModel(
     val timelineEvents: StateFlow<List<TimelineEvent>> = _timelineEvents.asStateFlow()
 
     // H3ERE pipeline scaffolding state - tracks which pipeline stages are active
+    // Labels are localized via LocalizationHelper for multilingual support
+    // Note: Initialize with default (English) labels - they will be updated when localization is ready
     private val _pipelineState = MutableStateFlow(PipelineState())
     val pipelineState: StateFlow<PipelineState> = _pipelineState.asStateFlow()
+
+    // Track language observation job
+    private var languageObserverJob: Job? = null
 
     // Show timeline popup
     private val _showTimeline = MutableStateFlow(false)
@@ -250,6 +256,43 @@ class InteractViewModel(
         logInfo("init", "InteractViewModel initialized (polling deferred until token available)")
         // NOTE: Don't auto-start polling here - wait for startPolling() to be called
         // after auth token is set. This avoids 401 errors during startup.
+    }
+
+    /**
+     * Observe language changes from LocalizationManager and update pipeline labels.
+     * Call this from CIRISApp after localization manager is initialized.
+     *
+     * This is necessary because the ViewModel is created during composition,
+     * but LocalizationManager.initialize() runs in a LaunchedEffect AFTER composition.
+     * So we need to update pipeline labels when:
+     * 1. Localization finishes loading (strings become available)
+     * 2. User changes language
+     */
+    fun observeLanguageChanges(localizationManager: LocalizationManager) {
+        val method = "observeLanguageChanges"
+        if (languageObserverJob != null) {
+            logDebug(method, "Already observing language changes, skipping")
+            return
+        }
+        logInfo(method, "Starting language observation for pipeline localization")
+
+        languageObserverJob = viewModelScope.launch {
+            // Combine isLoading and currentLanguage to trigger on either change
+            kotlinx.coroutines.flow.combine(
+                localizationManager.isLoading,
+                localizationManager.currentLanguage
+            ) { isLoading, language ->
+                isLoading to language
+            }.collect { (isLoading, language) ->
+                if (!isLoading) {
+                    // Localization is ready, update pipeline labels
+                    logInfo(method, "Updating pipeline labels for language: $language")
+                    _pipelineState.value = _pipelineState.value.withLocalizedLabels { key ->
+                        LocalizationHelper.getString("mobile.$key")
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -1456,5 +1499,6 @@ class InteractViewModel(
         healthJob?.cancel()
         trustPollJob?.cancel()
         sseJob?.cancel()
+        languageObserverJob?.cancel()
     }
 }

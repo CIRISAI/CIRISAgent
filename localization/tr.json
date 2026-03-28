@@ -767,7 +767,14 @@
     "memory_scope_local": "YEREL",
     "memory_scope_identity": "KİMLİK",
     "memory_scope_environment": "ORTAM",
-    "memory_scope_community": "TOPLULUK"
+    "memory_scope_community": "TOPLULUK",
+    "pipeline_label_think": "DÜŞÜN",
+    "pipeline_label_context": "BAĞLAM",
+    "pipeline_label_dma": "DMA",
+    "pipeline_label_idma": "IDMA",
+    "pipeline_label_select": "SEÇ",
+    "pipeline_label_ethics": "ETİK",
+    "pipeline_label_act": "EYLEM"
   },
   "conscience": {
     "ponder_attempted": "{action} yapmayı denedim",

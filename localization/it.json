@@ -1274,7 +1274,14 @@
     "memory_scope_local": "LOCALE",
     "memory_scope_identity": "IDENTITÀ",
     "memory_scope_environment": "AMBIENTE",
-    "memory_scope_community": "COMUNITÀ"
+    "memory_scope_community": "COMUNITÀ",
+    "pipeline_label_think": "PENSARE",
+    "pipeline_label_context": "CONTESTO",
+    "pipeline_label_dma": "DMA",
+    "pipeline_label_idma": "IDMA",
+    "pipeline_label_select": "SCEGLI",
+    "pipeline_label_ethics": "ETICA",
+    "pipeline_label_act": "AZIONE"
   },
   "conscience": {
     "ponder_attempted": "Ho tentato di {action}",

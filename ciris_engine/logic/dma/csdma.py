@@ -156,6 +156,8 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
     def _extract_context_data(self, context: Optional[Any]) -> tuple[str, str, str]:
         """Extract context strings from context object.
 
+        Also syncs user's language preference to the DMA prompt loader.
+
         Args:
             context: Context object with system_snapshot and/or user_profiles
 
@@ -171,16 +173,29 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         if not context:
             return system_snapshot_str, user_profiles_str, context_summary
 
+        # Track user profiles for language sync
+        user_profiles = None
+
         if hasattr(context, "system_snapshot") and context.system_snapshot:
             system_snapshot_str = format_system_snapshot(context.system_snapshot)
             if hasattr(context.system_snapshot, "user_profiles") and context.system_snapshot.user_profiles:
-                user_profiles_str = format_user_profiles(context.system_snapshot.user_profiles)
+                user_profiles = context.system_snapshot.user_profiles
+                user_profiles_str = format_user_profiles(user_profiles)
 
             agent_identity = getattr(context.system_snapshot, "agent_identity", None)
             if agent_identity:
                 context_summary = self._build_context_summary(agent_identity)
         elif hasattr(context, "user_profiles") and context.user_profiles:
-            user_profiles_str = format_user_profiles(context.user_profiles)
+            user_profiles = context.user_profiles
+            user_profiles_str = format_user_profiles(user_profiles)
+
+        # Sync user's language preference to prompt loader
+        if user_profiles and len(user_profiles) > 0:
+            user_lang = getattr(user_profiles[0], "preferred_language", None)
+            if user_lang and user_lang != self.prompt_loader.language:
+                from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+                set_prompt_language(user_lang)
+                logger.debug(f"CSDMA: Synced prompt language to user preference: {user_lang}")
 
         return system_snapshot_str, user_profiles_str, context_summary
 

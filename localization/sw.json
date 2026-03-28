@@ -767,7 +767,14 @@
     "users_created": "Imeundwa",
     "users_last_login": "Kuingia Mwisho",
     "users_close": "Funga",
-    "setup_waiting_browser": "Inasubiri idhini kwenye kivinjari..."
+    "setup_waiting_browser": "Inasubiri idhini kwenye kivinjari...",
+    "pipeline_label_think": "FIKIRI",
+    "pipeline_label_context": "MUKTADHA",
+    "pipeline_label_dma": "DMA",
+    "pipeline_label_idma": "IDMA",
+    "pipeline_label_select": "CHAGUA",
+    "pipeline_label_ethics": "MAADILI",
+    "pipeline_label_act": "TENDA"
   },
   "conscience": {
     "ponder_attempted": "Nilijaribu {action}",

@@ -1,8 +1,10 @@
 """User management API routes."""
 
 import logging
+import os
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated, Any, Dict, Generic, List, Optional, TypeVar
 
 import aiofiles
@@ -605,7 +607,7 @@ async def update_my_settings(
             )
 
             # Save the updated node directly (bypassing MANAGED_USER_ATTRIBUTES check)
-            await memory_service.memorize(updated_node, handler_name="UserSettingsAPI")
+            await memory_service.memorize(updated_node)
 
         else:
             # User node doesn't exist - create it with the settings
@@ -617,7 +619,13 @@ async def update_my_settings(
             )
 
             # Save the new node
-            await memory_service.memorize(new_node, handler_name="UserSettingsAPI")
+            await memory_service.memorize(new_node)
+
+        # Sync language preference to env and DMA prompt loader if it was updated
+        if request.preferred_language is not None:
+            from ciris_engine.logic.utils.path_resolution import sync_language_preference
+            sync_language_preference(request.preferred_language)
+            logger.info(f"Synced language preference '{request.preferred_language}' for user {auth.user_id}")
 
         # Return the updated settings
         final_attrs = {**attrs_to_update}

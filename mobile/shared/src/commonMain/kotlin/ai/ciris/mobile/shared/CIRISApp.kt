@@ -330,6 +330,33 @@ fun CIRISApp(
     // Track the current auth token - will be updated after login/setup
     var currentAccessToken by remember { mutableStateOf<String?>(null) }
 
+    // Sync language changes to backend when user is authenticated
+    // Track the previous language to detect actual changes (not initial load)
+    var previousLanguage by remember { mutableStateOf<String?>(null) }
+    val currentLanguage by localizationManager.currentLanguage.collectAsState()
+
+    LaunchedEffect(currentLanguage, currentAccessToken) {
+        // Only sync if:
+        // 1. We have a valid token (user is authenticated)
+        // 2. This is a real change (not initial load)
+        // 3. Localization is not still loading
+        if (currentAccessToken != null && previousLanguage != null && previousLanguage != currentLanguage) {
+            PlatformLogger.i(TAG, "Language changed from $previousLanguage to $currentLanguage, syncing to backend...")
+            try {
+                val success = apiClient.updateUserLanguage(currentLanguage)
+                if (success) {
+                    PlatformLogger.i(TAG, "Language synced to backend successfully: $currentLanguage")
+                } else {
+                    PlatformLogger.w(TAG, "Failed to sync language to backend")
+                }
+            } catch (e: Exception) {
+                PlatformLogger.e(TAG, "Error syncing language to backend: ${e.message}")
+            }
+        }
+        // Always update previous language after processing
+        previousLanguage = currentLanguage
+    }
+
     // Navigation state
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Startup) }
 
@@ -483,6 +510,9 @@ fun CIRISApp(
     }
     // Set device attestation callback so InteractViewModel can trigger Play Integrity at startup
     interactViewModel.setDeviceAttestationCallback(deviceAttestationCallback)
+    // Observe language changes for pipeline label localization
+    // This updates pipeline labels when localization becomes ready or language changes
+    interactViewModel.observeLanguageChanges(localizationManager)
     val settingsViewModel: SettingsViewModel = viewModel {
         SettingsViewModel(secureStorage, apiClient, envFileUpdater)
     }

@@ -25,7 +25,7 @@ import os
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +42,10 @@ _cache_initialized = False
 def _get_localization_dir() -> Path:
     """Get the localization directory path.
 
-    Uses platform-aware path resolution:
+    Uses platform-aware path resolution with fallback:
     1. CIRIS_LOCALIZATION_DIR env var if set (override)
     2. {CIRIS_HOME}/localization/ (standard location)
+    3. Package data directory as fallback (for mobile/bundled deployments)
 
     Returns:
         Path to the localization directory
@@ -57,7 +58,21 @@ def _get_localization_dir() -> Path:
     # Use centralized path resolution
     from ciris_engine.logic.utils.path_resolution import get_ciris_home
 
-    return get_ciris_home() / "localization"
+    ciris_home_loc = get_ciris_home() / "localization"
+
+    # Check if CIRIS_HOME/localization exists and has JSON files
+    if ciris_home_loc.exists() and any(ciris_home_loc.glob("*.json")):
+        return ciris_home_loc
+
+    # Fallback to package data directory (for mobile/bundled deployments)
+    # The localization JSON files are bundled in ciris_engine/data/localized/
+    package_loc = Path(__file__).parent.parent.parent / "data" / "localized"
+    if package_loc.exists():
+        logger.debug(f"Using package data localization directory: {package_loc}")
+        return package_loc
+
+    # Last resort: return CIRIS_HOME path even if empty (will trigger missing key warnings)
+    return ciris_home_loc
 
 
 def _load_language(lang_code: str) -> Optional[Dict[str, Any]]:
@@ -192,6 +207,7 @@ def get_string(
 
     # Check for [EN] placeholder marker (indicates untranslated)
     if result is not None and result.startswith("[EN]"):
+        logger.debug(f"[LOCALIZATION] Key '{key}' has [EN] placeholder, falling back to English (lang={lang_code})")
         result = None  # Treat as missing, fall back to English
 
     # Fall back to English if not found
@@ -199,15 +215,22 @@ def get_string(
         en_data = _get_language_data(DEFAULT_LANGUAGE)
         result = _resolve_key(en_data, key)
         if result is not None:
-            logger.debug(f"Localization fallback to English for key '{key}' (lang={lang_code})")
+            logger.info(f"[LOCALIZATION] Fallback to English for key '{key}' (requested lang={lang_code})")
+        else:
+            logger.warning(f"[LOCALIZATION] Key '{key}' not found in {lang_code} or English")
 
     # Fall back to default or key itself
     if result is None:
         if default is not None:
+            logger.debug(f"[LOCALIZATION] Using default for key '{key}': {default[:50] if len(default) > 50 else default}")
             result = default
         else:
-            logger.warning(f"Missing localization key: {key} (lang={lang_code})")
+            logger.warning(f"[LOCALIZATION] MISSING key: {key} (lang={lang_code}) - returning raw key")
             result = key
+    else:
+        # Successfully found the key - log at debug level
+        preview = result[:50] if len(result) > 50 else result
+        logger.debug(f"[LOCALIZATION] Found key '{key}' (lang={lang_code}): {preview}...")
 
     # Apply parameter interpolation
     if params:
@@ -310,3 +333,49 @@ def get_preferred_language() -> str:
         Language code (defaults to 'en')
     """
     return os.getenv("CIRIS_PREFERRED_LANGUAGE", DEFAULT_LANGUAGE)
+
+
+def get_user_language_from_context(context: Any) -> str:
+    """Extract user's preferred language from processing context/snapshot.
+
+    Looks for preferred_language in:
+    1. context.system_snapshot.user_profiles[0].preferred_language
+    2. context.system_snapshot.user_profiles[0].language
+    3. Falls back to get_preferred_language() (env var or 'en')
+
+    Args:
+        context: Processing context (ThoughtContext, BatchContext, or snapshot)
+
+    Returns:
+        Language code (e.g., 'en', 'am', 'es')
+    """
+    if context is None:
+        logger.debug("get_user_language_from_context: context is None, using env fallback")
+        return get_preferred_language()
+
+    try:
+        # Try to get system_snapshot from context
+        snapshot = getattr(context, "system_snapshot", None)
+        if snapshot is None:
+            # Maybe context IS the snapshot
+            snapshot = context
+
+        # Get user_profiles from snapshot
+        user_profiles = getattr(snapshot, "user_profiles", None)
+        if user_profiles and len(user_profiles) > 0:
+            profile = user_profiles[0]
+            lang = getattr(profile, "preferred_language", None)
+            if lang:
+                logger.debug(f"get_user_language_from_context: Found user language '{lang}' from profile")
+                return str(lang)
+            # Try alternative field name
+            lang = getattr(profile, "language", None)
+            if lang:
+                logger.debug(f"get_user_language_from_context: Found user language '{lang}' from profile.language")
+                return str(lang)
+
+        logger.debug("get_user_language_from_context: No user profile found, using env fallback")
+    except Exception as e:
+        logger.debug(f"get_user_language_from_context: Error extracting language: {e}")
+
+    return get_preferred_language()

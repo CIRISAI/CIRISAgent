@@ -49,19 +49,33 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         logger.info(f"EthicalPDMAEvaluator initialized with model: {self.model_name}")
 
     def _build_context_strings(self, context: Any) -> tuple[str, str]:
-        """Extract system snapshot and user profile context strings."""
+        """Extract system snapshot and user profile context strings.
+
+        Also syncs user's language preference to the DMA prompt loader.
+        """
         if not context:
             return "", ""
 
         system_snapshot_str = ""
         user_profile_str = ""
+        user_profiles = None
 
         if hasattr(context, "system_snapshot") and context.system_snapshot:
             system_snapshot_str = format_system_snapshot(context.system_snapshot)
             if hasattr(context.system_snapshot, "user_profiles") and context.system_snapshot.user_profiles:
-                user_profile_str = format_user_profiles(context.system_snapshot.user_profiles)
+                user_profiles = context.system_snapshot.user_profiles
+                user_profile_str = format_user_profiles(user_profiles)
         elif hasattr(context, "user_profiles") and context.user_profiles:
-            user_profile_str = format_user_profiles(context.user_profiles)
+            user_profiles = context.user_profiles
+            user_profile_str = format_user_profiles(user_profiles)
+
+        # Sync user's language preference to prompt loader
+        if user_profiles and len(user_profiles) > 0:
+            user_lang = getattr(user_profiles[0], "preferred_language", None)
+            if user_lang and user_lang != self.prompt_loader.language:
+                from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+                set_prompt_language(user_lang)
+                logger.debug(f"PDMA: Synced prompt language to user preference: {user_lang}")
 
         return system_snapshot_str, user_profile_str
 

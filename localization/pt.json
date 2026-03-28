@@ -1274,7 +1274,14 @@
     "screen_system_status": "Status do Sistema",
     "screen_consent_management": "Gerenciamento de Consentimento",
     "screen_users": "Usuários",
-    "screen_tickets": "Tíquetes e Privacidade"
+    "screen_tickets": "Tíquetes e Privacidade",
+    "pipeline_label_think": "PENSAR",
+    "pipeline_label_context": "CONTEXTO",
+    "pipeline_label_dma": "DMA",
+    "pipeline_label_idma": "IDMA",
+    "pipeline_label_select": "ESCOLHER",
+    "pipeline_label_ethics": "ÉTICA",
+    "pipeline_label_act": "AÇÃO"
   },
   "conscience": {
     "ponder_attempted": "Tentei {action}",

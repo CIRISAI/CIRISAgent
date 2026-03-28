@@ -525,3 +525,137 @@ def get_template_directory() -> Path:
 
     # Package bundled templates
     return get_package_root() / "ciris_templates"
+
+
+def get_env_file_path() -> Optional[Path]:
+    """Get the path to the .env file.
+
+    Platform-aware resolution:
+    - Managed: /app/.env
+    - Development: CWD/.env
+    - Android/iOS: None (no .env file on mobile, use graph only)
+    - Installed: CIRIS_HOME/.env or ~/ciris/.env
+
+    Returns:
+        Path to .env file, or None if not applicable (mobile platforms)
+    """
+    # Mobile platforms don't use .env files
+    if is_android() or is_ios():
+        return None
+
+    # Managed mode
+    if is_managed():
+        env_path = Path("/app/.env")
+        return env_path if env_path.exists() else None
+
+    # Development mode
+    if is_development_mode():
+        env_path = Path.cwd() / ".env"
+        return env_path if env_path.exists() else None
+
+    # Installed mode - check CIRIS_HOME then ~/ciris/
+    ciris_home = get_ciris_home()
+    env_path = ciris_home / ".env"
+    if env_path.exists():
+        return env_path
+
+    return None
+
+
+def sync_env_var(var_name: str, value: str, persist_to_file: bool = True) -> bool:
+    """Sync an environment variable to both os.environ and .env file.
+
+    Platform-aware:
+    - Desktop/server: Updates both os.environ and .env file
+    - Mobile (Android/iOS): Updates only os.environ (no .env file)
+    - Managed: Updates os.environ, optionally .env file
+
+    Args:
+        var_name: Environment variable name (e.g., 'CIRIS_PREFERRED_LANGUAGE')
+        value: Value to set
+        persist_to_file: Whether to persist to .env file (default True)
+
+    Returns:
+        True if successful, False if .env file update failed (os.environ still updated)
+    """
+    import re
+
+    # Always update os.environ
+    os.environ[var_name] = value
+    logger.debug(f"[env_sync] Set os.environ[{var_name}]={value}")
+
+    # Skip file persistence on mobile or if not requested
+    if not persist_to_file:
+        return True
+
+    env_path = get_env_file_path()
+    if not env_path:
+        logger.debug(f"[env_sync] No .env file available (mobile or missing), skipped file persistence for {var_name}")
+        return True  # Not an error - mobile doesn't use .env
+
+    try:
+        # Read current contents
+        content = env_path.read_text()
+
+        # Check if variable exists
+        pattern = rf'^{re.escape(var_name)}=.*$'
+        if re.search(pattern, content, re.MULTILINE):
+            # Update existing variable
+            content = re.sub(pattern, f'{var_name}="{value}"', content, flags=re.MULTILINE)
+        else:
+            # Add new variable
+            if not content.endswith("\n"):
+                content += "\n"
+            content += f'{var_name}="{value}"\n'
+
+        # Write back
+        env_path.write_text(content)
+        logger.info(f"[env_sync] Persisted {var_name} to {env_path}")
+        return True
+
+    except Exception as e:
+        logger.warning(f"[env_sync] Failed to persist {var_name} to .env: {e}")
+        return False
+
+
+def sync_language_preference(language_code: str) -> bool:
+    """Sync language preference to environment and DMA prompt loader.
+
+    This ensures the language is available to:
+    1. os.environ['CIRIS_PREFERRED_LANGUAGE']
+    2. .env file (on desktop/server)
+    3. DMA prompt loader (for localized prompts)
+
+    Args:
+        language_code: ISO 639-1 language code (e.g., 'en', 'am', 'es')
+
+    Returns:
+        True if successful
+    """
+    # Sync to environment and .env file
+    sync_env_var("CIRIS_PREFERRED_LANGUAGE", language_code)
+
+    # Update the DMA prompt loader
+    try:
+        from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+        set_prompt_language(language_code)
+        logger.info(f"[env_sync] Synced language preference to DMA prompt loader: {language_code}")
+    except ImportError:
+        logger.debug("[env_sync] DMA prompt_loader not available, skipping prompt language update")
+    except Exception as e:
+        logger.warning(f"[env_sync] Failed to update DMA prompt loader: {e}")
+
+    return True
+
+
+def load_language_preference_from_graph() -> Optional[str]:
+    """Load language preference from the graph (user profile).
+
+    This is called at startup to restore the user's language preference.
+
+    Returns:
+        Language code if found, None otherwise
+    """
+    # This is a sync function, so we can't easily query the graph here
+    # Instead, return the env var if set (which should be synced from graph)
+    return os.environ.get("CIRIS_PREFERRED_LANGUAGE")

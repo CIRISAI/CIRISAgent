@@ -1274,7 +1274,14 @@
     "setup_connecting_node": "नोड से कनेक्ट हो रहा है...",
     "setup_waiting_browser": "ब्राउज़र में प्राधिकरण की प्रतीक्षा हो रही है...",
     "runtime_paused": "रोका गया",
-    "runtime_running": "चल रहा है"
+    "runtime_running": "चल रहा है",
+    "pipeline_label_think": "सोच",
+    "pipeline_label_context": "संदर्भ",
+    "pipeline_label_dma": "DMA",
+    "pipeline_label_idma": "IDMA",
+    "pipeline_label_select": "चुनें",
+    "pipeline_label_ethics": "नैतिक",
+    "pipeline_label_act": "कार्य"
   },
   "conscience": {
     "ponder_attempted": "मैंने {action} करने का प्रयास किया",

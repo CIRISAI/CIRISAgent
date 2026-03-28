@@ -5043,6 +5043,40 @@ class CIRISApiClient(
         }
     }
 
+    /**
+     * Update the user's preferred language on the backend.
+     * Call this when the user changes language in settings to sync with server.
+     *
+     * @param languageCode ISO 639-1 language code (e.g., 'en', 'am', 'es')
+     * @return true if successful, false otherwise
+     */
+    suspend fun updateUserLanguage(languageCode: String): Boolean {
+        val method = "updateUserLanguage"
+        logInfo(method, "Updating user language to: $languageCode")
+
+        return try {
+            val request = ai.ciris.api.models.UpdateUserSettingsRequest(
+                preferredLanguage = languageCode
+            )
+            val response = usersApi.updateMySettingsV1UsersMeSettingsPut(
+                updateUserSettingsRequest = request,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                return false
+            }
+
+            logInfo(method, "User language updated successfully to: $languageCode")
+            true
+        } catch (e: Exception) {
+            logException(method, e, "languageCode=$languageCode")
+            false
+        }
+    }
+
     override fun close() {
     logInfo("close", "Closing CIRISApiClient")
     }

@@ -768,7 +768,14 @@
     "users_created": "생성됨",
     "users_last_login": "마지막 로그인",
     "users_close": "닫기",
-    "setup_waiting_browser": "브라우저에서 인증 대기 중..."
+    "setup_waiting_browser": "브라우저에서 인증 대기 중...",
+    "pipeline_label_think": "생각",
+    "pipeline_label_context": "맥락",
+    "pipeline_label_dma": "DMA",
+    "pipeline_label_idma": "IDMA",
+    "pipeline_label_select": "선택",
+    "pipeline_label_ethics": "윤리",
+    "pipeline_label_act": "실행"
   },
   "conscience": {
     "ponder_attempted": "{action}을(를) 시도했습니다",

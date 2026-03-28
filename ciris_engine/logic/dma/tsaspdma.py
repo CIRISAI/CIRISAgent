@@ -110,6 +110,39 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
 
         logger.info(f"TSASPDMAEvaluator initialized with model: {self.model_name}")
 
+    def _sync_language_from_context(self, context: Optional[Any]) -> None:
+        """Sync user's language preference from context to prompt loader."""
+        if not context:
+            return
+
+        user_profiles = None
+
+        # Try to extract user profiles from various context structures
+        if hasattr(context, "system_snapshot") and context.system_snapshot:
+            if hasattr(context.system_snapshot, "user_profiles"):
+                user_profiles = context.system_snapshot.user_profiles
+        elif hasattr(context, "user_profiles"):
+            user_profiles = context.user_profiles
+        elif isinstance(context, dict):
+            system_snapshot = context.get("system_snapshot")
+            if system_snapshot:
+                if isinstance(system_snapshot, dict):
+                    user_profiles = system_snapshot.get("user_profiles")
+                elif hasattr(system_snapshot, "user_profiles"):
+                    user_profiles = system_snapshot.user_profiles
+
+        if user_profiles and len(user_profiles) > 0:
+            first_profile = user_profiles[0]
+            user_lang = (
+                first_profile.get("preferred_language")
+                if isinstance(first_profile, dict)
+                else getattr(first_profile, "preferred_language", None)
+            )
+            if user_lang and user_lang != self.prompt_loader.language:
+                from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+                set_prompt_language(user_lang)
+                logger.debug(f"TSASPDMA: Synced prompt language to user preference: {user_lang}")
+
     def _convert_tsaspdma_result(
         self,
         llm_result: TSASPDMALLMResult,
@@ -390,6 +423,9 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         logger.info(f"[TSASPDMA] Tool info: name={tool_info.name}, when_to_use={tool_info.when_to_use[:50] if tool_info.when_to_use else 'N/A'}...")
         logger.info(f"[TSASPDMA] Context enrichment received: {list(context_enrichment.keys()) if context_enrichment else 'None'}")
 
+        # Sync user's language preference before building prompts
+        self._sync_language_from_context(context)
+
         # Access the text content directly from ThoughtContent, not str() which gives repr
         thought_content_str = (
             original_thought.content.text
@@ -479,6 +515,9 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         - Asks for clarification (returns SPEAK)
         - Reconsiders approach (returns PONDER)
         """
+        # Sync user's language preference before building prompts
+        self._sync_language_from_context(context)
+
         thought_content_str = (
             original_thought.content.text
             if hasattr(original_thought.content, "text")

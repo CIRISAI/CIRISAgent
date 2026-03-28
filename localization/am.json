@@ -767,7 +767,14 @@
     "users_created": "ተፈጥሯል",
     "users_last_login": "የመጨረሻ መግባት",
     "users_close": "ዝጋ",
-    "setup_waiting_browser": "በአሳሽ ውስጥ ፍቃድን በመጠበቅ ላይ..."
+    "setup_waiting_browser": "በአሳሽ ውስጥ ፍቃድን በመጠበቅ ላይ...",
+    "pipeline_label_think": "ሀሳብ",
+    "pipeline_label_context": "አውድ",
+    "pipeline_label_dma": "DMA",
+    "pipeline_label_idma": "IDMA",
+    "pipeline_label_select": "ምረጥ",
+    "pipeline_label_ethics": "ህሊና",
+    "pipeline_label_act": "ተግባር"
   },
   "conscience": {
     "ponder_attempted": "{action} ለማድረግ ሞከርኩ",

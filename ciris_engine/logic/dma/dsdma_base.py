@@ -149,6 +149,15 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 )
             system_snapshot = current_context.system_snapshot
             user_profiles_data = system_snapshot.user_profiles
+
+            # Sync user's language preference to prompt loader
+            if user_profiles_data and len(user_profiles_data) > 0:
+                user_lang = getattr(user_profiles_data[0], "preferred_language", None)
+                if user_lang and user_lang != self.prompt_loader.language:
+                    from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+                    set_prompt_language(user_lang)
+                    logger.debug(f"DSDMA: Synced prompt language to user preference: {user_lang}")
+
             # Convert list of UserProfile to dict format expected by format_user_profiles
             user_profiles_dict = {}
             for profile in user_profiles_data:
@@ -262,6 +271,19 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 user_profiles_data_raw = system_snapshot_raw.get("user_profiles")
                 # format_user_profiles accepts Union[List[Any], dict[str, Any], None]
                 user_profiles_block = format_user_profiles(user_profiles_data_raw) if user_profiles_data_raw else ""
+
+                # Sync user's language preference to prompt loader (legacy path)
+                if user_profiles_data_raw and len(user_profiles_data_raw) > 0:
+                    first_profile = user_profiles_data_raw[0]
+                    user_lang = (
+                        first_profile.get("preferred_language")
+                        if isinstance(first_profile, dict)
+                        else getattr(first_profile, "preferred_language", None)
+                    )
+                    if user_lang and user_lang != self.prompt_loader.language:
+                        from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+                        set_prompt_language(user_lang)
+                        logger.debug(f"DSDMA: Synced prompt language to user preference: {user_lang}")
                 # Cast dict to SystemSnapshot for format_system_snapshot
                 system_snapshot_block = format_system_snapshot(cast(SystemSnapshot, system_snapshot_raw))
             else:

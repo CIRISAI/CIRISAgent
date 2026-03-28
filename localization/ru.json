@@ -1274,7 +1274,14 @@
     "memory_scope_local": "ЛОКАЛЬНАЯ",
     "memory_scope_identity": "ИДЕНТИЧНОСТЬ",
     "memory_scope_environment": "ОКРУЖЕНИЕ",
-    "memory_scope_community": "СООБЩЕСТВО"
+    "memory_scope_community": "СООБЩЕСТВО",
+    "pipeline_label_think": "МЫСЛЬ",
+    "pipeline_label_context": "КОНТЕКСТ",
+    "pipeline_label_dma": "DMA",
+    "pipeline_label_idma": "IDMA",
+    "pipeline_label_select": "ВЫБОР",
+    "pipeline_label_ethics": "ЭТИКА",
+    "pipeline_label_act": "ДЕЙСТВИЕ"
   },
   "conscience": {
     "ponder_attempted": "Я попытался {action}",

@@ -1274,7 +1274,14 @@
     "setup_back_login": "العودة إلى تسجيل الدخول",
     "setup_location_note": "يُستخدم الموقع فقط للسياق (الطقس، المناطق الزمنية) ولا تتم مشاركته أبداً بدون موافقة.",
     "setup_connecting_node": "الاتصال بالعقدة...",
-    "setup_waiting_browser": "في انتظار التفويض في المتصفح..."
+    "setup_waiting_browser": "في انتظار التفويض في المتصفح...",
+    "pipeline_label_think": "فكر",
+    "pipeline_label_context": "سياق",
+    "pipeline_label_dma": "DMA",
+    "pipeline_label_idma": "IDMA",
+    "pipeline_label_select": "اختر",
+    "pipeline_label_ethics": "أخلاق",
+    "pipeline_label_act": "نفذ"
   },
   "conscience": {
     "ponder_attempted": "حاولت {action}",

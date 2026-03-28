@@ -9,6 +9,7 @@ prompts/localized/{lang}/ directories.
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import Any, Optional
 
@@ -17,6 +18,12 @@ import yaml
 from ciris_engine.schemas.dma.prompts import PromptCollection
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_log(value: str, max_length: int = 20) -> str:
+    """Sanitize a value for safe inclusion in log messages."""
+    sanitized = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', value)
+    return sanitized[:max_length] + "..." if len(sanitized) > max_length else sanitized
 
 # Default language for prompts
 DEFAULT_LANGUAGE = "en"
@@ -306,4 +313,4 @@ def set_prompt_language(language: str) -> None:
     _current_language = language
     if _default_loader is not None:
         _default_loader.set_language(language)
-    logger.info(f"DMA prompt language set to: {language}")
+    logger.info(f"DMA prompt language set to: {_sanitize_for_log(language)}")

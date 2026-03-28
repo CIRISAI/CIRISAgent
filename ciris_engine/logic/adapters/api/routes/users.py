@@ -52,6 +52,8 @@ ERROR_CREATE_USER_FAILED = "Failed to create user"
 ERROR_CHANGE_PASSWORD_FAILED = "Failed to change password. Check current password."
 ERROR_CANNOT_DEMOTE_SELF = "Cannot demote your own role"
 ERROR_CANNOT_DEACTIVATE_SELF = "Cannot deactivate your own account"
+
+
 ERROR_ONLY_ADMIN_MINT_WA = "Only ADMIN or higher can mint Wise Authorities"
 ERROR_CANNOT_MINT_ROOT = "Cannot mint new ROOT authorities. ROOT is singular."
 ERROR_INVALID_SIGNATURE = "Invalid ROOT signature"
@@ -625,7 +627,7 @@ async def update_my_settings(
         if request.preferred_language is not None:
             from ciris_engine.logic.utils.path_resolution import sync_language_preference
             sync_language_preference(request.preferred_language)
-            logger.info(f"Synced language preference '{request.preferred_language}' for user {auth.user_id}")
+            logger.info(f"Synced language preference '{_sanitize_for_log(request.preferred_language)}' for user {_sanitize_for_log(auth.user_id)}")
 
         # Return the updated settings
         final_attrs = {**attrs_to_update}

@@ -596,6 +596,27 @@ def _validate_env_var_name(var_name: str) -> bool:
     return bool(re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', var_name))
 
 
+def sanitize_for_log(value: str, max_length: int = 20) -> str:
+    """Sanitize a value for safe inclusion in log messages.
+
+    Prevents log injection by removing dangerous characters and truncating.
+
+    Args:
+        value: Value to sanitize
+        max_length: Maximum length of output (default 20)
+
+    Returns:
+        Sanitized value safe for logging
+    """
+    import re
+    # Remove newlines, carriage returns, and control characters
+    sanitized = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', value)
+    # Truncate to max length
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
+
 def sync_env_var(var_name: str, value: str, persist_to_file: bool = True) -> bool:
     """Sync an environment variable to both os.environ and .env file.
 
@@ -693,7 +714,7 @@ def sync_language_preference(language_code: str) -> bool:
     try:
         from ciris_engine.logic.dma.prompt_loader import set_prompt_language
         set_prompt_language(language_code)
-        logger.info(f"[env_sync] Synced language preference to DMA prompt loader: {language_code}")
+        logger.info(f"[env_sync] Synced language preference to DMA prompt loader: {sanitize_for_log(language_code)}")
     except ImportError:
         logger.debug("[env_sync] DMA prompt_loader not available, skipping prompt language update")
     except Exception as e:

@@ -379,6 +379,7 @@ class QARunner:
         # ALWAYS print log location reminders - helpful for debugging
         log_dir = f"logs/{self.server_manager.database_backend}"
         self.console.print("\n[cyan]📋 Log Locations:[/cyan]")
+        self.console.print(f"[dim]   • Console (early startup): {log_dir}/console.log[/dim]")
         self.console.print(f"[dim]   • Full logs: {log_dir}/latest.log[/dim]")
         self.console.print(f"[dim]   • Incidents: {log_dir}/incidents_latest.log[/dim]")
 

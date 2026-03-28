@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Dict, List, Optional, Set
 
+from .chain_client import keccak256
+
 logger = logging.getLogger(__name__)
 
 
@@ -107,13 +109,8 @@ def compute_checksum_address(address: str) -> str:
     address_lower = address.lower().replace("0x", "")
 
     # Compute keccak256 hash of the lowercase hex string
-    # Note: We use sha3_256 which is keccak256 in Python 3.11+
-    try:
-        hash_bytes = hashlib.new("sha3_256", address_lower.encode("ascii")).digest()
-    except ValueError:
-        # Fallback for older Python
-        import sha3  # type: ignore
-        hash_bytes = sha3.keccak_256(address_lower.encode("ascii")).digest()
+    # NOTE: Must use keccak256, NOT sha3_256 - they have different padding!
+    hash_bytes = keccak256(address_lower.encode("ascii"))
 
     # Build checksummed address
     result = "0x"

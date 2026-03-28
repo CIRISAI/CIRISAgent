@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-03-28T00:18:54.437119+00:00",
+  "last_updated": "2026-03-28T14:39:49.204957+00:00",
   "version": "2.0.0-beta",
   "modules": {
     "_comment_core": "=== CORE API MODULES ===",
@@ -461,12 +461,21 @@
       "status": "passing",
       "duration_seconds": 67.58,
       "context": null
+    },
+    "wallet": {
+      "last_run": "2026-03-28T14:39:49.204932+00:00",
+      "passed": 18,
+      "failed": 2,
+      "total": 20,
+      "status": "failing",
+      "duration_seconds": 22.03,
+      "context": null
     }
   },
   "summary": {
-    "total_modules": 51,
+    "total_modules": 52,
     "passing": 47,
-    "failing": 2,
+    "failing": 3,
     "not_run": 2
   }
 }

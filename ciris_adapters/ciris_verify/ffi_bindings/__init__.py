@@ -29,6 +29,21 @@ Logging:
 import logging as _logging
 
 from .client import CIRISVerify, MockCIRISVerify
+
+# Singleton verifier instance
+_verifier_instance: "CIRISVerify | None" = None
+
+
+def get_verifier() -> CIRISVerify:
+    """Get the singleton CIRISVerify instance.
+
+    Creates the instance on first call, returns cached instance thereafter.
+    This ensures all components share the same verifier state.
+    """
+    global _verifier_instance
+    if _verifier_instance is None:
+        _verifier_instance = CIRISVerify()
+    return _verifier_instance
 from .types import (
     LicenseStatus,
     LicenseTier,
@@ -115,6 +130,7 @@ __version__ = "1.3.1"
 __all__ = [
     "CIRISVerify",
     "MockCIRISVerify",
+    "get_verifier",
     "get_library_version",
     "setup_logging",
     "LicenseStatus",

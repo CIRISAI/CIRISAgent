@@ -129,7 +129,7 @@ class TestSignWithVerifier:
         """Should sign message using CIRISVerify."""
         mock_verifier = MagicMock()
         test_signature = b"signature_64_bytes_here_abcdefgh" * 2
-        mock_verifier.sign_sync.return_value = test_signature
+        mock_verifier.sign_ed25519_sync.return_value = test_signature
 
         with patch(
             "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
@@ -139,7 +139,7 @@ class TestSignWithVerifier:
 
         assert signature == test_signature
         assert error is None
-        mock_verifier.sign_sync.assert_called_once_with(b"test message")
+        mock_verifier.sign_ed25519_sync.assert_called_once_with(b"test message")
 
     def test_returns_error_when_verifier_unavailable(self):
         """Should return error when CIRISVerify singleton not available."""
@@ -154,7 +154,7 @@ class TestSignWithVerifier:
         assert "not available" in str(error)
 
     def test_returns_error_when_sign_sync_missing(self):
-        """Should return error when sign_sync method not available."""
+        """Should return error when sign_ed25519_sync method not available."""
         mock_verifier = MagicMock(spec=[])  # No methods
 
         with patch(
@@ -165,7 +165,7 @@ class TestSignWithVerifier:
 
         assert signature is None
         assert error is not None
-        assert "sign_sync not available" in str(error)
+        assert "sign_ed25519_sync not available" in str(error)
 
 
 class TestRegisterSelfCustodyKey:

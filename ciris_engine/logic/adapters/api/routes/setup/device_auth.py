@@ -364,11 +364,14 @@ def _sign_with_verifier(message: bytes) -> tuple[Optional[bytes], Optional[Excep
             return None, RuntimeError("CIRISVerify singleton not available")
 
         # Sign using CIRISVerify's Ed25519 key
-        if hasattr(verifier, "sign_sync"):
+        if hasattr(verifier, "sign_ed25519_sync"):
+            signature = verifier.sign_ed25519_sync(message)
+            return signature, None
+        elif hasattr(verifier, "sign_sync"):
             signature = verifier.sign_sync(message)
             return signature, None
         else:
-            return None, RuntimeError("CIRISVerify.sign_sync not available")
+            return None, RuntimeError("CIRISVerify.sign_ed25519_sync not available")
 
     except Exception as e:
         return None, e

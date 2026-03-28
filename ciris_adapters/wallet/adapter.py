@@ -54,16 +54,22 @@ class WalletAdapter(Service):
         **kwargs: Any,
     ) -> None:
         """Initialize Wallet adapter."""
+        logger.warning("[WALLET_INIT] WalletAdapter.__init__ starting")
+
         super().__init__(config=kwargs.get("adapter_config"))
         self.runtime = runtime
         self.context = context
 
         # Load configuration
+        logger.warning("[WALLET_INIT] Loading config from environment")
         self.adapter_config = config or self._load_config_from_env()
+        logger.warning(f"[WALLET_INIT] Config loaded with providers: {list(self.adapter_config.provider_configs.keys())}")
 
         # Initialize providers
         self._providers: Dict[str, Any] = {}
+        logger.warning("[WALLET_INIT] Calling _init_providers()")
         self._init_providers()
+        logger.warning(f"[WALLET_INIT] _init_providers() complete, loaded: {list(self._providers.keys())}")
 
         # Create tool service
         self.tool_service = WalletToolService(
@@ -74,9 +80,7 @@ class WalletAdapter(Service):
         # Track adapter state
         self._running = False
 
-        logger.info(
-            f"Wallet adapter initialized with providers: {list(self._providers.keys())}"
-        )
+        logger.warning(f"[WALLET_INIT] WalletAdapter.__init__ complete with providers: {list(self._providers.keys())}")
 
     def _load_config_from_env(self) -> WalletAdapterConfig:
         """Load configuration from environment variables."""
@@ -174,9 +178,12 @@ class WalletAdapter(Service):
         For x402: CIRISVerify 1.3.1+ is REQUIRED. No fallback.
         """
         provider_configs = self.adapter_config.provider_configs
+        logger.warning(f"[WALLET_INIT] _init_providers: {len(provider_configs)} configs: {list(provider_configs.keys())}")
 
         for provider_name, config in provider_configs.items():
+            logger.warning(f"[WALLET_INIT] Processing provider: {provider_name}, enabled={config.enabled}")
             if not config.enabled:
+                logger.warning(f"[WALLET_INIT] Skipping disabled provider: {provider_name}")
                 continue
 
             try:
@@ -184,31 +191,35 @@ class WalletAdapter(Service):
 
                 # x402 requires CIRISVerify wallet - no fallback
                 if provider_name == "x402":
+                    logger.warning("[WALLET_INIT] x402 provider - calling _get_ciris_verify_wallet()")
                     evm_address, signing_callback = self._get_ciris_verify_wallet()
+                    logger.warning(f"[WALLET_INIT] _get_ciris_verify_wallet returned: address={evm_address}")
 
                     if not evm_address:
                         logger.error(
-                            "x402 provider requires CIRISVerify 1.3.1+ with a loaded key. "
+                            "[WALLET_INIT] x402 FAILED: CIRISVerify 1.3.1+ with loaded key required. "
                             "Wallet will not be available."
                         )
                         continue
 
                     kwargs["evm_address"] = evm_address
                     kwargs["evm_signing_callback"] = signing_callback
-                    logger.info(f"x402 provider using CIRISVerify wallet: {evm_address}")
+                    logger.warning(f"[WALLET_INIT] x402 provider using CIRISVerify wallet: {evm_address}")
 
                 # Create the provider
+                logger.warning(f"[WALLET_INIT] Creating provider: {provider_name}")
                 provider = create_provider(provider_name, config=config, **kwargs)
                 self._providers[provider_name] = provider
-                logger.info(f"Loaded provider: {provider_name}")
+                logger.warning(f"[WALLET_INIT] Successfully loaded provider: {provider_name}")
 
             except ProviderLoadError as e:
-                logger.error(f"Failed to load provider {provider_name}: {e}")
+                logger.error(f"[WALLET_INIT] ProviderLoadError for {provider_name}: {e}")
             except ValueError as e:
-                # x402 raises ValueError if CIRISVerify not available
-                logger.error(f"Provider {provider_name} initialization failed: {e}")
+                logger.error(f"[WALLET_INIT] ValueError for {provider_name}: {e}")
             except Exception as e:
-                logger.error(f"Error initializing provider {provider_name}: {e}")
+                import traceback
+                logger.error(f"[WALLET_INIT] Exception for {provider_name}: {type(e).__name__}: {e}")
+                logger.error(f"[WALLET_INIT] Traceback: {traceback.format_exc()}")
 
     def _get_ciris_verify_wallet(self) -> tuple[Optional[str], Optional[Callable[[bytes, int], bytes]]]:
         """
@@ -226,41 +237,76 @@ class WalletAdapter(Service):
 
         The private key NEVER leaves the secure boundary.
         """
+        import os
+        logger.warning("[WALLET_INIT] Starting CIRISVerify wallet initialization...")
+        logger.warning(f"[WALLET_INIT] CIRIS_HOME={os.environ.get('CIRIS_HOME', 'NOT SET')}")
+        logger.warning(f"[WALLET_INIT] CIRIS_DATA_DIR={os.environ.get('CIRIS_DATA_DIR', 'NOT SET')}")
+
         try:
+            logger.warning("[WALLET_INIT] Importing verifier_singleton...")
             from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
                 get_verifier,
+                has_verifier,
             )
+            logger.warning(f"[WALLET_INIT] verifier_singleton imported, has_verifier={has_verifier()}")
 
+            logger.warning("[WALLET_INIT] Calling get_verifier()...")
             verifier = get_verifier()
+            logger.warning(f"[WALLET_INIT] Got verifier instance: {type(verifier).__name__}")
 
             # Check if verifier has a key
-            if not verifier.has_key_sync():
-                logger.warning("CIRISVerify has no key loaded")
+            logger.warning("[WALLET_INIT] Checking has_key_sync()...")
+            has_key = verifier.has_key_sync()
+            logger.warning(f"[WALLET_INIT] has_key_sync={has_key}")
+            if not has_key:
+                logger.error("[WALLET_INIT] FAILED: CIRISVerify has no key loaded - wallet unavailable")
                 return None, None
 
             # Check for wallet support (CIRISVerify 1.3.0+)
-            if not getattr(verifier, '_has_wallet_support', False):
-                logger.warning("CIRISVerify does not have wallet support (version < 1.3.0)")
+            has_wallet = getattr(verifier, '_has_wallet_support', False)
+            logger.warning(f"[WALLET_INIT] _has_wallet_support={has_wallet}")
+            if not has_wallet:
+                logger.error("[WALLET_INIT] FAILED: CIRISVerify version < 1.3.0, no wallet support")
                 return None, None
 
-            # Get wallet info (EVM address derived from secp256k1 key)
-            wallet_info = verifier.get_wallet_info()
-            evm_address = wallet_info.get("evm_address")
-            logger.info(f"Got EVM address from CIRISVerify: {evm_address}")
+            # Get EVM address via secp256k1 derivation (more reliable than get_wallet_info)
+            # This derives the secp256k1 pubkey from Ed25519 seed, then derives EVM address
+            logger.warning("[WALLET_INIT] Calling get_evm_address_checksummed()...")
+            try:
+                evm_address = verifier.get_evm_address_checksummed()
+                logger.warning(f"[WALLET_INIT] SUCCESS: EVM address = {evm_address}")
+            except Exception as addr_err:
+                # Fallback to get_wallet_info if get_evm_address_checksummed fails
+                logger.warning(f"[WALLET_INIT] get_evm_address_checksummed failed: {addr_err}, trying get_wallet_info...")
+                wallet_info = verifier.get_wallet_info()
+                logger.warning(f"[WALLET_INIT] wallet_info keys: {list(wallet_info.keys()) if wallet_info else 'None'}")
+                evm_address = wallet_info.get("evm_address")
+                logger.warning(f"[WALLET_INIT] SUCCESS via fallback: EVM address = {evm_address}")
 
             # Create signing callback for EVM transactions (EIP-155)
             def signing_callback(tx_hash: bytes, chain_id: int) -> bytes:
                 """Sign EVM transaction via CIRISVerify (key never leaves secure boundary)."""
+                logger.debug(f"[WALLET_SIGN] Signing tx_hash={tx_hash.hex()[:16]}... chain_id={chain_id}")
                 result: bytes = verifier.sign_evm_transaction(tx_hash, chain_id)
+                logger.debug(f"[WALLET_SIGN] Signature: {result.hex()[:32]}...")
                 return result
 
             return evm_address, signing_callback
 
         except ImportError as e:
-            logger.warning(f"CIRISVerify not available: {e}")
+            logger.error(f"[WALLET_INIT] FAILED: Import error - {e}")
+            import traceback
+            logger.error(f"[WALLET_INIT] Traceback: {traceback.format_exc()}")
+            return None, None
+        except RuntimeError as e:
+            logger.error(f"[WALLET_INIT] FAILED: Runtime error - {e}")
+            import traceback
+            logger.error(f"[WALLET_INIT] Traceback: {traceback.format_exc()}")
             return None, None
         except Exception as e:
-            logger.warning(f"Could not access CIRISVerify wallet: {e}")
+            logger.error(f"[WALLET_INIT] FAILED: Unexpected error - {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"[WALLET_INIT] Traceback: {traceback.format_exc()}")
             return None, None
 
     def get_services_to_register(self) -> List[AdapterServiceRegistration]:

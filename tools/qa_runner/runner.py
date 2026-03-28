@@ -261,6 +261,7 @@ class QARunner:
             QAModule.FILTERS,
             QAModule.HANDLERS,
             QAModule.DEFERRAL,
+            QAModule.WALLET,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]

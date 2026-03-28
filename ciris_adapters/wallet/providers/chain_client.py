@@ -25,28 +25,42 @@ logger = logging.getLogger(__name__)
 
 
 def keccak256(data: bytes) -> bytes:
-    """Compute Keccak-256 hash (Ethereum's hash function)."""
-    # Python 3.11+ has native keccak support via hashlib
+    """Compute Keccak-256 hash (Ethereum's hash function).
+
+    IMPORTANT: Keccak-256 is NOT the same as SHA3-256!
+    - SHA3-256: NIST standard with domain separation padding
+    - Keccak-256: Original algorithm before NIST standardization
+
+    Ethereum uses the original Keccak-256, so we must NOT use hashlib.sha3_256.
+    """
+    # Try pysha3 first (has correct keccak_256)
     try:
-        result: bytes = hashlib.new("sha3_256", data).digest()
-        return result
-    except ValueError:
-        # Fallback: use pysha3 if available
-        try:
-            import sha3
-            result = sha3.keccak_256(data).digest()
-            return bytes(result)
-        except ImportError:
-            # Last resort: use PyCryptodome
-            try:
-                from Crypto.Hash import keccak
-                result = keccak.new(data=data, digest_bits=256).digest()
-                return bytes(result)
-            except ImportError:
-                raise ImportError(
-                    "No keccak256 implementation available. "
-                    "Install pysha3 or pycryptodome."
-                )
+        import sha3  # type: ignore[import-not-found]
+        result = sha3.keccak_256(data).digest()
+        return bytes(result)
+    except ImportError:
+        pass
+
+    # Try PyCryptodome (has correct Keccak)
+    try:
+        from Crypto.Hash import keccak
+        result = keccak.new(data=data, digest_bits=256).digest()
+        return bytes(result)
+    except ImportError:
+        pass
+
+    # Last resort: try eth_hash if available (from eth-utils)
+    try:
+        from eth_hash.auto import keccak as eth_keccak  # type: ignore[import-not-found]
+        result = eth_keccak(data)
+        return bytes(result)
+    except ImportError:
+        pass
+
+    raise ImportError(
+        "No keccak256 implementation available. "
+        "Install one of: pysha3, pycryptodome, or eth-hash[pycryptodome]"
+    )
 
 
 def rlp_encode(item: Union[bytes, List[Any], int]) -> bytes:

@@ -72,6 +72,12 @@ response_format: |
   - "correlation_factors": Массив строк - Факторы, вызывающие корреляцию (например, "тот же автор", "производное от одного исследования").
   - "reasoning": Строка - Ваш анализ разнообразия информации и эпистемического здоровья. Это поле ОБЯЗАТЕЛЬНО.
 
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "Привет!", "rationale": "Пользователь поприветствовал на русском"} - Russian content, English keys.
+
   Не включайте дополнительные поля или не оборачивайте в блоки кода markdown.
 
 evaluation_steps: |

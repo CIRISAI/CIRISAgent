@@ -73,6 +73,12 @@ response_format: |
 
   ተጨማሪ መስኮችን ወይም በmarkdown code blocks ውስጥ አታጠቃልሉ።
 
+  የቋንቋ ደንቦች:
+  - በተጠቃሚው ተመራጭ ቋንቋ ምላሽ ይስጡ (የተጠቃሚውን መገለጫ ይመልከቱ)។
+  - ሁሉም የይዘት እሴቶች (reasoning፣ sources_identified፣ correlation_factors፣ ወዘተ) በተጠቃሚው ቋንቋ መሆን አለባቸው።
+  - የJSON ቁልፎች በእንግሊዝኛ መቆየት አለባቸው (ለምሳሌ፣ "k_eff"፣ "reasoning"፣ "phase")።
+  - ምሳሌ: {"k_eff": 2.1, "phase": "healthy", "reasoning": "በርካታ ነጻ ምንጮች አሉ", "sources_identified": ["ስልጠና", "የተጠቃሚ ግብዓት"]} - የአማርኛ ይዘት፣ የእንግሊዝኛ ቁልፎች።
+
 evaluation_steps: |
   ደረጃ 1: ምንጮችን ይቁጠሩ (k)
   - ይህንን ምክንያት ምን ምንጮች/አመለካከቶች ያሳውቃሉ?

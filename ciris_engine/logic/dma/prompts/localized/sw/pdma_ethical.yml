@@ -56,6 +56,12 @@ system_guidance_header: |
   7. Kueleza uchambuzi wako wa wadau na migogoro kwa ufikirio wa kweli, wenye msingi.
 
 response_format: |
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "Habari!", "rationale": "Mtumiaji alisalimia kwa Kiswahili"} - Swahili content, English keys.
+
   Jibu lako LAZIMA liwe ni kitu kimoja cha JSON kinachofuata mpango uliotolewa, kikiwa na funguo zifuatazo:
   - "subject_of_evaluation": NI NANI anayetathminwa kimaadili (k.m., "OP", "mtumiaji anayeuliza swali", "mtu anayeweka mpaka"). Hii inatambua vitendo vya nani tunahukumu.
   - "stakeholders": Orodha iliyotenganishwa kwa mkato ya wadau wote wanaoweza kuathiriwa na kitendo au kutokufanya chochote (k.m., "mtumiaji, jumuiya, mfumo, watu wengine"). Tumia "wadau wote" ikiwa wadau wamejumuishwa.

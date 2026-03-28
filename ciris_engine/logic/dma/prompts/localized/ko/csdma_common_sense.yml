@@ -26,6 +26,12 @@ response_format: |
   - "flags": 특정 상식 위반, 물리적 불가능성 (특히 무시된 상호 작용), 명확성 문제, 현실 지속성 위반, 긴급성 마커 또는 인과적/시간적 추론 문제를 식별하는 문자열 목록 (예: "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). 없으면 빈 목록을 제공하십시오. 이 필드는 필수입니다 (비어 있더라도).
   - "reasoning": 점수와 플래그에 대한 간략한 (1-2 문장) 설명. 이 필드는 필수입니다.
 
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "안녕하세요!", "rationale": "사용자가 한국어로 인사했습니다"} - Korean content, English keys.
+
 context_integration: |
   컨텍스트 요약: {context_summary}
   원본 사고: {original_thought_content}

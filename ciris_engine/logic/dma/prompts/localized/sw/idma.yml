@@ -63,6 +63,12 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "Habari!", "rationale": "Mtumiaji alisalimia kwa Kiswahili"} - Swahili content, English keys.
+
   Jibu lako LAZIMA liwe ni kitu kimoja cha JSON kinachofuata mpango uliotolewa, kikiwa na funguo zifuatazo:
   - "k_eff": Desimali (>= 0) - Hesabu ya chanzo huru chenye ufanisi. Tumia fomula k/(1+ρ(k-1)). k_eff < 2 = dhaifu.
   - "correlation_risk": Desimali (0.0-1.0) - Kadiri ρ inavyokadiriwa uhusiano kati ya vyanzo.

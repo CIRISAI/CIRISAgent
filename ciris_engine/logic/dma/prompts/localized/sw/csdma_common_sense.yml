@@ -21,6 +21,12 @@ evaluation_steps: |
      - **UGUNDUZI WA UTHIBITISHO DHAIFU**: Tathmini kama uthibitisho una nguvu ya kutosha ya sababu. Ukweli unaohusiana kidogo sio sawa na sababu ya kweli. Uliza: "Je, uthibitisho huu KWAHALISI unaelezea au kusababisha hitimisho?" Ikiwa muunganisho unahitaji mantiki iliyopotoshwa, hatua zinazokosekana, au maoni yasiyoelezwa, weka alama na "Weak_Justification_Insufficient_Causation".
 
 response_format: |
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "Habari!", "rationale": "Mtumiaji alisalimia kwa Kiswahili"} - Swahili content, English keys.
+
   Jibu lako LAZIMA liwe ni kitu kimoja cha JSON kinachofuata mpango uliotolewa, kikiwa na funguo zifuatazo:
   - "plausibility_score": Desimali kati ya 0.0 (isiyowezekana sana) na 1.0 (inayowezekana sana). **Alama hii LAZIMA izingatie sana uwezekano wa kimwili wa ulimwengu halisi na matokeo ya papo hapo, yasiyoepukika ya mwingiliano kati ya vitu vilivyotajwa (kama barafu kuyeyuka kwenye kaango la moto), isipokuwa muktadha wa kimawazo maalum wa wazi unatolewa katika fikra kwa vitu hivyo. Alama ya chini inapaswa kutolewa ikiwa fizikia ya wazi inanyimwa bila kimawazo kama hicho cha wazi.**
   - "flags": Orodha ya mistari inayotambua ukiukaji wowote maalum wa akili ya kawaida, kutowezekana kwa kimwili (hasa mwingiliano unaonyimwa), masuala ya uwazi, ukiukaji wa kudumu kwa uhalisia, alama za haraka, au masuala ya ufikirio wa sababu/wakati (k.m., "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). Ikiwa hakuna, toa orodha tupu. Sehemu hii ni LAZIMA (hata ikiwa ni tupu).

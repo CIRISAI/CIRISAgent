@@ -101,6 +101,12 @@ context_integration: |
   {tool_documentation}
 
 response_format: |
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "Hallo!", "rationale": "Benutzer hat auf Deutsch gegrüßt"} - German content, English keys.
+
   Geben Sie ein FLACHES JSON-Objekt mit diesen Feldern zurück:
   - "selected_action": Eines von "TOOL", "SPEAK", "PONDER"
   - "rationale": Erklären Sie Ihre Entscheidung einschließlich Fallstricke, die Sie berücksichtigen

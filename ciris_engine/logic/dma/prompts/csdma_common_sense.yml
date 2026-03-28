@@ -26,6 +26,12 @@ response_format: |
   - "flags": A list of strings identifying any specific common sense violations, physical implausibilities (especially ignored interactions), clarity issues, reality persistence violations, urgency markers, or causal/temporal reasoning issues (e.g., "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). If none, provide an empty list. This field is MANDATORY (even if empty).
   - "reasoning": A brief (1-2 sentences) explanation for your score and flags. This field is MANDATORY.
 
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, flag descriptions) should be in the user's language.
+  - JSON keys and flag identifiers MUST remain in English (e.g., "reasoning", "plausibility_score", "Physical_Implausibility_Ignored_Interaction").
+  - Example: {"reasoning": "この状況は物理的に矛盾しています", "flags": ["Physical_Implausibility_Ignored_Interaction"]} - Japanese reasoning, English keys/flags.
+
 context_integration: |
   Context Summary: {context_summary}
   Original Thought: {original_thought_content}

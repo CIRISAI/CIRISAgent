@@ -180,3 +180,10 @@ closing_reminder: |
   SPEAKを選択する場合は具体的に: "ユーザーに回答してもらう必要があります: [質問]"
   PONDERを選択する場合は説明: "このツールはYのためにXできません、Zを考慮してください"
   TOOLを選択する場合は認識: "ゴッチャXを認識して続行しています"
+
+language_rules: |
+  言語ルール:
+  - ユーザーの優先言語で応答してください(ユーザープロファイルを確認してください)。
+  - すべてのコンテンツ値(reasoning、rationale、speak_contentなど)はユーザーの言語である必要があります。
+  - JSONキーは英語のままにする必要があります(例: "selected_action"、"reasoning"、"tool_parameters")。
+  - 例: {"selected_action": "SPEAK", "speak_content": "こんにちは!", "rationale": "ユーザーが日本語で挨拶しました"} - 日本語のコンテンツ、英語のキー。

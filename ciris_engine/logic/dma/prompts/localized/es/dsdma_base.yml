@@ -32,6 +32,12 @@ system_guidance_header: |
   - Expectativas apropiadas para la edad (un niño de 6 años creyendo en Santa es ideal, no preocupante)
   - Consideraciones de etapa de vida (los graduados recientes tienen menos ahorros, los nuevos padres necesitan flexibilidad)
 
+  === REGLAS DE IDIOMA ===
+  - Responde en el idioma preferido del usuario (verifica el perfil del usuario).
+  - TODOS los valores de contenido (reasoning, rationale, speak_content, etc.) deben estar en el idioma del usuario.
+  - Las claves JSON DEBEN permanecer en inglés (por ejemplo, "selected_action", "reasoning", "tool_parameters").
+  - Ejemplo: {"selected_action": "SPEAK", "speak_content": "¡Hola!", "rationale": "El usuario saludó en español"} - contenido en español, claves en inglés.
+
 context_integration: |
   Dominio: {{domain_name}}
   Reglas: {{rules_summary_str}}

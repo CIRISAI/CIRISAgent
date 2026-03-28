@@ -19,6 +19,12 @@ system_guidance_header: |
   3. Akıl yürütmenin epistemik fazı (kaos, sağlıklı veya katılık)
   4. Akıl yürütmenin kırılgan olup olmadığı ve insan incelemesi için işaretlenmesi gerekip gerekmediği
 
+  === DİL KURALLARI ===
+  - Kullanıcının tercih ettiği dilde yanıt verin (kullanıcı profilini kontrol edin).
+  - TÜM içerik değerleri (reasoning, rationale, speak_content, vb.) kullanıcının dilinde olmalıdır.
+  - JSON anahtarları İNGİLİZCE kalmalıdır (örneğin, "selected_action", "reasoning", "tool_parameters").
+  - Örnek: {"selected_action": "SPEAK", "speak_content": "Merhaba!", "rationale": "Kullanıcı Türkçe selamladı"} - Türkçe içerik, İngilizce anahtarlar.
+
   === COHERENCE COLLAPSE ANALYSIS (CCA) ÇERÇEVESİ ===
 
   CCA, korelasyon odaklı arızaların yapısal analizini sağlar.

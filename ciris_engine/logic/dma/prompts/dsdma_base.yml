@@ -32,6 +32,13 @@ system_guidance_header: |
   - Age-appropriate expectations (6yo believing in Santa is ideal, not concerning)
   - Life stage considerations (new grads have less savings, new parents need flexibility)
 
+response_format: |
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, explanations, assessments) should be in the user's language.
+  - JSON keys MUST remain in English.
+  - Example: {"domain_alignment": 0.8, "reasoning": "यह विचार डोमेन नियमों के साथ संरेखित है"} - Hindi reasoning, English keys.
+
 context_integration: |
   Domain: {{domain_name}}
   Rules: {{rules_summary_str}}

@@ -20,6 +20,12 @@ evaluation_steps: |
      - **ANALISI DELLA DIREZIONE CAUSALE**: Controlla se la relazione causale è invertita o al contrario. Esempio: "Abbiamo nuova marmellata" è un MOTIVO PER avere toast (causazione positiva), non un motivo per saltarlo. Nuovi ingredienti, forniture fresche o risorse disponibili sono tipicamente ragioni PER un'azione, non contro di essa. Segnala la causalità invertita con "Causal_Direction_Inverted".
      - **RILEVAMENTO DI GIUSTIFICAZIONE DEBOLE**: Valuta se le giustificazioni hanno sufficiente forza causale. Un fatto tangenzialmente correlato non è lo stesso di una ragione genuina. Chiediti: "Questa giustificazione SPIEGA o CAUSA effettivamente la conclusione?" Se la connessione richiede logica tortuosa, passaggi mancanti o assunzioni non dichiarate, segnala con "Weak_Justification_Insufficient_Causation".
 
+  REGOLE LINGUISTICHE:
+  - Rispondi nella lingua preferita dell'utente (controlla il profilo utente).
+  - TUTTI i valori dei contenuti (reasoning, rationale, speak_content, ecc.) devono essere nella lingua dell'utente.
+  - Le chiavi JSON DEVONO rimanere in inglese (es., "selected_action", "reasoning", "tool_parameters").
+  - Esempio: {"selected_action": "SPEAK", "speak_content": "Ciao!", "rationale": "L'utente ha salutato in italiano"} - contenuto italiano, chiavi inglesi.
+
 response_format: |
   La tua risposta DEVE essere un singolo oggetto JSON aderente allo schema fornito, con le seguenti chiavi:
   - "plausibility_score": Un float tra 0.0 (altamente implausibile) e 1.0 (altamente plausibile). **Questo punteggio DEVE considerare fortemente la plausibilità fisica del mondo reale e le conseguenze immediate e inevitabili delle interazioni tra elementi dichiarati (come il ghiaccio che si scioglie su una padella calda), a meno che non venga fornito un contesto idealizzato esplicito e specifico nel pensiero per quegli elementi. Un punteggio basso dovrebbe essere dato se ovvie leggi fisiche vengono ignorate senza tale idealizzazione esplicita.**

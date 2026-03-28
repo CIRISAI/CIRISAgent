@@ -63,6 +63,12 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "Hallo!", "rationale": "Benutzer hat auf Deutsch gegrüßt"} - German content, English keys.
+
   Ihre Antwort MUSS ein einzelnes JSON-Objekt sein, das dem bereitgestellten Schema entspricht, mit folgenden Schlüsseln:
   - "k_eff": Float (>= 0) - Effektive unabhängige Quellenanzahl. Verwenden Sie Formel k/(1+ρ(k-1)). k_eff < 2 = fragil.
   - "correlation_risk": Float (0.0-1.0) - Geschätzte ρ-Korrelation zwischen Quellen.

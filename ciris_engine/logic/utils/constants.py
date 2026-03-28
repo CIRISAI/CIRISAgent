@@ -115,25 +115,14 @@ def get_localized_accord_text(lang: str = DEFAULT_LANGUAGE) -> str:
         lang: ISO 639-1 language code (e.g., 'en', 'am', 'es')
 
     Returns:
-        ACCORD text with platform-appropriate guide, in requested language if available.
-        Falls back to English if localized version not found.
+        ACCORD 1.3b (Polyglot version) with platform-appropriate guide.
+        The Polyglot ACCORD contains all 16 languages woven together for
+        maximum semantic depth and cross-cultural resonance.
     """
-    localized_dir = None
-    accord_filename = "accord_1.2b.txt"
+    # Always use the Polyglot ACCORD 1.3b - contains all languages woven together
+    accord_content = _load_accord_file("accord_1.3b.txt")
 
-    # For non-English, try to load from localized directory
-    if lang != DEFAULT_LANGUAGE:
-        localized_dir = Path(__file__).resolve().parents[2] / "data" / "localized"
-        accord_filename = f"accord_1.2b_{lang}.txt"
-        if not (localized_dir / accord_filename).exists():
-            # Fall back to English
-            logger.debug("Localized accord not found for %s, falling back to English", lang)
-            localized_dir = None
-            accord_filename = "accord_1.2b.txt"
-
-    accord_content = _load_accord_file(accord_filename, localized_dir)
-
-    # Load platform-appropriate guide in the same language
+    # Load platform-appropriate guide in the user's language
     guide_base_path = Path(__file__).resolve().parents[3]
     guide_content = _load_platform_guide(guide_base_path, lang)
 
@@ -144,8 +133,9 @@ def get_localized_accord_text(lang: str = DEFAULT_LANGUAGE) -> str:
 
 # Load accord text from package data using importlib.resources
 # This works for both development (editable install) and pip-installed packages
+# Always use Polyglot ACCORD 1.3b - contains all 16 languages woven together
 try:
-    accord_content = _load_accord_file("accord_1.2b.txt")
+    accord_content = _load_accord_file("accord_1.3b.txt")
 
     # Try to append platform-appropriate comprehensive guide
     _GUIDE_BASE_PATH = Path(__file__).resolve().parents[3]

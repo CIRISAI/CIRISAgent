@@ -9,15 +9,15 @@ This adapter follows the CIRIS adapter pattern:
 - Provider-agnostic interface
 - DMA-gated financial operations
 
-KEY FEATURE: Auto-loads from CIRISVerify
-- Wallet address derived from CIRISVerify Ed25519 public key
-- Private key NEVER leaves secure element
-- Every CIRIS agent has a wallet address from birth
+KEY ARCHITECTURE: CIRISVerify is the ONLY source for wallet primitives
+- EVM address derived from CIRISVerify secp256k1 key (hardware-backed when available)
+- Transaction signing via CIRISVerify (key never leaves secure boundary)
+- Every CIRIS agent has a deterministic wallet address from birth
+- NO fallback address derivation or local key handling
 """
 
 import asyncio
 import logging
-import os
 from typing import Any, Callable, Dict, List, Optional
 
 from ciris_engine.logic.adapters.base import Service
@@ -42,8 +42,8 @@ class WalletAdapter(Service):
     - request_money: Create payment requests/invoices
     - get_statement: Check balance and transaction history
 
-    The implementation routes to the appropriate provider based on currency
-    or explicit provider_params.
+    CRITICAL: x402 provider requires CIRISVerify 1.3.1+ for wallet operations.
+    If CIRISVerify is unavailable or lacks wallet support, x402 will not load.
     """
 
     def __init__(
@@ -79,15 +79,8 @@ class WalletAdapter(Service):
         )
 
     def _load_config_from_env(self) -> WalletAdapterConfig:
-        """Load configuration from environment variables.
-
-        Only creates config objects for providers that are explicitly enabled.
-        Providers are lazy-loaded, so unused providers don't consume memory.
-
-        MVP Default: x402 (USDC on Base L2) is enabled by default.
-        Other providers must be explicitly enabled via environment variables.
-        """
-        # Import config classes lazily to match provider pattern
+        """Load configuration from environment variables."""
+        import os
         from .config import (
             X402ProviderConfig,
             ChapaProviderConfig,
@@ -98,11 +91,9 @@ class WalletAdapter(Service):
             StripeProviderConfig,
         )
 
-        # Build provider configs dict - only include enabled providers
         provider_configs: Dict[str, Any] = {}
 
-        # x402 (USDC on Base L2) - ENABLED BY DEFAULT for MVP
-        # Disable explicitly with WALLET_X402_ENABLED=false
+        # x402 (USDC on Base L2) - ENABLED BY DEFAULT
         if os.getenv("WALLET_X402_ENABLED", "true").lower() == "true":
             provider_configs["x402"] = X402ProviderConfig(
                 enabled=True,
@@ -178,10 +169,9 @@ class WalletAdapter(Service):
         )
 
     def _init_providers(self) -> None:
-        """Lazily initialize enabled wallet providers.
+        """Initialize enabled wallet providers.
 
-        Providers are loaded on-demand using the registry, so only
-        the providers actually configured get imported into memory.
+        For x402: CIRISVerify 1.3.1+ is REQUIRED. No fallback.
         """
         provider_configs = self.adapter_config.provider_configs
 
@@ -190,46 +180,53 @@ class WalletAdapter(Service):
                 continue
 
             try:
-                # Build provider-specific kwargs
                 kwargs: Dict[str, Any] = {}
 
-                # x402 needs special handling for CIRISVerify
+                # x402 requires CIRISVerify wallet - no fallback
                 if provider_name == "x402":
-                    public_key, signing_callback = self._get_ciris_verify_key()
-                    kwargs["ed25519_public_key"] = public_key
-                    kwargs["ed25519_seed"] = self._get_test_seed()
-                    kwargs["signing_callback"] = signing_callback
+                    evm_address, signing_callback = self._get_ciris_verify_wallet()
 
-                    if public_key:
-                        logger.info("x402 provider configured with CIRISVerify key")
-                    else:
-                        logger.info("x402 provider configured (no CIRISVerify - test mode)")
+                    if not evm_address:
+                        logger.error(
+                            "x402 provider requires CIRISVerify 1.3.1+ with a loaded key. "
+                            "Wallet will not be available."
+                        )
+                        continue
 
-                # Lazy load and create the provider
+                    kwargs["evm_address"] = evm_address
+                    kwargs["evm_signing_callback"] = signing_callback
+                    logger.info(f"x402 provider using CIRISVerify wallet: {evm_address}")
+
+                # Create the provider
                 provider = create_provider(provider_name, config=config, **kwargs)
                 self._providers[provider_name] = provider
                 logger.info(f"Loaded provider: {provider_name}")
 
             except ProviderLoadError as e:
                 logger.error(f"Failed to load provider {provider_name}: {e}")
+            except ValueError as e:
+                # x402 raises ValueError if CIRISVerify not available
+                logger.error(f"Provider {provider_name} initialization failed: {e}")
             except Exception as e:
                 logger.error(f"Error initializing provider {provider_name}: {e}")
 
-    def _get_ciris_verify_key(self) -> tuple[Optional[bytes], Optional[Callable[[bytes], bytes]]]:
+    def _get_ciris_verify_wallet(self) -> tuple[Optional[str], Optional[Callable[[bytes, int], bytes]]]:
         """
-        Get Ed25519 public key and signing callback from CIRISVerify.
+        Get EVM wallet address and secp256k1 signing callback from CIRISVerify.
+
+        CIRISVerify 1.3.1+ provides unified wallet support:
+        - Deterministic secp256k1 key derived from Ed25519 root identity
+        - EVM address derived from secp256k1 public key (keccak256)
+        - Hardware-backed signing when available (Android StrongBox/TEE)
 
         Returns:
-            Tuple of (public_key, signing_callback)
-            - public_key: 32 bytes Ed25519 public key for address derivation
-            - signing_callback: Function to sign data via CIRISVerify
+            Tuple of (evm_address, signing_callback)
+            - evm_address: Checksummed EVM address (0x...) or None
+            - signing_callback: Function(tx_hash, chain_id) -> signature or None
 
-        The private key NEVER leaves the secure element. We only get:
-        1. Public key (for deriving wallet address)
-        2. Signing callback (for transaction signing)
+        The private key NEVER leaves the secure boundary.
         """
         try:
-            # Import the singleton getter
             from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
                 get_verifier,
             )
@@ -241,49 +238,35 @@ class WalletAdapter(Service):
                 logger.warning("CIRISVerify has no key loaded")
                 return None, None
 
-            # Get public key (safe - this is public information)
-            public_key = verifier.get_ed25519_public_key_sync()
-            logger.info(f"Got Ed25519 public key from CIRISVerify ({len(public_key)} bytes)")
+            # Check for wallet support (CIRISVerify 1.3.0+)
+            if not getattr(verifier, '_has_wallet_support', False):
+                logger.warning("CIRISVerify does not have wallet support (version < 1.3.0)")
+                return None, None
 
-            # Create signing callback that delegates to CIRISVerify
-            def signing_callback(data: bytes) -> bytes:
-                """Sign data using CIRISVerify (key never leaves secure element)."""
-                result: bytes = verifier.sign_ed25519_sync(data)
+            # Get wallet info (EVM address derived from secp256k1 key)
+            wallet_info = verifier.get_wallet_info()
+            evm_address = wallet_info.get("evm_address")
+            logger.info(f"Got EVM address from CIRISVerify: {evm_address}")
+
+            # Create signing callback for EVM transactions (EIP-155)
+            def signing_callback(tx_hash: bytes, chain_id: int) -> bytes:
+                """Sign EVM transaction via CIRISVerify (key never leaves secure boundary)."""
+                result: bytes = verifier.sign_evm_transaction(tx_hash, chain_id)
                 return result
 
-            return public_key, signing_callback
+            return evm_address, signing_callback
 
         except ImportError as e:
             logger.warning(f"CIRISVerify not available: {e}")
             return None, None
         except Exception as e:
-            logger.warning(f"Could not access CIRISVerify: {e}")
+            logger.warning(f"Could not access CIRISVerify wallet: {e}")
             return None, None
 
-    def _get_test_seed(self) -> Optional[bytes]:
-        """
-        Get Ed25519 seed from environment (TESTING ONLY).
-
-        In production, this should return None - use CIRISVerify instead.
-        """
-        seed_hex = os.getenv("WALLET_ED25519_SEED")
-        if seed_hex:
-            try:
-                logger.warning("Using WALLET_ED25519_SEED from environment - TESTING ONLY")
-                return bytes.fromhex(seed_hex)
-            except ValueError:
-                logger.warning("Invalid WALLET_ED25519_SEED format")
-        return None
-
     def get_services_to_register(self) -> List[AdapterServiceRegistration]:
-        """
-        Get services provided by this adapter.
-
-        Returns TOOL service registration for wallet operations.
-        """
+        """Get services provided by this adapter."""
         registrations = []
 
-        # Register TOOL service for wallet operations
         registrations.append(
             AdapterServiceRegistration(
                 service_type=ServiceType.TOOL,
@@ -306,11 +289,9 @@ class WalletAdapter(Service):
         """Start the Wallet adapter."""
         logger.info("Starting Wallet adapter")
 
-        # Start tool service (which initializes providers)
         await self.tool_service.start()
         logger.info("WalletToolService started")
 
-        # Register balance change callback for audit logging
         self._register_balance_audit_callback()
 
         self._running = True
@@ -331,9 +312,8 @@ class WalletAdapter(Service):
     ) -> None:
         """Handle balance change and emit audit event for received funds."""
         if incoming_tx is None:
-            return  # No incoming transaction, just balance refresh
+            return
 
-        # Emit audit event asynchronously
         asyncio.create_task(self._emit_funds_received_audit(provider_id, new_balance, incoming_tx))
 
     async def _emit_funds_received_audit(
@@ -342,9 +322,8 @@ class WalletAdapter(Service):
         new_balance: Any,
         incoming_tx: Any
     ) -> None:
-        """Emit audit event for received funds to all 3 sinks."""
+        """Emit audit event for received funds."""
         try:
-            # Get audit service from runtime
             audit_service = None
             if self.runtime and hasattr(self.runtime, "service_initializer"):
                 audit_service = getattr(self.runtime.service_initializer, "audit_service", None)
@@ -355,13 +334,11 @@ class WalletAdapter(Service):
 
             from ciris_engine.schemas.audit import EventPayload
 
-            # Get wallet address from x402 provider
             wallet_address = None
             x402_provider = self._providers.get("x402")
             if x402_provider:
                 wallet_address = getattr(x402_provider, "_evm_address", None)
 
-            # Create audit event payload
             event_data = EventPayload(
                 action=f"received {incoming_tx.amount} {incoming_tx.currency}",
                 result="success",
@@ -369,7 +346,6 @@ class WalletAdapter(Service):
                 user_id=wallet_address,
             )
 
-            # Log to all 3 audit sinks (graph, SQLite hash chain, file)
             await audit_service.log_event("wallet_funds_received", event_data)
             logger.info(
                 f"[WALLET_AUDIT] Logged funds_received: +{incoming_tx.amount} {incoming_tx.currency} "
@@ -384,28 +360,16 @@ class WalletAdapter(Service):
         logger.info("Stopping Wallet adapter")
         self._running = False
 
-        # Stop tool service (which cleans up providers)
         await self.tool_service.stop()
 
         logger.info("Wallet adapter stopped")
 
     async def run_lifecycle(self, agent_task: Any) -> None:
-        """
-        Run the adapter lifecycle.
-
-        For Wallet, we just wait for the agent task to complete.
-        Payment operations are request-driven, not continuous.
-
-        Args:
-            agent_task: The main agent task to wait for, or None in first-run mode.
-        """
+        """Run the adapter lifecycle."""
         logger.info("Wallet adapter lifecycle started")
         try:
-            # Guard against None agent_task (first-run mode)
-            # This shouldn't happen with the runtime fix, but defensive coding
             if agent_task is None:
                 logger.warning("Wallet adapter: agent_task is None (first-run mode), staying idle")
-                # In first-run mode, just wait indefinitely until cancelled
                 try:
                     await asyncio.Event().wait()
                 except asyncio.CancelledError:
@@ -420,7 +384,6 @@ class WalletAdapter(Service):
 
     def get_config(self) -> AdapterConfig:
         """Get adapter configuration."""
-        # Get loaded provider names from registry
         loaded = get_loaded_providers()
 
         return AdapterConfig(

@@ -403,23 +403,32 @@ Only request details when needed.
         logger.info(f"Registered wallet provider: {provider.provider_id}")
 
     def _get_provider_for_currency(self, currency: str) -> Optional[WalletProvider]:
-        """Get the appropriate provider for a currency."""
+        """
+        Get the appropriate provider for a currency.
+
+        SECURITY: Does NOT fall back to default provider if currency is unsupported.
+        This prevents accidentally routing unsupported currencies to providers
+        that don't handle them.
+        """
         currency = currency.upper()
 
-        # Check currency_providers mapping
+        # 1. Check explicit currency_providers mapping from config
         provider_id = self.config.currency_providers.get(currency)
         if provider_id and provider_id in self._providers:
             return self._providers[provider_id]
 
-        # Check if any provider supports this currency
+        # 2. Check if any loaded provider explicitly supports this currency
         for provider in self._providers.values():
             if provider.supports_currency(currency):
                 return provider
 
-        # Fall back to default
-        if self.config.default_provider in self._providers:
-            return self._providers[self.config.default_provider]
-
+        # 3. NO FALLBACK - return None if currency is not explicitly supported
+        # This is intentional: routing unsupported currencies to the default
+        # provider could cause unexpected behavior or silent failures.
+        logger.warning(
+            f"[WalletToolService] No provider found for currency: {currency}. "
+            f"Available providers: {list(self._providers.keys())}"
+        )
         return None
 
     def _get_provider(

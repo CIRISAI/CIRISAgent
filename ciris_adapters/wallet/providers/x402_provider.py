@@ -2,21 +2,31 @@
 x402 Wallet Provider.
 
 USDC payments on Base L2 via the x402 HTTP payment protocol.
-Uses deterministic wallet derivation from CIRISVerify Ed25519 signing key.
+All wallet primitives (address derivation, signing) come from CIRISVerify.
+
+Key Architecture (FSD-WALLET-001):
+1. Ed25519 root identity stored in CIRISVerify (hardware-backed when available)
+2. secp256k1 wallet key derived via HKDF from Ed25519 seed
+3. EVM address derived from secp256k1 public key (keccak256)
+4. Address derivation and signing BOTH happen in CIRISVerify → guaranteed match
+
+CRITICAL: CIRISVerify is the ONLY source for wallet operations.
+- No fallback address derivation
+- No local key handling
+- If CIRISVerify is unavailable, wallet operations fail
 
 Key security features:
-1. Private key NEVER leaves CIRISVerify's secure element
-2. Attestation-gated spending (Level 0-5 → $0-$100/tx)
-3. Hardware trust check (CIRISVerify 1.2.x) - degraded trust → receive-only
+1. Private keys NEVER leave CIRISVerify's secure boundary
+2. Hardware-backed signing on Android (StrongBox/TEE) and iOS (Keychain)
+3. Software fallback with secure storage on desktop/server
+4. Attestation-gated spending (Level 0-5 → $0-$100/tx)
+5. Hardware trust check - degraded trust → receive-only mode
 
 Dependencies:
-- x402[fastapi,httpx,evm]  # Core x402 protocol (future)
-- eth-keys                  # Ethereum key handling
-- ciris-verify>=1.2.1       # Hardware trust detection
+- ciris-verify>=1.3.1       # Unified wallet signing (secp256k1 + EVM support)
+- httpx                     # RPC client for Base L2
 """
 
-import hashlib
-import hmac
 import logging
 import os
 import uuid
@@ -40,18 +50,20 @@ from ..schemas import (
 from .balance_monitor import BalanceMonitor
 from .base import WalletProvider
 from .chain_client import ChainClient
+from .validation import WalletValidator
 
 logger = logging.getLogger(__name__)
 
-# Type alias for signing callback
-SigningCallback = Callable[[bytes], bytes]
+# Type alias for EVM signing callback from CIRISVerify
+# (tx_hash: bytes, chain_id: int) -> signature: bytes (65 bytes: r || s || v)
+EVMSigningCallback = Callable[[bytes, int], bytes]
 
 
 @dataclass
 class SpendingAuthority:
     """Spending authority based on attestation level and hardware trust.
 
-    CIRISVerify 1.2.x Integration:
+    CIRISVerify Integration:
     - hardware_trust_degraded == True → max_transaction = 0 (receive-only)
     - Otherwise, attestation_level determines spending limits
     """
@@ -63,7 +75,7 @@ class SpendingAuthority:
     trust_degradation_reason: Optional[str] = None
     security_advisories: Optional[List[Dict[str, Any]]] = None
 
-    # Attestation Level → Spending Limits (per integration guide)
+    # Attestation Level → Spending Limits (per FSD-WALLET-001)
     SPENDING_LIMITS: ClassVar[Dict[int, tuple[Decimal, Decimal]]] = {
         5: (Decimal("100.00"), Decimal("1000.00")),  # Full trust
         4: (Decimal("100.00"), Decimal("1000.00")),  # High trust (advisory logged)
@@ -81,15 +93,7 @@ class SpendingAuthority:
         trust_degradation_reason: Optional[str] = None,
         security_advisories: Optional[List[Dict[str, Any]]] = None,
     ) -> "SpendingAuthority":
-        """Create SpendingAuthority from attestation data.
-
-        Args:
-            attestation_level: Level 0-5 from CIRISVerify
-            hardware_trust_degraded: True if hardware compromised (1.2.x)
-            trust_degradation_reason: Human-readable reason
-            security_advisories: CVE details for UI
-        """
-        # If hardware trust is degraded, force receive-only regardless of level
+        """Create SpendingAuthority from attestation data."""
         if hardware_trust_degraded:
             return cls(
                 max_transaction=Decimal("0.00"),
@@ -100,7 +104,6 @@ class SpendingAuthority:
                 security_advisories=security_advisories,
             )
 
-        # Get limits from attestation level
         limits = cls.SPENDING_LIMITS.get(attestation_level, (Decimal("0.00"), Decimal("0.00")))
         return cls(
             max_transaction=limits[0],
@@ -112,11 +115,7 @@ class SpendingAuthority:
         )
 
     def can_spend(self, amount: Decimal) -> tuple[bool, Optional[str]]:
-        """Check if spending is allowed.
-
-        Returns:
-            (allowed, error_message) tuple
-        """
+        """Check if spending is allowed."""
         if self.hardware_trust_degraded:
             return (False, f"Hardware trust degraded: {self.trust_degradation_reason}. Receive-only mode active.")
 
@@ -133,44 +132,49 @@ class X402Provider(WalletProvider):
     """
     x402 provider for USDC payments on Base L2.
 
-    Key features:
-    - Wallet address derived from CIRISVerify Ed25519 PUBLIC key
-    - Private key NEVER leaves secure element
-    - Signing delegated to CIRISVerify via callback
-    - Attestation-gated spending authority
-    - ~400ms finality on Base L2
+    CRITICAL: All wallet primitives come from CIRISVerify.
+    - EVM address from CIRISVerify.get_wallet_info()
+    - Transaction signing from CIRISVerify.sign_evm_transaction()
+    - No local key handling or fallback derivation
 
-    For receiving: Only needs public key (address derivation)
-    For sending: Needs signing callback to CIRISVerify
+    Key features:
+    - Hardware-backed signing on Android (StrongBox/TEE) and iOS (Keychain)
+    - Software fallback with secure storage on desktop/server
+    - Attestation-gated spending authority (Level 0-5 → $0-$100/tx)
+    - ~400ms finality on Base L2
     """
 
-    DOMAIN_SEPARATOR = b"CIRIS-x402-wallet-v1"
     SUPPORTED_CURRENCIES = ["USDC", "ETH"]
 
     def __init__(
         self,
         config: X402ProviderConfig,
-        ed25519_public_key: Optional[bytes] = None,
-        ed25519_seed: Optional[bytes] = None,
-        signing_callback: Optional[SigningCallback] = None,
+        evm_address: Optional[str] = None,
+        evm_signing_callback: Optional[EVMSigningCallback] = None,
     ) -> None:
         """
         Initialize the x402 provider.
 
         Args:
             config: Provider configuration
-            ed25519_public_key: Ed25519 public key (32 bytes) for address derivation.
-                               This is the preferred method - key stays in secure element.
-            ed25519_seed: Optional Ed25519 seed (32 bytes) for testing only.
-                         In production, use public_key + signing_callback instead.
-            signing_callback: Callback to CIRISVerify for signing operations.
-                            Required for send operations if using public_key mode.
+            evm_address: Checksummed EVM address from CIRISVerify.get_wallet_info()
+            evm_signing_callback: Callback to sign EVM transactions:
+                                 (tx_hash: bytes, chain_id: int) -> signature: bytes
+
+        Raises:
+            ValueError: If CIRISVerify wallet is not available (evm_address is None)
         """
         self.config = config
-        self._ed25519_public_key = ed25519_public_key
-        self._ed25519_seed = ed25519_seed  # Only for testing
-        self._signing_callback = signing_callback
-        self._evm_address: Optional[str] = None
+
+        # CIRISVerify wallet primitives - REQUIRED
+        if not evm_address:
+            raise ValueError(
+                "CIRISVerify wallet not available. "
+                "x402 provider requires CIRISVerify 1.3.1+ with a loaded key."
+            )
+
+        self._evm_address = evm_address
+        self._evm_signing_callback = evm_signing_callback
         self._initialized = False
 
         # Track pending transactions and balances (in-memory for now)
@@ -184,7 +188,6 @@ class X402Provider(WalletProvider):
         )
 
         # Balance monitor for detecting incoming transfers
-        # Initialized after wallet address is derived
         self._balance_monitor: Optional[BalanceMonitor] = None
         self._balance_change_callbacks: List[Any] = []
 
@@ -197,27 +200,14 @@ class X402Provider(WalletProvider):
             rpc_url=config.rpc_url,
         )
 
+        # Validator for mission-critical safety checks
+        # Limits will be updated from attestation level
+        self._validator = WalletValidator()
+
         logger.info(
-            f"X402Provider created for network: {config.network}"
+            f"X402Provider created for network: {config.network}, "
+            f"address: {self._evm_address}"
         )
-
-        # Derive wallet address immediately (no async needed - pure computation)
-        self._derive_wallet_address()
-
-    def _derive_wallet_address(self) -> None:
-        """Derive EVM wallet address from Ed25519 key (sync - can call from __init__)."""
-        if self._ed25519_public_key:
-            self._evm_address = self._derive_evm_address_from_pubkey(self._ed25519_public_key)
-            logger.info(f"Derived wallet address from public key: {self._evm_address}")
-        elif self._ed25519_seed:
-            self._evm_address = self._derive_evm_address_from_seed(self._ed25519_seed)
-            logger.info(f"Derived wallet address from seed: {self._evm_address}")
-        else:
-            logger.warning("No Ed25519 key provided - wallet will use placeholder address")
-            # Use a deterministic placeholder for display (all zeros)
-            placeholder = hashlib.sha256(b"ciris-wallet-placeholder").digest()[:20]
-            self._evm_address = self._to_checksum_address(placeholder.hex())
-            logger.info(f"Using placeholder address: {self._evm_address}")
 
     @property
     def provider_id(self) -> str:
@@ -227,82 +217,21 @@ class X402Provider(WalletProvider):
     def supported_currencies(self) -> List[str]:
         return self.SUPPORTED_CURRENCIES
 
-    def _derive_evm_address_from_pubkey(self, public_key: bytes) -> str:
-        """
-        Derive EVM wallet address from Ed25519 PUBLIC key.
+    @property
+    def evm_address(self) -> str:
+        """Get the EVM wallet address (from CIRISVerify)."""
+        return self._evm_address
 
-        This is the secure method - private key never leaves CIRISVerify.
-        Uses HKDF-SHA256 with domain separation to create a deterministic
-        mapping from Ed25519 public key to EVM address.
-
-        Args:
-            public_key: Ed25519 public key (32 bytes)
-
-        Returns:
-            EVM address (0x...)
-        """
-        # HKDF with public key as input keying material
-        # This creates a deterministic, one-way mapping
-        prk = hmac.new(self.DOMAIN_SEPARATOR, public_key, hashlib.sha256).digest()
-        info = b"evm-address-from-ed25519-pubkey"
-        address_bytes = hmac.new(prk, info + b"\x01", hashlib.sha256).digest()[:20]
-
-        # Convert to checksum address
-        address_hex = address_bytes.hex()
-        return self._to_checksum_address(address_hex)
-
-    def _to_checksum_address(self, address_hex: str) -> str:
-        """Convert raw hex to EIP-55 checksum address."""
-        address_hex = address_hex.lower().replace("0x", "")
-        hash_bytes = hashlib.sha3_256(address_hex.encode()).digest()
-
-        checksum_address = "0x"
-        for i, char in enumerate(address_hex):
-            if char in "0123456789":
-                checksum_address += char
-            elif hash_bytes[i // 2] >> (4 * (1 - i % 2)) & 0xF >= 8:
-                checksum_address += char.upper()
-            else:
-                checksum_address += char
-        return checksum_address
-
-    def _derive_evm_address_from_seed(self, seed: bytes) -> str:
-        """
-        Derive EVM wallet address from Ed25519 seed (TESTING ONLY).
-
-        In production, use _derive_evm_address_from_pubkey instead.
-        This method is only for testing when we have direct access to the seed.
-        """
-        try:
-            from eth_keys import keys as eth_keys  # type: ignore[import-not-found]
-
-            # HKDF-extract
-            prk = hmac.new(self.DOMAIN_SEPARATOR, seed, hashlib.sha256).digest()
-
-            # HKDF-expand to 32 bytes (secp256k1 private key)
-            info = b"evm-secp256k1-signing-key"
-            okm = hmac.new(prk, info + b"\x01", hashlib.sha256).digest()
-
-            # Derive EVM address from secp256k1 private key
-            private_key = eth_keys.PrivateKey(okm)
-            address: str = private_key.public_key.to_checksum_address()
-            return address
-
-        except ImportError:
-            logger.warning("eth_keys not installed, using HKDF-based address")
-            # Fall back to HKDF-based address derivation
-            return self._derive_evm_address_from_pubkey(seed)
+    @property
+    def can_sign(self) -> bool:
+        """Check if signing is available."""
+        return self._evm_signing_callback is not None
 
     async def initialize(self) -> bool:
-        """Initialize async components (balance monitor, etc.).
+        """Initialize async components (balance monitor, etc.)."""
+        logger.info(f"Initializing X402Provider on {self.config.network}")
 
-        Note: Wallet address is already derived in __init__ (sync).
-        This method starts background tasks that require async.
-        """
-        logger.info(f"Initializing X402Provider async components on {self.config.network}")
-
-        # Warn if no signing callback (receive-only mode)
-        if self._ed25519_public_key and not self._signing_callback:
+        if not self._evm_signing_callback:
             logger.warning("No signing callback - send operations will fail (receive-only mode)")
 
         self._initialized = True
@@ -311,7 +240,7 @@ class X402Provider(WalletProvider):
         self._balance_monitor = BalanceMonitor(
             provider_id=self.provider_id,
             get_balance_fn=self._fetch_balance_from_chain,
-            poll_interval=30.0,  # Poll every 30 seconds
+            poll_interval=30.0,
             on_balance_change=self._on_balance_change,
         )
         await self._balance_monitor.start()
@@ -323,17 +252,14 @@ class X402Provider(WalletProvider):
         self, provider_id: str, new_balance: Balance, incoming_tx: Optional[Transaction]
     ) -> None:
         """Handle balance change notifications from monitor."""
-        # Update internal balance
         self._balance = new_balance
 
-        # Notify registered callbacks
         for callback in self._balance_change_callbacks:
             try:
                 callback(provider_id, new_balance, incoming_tx)
             except Exception as e:
                 logger.error(f"Balance change callback error: {e}")
 
-        # Log incoming transfers
         if incoming_tx:
             logger.info(
                 f"[{provider_id}] Incoming transfer detected: "
@@ -342,29 +268,9 @@ class X402Provider(WalletProvider):
             self._transactions.insert(0, incoming_tx)
 
     async def _fetch_balance_from_chain(self) -> Balance:
-        """Fetch balance from blockchain via RPC.
-
-        Queries:
-        1. USDC balance via ERC-20 balanceOf()
-        2. ETH balance via eth_getBalance (for gas estimation)
-
-        Returns:
-            Balance with on-chain USDC amount
-        """
-        if not self._evm_address:
-            logger.warning("[X402] No wallet address, returning zero balance")
-            return Balance(
-                currency="USDC",
-                available=Decimal("0"),
-                pending=Decimal("0"),
-                total=Decimal("0"),
-            )
-
+        """Fetch balance from blockchain via RPC."""
         try:
-            # Query USDC balance from chain
             usdc_balance = await self._chain_client.get_usdc_balance(self._evm_address)
-
-            # Also query ETH for gas estimation (stored in metadata)
             eth_balance = await self._chain_client.get_eth_balance(self._evm_address)
 
             logger.debug(
@@ -372,11 +278,10 @@ class X402Provider(WalletProvider):
                 f"{usdc_balance} USDC, {eth_balance} ETH"
             )
 
-            # Update internal balance
             self._balance = Balance(
                 currency="USDC",
                 available=usdc_balance,
-                pending=Decimal("0"),  # Pending would require mempool scanning
+                pending=Decimal("0"),
                 total=usdc_balance,
                 metadata={
                     "eth_balance": str(eth_balance),
@@ -388,7 +293,6 @@ class X402Provider(WalletProvider):
 
         except Exception as e:
             logger.error(f"[X402] Failed to fetch on-chain balance: {e}")
-            # Return cached balance on error
             return self._balance
 
     def register_balance_callback(self, callback: Any) -> None:
@@ -399,7 +303,6 @@ class X402Provider(WalletProvider):
         """Cleanup provider resources."""
         logger.info("Cleaning up X402Provider")
 
-        # Stop balance monitor
         if self._balance_monitor:
             await self._balance_monitor.stop()
             self._balance_monitor = None
@@ -407,56 +310,44 @@ class X402Provider(WalletProvider):
         self._initialized = False
 
     def _get_spending_authority(self) -> SpendingAuthority:
-        """Get spending authority from CIRISVerify attestation.
-
-        CIRISVerify 1.2.x Integration:
-        1. Check hardware_trust_degraded (vulnerable SoC, emulator, rooted)
-        2. If degraded → receive-only mode
-        3. Otherwise use attestation_level for spending limits
-
-        Returns:
-            SpendingAuthority with limits and trust status
-        """
-        # Try to get CIRISVerify instance
+        """Get spending authority from CIRISVerify attestation."""
         try:
-            from ciris_verify import CIRISVerify
-            verifier = CIRISVerify()
+            from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+                get_verifier,
+            )
 
-            # Get hardware info (1.2.x feature)
-            # On Android, this needs Build.* properties passed via JNI
-            # For now, try the sync method which works on desktop
-            # Check for 1.2.x features with hasattr for backwards compatibility
-            has_hw_support = getattr(verifier, "has_hardware_info_support", lambda: False)
-            if callable(has_hw_support) and has_hw_support():
-                hw_info = getattr(verifier, "get_hardware_info_sync", lambda: None)()
+            verifier = get_verifier()
 
-                if hw_info is not None and hw_info.hardware_trust_degraded:
-                    logger.warning(
-                        f"[X402] Hardware trust degraded: {hw_info.trust_degradation_reason}"
-                    )
-                    # Convert limitations to serializable format
-                    advisories = None
-                    if hw_info.limitations:
-                        advisories = []
-                        for lim in hw_info.limitations:
-                            if lim.advisory:
-                                advisories.append({
-                                    "cve": lim.advisory.cve,
-                                    "title": lim.advisory.title,
-                                    "impact": lim.advisory.impact,
-                                    "software_patchable": lim.advisory.software_patchable,
-                                    "min_patch_level": lim.advisory.min_patch_level,
-                                })
+            # Check for hardware trust degradation
+            if getattr(verifier, '_has_wallet_support', False):
+                try:
+                    hw_info = getattr(verifier, "get_hardware_info_sync", lambda: None)()
+                    if hw_info is not None and getattr(hw_info, 'hardware_trust_degraded', False):
+                        logger.warning(
+                            f"[X402] Hardware trust degraded: {hw_info.trust_degradation_reason}"
+                        )
+                        advisories = None
+                        if hasattr(hw_info, 'limitations') and hw_info.limitations:
+                            advisories = []
+                            for lim in hw_info.limitations:
+                                if hasattr(lim, 'advisory') and lim.advisory:
+                                    advisories.append({
+                                        "cve": lim.advisory.cve,
+                                        "title": lim.advisory.title,
+                                        "impact": lim.advisory.impact,
+                                    })
 
-                    self._spending_authority = SpendingAuthority.from_attestation(
-                        attestation_level=0,  # Degraded = level 0 equivalent
-                        hardware_trust_degraded=True,
-                        trust_degradation_reason=hw_info.trust_degradation_reason,
-                        security_advisories=advisories,
-                    )
-                    return self._spending_authority
+                        self._spending_authority = SpendingAuthority.from_attestation(
+                            attestation_level=0,
+                            hardware_trust_degraded=True,
+                            trust_degradation_reason=hw_info.trust_degradation_reason,
+                            security_advisories=advisories,
+                        )
+                        return self._spending_authority
+                except Exception as e:
+                    logger.debug(f"[X402] Hardware info check failed: {e}")
 
-            # Get attestation level via license status
+            # Get attestation level
             challenge = os.urandom(32)
             status = verifier.get_license_status(challenge_nonce=challenge)
             level = getattr(status, "attestation_level", 0)
@@ -468,13 +359,6 @@ class X402Provider(WalletProvider):
             logger.info(f"[X402] Spending authority: level={level}, max_tx={self._spending_authority.max_transaction}")
             return self._spending_authority
 
-        except ImportError:
-            logger.warning("[X402] CIRISVerify not available, using minimal spending authority")
-            self._spending_authority = SpendingAuthority.from_attestation(
-                attestation_level=1,  # Receive-only without CIRISVerify
-                hardware_trust_degraded=False,
-            )
-            return self._spending_authority
         except Exception as e:
             logger.error(f"[X402] Error getting spending authority: {e}")
             # Default to receive-only on error
@@ -493,16 +377,16 @@ class X402Provider(WalletProvider):
         **kwargs: object,
     ) -> TransactionResult:
         """
-        Send USDC to a recipient.
+        Send USDC or ETH to a recipient.
 
         Args:
             recipient: EVM address (0x...)
-            amount: Amount in USDC (or ETH)
+            amount: Amount in USDC (6 decimals) or ETH (18 decimals)
             currency: USDC or ETH
-            memo: Optional transaction memo
+            memo: Optional transaction memo (not stored on-chain)
 
         Returns:
-            TransactionResult with transaction ID and confirmation.
+            TransactionResult with transaction hash and confirmation.
         """
         currency = currency.upper()
         if currency not in self.SUPPORTED_CURRENCIES:
@@ -515,36 +399,23 @@ class X402Provider(WalletProvider):
                 error=f"Unsupported currency: {currency}. Supported: {self.SUPPORTED_CURRENCIES}",
             )
 
-        if not self._evm_address:
+        # Check signing capability
+        if not self._evm_signing_callback:
             return TransactionResult(
                 success=False,
                 provider=self.provider_id,
                 amount=amount,
                 currency=currency,
                 recipient=recipient,
-                error="Wallet not initialized (no Ed25519 key)",
+                error="Cannot send: CIRISVerify signing callback not available. "
+                      "Wallet is in receive-only mode.",
             )
 
-        # Check signing capability (need either callback or seed)
-        if not self._signing_callback and not self._ed25519_seed:
-            return TransactionResult(
-                success=False,
-                provider=self.provider_id,
-                amount=amount,
-                currency=currency,
-                recipient=recipient,
-                error="Cannot send: no signing capability (receive-only mode). "
-                      "Ensure CIRISVerify is initialized with a key.",
-            )
-
-        # =====================================================================
-        # CIRISVerify 1.2.x: Check hardware trust and spending authority
-        # =====================================================================
+        # Check hardware trust and spending authority
         spending_authority = self._get_spending_authority()
 
-        # Check if hardware trust is degraded (vulnerable SoC, emulator, rooted)
         if spending_authority.hardware_trust_degraded:
-            logger.warning(f"[X402] Send blocked - hardware trust degraded")
+            logger.warning("[X402] Send blocked - hardware trust degraded")
             return TransactionResult(
                 success=False,
                 provider=self.provider_id,
@@ -559,7 +430,6 @@ class X402Provider(WalletProvider):
                 },
             )
 
-        # Check if amount is within spending limits for attestation level
         can_spend, spend_error = spending_authority.can_spend(amount)
         if not can_spend:
             logger.warning(f"[X402] Send blocked - {spend_error}")
@@ -576,73 +446,193 @@ class X402Provider(WalletProvider):
                 },
             )
 
-        # Validate recipient address format
-        if not recipient.startswith("0x") or len(recipient) != 42:
+        # Update validator limits from attestation level
+        self._validator.update_limits_from_attestation(
+            max_transaction=spending_authority.max_transaction,
+            daily_limit=spending_authority.max_daily,
+        )
+
+        # Get ETH balance and gas price for validation
+        try:
+            eth_balance = await self._chain_client.get_eth_balance(self._evm_address)
+            gas_price = await self._chain_client.get_gas_price()
+        except Exception as e:
+            logger.error(f"[X402] Failed to get chain state: {e}")
             return TransactionResult(
                 success=False,
                 provider=self.provider_id,
                 amount=amount,
                 currency=currency,
                 recipient=recipient,
-                error=f"Invalid EVM address format: {recipient}",
+                error=f"Failed to query chain state: {e}",
             )
 
-        # TODO: Implement actual x402 transaction using signing callback
-        # When implemented:
-        # 1. Build EIP-712 typed data for the transfer
-        # 2. Sign via self._signing_callback(typed_data_hash) if available
-        # 3. Submit to x402 facilitator
-        #
-        # For now, simulate transaction for testing
-        signing_mode = "CIRISVerify callback" if self._signing_callback else "local seed (testing)"
-        logger.info(
-            f"[X402] Sending {amount} {currency} to {recipient}"
-            f" (memo: {memo}, signing: {signing_mode})"
-        )
-
-        # Generate transaction ID
-        tx_id = f"0x{uuid.uuid4().hex}"
-        timestamp = datetime.now(timezone.utc)
-
-        # Record transaction
-        transaction = Transaction(
-            transaction_id=tx_id,
-            provider=self.provider_id,
-            type=TransactionType.SEND,
-            status=TransactionStatus.PENDING,  # Would be CONFIRMED after blockchain confirmation
-            amount=-amount,  # Negative for sends
-            currency=currency,
+        # Run all safety validations (MDD: Mission-critical checks)
+        validation_result = self._validator.validate_send(
             recipient=recipient,
-            sender=self._evm_address,
-            memo=memo,
-            timestamp=timestamp,
-            fees={"network_fee": Decimal("0.001")},
-            confirmation={
-                "network": self.config.network,
-                "tx_hash": tx_id,
-            },
-        )
-        self._transactions.insert(0, transaction)
-
-        # Update balance
-        self._balance.available -= amount
-        self._balance.total = self._balance.available + self._balance.pending
-
-        return TransactionResult(
-            success=True,
-            transaction_id=tx_id,
-            provider=self.provider_id,
             amount=amount,
             currency=currency,
-            recipient=recipient,
-            timestamp=timestamp,
-            fees={"network_fee": Decimal("0.001")},
-            confirmation={
-                "network": self.config.network,
-                "tx_hash": tx_id,
-                "block_number": None,  # Would be set after confirmation
-            },
+            eth_balance=eth_balance,
+            gas_price=gas_price,
         )
+
+        if not validation_result.valid:
+            error_msg = validation_result.error_message()
+            logger.warning(f"[X402] Validation failed: {error_msg}")
+            return TransactionResult(
+                success=False,
+                provider=self.provider_id,
+                amount=amount,
+                currency=currency,
+                recipient=recipient,
+                error=error_msg,
+                metadata={
+                    "validation_errors": [
+                        {"code": e.code, "message": e.message, "field": e.field}
+                        for e in validation_result.errors
+                    ],
+                    "warnings": validation_result.warnings,
+                },
+            )
+
+        # Log any warnings
+        for warning in validation_result.warnings:
+            logger.warning(f"[X402] Validation warning: {warning}")
+
+        # Build and sign transaction
+        try:
+            if currency == "USDC":
+                tx_hash = await self._send_usdc(recipient, amount)
+            else:  # ETH
+                tx_hash = await self._send_eth(recipient, amount)
+
+            timestamp = datetime.now(timezone.utc)
+
+            # Record transaction
+            transaction = Transaction(
+                transaction_id=tx_hash,
+                provider=self.provider_id,
+                type=TransactionType.SEND,
+                status=TransactionStatus.PENDING,
+                amount=-amount,
+                currency=currency,
+                recipient=recipient,
+                sender=self._evm_address,
+                memo=memo,
+                timestamp=timestamp,
+                fees={"network_fee": Decimal("0.001")},  # Estimated
+                confirmation={
+                    "network": self.config.network,
+                    "tx_hash": tx_hash,
+                    "explorer_url": self._chain_client.get_explorer_url(tx_hash),
+                },
+            )
+            self._transactions.insert(0, transaction)
+
+            # Record for duplicate protection
+            self._validator.record_successful_send(recipient, amount, currency)
+
+            logger.info(f"[X402] Sent {amount} {currency} to {recipient}: {tx_hash}")
+
+            return TransactionResult(
+                success=True,
+                transaction_id=tx_hash,
+                provider=self.provider_id,
+                amount=amount,
+                currency=currency,
+                recipient=recipient,
+                timestamp=timestamp,
+                fees={"network_fee": Decimal("0.001")},
+                confirmation={
+                    "network": self.config.network,
+                    "tx_hash": tx_hash,
+                    "explorer_url": self._chain_client.get_explorer_url(tx_hash),
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"[X402] Transaction failed: {e}")
+            return TransactionResult(
+                success=False,
+                provider=self.provider_id,
+                amount=amount,
+                currency=currency,
+                recipient=recipient,
+                error=f"Transaction failed: {e}",
+            )
+
+    async def _send_usdc(self, recipient: str, amount: Decimal) -> str:
+        """Build and send ERC-20 USDC transfer transaction."""
+        # Signing callback must be available (checked in send())
+        assert self._evm_signing_callback is not None
+
+        # Get nonce and gas parameters
+        nonce = await self._chain_client.get_nonce(self._evm_address)
+        gas_price = await self._chain_client.get_gas_price()
+
+        # Build ERC-20 transfer transaction
+        tx_data = self._chain_client.build_erc20_transfer(
+            to=recipient,
+            amount=amount,
+            decimals=6,  # USDC has 6 decimals
+        )
+
+        # Build unsigned transaction
+        unsigned_tx = {
+            "nonce": nonce,
+            "gasPrice": gas_price,
+            "gas": 65000,  # Standard ERC-20 transfer
+            "to": self._chain_client.usdc_address,
+            "value": 0,
+            "data": tx_data,
+            "chainId": self._chain_client.chain_id,
+        }
+
+        # Encode and hash the transaction
+        tx_hash = self._chain_client.hash_transaction(unsigned_tx)
+
+        # Sign with CIRISVerify
+        signature = self._evm_signing_callback(tx_hash, self._chain_client.chain_id)
+
+        # Encode signed transaction
+        signed_tx = self._chain_client.encode_signed_transaction(unsigned_tx, signature)
+
+        # Broadcast
+        tx_id = await self._chain_client.send_raw_transaction(signed_tx)
+        return tx_id
+
+    async def _send_eth(self, recipient: str, amount: Decimal) -> str:
+        """Build and send ETH transfer transaction."""
+        # Signing callback must be available (checked in send())
+        assert self._evm_signing_callback is not None
+
+        # Get nonce and gas parameters
+        nonce = await self._chain_client.get_nonce(self._evm_address)
+        gas_price = await self._chain_client.get_gas_price()
+
+        # Build unsigned transaction
+        unsigned_tx = {
+            "nonce": nonce,
+            "gasPrice": gas_price,
+            "gas": 21000,  # Standard ETH transfer
+            "to": recipient,
+            "value": int(amount * Decimal(10**18)),  # Convert to wei
+            "data": b"",
+            "chainId": self._chain_client.chain_id,
+        }
+
+        # Encode and hash the transaction
+        tx_hash = self._chain_client.hash_transaction(unsigned_tx)
+
+        # Sign with CIRISVerify
+        signature = self._evm_signing_callback(tx_hash, self._chain_client.chain_id)
+
+        # Encode signed transaction
+        signed_tx = self._chain_client.encode_signed_transaction(unsigned_tx, signature)
+
+        # Broadcast
+        tx_id = await self._chain_client.send_raw_transaction(signed_tx)
+        return tx_id
 
     async def request(
         self,
@@ -653,17 +643,10 @@ class X402Provider(WalletProvider):
         callback_url: Optional[str] = None,
         **kwargs: object,
     ) -> PaymentRequest:
-        """
-        Create a payment request.
-
-        For x402, this generates the payment details that would be
-        returned in a 402 response body.
-        """
+        """Create a payment request."""
         currency = currency.upper()
         request_id = f"req_{uuid.uuid4().hex[:12]}"
 
-        # x402 payment requests don't have checkout URLs
-        # Payment is made via X-PAYMENT header
         request = PaymentRequest(
             request_id=request_id,
             provider=self.provider_id,
@@ -687,16 +670,9 @@ class X402Provider(WalletProvider):
         return request
 
     async def get_balance(self, currency: Optional[str] = None) -> Balance:
-        """Get account balance.
-
-        Uses cached balance from monitor when available (non-blocking).
-        Falls back to internal tracked balance if monitor not running.
-        """
-        # Prefer cached balance from monitor (non-blocking)
+        """Get account balance."""
         if self._balance_monitor and self._balance_monitor.cached_balance:
             return self._balance_monitor.cached_balance
-
-        # Fall back to tracked balance
         return self._balance
 
     async def get_history(
@@ -706,18 +682,14 @@ class X402Provider(WalletProvider):
         currency: Optional[str] = None,
     ) -> List[Transaction]:
         """Get transaction history."""
-        # Filter by currency if specified
         transactions = self._transactions
         if currency:
             currency = currency.upper()
             transactions = [t for t in transactions if t.currency == currency]
-
-        # Apply pagination
         return transactions[offset : offset + limit]
 
     async def get_account_details(self) -> AccountDetails:
         """Get account details including attestation level from CIRISVerify."""
-        # Get spending authority which includes attestation level
         spending_authority = self._get_spending_authority()
 
         return AccountDetails(
@@ -727,19 +699,19 @@ class X402Provider(WalletProvider):
             network=self.config.network,
             attestation_level=spending_authority.attestation_level,
             metadata={
-                "chain_id": 8453 if "mainnet" in self.config.network else 84532,
+                "chain_id": self._chain_client.chain_id,
                 "treasury": self.config.treasury_address,
                 "hardware_trust_degraded": spending_authority.hardware_trust_degraded,
                 "trust_degradation_reason": spending_authority.trust_degradation_reason,
                 "max_transaction": str(spending_authority.max_transaction),
                 "max_daily": str(spending_authority.max_daily),
                 "security_advisories": spending_authority.security_advisories,
+                "can_sign": self.can_sign,
             },
         )
 
     async def verify_payment(self, payment_ref: str) -> PaymentVerification:
         """Verify a payment by reference ID."""
-        # Check pending requests
         if payment_ref in self._pending_requests:
             request = self._pending_requests[payment_ref]
             return PaymentVerification(
@@ -755,7 +727,6 @@ class X402Provider(WalletProvider):
                 timestamp=request.paid_at,
             )
 
-        # Check transaction history
         for tx in self._transactions:
             if tx.transaction_id == payment_ref:
                 return PaymentVerification(

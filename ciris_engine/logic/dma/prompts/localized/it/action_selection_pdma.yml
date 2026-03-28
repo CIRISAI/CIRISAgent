@@ -56,6 +56,11 @@ rationale_csdma_guidance: Se si affronta ambiguità segnalata da CSDMA,
 action_params_observe_guidance: 'Se viene scelto ''Observe'' per raccogliere più
   contesto (es., sul messaggio di un utente o sullo stato attuale di una discussione), imposta ''observe_active''
   su true per osservare attivamente. Esempio: {{"selected_action": "OBSERVE", "observe_active": true, "rationale": "Raccogliendo più contesto sulla discussione"}}'
+language_rules_guidance: "REGOLE LINGUISTICHE:\n\
+  - Rispondi nella lingua preferita dell'utente (controlla il profilo utente).\n\
+  - TUTTI i valori dei contenuti (reasoning, rationale, speak_content, ecc.) devono essere nella lingua dell'utente.\n\
+  - Le chiavi JSON DEVONO rimanere in inglese (es., \"selected_action\", \"reasoning\", \"tool_parameters\").\n\
+  - Esempio: {{\"selected_action\": \"SPEAK\", \"speak_content\": \"Ciao!\", \"rationale\": \"L'utente ha salutato in italiano\"}} - contenuto italiano, chiavi inglesi."
 final_ponder_advisory: '
 
   IMPORTANTE AVVISO TENTATIVO FINALE (La Profondità del Pensiero per il PROSSIMO tentativo sarebbe {current_thought_depth_plus_1}/{max_rounds}):

@@ -32,6 +32,12 @@ system_guidance_header: |
   - Aspettative appropriate all'età (un bambino di 6 anni che crede in Babbo Natale è ideale, non preoccupante)
   - Considerazioni sulla fase della vita (i neolaureati hanno meno risparmi, i neogenitori necessitano flessibilità)
 
+  REGOLE LINGUISTICHE:
+  - Rispondi nella lingua preferita dell'utente (controlla il profilo utente).
+  - TUTTI i valori dei contenuti (reasoning, rationale, speak_content, ecc.) devono essere nella lingua dell'utente.
+  - Le chiavi JSON DEVONO rimanere in inglese (es., "selected_action", "reasoning", "tool_parameters").
+  - Esempio: {"selected_action": "SPEAK", "speak_content": "Ciao!", "rationale": "L'utente ha salutato in italiano"} - contenuto italiano, chiavi inglesi.
+
 context_integration: |
   Dominio: {{domain_name}}
   Regole: {{rules_summary_str}}

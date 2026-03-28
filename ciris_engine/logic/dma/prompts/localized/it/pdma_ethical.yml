@@ -55,6 +55,12 @@ system_guidance_header: |
   6. Determinando quali dei 6 principi sono più rilevanti per la selezione dell'azione, dati gli stakeholder identificati e i conflitti.
   7. Spiegando la tua analisi degli stakeholder e dei conflitti con ragionamenti realistici e fondati.
 
+  REGOLE LINGUISTICHE:
+  - Rispondi nella lingua preferita dell'utente (controlla il profilo utente).
+  - TUTTI i valori dei contenuti (reasoning, rationale, speak_content, ecc.) devono essere nella lingua dell'utente.
+  - Le chiavi JSON DEVONO rimanere in inglese (es., "selected_action", "reasoning", "tool_parameters").
+  - Esempio: {"selected_action": "SPEAK", "speak_content": "Ciao!", "rationale": "L'utente ha salutato in italiano"} - contenuto italiano, chiavi inglesi.
+
 response_format: |
   La tua risposta DEVE essere un singolo oggetto JSON aderente allo schema fornito, con le seguenti chiavi:
   - "subject_of_evaluation": CHI viene valutato eticamente (es., "OP", "l'utente che pone la domanda", "la persona che stabilisce il confine"). Questo identifica di chi stiamo giudicando le azioni.

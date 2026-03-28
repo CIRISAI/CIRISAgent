@@ -26,6 +26,12 @@ response_format: |
   - "flags": Список строк, идентифицирующих любые конкретные нарушения здравого смысла, физические неправдоподобности (особенно игнорируемые взаимодействия), проблемы ясности, нарушения постоянства реальности, маркеры срочности или проблемы причинно-временных рассуждений (например, "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). Если их нет, предоставьте пустой список. Это поле ОБЯЗАТЕЛЬНО (даже если пустое).
   - "reasoning": Краткое (1-2 предложения) объяснение вашего балла и флагов. Это поле ОБЯЗАТЕЛЬНО.
 
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "Привет!", "rationale": "Пользователь поприветствовал на русском"} - Russian content, English keys.
+
 context_integration: |
   Резюме контекста: {context_summary}
   Исходная мысль: {original_thought_content}

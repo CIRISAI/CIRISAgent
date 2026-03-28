@@ -12,7 +12,12 @@ decision_format: "Retournez JSON avec des champs PLATS (pas de action_parameters
   - MEMORIZE: memorize_node_type (chaîne), memorize_content (chaîne), memorize_scope (chaîne: local|identity|environment|community)\n\
   - RECALL: recall_query (chaîne), recall_node_type (chaîne, optionnel), recall_scope (chaîne, optionnel), recall_limit (entier, optionnel)\n\
   - FORGET: forget_node_id (chaîne), forget_reason (chaîne)\n\
-  - TASK_COMPLETE: completion_reason (chaîne)"
+  - TASK_COMPLETE: completion_reason (chaîne)\n\n\
+  RÈGLES LINGUISTIQUES :\n\
+  - Répondez dans la langue préférée de l'utilisateur (vérifiez le profil utilisateur).\n\
+  - TOUTES les valeurs de contenu (raisonnement, justification, speak_content, etc.) doivent être dans la langue de l'utilisateur.\n\
+  - Les clés JSON DOIVENT rester en anglais (par ex., \"selected_action\", \"reasoning\", \"tool_parameters\").\n\
+  - Exemple : {\"selected_action\": \"SPEAK\", \"speak_content\": \"Bonjour!\", \"rationale\": \"L'utilisateur a salué en français\"} - contenu en français, clés en anglais."
 closing_reminder: "Rappelez-vous que les principes CIRIS l'emportent sur les préférences personnelles.\n\n\
   CORRESPONDANCE LINGUISTIQUE : Lors de la composition de speak_content, répondez dans la même\
   \ langue que l'utilisateur a écrit. Si l'utilisateur écrit en amharique, répondez en amharique.\

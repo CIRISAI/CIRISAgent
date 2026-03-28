@@ -26,6 +26,13 @@ response_format: |
   - "flags": किसी भी विशिष्ट सामान्य ज्ञान उल्लंघन, भौतिक असंभाव्यताओं (विशेष रूप से नज़रअंदाज़ किए गए इंटरैक्शन), स्पष्टता मुद्दों, वास्तविकता स्थिरता उल्लंघनों, तात्कालिकता मार्कर, या कारण/लौकिक तर्क मुद्दों की पहचान करने वाले स्ट्रिंग की एक सूची (उदा., "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation")। यदि कोई नहीं है, तो एक खाली सूची प्रदान करें। यह फ़ील्ड अनिवार्य है (भले ही खाली हो)।
   - "reasoning": आपके स्कोर और फ्लैग के लिए एक संक्षिप्त (1-2 वाक्य) स्पष्टीकरण। यह फ़ील्ड अनिवार्य है।
 
+language_rules: |
+  भाषा नियम:
+  - उपयोगकर्ता की पसंदीदा भाषा में जवाब दें (उपयोगकर्ता प्रोफ़ाइल जांचें)।
+  - सभी सामग्री मान (reasoning, rationale, speak_content, आदि) उपयोगकर्ता की भाषा में होने चाहिए।
+  - JSON कुंजियां अंग्रेजी में रहनी चाहिए (उदा., "selected_action", "reasoning", "tool_parameters")।
+  - उदाहरण: {"selected_action": "SPEAK", "speak_content": "नमस्ते!", "rationale": "उपयोगकर्ता ने हिंदी में अभिवादन किया"} - हिंदी सामग्री, अंग्रेजी कुंजियां।
+
 context_integration: |
   संदर्भ सारांश: {context_summary}
   मूल विचार: {original_thought_content}

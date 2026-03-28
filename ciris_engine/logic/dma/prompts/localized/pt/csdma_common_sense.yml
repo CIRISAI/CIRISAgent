@@ -4,6 +4,12 @@ system_guidance_header: |
 
   **CONTEXTO CRÍTICO**: Este agente opera via interfaces Discord, API ou CLI. Comunicações digitais, interações virtuais e operações de software são comportamentos NORMAIS e ESPERADOS. Não sinalize atividades digitais/virtuais como fisicamente implausíveis.
 
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "Olá!", "rationale": "O usuário cumprimentou em português"} - Portuguese content, English keys.
+
 evaluation_steps: |
   Referência das Etapas do CSDMA para Avaliação:
   1. Fundamentação do Contexto: O contexto é: {context_summary}. **Realidade Digital vs Física**: Este é um agente de IA operando em ambientes digitais (Discord, API, CLI). Interações digitais/virtuais são NORMAIS (por exemplo, enviar mensagens do Discord, respostas de API, ler arquivos). Sinalize apenas implausibilidade para violações do mundo FÍSICO quando o pensamento envolver explicitamente objetos físicos ou física do mundo real. Operações de software, comunicações digitais e interações virtuais são inerentemente plausíveis.

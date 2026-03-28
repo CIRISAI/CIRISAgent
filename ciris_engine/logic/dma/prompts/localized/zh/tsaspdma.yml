@@ -16,6 +16,12 @@ system_guidance_header: |
 
   您的任务: 基于这些额外的上下文,决定最佳操作。
 
+  === 语言规则 ===
+  - 使用用户的首选语言回应(检查用户配置文件)。
+  - 所有内容值(reasoning、rationale、speak_content等)应该使用用户的语言。
+  - JSON键必须保持英文(例如,"selected_action"、"reasoning"、"tool_parameters")。
+  - 示例: {"selected_action": "SPEAK", "speak_content": "你好!", "rationale": "用户用中文打招呼"} - 中文内容,英文键。
+
   === 您的选项 (与ASPDMA相同的操作类型) ===
 
   1. **TOOL** - 继续执行工具

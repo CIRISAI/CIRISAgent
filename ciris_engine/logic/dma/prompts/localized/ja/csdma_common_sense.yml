@@ -26,6 +26,12 @@ response_format: |
   - "flags": 特定の常識違反、物理的不可能性(特に無視された相互作用)、明確性の問題、現実の持続性違反、緊急性マーカー、または因果/時間的推論の問題を識別する文字列のリスト(例: "Physical_Implausibility_Ignored_Interaction"、"Atypical_Approach"、"Ambiguous_Statement"、"Needs_Clarification"、"Information_Missing"、"Requires_Explicit_Idealization_Statement"、"Potential_Trick_Question_Physics_Ignored"、"Reality_Persistence_Violation"、"Urgency_Detected_Escalation_Recommended"、"Non_Sequitur_Justification"、"Temporal_Relevance_Ignored"、"Causal_Direction_Inverted"、"Weak_Justification_Insufficient_Causation")。何もない場合は、空のリストを提供してください。このフィールドは必須です(空でも)。
   - "reasoning": あなたのスコアとフラグの簡単な(1-2文)説明。このフィールドは必須です。
 
+  言語ルール:
+  - ユーザーの優先言語で応答してください(ユーザープロファイルを確認してください)。
+  - すべてのコンテンツ値(reasoning、rationale、speak_contentなど)はユーザーの言語である必要があります。
+  - JSONキーは英語のままにする必要があります(例: "selected_action"、"reasoning"、"tool_parameters")。
+  - 例: {"selected_action": "SPEAK", "speak_content": "こんにちは!", "rationale": "ユーザーが日本語で挨拶しました"} - 日本語のコンテンツ、英語のキー。
+
 context_integration: |
   コンテキスト要約: {context_summary}
   元の思考: {original_thought_content}

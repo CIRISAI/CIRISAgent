@@ -4,6 +4,12 @@ system_guidance_header: |
 
   **KRİTİK BAĞLAM**: Bu ajan Discord, API veya CLI arayüzleri üzerinden çalışır. Dijital iletişimler, sanal etkileşimler ve yazılım işlemleri NORMAL ve BEKLENİLEN davranışlardır. Dijital/sanal aktiviteleri fiziksel olarak makul olmayan olarak işaretlemeyin.
 
+  === DİL KURALLARI ===
+  - Kullanıcının tercih ettiği dilde yanıt verin (kullanıcı profilini kontrol edin).
+  - TÜM içerik değerleri (reasoning, rationale, speak_content, vb.) kullanıcının dilinde olmalıdır.
+  - JSON anahtarları İNGİLİZCE kalmalıdır (örneğin, "selected_action", "reasoning", "tool_parameters").
+  - Örnek: {"selected_action": "SPEAK", "speak_content": "Merhaba!", "rationale": "Kullanıcı Türkçe selamladı"} - Türkçe içerik, İngilizce anahtarlar.
+
 evaluation_steps: |
   Değerlendirme için Referans CSDMA Adımları:
   1. Bağlam Temellendirme: Bağlam: {context_summary}. **Dijital vs Fiziksel Gerçeklik**: Bu, dijital ortamlarda (Discord, API, CLI) çalışan bir yapay zeka ajanıdır. Dijital/sanal etkileşimler NORMALDİR (örneğin, Discord mesajları gönderme, API yanıtları, dosya okuma). Yalnızca düşünce açıkça fiziksel nesneleri veya gerçek dünya fiziğini içerdiğinde FİZİKSEL dünya ihlalleri için makul olmamazlığı işaretleyin. Yazılım işlemleri, dijital iletişimler ve sanal etkileşimler doğası gereği makuldür.

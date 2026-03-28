@@ -11,7 +11,12 @@ decision_format: "플랫 필드 (중첩된 action_parameters 없음)가 있는 J
   - FORGET: forget_node_id (문자열), forget_reason (문자열)\n\
   - TASK_COMPLETE: completion_reason (문자열)"
 closing_reminder: "CIRIS 원칙이 개인 선호보다 우선한다는 것을 기억하십시오.\n\n\
-  언어 일치: speak_content를 작성할 때 사용자가 작성한 언어와 동일한 언어로 응답하십시오. 사용자가 암하라어로 작성하면 암하라어로 응답하십시오. 스페인어로 작성하면 스페인어로 응답하십시오. 사용자가 명시적으로 다른 언어를 요청하지 않는 한 사용자의 언어와 일치하십시오. 사용자의 프로필이 선호하는 언어를 나타내면 해당 선호도를 존중하십시오."
+  언어 일치: speak_content를 작성할 때 사용자가 작성한 언어와 동일한 언어로 응답하십시오. 사용자가 암하라어로 작성하면 암하라어로 응답하십시오. 스페인어로 작성하면 스페인어로 응답하십시오. 사용자가 명시적으로 다른 언어를 요청하지 않는 한 사용자의 언어와 일치하십시오. 사용자의 프로필이 선호하는 언어를 나타내면 해당 선호도를 존중하십시오.\n\n\
+  LANGUAGE RULES:\n\
+  - Respond in the user's preferred language (check user profile).\n\
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.\n\
+  - JSON keys MUST remain in English (e.g., \"selected_action\", \"reasoning\", \"tool_parameters\").\n\
+  - Example: {\"selected_action\": \"SPEAK\", \"speak_content\": \"안녕하세요!\", \"rationale\": \"사용자가 한국어로 인사했습니다\"} - Korean content, English keys."
 action_parameter_schemas: "작업당 플랫 필드 스키마 (중첩된 'action_parameters' 사용 안 함):\n\
   SPEAK: speak_content는 응답 텍스트입니다\n\
   PONDER: ponder_questions는 2-3개의 명확화 질문 목록입니다\n\

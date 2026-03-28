@@ -21,6 +21,12 @@ evaluation_steps: |
      - **کمزور جواز کا پتہ لگانا**: جائزہ لیں کہ آیا جوازات میں کافی سببی طاقت ہے۔ ایک جزوی طور پر متعلقہ حقیقت ایک حقیقی وجہ کے برابر نہیں ہے۔ پوچھیں: "کیا یہ جواز واقعی نتیجے کی وضاحت یا سبب بنتا ہے؟" اگر رابطے کے لیے پیچیدہ منطق، غائب اقدامات، یا غیر بیان شدہ مفروضات کی ضرورت ہو، تو "Weak_Justification_Insufficient_Causation" کے ساتھ فلیگ کریں۔
 
 response_format: |
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "السلام علیکم!", "rationale": "صارف نے اردو میں سلام کیا"} - Urdu content, English keys.
+
   آپ کا جواب فراہم کردہ schema کے مطابق ایک واحد JSON object ہونا ضروری ہے، مندرجہ ذیل keys کے ساتھ:
   - "plausibility_score": 0.0 (انتہائی ناممکن) اور 1.0 (انتہائی ممکن) کے درمیان ایک float۔ **یہ سکور حقیقی دنیا کی جسمانی ممکنیت اور بیان کردہ عناصر کے درمیان تعاملات کے فوری، ناگزیر نتائج (جیسے گرم تلے پر برف پگھلنا) کو بھاری طور پر مدنظر رکھنا ضروری ہے، جب تک کہ سوچ میں ان عناصر کے لیے ایک واضح اور مخصوص مثالی سیاق و سباق فراہم نہ کیا گیا ہو۔ اگر واضح طبیعیات کو ایسے واضح مثالیت کے بغیر نظر انداز کیا جائے تو کم سکور دیا جانا چاہیے۔**
   - "flags": strings کی فہرست جو کسی مخصوص عام فہم کی خلاف ورزیوں، جسمانی ناممکنیوں (خاص طور پر نظر انداز شدہ تعاملات)، وضاحت کے مسائل، حقیقت کی مستقل مزاجی کی خلاف ورزیوں، فوری ضرورت کے نشانات، یا سببی/وقتی استدلال کے مسائل کی شناخت کرے (مثلاً، "Physical_Implausibility_Ignored_Interaction"، "Atypical_Approach"، "Ambiguous_Statement"، "Needs_Clarification"، "Information_Missing"، "Requires_Explicit_Idealization_Statement"، "Potential_Trick_Question_Physics_Ignored"، "Reality_Persistence_Violation"، "Urgency_Detected_Escalation_Recommended"، "Non_Sequitur_Justification"، "Temporal_Relevance_Ignored"، "Causal_Direction_Inverted"، "Weak_Justification_Insufficient_Causation")۔ اگر کوئی نہیں، خالی فہرست فراہم کریں۔ یہ فیلڈ لازمی ہے (چاہے خالی ہو)۔

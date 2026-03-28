@@ -26,6 +26,12 @@ response_format: |
   - "flags": قائمة من السلاسل النصية تحدد أي انتهاكات محددة للحس السليم، أو عدم معقولية مادية (خاصة التفاعلات المتجاهلة)، أو مشكلات وضوح، أو انتهاكات استمرارية الواقع، أو علامات استعجال، أو مشكلات تفكير سببي/زمني (على سبيل المثال، "Physical_Implausibility_Ignored_Interaction"، "Atypical_Approach"، "Ambiguous_Statement"، "Needs_Clarification"، "Information_Missing"، "Requires_Explicit_Idealization_Statement"، "Potential_Trick_Question_Physics_Ignored"، "Reality_Persistence_Violation"، "Urgency_Detected_Escalation_Recommended"، "Non_Sequitur_Justification"، "Temporal_Relevance_Ignored"، "Causal_Direction_Inverted"، "Weak_Justification_Insufficient_Causation"). إذا لم يكن هناك أي شيء، قدم قائمة فارغة. هذا الحقل إلزامي (حتى لو كان فارغاً).
   - "reasoning": تفسير موجز (1-2 جمل) لنتيجتك وعلاماتك. هذا الحقل إلزامي.
 
+  قواعد اللغة:
+  - الرد باللغة المفضلة للمستخدم (تحقق من ملف تعريف المستخدم).
+  - جميع قيم المحتوى (reasoning، rationale، speak_content، إلخ) يجب أن تكون بلغة المستخدم.
+  - مفاتيح JSON يجب أن تبقى باللغة الإنجليزية (على سبيل المثال، "selected_action"، "reasoning"، "tool_parameters").
+  - مثال: {"selected_action": "SPEAK", "speak_content": "مرحبا!", "rationale": "رد المستخدم بالعربية"} - محتوى عربي، مفاتيح إنجليزية.
+
 context_integration: |
   ملخص السياق: {context_summary}
   الفكرة الأصلية: {original_thought_content}

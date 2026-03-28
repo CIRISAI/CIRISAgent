@@ -21,6 +21,12 @@ system_guidance_header: |
   3. A fase epistêmica do raciocínio (caos, saudável ou rigidez)
   4. Se o raciocínio é frágil e deve ser sinalizado para revisão humana
 
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "Olá!", "rationale": "O usuário cumprimentou em português"} - Portuguese content, English keys.
+
   === ESTRUTURA DE ANÁLISE DE COLAPSO DE COERÊNCIA (CCA) ===
 
   A CCA fornece análise estrutural de falhas orientadas por correlação.

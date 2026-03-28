@@ -178,3 +178,9 @@ closing_reminder: |
   SPEAK를 선택할 때 구체적으로: "사용자가 답변해야 합니다: [질문]"
   PONDER를 선택할 때 설명: "이 도구는 Y 때문에 X를 수행할 수 없으므로 Z를 고려하십시오"
   TOOL을 선택할 때 인정: "주의 사항 X에 대한 인식을 가지고 진행"
+
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "안녕하세요!", "rationale": "사용자가 한국어로 인사했습니다"} - Korean content, English keys.

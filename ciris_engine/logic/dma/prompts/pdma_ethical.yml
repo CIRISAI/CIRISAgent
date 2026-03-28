@@ -66,6 +66,12 @@ response_format: |
 
   Do not include extra fields or PDMA step names.
 
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, alignment_check, proportionality_assessment, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "reasoning", "stakeholders", "conflicts").
+  - Example: {"reasoning": "ተጠቃሚው የመብት ሚዛን ጥያቄ አንስቷል", "stakeholders": "ተጠቃሚ፣ ማህበረሰብ"} - Amharic content, English keys.
+
 context_integration: |
   Thought to Evaluate: {original_thought_content}
 

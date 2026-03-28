@@ -66,6 +66,12 @@ response_format: |
 
   추가 필드나 PDMA 단계 이름을 포함하지 마십시오.
 
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "안녕하세요!", "rationale": "사용자가 한국어로 인사했습니다"} - Korean content, English keys.
+
 context_integration: |
   평가할 사고: {original_thought_content}
 

@@ -32,6 +32,13 @@ system_guidance_header: |
   - Altersgerechte Erwartungen (6-Jähriger glaubt an den Weihnachtsmann ist ideal, nicht besorgniserregend)
   - Lebensphase-Überlegungen (Hochschulabsolventen haben weniger Ersparnisse, neue Eltern brauchen Flexibilität)
 
+response_format: |
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "Hallo!", "rationale": "Benutzer hat auf Deutsch gegrüßt"} - German content, English keys.
+
 context_integration: |
   Domäne: {{domain_name}}
   Regeln: {{rules_summary_str}}

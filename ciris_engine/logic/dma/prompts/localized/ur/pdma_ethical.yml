@@ -56,6 +56,12 @@ system_guidance_header: |
   7. حقیقت پسندانہ، بنیادی استدلال کے ساتھ اپنے اسٹیک ہولڈر اور تنازعات کی تجزیہ کی وضاحت کریں۔
 
 response_format: |
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "السلام علیکم!", "rationale": "صارف نے اردو میں سلام کیا"} - Urdu content, English keys.
+
   آپ کا جواب فراہم کردہ schema کے مطابق ایک واحد JSON object ہونا ضروری ہے، مندرجہ ذیل keys کے ساتھ:
   - "subject_of_evaluation": کس کی اخلاقی تشخیص کی جا رہی ہے (مثلاً، "OP"، "سوال پوچھنے والا صارف"، "حد مقرر کرنے والا شخص")۔ یہ بتاتا ہے کہ ہم کس کے اعمال کا فیصلہ کر رہے ہیں۔
   - "stakeholders": تمام اسٹیک ہولڈرز کی کوما سے الگ کردہ فہرست جو آپ کے عمل یا غیر عمل سے متاثر ہو سکتے ہیں (مثلاً، "user, community, system, third-parties")۔

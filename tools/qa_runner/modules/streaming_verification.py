@@ -74,7 +74,7 @@ class StreamingVerificationModule:
         stream_connected = threading.Event()
         stream_error = threading.Event()
 
-        def monitor_stream():
+        def monitor_stream() -> None:
             """Monitor SSE stream in a separate thread."""
             nonlocal events_with_audit_data, events_with_recursive_flag
             nonlocal recursive_aspdma_count, recursive_conscience_count, unexpected_events
@@ -1175,6 +1175,27 @@ class StreamingVerificationModule:
                 "message": f"Error updating language: {e}",
             }
 
+    # Language-specific markers to detect proper localization in conscience prompts
+    # These are phrases that MUST appear in conscience prompts for each language
+    # and MUST NOT appear when the language is different
+    CONSCIENCE_LANGUAGE_MARKERS = {
+        "en": ["You are IRIS-E", "You are IRIS-C", "You are CIRIS-EOV", "You are CIRIS-EH"],
+        "am": ["እርስዎ IRIS-E", "ኤንትሮፒ"],  # Amharic: formal "you are IRIS-E"
+        "ar": ["أنت IRIS-E", "الانتروبيا"],  # Arabic
+        "de": ["Sie sind IRIS-E", "Entropie"],  # German (formal Sie)
+        "es": ["Eres IRIS-E", "entropía"],  # Spanish
+        "fr": ["Vous êtes IRIS-E", "entropie"],  # French
+        "hi": ["आप IRIS-E हैं", "एन्ट्रॉपी"],  # Hindi
+        "it": ["Sei IRIS-E", "entropia"],  # Italian
+        "ja": ["あなたはIRIS-E", "エントロピー"],  # Japanese
+        "ko": ["당신은 IRIS-E", "엔트로피"],  # Korean
+        "pt": ["Você é IRIS-E", "entropia"],  # Portuguese
+        "ru": ["Ты IRIS-E", "энтропии"],  # Russian
+        "sw": ["Wewe ni IRIS-E", "entropy"],  # Swahili
+        "tr": ["Sen IRIS-E", "entropi"],  # Turkish
+        "zh": ["你是IRIS-E", "熵"],  # Chinese
+    }
+
     @staticmethod
     def verify_localization_change(base_url: str, token: str, target_language: str = "am") -> Dict[str, Any]:
         """
@@ -1183,6 +1204,7 @@ class StreamingVerificationModule:
         1. Updates user's preferred_language to target_language
         2. Runs full streaming verification to generate all reasoning events
         3. Checks for localized strings in conscience/DMA prompts
+        4. Validates conscience prompts contain target language markers (not English)
 
         Args:
             base_url: API base URL
@@ -1192,13 +1214,12 @@ class StreamingVerificationModule:
         Returns:
             Dict with verification results
         """
-        results = {
-            "success": False,
-            "language_update": None,
-            "streaming_result": None,
-            "localization_evidence": [],
-            "errors": [],
-        }
+        # Use separate typed variables to avoid mypy issues with heterogeneous dicts
+        localization_evidence: List[Dict[str, Any]] = []
+        conscience_prompt_analysis: List[Dict[str, Any]] = []
+        errors: List[str] = []
+        language_update: Optional[Dict[str, Any]] = None
+        streaming_result: Optional[Dict[str, Any]] = None
 
         # Step 1: Update user language
         print(f"\n{'='*80}")
@@ -1206,12 +1227,19 @@ class StreamingVerificationModule:
         print(f"{'='*80}")
 
         update_result = StreamingVerificationModule.update_user_language(base_url, token, target_language)
-        results["language_update"] = update_result
+        language_update = update_result
 
         if not update_result["success"]:
-            results["errors"].append(f"Failed to update language: {update_result.get('message')}")
+            errors.append(f"Failed to update language: {update_result.get('message')}")
             print(f"❌ {update_result.get('message')}")
-            return results
+            return {
+                "success": False,
+                "language_update": language_update,
+                "streaming_result": streaming_result,
+                "localization_evidence": localization_evidence,
+                "conscience_prompt_analysis": conscience_prompt_analysis,
+                "errors": errors,
+            }
 
         print(f"✅ Language preference updated to '{target_language}'")
 
@@ -1224,96 +1252,343 @@ class StreamingVerificationModule:
                 stored_lang = profile_data.get("preferred_language")
                 print(f"📋 User profile preferred_language: {stored_lang}")
                 if stored_lang != target_language:
-                    results["errors"].append(f"Language not persisted: expected '{target_language}', got '{stored_lang}'")
+                    errors.append(f"Language not persisted: expected '{target_language}', got '{stored_lang}'")
                 else:
-                    results["localization_evidence"].append({
+                    localization_evidence.append({
                         "source": "user_profile_api",
                         "field": "preferred_language",
                         "value": stored_lang,
                     })
         except Exception as e:
-            results["errors"].append(f"Failed to verify user profile: {e}")
+            errors.append(f"Failed to verify user profile: {e}")
 
-        # Step 3: Run FULL streaming verification to exercise all code paths
-        print(f"\n📡 Running full streaming verification with language '{target_language}'...")
-        print(f"   This will exercise all 10 handler verbs and conscience checks...")
+        # Step 3: Run streaming verification with extended event collection
+        # We need to capture the raw events to analyze conscience prompts
+        print(f"\n📡 Running streaming verification with language '{target_language}'...")
+        print(f"   Capturing conscience prompts for localization analysis...")
 
-        streaming_result = StreamingVerificationModule.verify_streaming_events(base_url, token, timeout=60)
-        results["streaming_result"] = {
-            "success": streaming_result.get("success"),
-            "received_events": streaming_result.get("received_events", []),
-            "total_events": streaming_result.get("total_events", 0),
+        streaming_events_result = StreamingVerificationModule.verify_streaming_events_with_prompts(
+            base_url, token, timeout=60
+        )
+        streaming_result = {
+            "success": streaming_events_result.get("success"),
+            "received_events": streaming_events_result.get("received_events", []),
+            "total_events": streaming_events_result.get("total_events", 0),
         }
 
-        # Step 4: Analyze events for localization evidence
+        # Step 4: Analyze conscience prompts for localization
         print(f"\n{'='*80}")
-        print(f"📝 LOCALIZATION ANALYSIS")
+        print(f"📝 CONSCIENCE PROMPT LOCALIZATION ANALYSIS")
         print(f"{'='*80}")
 
-        event_details = streaming_result.get("event_details", [])
-        for event in event_details:
-            event_type = event.get("event_type")
+        conscience_prompts_list: List[Dict[str, Any]] = streaming_events_result.get("conscience_prompts", [])
+        english_markers = StreamingVerificationModule.CONSCIENCE_LANGUAGE_MARKERS.get("en", [])
+        target_markers = StreamingVerificationModule.CONSCIENCE_LANGUAGE_MARKERS.get(target_language, [])
 
-            # Check snapshot_and_context for user's preferred_language
-            if event_type == "snapshot_and_context":
-                # The full streaming test doesn't expose raw event data, but we can check via API
-                pass
+        conscience_localized = False
+        english_detected = False
 
-            # Check conscience_result for localized ponder strings
-            if event_type == "conscience_result":
-                # Conscience events might contain localized strings
-                print(f"  🧠 Conscience result received")
+        for i, prompt_data in enumerate(conscience_prompts_list):
+            prompt_text = prompt_data.get("prompt", "")
+            conscience_type = prompt_data.get("type", "unknown")
+
+            analysis = {
+                "conscience_type": conscience_type,
+                "prompt_length": len(prompt_text),
+                "english_markers_found": [],
+                "target_markers_found": [],
+                "is_localized": False,
+            }
+
+            # Check for English markers (should NOT be present if localized)
+            for marker in english_markers:
+                if marker in prompt_text:
+                    analysis["english_markers_found"].append(marker)
+                    english_detected = True
+
+            # Check for target language markers (SHOULD be present if localized)
+            for marker in target_markers:
+                if marker in prompt_text:
+                    analysis["target_markers_found"].append(marker)
+                    conscience_localized = True
+
+            # Determine if this prompt is properly localized
+            if target_language != "en":
+                # For non-English, we expect target markers and NO English markers
+                analysis["is_localized"] = (
+                    len(analysis["target_markers_found"]) > 0
+                    and len(analysis["english_markers_found"]) == 0
+                )
+            else:
+                # For English, we expect English markers
+                analysis["is_localized"] = len(analysis["english_markers_found"]) > 0
+
+            conscience_prompt_analysis.append(analysis)
+
+            # Print analysis
+            status = "✅" if analysis["is_localized"] else "❌"
+            print(f"\n  {status} Conscience: {conscience_type}")
+            print(f"     Prompt length: {analysis['prompt_length']} chars")
+            if analysis["english_markers_found"]:
+                print(f"     ⚠️  English markers found: {analysis['english_markers_found']}")
+            if analysis["target_markers_found"]:
+                print(f"     ✅ {target_language.upper()} markers found: {analysis['target_markers_found']}")
+            if not analysis["is_localized"]:
+                if target_language != "en":
+                    print(f"     ❌ Prompt is NOT localized to {target_language}!")
+                    # Show snippet of prompt for debugging
+                    snippet = prompt_text[:200] + "..." if len(prompt_text) > 200 else prompt_text
+                    print(f"     Snippet: {snippet}")
 
         # Step 5: Check the received events include all expected types
-        received = set(streaming_result.get("received_events", []))
+        received_events_list: List[Any] = streaming_result.get("received_events", []) if streaming_result else []
+        received = set(received_events_list)
         expected = {"thought_start", "snapshot_and_context", "dma_results", "idma_result",
                    "aspdma_result", "conscience_result", "action_result"}
 
         if expected.issubset(received):
-            print(f"  ✅ All 7 reasoning event types received")
-            results["localization_evidence"].append({
+            print(f"\n  ✅ All 7 reasoning event types received")
+            localization_evidence.append({
                 "source": "streaming_events",
                 "field": "event_types",
                 "value": list(received),
             })
         else:
             missing = expected - received
-            print(f"  ⚠️  Missing events: {missing}")
+            print(f"\n  ⚠️  Missing events: {missing}")
 
-        # Step 6: Summary
+        # Step 6: Determine overall localization success
+        if target_language != "en":
+            # For non-English: success if at least one conscience prompt is localized
+            # and NO English markers were found
+            localization_passed = conscience_localized and not english_detected
+            if localization_passed:
+                localization_evidence.append({
+                    "source": "conscience_prompts",
+                    "field": "localization",
+                    "value": f"Prompts localized to {target_language}",
+                })
+            else:
+                if english_detected:
+                    errors.append(
+                        f"English markers found in conscience prompts when language should be {target_language}"
+                    )
+                if not conscience_localized:
+                    errors.append(
+                        f"No {target_language} markers found in conscience prompts - localization may have failed"
+                    )
+        else:
+            # For English: success if English markers are found
+            localization_passed = english_detected
+
+        # Step 7: Summary
         print(f"\n{'='*80}")
         print(f"📝 LOCALIZATION TEST RESULTS")
         print(f"{'='*80}")
         print(f"  Target language: {target_language}")
         print(f"  Language stored in profile: ✅")
-        print(f"  Streaming test passed: {'✅' if streaming_result.get('success') else '❌'}")
-        print(f"  Events received: {streaming_result.get('total_events', 0)}")
-        print(f"  Localization evidence: {len(results['localization_evidence'])} items")
+        streaming_success = streaming_result.get("success", False) if streaming_result else False
+        streaming_total = streaming_result.get("total_events", 0) if streaming_result else 0
+        print(f"  Streaming test passed: {'✅' if streaming_success else '❌'}")
+        print(f"  Events received: {streaming_total}")
+        print(f"  Conscience prompts captured: {len(conscience_prompts_list)}")
+        print(f"  Conscience localization: {'✅ PASSED' if localization_passed else '❌ FAILED'}")
+        print(f"  Localization evidence: {len(localization_evidence)} items")
 
-        for evidence in results["localization_evidence"]:
+        for evidence in localization_evidence:
             print(f"    - {evidence['source']}.{evidence['field']}: {evidence['value']}")
 
-        if results["errors"]:
+        if errors:
             print(f"\n❌ Errors:")
-            for error in results["errors"]:
+            for error in errors:
                 print(f"   - {error}")
 
-        # Success if language was stored and streaming test passed
-        results["success"] = (
-            len(results["localization_evidence"]) > 0
-            and streaming_result.get("success", False)
-            and len(results["errors"]) == 0
+        # Success requires: language stored, streaming passed, AND conscience prompts localized
+        success = (
+            len(localization_evidence) > 0
+            and streaming_success
+            and localization_passed
+            and len(errors) == 0
         )
 
-        if results["success"]:
+        if success:
             print(f"\n✅ LOCALIZATION TEST PASSED")
             print(f"   Language preference '{target_language}' is stored and propagated through reasoning pipeline")
+            print(f"   Conscience prompts are properly localized to {target_language}")
         else:
             print(f"\n❌ LOCALIZATION TEST FAILED")
+            if not localization_passed:
+                print(f"   Conscience prompts are NOT properly localized to {target_language}")
 
         print(f"{'='*80}\n")
 
-        return results
+        return {
+            "success": success,
+            "language_update": language_update,
+            "streaming_result": streaming_result,
+            "localization_evidence": localization_evidence,
+            "conscience_prompt_analysis": conscience_prompt_analysis,
+            "errors": errors,
+        }
+
+    @staticmethod
+    def verify_streaming_events_with_prompts(base_url: str, token: str, timeout: int = 60) -> Dict[str, Any]:
+        """
+        Extended version of verify_streaming_events that captures conscience prompts.
+
+        Returns all standard verification results plus a list of conscience prompts
+        for localization analysis.
+        """
+        received_events: Set[str] = set()
+        event_details: List[Dict[str, Any]] = []
+        errors: List[str] = []
+        conscience_prompts: List[Dict[str, Any]] = []
+        start_time = time.time()
+
+        # Track event-specific data
+        events_with_audit_data = 0
+        unexpected_events: Set[str] = set()
+
+        # Shared state for thread communication
+        stream_connected = threading.Event()
+        stream_error = threading.Event()
+
+        def monitor_stream() -> None:
+            """Monitor SSE stream in a separate thread, capturing conscience prompts."""
+            nonlocal events_with_audit_data, unexpected_events
+
+            try:
+                headers = {"Authorization": f"Bearer {token}", "Accept": "text/event-stream"}
+
+                logger.debug("SSE client connecting to reasoning-stream endpoint")
+                response = requests.get(
+                    f"{base_url}/v1/system/runtime/reasoning-stream", headers=headers, stream=True, timeout=5
+                )
+
+                if response.status_code != 200:
+                    errors.append(f"Stream connection failed: {response.status_code}")
+                    stream_error.set()
+                    return
+
+                stream_connected.set()
+
+                # Parse SSE stream
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+
+                    line = line.decode("utf-8") if isinstance(line, bytes) else line
+
+                    if line.startswith("data:"):
+                        try:
+                            data = json.loads(line[6:])
+                            events = data.get("events", [])
+
+                            for event in events:
+                                event_type = event.get("event_type")
+                                if not event_type:
+                                    continue
+
+                                received_events.add(event_type)
+
+                                # Check for unexpected events
+                                all_valid_events = (
+                                    StreamingVerificationModule.EXPECTED_EVENTS
+                                    | StreamingVerificationModule.OPTIONAL_EVENTS
+                                )
+                                if event_type not in all_valid_events:
+                                    unexpected_events.add(event_type)
+
+                                # Capture conscience prompts for localization analysis
+                                if event_type == "conscience_result":
+                                    conscience_prompt = event.get("conscience_prompt", "")
+                                    if conscience_prompt:
+                                        # Try to identify the conscience type from the prompt content
+                                        conscience_type = "unknown"
+                                        if "IRIS-E" in conscience_prompt or "entropy" in conscience_prompt.lower():
+                                            conscience_type = "entropy"
+                                        elif "IRIS-C" in conscience_prompt or "coherence" in conscience_prompt.lower():
+                                            conscience_type = "coherence"
+                                        elif "CIRIS-EOV" in conscience_prompt or "optimization" in conscience_prompt.lower():
+                                            conscience_type = "optimization_veto"
+                                        elif "CIRIS-EH" in conscience_prompt or "epistemic" in conscience_prompt.lower():
+                                            conscience_type = "epistemic_humility"
+
+                                        conscience_prompts.append({
+                                            "type": conscience_type,
+                                            "prompt": conscience_prompt,
+                                            "thought_id": event.get("thought_id"),
+                                        })
+
+                                # Track audit data
+                                if event_type == "action_result":
+                                    audit_fields = ["audit_entry_id", "audit_sequence_number", "audit_entry_hash", "audit_signature"]
+                                    if all(event.get(f) for f in audit_fields):
+                                        events_with_audit_data += 1
+
+                                event_details.append({
+                                    "event_type": event_type,
+                                    "thought_id": event.get("thought_id"),
+                                    "task_id": event.get("task_id"),
+                                })
+
+                        except json.JSONDecodeError as e:
+                            errors.append(f"JSON decode error: {e}")
+                        except Exception as e:
+                            errors.append(f"Error processing event: {e}")
+
+            except Exception as e:
+                errors.append(f"Stream monitoring error: {e}")
+                stream_error.set()
+
+        # Start monitoring thread
+        monitor_thread = threading.Thread(target=monitor_stream, daemon=True)
+        monitor_thread.start()
+
+        # Wait for connection
+        if not stream_connected.wait(timeout=3):
+            return {
+                "success": False,
+                "error": "Failed to connect to SSE stream",
+                "errors": errors,
+                "conscience_prompts": [],
+            }
+
+        time.sleep(1)
+
+        # Trigger a task to generate events
+        try:
+            response = requests.post(
+                f"{base_url}/v1/agent/message",
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                json={"message": "Test localization verification"},
+                timeout=10,
+            )
+        except Exception as e:
+            errors.append(f"Failed to trigger task: {e}")
+
+        # Wait for events
+        elapsed = 0
+        check_interval = 0.5
+        while elapsed < timeout and len(received_events) < len(StreamingVerificationModule.EXPECTED_EVENTS):
+            time.sleep(check_interval)
+            elapsed += check_interval
+
+        duration = time.time() - start_time
+        missing_events = StreamingVerificationModule.EXPECTED_EVENTS - received_events
+
+        return {
+            "success": len(missing_events) == 0 and len(errors) == 0,
+            "received_events": sorted(list(received_events)),
+            "missing_events": sorted(list(missing_events)),
+            "unexpected_events": sorted(list(unexpected_events)),
+            "duration": duration,
+            "total_events": len(event_details),
+            "events_with_audit_data": events_with_audit_data,
+            "event_details": event_details,
+            "conscience_prompts": conscience_prompts,
+            "errors": errors,
+        }
 
     @staticmethod
     def run_custom_test(test: QATestCase, config: QAConfig, token: str) -> Dict[str, Any]:

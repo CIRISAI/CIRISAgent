@@ -34,6 +34,7 @@ from .sql_external_data_tests import SQLExternalDataTests
 from .state_transition_tests import StateTransitionTests
 from .utility_adapters_tests import UtilityAdaptersTests
 from .vision_tests import VisionTests
+from .wallet_tests import WalletTests
 
 __all__ = [
     "AdapterAutoloadTests",
@@ -68,4 +69,5 @@ __all__ = [
     "VisionTests",
     "HostedToolsTests",
     "UtilityAdaptersTests",
+    "WalletTests",
 ]

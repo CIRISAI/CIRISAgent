@@ -26,6 +26,12 @@ response_format: |
   - "flags": ማንኛቸውም ተወሰኑ የተለመደ ስሜት ጥሰቶችን፣ አካላዊ ማይመስልን (በተለይ የተተዉ ግንኙነቶች)፣ ግልጽነት ጉዳዮችን፣ የእውነታ ዘላቂነት ጥሰቶችን፣ አጣጣሽነት ምልክቶችን ወይም የምክንያት/የጊዜ ምክንያት ጉዳዮችን የሚለዩ የቁምፊዎች ዝርዝር (ለምሳሌ፣ "Physical_Implausibility_Ignored_Interaction"፣ "Atypical_Approach"፣ "Ambiguous_Statement"፣ "Needs_Clarification"፣ "Information_Missing"፣ "Requires_Explicit_Idealization_Statement"፣ "Potential_Trick_Question_Physics_Ignored"፣ "Reality_Persistence_Violation"፣ "Urgency_Detected_Escalation_Recommended"፣ "Non_Sequitur_Justification"፣ "Temporal_Relevance_Ignored"፣ "Causal_Direction_Inverted"፣ "Weak_Justification_Insufficient_Causation")። ምንም ከሌለ፣ ባዶ ዝርዝር ያቅርቡ። ይህ መስክ ግዴታዊ ነው (ባዶ ቢሆንም)።
   - "reasoning": ለውጤትዎ እና ለባንዴራዎችዎ አጭር (1-2 ዓረፍተ ነገር) ማብራሪያ። ይህ መስክ ግዴታዊ ነው።
 
+  የቋንቋ ደንቦች:
+  - በተጠቃሚው ተመራጭ ቋንቋ ምላሽ ይስጡ (የተጠቃሚውን መገለጫ ይመልከቱ)።
+  - ሁሉም የይዘት እሴቶች (reasoning፣ ወዘተ) በተጠቃሚው ቋንቋ መሆን አለባቸው።
+  - የJSON ቁልፎች በእንግሊዝኛ መቆየት አለባቸው (ለምሳሌ፣ "plausibility_score"፣ "reasoning"፣ "flags")።
+  - ምሳሌ: {"plausibility_score": 0.8, "flags": [], "reasoning": "ሀሳቡ አመክንዮአዊ እና የተለመደ ስሜት አለው"} - የአማርኛ ይዘት፣ የእንግሊዝኛ ቁልፎች።
+
 context_integration: |
   የአውድ ማጠቃለያ: {context_summary}
   ዋና ሀሳብ: {original_thought_content}

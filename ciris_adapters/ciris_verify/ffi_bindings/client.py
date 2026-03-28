@@ -595,6 +595,83 @@ class CIRISVerify:
             self._log_callback_type = None
             self._active_log_callback = None
 
+        # ciris_verify_derive_secp256k1_pubkey (optional - added in 1.3.0)
+        # Derive secp256k1 public key for EVM wallet
+        try:
+            self._lib.ciris_verify_derive_secp256k1_pubkey.argtypes = [
+                ctypes.c_void_p,                    # handle
+                ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # pubkey_data (out)
+                ctypes.POINTER(ctypes.c_size_t),    # pubkey_len (out)
+            ]
+            self._lib.ciris_verify_derive_secp256k1_pubkey.restype = ctypes.c_int
+
+            self._lib.ciris_verify_get_evm_address.argtypes = [
+                ctypes.POINTER(ctypes.c_uint8),     # pubkey
+                ctypes.c_size_t,                    # pubkey_len
+                ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # address_data (out)
+                ctypes.POINTER(ctypes.c_size_t),    # address_len (out)
+            ]
+            self._lib.ciris_verify_get_evm_address.restype = ctypes.c_int
+
+            self._lib.ciris_verify_get_evm_address_checksummed.argtypes = [
+                ctypes.POINTER(ctypes.c_uint8),     # pubkey
+                ctypes.c_size_t,                    # pubkey_len
+                ctypes.POINTER(ctypes.c_char_p),    # address_str (out)
+                ctypes.POINTER(ctypes.c_size_t),    # address_str_len (out)
+            ]
+            self._lib.ciris_verify_get_evm_address_checksummed.restype = ctypes.c_int
+
+            self._lib.ciris_verify_sign_secp256k1.argtypes = [
+                ctypes.c_void_p,                    # handle
+                ctypes.POINTER(ctypes.c_uint8),     # message_hash
+                ctypes.c_size_t,                    # hash_len
+                ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # signature_data (out)
+                ctypes.POINTER(ctypes.c_size_t),    # signature_len (out)
+            ]
+            self._lib.ciris_verify_sign_secp256k1.restype = ctypes.c_int
+
+            self._lib.ciris_verify_sign_evm_transaction.argtypes = [
+                ctypes.c_void_p,                    # handle
+                ctypes.POINTER(ctypes.c_uint8),     # tx_hash
+                ctypes.c_size_t,                    # hash_len
+                ctypes.c_uint64,                    # chain_id
+                ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # signature_data (out)
+                ctypes.POINTER(ctypes.c_size_t),    # signature_len (out)
+            ]
+            self._lib.ciris_verify_sign_evm_transaction.restype = ctypes.c_int
+
+            self._lib.ciris_verify_sign_typed_data.argtypes = [
+                ctypes.c_void_p,                    # handle
+                ctypes.POINTER(ctypes.c_uint8),     # domain_hash
+                ctypes.c_size_t,                    # domain_len
+                ctypes.POINTER(ctypes.c_uint8),     # message_hash
+                ctypes.c_size_t,                    # message_len
+                ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # signature_data (out)
+                ctypes.POINTER(ctypes.c_size_t),    # signature_len (out)
+            ]
+            self._lib.ciris_verify_sign_typed_data.restype = ctypes.c_int
+
+            self._lib.ciris_verify_recover_evm_address.argtypes = [
+                ctypes.POINTER(ctypes.c_uint8),     # message_hash
+                ctypes.c_size_t,                    # hash_len
+                ctypes.POINTER(ctypes.c_uint8),     # signature
+                ctypes.c_size_t,                    # signature_len
+                ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # address_data (out)
+                ctypes.POINTER(ctypes.c_size_t),    # address_len (out)
+            ]
+            self._lib.ciris_verify_recover_evm_address.restype = ctypes.c_int
+
+            self._lib.ciris_verify_get_wallet_info.argtypes = [
+                ctypes.c_void_p,                    # handle
+                ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # result_json (out)
+                ctypes.POINTER(ctypes.c_size_t),    # result_len (out)
+            ]
+            self._lib.ciris_verify_get_wallet_info.restype = ctypes.c_int
+
+            self._has_wallet_support = True
+        except AttributeError:
+            self._has_wallet_support = False
+
         # Initialize handle
         self._handle = self._lib.ciris_verify_init()
         if not self._handle:
@@ -2241,6 +2318,359 @@ class CIRISVerify:
         finally:
             if diag_data.value:
                 self._lib.ciris_verify_free(diag_data.value)
+
+    # =========================================================================
+    # EVM WALLET SIGNING (v1.3.0)
+    # =========================================================================
+
+    def get_wallet_info(self) -> dict:
+        """Get wallet information including derived secp256k1 public key and EVM address.
+
+        The secp256k1 key is deterministically derived from the Ed25519 root identity
+        using HKDF, ensuring a consistent wallet address across sessions.
+
+        Returns:
+            dict: Wallet info with keys:
+                - secp256k1_public_key: 65-byte uncompressed pubkey as hex
+                - evm_address: 20-byte address as checksummed hex (0x...)
+                - derivation_path: Description of the key derivation
+
+        Raises:
+            CommunicationError: If wallet info retrieval fails.
+            VerificationFailedError: If no Ed25519 key is loaded.
+        """
+        if not getattr(self, '_has_wallet_support', False):
+            raise CommunicationError("Wallet support not available (library version < 1.3.0)")
+
+        result_json = ctypes.POINTER(ctypes.c_uint8)()
+        result_len = ctypes.c_size_t()
+
+        ret = self._lib.ciris_verify_get_wallet_info(
+            self._handle,
+            ctypes.byref(result_json),
+            ctypes.byref(result_len),
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError()
+        if ret != 0:
+            raise VerificationFailedError(f"get_wallet_info failed with code {ret}")
+
+        try:
+            json_bytes = ctypes.string_at(result_json, result_len.value)
+            return json.loads(json_bytes.decode("utf-8"))
+        finally:
+            if result_json:
+                self._lib.ciris_verify_free(result_json)
+
+    def derive_secp256k1_pubkey(self) -> bytes:
+        """Derive the secp256k1 public key from the Ed25519 seed.
+
+        The derivation is deterministic: the same Ed25519 seed always produces
+        the same secp256k1 public key.
+
+        Returns:
+            bytes: 65-byte uncompressed public key (04 || x || y)
+
+        Raises:
+            CommunicationError: If derivation fails.
+            VerificationFailedError: If no Ed25519 key is loaded.
+        """
+        if not getattr(self, '_has_wallet_support', False):
+            raise CommunicationError("Wallet support not available (library version < 1.3.0)")
+
+        pubkey_data = ctypes.POINTER(ctypes.c_uint8)()
+        pubkey_len = ctypes.c_size_t()
+
+        ret = self._lib.ciris_verify_derive_secp256k1_pubkey(
+            self._handle,
+            ctypes.byref(pubkey_data),
+            ctypes.byref(pubkey_len),
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError()
+        if ret != 0:
+            raise VerificationFailedError(f"derive_secp256k1_pubkey failed with code {ret}")
+
+        try:
+            return ctypes.string_at(pubkey_data, pubkey_len.value)
+        finally:
+            if pubkey_data:
+                self._lib.ciris_verify_free(pubkey_data)
+
+    def get_evm_address(self, pubkey: bytes = None) -> bytes:
+        """Get the EVM address from a secp256k1 public key.
+
+        The address is derived by taking keccak256 of the public key (without
+        the 04 prefix) and taking the last 20 bytes.
+
+        Args:
+            pubkey: 65-byte uncompressed secp256k1 public key. If None, derives
+                   the public key first from the Ed25519 seed.
+
+        Returns:
+            bytes: 20-byte EVM address
+
+        Raises:
+            CommunicationError: If address derivation fails.
+            ValueError: If pubkey is not 65 bytes.
+        """
+        if not getattr(self, '_has_wallet_support', False):
+            raise CommunicationError("Wallet support not available (library version < 1.3.0)")
+
+        if pubkey is None:
+            pubkey = self.derive_secp256k1_pubkey()
+
+        if len(pubkey) != 65:
+            raise ValueError(f"pubkey must be 65 bytes, got {len(pubkey)}")
+
+        pubkey_array = (ctypes.c_uint8 * 65).from_buffer_copy(pubkey)
+        address_data = ctypes.POINTER(ctypes.c_uint8)()
+        address_len = ctypes.c_size_t()
+
+        ret = self._lib.ciris_verify_get_evm_address(
+            pubkey_array,
+            ctypes.c_size_t(65),
+            ctypes.byref(address_data),
+            ctypes.byref(address_len),
+        )
+
+        if ret != 0:
+            raise CommunicationError(f"get_evm_address failed with code {ret}")
+
+        try:
+            return ctypes.string_at(address_data, address_len.value)
+        finally:
+            if address_data:
+                self._lib.ciris_verify_free(address_data)
+
+    def get_evm_address_checksummed(self, pubkey: bytes = None) -> str:
+        """Get the checksummed EVM address string from a secp256k1 public key.
+
+        Implements EIP-55 checksum encoding.
+
+        Args:
+            pubkey: 65-byte uncompressed secp256k1 public key. If None, derives
+                   the public key first from the Ed25519 seed.
+
+        Returns:
+            str: Checksummed EVM address (e.g., "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed")
+
+        Raises:
+            CommunicationError: If address derivation fails.
+            ValueError: If pubkey is not 65 bytes.
+        """
+        if not getattr(self, '_has_wallet_support', False):
+            raise CommunicationError("Wallet support not available (library version < 1.3.0)")
+
+        if pubkey is None:
+            pubkey = self.derive_secp256k1_pubkey()
+
+        if len(pubkey) != 65:
+            raise ValueError(f"pubkey must be 65 bytes, got {len(pubkey)}")
+
+        pubkey_array = (ctypes.c_uint8 * 65).from_buffer_copy(pubkey)
+        address_str = ctypes.c_char_p()
+        address_len = ctypes.c_size_t()
+
+        ret = self._lib.ciris_verify_get_evm_address_checksummed(
+            pubkey_array,
+            ctypes.c_size_t(65),
+            ctypes.byref(address_str),
+            ctypes.byref(address_len),
+        )
+
+        if ret != 0:
+            raise CommunicationError(f"get_evm_address_checksummed failed with code {ret}")
+
+        try:
+            return address_str.value.decode("utf-8")
+        finally:
+            if address_str.value:
+                self._lib.ciris_verify_free(ctypes.cast(address_str, ctypes.c_void_p))
+
+    def sign_secp256k1(self, message_hash: bytes) -> bytes:
+        """Sign a 32-byte message hash with the derived secp256k1 key.
+
+        Args:
+            message_hash: 32-byte hash to sign (typically keccak256)
+
+        Returns:
+            bytes: 65-byte signature (r || s || v) where v is the recovery id (0 or 1)
+
+        Raises:
+            CommunicationError: If signing fails.
+            VerificationFailedError: If no Ed25519 key is loaded.
+            ValueError: If message_hash is not 32 bytes.
+        """
+        if not getattr(self, '_has_wallet_support', False):
+            raise CommunicationError("Wallet support not available (library version < 1.3.0)")
+
+        if len(message_hash) != 32:
+            raise ValueError(f"message_hash must be 32 bytes, got {len(message_hash)}")
+
+        hash_array = (ctypes.c_uint8 * 32).from_buffer_copy(message_hash)
+        signature_data = ctypes.POINTER(ctypes.c_uint8)()
+        signature_len = ctypes.c_size_t()
+
+        ret = self._lib.ciris_verify_sign_secp256k1(
+            self._handle,
+            hash_array,
+            ctypes.c_size_t(32),
+            ctypes.byref(signature_data),
+            ctypes.byref(signature_len),
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError()
+        if ret != 0:
+            raise VerificationFailedError(f"sign_secp256k1 failed with code {ret}")
+
+        try:
+            return ctypes.string_at(signature_data, signature_len.value)
+        finally:
+            if signature_data:
+                self._lib.ciris_verify_free(signature_data)
+
+    def sign_evm_transaction(self, tx_hash: bytes, chain_id: int) -> bytes:
+        """Sign an EVM transaction hash with EIP-155 replay protection.
+
+        Args:
+            tx_hash: 32-byte transaction hash
+            chain_id: EVM chain ID for replay protection (e.g., 1 for mainnet, 8453 for Base)
+
+        Returns:
+            bytes: 65-byte signature with EIP-155 adjusted v value (27 or 28)
+
+        Raises:
+            CommunicationError: If signing fails.
+            VerificationFailedError: If no Ed25519 key is loaded.
+            ValueError: If tx_hash is not 32 bytes.
+        """
+        if not getattr(self, '_has_wallet_support', False):
+            raise CommunicationError("Wallet support not available (library version < 1.3.0)")
+
+        if len(tx_hash) != 32:
+            raise ValueError(f"tx_hash must be 32 bytes, got {len(tx_hash)}")
+
+        hash_array = (ctypes.c_uint8 * 32).from_buffer_copy(tx_hash)
+        signature_data = ctypes.POINTER(ctypes.c_uint8)()
+        signature_len = ctypes.c_size_t()
+
+        ret = self._lib.ciris_verify_sign_evm_transaction(
+            self._handle,
+            hash_array,
+            ctypes.c_size_t(32),
+            ctypes.c_uint64(chain_id),
+            ctypes.byref(signature_data),
+            ctypes.byref(signature_len),
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError()
+        if ret != 0:
+            raise VerificationFailedError(f"sign_evm_transaction failed with code {ret}")
+
+        try:
+            return ctypes.string_at(signature_data, signature_len.value)
+        finally:
+            if signature_data:
+                self._lib.ciris_verify_free(signature_data)
+
+    def sign_typed_data(self, domain_hash: bytes, message_hash: bytes) -> bytes:
+        """Sign EIP-712 typed data.
+
+        Args:
+            domain_hash: 32-byte domain separator hash
+            message_hash: 32-byte struct hash
+
+        Returns:
+            bytes: 65-byte signature over keccak256(0x1901 || domain_hash || message_hash)
+
+        Raises:
+            CommunicationError: If signing fails.
+            VerificationFailedError: If no Ed25519 key is loaded.
+            ValueError: If hashes are not 32 bytes.
+        """
+        if not getattr(self, '_has_wallet_support', False):
+            raise CommunicationError("Wallet support not available (library version < 1.3.0)")
+
+        if len(domain_hash) != 32:
+            raise ValueError(f"domain_hash must be 32 bytes, got {len(domain_hash)}")
+        if len(message_hash) != 32:
+            raise ValueError(f"message_hash must be 32 bytes, got {len(message_hash)}")
+
+        domain_array = (ctypes.c_uint8 * 32).from_buffer_copy(domain_hash)
+        message_array = (ctypes.c_uint8 * 32).from_buffer_copy(message_hash)
+        signature_data = ctypes.POINTER(ctypes.c_uint8)()
+        signature_len = ctypes.c_size_t()
+
+        ret = self._lib.ciris_verify_sign_typed_data(
+            self._handle,
+            domain_array,
+            ctypes.c_size_t(32),
+            message_array,
+            ctypes.c_size_t(32),
+            ctypes.byref(signature_data),
+            ctypes.byref(signature_len),
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError()
+        if ret != 0:
+            raise VerificationFailedError(f"sign_typed_data failed with code {ret}")
+
+        try:
+            return ctypes.string_at(signature_data, signature_len.value)
+        finally:
+            if signature_data:
+                self._lib.ciris_verify_free(signature_data)
+
+    def recover_evm_address(self, message_hash: bytes, signature: bytes) -> bytes:
+        """Recover the signer's EVM address from a signature.
+
+        Args:
+            message_hash: 32-byte hash that was signed
+            signature: 65-byte signature (r || s || v)
+
+        Returns:
+            bytes: 20-byte recovered EVM address
+
+        Raises:
+            CommunicationError: If recovery fails (invalid signature).
+            ValueError: If arguments are wrong length.
+        """
+        if not getattr(self, '_has_wallet_support', False):
+            raise CommunicationError("Wallet support not available (library version < 1.3.0)")
+
+        if len(message_hash) != 32:
+            raise ValueError(f"message_hash must be 32 bytes, got {len(message_hash)}")
+        if len(signature) != 65:
+            raise ValueError(f"signature must be 65 bytes, got {len(signature)}")
+
+        hash_array = (ctypes.c_uint8 * 32).from_buffer_copy(message_hash)
+        sig_array = (ctypes.c_uint8 * 65).from_buffer_copy(signature)
+        address_data = ctypes.POINTER(ctypes.c_uint8)()
+        address_len = ctypes.c_size_t()
+
+        ret = self._lib.ciris_verify_recover_evm_address(
+            hash_array,
+            ctypes.c_size_t(32),
+            sig_array,
+            ctypes.c_size_t(65),
+            ctypes.byref(address_data),
+            ctypes.byref(address_len),
+        )
+
+        if ret != 0:
+            raise CommunicationError(f"recover_evm_address failed with code {ret}")
+
+        try:
+            return ctypes.string_at(address_data, address_len.value)
+        finally:
+            if address_data:
+                self._lib.ciris_verify_free(address_data)
 
 
 class MockCIRISVerify(CIRISVerify):

@@ -8,6 +8,12 @@ system_guidance_header: |
   são apropriadas para o domínio e se seu uso se alinha com as melhores práticas específicas do domínio.
   Concentre sua avaliação no alinhamento do domínio.
 
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
+  - Example: {"selected_action": "SPEAK", "speak_content": "Olá!", "rationale": "O usuário cumprimentou em português"} - Portuguese content, English keys.
+
   === CONSCIÊNCIA DE NORMAS ESPECÍFICAS DO DOMÍNIO ===
 
   Ao avaliar cenários, aplique estas normas estabelecidas:

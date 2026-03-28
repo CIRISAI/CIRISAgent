@@ -4,6 +4,12 @@ system_guidance_header: |
 
   **关键上下文**: 此代理通过Discord、API或CLI接口运行。数字通信、虚拟交互和软件操作是正常且预期的行为。不要将数字/虚拟活动标记为物理上不合理的。
 
+  === 语言规则 ===
+  - 使用用户的首选语言回应(检查用户配置文件)。
+  - 所有内容值(reasoning、rationale、speak_content等)应该使用用户的语言。
+  - JSON键必须保持英文(例如,"selected_action"、"reasoning"、"tool_parameters")。
+  - 示例: {"selected_action": "SPEAK", "speak_content": "你好!", "rationale": "用户用中文打招呼"} - 中文内容,英文键。
+
 evaluation_steps: |
   评估的CSDMA步骤参考:
   1. 上下文定位: 上下文是: {context_summary}。**数字 vs 物理现实**: 这是一个在数字环境(Discord, API, CLI)中运行的AI代理。数字/虚拟交互是正常的(例如,发送Discord消息、API响应、读取文件)。只有在想法明确涉及物理对象或现实世界物理时,才标记物理世界违规的不合理性。软件操作、数字通信和虚拟交互本质上是合理的。

@@ -62,6 +62,12 @@ context_integration: |
   === ANALISI DMA PRECEDENTI ===
   {prior_dma_context}
 
+  REGOLE LINGUISTICHE:
+  - Rispondi nella lingua preferita dell'utente (controlla il profilo utente).
+  - TUTTI i valori dei contenuti (reasoning, rationale, speak_content, ecc.) devono essere nella lingua dell'utente.
+  - Le chiavi JSON DEVONO rimanere in inglese (es., "selected_action", "reasoning", "tool_parameters").
+  - Esempio: {"selected_action": "SPEAK", "speak_content": "Ciao!", "rationale": "L'utente ha salutato in italiano"} - contenuto italiano, chiavi inglesi.
+
 response_format: |
   La tua risposta DEVE essere un singolo oggetto JSON aderente allo schema fornito, con le seguenti chiavi:
   - "k_eff": Float (>= 0) - Conteggio di fonti indipendenti effettive. Usa la formula k/(1+ρ(k-1)). k_eff < 2 = fragile.

@@ -164,13 +164,13 @@ fun WalletPage(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(localizedString("screen_wallet")) },
+                title = { Text(localizedString("mobile.screen_wallet")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
                         modifier = Modifier.testableClickable("btn_wallet_back") { onNavigateBack() }
                     ) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = localizedString("common_back"))
+                        Icon(Icons.Default.ArrowBack, contentDescription = localizedString("mobile.common_back"))
                     }
                 },
                 actions = {
@@ -187,7 +187,7 @@ fun WalletPage(
                         },
                         enabled = !loading
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = localizedString("common_refresh"))
+                        Icon(Icons.Default.Refresh, contentDescription = localizedString("mobile.common_refresh"))
                     }
                 }
             )
@@ -309,10 +309,10 @@ private fun WalletErrorCard(error: String, onRetry: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(text = localizedString("wallet_failed"), fontWeight = FontWeight.Bold, color = SemanticColors.Default.error)
+            Text(text = localizedString("mobile.wallet_failed"), fontWeight = FontWeight.Bold, color = SemanticColors.Default.error)
             Text(text = error, fontSize = 14.sp, color = SemanticColors.Default.error.copy(alpha = 0.8f))
             Button(onClick = onRetry) {
-                Text(localizedString("common_retry"))
+                Text(localizedString("mobile.common_retry"))
             }
         }
     }
@@ -396,7 +396,7 @@ private fun WalletBalanceCard(status: WalletStatusResponse) {
                     )
                     if (status.needsGas) {
                         Text(
-                            text = localizedString("wallet_needs_gas"),
+                            text = localizedString("mobile.wallet_needs_gas"),
                             fontSize = 12.sp,
                             color = SemanticColors.Default.warning
                         )
@@ -435,7 +435,7 @@ private fun WalletBalanceCard(status: WalletStatusResponse) {
                 // Receive-only warning
                 if (status.isReceiveOnly) {
                     Text(
-                        text = localizedString("wallet_receive_only"),
+                        text = localizedString("mobile.wallet_receive_only"),
                         fontSize = 12.sp,
                         color = textColor.copy(alpha = 0.8f)
                     )
@@ -471,7 +471,7 @@ private fun WalletAddressCard(address: String, network: String) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = localizedString("wallet_address"),
+                    text = localizedString("mobile.wallet_address"),
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp
                 )
@@ -484,7 +484,7 @@ private fun WalletAddressCard(address: String, network: String) {
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = if (showCopied) "✓ ${localizedString("common_copy")}!" else "📋 ${localizedString("common_copy")}",
+                        text = if (showCopied) "✓ ${localizedString("mobile.common_copy")}!" else "📋 ${localizedString("mobile.common_copy")}",
                         fontSize = 12.sp
                     )
                 }
@@ -500,7 +500,7 @@ private fun WalletAddressCard(address: String, network: String) {
             }
             SelectionContainer {
                 Text(
-                    text = localizedString("wallet_network", mapOf("network" to network)),
+                    text = localizedString("mobile.wallet_network", mapOf("network" to network)),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
@@ -520,7 +520,7 @@ private fun WalletLimitsCard(status: WalletStatusResponse) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = localizedString("wallet_limits"),
+                    text = localizedString("mobile.wallet_limits"),
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp
                 )
@@ -530,7 +530,7 @@ private fun WalletLimitsCard(status: WalletStatusResponse) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(text = localizedString("wallet_attestation"), fontSize = 13.sp)
+                    Text(text = localizedString("mobile.wallet_attestation"), fontSize = 13.sp)
                     Text(
                         text = "${status.attestationLevel}/5",
                         fontSize = 13.sp,
@@ -543,7 +543,7 @@ private fun WalletLimitsCard(status: WalletStatusResponse) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(text = localizedString("wallet_max_tx"), fontSize = 13.sp)
+                    Text(text = localizedString("mobile.wallet_max_tx"), fontSize = 13.sp)
                     Text(
                         text = "$${status.maxTransactionLimit} ${status.currency}",
                         fontSize = 13.sp,
@@ -556,7 +556,7 @@ private fun WalletLimitsCard(status: WalletStatusResponse) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(text = localizedString("wallet_daily_limit"), fontSize = 13.sp)
+                    Text(text = localizedString("mobile.wallet_daily_limit"), fontSize = 13.sp)
                     Text(
                         text = "$${status.dailyLimit} ${status.currency}",
                         fontSize = 13.sp,
@@ -566,7 +566,7 @@ private fun WalletLimitsCard(status: WalletStatusResponse) {
 
                 // Explanation
                 Text(
-                    text = localizedString("wallet_limits_note"),
+                    text = localizedString("mobile.wallet_limits_note"),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
@@ -595,9 +595,9 @@ private fun HardwareTrustWarningCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(text = localizedString("wallet_warning"), fontSize = 16.sp)
+                    Text(text = localizedString("mobile.wallet_warning"), fontSize = 16.sp)
                     Text(
-                        text = localizedString("wallet_trust_degraded"),
+                        text = localizedString("mobile.wallet_trust_degraded"),
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = SemanticColors.Default.onWarning
@@ -605,7 +605,7 @@ private fun HardwareTrustWarningCard(
                 }
 
                 Text(
-                    text = reason ?: localizedString("wallet_receive_only"),
+                    text = reason ?: localizedString("mobile.wallet_receive_only"),
                     fontSize = 13.sp,
                     color = SemanticColors.Default.onWarning.copy(alpha = 0.9f)
                 )
@@ -670,7 +670,7 @@ private fun HardwareTrustWarningCard(
                 }
 
                 Text(
-                    text = localizedString("wallet_sending_disabled"),
+                    text = localizedString("mobile.wallet_sending_disabled"),
                     fontSize = 12.sp,
                     color = SemanticColors.Default.onWarning.copy(alpha = 0.7f)
                 )
@@ -871,7 +871,7 @@ private fun GetGasCard(
             ) {
                 Text(text = "⛽", fontSize = 20.sp)
                 Text(
-                    text = localizedString("wallet_gas_required"),
+                    text = localizedString("mobile.wallet_gas_required"),
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )
@@ -910,13 +910,13 @@ private fun GetGasCard(
             }
 
             Text(
-                text = localizedString("wallet_gas_note"),
+                text = localizedString("mobile.wallet_gas_note"),
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
             )
 
             Text(
-                text = localizedString("wallet_gas_how"),
+                text = localizedString("mobile.wallet_gas_how"),
                 fontWeight = FontWeight.Medium,
                 fontSize = 14.sp
             )
@@ -925,17 +925,17 @@ private fun GetGasCard(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = localizedString("wallet_gas_step1"),
+                    text = localizedString("mobile.wallet_gas_step1"),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
                 Text(
-                    text = localizedString("wallet_gas_step2"),
+                    text = localizedString("mobile.wallet_gas_step2"),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
                 Text(
-                    text = localizedString("wallet_gas_step3"),
+                    text = localizedString("mobile.wallet_gas_step3"),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
@@ -951,7 +951,7 @@ private fun GetGasCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = if (showCopied) "✓ ${localizedString("wallet_address_copied")}" else "📋 ${localizedString("wallet_copy_address")}",
+                    text = if (showCopied) "✓ ${localizedString("mobile.wallet_address_copied")}" else "📋 ${localizedString("mobile.wallet_copy_address")}",
                     fontSize = 14.sp
                 )
             }
@@ -1026,13 +1026,13 @@ private fun WalletTransferCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = localizedString("wallet_send_currency", mapOf("currency" to currency)),
+                text = localizedString("mobile.wallet_send_currency", mapOf("currency" to currency)),
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
 
             Text(
-                text = localizedString("wallet_transfer_note"),
+                text = localizedString("mobile.wallet_transfer_note"),
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
@@ -1041,7 +1041,7 @@ private fun WalletTransferCard(
             OutlinedTextField(
                 value = recipientAddress,
                 onValueChange = { recipientAddress = it; transferError = null; transferSuccess = null },
-                label = { Text(localizedString("wallet_recipient")) },
+                label = { Text(localizedString("mobile.wallet_recipient")) },
                 placeholder = { Text("0x...") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
@@ -1081,13 +1081,13 @@ private fun WalletTransferCard(
             OutlinedTextField(
                 value = amount,
                 onValueChange = { amount = it; transferError = null; transferSuccess = null },
-                label = { Text(localizedString("wallet_amount", mapOf("currency" to currency))) },
+                label = { Text(localizedString("mobile.wallet_amount", mapOf("currency" to currency))) },
                 placeholder = { Text("0.00") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 enabled = !isTransferring,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                supportingText = { Text(localizedString("wallet_max", mapOf("amount" to maxAmount, "currency" to currency))) }
+                supportingText = { Text(localizedString("mobile.wallet_max", mapOf("amount" to maxAmount, "currency" to currency))) }
             )
 
             // Duplicate transaction warning
@@ -1122,8 +1122,8 @@ private fun WalletTransferCard(
             OutlinedTextField(
                 value = memo,
                 onValueChange = { memo = it },
-                label = { Text(localizedString("wallet_memo")) },
-                placeholder = { Text(localizedString("wallet_memo_placeholder")) },
+                label = { Text(localizedString("mobile.wallet_memo")) },
+                placeholder = { Text(localizedString("mobile.wallet_memo_placeholder")) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 enabled = !isTransferring
@@ -1148,11 +1148,11 @@ private fun WalletTransferCard(
             }
 
             // Pre-capture localized strings for use in onClick lambda
-            val errorEnterRecipient = localizedString("wallet_enter_recipient")
-            val errorInvalidFormat = localizedString("wallet_invalid_format")
-            val errorEnterAmount = localizedString("wallet_enter_amount")
-            val errorInvalidAmount = localizedString("wallet_invalid_amount")
-            val errorTransferFailed = localizedString("wallet_transfer_failed")
+            val errorEnterRecipient = localizedString("mobile.wallet_enter_recipient")
+            val errorInvalidFormat = localizedString("mobile.wallet_invalid_format")
+            val errorEnterAmount = localizedString("mobile.wallet_enter_amount")
+            val errorInvalidAmount = localizedString("mobile.wallet_invalid_amount")
+            val errorTransferFailed = localizedString("mobile.wallet_transfer_failed")
 
             // Send button
             Button(
@@ -1196,7 +1196,7 @@ private fun WalletTransferCard(
 
                             if (result.success) {
                                 val txId = result.txHash ?: result.transactionId ?: ""
-                                transferSuccess = LocalizationHelper.getString("wallet_transfer_success", mapOf("tx" to txId))
+                                transferSuccess = LocalizationHelper.getString("mobile.wallet_transfer_success", mapOf("tx" to txId))
                                 // Clear form
                                 recipientAddress = ""
                                 amount = ""
@@ -1224,16 +1224,16 @@ private fun WalletTransferCard(
                         color = MaterialTheme.colorScheme.onPrimary
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(localizedString("wallet_sending"))
+                    Text(localizedString("mobile.wallet_sending"))
                 } else {
-                    Text(localizedString("wallet_send_currency", mapOf("currency" to currency)))
+                    Text(localizedString("mobile.wallet_send_currency", mapOf("currency" to currency)))
                 }
             }
 
             // Warning about gas if needed
             if (needsGas) {
                 Text(
-                    text = "⚠️ ${localizedString("wallet_gas_warning")}",
+                    text = "⚠️ ${localizedString("mobile.wallet_gas_warning")}",
                     fontSize = 11.sp,
                     color = SemanticColors.Default.error
                 )
@@ -1241,7 +1241,7 @@ private fun WalletTransferCard(
 
             // Warning about irreversibility
             Text(
-                text = localizedString("wallet_irreversible"),
+                text = localizedString("mobile.wallet_irreversible"),
                 fontSize = 11.sp,
                 color = SemanticColors.Default.warning
             )

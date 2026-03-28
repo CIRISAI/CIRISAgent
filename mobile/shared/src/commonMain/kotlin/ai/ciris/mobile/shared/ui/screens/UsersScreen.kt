@@ -67,13 +67,13 @@ fun UsersScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(localizedString("screen_users")) },
+                title = { Text(localizedString("mobile.screen_users")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
                         modifier = Modifier.testableClickable("btn_users_back") { onNavigateBack() }
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = localizedString("common_back"))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = localizedString("mobile.common_back"))
                     }
                 },
                 actions = {
@@ -95,7 +95,7 @@ fun UsersScreen(
                         enabled = !state.isLoading,
                         modifier = Modifier.testableClickable("btn_users_refresh") { onRefresh() }
                     ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = localizedString("common_refresh"))
+                        Icon(Icons.Filled.Refresh, contentDescription = localizedString("mobile.common_refresh"))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -306,7 +306,7 @@ private fun FilterChipsRow(
             FilterChip(
                 selected = filter.apiRole == null,
                 onClick = { onFilterChange(filter.copy(apiRole = null)) },
-                label = { Text(localizedString("common_all")) },
+                label = { Text(localizedString("mobile.common_all")) },
                 modifier = Modifier.testableClickable("chip_api_role_all") { onFilterChange(filter.copy(apiRole = null)) }
             )
             APIRole.entries.forEach { role ->
@@ -335,7 +335,7 @@ private fun FilterChipsRow(
             FilterChip(
                 selected = filter.authType == null,
                 onClick = { onFilterChange(filter.copy(authType = null)) },
-                label = { Text(localizedString("common_all")) },
+                label = { Text(localizedString("mobile.common_all")) },
                 modifier = Modifier.testableClickable("chip_auth_type_all") { onFilterChange(filter.copy(authType = null)) }
             )
             listOf("password", "oauth", "api_key").forEach { authType ->
@@ -364,7 +364,7 @@ private fun FilterChipsRow(
             FilterChip(
                 selected = filter.isActive == null,
                 onClick = { onFilterChange(filter.copy(isActive = null)) },
-                label = { Text(localizedString("common_all")) },
+                label = { Text(localizedString("mobile.common_all")) },
                 modifier = Modifier.testableClickable("chip_status_all") { onFilterChange(filter.copy(isActive = null)) }
             )
             FilterChip(
@@ -756,7 +756,7 @@ private fun PaginationControls(
             enabled = pagination.page > 1,
             modifier = Modifier.testableClickable("btn_users_previous_page") { onPrevious() }
         ) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = localizedString("common_back"))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = localizedString("mobile.common_back"))
         }
 
         Text(
@@ -770,7 +770,7 @@ private fun PaginationControls(
             enabled = pagination.page < pagination.totalPages,
             modifier = Modifier.testableClickable("btn_users_next_page") { onNext() }
         ) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = localizedString("common_next"))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = localizedString("mobile.common_next"))
         }
     }
 }

@@ -73,7 +73,7 @@ fun ConfigScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = localizedString("common_back")
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -85,7 +85,7 @@ fun ConfigScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = localizedString("common_refresh")
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -224,7 +224,7 @@ fun ConfigScreen(
                         showDeleteDialog = null
                     }
                 ) {
-                    Text(localizedString("common_delete"))
+                    Text(localizedString("mobile.common_delete"))
                 }
             },
             dismissButton = {
@@ -232,7 +232,7 @@ fun ConfigScreen(
                     onClick = { showDeleteDialog = null },
                     modifier = Modifier.testableClickable("btn_config_cancel_delete") { showDeleteDialog = null }
                 ) {
-                    Text(localizedString("common_cancel"))
+                    Text(localizedString("mobile.common_cancel"))
                 }
             }
         )
@@ -255,7 +255,7 @@ private fun CategoryChips(
         FilterChip(
             selected = selectedCategory == null,
             onClick = { onCategorySelect(null) },
-            label = { Text(localizedString("common_all")) },
+            label = { Text(localizedString("mobile.common_all")) },
             modifier = Modifier.testableClickable("chip_config_category_all") {
                 onCategorySelect(null)
             }
@@ -408,7 +408,7 @@ private fun ConfigItemRow(
                         onClick = onEdit,
                         modifier = Modifier.testableClickable("btn_config_edit_${item.key.lowercase().replace(" ", "_")}") { onEdit() }
                     ) {
-                        Text(localizedString("common_edit"), style = MaterialTheme.typography.labelMedium)
+                        Text(localizedString("mobile.common_edit"), style = MaterialTheme.typography.labelMedium)
                     }
                     TextButton(
                         onClick = onDelete,
@@ -417,7 +417,7 @@ private fun ConfigItemRow(
                         ),
                         modifier = Modifier.testableClickable("btn_config_delete_${item.key.lowercase().replace(" ", "_")}") { onDelete() }
                     ) {
-                        Text(localizedString("common_delete"), style = MaterialTheme.typography.labelMedium)
+                        Text(localizedString("mobile.common_delete"), style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -460,7 +460,7 @@ private fun EditConfigDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(localizedString("common_edit") + " " + localizedString("mobile.screen_configuration")) },
+        title = { Text(localizedString("mobile.common_edit") + " " + localizedString("mobile.screen_configuration")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
@@ -484,7 +484,7 @@ private fun EditConfigDialog(
                 enabled = editedValue != currentValue,
                 modifier = Modifier.testableClickable("btn_config_dialog_save") { onConfirm(editedValue) }
             ) {
-                Text(localizedString("common_save"))
+                Text(localizedString("mobile.common_save"))
             }
         },
         dismissButton = {
@@ -492,7 +492,7 @@ private fun EditConfigDialog(
                 onClick = onDismiss,
                 modifier = Modifier.testableClickable("btn_config_dialog_cancel") { onDismiss() }
             ) {
-                Text(localizedString("common_cancel"))
+                Text(localizedString("mobile.common_cancel"))
             }
         }
     )

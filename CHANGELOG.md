@@ -5,7 +5,7 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.3.0] - 2026-03-27
+## [2.3.0] - 2026-03-28
 
 ### Added
 
@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Action Sequence Conscience** - Fixed action types stored as `"HandlerActionType.SPEAK"` instead of `"speak"`, preventing conscience from detecting repeated SPEAK actions
+- **DMA Prompt JSON Escaping** - Fixed `KeyError: '"reasoning"'` caused by unescaped JSON braces in LANGUAGE RULES examples (affects all 15 localized prompt sets)
+- **Error Visibility** - Added `emit_dma_failure` and `emit_circuit_breaker_open` calls for UI display
+- **ACCORD Mode** - Added `CIRIS_ACCORD_MODE` env var (compressed/full/none) with default "compressed"
+- **Env Var Security** - Added sanitization in `sync_env_var()` to prevent log injection
 - **Kotlin Composable Context** - Fixed `localizedString()` calls in non-composable contexts
 - **ASPDMA Language** - Use `get_preferred_language()` instead of prompt_loader
 

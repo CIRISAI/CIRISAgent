@@ -63,7 +63,7 @@ fun BillingScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = localizedString("common_back")
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -136,7 +136,7 @@ fun BillingScreen(
                             onClick = onRefresh,
                             modifier = Modifier.testableClickable("btn_billing_refresh") { onRefresh() }
                         ) {
-                            Text(localizedString("common_refresh"))
+                            Text(localizedString("mobile.common_refresh"))
                         }
                     }
                 }

@@ -52,7 +52,7 @@ fun ConsentScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(localizedString("screen_consent_management")) },
+                title = { Text(localizedString("mobile.screen_consent_management")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -60,7 +60,7 @@ fun ConsentScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = localizedString("common_back")
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -72,7 +72,7 @@ fun ConsentScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = localizedString("common_refresh")
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -216,7 +216,7 @@ fun ConsentScreen(
                         showStreamConfirmDialog = null
                     }
                 ) {
-                    Text(localizedString("common_confirm"))
+                    Text(localizedString("mobile.common_confirm"))
                 }
             },
             dismissButton = {
@@ -224,7 +224,7 @@ fun ConsentScreen(
                     onClick = { showStreamConfirmDialog = null },
                     modifier = Modifier.testableClickable("btn_stream_cancel") { showStreamConfirmDialog = null }
                 ) {
-                    Text(localizedString("common_cancel"))
+                    Text(localizedString("mobile.common_cancel"))
                 }
             }
         )

@@ -59,7 +59,7 @@ fun RuntimeScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = localizedString("common_back")
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -71,7 +71,7 @@ fun RuntimeScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = localizedString("common_refresh")
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -334,7 +334,7 @@ private fun PipelineStatusCard(
                 // Current Step
                 StatusMetric(
                     label = localizedString("mobile.runtime_current_step"),
-                    value = currentStepPoint?.let { getStepDisplayName(it) } ?: localizedString("common_none"),
+                    value = currentStepPoint?.let { getStepDisplayName(it) } ?: localizedString("mobile.common_none"),
                     color = colors.info
                 )
 

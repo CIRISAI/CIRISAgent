@@ -37,6 +37,7 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
@@ -2508,8 +2509,11 @@ class CIRISApiClient(
 
             val json = Json.parseToJsonElement(jsonString).jsonObject
 
-            // Parse spending progress
-            val spendingJson = json["spending"]?.jsonObject
+            // Parse spending progress (handle null vs missing vs object)
+            val spendingElement = json["spending"]
+            val spendingJson = if (spendingElement != null && spendingElement !is JsonNull) {
+                spendingElement.jsonObject
+            } else null
             val spending = if (spendingJson != null) {
                 ai.ciris.mobile.shared.ui.screens.SpendingProgress(
                     sessionSpent = spendingJson["session_spent"]?.jsonPrimitive?.contentOrNull ?: "0.00",
@@ -2522,8 +2526,11 @@ class CIRISApiClient(
                 )
             } else null
 
-            // Parse gas estimate
-            val gasJson = json["gas_estimate"]?.jsonObject
+            // Parse gas estimate (handle null vs missing vs object)
+            val gasElement = json["gas_estimate"]
+            val gasJson = if (gasElement != null && gasElement !is JsonNull) {
+                gasElement.jsonObject
+            } else null
             val gasEstimate = if (gasJson != null) {
                 ai.ciris.mobile.shared.ui.screens.GasEstimate(
                     gasPriceGwei = gasJson["gas_price_gwei"]?.jsonPrimitive?.contentOrNull ?: "0.00",
@@ -2535,8 +2542,11 @@ class CIRISApiClient(
                 )
             } else null
 
-            // Parse security advisories
-            val advisoriesJson = json["security_advisories"]?.jsonArray
+            // Parse security advisories (handle null vs missing vs array)
+            val advisoriesElement = json["security_advisories"]
+            val advisoriesJson = if (advisoriesElement != null && advisoriesElement !is JsonNull) {
+                advisoriesElement.jsonArray
+            } else null
             val securityAdvisories = advisoriesJson?.mapNotNull { advElement ->
                 val adv = advElement.jsonObject
                 ai.ciris.mobile.shared.ui.screens.SecurityAdvisoryData(
@@ -2547,20 +2557,23 @@ class CIRISApiClient(
                 )
             } ?: emptyList()
 
-            // Parse recent transactions
-            val txJson = json["recent_transactions"]?.jsonArray
-            val recentTransactions = txJson?.mapNotNull { txElement ->
-                val tx = txElement.jsonObject
+            // Parse recent transactions (handle null vs missing vs array)
+            val txElement = json["recent_transactions"]
+            val txJson = if (txElement != null && txElement !is JsonNull) {
+                txElement.jsonArray
+            } else null
+            val recentTransactions = txJson?.mapNotNull { txItem ->
+                val txObj = txItem.jsonObject
                 ai.ciris.mobile.shared.ui.screens.TransactionSummary(
-                    transactionId = tx["transaction_id"]?.jsonPrimitive?.contentOrNull ?: "",
-                    type = tx["type"]?.jsonPrimitive?.contentOrNull ?: "send",
-                    amount = tx["amount"]?.jsonPrimitive?.contentOrNull ?: "0.00",
-                    currency = tx["currency"]?.jsonPrimitive?.contentOrNull ?: "USDC",
-                    recipient = tx["recipient"]?.jsonPrimitive?.contentOrNull,
-                    sender = tx["sender"]?.jsonPrimitive?.contentOrNull,
-                    status = tx["status"]?.jsonPrimitive?.contentOrNull ?: "pending",
-                    timestamp = tx["timestamp"]?.jsonPrimitive?.contentOrNull ?: "",
-                    explorerUrl = tx["explorer_url"]?.jsonPrimitive?.contentOrNull
+                    transactionId = txObj["transaction_id"]?.jsonPrimitive?.contentOrNull ?: "",
+                    type = txObj["type"]?.jsonPrimitive?.contentOrNull ?: "send",
+                    amount = txObj["amount"]?.jsonPrimitive?.contentOrNull ?: "0.00",
+                    currency = txObj["currency"]?.jsonPrimitive?.contentOrNull ?: "USDC",
+                    recipient = txObj["recipient"]?.jsonPrimitive?.contentOrNull,
+                    sender = txObj["sender"]?.jsonPrimitive?.contentOrNull,
+                    status = txObj["status"]?.jsonPrimitive?.contentOrNull ?: "pending",
+                    timestamp = txObj["timestamp"]?.jsonPrimitive?.contentOrNull ?: "",
+                    explorerUrl = txObj["explorer_url"]?.jsonPrimitive?.contentOrNull
                 )
             } ?: emptyList()
 

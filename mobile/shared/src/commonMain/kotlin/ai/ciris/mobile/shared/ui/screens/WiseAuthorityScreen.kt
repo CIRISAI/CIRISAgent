@@ -59,7 +59,7 @@ fun WiseAuthorityScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(localizedString("screen_human_deferrals")) },
+                title = { Text(localizedString("mobile.screen_human_deferrals")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -67,7 +67,7 @@ fun WiseAuthorityScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = localizedString("common_back")
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -79,7 +79,7 @@ fun WiseAuthorityScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = localizedString("common_refresh")
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -602,7 +602,7 @@ private fun ResolveDeferralDialog(
                 enabled = !isResolving,
                 modifier = Modifier.testableClickable("btn_resolve_cancel") { onDismiss() }
             ) {
-                Text(localizedString("common_cancel"))
+                Text(localizedString("mobile.common_cancel"))
             }
         }
     )

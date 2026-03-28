@@ -73,7 +73,7 @@ fun MemoryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(localizedString("screen_memory_explorer")) },
+                title = { Text(localizedString("mobile.screen_memory_explorer")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -81,7 +81,7 @@ fun MemoryScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = localizedString("common_back")
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -112,7 +112,7 @@ fun MemoryScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = localizedString("common_refresh")
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -346,7 +346,7 @@ private fun MemoryFiltersSection(
                 FilterChip(
                     selected = filter.nodeType == null,
                     onClick = { onFilterChange(filter.copy(nodeType = null)) },
-                    label = { Text(localizedString("common_all")) },
+                    label = { Text(localizedString("mobile.common_all")) },
                     modifier = Modifier.testableClickable("chip_memory_node_type_all") {
                         onFilterChange(filter.copy(nodeType = null))
                     }
@@ -559,7 +559,7 @@ private fun NodeDetailsCard(
                     onClick = onClose,
                     modifier = Modifier.testableClickable("btn_memory_close_details") { onClose() }
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = localizedString("common_close"))
+                    Icon(Icons.Filled.Close, contentDescription = localizedString("mobile.common_close"))
                 }
             }
 

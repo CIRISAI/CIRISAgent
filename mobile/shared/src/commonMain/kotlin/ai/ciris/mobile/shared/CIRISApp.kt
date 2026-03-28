@@ -2914,7 +2914,7 @@ private fun ThemePickerDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text(localizedString("common_done"))
+                Text(localizedString("mobile.common_done"))
             }
         }
     )

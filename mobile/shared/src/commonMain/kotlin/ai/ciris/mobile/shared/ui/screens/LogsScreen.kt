@@ -75,7 +75,7 @@ fun LogsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = localizedString("common_back")
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -94,7 +94,7 @@ fun LogsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = localizedString("common_refresh")
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -293,7 +293,7 @@ private fun LogsFiltersSection(
                         FilterChip(
                             selected = filter.service == null,
                             onClick = { onFilterChange(filter.copy(service = null)) },
-                            label = { Text(localizedString("common_all"), fontSize = 11.sp) },
+                            label = { Text(localizedString("mobile.common_all"), fontSize = 11.sp) },
                             modifier = Modifier.testableClickable("chip_logs_service_all") {
                                 onFilterChange(filter.copy(service = null))
                             }

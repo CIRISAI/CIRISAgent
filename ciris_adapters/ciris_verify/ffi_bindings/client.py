@@ -2354,7 +2354,7 @@ class CIRISVerify:
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError()
         if ret != 0:
-            raise VerificationFailedError(ret, f"get_wallet_info failed with code {ret}")
+            raise VerificationFailedError(f"get_wallet_info failed with code {ret}")
 
         try:
             json_bytes = ctypes.string_at(result_json, result_len.value)
@@ -2391,7 +2391,7 @@ class CIRISVerify:
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError()
         if ret != 0:
-            raise VerificationFailedError(ret, f"derive_secp256k1_pubkey failed with code {ret}")
+            raise VerificationFailedError(f"derive_secp256k1_pubkey failed with code {ret}")
 
         try:
             return ctypes.string_at(pubkey_data, pubkey_len.value)
@@ -2525,7 +2525,7 @@ class CIRISVerify:
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError()
         if ret != 0:
-            raise VerificationFailedError(ret, f"sign_secp256k1 failed with code {ret}")
+            raise VerificationFailedError(f"sign_secp256k1 failed with code {ret}")
 
         try:
             return ctypes.string_at(signature_data, signature_len.value)
@@ -2570,7 +2570,7 @@ class CIRISVerify:
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError()
         if ret != 0:
-            raise VerificationFailedError(ret, f"sign_evm_transaction failed with code {ret}")
+            raise VerificationFailedError(f"sign_evm_transaction failed with code {ret}")
 
         try:
             return ctypes.string_at(signature_data, signature_len.value)
@@ -2619,7 +2619,7 @@ class CIRISVerify:
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError()
         if ret != 0:
-            raise VerificationFailedError(ret, f"sign_typed_data failed with code {ret}")
+            raise VerificationFailedError(f"sign_typed_data failed with code {ret}")
 
         try:
             return ctypes.string_at(signature_data, signature_len.value)

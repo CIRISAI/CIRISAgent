@@ -109,7 +109,7 @@ fun TrustPage(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(localizedString("screen_trust_security")) },
+                title = { Text(localizedString("mobile.screen_trust_security")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -276,7 +276,7 @@ private fun ErrorCard(error: String, onRetry: () -> Unit) {
                 modifier = Modifier.testableClickable("btn_trust_retry") { onRetry() },
                 colors = ButtonDefaults.buttonColors(containerColor = SemanticColors.Default.error)
             ) {
-                Text(localizedString("common_retry"))
+                Text(localizedString("mobile.common_retry"))
             }
         }
     }
@@ -2562,7 +2562,7 @@ private fun DiagnosticsLogCard(
                     modifier = Modifier.testableClickable("btn_copy_diagnostics") { onCopy() },
                     enabled = !diagnostics.isNullOrEmpty()
                 ) {
-                    Text(localizedString("common_copy"))
+                    Text(localizedString("mobile.common_copy"))
                 }
             }
 
@@ -2698,7 +2698,7 @@ private fun RawDetailsCard(
                     fontWeight = FontWeight.Medium
                 )
                 TextButton(onClick = onCopy) {
-                    Text(localizedString("common_copy"))
+                    Text(localizedString("mobile.common_copy"))
                 }
             }
 

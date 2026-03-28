@@ -67,6 +67,7 @@ class LocalizationManager(
     /**
      * Initialize the localization manager.
      * Loads persisted language preference and initializes strings.
+     * Blocks until strings are loaded to prevent timing races.
      */
     suspend fun initialize() {
         PlatformLogger.i(TAG, "Initializing localization manager...")
@@ -90,8 +91,23 @@ class LocalizationManager(
             DEFAULT_LANGUAGE
         }
 
-        // Set current language (will also load strings)
-        setLanguageInternal(validLanguage, persist = false)
+        // Load target language strings synchronously during init to prevent timing race
+        val languageInfo = SUPPORTED_LANGUAGES.find { it.code == validLanguage }
+            ?: SUPPORTED_LANGUAGES.first { it.code == DEFAULT_LANGUAGE }
+
+        val strings = if (validLanguage == "en") {
+            englishStrings
+        } else {
+            languageStringsCache[validLanguage] ?: loadStrings(validLanguage) ?: englishStrings
+        }
+        languageStringsCache[validLanguage] = strings
+
+        // Set state synchronously - no coroutine launch during init
+        currentStrings = strings
+        _currentLanguage.value = validLanguage
+        _currentLanguageInfo.value = languageInfo
+
+        PlatformLogger.i(TAG, "Loaded ${strings.keys.size} top-level keys for $validLanguage")
         _isLoading.value = false
         PlatformLogger.i(TAG, "Localization initialized with language: $validLanguage, explicit: ${_hasExplicitLanguageSelection.value}")
     }

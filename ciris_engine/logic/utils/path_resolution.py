@@ -634,6 +634,16 @@ def sync_env_var(var_name: str, value: str, persist_to_file: bool = True) -> boo
         logger.debug(f"[env_sync] No .env file available (mobile or missing), skipped file persistence for {var_name}")
         return True  # Not an error - mobile doesn't use .env
 
+    # Security: env_path is validated by get_env_file_path() -> get_ciris_home() -> validate_path_safety()
+    # which blocks system directories (/etc, /bin, etc.) and resolves symlinks/traversal.
+    # The ".env" suffix is hardcoded, not user-controlled.
+    # Re-validate here to satisfy static analysis tools (defense in depth).
+    try:
+        env_path = validate_path_safety(env_path, context=".env file path")
+    except ValueError as e:
+        logger.warning(f"[env_sync] Invalid .env path: {e}")
+        return False
+
     try:
         # Read current contents
         content = env_path.read_text()

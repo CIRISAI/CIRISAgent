@@ -116,18 +116,23 @@ class DMAPromptLoader:
                 logger.debug(f"Localized prompt not found for {self.language}, using English: {template_path}")
 
         if not template_path.exists():
+            logger.error(f"[DMA-PROMPT] Template file NOT FOUND: {template_path}")
             raise FileNotFoundError(f"Prompt template not found: {template_path}")
 
         try:
+            logger.info(f"[DMA-PROMPT] Loading template from: {template_path}")
             with open(template_path, "r", encoding="utf-8") as f:
-                template_data = yaml.safe_load(f)
+                raw_content = f.read()
+                logger.info(f"[DMA-PROMPT] Read {len(raw_content)} chars from {template_name}.yml")
+                template_data = yaml.safe_load(raw_content)
 
             if not isinstance(template_data, dict):
+                logger.error(f"[DMA-PROMPT] Invalid template format: expected dict, got {type(template_data)}")
                 raise ValueError(
                     f"Invalid template format in {template_path}: expected dict, got {type(template_data)}"
                 )
 
-            logger.debug(f"Loaded prompt template: {template_name}")
+            logger.info(f"[DMA-PROMPT] Parsed template {template_name}: keys={list(template_data.keys())}")
 
             # Convert dict to PromptCollection
             prompt_collection = PromptCollection(

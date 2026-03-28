@@ -17,8 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import ACCORD_TEXT_COMPRESSED
-from ciris_engine.logic.utils.constants import get_localized_accord_text
+from ciris_engine.logic.utils import get_accord_text
 from ciris_engine.protocols.dma.tsaspdma import TSASPDMAProtocol
 from ciris_engine.schemas.actions.parameters import PonderParams, SpeakParams, ToolParams
 from ciris_engine.schemas.adapters.tools import ToolDocumentation, ToolInfo
@@ -341,13 +340,11 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         """
         messages: List[JSONDict] = []
 
-        # Add accord based on mode - 'full', 'compressed', or 'none' (use localized ACCORD)
+        # Add accord based on mode (centralized in get_accord_text)
         accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
-        if accord_mode == "full":
-            localized_accord = get_localized_accord_text(self.prompt_loader.language)
-            messages.append({"role": "system", "content": localized_accord})
-        elif accord_mode == "compressed":
-            messages.append({"role": "system", "content": ACCORD_TEXT_COMPRESSED})
+        accord_text = get_accord_text(accord_mode)
+        if accord_text:
+            messages.append({"role": "system", "content": accord_text})
 
         # Get system message from prompt template
         system_message = self.prompt_loader.get_system_message(
@@ -621,13 +618,11 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         """Create prompt messages for TSASPDMA correction mode."""
         messages: List[JSONDict] = []
 
-        # Add accord (use localized ACCORD)
+        # Add accord (centralized in get_accord_text)
         accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
-        if accord_mode == "full":
-            localized_accord = get_localized_accord_text(self.prompt_loader.language)
-            messages.append({"role": "system", "content": localized_accord})
-        elif accord_mode == "compressed":
-            messages.append({"role": "system", "content": ACCORD_TEXT_COMPRESSED})
+        accord_text = get_accord_text(accord_mode)
+        if accord_text:
+            messages.append({"role": "system", "content": accord_text})
 
         # System message for correction mode
         system_message = self.prompt_loader.get_system_message(

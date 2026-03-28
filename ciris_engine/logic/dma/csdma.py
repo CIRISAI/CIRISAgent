@@ -11,8 +11,7 @@ from ciris_engine.logic.formatters import (
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import ACCORD_TEXT_COMPRESSED
-from ciris_engine.logic.utils.constants import get_localized_accord_text
+from ciris_engine.logic.utils import get_accord_text
 from ciris_engine.protocols.dma.base import CSDMAProtocol
 from ciris_engine.schemas.dma.results import CSDMAResult
 from ciris_engine.schemas.runtime.models import ImageContent
@@ -87,14 +86,11 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         """
         messages: List[JSONDict] = []
 
-        # Add accord based on mode - 'full', 'compressed', or 'none'
-        # Use localized ACCORD text based on prompt loader's language
+        # Add accord based on mode (centralized in get_accord_text)
         accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
-        if accord_mode == "full":
-            localized_accord = get_localized_accord_text(self.prompt_loader.language)
-            messages.append({"role": "system", "content": localized_accord})
-        elif accord_mode == "compressed":
-            messages.append({"role": "system", "content": ACCORD_TEXT_COMPRESSED})
+        accord_text = get_accord_text(accord_mode)
+        if accord_text:
+            messages.append({"role": "system", "content": accord_text})
 
         # Check for template override of system_prompt (e.g., HE-300 format instructions)
         template_system_override = None

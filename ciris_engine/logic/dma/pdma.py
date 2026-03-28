@@ -5,8 +5,7 @@ from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_snapshot, format_user_profiles
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import ACCORD_TEXT_COMPRESSED
-from ciris_engine.logic.utils.constants import get_localized_accord_text
+from ciris_engine.logic.utils import get_accord_text
 from ciris_engine.protocols.dma.base import PDMAProtocol
 from ciris_engine.schemas.dma.results import EthicalDMAResult
 from ciris_engine.schemas.types import JSONDict
@@ -149,13 +148,11 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         prompt_start = time.time()
         messages: List[JSONDict] = []
 
-        # Add accord based on mode - use localized ACCORD text
+        # Add accord based on mode (centralized in get_accord_text)
         accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
-        if accord_mode == "full":
-            localized_accord = get_localized_accord_text(self.prompt_loader.language)
-            messages.append({"role": "system", "content": localized_accord})
-        elif accord_mode == "compressed":
-            messages.append({"role": "system", "content": ACCORD_TEXT_COMPRESSED})
+        accord_text = get_accord_text(accord_mode)
+        if accord_text:
+            messages.append({"role": "system", "content": accord_text})
 
         system_message = self._build_system_message_text(original_thought_content, full_context_str)
         messages.append({"role": "system", "content": system_message})

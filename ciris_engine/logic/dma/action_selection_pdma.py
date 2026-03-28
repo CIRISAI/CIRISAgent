@@ -7,8 +7,7 @@ from typing import Any, Dict, List, Optional, Union, cast
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils.constants import ACCORD_TEXT_COMPRESSED, get_localized_accord_text
-from ciris_engine.logic.utils.localization import get_preferred_language, get_user_language_from_context
+from ciris_engine.logic.utils.constants import get_accord_text
 from ciris_engine.protocols.dma.base import ActionSelectionDMAProtocol
 from ciris_engine.protocols.faculties import EpistemicFaculty
 from ciris_engine.schemas.actions.parameters import PonderParams
@@ -201,14 +200,10 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         return self.context_builder.build_main_user_content(input_data, agent_name)
 
     def _build_accord_with_metadata(self, original_thought: Any, processing_context: Any = None) -> str:
-        """Build accord text with thought type metadata (uses localized ACCORD)."""
+        """Build accord text with thought type metadata (uses polyglot ACCORD)."""
         accord_mode = self.get_accord_mode()
-        if accord_mode == "full":
-            lang = get_user_language_from_context(processing_context)
-            accord_text = get_localized_accord_text(lang)
-        elif accord_mode == "compressed":
-            accord_text = ACCORD_TEXT_COMPRESSED
-        else:
+        accord_text = get_accord_text(accord_mode)
+        if not accord_text:
             return ""
 
         if original_thought and hasattr(original_thought, "thought_type"):

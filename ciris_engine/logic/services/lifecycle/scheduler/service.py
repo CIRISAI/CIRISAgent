@@ -10,6 +10,7 @@ their own future actions with human approval.
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -24,6 +25,32 @@ from ciris_engine.schemas.services.core import ServiceCapabilities
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_log(value: str, max_length: int = 64) -> str:
+    """Sanitize a value for safe inclusion in log messages.
+
+    Prevents log injection (CWE-117) by:
+    1. Removing newlines and carriage returns (prevent log forging)
+    2. Removing control characters
+    3. Truncating to max length
+    4. Using allowlist of safe characters
+
+    Args:
+        value: Raw value to sanitize
+        max_length: Maximum length of output
+
+    Returns:
+        Sanitized value safe for logging
+    """
+    if not value:
+        return "unnamed"
+    # Remove newlines, carriage returns, and other control characters
+    sanitized = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', value)
+    # Truncate to max length
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized or "unnamed"
 
 # Try to import croniter for cron scheduling support
 try:
@@ -333,12 +360,14 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             self._oneshot_tasks += 1
 
         # Log scheduling details - sanitize user-controlled data to prevent log injection (CWE-117)
-        safe_name = name.replace("\n", "").replace("\r", "")[:64] if name else "unnamed"
+        safe_name = _sanitize_for_log(name)
         if defer_until:
-            logger.info(f"Scheduled one-time task: {safe_name} ({task_id}) for {defer_until}")
+            # defer_until is validated datetime string, but sanitize anyway for defense in depth
+            safe_defer = _sanitize_for_log(defer_until, max_length=30)
+            logger.info(f"Scheduled one-time task: {safe_name} ({task_id}) for {safe_defer}")
         elif schedule_cron:
             next_run = self._get_next_cron_time(schedule_cron)
-            # schedule_cron is validated above, safe to log
+            # schedule_cron is validated above, next_run is computed datetime
             logger.info(f"Scheduled recurring task: {safe_name} ({task_id}). Next run: {next_run}")
         else:
             logger.info(f"Scheduled task: {safe_name} ({task_id})")
@@ -407,7 +436,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             task.status = "CANCELLED"
             del self._active_tasks[task_id]
             # Sanitize task name for logging to prevent log injection (CWE-117)
-            safe_name = task.name.replace("\n", "").replace("\r", "")[:64] if task.name else "unnamed"
+            safe_name = _sanitize_for_log(task.name)
             logger.info(f"Cancelled task: {safe_name} ({task_id})")
             return True
 

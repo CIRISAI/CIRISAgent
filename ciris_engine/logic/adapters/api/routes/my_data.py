@@ -578,8 +578,10 @@ async def update_accord_settings(
             detail="No settings provided to update.",
         )
 
-    # Log role instead of username to avoid logging user-controlled data
-    logger.info(f"Accord settings updated (role={current_user.role}): {', '.join(changes)}")
+    # Log only field names (not values) to prevent log injection (CWE-117)
+    # The 'changes' list contains strings like "consent_given=true" - extract only the field names
+    safe_field_names = [c.split("=")[0] for c in changes if "=" in c]
+    logger.info(f"Accord settings updated (role={current_user.role}): {', '.join(safe_field_names)}")
 
     return StandardResponse(
         success=True,

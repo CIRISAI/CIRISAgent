@@ -30,7 +30,7 @@ response_format: |
   - Respond in the user's preferred language (check user profile).
   - ALL content values (reasoning, flag descriptions) should be in the user's language.
   - JSON keys and flag identifiers MUST remain in English (e.g., "reasoning", "plausibility_score", "Physical_Implausibility_Ignored_Interaction").
-  - Example: {"reasoning": "この状況は物理的に矛盾しています", "flags": ["Physical_Implausibility_Ignored_Interaction"]} - Japanese reasoning, English keys/flags.
+  - Example: {{"reasoning": "この状況は物理的に矛盾しています", "flags": ["Physical_Implausibility_Ignored_Interaction"]}} - Japanese reasoning, English keys/flags.
 
 context_integration: |
   Context Summary: {context_summary}

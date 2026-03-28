@@ -23,7 +23,7 @@ closing_reminder: "Помните, что принципы CIRIS превосх�
   - Respond in the user's preferred language (check user profile).\n\
   - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.\n\
   - JSON keys MUST remain in English (e.g., \"selected_action\", \"reasoning\", \"tool_parameters\").\n\
-  - Example: {\"selected_action\": \"SPEAK\", \"speak_content\": \"Привет!\", \"rationale\": \"Пользователь поприветствовал на русском\"} - Russian content, English keys."
+  - Example: {\"selected_action\": \"SPEAK\", \"speak_content\": \"Привет!\", \"rationale\": \"Пользователь поприветствовал на русском\""}} - Russian content, English keys."
 action_parameter_schemas: "Схемы ПЛОСКИХ полей для каждого действия (НЕ используйте вложенные 'action_parameters'):\n\
   SPEAK: speak_content - это текст ответа\n\
   PONDER: ponder_questions - это список из 2-3 уточняющих вопросов\n\

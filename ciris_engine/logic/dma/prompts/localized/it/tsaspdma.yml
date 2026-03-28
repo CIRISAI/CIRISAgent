@@ -104,7 +104,7 @@ context_integration: |
   - Rispondi nella lingua preferita dell'utente (controlla il profilo utente).
   - TUTTI i valori dei contenuti (reasoning, rationale, speak_content, ecc.) devono essere nella lingua dell'utente.
   - Le chiavi JSON DEVONO rimanere in inglese (es., "selected_action", "reasoning", "tool_parameters").
-  - Esempio: {"selected_action": "SPEAK", "speak_content": "Ciao!", "rationale": "L'utente ha salutato in italiano"} - contenuto italiano, chiavi inglesi.
+  - Esempio: {"selected_action": "SPEAK", "speak_content": "Ciao!", "rationale": "L'utente ha salutato in italiano""}} - contenuto italiano, chiavi inglesi.
 
 response_format: |
   Restituisci un oggetto JSON PIATTO con questi campi:

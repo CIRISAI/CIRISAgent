@@ -8,7 +8,7 @@ system_guidance_header: |
   - 使用用户的首选语言回应(检查用户配置文件)。
   - 所有内容值(reasoning、rationale、speak_content等)应该使用用户的语言。
   - JSON键必须保持英文(例如,"selected_action"、"reasoning"、"tool_parameters")。
-  - 示例: {"selected_action": "SPEAK", "speak_content": "你好!", "rationale": "用户用中文打招呼"} - 中文内容,英文键。
+  - 示例: {"selected_action": "SPEAK", "speak_content": "你好!", "rationale": "用户用中文打招呼""}} - 中文内容,英文键。
 
 evaluation_steps: |
   评估的CSDMA步骤参考:

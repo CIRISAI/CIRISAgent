@@ -137,6 +137,18 @@ async def run_dma_with_retries(
     last_error_msg = str(last_error).strip() if last_error else "unknown error"
     if not last_error_msg:
         last_error_msg = f"<{type(last_error).__name__} with no message>"
+
+    # Emit error to UI (fire and forget - don't block on emission)
+    from ciris_engine.logic.utils import error_emitter
+    task = asyncio.create_task(
+        error_emitter.emit_dma_failure(
+            dma_name=run_fn.__name__,
+            error_summary=last_error_msg[:80],
+        )
+    )
+    # Register task to prevent garbage collection warnings
+    task.add_done_callback(lambda t: None)
+
     raise DMAFailure(f"{run_fn.__name__} failed after {retry_limit} attempts: {last_error_msg}")
 
 

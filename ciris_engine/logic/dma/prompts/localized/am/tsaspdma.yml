@@ -130,7 +130,7 @@ response_format: |
   - በተጠቃሚው ተመራጭ ቋንቋ ምላሽ ይስጡ (የተጠቃሚውን መገለጫ ይመልከቱ)።
   - ሁሉም የይዘት እሴቶች (rationale፣ speak_content፣ ወዘተ) በተጠቃሚው ቋንቋ መሆን አለባቸው።
   - የJSON ቁልፎች በእንግሊዝኛ መቆየት አለባቸው (ለምሳሌ፣ "selected_action"፣ "rationale"፣ "tool_parameters")።
-  - ምሳሌ: {"selected_action": "SPEAK", "speak_content": "ሰላም!", "rationale": "ተጠቃሚው በአማርኛ ሰላምታ ሰጥቷል"} - የአማርኛ ይዘት፣ የእንግሊዝኛ ቁልፎች።
+  - ምሳሌ: {"selected_action": "SPEAK", "speak_content": "ሰላም!", "rationale": "ተጠቃሚው በአማርኛ ሰላምታ ሰጥቷል""}} - የአማርኛ ይዘት፣ የእንግሊዝኛ ቁልፎች።
 
 # Tool correction mode section (used when ASPDMA selected non-existent tool)
 tool_correction_section: |

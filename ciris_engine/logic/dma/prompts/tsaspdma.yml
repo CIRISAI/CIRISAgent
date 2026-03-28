@@ -130,7 +130,7 @@ response_format: |
   - Respond in the user's preferred language (check user profile).
   - ALL content values (rationale, speak_content, ponder_questions) should be in the user's language.
   - JSON keys and action names MUST remain in English (e.g., "selected_action": "TOOL", "rationale", "tool_parameters").
-  - Example: {"selected_action": "SPEAK", "rationale": "需要用户澄清", "speak_content": "请问您想控制哪个灯？"} - Chinese content, English keys/actions.
+  - Example: {{"selected_action": "SPEAK", "rationale": "需要用户澄清", "speak_content": "请问您想控制哪个灯？"}} - Chinese content, English keys/actions.
 
 # Tool correction mode section (used when ASPDMA selected non-existent tool)
 tool_correction_section: |

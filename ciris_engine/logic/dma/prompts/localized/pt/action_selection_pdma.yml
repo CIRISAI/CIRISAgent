@@ -4,7 +4,7 @@ LANGUAGE RULES:\n\
 - Respond in the user's preferred language (check user profile).\n\
 - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.\n\
 - JSON keys MUST remain in English (e.g., \"selected_action\", \"reasoning\", \"tool_parameters\").\n\
-- Example: {\"selected_action\": \"SPEAK\", \"speak_content\": \"Olá!\", \"rationale\": \"O usuário cumprimentou em português\"} - Portuguese content, English keys."
+- Example: {\"selected_action\": \"SPEAK\", \"speak_content\": \"Olá!\", \"rationale\": \"O usuário cumprimentou em português\""}} - Portuguese content, English keys."
 decision_format: "Retorne JSON com campos PLANOS (sem action_parameters aninhado). Chaves obrigatórias: selected_action, rationale. Então inclua APENAS os campos para sua ação escolhida:\n\
   - SPEAK: speak_content (string)\n\
   - PONDER: ponder_questions (lista de strings)\n\

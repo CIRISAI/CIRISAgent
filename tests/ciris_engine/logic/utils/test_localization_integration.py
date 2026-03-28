@@ -247,22 +247,30 @@ class TestConscienceLocalization:
 # ============================================================================
 
 class TestDMALocalization:
-    """Tests for DMA ACCORD text localization."""
+    """Tests for DMA ACCORD text.
 
-    def test_localized_accord_text_english(self):
-        """Test that English ACCORD text is returned."""
-        from ciris_engine.logic.utils.constants import get_localized_accord_text
-        accord = get_localized_accord_text("en")
+    Note: CIRIS 2.3 uses a polyglot ACCORD that contains all languages woven together.
+    There is no separate per-language ACCORD - the polyglot version IS the ACCORD.
+    """
+
+    def test_polyglot_accord_contains_english(self):
+        """Test that polyglot ACCORD contains English content."""
+        from ciris_engine.logic.utils.constants import get_accord_text
+        accord = get_accord_text()
         assert accord is not None
         assert len(accord) > 100  # ACCORD is a substantial document
-        assert "ACCORD" in accord or "Principle" in accord
+        # Polyglot version contains English
+        assert "ACCORD" in accord or "Principle" in accord or "PDMA" in accord
 
-    def test_localized_accord_text_amharic(self):
-        """Test that Amharic ACCORD text is returned or falls back."""
-        from ciris_engine.logic.utils.constants import get_localized_accord_text
-        accord = get_localized_accord_text("am")
+    def test_polyglot_accord_contains_amharic(self):
+        """Test that polyglot ACCORD contains Amharic content."""
+        from ciris_engine.logic.utils.constants import get_accord_text
+        accord = get_accord_text()
         assert accord is not None
-        assert len(accord) > 100
+        # Polyglot version contains Amharic (Ge'ez script)
+        # Check for common Amharic characters in the ACCORD
+        has_amharic = any(ord(c) >= 0x1200 and ord(c) <= 0x137F for c in accord)
+        assert has_amharic, "Polyglot ACCORD should contain Amharic characters"
 
 
 class TestCSDMALocalization:
@@ -299,12 +307,13 @@ class TestCSDMALocalization:
 class TestPDMALocalization:
     """Tests for PDMA language handling."""
 
-    def test_pdma_localized_accord_keys_exist(self):
-        """Test that PDMA-related localization keys exist."""
-        # PDMA uses the same ACCORD text
-        from ciris_engine.logic.utils.constants import get_localized_accord_text
-        accord = get_localized_accord_text("en")
+    def test_pdma_accord_contains_pdma_content(self):
+        """Test that ACCORD contains PDMA-related content."""
+        from ciris_engine.logic.utils.constants import get_accord_text
+        accord = get_accord_text()
         assert accord is not None
+        # ACCORD should reference PDMA process
+        assert "PDMA" in accord
 
 
 class TestIDMALocalization:
@@ -320,15 +329,13 @@ class TestIDMALocalization:
 class TestDSDMALocalization:
     """Tests for DSDMA language handling."""
 
-    def test_dsdma_uses_localized_accord(self):
-        """Test that DSDMA base uses localized ACCORD."""
-        from ciris_engine.logic.utils.constants import get_localized_accord_text
-        # DSDMA should use the same localization mechanism
-        accord_en = get_localized_accord_text("en")
-        accord_am = get_localized_accord_text("am")
-        # Both should return valid text
-        assert accord_en is not None
-        assert accord_am is not None
+    def test_dsdma_uses_polyglot_accord(self):
+        """Test that DSDMA uses the polyglot ACCORD via get_accord_text."""
+        from ciris_engine.logic.utils.constants import get_accord_text
+        # All DMAs now use the same polyglot ACCORD
+        accord = get_accord_text()
+        assert accord is not None
+        assert len(accord) > 100
 
     def test_dsdma_has_prompt_loader(self):
         """Test that DSDMA has prompt_loader for language sync."""
@@ -364,11 +371,13 @@ class TestASPDMALocalization:
 class TestTSASPDMALocalization:
     """Tests for Tool-Specific ASPDMA language handling."""
 
-    def test_tsaspdma_localized_accord(self):
-        """Test that TSASPDMA uses localized ACCORD."""
-        from ciris_engine.logic.utils.constants import get_localized_accord_text
-        accord = get_localized_accord_text("en")
-        assert "tool" in accord.lower() or "ACCORD" in accord
+    def test_tsaspdma_uses_polyglot_accord(self):
+        """Test that TSASPDMA uses polyglot ACCORD via get_accord_text."""
+        from ciris_engine.logic.utils.constants import get_accord_text
+        accord = get_accord_text()
+        # ACCORD should be present and contain relevant content
+        assert accord is not None
+        assert "ACCORD" in accord or "PDMA" in accord
 
     def test_tsaspdma_has_sync_language_method(self):
         """Test that TSASPDMA has _sync_language_from_context method."""

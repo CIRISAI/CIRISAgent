@@ -110,7 +110,7 @@ evaluation_steps: |
   - Responde en el idioma preferido del usuario (verifica el perfil del usuario).
   - TODOS los valores de contenido (reasoning, rationale, speak_content, etc.) deben estar en el idioma del usuario.
   - Las claves JSON DEBEN permanecer en inglés (por ejemplo, "selected_action", "reasoning", "tool_parameters").
-  - Ejemplo: {"selected_action": "SPEAK", "speak_content": "¡Hola!", "rationale": "El usuario saludó en español"} - contenido en español, claves en inglés.
+  - Ejemplo: {"selected_action": "SPEAK", "speak_content": "¡Hola!", "rationale": "El usuario saludó en español""}} - contenido en español, claves en inglés.
 
 closing_reminder: |
   IMPORTANTE: Cuando no estés seguro sobre la independencia de las fuentes, peca de precaución

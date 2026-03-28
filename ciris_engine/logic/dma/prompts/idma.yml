@@ -76,7 +76,7 @@ response_format: |
   - Respond in the user's preferred language (check user profile).
   - ALL content values (reasoning, sources_identified, correlation_factors) should be in the user's language.
   - JSON keys and phase values MUST remain in English (e.g., "reasoning", "k_eff", "phase": "healthy").
-  - Example: {"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"} - Korean content, English keys/phases.
+  - Example: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - Korean content, English keys/phases.
 
   Do not include extra fields or wrap in markdown code blocks.
 

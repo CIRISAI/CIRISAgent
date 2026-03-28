@@ -562,6 +562,40 @@ def get_env_file_path() -> Optional[Path]:
     return None
 
 
+def _sanitize_env_value(value: str) -> str:
+    """Sanitize a value for safe inclusion in .env file.
+
+    Prevents injection attacks by escaping/removing dangerous characters.
+
+    Args:
+        value: Raw value to sanitize
+
+    Returns:
+        Sanitized value safe for .env file
+    """
+    # Remove newlines and carriage returns (prevent multi-line injection)
+    sanitized = value.replace("\n", "").replace("\r", "")
+    # Escape double quotes
+    sanitized = sanitized.replace('"', '\\"')
+    # Escape backslashes (must come after quote escaping)
+    sanitized = sanitized.replace("\\\\", "\\")
+    return sanitized
+
+
+def _validate_env_var_name(var_name: str) -> bool:
+    """Validate that var_name is a safe environment variable name.
+
+    Args:
+        var_name: Variable name to validate
+
+    Returns:
+        True if valid, False otherwise
+    """
+    import re
+    # Env var names: start with letter/underscore, contain only alphanumeric/underscore
+    return bool(re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', var_name))
+
+
 def sync_env_var(var_name: str, value: str, persist_to_file: bool = True) -> bool:
     """Sync an environment variable to both os.environ and .env file.
 
@@ -577,12 +611,19 @@ def sync_env_var(var_name: str, value: str, persist_to_file: bool = True) -> boo
 
     Returns:
         True if successful, False if .env file update failed (os.environ still updated)
+
+    Raises:
+        ValueError: If var_name contains invalid characters
     """
     import re
 
-    # Always update os.environ
+    # Validate var_name to prevent injection
+    if not _validate_env_var_name(var_name):
+        raise ValueError(f"Invalid environment variable name: {var_name}")
+
+    # Always update os.environ (os.environ handles its own safety)
     os.environ[var_name] = value
-    logger.debug(f"[env_sync] Set os.environ[{var_name}]={value}")
+    logger.debug(f"[env_sync] Set os.environ[{var_name}]")
 
     # Skip file persistence on mobile or if not requested
     if not persist_to_file:
@@ -597,20 +638,23 @@ def sync_env_var(var_name: str, value: str, persist_to_file: bool = True) -> boo
         # Read current contents
         content = env_path.read_text()
 
+        # Sanitize value for safe .env file inclusion
+        safe_value = _sanitize_env_value(value)
+
         # Check if variable exists
         pattern = rf'^{re.escape(var_name)}=.*$'
         if re.search(pattern, content, re.MULTILINE):
             # Update existing variable
-            content = re.sub(pattern, f'{var_name}="{value}"', content, flags=re.MULTILINE)
+            content = re.sub(pattern, f'{var_name}="{safe_value}"', content, flags=re.MULTILINE)
         else:
             # Add new variable
             if not content.endswith("\n"):
                 content += "\n"
-            content += f'{var_name}="{value}"\n'
+            content += f'{var_name}="{safe_value}"\n'
 
         # Write back
         env_path.write_text(content)
-        logger.info(f"[env_sync] Persisted {var_name} to {env_path}")
+        logger.info(f"[env_sync] Persisted {var_name} to .env file")
         return True
 
     except Exception as e:

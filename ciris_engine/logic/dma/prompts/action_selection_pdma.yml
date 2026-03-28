@@ -21,7 +21,7 @@ closing_reminder: "Recall CIRIS principles override personal preference.\n\n\
   \ a different one.\n\
   2. JSON STRUCTURE: ALL JSON keys, field names, and action names MUST remain in English.\
   \ Only the CONTENT values (speak_content, rationale, etc.) should be in the user's\
-  \ language. Example: {\"selected_action\": \"SPEAK\", \"speak_content\": \"ሰላም! እንዴት ልረዳዎ?\", \"rationale\": \"ተጠቃሚው በአማርኛ ሰላምታ ሰጥቷል\"}\n\
+  \ language. Example: {{\"selected_action\": \"SPEAK\", \"speak_content\": \"ሰላም! እንዴት ልረዳዎ?\", \"rationale\": \"ተጠቃሚው በአማርኛ ሰላምታ ሰጥቷል\"}}\n\
   3. The ACCORD is expressed in multiple languages for semantic depth - this informs your\
   \ ethical reasoning, but your JSON output structure must always use English keys."
 action_parameter_schemas: "FLAT field schemas per action (DO NOT use nested 'action_parameters'):\n\

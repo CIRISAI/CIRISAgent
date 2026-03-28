@@ -738,7 +738,16 @@ class LLMBus(BaseBus[LLMService]):
         metrics.consecutive_failures += 1
 
         if service_name in self.circuit_breakers:
-            self.circuit_breakers[service_name].record_failure()
+            cb = self.circuit_breakers[service_name]
+            was_closed = cb.state == CircuitState.CLOSED
+            cb.record_failure()
+            # Emit error if circuit just opened
+            if was_closed and cb.state == CircuitState.OPEN:
+                task = asyncio.create_task(
+                    error_emitter.emit_circuit_breaker_open(service_name)
+                )
+                self._background_tasks.add(task)
+                task.add_done_callback(self._background_tasks.discard)
 
     async def _record_resource_telemetry(
         self,

@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.runtime.extended import ScheduledTaskInfo
 
-from ._common import RESPONSES_400, RESPONSES_500_503, AuthAdminDep, AuthObserverDep
+from ._common import RESPONSES_400_404_500_503, RESPONSES_400_500_503, RESPONSES_500_503, AuthAdminDep, AuthObserverDep
 
 logger = logging.getLogger(__name__)
 
@@ -283,7 +283,7 @@ async def get_scheduler_stats(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/tasks", response_model=None, responses={**RESPONSES_400, **RESPONSES_500_503})
+@router.post("/tasks", response_model=None, responses=RESPONSES_400_500_503)
 async def create_scheduled_task(
     request: Request,
     task_request: CreateScheduledTaskRequest,
@@ -365,7 +365,7 @@ async def create_scheduled_task(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/tasks/{task_id}", response_model=None, responses={**RESPONSES_400, **RESPONSES_500_503})
+@router.delete("/tasks/{task_id}", response_model=None, responses=RESPONSES_400_404_500_503)
 async def cancel_scheduled_task(
     request: Request,
     task_id: str,

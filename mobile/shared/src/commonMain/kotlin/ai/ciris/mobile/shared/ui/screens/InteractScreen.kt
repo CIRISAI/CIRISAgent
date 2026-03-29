@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.localization.LocalCurrency
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.ActionDetails
 import ai.ciris.mobile.shared.models.ActionType
 import ai.ciris.mobile.shared.models.ChatMessage
@@ -11,6 +13,8 @@ import ai.ciris.mobile.shared.viewmodels.InteractViewModel
 import ai.ciris.mobile.shared.viewmodels.LlmHealthStatus
 import ai.ciris.mobile.shared.viewmodels.TimelineEvent
 import ai.ciris.mobile.shared.viewmodels.TrustStatus
+import ai.ciris.mobile.shared.viewmodels.WalletStatus
+import ai.ciris.mobile.shared.platform.PlatformLogger
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -96,6 +100,7 @@ fun InteractScreen(
     onNavigateBack: () -> Unit,
     onSessionExpired: () -> Unit = {},
     onOpenTrustPage: () -> Unit = {},
+    onOpenWalletPage: () -> Unit = {},
     onOpenBilling: () -> Unit = {},
     onOpenSystem: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
@@ -131,6 +136,7 @@ fun InteractScreen(
     val llmHealth by viewModel.llmHealth.collectAsState()
     val creditStatus by viewModel.creditStatus.collectAsState()
     val trustStatus by viewModel.trustStatus.collectAsState()
+    val walletStatus by viewModel.walletStatus.collectAsState()
     val attachedFiles by viewModel.attachedFiles.collectAsState()
     val pipelineState by viewModel.pipelineState.collectAsState()
 
@@ -302,10 +308,12 @@ fun InteractScreen(
                 llmHealth = llmHealth,
                 creditStatus = creditStatus,
                 trustStatus = trustStatus,
+                walletStatus = walletStatus,
                 visualizationMode = visualizationMode,
                 onVisualizationToggle = { visualizationMode = visualizationMode.next() },
                 onShutdown = { viewModel.shutdown(emergency = false) },
                 onEmergencyStop = { viewModel.shutdown(emergency = true) },
+                onWalletClick = onOpenWalletPage,
                 onTrustShieldClick = onOpenTrustPage,
                 onCreditsClick = onOpenBilling,
                 onLocalClick = onOpenSystem,
@@ -382,7 +390,7 @@ fun InteractScreen(
         // Message count indicator (from fragment_interact.xml:192-200)
         if (messages.isNotEmpty()) {
             Text(
-                text = "Showing last ${messages.size} messages",
+                text = localizedString("mobile.interact_showing_messages", mapOf("count" to messages.size.toString())),
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(theme.messageCountBackground)
@@ -490,7 +498,7 @@ fun InteractScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Exit fullscreen",
+                        contentDescription = localizedString("mobile.interact_exit_fullscreen"),
                         tint = theme.textPrimary,
                         modifier = Modifier.size(24.dp)
                     )
@@ -528,6 +536,7 @@ fun InteractScreen(
  * - Connection status (local server)
  * - LLM provider health
  * - CIRIS credits (if CIRIS proxy)
+ * - Wallet badge (balance display)
  * - Trust shield (X/5 level)
  * - Shutdown controls
  */
@@ -538,10 +547,12 @@ private fun EnhancedStatusBar(
     llmHealth: LlmHealthStatus,
     creditStatus: CreditStatus,
     trustStatus: TrustStatus,
+    walletStatus: WalletStatus,
     visualizationMode: VisualizationMode,
     onVisualizationToggle: () -> Unit,
     onShutdown: () -> Unit,
     onEmergencyStop: () -> Unit,
+    onWalletClick: () -> Unit,
     onTrustShieldClick: () -> Unit,
     onCreditsClick: () -> Unit,
     onLocalClick: () -> Unit,
@@ -581,7 +592,7 @@ private fun EnhancedStatusBar(
                             )
                     )
                     Text(
-                        text = if (isConnected) "Local" else "Offline",
+                        text = if (isConnected) localizedString("mobile.interact_local") else localizedString("mobile.interact_offline"),
                         fontSize = 11.sp,
                         color = if (isConnected) theme.statusConnected else theme.statusDisconnected
                     )
@@ -600,6 +611,13 @@ private fun EnhancedStatusBar(
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
+
+                // Wallet badge (to the left of trust shield)
+                WalletBadge(
+                    walletStatus = walletStatus,
+                    onClick = onWalletClick,
+                    theme = theme
+                )
 
                 // Trust shield
                 TrustShield(
@@ -625,7 +643,7 @@ private fun EnhancedStatusBar(
                     color = Color.Transparent
                 ) {
                     Text(
-                        text = status,
+                        text = localizedCognitiveState(status),
                         fontSize = 10.sp,
                         color = theme.textSecondary,
                         modifier = Modifier.padding(4.dp)
@@ -648,7 +666,7 @@ private fun EnhancedStatusBar(
                         horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Text(
-                            text = "VIZ",
+                            text = localizedString("mobile.interact_viz_label"),
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Medium,
                             color = when (visualizationMode) {
@@ -658,7 +676,11 @@ private fun EnhancedStatusBar(
                             }
                         )
                         Text(
-                            text = visualizationMode.label,
+                            text = when (visualizationMode) {
+                                VisualizationMode.OFF -> localizedString("mobile.interact_viz_mode_off")
+                                VisualizationMode.BACKGROUND -> localizedString("mobile.interact_viz_mode_bg")
+                                VisualizationMode.FOREGROUND -> localizedString("mobile.interact_viz_mode_fg")
+                            },
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                             color = when (visualizationMode) {
@@ -683,7 +705,7 @@ private fun EnhancedStatusBar(
                     ),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
-                    Text("Shutdown", fontSize = 9.sp)
+                    Text(localizedString("mobile.interact_shutdown"), fontSize = 9.sp)
                 }
 
                 Spacer(modifier = Modifier.width(4.dp))
@@ -699,7 +721,7 @@ private fun EnhancedStatusBar(
                     ),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
-                    Text("STOP", fontSize = 9.sp, color = Color.White)
+                    Text(localizedString("mobile.interact_stop"), fontSize = 9.sp, color = Color.White)
                 }
             }
         }
@@ -819,6 +841,74 @@ private fun CreditsIndicator(
 }
 
 /**
+ * Wallet badge - shows wallet status and balance in user's selected currency
+ * Colors: Green = funded, Amber = receive-only, Gray = not configured/empty
+ * Balance is converted from USDC to selected display currency.
+ */
+@Composable
+private fun WalletBadge(
+    walletStatus: WalletStatus,
+    onClick: () -> Unit,
+    theme: InteractTheme,
+    modifier: Modifier = Modifier
+) {
+    // Get currency manager for conversion
+    val currencyManager = LocalCurrency.current
+    val currentCurrency by currencyManager?.currentCurrency?.collectAsState()
+        ?: remember { mutableStateOf("USD") }
+
+    // Log wallet status for debugging
+    LaunchedEffect(walletStatus) {
+        PlatformLogger.d("WalletBadge", "WalletStatus: isLoaded=${walletStatus.isLoaded}, hasWallet=${walletStatus.hasWallet}, balance=${walletStatus.balance}, provider=${walletStatus.provider}, isReceiveOnly=${walletStatus.isReceiveOnly}")
+    }
+
+    val hasBalance = walletStatus.balance != "0.00" && walletStatus.balance != "0"
+    val badgeColor = when {
+        walletStatus.isReceiveOnly -> theme.trustLevel4  // Receive-only (hardware degraded) - amber
+        hasBalance -> theme.trustLevel5                   // Has funds - green
+        walletStatus.hasWallet -> theme.trustDefault      // Empty wallet - gray
+        else -> theme.trustDefault                        // Not configured - gray
+    }
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(4.dp),
+        color = badgeColor.copy(alpha = 0.15f),
+        modifier = modifier.testableClickable("btn_wallet_badge") { onClick() }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            // Wallet emoji
+            Text(text = "💰", fontSize = 12.sp)
+
+            // Balance or status text - convert to selected currency
+            val displayText = when {
+                !walletStatus.hasWallet -> localizedString("mobile.interact_wallet_setup")
+                walletStatus.isReceiveOnly -> localizedString("mobile.interact_wallet_receive_only")
+                hasBalance -> {
+                    // Convert USDC balance to selected currency
+                    val usdcAmount = walletStatus.balance.toDoubleOrNull() ?: 0.0
+                    currencyManager?.convertFromUsdc(usdcAmount) ?: walletStatus.balance
+                }
+                else -> {
+                    // Show "0" in selected currency format
+                    currencyManager?.convertFromUsdc(0.0) ?: "0"
+                }
+            }
+            Text(
+                text = displayText,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = badgeColor
+            )
+        }
+    }
+}
+
+/**
  * Trust shield - shows attestation level X/5
  * Colors match TrustPage: L5=green, L4=amber, L1-3=red (issues detected)
  */
@@ -899,7 +989,7 @@ private fun ConnectionStatusBar(
 
             // Status text (from fragment_interact.xml:27-35)
             Text(
-                text = if (isConnected) "Connected" else "Disconnected",
+                text = if (isConnected) localizedString("mobile.interact_connected") else localizedString("mobile.interact_disconnected"),
                 modifier = Modifier.weight(1f),
                 fontSize = 14.sp,
                 color = if (isConnected) Color(0xFF10B981) else Color(0xFFEF4444)
@@ -967,7 +1057,7 @@ private fun AuthErrorBanner(
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = "Dismiss",
+                    text = localizedString("mobile.interact_dismiss"),
                     fontSize = 11.sp,
                     color = Color(0xFFDC2626)
                 )
@@ -986,7 +1076,7 @@ private fun AIWarningBanner(
     modifier: Modifier = Modifier
 ) {
     Text(
-        text = "⚠️ AI HALLUCINATES - CHECK FACTS",
+        text = "⚠️ " + localizedString("mobile.interact_hallucination_warning"),
         modifier = modifier
             .fillMaxWidth()
             .background(theme.warningBackground)
@@ -1023,7 +1113,7 @@ private fun EmptyStateView(
 
         // Welcome text (from fragment_interact.xml:160-167)
         Text(
-            text = "Welcome to Ally",
+            text = localizedString("mobile.interact_welcome_title"),
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = if (transparentBackground) Color.White else Color(0xFF1F2937),
@@ -1032,7 +1122,7 @@ private fun EmptyStateView(
 
         // Subtitle (from fragment_interact.xml:169-175)
         Text(
-            text = "Your personal thriving assistant",
+            text = localizedString("mobile.interact_welcome_subtitle"),
             fontSize = 14.sp,
             color = if (transparentBackground) Color.White.copy(alpha = 0.7f) else Color(0xFF6B7280),
             modifier = Modifier.padding(bottom = 24.dp)
@@ -1040,7 +1130,7 @@ private fun EmptyStateView(
 
         // Hint text (from fragment_interact.xml:177-186)
         Text(
-            text = "Ask Ally how it can help with tasks, scheduling, decisions, or wellbeing — or ask how CIRIS works!",
+            text = localizedString("mobile.interact_welcome_hint"),
             fontSize = 14.sp,
             color = if (transparentBackground) Color(0xFF7DD3FC) else Color(0xFF419CA0),  // Lighter cyan on dark
             textAlign = TextAlign.Center,
@@ -1120,7 +1210,7 @@ private fun UserChatBubble(message: ChatMessage, modifier: Modifier = Modifier) 
         ) {
             // Author (from item_chat_user.xml:17-23)
             Text(
-                text = "You",
+                text = localizedString("mobile.interact_sender_you"),
                 fontSize = 11.sp,
                 color = Color(0xFFDBEAFE)
             )
@@ -1196,7 +1286,7 @@ private fun AgentChatBubble(message: ChatMessage, modifier: Modifier = Modifier)
         ) {
             // Author (from item_chat_agent.xml:18-23)
             Text(
-                text = "CIRIS",
+                text = localizedString("mobile.interact_sender_ciris"),
                 fontSize = 11.sp,
                 color = Color(0xFF6B7280)
             )
@@ -1366,6 +1456,13 @@ private fun ActionBubble(message: ChatMessage, modifier: Modifier = Modifier) {
                     }
 
                     // Outcome badge
+                    val outcomeText = when (actionDetails?.outcome?.lowercase()) {
+                        "success" -> localizedString("mobile.interact_outcome_success")
+                        "failure", "failed" -> localizedString("mobile.interact_outcome_failure")
+                        "error" -> localizedString("mobile.interact_outcome_error")
+                        "pending" -> localizedString("mobile.interact_outcome_pending")
+                        else -> actionDetails?.outcome ?: localizedString("mobile.interact_outcome_success")
+                    }
                     val outcomeColor = when (actionDetails?.outcome?.lowercase()) {
                         "success" -> Color(0xFF10B981)
                         "failure", "error", "failed" -> Color(0xFFEF4444)
@@ -1377,7 +1474,7 @@ private fun ActionBubble(message: ChatMessage, modifier: Modifier = Modifier) {
                         color = outcomeColor.copy(alpha = 0.15f)
                     ) {
                         Text(
-                            text = actionDetails?.outcome ?: "success",
+                            text = outcomeText,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             fontSize = 10.sp,
                             color = outcomeColor,
@@ -1425,19 +1522,20 @@ private fun ActionBubble(message: ChatMessage, modifier: Modifier = Modifier) {
 /**
  * Get the main title for an action
  */
+@Composable
 private fun getActionTitle(details: ActionDetails?): String {
     return when (details?.actionType) {
-        ActionType.SPEAK -> "Speak"
-        ActionType.TOOL -> details.toolName ?: "Tool"
-        ActionType.OBSERVE -> "Observe"
-        ActionType.MEMORIZE -> "Memorize"
-        ActionType.RECALL -> "Recall"
-        ActionType.FORGET -> "Forget"
-        ActionType.REJECT -> "Reject"
-        ActionType.PONDER -> "Ponder"
-        ActionType.DEFER -> "Defer"
-        ActionType.TASK_COMPLETE -> "Task Complete"
-        null -> "Action"
+        ActionType.SPEAK -> localizedString("mobile.interact_action_speak")
+        ActionType.TOOL -> details.toolName ?: localizedString("mobile.interact_action_tool")
+        ActionType.OBSERVE -> localizedString("mobile.interact_action_observe")
+        ActionType.MEMORIZE -> localizedString("mobile.interact_action_memorize")
+        ActionType.RECALL -> localizedString("mobile.interact_action_recall")
+        ActionType.FORGET -> localizedString("mobile.interact_action_forget")
+        ActionType.REJECT -> localizedString("mobile.interact_action_reject")
+        ActionType.PONDER -> localizedString("mobile.interact_action_ponder")
+        ActionType.DEFER -> localizedString("mobile.interact_action_defer")
+        ActionType.TASK_COMPLETE -> localizedString("mobile.interact_action_task_complete")
+        null -> localizedString("mobile.interact_action_generic")
     }
 }
 
@@ -1486,7 +1584,7 @@ private fun ActionExpandedDetails(
                 // Tool parameters
                 if (actionDetails.toolParameters.isNotEmpty()) {
                     Text(
-                        text = "Parameters",
+                        text = localizedString("mobile.interact_field_parameters"),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color(0xFF374151)
@@ -1511,11 +1609,28 @@ private fun ActionExpandedDetails(
                         }
                     }
                 }
+                // Tool result
+                actionDetails.toolResult?.let { result ->
+                    Text(
+                        text = localizedString("mobile.interact_field_result"),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF374151)
+                    )
+                    SelectionContainer {
+                        Text(
+                            text = result.take(300) + if (result.length > 300) "..." else "",
+                            fontSize = 10.sp,
+                            color = Color(0xFF1F2937),
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
             }
             ActionType.MEMORIZE, ActionType.RECALL -> {
                 actionDetails.memoryContent?.let { content ->
                     Text(
-                        text = "Content",
+                        text = localizedString("mobile.interact_field_content"),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color(0xFF374151)
@@ -1533,7 +1648,7 @@ private fun ActionExpandedDetails(
             ActionType.DEFER -> {
                 actionDetails.deferReason?.let { reason ->
                     Text(
-                        text = "Reason: $reason",
+                        text = localizedString("mobile.interact_field_reason", mapOf("reason" to reason)),
                         fontSize = 10.sp,
                         color = Color(0xFF6B7280)
                     )
@@ -1542,7 +1657,7 @@ private fun ActionExpandedDetails(
             ActionType.REJECT -> {
                 actionDetails.rejectReason?.let { reason ->
                     Text(
-                        text = "Reason: $reason",
+                        text = localizedString("mobile.interact_field_reason", mapOf("reason" to reason)),
                         fontSize = 10.sp,
                         color = Color(0xFF6B7280)
                     )
@@ -1554,7 +1669,7 @@ private fun ActionExpandedDetails(
                 if (questions.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            text = "Questions:",
+                            text = localizedString("mobile.interact_field_questions"),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Medium,
                             color = Color(0xFF0369A1)
@@ -1658,7 +1773,7 @@ private fun ChatInputBarWithBubbles(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
-                        contentDescription = "Attach file",
+                        contentDescription = localizedString("mobile.interact_attach_file"),
                         tint = if (enabled) theme.textSecondary else theme.inputButtonDisabled,
                         modifier = Modifier.size(20.dp)
                     )
@@ -1683,7 +1798,7 @@ private fun ChatInputBarWithBubbles(
                                 onFocused()
                             }
                         },
-                    placeholder = { Text("Type your message...", color = theme.inputPlaceholder) },
+                    placeholder = { Text(localizedString("mobile.interact_input_placeholder"), color = theme.inputPlaceholder) },
                     enabled = enabled,
                     singleLine = false,
                     maxLines = 3,
@@ -1714,7 +1829,7 @@ private fun ChatInputBarWithBubbles(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Send,
-                        contentDescription = "Send",
+                        contentDescription = localizedString("mobile.interact_send"),
                         tint = Color.White
                     )
                 }
@@ -1789,7 +1904,7 @@ private fun AttachmentChip(
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "Remove",
+                    contentDescription = localizedString("mobile.interact_remove"),
                     tint = Color(0xFF9CA3AF),
                     modifier = Modifier.size(14.dp)
                 )
@@ -1848,7 +1963,7 @@ private fun MessageAttachmentRow(
         // Attachment icon
         Icon(
             imageVector = Icons.Default.Add,
-            contentDescription = "Attachments",
+            contentDescription = localizedString("mobile.interact_attachments"),
             tint = tintColor,
             modifier = Modifier.size(12.dp)
         )
@@ -1876,6 +1991,22 @@ private fun formatFileSize(bytes: Long): String {
             val rounded = (mb * 10).toLong() / 10.0
             "${rounded}MB"
         }
+    }
+}
+
+/**
+ * Localize cognitive state names (WORK, PLAY, SOLITUDE, etc.)
+ */
+@Composable
+private fun localizedCognitiveState(state: String): String {
+    return when (state.uppercase()) {
+        "WORK" -> localizedString("mobile.interact_state_work")
+        "PLAY" -> localizedString("mobile.interact_state_play")
+        "SOLITUDE" -> localizedString("mobile.interact_state_solitude")
+        "DREAM" -> localizedString("mobile.interact_state_dream")
+        "WAKEUP" -> localizedString("mobile.interact_state_wakeup")
+        "SHUTDOWN" -> localizedString("mobile.interact_state_shutdown")
+        else -> state  // Fallback to original if unknown
     }
 }
 
@@ -2087,7 +2218,7 @@ private fun BubbleNet(
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "Clear",
+                                text = localizedString("mobile.interact_clear"),
                                 fontSize = 11.sp,
                                 color = Color(0xFF059669)
                             )
@@ -2172,7 +2303,7 @@ private fun EmojiLegendDialog(
         modifier = modifier,
         title = {
             Text(
-                text = "CIRIS Action Emojis",
+                text = localizedString("mobile.interact_legend_title"),
                 fontWeight = FontWeight.Bold
             )
         },
@@ -2182,79 +2313,81 @@ private fun EmojiLegendDialog(
             ) {
                 // Processing stages
                 Text(
-                    text = "Processing Stages",
+                    text = localizedString("mobile.interact_legend_processing"),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("🤔", "Thought Start")
-                LegendRow("📋", "Snapshot & Context")
-                LegendRow("⚖️", "DMA Results")
-                LegendRow("🎯", "Action Selection")
-                LegendRow("🧭", "Conscience Check")
+                LegendRow("🤔", localizedString("mobile.interact_legend_thought_start"))
+                LegendRow("📋", localizedString("mobile.interact_legend_snapshot"))
+                LegendRow("⚖️", localizedString("mobile.interact_legend_dma"))
+                LegendRow("〰️", localizedString("mobile.interact_legend_idma"))
+                LegendRow("🎯", localizedString("mobile.interact_legend_action_selection"))
+                LegendRow("🔧", localizedString("mobile.interact_legend_tsaspdma"))
+                LegendRow("🧭", localizedString("mobile.interact_legend_conscience"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // External actions
                 Text(
-                    text = "External Actions",
+                    text = localizedString("mobile.interact_legend_external"),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("👀", "Observe")
-                LegendRow("💬", "Speak")
-                LegendRow("🔧", "Tool")
+                LegendRow("👀", localizedString("mobile.interact_legend_observe"))
+                LegendRow("💬", localizedString("mobile.interact_legend_speak"))
+                LegendRow("🔧", localizedString("mobile.interact_legend_tool"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Control actions
                 Text(
-                    text = "Control Actions",
+                    text = localizedString("mobile.interact_legend_control"),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("❌", "Reject")
-                LegendRow("💭", "Ponder")
-                LegendRow("⏸️", "Defer")
+                LegendRow("❌", localizedString("mobile.interact_legend_reject"))
+                LegendRow("💭", localizedString("mobile.interact_legend_ponder"))
+                LegendRow("⏸️", localizedString("mobile.interact_legend_defer"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Memory actions
                 Text(
-                    text = "Memory Actions",
+                    text = localizedString("mobile.interact_legend_memory"),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("💾", "Memorize")
-                LegendRow("🔍", "Recall")
-                LegendRow("🗑️", "Forget")
+                LegendRow("💾", localizedString("mobile.interact_legend_memorize"))
+                LegendRow("🔍", localizedString("mobile.interact_legend_recall"))
+                LegendRow("🗑️", localizedString("mobile.interact_legend_forget"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Terminal action
                 Text(
-                    text = "Terminal",
+                    text = localizedString("mobile.interact_legend_terminal"),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("✅", "Task Complete")
+                LegendRow("✅", localizedString("mobile.interact_legend_task_complete"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Agent state icons
                 Text(
-                    text = "Agent Status",
+                    text = localizedString("mobile.interact_legend_agent_status"),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("💭", "Idle")
-                LegendRow("🔄", "Processing")
-                LegendRow("⚪", "Disconnected")
+                LegendRow("💭", localizedString("mobile.interact_legend_idle"))
+                LegendRow("🔄", localizedString("mobile.interact_legend_processing_icon"))
+                LegendRow("⚪", localizedString("mobile.interact_legend_disconnected"))
             }
         },
         confirmButton = {
@@ -2262,7 +2395,7 @@ private fun EmojiLegendDialog(
                 onClick = onDismiss,
                 modifier = Modifier.testableClickable("btn_close_legend") { onDismiss() }
             ) {
-                Text("Close")
+                Text(localizedString("mobile.interact_close"))
             }
         }
     )
@@ -2330,33 +2463,33 @@ private fun VisualizationLegendButton(
                 ) {
                     // Title
                     Text(
-                        text = "H3ERE Pipeline",
+                        text = localizedString("mobile.interact_viz_title"),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = theme.textPrimary
                     )
 
                     // Pipeline stages (bottom to top to match visualization)
-                    VisualizationLegendItem("THINK", Color(0xFF60A5FA), "Start reasoning", theme)
-                    VisualizationLegendItem("CONTEXT", Color(0xFF34D399), "Gather context", theme)
-                    VisualizationLegendItem("DMA", Color(0xFFFBBF24), "Decision making", theme)
-                    VisualizationLegendItem("IDMA", Color(0xFFF97316), "Intuition check", theme)
-                    VisualizationLegendItem("SELECT", Color(0xFFA78BFA), "Choose action", theme)
-                    VisualizationLegendItem("ETHICS", Color(0xFF38BDF8), "Ethics check", theme)
-                    VisualizationLegendItem("ACT", Color(0xFF4ADE80), "Execute action", theme)
+                    VisualizationLegendItem("THINK", Color(0xFF60A5FA), localizedString("mobile.interact_viz_think"), theme)
+                    VisualizationLegendItem("CONTEXT", Color(0xFF34D399), localizedString("mobile.interact_viz_context"), theme)
+                    VisualizationLegendItem("DMA", Color(0xFFFBBF24), localizedString("mobile.interact_viz_dma"), theme)
+                    VisualizationLegendItem("IDMA", Color(0xFFF97316), localizedString("mobile.interact_viz_idma"), theme)
+                    VisualizationLegendItem("SELECT", Color(0xFFA78BFA), localizedString("mobile.interact_viz_select"), theme)
+                    VisualizationLegendItem("ETHICS", Color(0xFF38BDF8), localizedString("mobile.interact_viz_ethics"), theme)
+                    VisualizationLegendItem("ACT", Color(0xFF4ADE80), localizedString("mobile.interact_viz_act"), theme)
 
                     Divider(color = theme.textMuted.copy(alpha = 0.3f))
 
                     // Graph nodes
                     Text(
-                        text = "Memory Graph",
+                        text = localizedString("mobile.interact_viz_memory"),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         color = theme.textSecondary
                     )
-                    VisualizationLegendItem("LOCAL", theme.textAccent, "Local scope", theme)
-                    VisualizationLegendItem("IDENTITY", theme.textSecondary, "Identity scope", theme)
-                    VisualizationLegendItem("ENVIRON", theme.statusConnected, "Environment", theme)
+                    VisualizationLegendItem("LOCAL", theme.textAccent, localizedString("mobile.interact_viz_local"), theme)
+                    VisualizationLegendItem("IDENTITY", theme.textSecondary, localizedString("mobile.interact_viz_identity"), theme)
+                    VisualizationLegendItem("ENVIRON", theme.statusConnected, localizedString("mobile.interact_viz_environ"), theme)
                 }
             }
         }

@@ -632,10 +632,12 @@ private fun DrawScope.drawPipelineScaffolding(
         val ringRadius = cylinderRadius * radiusFactor
 
         // Calculate glow intensity (1.0 when just activated, fading to 0)
+        // Apply glowBoost multiplier (e.g., TSASPDMA boosts ASPDMA to 1.6x brightness)
         val glowIntensity = if (stage.activatedAtMs > 0) {
             val elapsed = currentTimeMs - stage.activatedAtMs
             if (elapsed < PipelineStage.GLOW_DURATION_MS) {
-                1f - (elapsed.toFloat() / PipelineStage.GLOW_DURATION_MS)
+                val baseGlow = 1f - (elapsed.toFloat() / PipelineStage.GLOW_DURATION_MS)
+                (baseGlow * stage.glowBoost).coerceAtMost(2.0f)  // Cap at 2x to prevent over-saturation
             } else 0f
         } else 0f
 
@@ -846,8 +848,8 @@ private fun DrawScope.drawScaffoldRing(
     val charSize = (24f + (if (isForegroundMode) 12f else 0f)) * labelScale  // 3x larger
     val strokeWidth = (3f + (if (isForegroundMode) 2f else 0f)) * labelScale
 
-    // Draw label using line-based block letters
-    drawBlockText(
+    // Draw label using vector font system (supports all languages)
+    drawVectorText(
         text = stage.label,
         x = labelPoint.screenX,
         y = labelPoint.screenY,
@@ -858,73 +860,13 @@ private fun DrawScope.drawScaffoldRing(
 }
 
 // =============================================================================
-// Line-Based Block Text Rendering (Platform Agnostic)
+// Vector Font Text Rendering (Platform Agnostic, All Languages)
 // =============================================================================
-
-/**
- * Draw text using simple line segments - works on all platforms.
- * Each character is rendered as a set of line strokes.
- */
-private fun DrawScope.drawBlockText(
-    text: String,
-    x: Float,
-    y: Float,
-    charSize: Float,
-    color: Color,
-    strokeWidth: Float
-) {
-    val charWidth = charSize * 0.8f
-    val spacing = charSize * 0.3f
-    val totalWidth = text.length * (charWidth + spacing) - spacing
-    var currentX = x - totalWidth / 2  // Center the text
-
-    for (char in text.uppercase()) {
-        drawBlockChar(char, currentX, y, charSize, charWidth, color, strokeWidth)
-        currentX += charWidth + spacing
-    }
-}
-
-/**
- * Draw a single character using line segments.
- * Simple block-letter font optimized for clarity at small sizes.
- */
-private fun DrawScope.drawBlockChar(
-    char: Char,
-    x: Float,
-    y: Float,
-    h: Float,  // Height
-    w: Float,  // Width
-    color: Color,
-    sw: Float  // Stroke width
-) {
-    val t = y - h / 2  // Top
-    val b = y + h / 2  // Bottom
-    val m = y          // Middle
-    val l = x          // Left
-    val r = x + w      // Right
-    val c = x + w / 2  // Center
-
-    // Helper to draw a line
-    fun line(x1: Float, y1: Float, x2: Float, y2: Float) {
-        drawLine(color, Offset(x1, y1), Offset(x2, y2), sw, StrokeCap.Round)
-    }
-
-    when (char) {
-        'A' -> { line(l, b, c, t); line(c, t, r, b); line(l + w*0.2f, m, r - w*0.2f, m) }
-        'C' -> { line(r, t, l, t); line(l, t, l, b); line(l, b, r, b) }
-        'D' -> { line(l, t, l, b); line(l, t, c, t); line(c, t, r, m); line(r, m, c, b); line(c, b, l, b) }
-        'E' -> { line(r, t, l, t); line(l, t, l, b); line(l, b, r, b); line(l, m, c, m) }
-        'H' -> { line(l, t, l, b); line(r, t, r, b); line(l, m, r, m) }
-        'I' -> { line(l, t, r, t); line(c, t, c, b); line(l, b, r, b) }
-        'K' -> { line(l, t, l, b); line(r, t, l, m); line(l, m, r, b) }
-        'L' -> { line(l, t, l, b); line(l, b, r, b) }
-        'M' -> { line(l, b, l, t); line(l, t, c, m); line(c, m, r, t); line(r, t, r, b) }
-        'N' -> { line(l, b, l, t); line(l, t, r, b); line(r, b, r, t) }
-        'O' -> { line(l, t, r, t); line(r, t, r, b); line(r, b, l, b); line(l, b, l, t) }
-        'S' -> { line(r, t, l, t); line(l, t, l, m); line(l, m, r, m); line(r, m, r, b); line(r, b, l, b) }
-        'T' -> { line(l, t, r, t); line(c, t, c, b) }
-        'X' -> { line(l, t, r, b); line(r, t, l, b) }
-        // Numbers and special chars as needed
-        else -> { /* Skip unknown chars */ }
-    }
-}
+// Text rendering now uses VectorFontCharsets.kt which supports:
+// - Latin (A-Z + accented): English, German, Spanish, French, Italian, Portuguese, Turkish, Swahili
+// - Cyrillic: Russian
+// - Ge'ez: Amharic
+// - CJK: Chinese, Japanese, Korean (placeholders)
+// - Arabic, Hindi, and more can be added following the same pattern
+//
+// See VectorFontCharsets.kt for character definitions and adding new scripts.

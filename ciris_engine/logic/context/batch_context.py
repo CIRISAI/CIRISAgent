@@ -92,6 +92,80 @@ async def _get_attestation_summary() -> Optional[str]:
         return None
 
 
+async def _get_wallet_summary(service_registry: Optional[Any] = None) -> Optional[str]:
+    """Get a concise wallet summary from the wallet adapter.
+
+    Returns a string like:
+    "💰 x402/USDC: 100.50 (Base Sepolia) | Max Tx: $50.00 | Level 3/5"
+
+    This is fetched on startup and included in context enrichment so the
+    agent knows its financial capabilities without needing to call tools.
+    """
+    try:
+        # Try to get wallet adapter from service registry
+        if service_registry is None:
+            return None
+
+        # Get tool service which manages adapters
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        tool_service = service_registry.get_service(ServiceType.TOOL)
+        if tool_service is None:
+            return None
+
+        # Try to find wallet adapter
+        wallet_adapter = None
+        for adapter in getattr(tool_service, "_adapters", {}).values():
+            if hasattr(adapter, "provider_id") and "wallet" in type(adapter).__name__.lower():
+                wallet_adapter = adapter
+                break
+
+        if wallet_adapter is None:
+            # Try direct import as fallback
+            try:
+                from ciris_adapters.wallet import WalletAdapter
+
+                # Check if there's a wallet instance available
+                return None  # No wallet adapter found
+            except ImportError:
+                return None
+
+        # Get wallet status
+        providers = getattr(wallet_adapter, "_providers", {})
+        if not providers:
+            return "💰 Wallet: Not configured"
+
+        # Get balance from first active provider
+        summaries = []
+        for name, provider in providers.items():
+            try:
+                balance = await provider.get_balance()
+                account = await provider.get_account_details()
+
+                # Format balance
+                balance_str = f"{balance.available:.2f}" if balance.available else "0.00"
+                currency = balance.currency or "USDC"
+                network = getattr(account, "network", "unknown")
+
+                # Check if receive-only
+                is_receive_only = getattr(provider, "_receive_only", False)
+                mode = " (Recv Only)" if is_receive_only else ""
+
+                summaries.append(f"{name}/{currency}: {balance_str}{mode} ({network})")
+            except Exception as e:
+                logger.debug(f"[BATCH] Failed to get balance from {name}: {e}")
+                continue
+
+        if not summaries:
+            return "💰 Wallet: No balance available"
+
+        return f"💰 {' | '.join(summaries)}"
+
+    except Exception as e:
+        logger.debug(f"[BATCH] Wallet summary error: {e}")
+        return None
+
+
 async def create_minimal_batch_context(
     memory_service: Optional[Any] = None,
     secrets_service: Optional[Any] = None,
@@ -160,6 +234,9 @@ class BatchContextData:
         self.license_disclosure_text: Optional[str] = None
         self.license_disclosure_severity: Optional[str] = None
         self.attestation_summary: Optional[str] = None
+
+        # Wallet status for financial context
+        self.wallet_summary: Optional[str] = None
 
 
 async def prefetch_batch_context(
@@ -450,6 +527,14 @@ async def prefetch_batch_context(
             batch_data.license_disclosure_text = batch_data.verify_attestation.disclosure_text
             batch_data.license_disclosure_severity = batch_data.verify_attestation.disclosure_severity
             batch_data.attestation_summary = batch_data.verify_attestation.attestation_summary
+
+    # 8. Wallet Status (async, uses wallet adapter if available)
+    try:
+        batch_data.wallet_summary = await _get_wallet_summary(service_registry)
+        if batch_data.wallet_summary:
+            logger.info(f"[BATCH] Wallet context loaded: {batch_data.wallet_summary}")
+    except Exception as e:
+        logger.debug(f"[BATCH] Wallet summary not available: {e}")
 
     logger.debug("[DEBUG DB TIMING] Batch context prefetch complete")
     return batch_data
@@ -771,6 +856,8 @@ async def build_system_snapshot_with_batch(
         license_disclosure_text=batch_data.license_disclosure_text,
         license_disclosure_severity=batch_data.license_disclosure_severity,
         attestation_summary=batch_data.attestation_summary,
+        # Wallet status
+        wallet_summary=batch_data.wallet_summary,
         # Get localized times - FAILS FAST AND LOUD if time_service is None
         **{
             f"current_time_{key}": value

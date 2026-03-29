@@ -1,6 +1,11 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.localization.LocalLocalization
+import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.localization.currentLanguageInfo
 import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.viewmodels.SUPPORTED_LANGUAGES
+import kotlinx.coroutines.delay
 import ai.ciris.mobile.shared.platform.getDeviceDebugInfo
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
@@ -14,6 +19,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -60,6 +66,44 @@ fun StartupScreen(
     val prepStepsCompleted by viewModel.prepStepsCompleted.collectAsState()
     val verifyStepsCompleted by viewModel.verifyStepsCompleted.collectAsState()
     val hasError by viewModel.hasError.collectAsState()
+
+    // Language rotation for startup screen when no explicit language selection
+    val localization = LocalLocalization.current
+    val hasExplicitLanguage by localization?.hasExplicitLanguageSelection?.collectAsState()
+        ?: remember { mutableStateOf(true) }
+    var rotationLanguageIndex by remember { mutableStateOf(0) }
+
+    // Get current language info (reactive - updates when language changes)
+    val currentLangInfo = currentLanguageInfo()
+
+    // Track if languages are preloaded for rotation
+    var languagesPreloaded by remember { mutableStateOf(false) }
+
+    // Preload all languages for smooth rotation on first launch
+    LaunchedEffect(Unit) {
+        localization?.preloadLanguages(SUPPORTED_LANGUAGES.map { it.code })
+        languagesPreloaded = true
+    }
+
+    // Rotate through languages every 2.5 seconds if no explicit selection
+    // Wait for languages to be preloaded before starting rotation
+    LaunchedEffect(hasExplicitLanguage, languagesPreloaded) {
+        if (!hasExplicitLanguage && languagesPreloaded) {
+            while (true) {
+                delay(2500)
+                rotationLanguageIndex = (rotationLanguageIndex + 1) % SUPPORTED_LANGUAGES.size
+                val nextLang = SUPPORTED_LANGUAGES[rotationLanguageIndex]
+                localization?.setTemporaryLanguage(nextLang.code)
+            }
+        }
+    }
+
+    // Reset to persisted language when startup completes (READY or going to interact)
+    LaunchedEffect(phase) {
+        if (phase == StartupPhase.READY || phase == StartupPhase.FIRST_RUN_SETUP) {
+            localization?.resetToPersistedLanguage()
+        }
+    }
 
     // Auto-start CIRIS on mount
     LaunchedEffect(Unit) {
@@ -132,18 +176,26 @@ fun StartupScreen(
             )
 
             // Prep label (above prep lights like Android)
+            // Shows rotating languages if no explicit selection
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(bottom = 16.dp)
             ) {
+                val prepText = if (prepStepsCompleted >= StartupViewModel.TOTAL_PREP_STEPS) {
+                    localizedString("mobile.startup_environment_ready")
+                } else if (prepStepsCompleted > 0) {
+                    localizedString(
+                        "mobile.startup_preparing_progress",
+                        mapOf(
+                            "current" to prepStepsCompleted.toString(),
+                            "total" to StartupViewModel.TOTAL_PREP_STEPS.toString()
+                        )
+                    )
+                } else {
+                    localizedString("mobile.startup_preparing")
+                }
                 Text(
-                    text = if (prepStepsCompleted >= StartupViewModel.TOTAL_PREP_STEPS) {
-                        "Environment Ready"
-                    } else if (prepStepsCompleted > 0) {
-                        "Preparing Environment... $prepStepsCompleted/${StartupViewModel.TOTAL_PREP_STEPS}"
-                    } else {
-                        "Preparing Environment"
-                    },
+                    text = prepText,
                     fontSize = 10.sp,
                     color = if (prepStepsCompleted >= StartupViewModel.TOTAL_PREP_STEPS) {
                         CIRISColors.SuccessGreen
@@ -152,6 +204,16 @@ fun StartupScreen(
                     },
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
+
+                // Show current language indicator if no explicit selection (rotating)
+                if (!hasExplicitLanguage) {
+                    Text(
+                        text = currentLangInfo.nativeName,
+                        fontSize = 9.sp,
+                        color = CIRISColors.SignetTeal.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
             }
 
             // Verify lights row (11 steps: Phase 1 = 5, Phase 2 = 6)
@@ -164,12 +226,21 @@ fun StartupScreen(
                 )
 
                 // Verify label
+                val verifyText = when {
+                    verifyStepsCompleted >= StartupViewModel.TOTAL_VERIFY_STEPS ->
+                        localizedString("mobile.startup_attestation_complete")
+                    verifyStepsCompleted > 0 ->
+                        localizedString(
+                            "mobile.startup_attestation_progress",
+                            mapOf(
+                                "current" to verifyStepsCompleted.toString(),
+                                "total" to StartupViewModel.TOTAL_VERIFY_STEPS.toString()
+                            )
+                        )
+                    else -> localizedString("mobile.startup_attestation")
+                }
                 Text(
-                    text = when {
-                        verifyStepsCompleted >= StartupViewModel.TOTAL_VERIFY_STEPS -> "Platform Attestation Complete"
-                        verifyStepsCompleted > 0 -> "Platform Attestation... $verifyStepsCompleted/${StartupViewModel.TOTAL_VERIFY_STEPS}"
-                        else -> "Platform Attestation"
-                    },
+                    text = verifyText,
                     fontSize = 10.sp,
                     color = when {
                         verifyStepsCompleted >= StartupViewModel.TOTAL_VERIFY_STEPS -> CIRISColors.SuccessGreen
@@ -182,7 +253,7 @@ fun StartupScreen(
             // Services label (shown after verify completes or starts, above service lights)
             if (verifyStepsCompleted > 0 || servicesOnline > 0) {
                 Text(
-                    text = "Starting Services",
+                    text = localizedString("mobile.startup_services"),
                     fontSize = 10.sp,
                     color = CIRISColors.TextDim,
                     modifier = Modifier.padding(bottom = 4.dp)
@@ -197,81 +268,91 @@ fun StartupScreen(
                 modifier = Modifier.padding(bottom = 32.dp)
             )
 
-            // Status message (main status text like Android)
-            Text(
-                text = statusMessage,
-                fontSize = 14.sp,
-                color = CIRISColors.TextTertiary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            // Current service name (shown during startup, cyan colored)
-            if (servicesOnline > 0 && servicesOnline < totalServices) {
-                Text(
-                    text = "Service $servicesOnline/$totalServices",
-                    fontSize = 12.sp,
-                    color = CIRISColors.AccentCyan
-                )
-            }
-
-            // Error section with debug info (appears on error)
-            errorMessage?.let { error ->
-                Spacer(Modifier.height(16.dp))
-
-                // Error message box
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            color = CIRISColors.ErrorRed.copy(alpha = 0.1f),
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
-                        )
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.Start
-                ) {
+            // Status message (main status text like Android) - selectable for debugging
+            SelectionContainer {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "Engine Failed to Start",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = CIRISColors.ErrorRed,
+                        text = statusMessage,
+                        fontSize = 14.sp,
+                        color = CIRISColors.TextTertiary,
+                        textAlign = TextAlign.Center,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
 
-                    // Error message
-                    Text(
-                        text = error,
-                        fontSize = 12.sp,
-                        color = CIRISColors.TextSecondary,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
+                    // Current service name (shown during startup, cyan colored)
+                    if (servicesOnline > 0 && servicesOnline < totalServices) {
+                        Text(
+                            text = localizedString(
+                                "mobile.startup_services_count",
+                                mapOf("online" to servicesOnline.toString(), "total" to totalServices.toString())
+                            ),
+                            fontSize = 12.sp,
+                            color = CIRISColors.AccentCyan
+                        )
+                    }
+                }
+            }
 
-                    // Debug info section
-                    Text(
-                        text = "Debug Information",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = CIRISColors.TextTertiary,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
+            // Error section with debug info (appears on error)
+            // Wrapped in SelectionContainer for easy copy/paste of error details
+            errorMessage?.let { error ->
+                Spacer(Modifier.height(16.dp))
 
-                    // Platform-specific debug info will be provided by expect/actual
-                    val debugInfo = getDeviceDebugInfo()
-                    Text(
-                        text = debugInfo,
-                        fontSize = 10.sp,
-                        color = CIRISColors.TextDim,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
+                // Error message box - all text is selectable
+                SelectionContainer {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                color = CIRISColors.ErrorRed.copy(alpha = 0.1f),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                            )
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = localizedString("mobile.startup_engine_failed"),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CIRISColors.ErrorRed,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
 
-                    // Help text
-                    Text(
-                        text = "If this persists, please report at:\ngithub.com/CIRISAI/CIRISAgent/issues",
-                        fontSize = 10.sp,
-                        color = CIRISColors.TextDim,
-                        textAlign = TextAlign.Start
-                    )
+                        // Error message
+                        Text(
+                            text = error,
+                            fontSize = 12.sp,
+                            color = CIRISColors.TextSecondary,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+
+                        // Debug info section
+                        Text(
+                            text = localizedString("mobile.startup_debug_info"),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = CIRISColors.TextTertiary,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+
+                        // Platform-specific debug info will be provided by expect/actual
+                        val debugInfo = getDeviceDebugInfo()
+                        Text(
+                            text = debugInfo,
+                            fontSize = 10.sp,
+                            color = CIRISColors.TextDim,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+
+                        // Help text
+                        Text(
+                            text = localizedString("mobile.startup_report_hint"),
+                            fontSize = 10.sp,
+                            color = CIRISColors.TextDim,
+                            textAlign = TextAlign.Start
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -284,7 +365,7 @@ fun StartupScreen(
                         containerColor = CIRISColors.SignetTeal
                     )
                 ) {
-                    Text("Retry", color = Color.White)
+                    Text(localizedString("mobile.startup_retry"), color = Color.White)
                 }
             }
         }

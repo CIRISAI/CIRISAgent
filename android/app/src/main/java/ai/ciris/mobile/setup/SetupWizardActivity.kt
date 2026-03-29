@@ -24,17 +24,19 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Setup Wizard Activity - 3-step native Kotlin wizard.
+ * Setup Wizard Activity - 4-step native Kotlin wizard.
  *
  * Steps:
  * 1. Welcome - Introduction
- * 2. LLM - AI configuration (CIRIS proxy for Google users, BYOK for others)
- * 3. Confirm - Summary (Google) or account creation (non-Google)
+ * 2. Preferences - Language and location (user-chosen granularity)
+ * 3. LLM - AI configuration (CIRIS proxy for Google users, BYOK for others)
+ * 4. Confirm - Summary (Google) or account creation (non-Google)
  *
  * Key features:
  * - Admin password is auto-generated (users don't need to set it)
  * - Google OAuth users get free CIRIS AI (via proxy)
  * - Non-Google users must provide their own API key (BYOK)
+ * - Language & location at user-selected granularity
  */
 class SetupWizardActivity : AppCompatActivity() {
 
@@ -48,7 +50,7 @@ class SetupWizardActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "SetupWizard"
         private const val SERVER_URL = "http://localhost:8080"
-        private const val STEP_COUNT = 3
+        private const val STEP_COUNT = 4
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,10 +64,11 @@ class SetupWizardActivity : AppCompatActivity() {
         btnNext = findViewById(R.id.btn_next)
         btnBack = findViewById(R.id.btn_back)
 
-        // Only 3 step indicators now
+        // 4 step indicators
         indicators.add(findViewById(R.id.step1_indicator))
         indicators.add(findViewById(R.id.step2_indicator))
         indicators.add(findViewById(R.id.step3_indicator))
+        indicators.add(findViewById(R.id.step4_indicator))
 
         // Detect Google OAuth state
         detectGoogleAuthState()
@@ -217,6 +220,11 @@ class SetupWizardActivity : AppCompatActivity() {
                 return true
             }
             1 -> {
+                // Preferences step - language always valid (has default), location optional
+                Log.d(TAG, "Preferences step validation: PASS (language=${viewModel.preferredLanguage.value})")
+                return true
+            }
+            2 -> {
                 // LLM step
                 val mode = viewModel.llmMode.value
                 Log.i(TAG, "LLM step validation: mode=$mode")
@@ -250,7 +258,7 @@ class SetupWizardActivity : AppCompatActivity() {
                     return true
                 }
             }
-            2 -> {
+            3 -> {
                 // Confirm step
                 val isGoogle = viewModel.isGoogleAuth.value == true
                 Log.i(TAG, "Confirm step validation: isGoogle=$isGoogle")
@@ -486,6 +494,29 @@ class SetupWizardActivity : AppCompatActivity() {
             payload.put("admin_username", username)
             payload.put("admin_password", password)
         }
+
+        // Language & location preferences
+        val lang = viewModel.preferredLanguage.value ?: "en"
+        payload.put("preferred_language", lang)
+
+        val country = viewModel.locationCountry.value
+        if (country != null) {
+            payload.put("location_country", country)
+        }
+        val region = viewModel.locationRegion.value
+        if (region != null) {
+            payload.put("location_region", region)
+        }
+        val city = viewModel.locationCity.value
+        if (city != null) {
+            payload.put("location_city", city)
+        }
+        val tz = viewModel.userTimezone.value
+        if (tz != null) {
+            payload.put("timezone", tz)
+        }
+
+        Log.i(TAG, "  preferences: lang=$lang, country=$country, region=$region, city=$city")
 
         // Required fields with defaults
         payload.put("template_id", "ally")  // Force Ally template for Android

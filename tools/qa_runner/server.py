@@ -661,8 +661,11 @@ class APIServerManager:
         # Start server process
         try:
             # Open log file to capture console output (includes early startup logs)
-            # Use backend-specific console log to avoid conflicts in parallel mode
-            console_log_path = f"/tmp/qa_runner_console_{self.database_backend}_{self.config.api_port}.txt"
+            # Save to logs/{backend}/ so it's discoverable alongside other logs
+            log_dir_path = Path(f"logs/{self.database_backend}")
+            log_dir_path.mkdir(parents=True, exist_ok=True)
+            console_log_path = str(log_dir_path / "console.log")
+            self._console_log_path = console_log_path  # Store for reference in error messages
             self.console.print(f"[dim]📝 Console log: {console_log_path}[/dim]")
             self.console.print(f"[dim]📝 CIRIS log: logs/{self.database_backend}/latest.log[/dim]")
             self.console.print(f"[dim]🚀 Command: {' '.join(cmd)}[/dim]")
@@ -749,7 +752,7 @@ class APIServerManager:
                 # Process died - read error from console log file
                 exit_code = self.process.returncode
                 error_output = ""
-                console_log_path = f"/tmp/qa_runner_console_{self.database_backend}_{self.config.api_port}.txt"
+                console_log_path = getattr(self, "_console_log_path", f"logs/{self.database_backend}/console.log")
                 try:
                     with open(console_log_path, "r") as f:
                         # Read last 1000 chars to find error

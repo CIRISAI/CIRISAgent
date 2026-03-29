@@ -30,6 +30,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.localization.localizedString
 
 /**
  * Configuration management screen
@@ -64,7 +65,7 @@ fun ConfigScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Configuration") },
+                title = { Text(localizedString("mobile.screen_configuration")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -72,7 +73,7 @@ fun ConfigScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -84,7 +85,7 @@ fun ConfigScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -120,11 +121,11 @@ fun ConfigScreen(
                         .fillMaxWidth()
                         .padding(16.dp)
                         .testable("input_config_search"),
-                    placeholder = { Text("Search configurations...") },
+                    placeholder = { Text(localizedString("mobile.config_search_placeholder")) },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Filled.Search,
-                            contentDescription = "Search"
+                            contentDescription = localizedString("mobile.tools_search_placeholder")
                         )
                     },
                     singleLine = true,
@@ -164,7 +165,7 @@ fun ConfigScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "No configurations found",
+                                    text = localizedString("mobile.config_no_found"),
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -207,8 +208,8 @@ fun ConfigScreen(
     showDeleteDialog?.let { key ->
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
-            title = { Text("Delete Configuration") },
-            text = { Text("Are you sure you want to delete \"$key\"? This cannot be undone.") },
+            title = { Text(localizedString("mobile.config_delete_title")) },
+            text = { Text(localizedString("mobile.config_delete_confirm").replace("{key}", key)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -223,7 +224,7 @@ fun ConfigScreen(
                         showDeleteDialog = null
                     }
                 ) {
-                    Text("Delete")
+                    Text(localizedString("mobile.common_delete"))
                 }
             },
             dismissButton = {
@@ -231,7 +232,7 @@ fun ConfigScreen(
                     onClick = { showDeleteDialog = null },
                     modifier = Modifier.testableClickable("btn_config_cancel_delete") { showDeleteDialog = null }
                 ) {
-                    Text("Cancel")
+                    Text(localizedString("mobile.common_cancel"))
                 }
             }
         )
@@ -254,7 +255,7 @@ private fun CategoryChips(
         FilterChip(
             selected = selectedCategory == null,
             onClick = { onCategorySelect(null) },
-            label = { Text("All") },
+            label = { Text(localizedString("mobile.common_all")) },
             modifier = Modifier.testableClickable("chip_config_category_all") {
                 onCategorySelect(null)
             }
@@ -302,7 +303,7 @@ private fun ConfigSectionCard(
             ) {
                 Icon(
                     imageVector = if (isExpanded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
-                    contentDescription = if (isExpanded) "Collapse" else "Expand"
+                    contentDescription = null
                 )
                 Column {
                     Text(
@@ -394,7 +395,7 @@ private fun ConfigItemRow(
                             shape = RoundedCornerShape(4.dp)
                         ) {
                             Text(
-                                text = "Sensitive",
+                                text = localizedString("mobile.config_sensitive"),
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = SemanticColors.Default.warning
@@ -407,7 +408,7 @@ private fun ConfigItemRow(
                         onClick = onEdit,
                         modifier = Modifier.testableClickable("btn_config_edit_${item.key.lowercase().replace(" ", "_")}") { onEdit() }
                     ) {
-                        Text("Edit", style = MaterialTheme.typography.labelMedium)
+                        Text(localizedString("mobile.common_edit"), style = MaterialTheme.typography.labelMedium)
                     }
                     TextButton(
                         onClick = onDelete,
@@ -416,7 +417,7 @@ private fun ConfigItemRow(
                         ),
                         modifier = Modifier.testableClickable("btn_config_delete_${item.key.lowercase().replace(" ", "_")}") { onDelete() }
                     ) {
-                        Text("Delete", style = MaterialTheme.typography.labelMedium)
+                        Text(localizedString("mobile.common_delete"), style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -438,7 +439,9 @@ private fun ConfigItemRow(
 
             // Metadata
             Text(
-                text = "Updated: ${item.updatedAt} by ${item.updatedBy}",
+                text = localizedString("mobile.config_updated")
+                    .replace("{date}", item.updatedAt)
+                    .replace("{user}", item.updatedBy),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -457,7 +460,7 @@ private fun EditConfigDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit Configuration") },
+        title = { Text(localizedString("mobile.common_edit") + " " + localizedString("mobile.screen_configuration")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
@@ -469,7 +472,7 @@ private fun EditConfigDialog(
                     value = editedValue,
                     onValueChange = { editedValue = it },
                     modifier = Modifier.fillMaxWidth().testable("input_config_edit_value"),
-                    label = { Text("Value") },
+                    label = { Text(localizedString("mobile.tickets_notes_hint")) },
                     minLines = 2,
                     maxLines = 5
                 )
@@ -481,7 +484,7 @@ private fun EditConfigDialog(
                 enabled = editedValue != currentValue,
                 modifier = Modifier.testableClickable("btn_config_dialog_save") { onConfirm(editedValue) }
             ) {
-                Text("Save")
+                Text(localizedString("mobile.common_save"))
             }
         },
         dismissButton = {
@@ -489,7 +492,7 @@ private fun EditConfigDialog(
                 onClick = onDismiss,
                 modifier = Modifier.testableClickable("btn_config_dialog_cancel") { onDismiss() }
             ) {
-                Text("Cancel")
+                Text(localizedString("mobile.common_cancel"))
             }
         }
     )

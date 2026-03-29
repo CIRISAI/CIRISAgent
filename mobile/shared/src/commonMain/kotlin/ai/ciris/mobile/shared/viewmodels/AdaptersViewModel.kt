@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.localization.LocalizationHelper
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.models.AdapterDetailsData
 import ai.ciris.mobile.shared.models.ConfigSessionData
@@ -249,13 +250,13 @@ class AdaptersViewModel(
         viewModelScope.launch {
             try {
                 _operationInProgress.value = true
-                _statusMessage.value = "Reloading adapter..."
+                _statusMessage.value = LocalizationHelper.getString("mobile.adapter_reloading")
 
                 // Find the adapter to get its type
                 val adapter = _adapters.value.find { it.id == adapterId }
                 if (adapter == null) {
                     logError(method, "Adapter not found: $adapterId")
-                    _statusMessage.value = "Adapter not found"
+                    _statusMessage.value = LocalizationHelper.getString("mobile.adapter_not_found")
                     clearStatusMessageAfterDelay()
                     return@launch
                 }
@@ -267,9 +268,10 @@ class AdaptersViewModel(
                 logInfo(method, "Adapter reloaded: adapterId=${result.adapterId}, success=${result.success}")
 
                 _statusMessage.value = if (result.success) {
-                    "Adapter reloaded successfully"
+                    LocalizationHelper.getString("mobile.adapter_reloaded_successfully")
                 } else {
-                    "Failed to reload adapter: ${result.message ?: "Unknown error"}"
+                    LocalizationHelper.getString("mobile.adapter_reload_failed")
+                        .replace("{error}", result.message ?: "Unknown error")
                 }
 
                 // Refresh the list
@@ -277,7 +279,8 @@ class AdaptersViewModel(
 
             } catch (e: Exception) {
                 logException(method, e, "adapterId=$adapterId")
-                _statusMessage.value = "Error reloading adapter: ${e.message}"
+                _statusMessage.value = LocalizationHelper.getString("mobile.adapter_reload_error")
+                    .replace("{error}", e.message ?: "Unknown")
             } finally {
                 _operationInProgress.value = false
                 clearStatusMessageAfterDelay()
@@ -300,7 +303,7 @@ class AdaptersViewModel(
         viewModelScope.launch {
             try {
                 _operationInProgress.value = true
-                _statusMessage.value = "Removing adapter..."
+                _statusMessage.value = LocalizationHelper.getString("mobile.adapter_removing")
 
                 logDebug(method, "Calling apiClient.removeAdapter($adapterId)")
 
@@ -308,9 +311,10 @@ class AdaptersViewModel(
                 logInfo(method, "Adapter removed: adapterId=${result.adapterId}, success=${result.success}")
 
                 _statusMessage.value = if (result.success) {
-                    "Adapter removed successfully"
+                    LocalizationHelper.getString("mobile.adapter_removed_successfully")
                 } else {
-                    "Failed to remove adapter: ${result.message ?: "Unknown error"}"
+                    LocalizationHelper.getString("mobile.adapter_remove_failed")
+                        .replace("{error}", result.message ?: "Unknown error")
                 }
 
                 // Refresh the list
@@ -318,7 +322,8 @@ class AdaptersViewModel(
 
             } catch (e: Exception) {
                 logException(method, e, "adapterId=$adapterId")
-                _statusMessage.value = "Error removing adapter: ${e.message}"
+                _statusMessage.value = LocalizationHelper.getString("mobile.adapter_remove_error")
+                    .replace("{error}", e.message ?: "Unknown")
             } finally {
                 _operationInProgress.value = false
                 clearStatusMessageAfterDelay()
@@ -631,15 +636,16 @@ class AdaptersViewModel(
                     logInfo(method, "Adapter loaded successfully: ${result.adapterId}")
                     closeWizard()
                     fetchAdaptersInternal() // Refresh adapters list
-                    _statusMessage.value = "Adapter loaded successfully"
+                    _statusMessage.value = LocalizationHelper.getString("mobile.adapter_loaded_successfully")
                     clearStatusMessageAfterDelay()
                 } else {
                     logError(method, "Failed to load adapter: ${result.message}")
-                    _wizardError.value = result.message ?: "Failed to load adapter"
+                    _wizardError.value = result.message ?: LocalizationHelper.getString("mobile.adapter_load_failed")
                 }
             } catch (e: Exception) {
                 logException(method, e)
-                _wizardError.value = "Failed to load adapter: ${e.message}"
+                _wizardError.value = LocalizationHelper.getString("mobile.adapter_load_error")
+                    .replace("{error}", e.message ?: "Unknown")
             } finally {
                 _wizardLoading.value = false
             }

@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Union, cast
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils.constants import ACCORD_TEXT, ACCORD_TEXT_COMPRESSED
+from ciris_engine.logic.utils.constants import get_accord_text
 from ciris_engine.protocols.dma.base import ActionSelectionDMAProtocol
 from ciris_engine.protocols.faculties import EpistemicFaculty
 from ciris_engine.schemas.actions.parameters import PonderParams
@@ -199,14 +199,11 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
         return self.context_builder.build_main_user_content(input_data, agent_name)
 
-    def _build_accord_with_metadata(self, original_thought: Any) -> str:
-        """Build accord text with thought type metadata."""
+    def _build_accord_with_metadata(self, original_thought: Any, processing_context: Any = None) -> str:
+        """Build accord text with thought type metadata (uses polyglot ACCORD)."""
         accord_mode = self.get_accord_mode()
-        if accord_mode == "full":
-            accord_text = ACCORD_TEXT
-        elif accord_mode == "compressed":
-            accord_text = ACCORD_TEXT_COMPRESSED
-        else:
+        accord_text = get_accord_text(accord_mode)
+        if not accord_text:
             return ""
 
         if original_thought and hasattr(original_thought, "thought_type"):
@@ -237,7 +234,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
         # Build messages
         system_message = self._build_system_message(input_data)
-        accord_with_metadata = self._build_accord_with_metadata(original_thought)
+        accord_with_metadata = self._build_accord_with_metadata(original_thought, input_data.processing_context)
 
         if input_images:
             logger.info(f"[VISION] ActionSelectionPDMA building multimodal content with {len(input_images)} images")

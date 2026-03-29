@@ -244,6 +244,37 @@ Only for multi-provider services:
 - **DREAM** - Deep introspection
 - **SHUTDOWN** - Graceful termination
 
+## Localization
+
+CIRIS supports 14 languages with full pipeline localization. The entire ethical reasoning system operates in the user's preferred language.
+
+### Supported Languages
+`am` (Amharic), `ar` (Arabic), `de` (German), `es` (Spanish), `fr` (French), `hi` (Hindi), `it` (Italian), `ja` (Japanese), `ko` (Korean), `pt` (Portuguese), `ru` (Russian), `sw` (Swahili), `tr` (Turkish), `zh` (Chinese)
+
+### Key Files
+- **UI Strings**: `localization/{lang}.json` - Mobile/API UI strings
+- **ACCORD**: `ciris_engine/data/localized/accord_1.2b_{lang}.txt`
+- **Guides**: `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_{lang}.md`
+- **DMA Prompts**: `ciris_engine/logic/dma/prompts/localized/{lang}/*.yml`
+
+### Setting Language
+```bash
+export CIRIS_PREFERRED_LANGUAGE=am  # Set before starting server
+```
+
+### How It Works
+1. `get_preferred_language()` reads `CIRIS_PREFERRED_LANGUAGE` env var
+2. `DMAPromptLoader` auto-detects language on first load
+3. Each DMA calls `get_localized_accord_text(lang)` for localized ACCORD
+4. Conscience strings use `get_string(lang, "conscience.ponder_*")`
+
+### Testing Localization
+```bash
+# Run streaming test with Amharic
+CIRIS_PREFERRED_LANGUAGE=am python3 -m tools.qa_runner streaming --verbose
+# Look for Amharic text: ከመጀመሪያው ጥያቄ በፊት...
+```
+
 ## Development Tools
 
 ### Grace - Sustainable Development Companion
@@ -347,7 +378,79 @@ secrets_tool
 - **RuntimeControlBus** → Multiple control interfaces
 - **WiseBus** → Multiple wisdom sources *(FOCUS AREA)*
 
-## Mobile Development
+## Adapter Development
+
+Adapters extend CIRIS with new capabilities via the bus system. See `FSD/ADAPTER_DEVELOPMENT_GUIDE.md` for the full guide.
+
+### Quick Reference
+
+**Required Files:**
+```
+ciris_adapters/your_adapter/
+├── __init__.py           # MUST export Adapter
+├── adapter.py            # BaseAdapterProtocol implementation
+├── manifest.json         # Metadata, services, capabilities
+├── tool_service.py       # ToolServiceProtocol implementation
+└── config.py             # Pydantic config models (no Dict[str, Any])
+```
+
+**Context Enrichment:**
+Tools that provide situational awareness should auto-run during context gathering:
+```python
+ToolInfo(
+    name="get_status",
+    context_enrichment=True,
+    context_enrichment_params={"include_details": False},
+    ...
+)
+```
+
+**DMA Guidance:**
+Financial and destructive tools MUST have:
+```python
+dma_guidance=ToolDMAGuidance(
+    requires_approval=True,  # Triggers Wise Authority deferral
+    min_confidence=0.95,     # High confidence required
+    ethical_considerations="...",
+)
+```
+
+**Reference Implementations:**
+- `ciris_adapters/sample_adapter/` - Complete template
+- `ciris_adapters/home_assistant/` - Context enrichment example
+- `ciris_adapters/wallet/` - Financial tools example
+
+## Unified Agent UX (`mobile/`)
+
+**NOTE: "mobile" is a misnomer.** The `mobile/` directory contains the **unified CIRIS agent UX** - a Kotlin Multiplatform (KMP) client targeting Android, iOS, Windows, macOS, and Linux. It's the cross-platform user interface for interacting with CIRIS agents.
+
+### Unified Entry Point (`ciris-agent`)
+
+The `ciris-agent` command is the **unified entry point** that starts both the Python backend and the desktop GUI:
+
+```bash
+# Unified: Start API server + launch desktop app (DEFAULT)
+ciris-agent
+
+# Server-only modes (headless)
+ciris-agent --server              # API server only
+ciris-agent --adapter api         # Same as --server
+ciris-agent --adapter discord     # Discord bot mode
+
+# Separate commands
+ciris-server                      # Headless API server only
+ciris-desktop                     # Desktop app only (connects to running server)
+```
+
+**How it works (from `ciris_engine/cli.py`):**
+1. Starts Python API server on port 8080 via `main.py --adapter api`
+2. Waits briefly to detect startup failures
+3. Launches desktop JAR via `desktop_launcher.py`
+4. On exit, shuts down server gracefully
+
+**Desktop JAR location:**
+- Production: `ciris_engine/desktop_app/CIRIS-*.jar` (bundled in pip package)
+- Development: `mobile/desktopApp/build/compose/jars/CIRIS-*.jar`
 
 ### Mobile QA Runner (ALWAYS USE THIS)
 
@@ -420,6 +523,36 @@ adb install -r mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk
 # Or use ADB from Android SDK
 ~/Android/Sdk/platform-tools/adb install -r ...
 ```
+
+### Desktop UI Test Mode
+
+The desktop app includes an embedded HTTP server for programmatic UI testing:
+
+```bash
+# Via unified entry point (starts server + desktop with test mode)
+export CIRIS_TEST_MODE=true
+ciris-agent
+
+# Via Gradle (development - desktop only, connects to existing server)
+export CIRIS_TEST_MODE=true
+cd mobile && ./gradlew :desktopApp:run
+
+# Build development JAR first (if needed)
+cd mobile && ./gradlew :desktopApp:packageUberJarForCurrentOS
+
+# Custom test server port
+export CIRIS_TEST_PORT=9000
+```
+
+**Test Server Endpoints (`http://localhost:8091`):**
+- `GET /health` - Health check
+- `GET /screen` - Current screen name
+- `GET /tree` - Full UI element tree with positions
+- `POST /click` - Click element: `{"testTag": "btn_login"}`
+- `POST /input` - Input text: `{"testTag": "input_user", "text": "admin"}`
+- `POST /wait` - Wait for element: `{"testTag": "btn_send", "timeoutMs": 5000}`
+
+**Full documentation:** `mobile/desktopApp/src/main/kotlin/ai/ciris/desktop/testing/README.md`
 
 ## Development Workflow
 

@@ -46,19 +46,31 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
     actual override suspend fun startServer(): Result<String> = runCatching {
         println("[PythonRuntime.desktop] startServer() called, checking for server at $_serverUrl")
 
-        // Check if server is already running (launched by ciris-agent CLI)
-        val alreadyRunning = try {
-            val resp = httpClient.get("$_serverUrl/v1/system/health")
-            resp.status == HttpStatusCode.OK
-        } catch (_: Exception) {
-            false
-        }
+        // Check if server is already running and in a usable state
+        val existingServerState = checkExistingServer()
 
-        if (!alreadyRunning) {
-            // Launch the Python backend ourselves
-            launchServerProcess()
-        } else {
-            println("[PythonRuntime.desktop] Server already running at $_serverUrl")
+        when (existingServerState) {
+            ExistingServerState.HEALTHY -> {
+                println("[PythonRuntime.desktop] Server already running and healthy at $_serverUrl")
+            }
+            ExistingServerState.STUCK_SHUTDOWN -> {
+                println("[PythonRuntime.desktop] Detected stuck server in shutdown state - attempting to kill...")
+                if (!killStuckServer()) {
+                    throw RuntimeException(
+                        "A CIRIS server is stuck in shutdown state on $_serverUrl but could not be killed.\n\n" +
+                        "Please manually kill the process:\n" +
+                        "  Linux/Mac: lsof -i :${getPort()} | grep LISTEN | awk '{print \$2}' | xargs kill\n" +
+                        "  Windows: netstat -ano | findstr :${getPort()} then taskkill /PID <pid> /F\n\n" +
+                        "Then restart the application."
+                    )
+                }
+                println("[PythonRuntime.desktop] Killed stuck server, launching fresh instance...")
+                launchServerProcess()
+            }
+            ExistingServerState.NOT_RUNNING -> {
+                println("[PythonRuntime.desktop] No server detected, launching backend...")
+                launchServerProcess()
+            }
         }
 
         // Wait for server to become healthy
@@ -79,11 +91,98 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
     }
 
     /**
+     * State of an existing server process.
+     */
+    private enum class ExistingServerState {
+        NOT_RUNNING,      // No server on port
+        HEALTHY,          // Server running in WORK or SETUP state
+        STUCK_SHUTDOWN    // Server responding but in shutdown or other bad state
+    }
+
+    /**
+     * Check if there's an existing server and what state it's in.
+     */
+    private suspend fun checkExistingServer(): ExistingServerState {
+        return try {
+            val response = httpClient.get("$_serverUrl/v1/system/health")
+            if (response.status != HttpStatusCode.OK) {
+                return ExistingServerState.NOT_RUNNING
+            }
+
+            val body = response.bodyAsText()
+            val stateMatch = Regex(""""cognitive_state"\s*:\s*"(\w+)"""").find(body)
+            val cognitiveState = stateMatch?.groupValues?.get(1)?.uppercase() ?: ""
+
+            when (cognitiveState) {
+                "WORK", "SETUP", "WAKEUP", "PLAY", "SOLITUDE", "DREAM" -> ExistingServerState.HEALTHY
+                "SHUTDOWN" -> ExistingServerState.STUCK_SHUTDOWN
+                else -> {
+                    println("[PythonRuntime.desktop] Unknown cognitive_state: $cognitiveState - treating as stuck")
+                    ExistingServerState.STUCK_SHUTDOWN
+                }
+            }
+        } catch (_: Exception) {
+            ExistingServerState.NOT_RUNNING
+        }
+    }
+
+    /**
+     * Get port from server URL.
+     */
+    private fun getPort(): String {
+        return Regex(":(\\d+)").find(_serverUrl)?.groupValues?.get(1) ?: "8080"
+    }
+
+    /**
+     * Attempt to kill a stuck server process.
+     * Returns true if successful or if server is no longer responding.
+     */
+    private suspend fun killStuckServer(): Boolean {
+        val port = getPort()
+        val isWindows = System.getProperty("os.name", "").lowercase().contains("win")
+
+        try {
+            // Find and kill process on the port
+            val killProcess = if (isWindows) {
+                // Windows: use netstat + taskkill
+                ProcessBuilder("cmd", "/c",
+                    "for /f \"tokens=5\" %a in ('netstat -ano ^| findstr :$port ^| findstr LISTENING') do taskkill /PID %a /F"
+                ).start()
+            } else {
+                // Unix: use lsof + kill
+                ProcessBuilder("sh", "-c",
+                    "lsof -ti :$port | xargs kill -9 2>/dev/null || true"
+                ).start()
+            }
+
+            killProcess.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
+
+            // Wait a moment for port to be released
+            delay(2000)
+
+            // Verify server is no longer responding
+            return try {
+                httpClient.get("$_serverUrl/v1/system/health")
+                // Still responding - kill failed
+                println("[PythonRuntime.desktop] Server still responding after kill attempt")
+                false
+            } catch (_: Exception) {
+                // Not responding - kill succeeded
+                println("[PythonRuntime.desktop] Server successfully killed")
+                true
+            }
+        } catch (e: Exception) {
+            println("[PythonRuntime.desktop] Error killing stuck server: ${e.message}")
+            return false
+        }
+    }
+
+    /**
      * Launch ciris-agent --adapter api as a subprocess.
      * Tries ciris-agent first (pip-installed), then falls back to python main.py.
      */
     private fun launchServerProcess() {
-        println("[PythonRuntime.desktop] No server detected, launching backend...")
+        println("[PythonRuntime.desktop] Launching backend...")
 
         // Parse port from server URL
         val port = Regex(":(\\d+)").find(_serverUrl)?.groupValues?.get(1) ?: "8080"

@@ -1,6 +1,11 @@
 package ai.ciris.mobile.shared.viewmodels
 
+import ai.ciris.mobile.shared.localization.LocalizationHelper
 import ai.ciris.mobile.shared.models.CommunicationAdapter
+import ai.ciris.mobile.shared.models.ConfigSessionData
+import ai.ciris.mobile.shared.models.DiscoveredItemData
+import ai.ciris.mobile.shared.models.LoadableAdaptersData
+import ai.ciris.mobile.shared.models.SelectOptionData
 import ai.ciris.mobile.shared.models.SetupMode
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -36,7 +41,14 @@ enum class SetupStep {
     NODE_AUTH,
 
     /**
-     * Step 2: LLM mode selection (CIRIS_PROXY vs BYOK) and configuration.
+     * Step 2: Language and location preferences.
+     * Helps CIRIS communicate in the user's preferred language.
+     * Location is optional and provides contextual awareness.
+     */
+    PREFERENCES,
+
+    /**
+     * Step 3: LLM mode selection (CIRIS_PROXY vs BYOK) and configuration.
      */
     LLM_CONFIGURATION,
 
@@ -100,6 +112,95 @@ enum class DeviceAuthStatus {
 }
 
 /**
+ * Location sharing granularity for user preferences.
+ * Mirrors the CLI wizard's location options from wizard.py:377-382.
+ */
+@Serializable
+enum class LocationGranularity {
+    NONE,           // Prefer not to say
+    COUNTRY,        // Country only
+    REGION,         // Country + Region/State
+    CITY            // Country + Region + City
+}
+
+/**
+ * Supported language for the PREFERENCES step.
+ * Mirrors localization/manifest.json (15 languages).
+ * ISO 639-1 codes with native names for display.
+ */
+data class SupportedLanguage(
+    val code: String,        // ISO 639-1 code (e.g., "en", "am")
+    val nativeName: String,  // Name in native script (e.g., "English", "አማርኛ")
+    val englishName: String  // Name in English for accessibility
+)
+
+/**
+ * Available languages for selection in the PREFERENCES step.
+ * Sorted alphabetically by English name for consistent ordering.
+ * Matches localization/manifest.json.
+ */
+val SUPPORTED_LANGUAGES = listOf(
+    SupportedLanguage("am", "አማርኛ", "Amharic"),
+    SupportedLanguage("ar", "العربية", "Arabic"),
+    SupportedLanguage("zh", "中文", "Chinese"),
+    SupportedLanguage("en", "English", "English"),
+    SupportedLanguage("fr", "Français", "French"),
+    SupportedLanguage("de", "Deutsch", "German"),
+    SupportedLanguage("hi", "हिन्दी", "Hindi"),
+    SupportedLanguage("it", "Italiano", "Italian"),
+    SupportedLanguage("ja", "日本語", "Japanese"),
+    SupportedLanguage("ko", "한국어", "Korean"),
+    SupportedLanguage("pt", "Português", "Portuguese"),
+    SupportedLanguage("ru", "Русский", "Russian"),
+    SupportedLanguage("es", "Español", "Spanish"),
+    SupportedLanguage("sw", "Kiswahili", "Swahili"),
+    SupportedLanguage("tr", "Türkçe", "Turkish"),
+    SupportedLanguage("ur", "اردو", "Urdu")
+)
+
+/**
+ * Supported currency for display and conversion.
+ * Uses ISO 4217 codes.
+ */
+data class SupportedCurrency(
+    val code: String,        // ISO 4217 code (e.g., "USD", "EUR")
+    val symbol: String,      // Currency symbol (e.g., "$", "€")
+    val name: String,        // English name (e.g., "US Dollar")
+    val nativeName: String,  // Native/local name
+    val decimals: Int = 2    // Decimal places for display
+)
+
+/**
+ * Available currencies for wallet display conversion.
+ * Sorted by common usage. USDC is the native wallet currency.
+ * Exchange rates are fetched at runtime from CurrencyManager.
+ */
+val SUPPORTED_CURRENCIES = listOf(
+    // Native crypto
+    SupportedCurrency("USDC", "$", "USDC", "USD Coin", 2),
+    // Major fiat
+    SupportedCurrency("USD", "$", "US Dollar", "US Dollar", 2),
+    SupportedCurrency("EUR", "€", "Euro", "Euro", 2),
+    SupportedCurrency("GBP", "£", "British Pound", "Pound Sterling", 2),
+    SupportedCurrency("JPY", "¥", "Japanese Yen", "円", 0),
+    SupportedCurrency("CNY", "¥", "Chinese Yuan", "人民币", 2),
+    // Regional
+    SupportedCurrency("ETB", "Br", "Ethiopian Birr", "ብር", 2),
+    SupportedCurrency("INR", "₹", "Indian Rupee", "रुपया", 2),
+    SupportedCurrency("KRW", "₩", "South Korean Won", "원", 0),
+    SupportedCurrency("BRL", "R$", "Brazilian Real", "Real", 2),
+    SupportedCurrency("MXN", "$", "Mexican Peso", "Peso Mexicano", 2),
+    SupportedCurrency("RUB", "₽", "Russian Ruble", "Рубль", 2),
+    SupportedCurrency("TRY", "₺", "Turkish Lira", "Türk Lirası", 2),
+    SupportedCurrency("ZAR", "R", "South African Rand", "Rand", 2),
+    SupportedCurrency("NGN", "₦", "Nigerian Naira", "Naira", 2),
+    SupportedCurrency("KES", "KSh", "Kenyan Shilling", "Shilingi", 2),
+    // Crypto
+    SupportedCurrency("BTC", "₿", "Bitcoin", "Bitcoin", 8),
+    SupportedCurrency("ETH", "Ξ", "Ethereum", "Ethereum", 6)
+)
+
+/**
  * CIRISVerify setup state for the optional verification step.
  */
 @Serializable
@@ -141,6 +242,17 @@ data class SetupFormState(
     val googleUserId: String? = null,
     val oauthProvider: String = "google", // "google" or "apple"
 
+    // Language and location preferences (from PREFERENCES step)
+    // Mirrors CLI wizard fields from wizard.py:324-395
+    val preferredLanguage: String = "en",  // ISO 639-1 code
+    val locationGranularity: LocationGranularity = LocationGranularity.NONE,
+    val country: String = "",
+    val region: String = "",
+    val city: String = "",
+    // Consent to share location data in telemetry/traces
+    // When enabled, location is included in anonymized telemetry
+    val shareLocationInTraces: Boolean = false,
+
     // LLM mode selection (CIRIS_PROXY or BYOK)
     val setupMode: SetupMode? = null,
 
@@ -160,6 +272,12 @@ data class SetupFormState(
     // No message content or PII is ever sent
     val accordMetricsConsent: Boolean = false,
 
+    // Public API Services (Navigation & Weather)
+    // Email included in User-Agent header for Nominatim (OSM) and weather.gov (NOAA)
+    // Required by their usage policies for contact if issues arise
+    val publicApiEmail: String = "",
+    val publicApiServicesEnabled: Boolean = false,
+
     // V1.9.7: Template selection (Advanced Settings)
     val availableTemplates: List<AgentTemplateInfo> = emptyList(),
     val selectedTemplateId: String = "default",
@@ -173,6 +291,26 @@ data class SetupFormState(
     val enabledAdapterIds: Set<String> = setOf("api"),
     // Loading state for adapter list
     val adaptersLoading: Boolean = false,
+
+    // Adapter wizard state (for adapters that require configuration)
+    // This mirrors AdaptersViewModel's wizard state for use during setup
+    val showAdapterWizard: Boolean = false,
+    val adapterWizardType: String? = null,  // Adapter type being configured (e.g., "home_assistant")
+    @kotlinx.serialization.Transient
+    val loadableAdaptersData: LoadableAdaptersData? = null,
+    @kotlinx.serialization.Transient
+    val adapterWizardSession: ConfigSessionData? = null,
+    val adapterWizardError: String? = null,
+    val adapterWizardLoading: Boolean = false,
+    @kotlinx.serialization.Transient
+    val adapterDiscoveredItems: List<DiscoveredItemData> = emptyList(),
+    val adapterDiscoveryExecuted: Boolean = false,
+    val adapterOAuthUrl: String? = null,
+    val adapterAwaitingOAuthCallback: Boolean = false,
+    @kotlinx.serialization.Transient
+    val adapterSelectOptions: List<SelectOptionData> = emptyList(),
+    // Map of adapterId -> completed configuration for adapters configured during setup
+    val configuredAdapterData: Map<String, Map<String, String>> = emptyMap(),
 
     // Validation state
     val isValidating: Boolean = false,
@@ -209,6 +347,11 @@ data class SetupFormState(
             SetupStep.NODE_AUTH -> {
                 // Can proceed when device auth is complete
                 deviceAuth.status == DeviceAuthStatus.COMPLETE
+            }
+
+            SetupStep.PREFERENCES -> {
+                // Language has a default, location is optional - always valid
+                true
             }
 
             SetupStep.LLM_CONFIGURATION -> {
@@ -261,21 +404,26 @@ data class SetupFormState(
 
             SetupStep.NODE_AUTH -> {
                 when (deviceAuth.status) {
-                    DeviceAuthStatus.ERROR -> deviceAuth.error ?: "Device authorization failed"
-                    DeviceAuthStatus.IDLE -> "Enter a node URL to connect"
-                    DeviceAuthStatus.CONNECTING -> "Connecting to node..."
-                    DeviceAuthStatus.WAITING -> "Waiting for authorization in browser..."
+                    DeviceAuthStatus.ERROR -> deviceAuth.error ?: LocalizationHelper.getString("setup_validation_device_failed")
+                    DeviceAuthStatus.IDLE -> LocalizationHelper.getString("setup_validation_node_url")
+                    DeviceAuthStatus.CONNECTING -> LocalizationHelper.getString("setup_validation_node_connecting")
+                    DeviceAuthStatus.WAITING -> LocalizationHelper.getString("setup_validation_node_waiting")
                     DeviceAuthStatus.COMPLETE -> null
                 }
             }
 
+            SetupStep.PREFERENCES -> {
+                // Preferences are optional - no validation errors
+                null
+            }
+
             SetupStep.LLM_CONFIGURATION -> {
                 when {
-                    setupMode == null -> "Please select an AI mode"
+                    setupMode == null -> LocalizationHelper.getString("setup_validation_select_mode")
                     setupMode == SetupMode.CIRIS_PROXY && googleIdToken == null ->
-                        "Google sign-in required for free AI"
+                        LocalizationHelper.getString("setup_validation_google_required")
                     setupMode == SetupMode.BYOK && llmProvider != "LocalAI" && llmApiKey.isEmpty() ->
-                        "API Key is required"
+                        LocalizationHelper.getString("setup_validation_api_key_required")
                     else -> null
                 }
             }
@@ -288,9 +436,9 @@ data class SetupFormState(
             SetupStep.ACCOUNT_AND_CONFIRMATION -> {
                 if (!isGoogleAuth) {
                     when {
-                        username.isEmpty() -> "Username is required"
-                        userPassword.isEmpty() -> "Password is required"
-                        userPassword.length < 8 -> "Password must be at least 8 characters"
+                        username.isEmpty() -> LocalizationHelper.getString("setup_validation_username_required")
+                        userPassword.isEmpty() -> LocalizationHelper.getString("setup_validation_password_required")
+                        userPassword.length < 8 -> LocalizationHelper.getString("setup_validation_password_length")
                         else -> null
                     }
                 } else {
@@ -583,7 +731,49 @@ data class VerifyStatusResponse(
     val diskAgentMismatch: Map<String, JsonElement>? = null,
     /** Files that don't match registry */
     @SerialName("registry_mismatch_files")
-    val registryMismatchFiles: Map<String, JsonElement>? = null
+    val registryMismatchFiles: Map<String, JsonElement>? = null,
+
+    // =========================================================================
+    // CIRISVerify 1.2.x: Hardware Trust Detection
+    // =========================================================================
+    // Detects SoC-level vulnerabilities (CVE-2026-20435, CVE-2026-21385) that compromise TEE
+
+    /** THE KEY FLAG - True if hardware security is compromised. When true, wallet is RECEIVE-ONLY. */
+    @SerialName("hardware_trust_degraded")
+    val hardwareTrustDegraded: Boolean = false,
+    /** Human-readable reason (e.g., "Vulnerable MediaTek SoC detected") */
+    @SerialName("trust_degradation_reason")
+    val trustDegradationReason: String? = null,
+    /** SoC manufacturer (mediatek, qualcomm, samsung, etc.) */
+    @SerialName("soc_manufacturer")
+    val socManufacturer: String? = null,
+    /** SoC model identifier (mt6893, sm8550, etc.) */
+    @SerialName("soc_model")
+    val socModel: String? = null,
+    /** Android security patch level (YYYY-MM-DD) */
+    @SerialName("security_patch_level")
+    val securityPatchLevel: String? = null,
+    /** Device is an emulator */
+    @SerialName("is_emulator")
+    val isEmulator: Boolean = false,
+    /** Sophisticated emulator hiding detection */
+    @SerialName("is_suspicious_emulator")
+    val isSuspiciousEmulator: Boolean = false,
+    /** Bootloader is unlocked (if detectable) */
+    @SerialName("bootloader_unlocked")
+    val bootloaderUnlocked: Boolean? = null,
+    /** TEE implementation (TrustZone, StrongBox, etc.) */
+    @SerialName("tee_implementation")
+    val teeImplementation: String? = null,
+    /** Device shows signs of root access */
+    @SerialName("is_rooted")
+    val isRooted: Boolean = false,
+    /** List of limitations explaining why trust is degraded */
+    @SerialName("hardware_limitations")
+    val hardwareLimitations: List<HardwareLimitationData>? = null,
+    /** CVE details for vulnerable hardware */
+    @SerialName("security_advisories")
+    val securityAdvisories: List<SecurityAdvisoryData>? = null
 ) {
     /**
      * Calculate actual achieved attestation level (0-5).
@@ -648,4 +838,47 @@ data class CheckDetail(
 data class SourceErrorDetail(
     val category: String = "unknown",
     val details: String = ""
+)
+
+/**
+ * CIRISVerify 1.2.x: Hardware limitation explaining trust degradation.
+ * Each limitation may have an associated security advisory (CVE).
+ */
+@Serializable
+data class HardwareLimitationData(
+    /** Type: Emulator, VulnerableSoC, OutdatedPatchLevel, RootedDevice, etc. */
+    @SerialName("limitation_type")
+    val limitationType: String,
+    /** Affected manufacturer (mediatek, qualcomm, etc.) */
+    val manufacturer: String? = null,
+    /** Associated security advisory if applicable */
+    val advisory: SecurityAdvisoryData? = null,
+    /** Human-readable explanation */
+    val reason: String? = null,
+    /** Current security patch level on device */
+    @SerialName("current_patch")
+    val currentPatch: String? = null,
+    /** Minimum required patch level to remediate */
+    @SerialName("minimum_patch")
+    val minimumPatch: String? = null
+)
+
+/**
+ * CIRISVerify 1.2.x: Security advisory for hardware vulnerabilities.
+ * Contains CVE details for UI display.
+ */
+@Serializable
+data class SecurityAdvisoryData(
+    /** CVE identifier (e.g., "CVE-2026-20435") */
+    val cve: String,
+    /** Brief title (e.g., "MediaTek TEE Key Extraction") */
+    val title: String,
+    /** Impact description (e.g., "Key extraction possible in <45s") */
+    val impact: String,
+    /** Whether a software patch can fix this (false for silicon-level vulns) */
+    @SerialName("software_patchable")
+    val softwarePatchable: Boolean,
+    /** Minimum patch level that fixes (if software_patchable) */
+    @SerialName("min_patch_level")
+    val minPatchLevel: String? = null
 )

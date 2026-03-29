@@ -7,7 +7,7 @@ Eliminates duplicated verification logic from the old monolithic setup.py.
 import asyncio
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -106,6 +106,35 @@ class VerifyStatusResponse(BaseModel):
     # Module integrity (v0.9.7)
     module_integrity_ok: bool = Field(default=False)
     module_integrity_summary: Optional[Dict[str, int]] = Field(default=None)
+
+    # =========================================================================
+    # CIRISVerify 1.2.x: Hardware Trust Detection
+    # =========================================================================
+    # THE KEY FLAG for wallet operations - when True, wallet is receive-only
+    hardware_trust_degraded: bool = Field(
+        default=False,
+        description="True if hardware security is compromised (vulnerable SoC, rooted, emulator)",
+    )
+    trust_degradation_reason: Optional[str] = Field(
+        default=None,
+        description="Human-readable reason for trust degradation",
+    )
+    # Hardware info
+    soc_manufacturer: Optional[str] = Field(default=None, description="SoC manufacturer")
+    soc_model: Optional[str] = Field(default=None, description="SoC model identifier")
+    security_patch_level: Optional[str] = Field(default=None, description="Android security patch level")
+    is_emulator: bool = Field(default=False, description="Device is an emulator")
+    is_suspicious_emulator: bool = Field(default=False, description="Sophisticated emulator detected")
+    bootloader_unlocked: Optional[bool] = Field(default=None, description="Bootloader unlocked")
+    tee_implementation: Optional[str] = Field(default=None, description="TEE implementation type")
+    is_rooted: bool = Field(default=False, description="Device is rooted")
+    # Limitations and advisories (for UI display)
+    hardware_limitations: Optional[List[Dict[str, Any]]] = Field(
+        default=None, description="Why trust is degraded (limitation_type, advisory, etc.)"
+    )
+    security_advisories: Optional[List[Dict[str, Any]]] = Field(
+        default=None, description="CVE details for vulnerable hardware"
+    )
 
 
 class AppAttestVerifyRequest(BaseModel):
@@ -208,6 +237,19 @@ def _attestation_to_response(result: AttestationResult) -> VerifyStatusResponse:
         device_attestation=result.device_attestation,
         module_integrity_ok=result.module_integrity_ok,
         module_integrity_summary=result.module_integrity_summary,
+        # CIRISVerify 1.2.x hardware trust fields
+        hardware_trust_degraded=result.hardware_trust_degraded,
+        trust_degradation_reason=result.trust_degradation_reason,
+        soc_manufacturer=result.soc_manufacturer,
+        soc_model=result.soc_model,
+        security_patch_level=result.security_patch_level,
+        is_emulator=result.is_emulator,
+        is_suspicious_emulator=result.is_suspicious_emulator,
+        bootloader_unlocked=result.bootloader_unlocked,
+        tee_implementation=result.tee_implementation,
+        is_rooted=result.is_rooted,
+        hardware_limitations=result.hardware_limitations,
+        security_advisories=result.security_advisories,
     )
 
 

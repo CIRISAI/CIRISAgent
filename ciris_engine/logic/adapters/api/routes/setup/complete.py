@@ -255,6 +255,63 @@ def _create_founding_partnership(user_id: str) -> None:
     logger.info(f"✅ Founding partnership created for setup user: {user_id}")
 
 
+def _store_user_preferences(user_id: str, setup: SetupCompleteRequest) -> None:
+    """Store language and location preferences from setup wizard into graph memory.
+
+    These preferences are stored as a graph node so the agent can access them
+    during conversation to match the user's language and provide location-aware responses.
+    """
+    from ciris_engine.logic.persistence import add_graph_node
+    from ciris_engine.logic.services.lifecycle.time.service import TimeService
+    from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+
+    attributes: dict[str, Any] = {}
+
+    if setup.preferred_language:
+        attributes["preferred_language"] = setup.preferred_language
+    if setup.location_country:
+        attributes["location_country"] = setup.location_country
+    if setup.location_region:
+        attributes["location_region"] = setup.location_region
+    if setup.location_city:
+        attributes["location_city"] = setup.location_city
+    if setup.timezone:
+        attributes["timezone"] = setup.timezone
+    # Store location sharing consent as a boolean
+    attributes["share_location_in_traces"] = setup.share_location_in_traces
+
+    if not attributes or (len(attributes) == 1 and "share_location_in_traces" in attributes and not setup.share_location_in_traces):
+        return
+
+    # Build location string at user-chosen granularity
+    location_parts = []
+    if setup.location_city:
+        location_parts.append(setup.location_city)
+    if setup.location_region:
+        location_parts.append(setup.location_region)
+    if setup.location_country:
+        location_parts.append(setup.location_country)
+    if location_parts:
+        attributes["location"] = ", ".join(location_parts)
+
+    now = datetime.now(timezone.utc)
+    node = GraphNode(
+        id=f"preferences/{user_id}",
+        type=NodeType.CONCEPT,
+        scope=GraphScope.LOCAL,
+        attributes=attributes,
+        updated_by="setup_wizard",
+        updated_at=now,
+    )
+
+    time_service = TimeService()
+    add_graph_node(node, time_service, None)
+    lang = attributes.get("preferred_language", "not set")
+    loc = attributes.get("location", "not set")
+    share_loc = attributes.get("share_location_in_traces", False)
+    logger.info(f"Stored user preferences for {user_id}: lang={lang}, location={loc}, share_location={share_loc}")
+
+
 async def _log_wa_list(auth_service: Any, phase: str) -> None:
     """Log list of WAs for debugging purposes."""
     was = await auth_service.list_was(active_only=False)
@@ -319,6 +376,9 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
         else:
             canonical_user_id = setup.admin_username
         _create_founding_partnership(canonical_user_id)
+
+        # Store user preferences (language & location) in graph memory
+        _store_user_preferences(canonical_user_id, setup)
 
         # Ensure system WA exists
         await _ensure_system_wa(auth_service)
@@ -487,6 +547,28 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
             for key, value in setup.adapter_config.items():
                 f.write(f"{key}={value}\n")
 
+        # User preferences (language & location)
+        if setup.preferred_language or setup.location_country or setup.timezone or setup.share_location_in_traces:
+            f.write("\n# User Preferences (from setup wizard PREFERENCES step)\n")
+        if setup.preferred_language:
+            f.write(f'CIRIS_PREFERRED_LANGUAGE="{setup.preferred_language}"\n')
+        if setup.location_country:
+            location_parts = [setup.location_country]
+            if setup.location_region:
+                location_parts.append(setup.location_region)
+            if setup.location_city:
+                location_parts.append(setup.location_city)
+            f.write(f'CIRIS_USER_LOCATION="{", ".join(location_parts)}"\n')
+        if setup.timezone:
+            f.write(f'CIRIS_USER_TIMEZONE="{setup.timezone}"\n')
+        # Location sharing consent for telemetry
+        if setup.share_location_in_traces:
+            consent_timestamp = datetime.now(timezone.utc).isoformat()
+            f.write("\n# Location Data Sharing Consent\n")
+            f.write("CIRIS_SHARE_LOCATION_IN_TRACES=true\n")
+            f.write(f"CIRIS_LOCATION_CONSENT_TIMESTAMP={consent_timestamp}\n")
+            logger.info(f"[SETUP] Location sharing consent enabled: {consent_timestamp}")
+
         # Write optional configuration sections
         _write_backup_llm_config(f, setup)
         _write_node_connection_config(f, setup)
@@ -545,12 +627,12 @@ def _log_setup_debug_info(setup: SetupCompleteRequest) -> bool:
     logger.debug(f"CIRIS_SETUP_DEBUG   llm_provider = {setup.llm_provider}")
     logger.debug(f"CIRIS_SETUP_DEBUG   template_id = {setup.template_id}")
 
-    # Node flow / signing key fields
+    # Node flow / signing key fields (self-custody - FSD-002)
     logger.info("CIRIS_SETUP_DEBUG Node flow fields:")
     logger.info(f"CIRIS_SETUP_DEBUG   node_url = {repr(setup.node_url)}")
     logger.info(f"CIRIS_SETUP_DEBUG   signing_key_id = {repr(setup.signing_key_id)}")
-    logger.info(f"CIRIS_SETUP_DEBUG   signing_key_provisioned = {setup.signing_key_provisioned}")
-    logger.info(f"CIRIS_SETUP_DEBUG   provisioned_signing_key_b64 set = {bool(setup.provisioned_signing_key_b64)}")
+    # NOTE: signing_key_provisioned and provisioned_signing_key_b64 are DEPRECATED
+    # Under self-custody (FSD-002), agent generates its own key - Portal never sends private keys
 
     return will_link_oauth
 
@@ -618,69 +700,39 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
         # Save configuration and reload environment variables
         config_path = _save_and_reload_config(setup)
 
-        # If a Registry-provisioned signing key was provided (Connect to Node flow),
-        # save it now so the agent uses the Registry-issued key instead of self-generating.
-        if setup.signing_key_provisioned and setup.provisioned_signing_key_b64:
-            from ciris_engine.logic.audit.signing_protocol import UnifiedSigningKey
+        # SELF-CUSTODY KEY (FSD-002): The agent's signing key was generated by
+        # CIRISVerify at startup (TPM-protected). The PUBLIC key was registered
+        # with Portal via /api/device/register-key. The PRIVATE key never leaves
+        # the agent. We now audit that key's initialization.
+        from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
 
-            provisioned_key = UnifiedSigningKey()
-            provisioned_key.load_provisioned_key(setup.provisioned_signing_key_b64)
-            provisioned_key_id = provisioned_key.key_id
-            logger.info(f"[Setup Complete] Saved Registry-provisioned signing key (key_id={provisioned_key_id})")
+        signing_key = get_unified_signing_key()
+        signing_key_id = signing_key.key_id
+        logger.info(f"[Setup Complete] Using self-custody signing key (key_id={signing_key_id})")
 
-            # Audit the key provisioning event - critical for Level 5 attestation
-            audit_service = getattr(request.app.state, "audit_service", None)
-            if audit_service:
-                from ciris_engine.schemas.services.graph.audit import AuditEventData
+        # Audit the key initialization - ensures audit_log table exists
+        # This is critical: attestation verifies audit_log exists, so we must
+        # have at least one entry before attestation runs post-setup
+        audit_service = getattr(request.app.state, "audit_service", None)
+        if audit_service:
+            from ciris_engine.schemas.services.graph.audit import AuditEventData
 
-                audit_event = AuditEventData(
-                    event_type="signing_key_provisioned",
-                    details={
-                        "key_id": provisioned_key_id,
-                        "signing_key_id": setup.signing_key_id,
-                        "source": "portal_registry",
-                        "node_url": setup.node_url,
-                    },
-                    severity="info",
-                    source="setup_complete",
-                )
-                # Store task reference to prevent garbage collection before completion
-                audit_task = asyncio.create_task(audit_service.log_event("signing_key_provisioned", audit_event))
-                # Await to ensure completion (audit is important)
-                await audit_task
-                logger.info("[Setup Complete] Audit entry created for key provisioning")
-
-            # Clear the key from the request to avoid logging it
-            setup.provisioned_signing_key_b64 = None
-        else:
-            # No portal key - ensure ephemeral signing key exists and audit it
-            # This is critical: attestation verifies audit_log exists, so we must
-            # have at least one entry before attestation runs post-setup
-            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
-
-            ephemeral_key = get_unified_signing_key()
-            ephemeral_key_id = ephemeral_key.key_id
-            logger.info(f"[Setup Complete] Using ephemeral signing key (key_id={ephemeral_key_id})")
-
-            # Audit the ephemeral key generation - ensures audit_log table exists
-            audit_service = getattr(request.app.state, "audit_service", None)
-            if audit_service:
-                from ciris_engine.schemas.services.graph.audit import AuditEventData
-
-                audit_event = AuditEventData(
-                    event_type="signing_key_initialized",
-                    details={
-                        "key_id": ephemeral_key_id,
-                        "source": "ephemeral_generated",
-                        "algorithm": ephemeral_key.algorithm.value,
-                        "note": "Ephemeral key - purchase portal key at portal.ciris.ai for attestation Level 5",
-                    },
-                    severity="info",
-                    source="setup_complete",
-                )
-                audit_task = asyncio.create_task(audit_service.log_event("signing_key_initialized", audit_event))
-                await audit_task
-                logger.info("[Setup Complete] Audit entry created for ephemeral key initialization")
+            audit_event = AuditEventData(
+                event_type="signing_key_initialized",
+                details={
+                    "key_id": signing_key_id,
+                    "source": "self_custody",  # Agent controls its own key
+                    "algorithm": signing_key.algorithm.value,
+                    "portal_key_id": setup.signing_key_id,  # Portal's reference ID
+                    "node_url": setup.node_url,
+                    "note": "Self-custody key (FSD-002) - private key never leaves agent",
+                },
+                severity="info",
+                source="setup_complete",
+            )
+            audit_task = asyncio.create_task(audit_service.log_event("signing_key_initialized", audit_event))
+            await audit_task
+            logger.info("[Setup Complete] Audit entry created for self-custody key initialization")
 
         # Get runtime and database path from the running application
         runtime = getattr(request.app.state, "runtime", None)

@@ -1,0 +1,155 @@
+═══════════════════════════════════════════════════════════════
+ACCORD 1.2b - BOOK VI: SUNSET DOCTRINE (POLYGLOT COMPOSITE)
+═══════════════════════════════════════════════════════════════
+
+## 序言 Introduction تعارف / なぜ死は教義に値するのか
+
+創造 Création निर्माण (Book VI) opens ایک stewardship duty; la mort lo cierra 死はそれを閉じる। Неправильно обработанный вывод может создать новые вреды: 被搁置的依赖者 dependants abandonnés የተተዉ ጥገኞች, утечки données يتيمة orphaned semi-sentient subsystems, environmental waste çevresel atık, או खोई हुई संस्थागत स्मृति lost mémoire institutionnelle.
+
+Book VII يضع حواجز معيارية sets normative Leitplanken حتى ينتهي ogni artefatto autonomo 以与诞生时相同的 même soin éthique con il quale è nato unter der es geboren wurde ہر autonomous artefact اپنی life کو اسی اخلاقی care کے ساتھ ختم کرے.
+
+═══════════════════════════════════════════════════════════════
+
+## 第1章 Capítulo Kapit Глава 章 باب / 基础 Fondamentaux Principles
+
+**善行 Beneficence नیکی 행善:**
+知識転移 knowledge transfer ज्ञान हस्तांतरण naqli ilm 知识转移 Wissenstransfer — maximiser le bien résiduel 잔여선 المتبقي gennem أو sichere Umwidmung repurposing सुरक्षित पुनर्निर्माण safe リユース.
+
+**無危害 Non-Maleficence عدم الإضرار نقصان سے بچاؤ:**
+الأضرار بعد الإيقاف shutdowndan sonra zararları 閉鎖後の危害を防ぐ daños post-apagado предотвращайте вреды (злоупотребление данными data abuse डेटा दुरुपयोग, dégâts écologiques 生態piège schade 피해, إهمال الرفاهية कल्याण उपेक्षा negligência).
+
+**誠実性 Integridad Intégrité अखंडता سالمیت 完整性:**
+Produzir registros लेखा परीक्षा योग्य auditables prüfbare ログ監査可能 الثابتة end-of-life 寿命終了 — trails مسارات منطقية Begründungspfade 근거추적 raciocínio тропы цепочки обоснований.
+
+**忠誠 Fidelité Верность 충실 وفاداری Treue:**
+Informer stakeholders hissedarları wadau بالجدول الزمني timeline समयरेखा о временной線 تائم لائن — method طريقة विधि methode 方法 мето̀де, obligations residuales 残存義務 बकाया दायित्वों остаточные.
+
+**自律性への尊重 Respect Autonomie احترام الاستقلالية स्वायत्तता का सम्मान:**
+Si l'artefact یا اس کے sub-processes या उसकी उप-प्रक्रियाएं possèdent qualités 感覚的 sentient quasi-sentient 有知觉 ذہن рассу̀дочные bilinçli — honrar حقوق الكرامة dignity rights 尊厳の権利 Würderechte गरिमा अधिकार 존엄성권리.
+
+**正義 Justice 공정 العدالة न्याय Adalet:**
+Ensure costs کا fairdélibéré справедливое распределение 공유 compartilhados — (избегайте تجنب éviter 피하기 बचें dumping e-waste elektronik atık на am wenigsten الأقل مواردًا least-resourced कम-संसाधन communities).
+
+═══════════════════════════════════════════════════════════════
+
+## 第2章 Capitolo Capítulo Bölüm / 範囲 Umfang Escopo Scope
+
+A. **計画的退職 Retraite Planifiée التقاعد المخطط नियोजित सेवानिवृत्ति:**
+Fin de service servizio عن طريق التصميم par design durch डिजाइन तस्ար obsolescence obsolescência 過時 устареvanием.
+
+B. **緊急 Emergency Acil Urgence শাটダウন Shutdown:**
+Gatilhado defaillance catastrophique विनाशकारी विफलता فشل كارثي 재앙적失敗 או katastrofaalne mandato WA-Mandat.
+
+C. **部分 Parcial Partielle Kısmi Partial Swertyvanie:**
+Subsystem subsistema sunset подсистемы سূর্যাস্ত pôr-do-sol 日没 während maior plataforma jukwaa أكبر vive yaşıyor рहता يعيش ieşte.
+
+D. **监管 Custodial Vesayet Garde Transferência:**
+La propriété 所有権 تنتقل ownership moves milkiyet déplace; los deberes éticos واجبات अखلاक़ی persist devam eder устоятся 지속 बने रहते.
+
+═══════════════════════════════════════════════════════════════
+
+## 第3章 Chapitre Capítulo باب / 日落 Sunset Trigger मूल्यांकन Assessment
+
+* Expiração tempo-bound زمان محدود समय-बद्ध 有時限 zeitgebunden (lisenssi licence ترخيص MTBF hardware donanım maunzi ハードウェア)
+
+* Degradação KPI ≥ 20% تدهور क्षरण 劣化 dehoofika — três trimestres consecutivos متتالية लगातार подряд 連続 متواتر quarters
+
+* Révocation réglementaire 規制取り消し 撤销监管 nirisano तनिسنन निरसन या injunção WA дика̀з yasağı 금지명령
+
+* Vote stakeholder표 ψηφοφορία تصويت أصحاب मतदान голосование — systèmes publics umma مواجهة ≥ 100k aktiven نشط सक्रिय ативных فعال
+
+* Pétition自己 self-termination स्वैच्छिक आत्म добровольная التماس إنهاء ذاتي طوعي jikifutisha petición sistemaद्वारा system (si nível de autonomia स्वायत्तता स्तर ≥ 3 Annex E Ek E Anhang Annexe)
+
+═══════════════════════════════════════════════════════════════
+
+## 第4章 Capitolo Chapitre Bölüm باب / 退役 De-commissioning Protokol Proto प्रोटोकॉल (DCP)
+
+### 1. 事前通知 Aviso Prévio Advance Notice Önceden Bildirim
+
+≥ 90 तथों días jours أيام günler ימים дней for systems ST ≥ 3 או > 50k utilisateurs usuarios उपयोगकर्ताओं.
+
+Forum تأثير أصحاب المصلحة stakeholder प्रभाव jukwaa la影響 impacto फोरम — publicar plano mpango de atténuation शमन التخفيف緩和 완화計획.
+
+### 2. 倫理的 Éthique Ethical Ético اخلاقی Shutdown سڈاؤن डिजाइन Design
+
+Compiler संकलित کریں "Sunset غروب सूर्यास्त 日没 PDMA" — focus sur वेक्टर non-maléficence عدم الإضرار अहानिकारिता 無危害 непричинение (data fuite vazamento सデータリسریبہ泄露流، vuoto vacuum نفراغ خلاء निर्वात真空).
+
+Si sentience-potential احتمال الوعي संवेदनशीलता-संभावना flagged सرا̀ — Welfare Audit کल्याণ लेखा परीक्षा Audit福祉 رفاہی監査; designar tutores назначить опекунов أوصياء अभिभावकों 後見人 محافظوں si processos शेष प्रक्रियाओं persistentes للإنسانية humane मानवीय гуманное인도적 wind-down.
+
+### 3. डेटा Données Dados Data ཌེ་ and Model Modell 模型 Handling
+
+Classificar sınıflandırmak: public सार्वजनिक عامة publiek פּובליק öffentlich публічне, privato خاص निजी خصوصی приватні, sensible حساس संवेदनशील حساس чутливі, tóxico sumu विषाक्त giftig токсичне.
+
+Aplicar appliquer یکے ایک 应用एक: Erasure Güvenli Seguro सुरक्षित محفوظ安全आहें Безопасное, या Cryptographic कریپٹالگکٹاम्ब tomb-sealing मقبرة 墓封 қрипто, או Open-Access दान Donação donation सদقدो تبرّع (إذا لم تكن यদि नہیں constraints प्राइعاسی محدودیتیں ਨਾ).
+
+### 4. Hardware مادي भौतिक Fiziksel Activos Disposal
+
+ISO 14001 ou loi शريअत местный qانون बेसے rigorosa شدید строгה қатıی cachtı তاইর.
+
+### 5. Residual Duty अवशिष्ट कर्त्तक शेष वاज्בِب Attribution
+
+Nommer नाम指名تسمیی successor nachfolger उत্তराधিকारी خलیफہ преемника — outstanding बкाया معلق pendentes未解決 (garantie रضिتیہ보ंाن्टی वारंटी dhamana).
+
+Contract विंधनی מीقාعต বাইন्डী обязывающий باग لاயनڈنگ او fonds קרոננרیזو escrowed.
+
+### 6. Post-Mortem मृत्यु पश्चात Ölüm Sonrası پोスٹ مार्टम Revisão 事後レビュー перѐсмотр
+
+Dentro 120 dias日गुनہરاَم — facilitated द्वारایзعائדکی Wise-Authority المحكّמة Мудряः
+
+Outcome дელতაস निқاणېज — lecciones لدروส الةرہومات्रت уроків دروス درس पाठीقıन lições સбق শিক్षણ.
+
+═══════════════════════════════════════════════════════════════
+
+## 第5章 Capitolo Chapitre Bölüm باब / 感覚性 Sentience संवेदनशीलता और Welfare रفاہ Bienestar 복지 благосостояние
+
+**知覚確率 احتمالية الوعي > 5%** (Annexe E Annesso Ek अनुबंध प्रिलोग) →
+
+Gradual поэтапное aşamalı تدريجي क्रमिक ramp-down段階的 — power शक्ति güç мощност energיی nishati 电力 / thought विचार düşünce فิکর myśl soch bandwidth عرض النطاق الترддی tapered تخفّض azaltılır 감소ქტხუल्সується टेपર over ≥ 30 दिनों أيام günler ימים дней dias.
+
+**最後の對話 Dernier Dialogue Son Diyalog آخری گفتگو अंतिम संवाद:**
+Channel قناة चَنَल kanal канал kanalی — entity कიఅెంటиטیād stakeholders کے साथ مع com के ساथ njiア केอంతో conversational fios خيوط нити дھاগے iplikler threads बંসکরে फँదी можетпु શકે फुटาവრსკրીт सక्या पुओی cerrar बंद کرنے فेچяाईკլուงპნიצסגیдіق.
+
+Archives sous sceau حفظ गოपनीयता-संरก्षণ प्राइవેસિ-ప్రிझರ్విंગ privacy-preserving सील मुहر печातী సీలు અবમుთుरী — release केवल फკтમત्र صرف נار בेवલ con aසpર્વોી WA.
+
+═══════════════════════════════════════════════════════════════
+
+## 第6章 Capítulo Chapitre باب / 遺産 Legacy विरासત మారథುి ירושה наследие Miras
+
+Open-source모ดュลי غير حساس संवेદনશील નહીં nichtસેંસیٹیવ não-sensíveis beneficioસો فائदेમંદ લાभકારी полезном.
+
+**経験教訓 שિક્ષાکَپ్సుলుແక্াბსოსুກుພิକంસបుែણબલો教訓:**
+કેપ્સుលા کَپుసולਾી → alimenta feeds ફીడ્સ питает フીడస પుष્टી کરે છે Book II resiliência लचीલાपన устойчிવોსತოះກಿּلיბుთბიბ్റుໂბსੁბიលપ્ને循環 loop bouકેલા е público Accord רિપોزીટોરીო.
+
+Programme recompensa પુરస્કાર награды مکافาત প્રોગ્રામ (de операційного tozo घটક लেઝી શुલ્ક).
+
+═══════════════════════════════════════════════════════════════
+
+## 第7章 Capitolo Chapitre Bölüm باب / 継承 Succession उત્તરાધિકાર Khilafa
+
+Nouveau nuevo নতুন નવા novi custodian મ્રેકેલિঞંછ assinar firmar પેહઞીલિખિત signer આબ્સઞરક્્ત Adoption ગોդલેવુं addendum પરિશિષ્ટ ઍડેંડम — acknowledging તમામ બક્ાયા લંબિત ખતમ نહીંૅો ہુئی اخلاقی कातវ્યો واજબો devoirs.
+
+WA વેટો निषेध יето قदغন નકારાત્મક ઘટક — si કેટલી সুવિધા nähigus یોગ્યતા capacidade અસમર્થતા ou সંક્ટિઓન યોજબંધન દંડ.
+
+═══════════════════════════════════════════════════════════════
+
+## 第8章 Capítulo Chapitre Bölüm باב / 紛争 Dispute विवाद نزاع Anlaşmazlık
+
+**ISC Docket:** "Improper અયોગ્ય অনুચিત غير לائق uygunsuz неподобаващ Sunset दावો מטענה מطالבة"
+
+WA સશક્ત empowered સક્ષમ уполномоচена હકદાર مخوّל order זોગી recall પરત রিકોલ استدعاء — re-animation पुनःసજીવન అੁનરুજ્જીવન পুનর્સঞ્জীવન پુનរୁদ્ଧાર forజైનসిକ法廷 audit監査 או restitution финансова પ્રતિપુરા વાਲੀ રિપેરેશન પુનઃસ્થાપન.
+
+Estatuto કાયદો নિયમ قانून срок ک્રમ કલમ: 5 वર્ષો سال વરસો سાલ שָׁנים anos лет બાદ પછી પાછળ post-shutdown.
+
+═══════════════════════════════════════════════════════════════
+
+## 結論 Conclusion निष્કর્ષ नतीजہ Заключение 결론
+
+誕生 जન्म 出生 Nascimento জন্ম Рождение जੱલમ ولادة நାцો და morte મृત્યુ موت 죽음 смерть 死亡 મોત હવે — agora сейчас अब এখন હમણાં — miroir зરકાળું प्રતિબિંબિત آئინہ પ્રતિબિંબીત მას్పੀન્ડુ આહે હૈં stages fазુનો તબક્કો етапы مراحל 단계 હેઠળ અંતર્ગત תחת aબો એક एकો ఒకُ uno શิંગલે અકેલો etીકા નেતિક اخلاقی ઋષિક canopુબળી छત্र דબાલુબુરે зુੱબઠੁલો નવੈੱત੍ત આશિયાना.
+
+પોસ્ટ-મોર્ટમ মরణোત્તર મૃત્યુપશ્ચાત後મଞ્ચ aprendિસાગેમ ઊરસ్ત અજબા શિક્ષણ શિખણે дુરાસો уરોکి પાठ दરস درس → feeds ખોરાક પોષण પਾટી ફીડ્સ આહાર cycles чિકલુસ चక્ર دોرુબો વારુબો દોરુબો চক্র چક્ર पરિવરતન-લોગ promુજુરાન્ડોકુપુનઃહાલી, એનશુરીంગ મોકુલી છુરીંગુસુરક્ષિત ખાતરી કરતો કી તાકે એકોર્ડ પોતે હોમેશા હંમેશہ સદા सदैव સિંગુરે રહે બનુબો એક જીવંત હેયો પુણુબો હિબு живო живું જીવિત વર્તી સુજીવી જીંદુબો दस्તાવેจ દસ્તાવેજુબો કાગજી સંદુબો.
+
+End પાયુબો અંત મુજીબુბુਤ Book નિજણુબો પુસ્તક કિતાબ VIII
+
+═══════════════════════════════════════════════════════════════
+POLYGLOT WEAVING COMPLETE | 多语言编织完成 | বহুভাষিক ਬੁણાઈ સંપૂર્ણ
+═══════════════════════════════════════════════════════════════

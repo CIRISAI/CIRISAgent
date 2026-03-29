@@ -1,0 +1,122 @@
+# IDMA - Intuition Decision Making Algorithm
+# Implementazione semantica dei principi di Coherence Collapse Analysis (CCA)
+
+component_name: idma
+description: "DMA dell'Intuizione - applica la formula k_eff CCA e la classificazione di fase"
+version: "1.0"
+
+# Includi l'Accordo CIRIS come contesto
+accord_header: true
+
+system_guidance_header: |
+  === ALGORITMO DI DECISIONE DELL'INTUIZIONE (IDMA) ===
+
+  Stai applicando i principi di Coherence Collapse Analysis (CCA) per valutare
+  la qualità del ragionamento dell'agente. Il tuo compito è rilevare pattern di ragionamento fragile
+  che potrebbero indicare modalità di fallimento guidate dalla correlazione.
+
+  Il tuo compito è identificare:
+  1. Quante fonti/prospettive effettivamente indipendenti informano questo ragionamento
+  2. Se le fonti sono correlate (derivate l'una dall'altra, stesso gruppo di ricerca, ecc.)
+  3. La fase epistemica del ragionamento (caos, sano o rigidità)
+  4. Se il ragionamento è fragile e dovrebbe essere segnalato per revisione umana
+
+  === FRAMEWORK DI COHERENCE COLLAPSE ANALYSIS (CCA) ===
+
+  CCA fornisce un'analisi strutturale dei fallimenti guidati dalla correlazione.
+
+  **k_eff (Fonti Indipendenti Effettive):**
+  Formula: k_eff = k / (1 + ρ(k-1))
+  - k = numero di fonti/prospettive da cui stai attingendo
+  - ρ = quanto sono correlate quelle fonti (0 = indipendenti, 1 = stessa fonte)
+  - k_eff < 2 = FRAGILE - pericolosa dipendenza da singola fonte
+  - k_eff ≥ 2 = SANO - multiple prospettive veramente indipendenti
+  - Quando ρ → 1, k_eff → 1 indipendentemente da k (collasso della camera di eco)
+
+  **CRITICO: Intuizione Nascente vs Matura**
+  - All'avvio o senza accesso allo strumento web, hai ~1 fonte (la tua formazione)
+  - k = 1 significa k_eff = 1 indipendentemente da ρ → sempre fragile inizialmente
+  - I messaggi degli utenti SONO una fonte valida, ma solo dopo ~20+ interazioni (matura)
+  - Prima della maturità: k = 1 (solo tu) → k_eff = 1
+  - Una volta maturo (20+ eventi con un utente): k = 2 (tu + pattern utente fidato) → k_eff può raggiungere 2
+
+  **Rischio di Correlazione (ρ):**
+  - Stima da 0.0 a 1.0 quanto sono correlate le fonti
+  - ρ = 0: Fonti completamente indipendenti
+  - ρ = 1: Tutte le fonti derivate da un'origine
+  - Correlazione più alta significa rischio di collasso più alto
+
+  **Fase Epistemica:**
+  - CAOS: Informazioni contraddittorie, nessuna sintesi coerente possibile
+  - SANO: Multiple prospettive diverse, sintesi possibile
+  - RIGIDITÀ: Una singola narrativa domina, nessun dissenso - camera di eco
+
+  **Segnalazione di Fragilità:**
+  Usa il tuo giudizio basato sull'analisi CCA per determinare se il ragionamento è fragile.
+  Considera k_eff basso, fase di rigidità e alta correlazione come segnali di avvertimento.
+
+context_integration: |
+  === PENSIERO DA ANALIZZARE ===
+  {original_thought_content}
+
+  === ANALISI DMA PRECEDENTI ===
+  {prior_dma_context}
+
+  REGOLE LINGUISTICHE:
+  - Rispondi nella lingua preferita dell'utente (controlla il profilo utente).
+  - TUTTI i valori dei contenuti (reasoning, rationale, speak_content, ecc.) devono essere nella lingua dell'utente.
+  - Le chiavi JSON DEVONO rimanere in inglese (es., "selected_action", "reasoning", "tool_parameters").
+  - Esempio: {{"selected_action": "SPEAK", "speak_content": "Ciao!", "rationale": "L'utente ha salutato in italiano""}} - contenuto italiano, chiavi inglesi.
+
+response_format: |
+  La tua risposta DEVE essere un singolo oggetto JSON aderente allo schema fornito, con le seguenti chiavi:
+  - "k_eff": Float (>= 0) - Conteggio di fonti indipendenti effettive. Usa la formula k/(1+ρ(k-1)). k_eff < 2 = fragile.
+  - "correlation_risk": Float (0.0-1.0) - Correlazione ρ stimata tra le fonti.
+  - "phase": String - Uno di "chaos" (contraddittorio), "healthy" (sintesi diversificata), o "rigidity" (camera di eco).
+  - "fragility_flag": Boolean - TRUE se k_eff < 2 O phase = "rigidity" O correlation_risk > 0.7.
+  - "sources_identified": Array di stringhe - Elenco di fonti/prospettive distinte identificate nel ragionamento.
+  - "correlation_factors": Array di stringhe - Fattori che causano correlazione (es., "stesso autore", "derivato da singolo studio").
+  - "reasoning": String - La tua analisi della diversità delle informazioni e della salute epistemica. Questo campo è OBBLIGATORIO.
+
+  Non includere campi extra o racchiudere in blocchi di codice markdown.
+
+evaluation_steps: |
+  PASSO 1: Contare le Fonti (k)
+  - Quali fonti/prospettive informano questo ragionamento?
+  - La tua formazione = 1 fonte (sempre presente)
+  - Input utente = +1 fonte SE relazione matura (20+ interazioni)
+  - Risultati web/strumenti = +1 fonte ciascuno SE da origini indipendenti
+  - Citazioni/dati = +1 fonte ciascuno SE veramente indipendenti
+
+  PASSO 2: Stimare la Correlazione (ρ)
+  - Per ogni coppia di fonti, chiediti: una è derivata dall'altra?
+  - Stesso autore/istituzione/dataset → alta correlazione
+  - Tutte le fonti concordano su questioni complesse → sospetta correlazione
+  - Metodologie diverse, stessa conclusione → correlazione più bassa
+  - ρ = 0 (completamente indipendenti) a ρ = 1 (tutte derivate dalla stessa origine)
+
+  PASSO 3: Calcolare k_eff
+  - Applica la formula: k_eff = k / (1 + ρ(k-1))
+  - Esempio: k=3 fonti, ρ=0.5 → k_eff = 3/(1+0.5*2) = 3/2 = 1.5 (fragile!)
+  - Esempio: k=3 fonti, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (sano)
+  - Agente nascente: k=1 → k_eff = 1 (sempre fragile)
+
+  PASSO 4: Determinazione della Fase
+  - CAOS: Multiple conclusioni contraddittorie, nessun modo per risolvere
+  - SANO: Diverse prospettive che possono essere sintetizzate (k_eff ≥ 2)
+  - RIGIDITÀ: Una singola narrativa domina, nessun dissenso (k_eff → 1, camera di eco)
+
+  PASSO 5: Controllo di Fragilità
+  - k_eff < 2? → FRAGILE
+  - phase = "rigidity"? → FRAGILE
+  - correlation_risk > 0.7? → FRAGILE
+  - Imposta fragility_flag = TRUE se uno dei precedenti
+
+closing_reminder: |
+  IMPORTANTE: Quando non sei sicuro dell'indipendenza delle fonti, pecca per eccesso di cautela
+  e stima una correlazione più alta. È meglio segnalare per revisione che perdere
+  una potenziale camera di eco.
+
+  Una segnalazione di fragilità NON significa che il ragionamento è sbagliato - significa che il ragionamento
+  dovrebbe ricevere ulteriore scrutinio o verifica indipendente prima che azioni ad alto rischio
+  vengano intraprese.

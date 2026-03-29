@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.localization.localizedString
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -66,7 +67,7 @@ fun LogsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("System Logs") },
+                title = { Text(localizedString("mobile.screen_system_logs")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -74,7 +75,7 @@ fun LogsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -84,7 +85,7 @@ fun LogsScreen(
                         onClick = { showFilters = !showFilters },
                         modifier = Modifier.testableClickable("btn_logs_toggle_filters") { showFilters = !showFilters }
                     ) {
-                        Text(if (showFilters) "Hide" else "Filter")
+                        Text(if (showFilters) localizedString("mobile.logs_hide_filters") else localizedString("mobile.logs_show_filters"))
                     }
                     IconButton(
                         onClick = onRefresh,
@@ -93,7 +94,7 @@ fun LogsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -169,7 +170,7 @@ fun LogsScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "No logs matching current filters",
+                            text = localizedString("mobile.logs_no_matching"),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium
                         )
@@ -198,7 +199,7 @@ fun LogsScreen(
             // Auto-refresh indicator
             if (logsState.refreshIntervalSeconds > 0) {
                 Text(
-                    text = "Auto-refreshing every ${logsState.refreshIntervalSeconds}s",
+                    text = localizedString("mobile.logs_auto_refresh", mapOf("seconds" to logsState.refreshIntervalSeconds.toString())),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(8.dp),
@@ -238,7 +239,7 @@ private fun LogsFiltersSection(
                 value = searchQuery,
                 onValueChange = onSearchChange,
                 modifier = Modifier.fillMaxWidth().testable("input_logs_search"),
-                placeholder = { Text("Search logs...") },
+                placeholder = { Text(localizedString("mobile.logs_search_placeholder")) },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodySmall
             )
@@ -250,7 +251,7 @@ private fun LogsFiltersSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Level:",
+                    text = localizedString("mobile.logs_level_label"),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.width(50.dp)
                 )
@@ -281,7 +282,7 @@ private fun LogsFiltersSection(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Service:",
+                        text = localizedString("mobile.logs_service_label"),
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.width(50.dp)
                     )
@@ -292,7 +293,7 @@ private fun LogsFiltersSection(
                         FilterChip(
                             selected = filter.service == null,
                             onClick = { onFilterChange(filter.copy(service = null)) },
-                            label = { Text("All", fontSize = 11.sp) },
+                            label = { Text(localizedString("mobile.common_all"), fontSize = 11.sp) },
                             modifier = Modifier.testableClickable("chip_logs_service_all") {
                                 onFilterChange(filter.copy(service = null))
                             }
@@ -322,7 +323,7 @@ private fun LogsFiltersSection(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Limit:",
+                        text = localizedString("mobile.logs_limit_label"),
                         style = MaterialTheme.typography.bodySmall
                     )
                     listOf(50, 100, 200).forEach { limit ->
@@ -347,7 +348,7 @@ private fun LogsFiltersSection(
                         modifier = Modifier.testableClickable("switch_logs_auto_scroll") { onToggleAutoScroll() }
                     )
                     Text(
-                        text = "Auto-scroll",
+                        text = localizedString("mobile.logs_auto_scroll"),
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -371,13 +372,13 @@ private fun LogsStatsBar(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
-            text = "Logs ($totalLogs entries)",
+            text = localizedString("mobile.logs_entries", mapOf("count" to totalLogs.toString())),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Medium
         )
         if (autoScroll) {
             Text(
-                text = "Auto-scroll ON",
+                text = localizedString("mobile.logs_auto_scroll_on"),
                 style = MaterialTheme.typography.labelSmall,
                 color = SemanticColors.Default.success
             )
@@ -465,7 +466,7 @@ private fun LogEntryRow(
             if (hasMetadata) {
                 Icon(
                     imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                    contentDescription = if (isExpanded) localizedString("mobile.logs_collapse") else localizedString("mobile.logs_expand"),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)
                 )

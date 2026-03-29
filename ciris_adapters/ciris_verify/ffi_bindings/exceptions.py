@@ -25,9 +25,17 @@ class BinaryTamperedError(CIRISVerifyError):
 
 class VerificationFailedError(CIRISVerifyError):
     """License verification failed."""
-    def __init__(self, status_code: int, message: str):
-        self.status_code = status_code
-        super().__init__(f"Verification failed ({status_code}): {message}")
+    def __init__(self, status_code_or_message: int | str, message: str | None = None):
+        # Support both: VerificationFailedError(code, message) and VerificationFailedError(message)
+        if message is None:
+            # Called with just message
+            self.status_code = -1
+            msg = str(status_code_or_message)
+        else:
+            # Called with status_code and message
+            self.status_code = int(status_code_or_message)
+            msg = message
+        super().__init__(f"Verification failed ({self.status_code}): {msg}")
 
 
 class TimeoutError(CIRISVerifyError):

@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.localization.localizedString
 
 /**
  * Billing screen for purchasing CIRIS credits
@@ -54,7 +55,7 @@ fun BillingScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Buy Credits") },
+                title = { Text(localizedString("mobile.screen_billing")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -62,7 +63,7 @@ fun BillingScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -100,12 +101,12 @@ fun BillingScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "Current Balance",
+                            text = localizedString("mobile.billing_balance"),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                         Text(
-                            text = if (currentBalance >= 0) "$currentBalance credits" else "Sign in to view",
+                            text = if (currentBalance >= 0) "$currentBalance credits" else localizedString("mobile.login_signin_provider").replace("{provider}", ""),
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -120,7 +121,7 @@ fun BillingScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Credit Packages",
+                        text = localizedString("mobile.billing_packages"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -135,7 +136,7 @@ fun BillingScreen(
                             onClick = onRefresh,
                             modifier = Modifier.testableClickable("btn_billing_refresh") { onRefresh() }
                         ) {
-                            Text("Refresh")
+                            Text(localizedString("mobile.common_refresh"))
                         }
                     }
                 }
@@ -154,11 +155,11 @@ fun BillingScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "No products available",
+                                text = localizedString("mobile.billing_no_products"),
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                text = "Please check your connection and try again",
+                                text = localizedString("mobile.billing_check_connection"),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -240,7 +241,7 @@ private fun ProductCard(
                     modifier = Modifier.testableClickable("btn_buy_${product.productId}") { onClick() },
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Buy")
+                    Text(localizedString("mobile.billing_buy"))
                 }
             }
         }

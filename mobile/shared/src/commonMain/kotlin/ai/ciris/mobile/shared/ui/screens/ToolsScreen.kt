@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.api.ToolInfoData
 import ai.ciris.mobile.shared.api.ToolsMetadataData
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.viewmodels.ToolsScreenState
 import androidx.compose.animation.AnimatedVisibility
@@ -57,7 +58,7 @@ fun ToolsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Tools") },
+                title = { Text(localizedString("mobile.nav_tools")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -65,7 +66,7 @@ fun ToolsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -77,7 +78,7 @@ fun ToolsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -146,7 +147,7 @@ fun ToolsScreen(
                         value = state.searchQuery,
                         onValueChange = onSearchQueryChange,
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Search tools...") },
+                        placeholder = { Text(localizedString("mobile.tools_search_placeholder")) },
                         leadingIcon = {
                             Icon(Icons.Filled.Search, contentDescription = null)
                         },
@@ -164,7 +165,7 @@ fun ToolsScreen(
                                 selected = state.selectedCategory != null,
                                 onClick = { showCategoryDropdown = !showCategoryDropdown },
                                 label = {
-                                    Text(state.selectedCategory ?: "Category")
+                                    Text(state.selectedCategory ?: localizedString("mobile.common_category"))
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -173,7 +174,7 @@ fun ToolsScreen(
                                 onDismissRequest = { showCategoryDropdown = false }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("All Categories") },
+                                    text = { Text(localizedString("mobile.tools_all_categories")) },
                                     onClick = {
                                         onCategoryFilter(null)
                                         showCategoryDropdown = false
@@ -198,7 +199,7 @@ fun ToolsScreen(
                                 onClick = { showProviderDropdown = !showProviderDropdown },
                                 label = {
                                     Text(
-                                        text = state.selectedProvider?.take(15) ?: "Provider",
+                                        text = state.selectedProvider?.take(15) ?: localizedString("mobile.common_provider"),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -210,7 +211,7 @@ fun ToolsScreen(
                                 onDismissRequest = { showProviderDropdown = false }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("All Providers") },
+                                    text = { Text(localizedString("mobile.tools_all_providers")) },
                                     onClick = {
                                         onProviderFilter(null)
                                         showProviderDropdown = false
@@ -234,7 +235,7 @@ fun ToolsScreen(
             // Tools Count
             item {
                 Text(
-                    text = "${filteredTools.size} tools",
+                    text = localizedString("mobile.tools_count", mapOf("count" to filteredTools.size.toString())),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -268,9 +269,9 @@ fun ToolsScreen(
                         ) {
                             Text(
                                 text = if (state.searchQuery.isNotBlank() || state.selectedCategory != null || state.selectedProvider != null) {
-                                    "No tools match your filters"
+                                    localizedString("mobile.tools_no_match")
                                 } else {
-                                    "No tools available"
+                                    localizedString("mobile.tools_no_tools")
                                 },
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -301,12 +302,12 @@ private fun ToolsStatsCard(
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             StatColumn(
-                label = "Total Tools",
+                label = localizedString("mobile.tools_total"),
                 value = metadata.totalTools.toString(),
                 color = SemanticColors.Default.success
             )
             StatColumn(
-                label = "Providers",
+                label = localizedString("mobile.tools_providers"),
                 value = metadata.providerCount.toString(),
                 color = SemanticColors.Default.info
             )
@@ -417,7 +418,7 @@ private fun ToolCard(
                     // Expand Icon
                     Icon(
                         imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                        contentDescription = if (isExpanded) "Collapse" else "Expand",
+                        contentDescription = if (isExpanded) localizedString("mobile.common_collapse") else localizedString("mobile.common_expand"),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -449,7 +450,7 @@ private fun ToolCard(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "Cost:",
+                                text = localizedString("mobile.tools_cost"),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -465,7 +466,7 @@ private fun ToolCard(
                     tool.whenToUse?.let { whenToUse ->
                         Column {
                             Text(
-                                text = "When to Use",
+                                text = localizedString("mobile.tools_when_to_use"),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -483,7 +484,7 @@ private fun ToolCard(
                         if (params.isNotEmpty()) {
                             Column {
                                 Text(
-                                    text = "Parameters",
+                                    text = localizedString("mobile.tools_parameters"),
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold
                                 )

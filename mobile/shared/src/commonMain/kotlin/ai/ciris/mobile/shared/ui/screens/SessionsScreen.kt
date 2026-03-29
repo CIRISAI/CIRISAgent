@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.localization.localizedString
 
 /**
  * Sessions screen for cognitive session management
@@ -45,7 +46,7 @@ fun SessionsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Cognitive Sessions") },
+                title = { Text(localizedString("mobile.screen_cognitive_sessions")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -53,7 +54,7 @@ fun SessionsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -65,7 +66,7 @@ fun SessionsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -110,13 +111,13 @@ fun SessionsScreen(
                     )
                     Column {
                         Text(
-                            text = "Experimental Feature",
+                            text = localizedString("mobile.sessions_experimental"),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = semantic.onWarning
                         )
                         Text(
-                            text = "Cognitive sessions can consume significant thoughts and tasks. Use sparingly during testing.",
+                            text = localizedString("mobile.sessions_warning"),
                             style = MaterialTheme.typography.bodySmall,
                             color = semantic.onWarning
                         )
@@ -126,30 +127,30 @@ fun SessionsScreen(
 
             // Session cards
             Text(
-                text = "Available Sessions",
+                text = localizedString("mobile.sessions_available"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
 
             SessionCard(
-                title = "DREAM",
-                description = "Deep introspection and memory consolidation",
+                title = localizedString("mobile.interact_state_dream"),
+                description = localizedString("mobile.sessions_dream_desc"),
                 isActive = currentState == "DREAM",
                 isEnabled = currentState == "WORK",
                 onInitiate = { showConfirmDialog = "DREAM" }
             )
 
             SessionCard(
-                title = "PLAY",
-                description = "Creative exploration and experimentation",
+                title = localizedString("mobile.interact_state_play"),
+                description = localizedString("mobile.sessions_play_desc"),
                 isActive = currentState == "PLAY",
                 isEnabled = currentState == "WORK",
                 onInitiate = { showConfirmDialog = "PLAY" }
             )
 
             SessionCard(
-                title = "SOLITUDE",
-                description = "Quiet reflection and planning",
+                title = localizedString("mobile.interact_state_solitude"),
+                description = localizedString("mobile.sessions_solitude_desc"),
                 isActive = currentState == "SOLITUDE",
                 isEnabled = currentState == "WORK",
                 onInitiate = { showConfirmDialog = "SOLITUDE" }
@@ -166,7 +167,7 @@ fun SessionsScreen(
                         containerColor = MaterialTheme.colorScheme.secondary
                     )
                 ) {
-                    Text("Return to Work")
+                    Text(localizedString("mobile.sessions_return_work"))
                 }
             }
         }
@@ -216,7 +217,7 @@ private fun CurrentStateBanner(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Current State",
+                    text = localizedString("mobile.sessions_current"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
@@ -291,7 +292,7 @@ private fun SessionCard(
                                 shape = MaterialTheme.shapes.small
                             ) {
                                 Text(
-                                    text = "ACTIVE",
+                                    text = localizedString("mobile.sessions_active"),
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = semantic.onSuccess
@@ -312,7 +313,7 @@ private fun SessionCard(
                 enabled = isEnabled && !isActive,
                 modifier = Modifier.testableClickable("btn_initiate_${title.lowercase()}") { onInitiate() }
             ) {
-                Text("Initiate")
+                Text(localizedString("mobile.sessions_initiate"))
             }
         }
     }
@@ -324,24 +325,32 @@ private fun ConfirmSessionDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val (title, message) = when (targetState) {
-        "DREAM" -> "Initiate DREAM Session" to "Initiate a DREAM session for deep introspection and memory consolidation?"
-        "PLAY" -> "Initiate PLAY Session" to "Initiate a PLAY session for creative exploration and experimentation?"
-        "SOLITUDE" -> "Initiate SOLITUDE Session" to "Initiate a SOLITUDE session for quiet reflection and planning?"
-        "WORK" -> "Return to Work" to "Return to normal WORK state?"
-        else -> "Change State" to "Change cognitive state to $targetState?"
+    val (titleKey, messageKey) = when (targetState) {
+        "DREAM" -> "mobile.sessions_dialog_dream_title" to "mobile.sessions_dialog_dream_message"
+        "PLAY" -> "mobile.sessions_dialog_play_title" to "mobile.sessions_dialog_play_message"
+        "SOLITUDE" -> "mobile.sessions_dialog_solitude_title" to "mobile.sessions_dialog_solitude_message"
+        "WORK" -> "mobile.sessions_dialog_work_title" to "mobile.sessions_dialog_work_message"
+        else -> "mobile.sessions_dialog_change_title" to "mobile.sessions_dialog_change_message"
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(message) },
+        title = { Text(localizedString(titleKey)) },
+        text = {
+            Text(
+                if (titleKey == "mobile.sessions_dialog_change_title") {
+                    localizedString(messageKey, "state", targetState)
+                } else {
+                    localizedString(messageKey)
+                }
+            )
+        },
         confirmButton = {
             Button(
                 onClick = onConfirm,
                 modifier = Modifier.testableClickable("btn_confirm_session") { onConfirm() }
             ) {
-                Text("Confirm")
+                Text(localizedString("mobile.common_confirm"))
             }
         },
         dismissButton = {
@@ -349,7 +358,7 @@ private fun ConfirmSessionDialog(
                 onClick = onDismiss,
                 modifier = Modifier.testableClickable("btn_cancel_session") { onDismiss() }
             ) {
-                Text("Cancel")
+                Text(localizedString("mobile.common_cancel"))
             }
         }
     )

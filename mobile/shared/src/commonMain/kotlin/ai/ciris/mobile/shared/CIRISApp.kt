@@ -19,6 +19,14 @@ import ai.ciris.mobile.shared.platform.createSecureStorage
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
 import ai.ciris.mobile.shared.platform.getOAuthProviderId
 import ai.ciris.mobile.shared.platform.platformLog
+import ai.ciris.mobile.shared.localization.CurrencyHelper
+import ai.ciris.mobile.shared.localization.CurrencyManager
+import ai.ciris.mobile.shared.localization.LocalCurrency
+import ai.ciris.mobile.shared.localization.LocalLocalization
+import ai.ciris.mobile.shared.localization.LocalizationHelper
+import ai.ciris.mobile.shared.localization.LocalizationManager
+import ai.ciris.mobile.shared.localization.createLocalizationResourceLoader
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.ui.components.AdapterWizardDialog
 import ai.ciris.mobile.shared.ui.components.CIRISSignet
 import ai.ciris.mobile.shared.ui.screens.*
@@ -296,8 +304,58 @@ fun CIRISApp(
     val coroutineScope = rememberCoroutineScope()
     val apiClient = remember { CIRISApiClient(baseUrl, accessToken) }
 
+    // Initialize localization manager for runtime language switching
+    val resourceLoader = remember { createLocalizationResourceLoader() }
+    val localizationManager = remember {
+        LocalizationManager(coroutineScope, secureStorage, resourceLoader).also {
+            LocalizationHelper.setManager(it)
+        }
+    }
+
+    // Initialize currency manager for wallet display
+    val currencyManager = remember {
+        CurrencyManager(coroutineScope, secureStorage).also {
+            CurrencyHelper.setManager(it)
+        }
+    }
+
+    // Initialize localization and currency on startup
+    LaunchedEffect(Unit) {
+        PlatformLogger.i(TAG, "Initializing localization...")
+        localizationManager.initialize()
+        PlatformLogger.i(TAG, "Initializing currency...")
+        currencyManager.initialize()
+    }
+
     // Track the current auth token - will be updated after login/setup
     var currentAccessToken by remember { mutableStateOf<String?>(null) }
+
+    // Sync language changes to backend when user is authenticated
+    // Track the previous language to detect actual changes (not initial load)
+    var previousLanguage by remember { mutableStateOf<String?>(null) }
+    val currentLanguage by localizationManager.currentLanguage.collectAsState()
+
+    LaunchedEffect(currentLanguage, currentAccessToken) {
+        // Only sync if:
+        // 1. We have a valid token (user is authenticated)
+        // 2. This is a real change (not initial load)
+        // 3. Localization is not still loading
+        if (currentAccessToken != null && previousLanguage != null && previousLanguage != currentLanguage) {
+            PlatformLogger.i(TAG, "Language changed from $previousLanguage to $currentLanguage, syncing to backend...")
+            try {
+                val success = apiClient.updateUserLanguage(currentLanguage)
+                if (success) {
+                    PlatformLogger.i(TAG, "Language synced to backend successfully: $currentLanguage")
+                } else {
+                    PlatformLogger.w(TAG, "Failed to sync language to backend")
+                }
+            } catch (e: Exception) {
+                PlatformLogger.e(TAG, "Error syncing language to backend: ${e.message}")
+            }
+        }
+        // Always update previous language after processing
+        previousLanguage = currentLanguage
+    }
 
     // Navigation state
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Startup) }
@@ -452,6 +510,9 @@ fun CIRISApp(
     }
     // Set device attestation callback so InteractViewModel can trigger Play Integrity at startup
     interactViewModel.setDeviceAttestationCallback(deviceAttestationCallback)
+    // Observe language changes for pipeline label localization
+    // This updates pipeline labels when localization becomes ready or language changes
+    interactViewModel.observeLanguageChanges(localizationManager)
     val settingsViewModel: SettingsViewModel = viewModel {
         SettingsViewModel(secureStorage, apiClient, envFileUpdater)
     }
@@ -540,7 +601,7 @@ fun CIRISApp(
 
                 // Wait for agent to reach WORK state
                 // NOTE: Don't call setPhase() here - it would cancel this LaunchedEffect!
-                startupViewModel.setStatus("Waiting for agent...")
+                startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_waiting_agent"))
 
                 var agentReady = false
                 var pollAttempts = 0
@@ -566,7 +627,7 @@ fun CIRISApp(
                     } catch (e: Exception) {
                         if (pollAttempts % 10 == 0) {
                             PlatformLogger.d(TAG, " Waiting for server... (${e.message?.take(30)})")
-                            startupViewModel.setStatus("Connecting to backend...")
+                            startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_connecting_backend"))
                         }
                     }
                     kotlinx.coroutines.delay(200)
@@ -592,7 +653,7 @@ fun CIRISApp(
             // Check if this is first run via API
             // Keep timer running and show status while waiting for backend
             startupViewModel.setKeepTimerAlive(true)
-            startupViewModel.setStatus("Checking setup status...")
+            startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_checking_setup"))
 
             isFirstRun = checkFirstRunStatus(
                 baseUrl = baseUrl,
@@ -619,7 +680,7 @@ fun CIRISApp(
                 platformLog(TAG, "[INFO] Not first run, attempting to load and validate stored token")
                 // NOTE: Don't change phase here - it would restart the LaunchedEffect and cancel this coroutine!
                 // Just update the status message which is shown on the startup screen
-                startupViewModel.setStatus("Authenticating...")
+                startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_authenticating"))
 
                 // Add timeout for token loading (shouldn't take more than 5 seconds)
                 val tokenResult = try {
@@ -639,7 +700,7 @@ fun CIRISApp(
                 tokenResult.onSuccess { storedToken ->
                         if (storedToken != null) {
                             platformLog(TAG, "[INFO] Loaded stored token: ${storedToken.take(8)}...${storedToken.takeLast(4)}")
-                            startupViewModel.setStatus("Token loaded, checking validity...")
+                            startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_token_loaded"))
 
                             // Check token validity and refresh if needed
                             // NOTE: storedToken is a CIRIS access token, not a Google ID token
@@ -647,7 +708,7 @@ fun CIRISApp(
                             // which gets a Google ID token, then onTokenRefreshed callback
                             // exchanges it for a new CIRIS token
                             tokenExchangeComplete = true // Assume no exchange needed initially
-                            startupViewModel.setStatus("Checking token expiry...")
+                            startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_checking_expiry"))
                             val tokenValid = tokenManager.checkAndRefreshToken(storedToken)
 
                             if (tokenValid) {
@@ -655,7 +716,7 @@ fun CIRISApp(
                                 if (!tokenExchangeComplete) {
                                     // Token was refreshed - wait for Google->CIRIS exchange to complete
                                     PlatformLogger.i(TAG, " Token was refreshed, waiting for CIRIS token exchange...")
-                                    startupViewModel.setStatus("Refreshing token...")
+                                    startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_refreshing_token"))
                                     var waitCount = 0
                                     while (!tokenExchangeComplete && waitCount < 50) {
                                         kotlinx.coroutines.delay(100)
@@ -675,7 +736,7 @@ fun CIRISApp(
                                     // Token was valid without refresh - but we need to verify it works with the backend
                                     // (backend may have restarted, invalidating old tokens)
                                     PlatformLogger.i(TAG, " Stored token not expired, verifying with backend...")
-                                    startupViewModel.setStatus("Verifying token with backend...")
+                                    startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_verifying_token"))
                                     apiClient.setAccessToken(storedToken)
 
                                     // Test API call to verify token is actually accepted
@@ -691,7 +752,7 @@ fun CIRISApp(
                                         val errorMsg = e.message ?: ""
                                         if (errorMsg.contains("401") || errorMsg.contains("Unauthorized", ignoreCase = true)) {
                                             PlatformLogger.w(TAG, " Token rejected by backend (401) - triggering refresh")
-                                            startupViewModel.setStatus("Token rejected (401), refreshing...")
+                                            startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_token_rejected"))
                                             tokenManager.on401Error()
                                             // Wait for refresh to complete - callback will set apiClient token
                                             var refreshWait = 0
@@ -726,7 +787,7 @@ fun CIRISApp(
                                 // The status message is sufficient for user feedback
                                 // Keep timer running during backend polling
                                 startupViewModel.setKeepTimerAlive(true)
-                                startupViewModel.setStatus("Waiting for agent...")
+                                startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_waiting_agent"))
 
                                 // Poll for WORK state with timeout
                                 var agentReady = false
@@ -754,7 +815,7 @@ fun CIRISApp(
                                         // Server not ready yet, keep polling
                                         if (pollAttempts % 10 == 0) {
                                             PlatformLogger.d(TAG, " Waiting for server... (${e.message?.take(30)})")
-                                            startupViewModel.setStatus("Connecting to backend...")
+                                            startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_connecting_backend"))
                                         }
                                     }
                                     kotlinx.coroutines.delay(200)
@@ -840,8 +901,13 @@ fun CIRISApp(
         )
     }
 
-    MaterialTheme(colorScheme = colorScheme) {
-        when (currentScreen) {
+    // Provide localization and currency to entire Compose tree
+    CompositionLocalProvider(
+        LocalLocalization provides localizationManager,
+        LocalCurrency provides currencyManager
+    ) {
+        MaterialTheme(colorScheme = colorScheme) {
+            when (currentScreen) {
             Screen.Startup -> {
                 StartupScreen(viewModel = startupViewModel)
             }
@@ -874,7 +940,7 @@ fun CIRISApp(
                             // Use platform-specific Google sign-in
                             platformLog(TAG, "[INFO][onGoogleSignIn] Callback is not null, calling onGoogleSignInRequested...")
                             isLoginLoading = true
-                            loginStatusMessage = "Signing in with ${getOAuthProviderName()}..."
+                            loginStatusMessage = LocalizationHelper.getString("mobile.status_signing_in", mapOf("provider" to getOAuthProviderName()))
                             loginErrorMessage = null
 
                             googleSignInCallback.onGoogleSignInRequested { result ->
@@ -1014,7 +1080,7 @@ fun CIRISApp(
                         // Handle local login form submission
                         platformLog(TAG, "[INFO][onLocalLoginSubmit] Logging in with username: $username")
                         isLoginLoading = true
-                        loginStatusMessage = "Logging in..."
+                        loginStatusMessage = LocalizationHelper.getString("mobile.status_logging_in")
                         loginErrorMessage = null
 
                         coroutineScope.launch {
@@ -1250,6 +1316,10 @@ fun CIRISApp(
                         onOpenTrustPage = {
                             platformLog(TAG, "[INFO] Opening Trust page")
                             currentScreen = Screen.Trust
+                        },
+                        onOpenWalletPage = {
+                            platformLog(TAG, "[INFO] Opening Wallet page")
+                            currentScreen = Screen.Wallet
                         },
                         onOpenBilling = {
                             platformLog(TAG, "[INFO] Opening Billing page from credits")
@@ -2350,8 +2420,19 @@ fun CIRISApp(
                     deviceAttestationCallback = deviceAttestationCallback
                 )
             }
+
+            Screen.Wallet -> {
+                WalletPage(
+                    apiClient = apiClient,
+                    onNavigateBack = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Wallet] Navigating back to Interact")
+                        currentScreen = Screen.Interact
+                    }
+                )
+            }
         }
     }
+    } // CompositionLocalProvider
 }
 
 /**
@@ -2380,7 +2461,7 @@ private suspend fun checkFirstRunStatus(
             attempts++
             if (attempts <= maxRetries) {
                 platformLog("checkFirstRunStatus", "[INFO] Connection error, retrying in 500ms... (${e::class.simpleName})")
-                onStatusUpdate?.invoke("Waiting for backend... (attempt $attempts)")
+                onStatusUpdate?.invoke(LocalizationHelper.getString("mobile.startup_waiting_backend", mapOf("attempt" to attempts.toString())))
                 kotlinx.coroutines.delay(500)
             } else {
                 platformLog("checkFirstRunStatus", "[ERROR] Failed to check setup status after ${maxRetries + 1} attempts: ${e::class.simpleName}: ${e.message}")
@@ -2480,21 +2561,22 @@ private fun CIRISTopBar(
                     onDismissRequest = { activeCategory = NavCategory.NONE }
                 ) {
                     Text(
-                        text = "Adapters & Tools",
+                        text = localizedString("mobile.nav_adapters_tools"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                     DropdownMenuItem(
-                        text = { Text("Adapters") },
+                        text = { Text(localizedString("mobile.nav_adapters")) },
                         onClick = { activeCategory = NavCategory.NONE; onAdaptersClick() },
                         leadingIcon = { Icon(Icons.Default.Build, null) },
                         modifier = Modifier.testableClickable("menu_adapters") { activeCategory = NavCategory.NONE; onAdaptersClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Tools") },
+                        text = { Text(localizedString("mobile.nav_tools")) },
                         onClick = { activeCategory = NavCategory.NONE; onToolsClick() },
-                        leadingIcon = { Icon(Icons.Default.Build, null) }
+                        leadingIcon = { Icon(Icons.Default.Build, null) },
+                        modifier = Modifier.testableClickable("menu_tools") { activeCategory = NavCategory.NONE; onToolsClick() }
                     )
                 }
             }
@@ -2502,7 +2584,10 @@ private fun CIRISTopBar(
             // Category 2: Config & Credits
             Box {
                 IconButton(
-                    onClick = { activeCategory = if (activeCategory == NavCategory.CONFIG) NavCategory.NONE else NavCategory.CONFIG }
+                    onClick = { activeCategory = if (activeCategory == NavCategory.CONFIG) NavCategory.NONE else NavCategory.CONFIG },
+                    modifier = Modifier.testableClickable("btn_config_menu") {
+                        activeCategory = if (activeCategory == NavCategory.CONFIG) NavCategory.NONE else NavCategory.CONFIG
+                    }
                 ) {
                     Icon(
                         imageVector = Icons.Default.Settings,
@@ -2515,13 +2600,13 @@ private fun CIRISTopBar(
                     onDismissRequest = { activeCategory = NavCategory.NONE }
                 ) {
                     Text(
-                        text = "Config & Credits",
+                        text = localizedString("mobile.nav_config_credits"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                     DropdownMenuItem(
-                        text = { Text("App Theme") },
+                        text = { Text(localizedString("mobile.nav_app_theme")) },
                         onClick = { activeCategory = NavCategory.NONE; showThemePicker = true },
                         leadingIcon = {
                             // Show current theme color as icon
@@ -2533,19 +2618,22 @@ private fun CIRISTopBar(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("App Settings") },
+                        text = { Text(localizedString("mobile.nav_app_settings")) },
                         onClick = { activeCategory = NavCategory.NONE; onSettingsClick() },
-                        leadingIcon = { Icon(Icons.Default.Settings, null) }
+                        leadingIcon = { Icon(Icons.Default.Settings, null) },
+                        modifier = Modifier.testableClickable("menu_settings") { activeCategory = NavCategory.NONE; onSettingsClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Agent Config") },
+                        text = { Text(localizedString("mobile.nav_agent_config")) },
                         onClick = { activeCategory = NavCategory.NONE; onConfigClick() },
-                        leadingIcon = { Icon(Icons.Default.Settings, null) }
+                        leadingIcon = { Icon(Icons.Default.Settings, null) },
+                        modifier = Modifier.testableClickable("menu_config") { activeCategory = NavCategory.NONE; onConfigClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Buy Credits") },
+                        text = { Text(localizedString("mobile.nav_buy_credits")) },
                         onClick = { activeCategory = NavCategory.NONE; onBillingClick() },
-                        leadingIcon = { Icon(Icons.Default.Star, null) }
+                        leadingIcon = { Icon(Icons.Default.Star, null) },
+                        modifier = Modifier.testableClickable("menu_billing") { activeCategory = NavCategory.NONE; onBillingClick() }
                     )
                 }
             }
@@ -2553,7 +2641,10 @@ private fun CIRISTopBar(
             // Category 3: Data & Privacy
             Box {
                 IconButton(
-                    onClick = { activeCategory = if (activeCategory == NavCategory.DATA) NavCategory.NONE else NavCategory.DATA }
+                    onClick = { activeCategory = if (activeCategory == NavCategory.DATA) NavCategory.NONE else NavCategory.DATA },
+                    modifier = Modifier.testableClickable("btn_data_menu") {
+                        activeCategory = if (activeCategory == NavCategory.DATA) NavCategory.NONE else NavCategory.DATA
+                    }
                 ) {
                     Icon(
                         imageVector = Icons.Default.Info,
@@ -2566,35 +2657,40 @@ private fun CIRISTopBar(
                     onDismissRequest = { activeCategory = NavCategory.NONE }
                 ) {
                     Text(
-                        text = "Data & Privacy",
+                        text = localizedString("mobile.nav_data_privacy"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                     DropdownMenuItem(
-                        text = { Text("Memory") },
+                        text = { Text(localizedString("mobile.nav_memory")) },
                         onClick = { activeCategory = NavCategory.NONE; onMemoryClick() },
-                        leadingIcon = { Icon(Icons.Default.Star, null) }
+                        leadingIcon = { Icon(Icons.Default.Star, null) },
+                        modifier = Modifier.testableClickable("menu_memory") { activeCategory = NavCategory.NONE; onMemoryClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Sessions") },
+                        text = { Text(localizedString("mobile.nav_sessions")) },
                         onClick = { activeCategory = NavCategory.NONE; onSessionsClick() },
-                        leadingIcon = { Icon(Icons.Default.List, null) }
+                        leadingIcon = { Icon(Icons.Default.List, null) },
+                        modifier = Modifier.testableClickable("menu_sessions") { activeCategory = NavCategory.NONE; onSessionsClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Consent") },
+                        text = { Text(localizedString("mobile.nav_consent")) },
                         onClick = { activeCategory = NavCategory.NONE; onConsentClick() },
-                        leadingIcon = { Icon(Icons.Default.Check, null) }
+                        leadingIcon = { Icon(Icons.Default.Check, null) },
+                        modifier = Modifier.testableClickable("menu_consent") { activeCategory = NavCategory.NONE; onConsentClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Audit Trail") },
+                        text = { Text(localizedString("mobile.nav_audit_trail")) },
                         onClick = { activeCategory = NavCategory.NONE; onAuditClick() },
-                        leadingIcon = { Icon(Icons.Default.List, null) }
+                        leadingIcon = { Icon(Icons.Default.List, null) },
+                        modifier = Modifier.testableClickable("menu_audit") { activeCategory = NavCategory.NONE; onAuditClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Data Management") },
+                        text = { Text(localizedString("mobile.nav_data_management")) },
                         onClick = { activeCategory = NavCategory.NONE; onDataManagementClick() },
-                        leadingIcon = { Icon(Icons.Default.Info, null) }
+                        leadingIcon = { Icon(Icons.Default.Info, null) },
+                        modifier = Modifier.testableClickable("menu_data_management") { activeCategory = NavCategory.NONE; onDataManagementClick() }
                     )
                 }
             }
@@ -2602,7 +2698,10 @@ private fun CIRISTopBar(
             // Category 4: Governance
             Box {
                 IconButton(
-                    onClick = { activeCategory = if (activeCategory == NavCategory.GOVERNANCE) NavCategory.NONE else NavCategory.GOVERNANCE }
+                    onClick = { activeCategory = if (activeCategory == NavCategory.GOVERNANCE) NavCategory.NONE else NavCategory.GOVERNANCE },
+                    modifier = Modifier.testableClickable("btn_governance_menu") {
+                        activeCategory = if (activeCategory == NavCategory.GOVERNANCE) NavCategory.NONE else NavCategory.GOVERNANCE
+                    }
                 ) {
                     Icon(
                         imageVector = Icons.Default.Person,
@@ -2615,20 +2714,22 @@ private fun CIRISTopBar(
                     onDismissRequest = { activeCategory = NavCategory.NONE }
                 ) {
                     Text(
-                        text = "Governance",
+                        text = localizedString("mobile.nav_governance"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                     DropdownMenuItem(
-                        text = { Text("Human Deferrals") },
+                        text = { Text(localizedString("mobile.nav_human_deferrals")) },
                         onClick = { activeCategory = NavCategory.NONE; onWiseAuthorityClick() },
-                        leadingIcon = { Icon(Icons.Default.Person, null) }
+                        leadingIcon = { Icon(Icons.Default.Person, null) },
+                        modifier = Modifier.testableClickable("menu_wise_authority") { activeCategory = NavCategory.NONE; onWiseAuthorityClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Users") },
+                        text = { Text(localizedString("mobile.nav_users")) },
                         onClick = { activeCategory = NavCategory.NONE; onUsersClick() },
-                        leadingIcon = { Icon(Icons.Default.Person, null) }
+                        leadingIcon = { Icon(Icons.Default.Person, null) },
+                        modifier = Modifier.testableClickable("menu_users") { activeCategory = NavCategory.NONE; onUsersClick() }
                     )
                 }
             }
@@ -2652,45 +2753,52 @@ private fun CIRISTopBar(
                     onDismissRequest = { activeCategory = NavCategory.NONE }
                 ) {
                     Text(
-                        text = "Advanced",
+                        text = localizedString("mobile.nav_advanced"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                     DropdownMenuItem(
-                        text = { Text("Telemetry") },
+                        text = { Text(localizedString("mobile.nav_telemetry")) },
                         onClick = { activeCategory = NavCategory.NONE; onTelemetryClick() },
-                        leadingIcon = { Icon(Icons.Default.Info, null) }
+                        leadingIcon = { Icon(Icons.Default.Info, null) },
+                        modifier = Modifier.testableClickable("menu_telemetry") { activeCategory = NavCategory.NONE; onTelemetryClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Services") },
+                        text = { Text(localizedString("mobile.nav_services")) },
                         onClick = { activeCategory = NavCategory.NONE; onServicesClick() },
-                        leadingIcon = { Icon(Icons.Default.Build, null) }
+                        leadingIcon = { Icon(Icons.Default.Build, null) },
+                        modifier = Modifier.testableClickable("menu_services") { activeCategory = NavCategory.NONE; onServicesClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Logs") },
+                        text = { Text(localizedString("mobile.nav_logs")) },
                         onClick = { activeCategory = NavCategory.NONE; onLogsClick() },
-                        leadingIcon = { Icon(Icons.Default.List, null) }
+                        leadingIcon = { Icon(Icons.Default.List, null) },
+                        modifier = Modifier.testableClickable("menu_logs") { activeCategory = NavCategory.NONE; onLogsClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("System") },
+                        text = { Text(localizedString("mobile.nav_system")) },
                         onClick = { activeCategory = NavCategory.NONE; onSystemClick() },
-                        leadingIcon = { Icon(Icons.Default.Info, null) }
+                        leadingIcon = { Icon(Icons.Default.Info, null) },
+                        modifier = Modifier.testableClickable("menu_system") { activeCategory = NavCategory.NONE; onSystemClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Runtime") },
+                        text = { Text(localizedString("mobile.nav_runtime")) },
                         onClick = { activeCategory = NavCategory.NONE; onRuntimeClick() },
-                        leadingIcon = { Icon(Icons.Default.PlayArrow, null) }
+                        leadingIcon = { Icon(Icons.Default.PlayArrow, null) },
+                        modifier = Modifier.testableClickable("menu_runtime") { activeCategory = NavCategory.NONE; onRuntimeClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Tickets") },
+                        text = { Text(localizedString("mobile.nav_tickets")) },
                         onClick = { activeCategory = NavCategory.NONE; onTicketsClick() },
-                        leadingIcon = { Icon(Icons.Default.List, null) }
+                        leadingIcon = { Icon(Icons.Default.List, null) },
+                        modifier = Modifier.testableClickable("menu_tickets") { activeCategory = NavCategory.NONE; onTicketsClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Scheduler") },
+                        text = { Text(localizedString("mobile.nav_scheduler")) },
                         onClick = { activeCategory = NavCategory.NONE; onSchedulerClick() },
-                        leadingIcon = { Icon(Icons.Default.Check, null) }
+                        leadingIcon = { Icon(Icons.Default.Check, null) },
+                        modifier = Modifier.testableClickable("menu_scheduler") { activeCategory = NavCategory.NONE; onSchedulerClick() }
                     )
                 }
             }
@@ -2728,6 +2836,7 @@ private sealed class Screen {
     object Runtime : Screen()
     object Users : Screen()
     object Trust : Screen()
+    object Wallet : Screen()
     object Tickets : Screen()
     object Scheduler : Screen()
     object Tools : Screen()
@@ -2747,7 +2856,7 @@ private fun ThemePickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("App Theme") },
+        title = { Text(localizedString("mobile.nav_app_theme")) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -2755,7 +2864,7 @@ private fun ThemePickerDialog(
             ) {
                 // Brightness selection
                 Text(
-                    text = "Brightness",
+                    text = localizedString("mobile.nav_brightness"),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Medium
                 )
@@ -2774,7 +2883,7 @@ private fun ThemePickerDialog(
 
                 // Color theme grid
                 Text(
-                    text = "Color Theme",
+                    text = localizedString("mobile.nav_color_theme"),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Medium
                 )
@@ -2805,7 +2914,7 @@ private fun ThemePickerDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Done")
+                Text(localizedString("mobile.common_done"))
             }
         }
     )

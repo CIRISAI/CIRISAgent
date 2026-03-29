@@ -3,27 +3,41 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		008EBAB705831128110F1E6D /* CIRISVerify.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 960264F5759B4678704E09D5 /* CIRISVerify.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		22EA1CB33A17DCC6FC82406D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F543015C899423D4B01CEB2E /* Assets.xcassets */; };
+		2F10842CAAD45BCFEC7DCBF8 /* es.json in Resources */ = {isa = PBXBuildFile; fileRef = 48E41FF38495880A27B036FA /* es.json */; };
 		40ED78CC391B58FEED543A87 /* PythonInit.m in Sources */ = {isa = PBXBuildFile; fileRef = FE5DE9AED4DF76F07B0E1091 /* PythonInit.m */; };
+		414E873AF0F5AB3035E6FFBE /* ko.json in Resources */ = {isa = PBXBuildFile; fileRef = B01B283DC417F03B7803D5E3 /* ko.json */; };
 		49E475AB2B339B9760DED60C /* PythonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA9BDE339934CB14814355D /* PythonBridge.swift */; };
 		4A23539E03B1795BF31CBF28 /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */; };
 		56B0305B5D3847FC6B326502 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE8509E5A49E4A5CAAEB3ADB /* ContentView.swift */; };
 		66A2AEEC40DC3948EEC2CEBA /* Python.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7F57CDEE4615E80E9C189DA6 /* Python.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		9AC0B16B2F5FCEC100756F0D /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9AC0B16A2F5FCEC100756F0D /* StoreKit.framework */; };
+		7D11C469FC9483C9EDE19ACB /* ar.json in Resources */ = {isa = PBXBuildFile; fileRef = 6C6722442EC053DE062BB5B9 /* ar.json */; };
+		855680CCB023F343A6FD87C1 /* fr.json in Resources */ = {isa = PBXBuildFile; fileRef = DEC7B34FCF90CCCC26E8B1DF /* fr.json */; };
+		8643B865899388F7DFCED66B /* en.json in Resources */ = {isa = PBXBuildFile; fileRef = 178F78A09CA3F5809B867F74 /* en.json */; };
+		8A476DA2D89BA1706C2F6C0A /* ja.json in Resources */ = {isa = PBXBuildFile; fileRef = D64F1C20423DB4551C0FEBDD /* ja.json */; };
+		8F18BC76CCF0E61689FB9546 /* it.json in Resources */ = {isa = PBXBuildFile; fileRef = 187CA1BC456EC956C8DE7C3C /* it.json */; };
+		967D118D4C5509A7828AD513 /* de.json in Resources */ = {isa = PBXBuildFile; fileRef = 37019FD67F9DE2D57A74BA03 /* de.json */; };
+		A5082A49E9C0871D19D9AE2D /* tr.json in Resources */ = {isa = PBXBuildFile; fileRef = F5AD539185FEAC35E1C4C4E4 /* tr.json */; };
 		AA5FBF09EA586006E8064F7E /* DeviceCheck.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E8B29C709AD6D0538972B327 /* DeviceCheck.framework */; };
+		AA864D37B687356222AD9D24 /* zh.json in Resources */ = {isa = PBXBuildFile; fileRef = 8620DD490569E31850E66411 /* zh.json */; };
+		AC2B0A9A845B3FED54D32D59 /* sw.json in Resources */ = {isa = PBXBuildFile; fileRef = 586074AFD59511DC8365521A /* sw.json */; };
 		B60CB4CB11974283B79D66D0 /* AppAttestManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FD4253E3B2F5576887094CC /* AppAttestManager.swift */; };
 		CBE772C185B3AE8489CCE92F /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 428EEA85690BE39004316694 /* Security.framework */; };
 		D4EF14070E1BB23B1DAAFBCB /* StoreKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC688A47713DC269281F526D /* StoreKitManager.swift */; };
 		DBF2178339A7B6A37F096AF1 /* iosAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404608725152C3067E7030FA /* iosAppApp.swift */; };
+		DD92D88FBF10113F9EE98AE0 /* am.json in Resources */ = {isa = PBXBuildFile; fileRef = B57162E8FCBD1C507FA4F444 /* am.json */; };
+		DFCB069889964A2480FD8104 /* pt.json in Resources */ = {isa = PBXBuildFile; fileRef = CDF043D9A84971421E6228BE /* pt.json */; };
 		E0491F1A134023B2903DF517 /* Python.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7F57CDEE4615E80E9C189DA6 /* Python.xcframework */; };
 		E3702892E761DFE128D48B0D /* AppleSignInHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3BBFBA91E6B290B4005C668 /* AppleSignInHelper.swift */; };
 		EE9564216B1ADCF041A3BB54 /* Resources.zip in Resources */ = {isa = PBXBuildFile; fileRef = 93BB47C3CC3B5531EA4EB340 /* Resources.zip */; };
 		F358EA2E70E0056A40821CA6 /* CIRISVerify.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 960264F5759B4678704E09D5 /* CIRISVerify.xcframework */; };
+		F481F043FDB03ABB9806556F /* ru.json in Resources */ = {isa = PBXBuildFile; fileRef = 3D9384BF6CBF1F877EFEE41C /* ru.json */; };
+		F5ECB98162A11BE42DD3E512 /* hi.json in Resources */ = {isa = PBXBuildFile; fileRef = 0C9B4C8D2EE1662BF922EA9A /* hi.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -42,25 +56,39 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0C9B4C8D2EE1662BF922EA9A /* hi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = hi.json; sourceTree = "<group>"; };
+		178F78A09CA3F5809B867F74 /* en.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = en.json; sourceTree = "<group>"; };
+		187CA1BC456EC956C8DE7C3C /* it.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = it.json; sourceTree = "<group>"; };
+		37019FD67F9DE2D57A74BA03 /* de.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = de.json; sourceTree = "<group>"; };
+		3D9384BF6CBF1F877EFEE41C /* ru.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ru.json; sourceTree = "<group>"; };
 		404608725152C3067E7030FA /* iosAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iosAppApp.swift; sourceTree = "<group>"; };
 		428EEA85690BE39004316694 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		48E41FF38495880A27B036FA /* es.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = es.json; sourceTree = "<group>"; };
+		586074AFD59511DC8365521A /* sw.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = sw.json; sourceTree = "<group>"; };
 		586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
 		5FD4253E3B2F5576887094CC /* AppAttestManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAttestManager.swift; sourceTree = "<group>"; };
+		6C6722442EC053DE062BB5B9 /* ar.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ar.json; sourceTree = "<group>"; };
 		7F57CDEE4615E80E9C189DA6 /* Python.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Python.xcframework; path = Frameworks/Python.xcframework; sourceTree = "<group>"; };
 		86038AE1032E284E79B32AD6 /* iosApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8620DD490569E31850E66411 /* zh.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = zh.json; sourceTree = "<group>"; };
 		93BB47C3CC3B5531EA4EB340 /* Resources.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = Resources.zip; sourceTree = "<group>"; };
 		960264F5759B4678704E09D5 /* CIRISVerify.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = CIRISVerify.xcframework; path = Frameworks/CIRISVerify.xcframework; sourceTree = "<group>"; };
-		9AC0B16A2F5FCEC100756F0D /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		A3BBFBA91E6B290B4005C668 /* AppleSignInHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInHelper.swift; sourceTree = "<group>"; };
+		B01B283DC417F03B7803D5E3 /* ko.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ko.json; sourceTree = "<group>"; };
+		B57162E8FCBD1C507FA4F444 /* am.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = am.json; sourceTree = "<group>"; };
 		C117AD187833E2513BD2F553 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		C49B0B02429FBBC9F867DDE1 /* iosApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iosApp.entitlements; sourceTree = "<group>"; };
+		CDF043D9A84971421E6228BE /* pt.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = pt.json; sourceTree = "<group>"; };
 		CE8509E5A49E4A5CAAEB3ADB /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		D64F1C20423DB4551C0FEBDD /* ja.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ja.json; sourceTree = "<group>"; };
 		DAA9BDE339934CB14814355D /* PythonBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonBridge.swift; sourceTree = "<group>"; };
+		DEC7B34FCF90CCCC26E8B1DF /* fr.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = fr.json; sourceTree = "<group>"; };
 		E805AC5C75138F5ACE082017 /* iosApp-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "iosApp-Bridging-Header.h"; sourceTree = "<group>"; };
 		E8B29C709AD6D0538972B327 /* DeviceCheck.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DeviceCheck.framework; path = System/Library/Frameworks/DeviceCheck.framework; sourceTree = SDKROOT; };
 		EC688A47713DC269281F526D /* StoreKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitManager.swift; sourceTree = "<group>"; };
 		ECBEC7804965D6227702FBC1 /* PythonInit.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PythonInit.h; sourceTree = "<group>"; };
 		F543015C899423D4B01CEB2E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F5AD539185FEAC35E1C4C4E4 /* tr.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = tr.json; sourceTree = "<group>"; };
 		FE5DE9AED4DF76F07B0E1091 /* PythonInit.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PythonInit.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -72,7 +100,6 @@
 				E0491F1A134023B2903DF517 /* Python.xcframework in Frameworks */,
 				F358EA2E70E0056A40821CA6 /* CIRISVerify.xcframework in Frameworks */,
 				4A23539E03B1795BF31CBF28 /* AuthenticationServices.framework in Frameworks */,
-				9AC0B16B2F5FCEC100756F0D /* StoreKit.framework in Frameworks */,
 				CBE772C185B3AE8489CCE92F /* Security.framework in Frameworks */,
 				AA5FBF09EA586006E8064F7E /* DeviceCheck.framework in Frameworks */,
 			);
@@ -84,6 +111,7 @@
 		1DB4B685CAEE8BEFEBBAEF94 /* iosApp */ = {
 			isa = PBXGroup;
 			children = (
+				8015938FBC4C8E14C8542097 /* localization */,
 				5FD4253E3B2F5576887094CC /* AppAttestManager.swift */,
 				A3BBFBA91E6B290B4005C668 /* AppleSignInHelper.swift */,
 				F543015C899423D4B01CEB2E /* Assets.xcassets */,
@@ -103,7 +131,6 @@
 		3666012298E772D226418813 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				9AC0B16A2F5FCEC100756F0D /* StoreKit.framework */,
 				586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */,
 				960264F5759B4678704E09D5 /* CIRISVerify.xcframework */,
 				E8B29C709AD6D0538972B327 /* DeviceCheck.framework */,
@@ -121,6 +148,28 @@
 				3666012298E772D226418813 /* Frameworks */,
 				94C98B8B3A2BFC1966447269 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		8015938FBC4C8E14C8542097 /* localization */ = {
+			isa = PBXGroup;
+			children = (
+				B57162E8FCBD1C507FA4F444 /* am.json */,
+				6C6722442EC053DE062BB5B9 /* ar.json */,
+				37019FD67F9DE2D57A74BA03 /* de.json */,
+				178F78A09CA3F5809B867F74 /* en.json */,
+				48E41FF38495880A27B036FA /* es.json */,
+				DEC7B34FCF90CCCC26E8B1DF /* fr.json */,
+				0C9B4C8D2EE1662BF922EA9A /* hi.json */,
+				187CA1BC456EC956C8DE7C3C /* it.json */,
+				D64F1C20423DB4551C0FEBDD /* ja.json */,
+				B01B283DC417F03B7803D5E3 /* ko.json */,
+				CDF043D9A84971421E6228BE /* pt.json */,
+				3D9384BF6CBF1F877EFEE41C /* ru.json */,
+				586074AFD59511DC8365521A /* sw.json */,
+				F5AD539185FEAC35E1C4C4E4 /* tr.json */,
+				8620DD490569E31850E66411 /* zh.json */,
+			);
+			path = localization;
 			sourceTree = "<group>";
 		};
 		94C98B8B3A2BFC1966447269 /* Products */ = {
@@ -166,7 +215,7 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					78B53CC79860CBFC2F5543C6 = {
-						DevelopmentTeam = MHX9MGJ62V;
+						DevelopmentTeam = "${DEVELOPMENT_TEAM}";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -181,6 +230,7 @@
 			);
 			mainGroup = 38B69C3F79CD97858CF7B609;
 			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -196,6 +246,21 @@
 			files = (
 				22EA1CB33A17DCC6FC82406D /* Assets.xcassets in Resources */,
 				EE9564216B1ADCF041A3BB54 /* Resources.zip in Resources */,
+				DD92D88FBF10113F9EE98AE0 /* am.json in Resources */,
+				7D11C469FC9483C9EDE19ACB /* ar.json in Resources */,
+				967D118D4C5509A7828AD513 /* de.json in Resources */,
+				8643B865899388F7DFCED66B /* en.json in Resources */,
+				2F10842CAAD45BCFEC7DCBF8 /* es.json in Resources */,
+				855680CCB023F343A6FD87C1 /* fr.json in Resources */,
+				F5ECB98162A11BE42DD3E512 /* hi.json in Resources */,
+				8F18BC76CCF0E61689FB9546 /* it.json in Resources */,
+				8A476DA2D89BA1706C2F6C0A /* ja.json in Resources */,
+				414E873AF0F5AB3035E6FFBE /* ko.json in Resources */,
+				DFCB069889964A2480FD8104 /* pt.json in Resources */,
+				F481F043FDB03ABB9806556F /* ru.json in Resources */,
+				AC2B0A9A845B3FED54D32D59 /* sw.json in Resources */,
+				A5082A49E9C0871D19D9AE2D /* tr.json in Resources */,
+				AA864D37B687356222AD9D24 /* zh.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -296,7 +361,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = MHX9MGJ62V;
+				DEVELOPMENT_TEAM = "${DEVELOPMENT_TEAM}";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -354,7 +419,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = MHX9MGJ62V;
+				DEVELOPMENT_TEAM = "${DEVELOPMENT_TEAM}";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;

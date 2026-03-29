@@ -25,7 +25,7 @@ from .models import AdapterConfig, AgentTemplate, SetupCompleteRequest
 logger = logging.getLogger(__name__)
 
 # Constants for adapter filtering
-_SKIP_ADAPTERS = {"ciris_accord_metrics"}  # Handled by consent checkbox in setup
+_SKIP_ADAPTERS = {"ciris_accord_metrics", "navigation", "weather"}  # Handled by consent checkbox in setup
 _CIRIS_SERVICES_ADAPTERS = {"ciris_hosted_tools"}  # Require Google sign-in
 
 

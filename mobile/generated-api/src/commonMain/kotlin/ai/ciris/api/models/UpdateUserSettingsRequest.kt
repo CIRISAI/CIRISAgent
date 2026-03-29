@@ -24,6 +24,7 @@ import kotlinx.serialization.encoding.*
  * Request to update user's personal settings.
  *
  * @param userPreferredName
+ * @param preferredLanguage ISO 639-1 language code (e.g., 'en', 'am', 'es')
  * @param location
  * @param interactionPreferences
  * @param marketingOptIn
@@ -33,6 +34,8 @@ import kotlinx.serialization.encoding.*
 data class UpdateUserSettingsRequest (
 
     @SerialName(value = "user_preferred_name") val userPreferredName: kotlin.String? = null,
+
+    @SerialName(value = "preferred_language") val preferredLanguage: kotlin.String? = null,
 
     @SerialName(value = "location") val location: kotlin.String? = null,
 

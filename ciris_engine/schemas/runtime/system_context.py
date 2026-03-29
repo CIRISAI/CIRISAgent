@@ -175,6 +175,11 @@ class SystemSnapshot(BaseModel):
         None, description="[DEPRECATED] Use verify_attestation.attestation_summary"
     )
 
+    # Wallet status - provides financial context for the agent
+    wallet_summary: Optional[str] = Field(
+        None, description="Wallet status summary (balance, limits, provider)"
+    )
+
     model_config = ConfigDict(extra="forbid", defer_build=True)  # Be strict about fields to catch misuse
 
 

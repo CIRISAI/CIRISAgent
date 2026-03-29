@@ -408,10 +408,8 @@ async def test_update_my_settings_bypasses_protected_attributes(
     # Verify: update succeeded
     assert result.user_preferred_name == "Updated via API"
 
-    # Verify memorize was called with handler_name="UserSettingsAPI"
+    # Verify memorize was called (handler_name is no longer passed)
     mock_memory_service.memorize.assert_called_once()
-    call_kwargs = mock_memory_service.memorize.call_args[1]
-    assert call_kwargs["handler_name"] == "UserSettingsAPI"
 
 
 # =============================================================================

@@ -114,3 +114,12 @@ expect fun Modifier.testable(tag: String, text: String? = null): Modifier
  * On other platforms, this just applies testTag and clickable.
  */
 expect fun Modifier.testableClickable(tag: String, text: String? = null, onClick: () -> Unit): Modifier
+
+/**
+ * Modifier that tracks an element AND registers a click handler WITHOUT adding clickable.
+ * Use this for components that already handle clicks internally (like DropdownMenuItem).
+ *
+ * The onClick handler can be triggered programmatically by the test server,
+ * but normal user clicks are handled by the component's built-in onClick.
+ */
+expect fun Modifier.testableWithHandler(tag: String, onClick: () -> Unit): Modifier

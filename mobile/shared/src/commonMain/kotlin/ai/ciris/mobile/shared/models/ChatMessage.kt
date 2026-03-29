@@ -62,6 +62,7 @@ data class ActionDetails(
     val toolName: String? = null,
     val toolAdapter: String? = null,
     val toolParameters: Map<String, String> = emptyMap(),
+    val toolResult: String? = null,
     // Memory-specific (memorize, recall, forget)
     val memoryKey: String? = null,
     val memoryContent: String? = null,

@@ -40,6 +40,7 @@ from .routes import (
     users,
     verification,
     wa,
+    wallet,
 )
 
 # Import auth service
@@ -279,6 +280,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         verification.router,
         partnership.router,
         transparency.router,
+        wallet.router,
     ]
 
     for router in v1_routers:

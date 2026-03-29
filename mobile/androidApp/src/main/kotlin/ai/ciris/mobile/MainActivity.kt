@@ -17,6 +17,7 @@ import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.config.CIRISConfig
 import ai.ciris.mobile.shared.platform.AppRestarter
 import ai.ciris.mobile.shared.platform.PythonRuntime
+import ai.ciris.mobile.shared.localization.LocalizationResourceLoader
 import ai.ciris.mobile.shared.platform.initUrlOpener
 import ai.ciris.mobile.shared.diagnostics.NetworkDiagnosticsAndroid
 import kotlinx.coroutines.CoroutineScope
@@ -96,6 +97,10 @@ class MainActivity : ComponentActivity() {
             Python.start(AndroidPlatform(this))
             Log.i(TAG, "Python runtime started")
         }
+
+        // Initialize localization resource loader with app context
+        LocalizationResourceLoader.init(applicationContext)
+        Log.i(TAG, "Localization resource loader initialized")
 
         // Initialize Google Sign-In
         initGoogleSignIn()

@@ -38,6 +38,23 @@
     <string name="setup_step_3">3</string>
     <string name="setup_step_4">4</string>
 
+    <!-- Setup Wizard - Preferences (Step 2) -->
+    <string name="setup_prefs_title">Your Preferences</string>
+    <string name="setup_prefs_desc">Help CIRIS communicate with you in your preferred language. Location is optional and helps provide relevant context.</string>
+    <string name="setup_prefs_language_label">Preferred Language</string>
+    <string name="setup_prefs_location_label">Location (optional)</string>
+    <string name="setup_prefs_location_hint">Share as much or as little as you like. This helps CIRIS understand your context.</string>
+    <string name="setup_prefs_location_none">Prefer not to say</string>
+    <string name="setup_prefs_location_country">Country only</string>
+    <string name="setup_prefs_location_region">Country + Region/State</string>
+    <string name="setup_prefs_location_city">Country + Region + City</string>
+    <string name="setup_prefs_country_label">Country</string>
+    <string name="setup_prefs_country_hint">e.g., Ethiopia, United States, Japan</string>
+    <string name="setup_prefs_region_label">Region / State</string>
+    <string name="setup_prefs_region_hint">e.g., Amhara, California, Tokyo</string>
+    <string name="setup_prefs_city_label">City</string>
+    <string name="setup_prefs_city_hint">e.g., Addis Ababa, San Francisco</string>
+
     <string name="setup_llm_title">AI Configuration</string>
     <string name="setup_llm_desc">Configure how CIRIS connects to AI services.</string>
     <string name="setup_provider_label">Provider</string>

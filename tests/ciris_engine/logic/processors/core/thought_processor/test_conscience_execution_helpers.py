@@ -8,9 +8,47 @@ Tests coverage for the helper methods extracted to reduce cognitive complexity:
 - _log_override_details
 """
 
+import os
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def reset_language_to_english():
+    """Reset language to English before each test to avoid test pollution."""
+    # Set environment variable
+    original = os.environ.get("CIRIS_PREFERRED_LANGUAGE")
+    os.environ["CIRIS_PREFERRED_LANGUAGE"] = "en"
+
+    # Reset localization cache
+    try:
+        from ciris_engine.logic.utils.localization import clear_cache
+        clear_cache()
+    except ImportError:
+        pass
+
+    # Reset DMA prompt loader
+    try:
+        from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+        set_prompt_language("en")
+    except ImportError:
+        pass
+
+    yield
+
+    # Restore original
+    if original:
+        os.environ["CIRIS_PREFERRED_LANGUAGE"] = original
+    else:
+        os.environ.pop("CIRIS_PREFERRED_LANGUAGE", None)
+
+    # Clear cache again
+    try:
+        from ciris_engine.logic.utils.localization import clear_cache
+        clear_cache()
+    except ImportError:
+        pass
 
 from ciris_engine.logic.processors.core.thought_processor.conscience_execution import ConscienceExecutionPhase
 from ciris_engine.schemas.actions.parameters import PonderParams

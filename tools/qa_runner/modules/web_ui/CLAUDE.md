@@ -8,6 +8,23 @@ Desktop app and browser-based end-to-end UI testing for CIRIS.
 
 Uses the **TestAutomationServer** embedded in the CIRIS Desktop app (Ktor HTTP on port 8091). No browser needed — interacts directly with Compose UI elements via `testTag` identifiers.
 
+#### Building the Desktop App
+
+The desktop app can be built/run in several ways:
+
+```bash
+# Quick run (development) - JIT compilation, fastest iteration
+cd mobile && CIRIS_TEST_MODE=true ./gradlew :desktopApp:run
+
+# Build runnable JAR (production-like)
+cd mobile && ./gradlew :desktopApp:createDistributable
+# Output: mobile/desktopApp/build/compose/binaries/main/app/
+
+# Build native installer package (DMG/MSI/DEB)
+cd mobile && ./gradlew :desktopApp:packageDistributionForCurrentOS
+# Output: mobile/desktopApp/build/compose/binaries/main/
+```
+
 **Prerequisite**: Desktop app running with `CIRIS_TEST_MODE=true`
 
 ```bash

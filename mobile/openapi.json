@@ -27036,6 +27036,18 @@
             "title": "User Preferred Name",
             "description": "User's preferred display name"
           },
+          "preferred_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Language",
+            "description": "ISO 639-1 language code (e.g., 'en', 'am', 'es')"
+          },
           "location": {
             "anyOf": [
               {

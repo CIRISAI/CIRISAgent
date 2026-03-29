@@ -5,6 +5,7 @@ This module provides endpoints for reading and updating agent configuration.
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -16,6 +17,54 @@ from ciris_engine.schemas.api.responses import SuccessResponse
 from .._common import RESPONSES_401_500, RESPONSES_403, RESPONSES_500, AuthAdminDep
 from .helpers import _is_setup_allowed_without_auth
 from .models import SetupCompleteRequest, SetupConfigResponse
+
+
+def _sanitize_env_value(value: str) -> str:
+    """Sanitize a value for safe inclusion in .env file.
+
+    Prevents injection attacks by escaping/removing dangerous characters.
+    This breaks the taint chain from user input to file write.
+
+    Args:
+        value: Raw value to sanitize
+
+    Returns:
+        Sanitized value safe for .env file
+    """
+    # Remove newlines and carriage returns (prevent multi-line injection)
+    sanitized = value.replace("\n", "").replace("\r", "")
+    # Escape double quotes
+    sanitized = sanitized.replace('"', '\\"')
+    # Escape backslashes (prevent escape sequence injection)
+    sanitized = sanitized.replace("\\", "\\\\")
+    return sanitized
+
+
+def _validate_provider_name(provider: str) -> str:
+    """Validate and normalize LLM provider name.
+
+    Only allow known provider names to prevent injection.
+
+    Args:
+        provider: User-provided provider name
+
+    Returns:
+        Validated provider name
+
+    Raises:
+        ValueError: If provider is not in allowlist
+    """
+    # Allowlist of known providers
+    allowed_providers = frozenset({
+        "openai", "anthropic", "google", "openrouter", "local",
+        "groq", "together", "mistral", "cohere", "azure", "ollama"
+    })
+    normalized = provider.lower().strip()
+    if normalized not in allowed_providers:
+        # Allow custom providers but validate format (alphanumeric + underscore only)
+        if not re.match(r'^[a-z][a-z0-9_]*$', normalized):
+            raise ValueError(f"Invalid provider name format: {provider}")
+    return normalized
 
 
 class UpdateLlmConfigRequest(BaseModel):
@@ -258,6 +307,16 @@ async def update_llm_config(
                 detail="Configuration file not found. Run setup wizard first.",
             )
 
+        # SECURITY: Validate and sanitize all user input before file operations.
+        # This breaks the taint chain from HTTP request to file write.
+        try:
+            safe_provider = _validate_provider_name(body.llm_provider)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+        safe_api_key = _sanitize_env_value(body.llm_api_key) if body.llm_api_key else None
+        safe_model = _sanitize_env_value(body.llm_model) if body.llm_model else None
+
         # Read existing .env content
         content = config_path.read_text(encoding="utf-8")
         lines = content.splitlines()
@@ -270,7 +329,8 @@ async def update_llm_config(
         updated_model = False
 
         # Get the effective base URL (use provider default if not specified)
-        effective_base_url = _get_provider_base_url(body.llm_provider, body.llm_base_url) or ""
+        raw_base_url = _get_provider_base_url(body.llm_provider, body.llm_base_url) or ""
+        safe_base_url = _sanitize_env_value(raw_base_url) if raw_base_url else ""
 
         # Determine which API key env var to use based on provider
         # anthropic → ANTHROPIC_API_KEY, google → GOOGLE_API_KEY, others → OPENAI_API_KEY
@@ -278,7 +338,7 @@ async def update_llm_config(
             "anthropic": "ANTHROPIC_API_KEY",
             "google": "GOOGLE_API_KEY",
         }
-        target_key_var = provider_key_mapping.get(body.llm_provider.lower(), "OPENAI_API_KEY")
+        target_key_var = provider_key_mapping.get(safe_provider, "OPENAI_API_KEY")
 
         for line in lines:
             stripped = line.strip()
@@ -286,8 +346,8 @@ async def update_llm_config(
             # Update the appropriate provider-specific API key
             # For anthropic: ANTHROPIC_API_KEY, for google: GOOGLE_API_KEY, else: OPENAI_API_KEY
             if stripped.startswith(f"{target_key_var}=") or stripped.startswith(f"# {target_key_var}="):
-                if body.llm_api_key:
-                    new_lines.append(f'{target_key_var}="{body.llm_api_key}"')
+                if safe_api_key:
+                    new_lines.append(f'{target_key_var}="{safe_api_key}"')
                     updated_key = True
                 else:
                     new_lines.append(line)  # Keep existing
@@ -303,8 +363,8 @@ async def update_llm_config(
 
             # Update or uncomment OPENAI_API_BASE
             if stripped.startswith("OPENAI_API_BASE=") or stripped.startswith("# OPENAI_API_BASE="):
-                if effective_base_url:
-                    new_lines.append(f'OPENAI_API_BASE="{effective_base_url}"')
+                if safe_base_url:
+                    new_lines.append(f'OPENAI_API_BASE="{safe_base_url}"')
                 else:
                     new_lines.append(f'# OPENAI_API_BASE=""')
                 updated_base = True
@@ -312,8 +372,8 @@ async def update_llm_config(
 
             # Update or uncomment OPENAI_MODEL
             if stripped.startswith("OPENAI_MODEL=") or stripped.startswith("# OPENAI_MODEL="):
-                if body.llm_model:
-                    new_lines.append(f'OPENAI_MODEL="{body.llm_model}"')
+                if safe_model:
+                    new_lines.append(f'OPENAI_MODEL="{safe_model}"')
                 else:
                     new_lines.append(line)  # Keep existing
                 updated_model = True
@@ -321,22 +381,22 @@ async def update_llm_config(
 
             # Update LLM_PROVIDER if present
             if stripped.startswith("LLM_PROVIDER=") or stripped.startswith("# LLM_PROVIDER="):
-                new_lines.append(f'LLM_PROVIDER="{body.llm_provider}"')
+                new_lines.append(f'LLM_PROVIDER="{safe_provider}"')
                 updated_provider = True
                 continue
 
             # Keep other lines unchanged
             new_lines.append(line)
 
-        # Add missing keys if not found
-        if not updated_key and body.llm_api_key:
-            new_lines.append(f'{target_key_var}="{body.llm_api_key}"')
-        if not updated_base and effective_base_url:
-            new_lines.append(f'OPENAI_API_BASE="{effective_base_url}"')
-        if not updated_model and body.llm_model:
-            new_lines.append(f'OPENAI_MODEL="{body.llm_model}"')
+        # Add missing keys if not found (using sanitized values)
+        if not updated_key and safe_api_key:
+            new_lines.append(f'{target_key_var}="{safe_api_key}"')
+        if not updated_base and safe_base_url:
+            new_lines.append(f'OPENAI_API_BASE="{safe_base_url}"')
+        if not updated_model and safe_model:
+            new_lines.append(f'OPENAI_MODEL="{safe_model}"')
         if not updated_provider:
-            new_lines.append(f'LLM_PROVIDER="{body.llm_provider}"')
+            new_lines.append(f'LLM_PROVIDER="{safe_provider}"')
 
         # Write updated content
         new_content = "\n".join(new_lines)
@@ -357,9 +417,9 @@ async def update_llm_config(
             data={
                 "status": "updated",
                 "message": "LLM configuration updated successfully",
-                "provider": body.llm_provider,
-                "base_url": effective_base_url or "(default)",
-                "model": body.llm_model or "(unchanged)",
+                "provider": safe_provider,
+                "base_url": safe_base_url or "(default)",
+                "model": safe_model or "(unchanged)",
                 "config_path": str(config_path),
             }
         )

@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
@@ -61,7 +62,7 @@ fun ServicesScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Service Management") },
+                title = { Text(localizedString("mobile.screen_service_management")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -69,7 +70,7 @@ fun ServicesScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = localizedString("mobile.common_back")
                         )
                     }
                 },
@@ -81,7 +82,7 @@ fun ServicesScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Warning,
-                            contentDescription = "Diagnose Issues"
+                            contentDescription = localizedString("mobile.services_diagnostics")
                         )
                     }
                     IconButton(
@@ -91,7 +92,7 @@ fun ServicesScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh"
+                            contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
                 },
@@ -148,7 +149,7 @@ fun ServicesScreen(
                 if (servicesData.globalServices.isNotEmpty()) {
                     item {
                         Text(
-                            text = "Global Services",
+                            text = localizedString("mobile.services_global"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -171,7 +172,7 @@ fun ServicesScreen(
                 if (servicesData.handlerServices.isNotEmpty()) {
                     item {
                         Text(
-                            text = "Handler-Specific Services",
+                            text = localizedString("mobile.services_handler"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -202,13 +203,13 @@ fun ServicesScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
-                                    text = "No Services Found",
+                                    text = localizedString("mobile.services_no_services"),
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "Services information is currently unavailable",
+                                    text = localizedString("mobile.services_unavailable"),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -224,13 +225,13 @@ fun ServicesScreen(
     if (showResetDialog) {
         AlertDialog(
             onDismissRequest = { showResetDialog = false },
-            title = { Text("Reset Circuit Breakers") },
+            title = { Text(localizedString("mobile.services_reset_title")) },
             text = {
                 Text(
                     if (selectedResetType != null) {
-                        "Reset circuit breakers for $selectedResetType services?"
+                        localizedString("mobile.services_reset_title") + " for $selectedResetType services?"
                     } else {
-                        "Reset all circuit breakers? This will clear any tripped breakers and allow services to attempt reconnection."
+                        localizedString("mobile.services_circuit_hint")
                     }
                 )
             },
@@ -245,7 +246,7 @@ fun ServicesScreen(
                         showResetDialog = false
                     }
                 ) {
-                    Text("Reset")
+                    Text(localizedString("mobile.services_reset"))
                 }
             },
             dismissButton = {
@@ -253,7 +254,7 @@ fun ServicesScreen(
                     onClick = { showResetDialog = false },
                     modifier = Modifier.testableClickable("btn_reset_cancel") { showResetDialog = false }
                 ) {
-                    Text("Cancel")
+                    Text(localizedString("mobile.common_cancel"))
                 }
             }
         )
@@ -282,7 +283,7 @@ private fun ServiceHealthOverviewCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Service Health Overview",
+                text = localizedString("mobile.services_health"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -293,7 +294,7 @@ private fun ServiceHealthOverviewCard(
             ) {
                 // Overall Health
                 HealthMetricItem(
-                    label = "Overall Health",
+                    label = localizedString("status.all_operational"),
                     value = overallHealth.uppercase(),
                     color = when (overallHealth.lowercase()) {
                         "healthy" -> semantic.success
@@ -304,21 +305,21 @@ private fun ServiceHealthOverviewCard(
 
                 // Total Services
                 HealthMetricItem(
-                    label = "Total",
+                    label = localizedString("mobile.common_all"),
                     value = totalServices.toString(),
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
 
                 // Healthy Services
                 HealthMetricItem(
-                    label = "Healthy",
+                    label = localizedString("status.online"),
                     value = healthyServices.toString(),
                     color = semantic.success
                 )
 
                 // Unhealthy Services
                 HealthMetricItem(
-                    label = "Unhealthy",
+                    label = localizedString("status.offline"),
                     value = unhealthyServices.toString(),
                     color = if (unhealthyServices > 0) semantic.error else semantic.success
                 )
@@ -369,13 +370,13 @@ private fun CircuitBreakerCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Circuit Breaker Management",
+                text = localizedString("mobile.services_circuit_breaker"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
 
             Text(
-                text = "Reset circuit breakers to restore service connectivity",
+                text = localizedString("mobile.services_circuit_hint"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -388,7 +389,7 @@ private fun CircuitBreakerCard(
                     onClick = onResetAll,
                     modifier = Modifier.weight(1f).testableClickable("btn_reset_all") { onResetAll() }
                 ) {
-                    Text("Reset All")
+                    Text(localizedString("mobile.services_reset_all"))
                 }
 
                 Box(modifier = Modifier.weight(1f)) {
@@ -396,7 +397,7 @@ private fun CircuitBreakerCard(
                         onClick = { expanded = true },
                         modifier = Modifier.fillMaxWidth().testableClickable("btn_reset_by_type") { expanded = true }
                     ) {
-                        Text("Reset by Type")
+                        Text(localizedString("mobile.services_reset_type"))
                     }
 
                     DropdownMenu(
@@ -452,13 +453,13 @@ private fun DiagnosticsCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Diagnostics Results",
+                    text = localizedString("mobile.services_diagnostics"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
 
                 Text(
-                    text = "${diagnostics.issuesFound} issues found",
+                    text = "${diagnostics.issuesFound} ${localizedString("mobile.services_issues")}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (diagnostics.issuesFound > 0) semantic.error else semantic.success,
                     fontWeight = FontWeight.Medium
@@ -468,7 +469,7 @@ private fun DiagnosticsCard(
             // Issues
             if (diagnostics.issues.isNotEmpty()) {
                 Text(
-                    text = "Issues:",
+                    text = localizedString("mobile.services_issues"),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
                 )
@@ -484,7 +485,7 @@ private fun DiagnosticsCard(
             // Recommendations
             if (diagnostics.recommendations.isNotEmpty()) {
                 Text(
-                    text = "Recommendations:",
+                    text = localizedString("mobile.services_recommendations"),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
                 )
@@ -527,7 +528,7 @@ private fun ServiceTypeCard(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "${providers.size} provider${if (providers.size != 1) "s" else ""}",
+                    text = "${providers.size} provider${if (providers.size != 1) "s" else ""}", // Keep English for technical term
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -615,7 +616,7 @@ private fun ServiceProviderRow(
                 // Expand chevron
                 Icon(
                     imageVector = Icons.Filled.KeyboardArrowDown,
-                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                    contentDescription = if (isExpanded) "Collapse" else "Expand", // Keep English for accessibility
                     modifier = Modifier
                         .size(20.dp)
                         .rotate(rotationAngle),
@@ -637,20 +638,20 @@ private fun ServiceProviderRow(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 // Priority info
-                DetailRow(label = "Priority", value = provider.priority)
+                DetailRow(label = "Priority", value = provider.priority) // Keep English for technical term
 
                 // Priority group (only show if non-zero)
                 if (provider.priorityGroup > 0) {
-                    DetailRow(label = "Priority Group", value = provider.priorityGroup.toString())
+                    DetailRow(label = "Priority Group", value = provider.priorityGroup.toString()) // Keep English for technical term
                 }
 
                 // Strategy
-                DetailRow(label = "Strategy", value = DisplayNames.humanizeStrategy(provider.strategy))
+                DetailRow(label = "Strategy", value = DisplayNames.humanizeStrategy(provider.strategy)) // Keep English for technical term
 
                 // Capabilities (if any)
                 if (provider.capabilities.isNotEmpty()) {
                     Text(
-                        text = "Capabilities",
+                        text = localizedString("mobile.services_capabilities"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -727,7 +728,7 @@ private fun HandlerServicesCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Handler: $handler",
+                text = localizedString("mobile.services_handler_label", "handler", handler),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold
             )

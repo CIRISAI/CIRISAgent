@@ -13,8 +13,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 74
-        versionName "2.2.9"
+        versionCode 75
+        versionName "2.3.0"
 
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
@@ -138,6 +138,26 @@ android {
     }
 }
 
+// Sync localization JSON files from main repo to assets
+// This ensures mobile has all translated strings available at runtime
+task syncLocalizationAssets(type: Sync) {
+    description = "Sync localization JSON files from main repo to assets"
+
+    from("../../localization") {
+        include "*.json"
+        // Exclude manifest.json (not needed at runtime)
+        exclude "manifest.json"
+    }
+    into "src/main/assets/localization"
+}
+
+// Make preBuild depend on localization sync
+tasks.whenTaskAdded { task ->
+    if (task.name == "preBuild") {
+        task.dependsOn syncLocalizationAssets
+    }
+}
+
 // Sync Python sources from main repo before building
 // This ensures mobile always uses the latest ciris_engine and ciris_adapters
 task syncPythonSources(type: Sync) {
@@ -165,10 +185,24 @@ task syncPythonSources(type: Sync) {
     exclude "**/adapters/discord/**"
 }
 
-// Make Python tasks depend on sync
+// Copy backend localization JSON files to ciris_engine/data/localized/
+// This ensures the Python backend has access to localized strings
+task syncBackendLocalization(type: Copy) {
+    description = "Copy localization JSON files to Python package data"
+
+    from("../../localization") {
+        include "*.json"
+    }
+    into "${buildDir}/python-src/ciris_engine/data/localized"
+}
+
+// Make syncBackendLocalization run after syncPythonSources
+syncBackendLocalization.dependsOn syncPythonSources
+
+// Make Python tasks depend on sync (including backend localization)
 tasks.whenTaskAdded { task ->
     if (task.name.contains("Python") && !task.name.contains("sync")) {
-        task.dependsOn syncPythonSources
+        task.dependsOn syncBackendLocalization
     }
 }
 

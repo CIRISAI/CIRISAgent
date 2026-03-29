@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import ACCORD_TEXT, ACCORD_TEXT_COMPRESSED
+from ciris_engine.logic.utils import get_accord_text
 from ciris_engine.protocols.dma.tsaspdma import TSASPDMAProtocol
 from ciris_engine.schemas.actions.parameters import PonderParams, SpeakParams, ToolParams
 from ciris_engine.schemas.adapters.tools import ToolDocumentation, ToolInfo
@@ -108,6 +108,39 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         self.last_user_prompt: Optional[str] = None
 
         logger.info(f"TSASPDMAEvaluator initialized with model: {self.model_name}")
+
+    def _sync_language_from_context(self, context: Optional[Any]) -> None:
+        """Sync user's language preference from context to prompt loader."""
+        if not context:
+            return
+
+        user_profiles = None
+
+        # Try to extract user profiles from various context structures
+        if hasattr(context, "system_snapshot") and context.system_snapshot:
+            if hasattr(context.system_snapshot, "user_profiles"):
+                user_profiles = context.system_snapshot.user_profiles
+        elif hasattr(context, "user_profiles"):
+            user_profiles = context.user_profiles
+        elif isinstance(context, dict):
+            system_snapshot = context.get("system_snapshot")
+            if system_snapshot:
+                if isinstance(system_snapshot, dict):
+                    user_profiles = system_snapshot.get("user_profiles")
+                elif hasattr(system_snapshot, "user_profiles"):
+                    user_profiles = system_snapshot.user_profiles
+
+        if user_profiles and len(user_profiles) > 0:
+            first_profile = user_profiles[0]
+            user_lang = (
+                first_profile.get("preferred_language")
+                if isinstance(first_profile, dict)
+                else getattr(first_profile, "preferred_language", None)
+            )
+            if user_lang and user_lang != self.prompt_loader.language:
+                from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+                set_prompt_language(user_lang)
+                logger.debug(f"TSASPDMA: Synced prompt language to user preference: {user_lang}")
 
     def _convert_tsaspdma_result(
         self,
@@ -238,11 +271,29 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         that provide available resources (e.g., entity IDs) for parameter selection.
         """
         if not context_enrichment:
+            logger.info("[TSASPDMA] No context enrichment data provided")
             return ""
+
+        logger.info(f"[TSASPDMA] Formatting context enrichment with {len(context_enrichment)} entries")
+        logger.info(f"[TSASPDMA] Context enrichment keys: {list(context_enrichment.keys())}")
 
         sections = []
         for tool_key, result in context_enrichment.items():
+            logger.info(f"[TSASPDMA] Processing enrichment: {tool_key} = {type(result)}")
             if not result:
+                continue
+
+            # Handle _tool_highlight from _info_only tools
+            if isinstance(result, dict) and result.get("_tool_highlight"):
+                tool_name = result.get("tool_name", tool_key)
+                when_to_use = result.get("when_to_use", "")
+                message = result.get("message", "")
+                sections.append(f"--- IMPORTANT TOOL AVAILABLE: {tool_name} ---")
+                sections.append(f"  ⭐ {message}")
+                if when_to_use:
+                    sections.append(f"  When to use: {when_to_use}")
+                sections.append(f"  tool_name=\"{tool_name}\" - Use this EXACT name!")
+                logger.info(f"[TSASPDMA] Added tool highlight for: {tool_name}")
                 continue
 
             # Format based on tool type
@@ -289,12 +340,11 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         """
         messages: List[JSONDict] = []
 
-        # Add accord based on mode - 'full', 'compressed', or 'none'
+        # Add accord based on mode (centralized in get_accord_text)
         accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
-        if accord_mode == "full":
-            messages.append({"role": "system", "content": ACCORD_TEXT})
-        elif accord_mode == "compressed":
-            messages.append({"role": "system", "content": ACCORD_TEXT_COMPRESSED})
+        accord_text = get_accord_text(accord_mode)
+        if accord_text:
+            messages.append({"role": "system", "content": accord_text})
 
         # Get system message from prompt template
         system_message = self.prompt_loader.get_system_message(
@@ -366,12 +416,20 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         - SPEAK: Ask user for clarification
         - PONDER: Reconsider the approach
         """
+        logger.info(f"[TSASPDMA] evaluate_tool_action called for tool: {tool_name}")
+        logger.info(f"[TSASPDMA] Tool info: name={tool_info.name}, when_to_use={tool_info.when_to_use[:50] if tool_info.when_to_use else 'N/A'}...")
+        logger.info(f"[TSASPDMA] Context enrichment received: {list(context_enrichment.keys()) if context_enrichment else 'None'}")
+
+        # Sync user's language preference before building prompts
+        self._sync_language_from_context(context)
+
         # Access the text content directly from ThoughtContent, not str() which gives repr
         thought_content_str = (
             original_thought.content.text
             if hasattr(original_thought.content, "text")
             else str(original_thought.content)
         )
+        logger.info(f"[TSASPDMA] Original thought: {thought_content_str[:100]}...")
 
         messages = self._create_tsaspdma_messages(
             tool_name=tool_name,
@@ -454,6 +512,9 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         - Asks for clarification (returns SPEAK)
         - Reconsiders approach (returns PONDER)
         """
+        # Sync user's language preference before building prompts
+        self._sync_language_from_context(context)
+
         thought_content_str = (
             original_thought.content.text
             if hasattr(original_thought.content, "text")
@@ -557,12 +618,11 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         """Create prompt messages for TSASPDMA correction mode."""
         messages: List[JSONDict] = []
 
-        # Add accord
+        # Add accord (centralized in get_accord_text)
         accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
-        if accord_mode == "full":
-            messages.append({"role": "system", "content": ACCORD_TEXT})
-        elif accord_mode == "compressed":
-            messages.append({"role": "system", "content": ACCORD_TEXT_COMPRESSED})
+        accord_text = get_accord_text(accord_mode)
+        if accord_text:
+            messages.append({"role": "system", "content": accord_text})
 
         # System message for correction mode
         system_message = self.prompt_loader.get_system_message(

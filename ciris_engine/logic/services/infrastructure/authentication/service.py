@@ -1489,7 +1489,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         return token
 
-    def verify_token_sync(self, token: str) -> Optional[JSONDict]:
+    def verify_token_sync(self, token: str) -> Optional[TokenVerification]:
         """Synchronously verify a token (for non-async contexts)."""
         # For sync verification, we can only verify gateway-signed tokens
         # since authority tokens require async DB lookups for public keys
@@ -1502,8 +1502,16 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             # Validate that this is indeed a gateway-signed token type
             sub_type = decoded.get("sub_type")
             if sub_type in [JWTSubType.ANON.value, JWTSubType.OAUTH.value, JWTSubType.USER.value]:
-                # Valid gateway token
-                return dict(decoded)
+                # Valid gateway token - convert to TokenVerification
+                exp_timestamp = decoded.get("exp")
+                expires_at = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc) if exp_timestamp else None
+                return TokenVerification(
+                    valid=True,
+                    wa_id=decoded.get("sub"),
+                    name=decoded.get("name"),
+                    role=decoded.get("role"),
+                    expires_at=expires_at,
+                )
             else:
                 # Invalid sub_type for gateway token
                 return None

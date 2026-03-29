@@ -1,9 +1,10 @@
 """Task Scheduler Service Protocol."""
 
 from abc import abstractmethod
-from typing import Any, Dict, List, Optional, Protocol
+from typing import List, Optional, Protocol
 
 from ciris_engine.schemas.runtime.extended import ScheduledTask, ScheduledTaskInfo
+from ciris_engine.schemas.services.context import DeferralContext
 
 from ...runtime.base import ServiceProtocol
 
@@ -36,7 +37,7 @@ class TaskSchedulerServiceProtocol(ServiceProtocol, Protocol):
 
     @abstractmethod
     async def schedule_deferred_task(
-        self, thought_id: str, task_id: str, defer_until: str, reason: str, context: Optional[Dict[str, Any]] = None
+        self, thought_id: str, task_id: str, defer_until: str, reason: str, context: Optional[DeferralContext] = None
     ) -> ScheduledTask:
         """Schedule a deferred task for future reactivation."""
         ...

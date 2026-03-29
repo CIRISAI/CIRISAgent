@@ -1005,6 +1005,9 @@ class TestUpdateLLMConfigEndpoint:
         with patch(
             "ciris_engine.logic.setup.first_run.get_default_config_path",
             return_value=config_file,
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.config._validate_config_path",
+            side_effect=lambda p: p,  # Pass through for tests
         ):
             response = client.put(
                 "/v1/setup/llm",
@@ -1061,6 +1064,9 @@ class TestUpdateLLMConfigEndpoint:
         with patch(
             "ciris_engine.logic.setup.first_run.get_default_config_path",
             return_value=config_file,
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.config._validate_config_path",
+            side_effect=lambda p: p,  # Pass through for tests
         ):
             response = client.put(
                 "/v1/setup/llm",
@@ -1088,6 +1094,9 @@ class TestUpdateLLMConfigEndpoint:
         with patch(
             "ciris_engine.logic.setup.first_run.get_default_config_path",
             return_value=config_file,
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.config._validate_config_path",
+            side_effect=lambda p: p,  # Pass through for tests
         ):
             response = client.put(
                 "/v1/setup/llm",
@@ -1114,6 +1123,9 @@ class TestUpdateLLMConfigEndpoint:
         with patch(
             "ciris_engine.logic.setup.first_run.get_default_config_path",
             return_value=config_file,
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.config._validate_config_path",
+            side_effect=lambda p: p,  # Pass through for tests
         ):
             response = client.put(
                 "/v1/setup/llm",

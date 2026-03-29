@@ -335,7 +335,7 @@ class ThoughtProcessor(
                 # Get all available tools for correction mode
                 all_tools = await tool_bus.get_all_tool_info()
                 if not all_tools:
-                    logger.error(f"TSASPDMA-CORRECTION: No tools available for correction")
+                    logger.error("TSASPDMA-CORRECTION: No tools available for correction")
                     return ActionSelectionDMAResult(
                         selected_action=HandlerActionType.PONDER,
                         action_parameters=PonderParams(
@@ -344,7 +344,7 @@ class ThoughtProcessor(
                                 "What alternative approach should I take?",
                             ],
                         ),
-                        rationale=f"TSASPDMA-CORRECTION: No tools available for correction",
+                        rationale="TSASPDMA-CORRECTION: No tools available for correction",
                     )
 
                 logger.info(
@@ -356,7 +356,7 @@ class ThoughtProcessor(
 
                 evaluator = self.dma_orchestrator.tsaspdma_evaluator
                 if not evaluator:
-                    logger.error(f"TSASPDMA-CORRECTION: No evaluator available")
+                    logger.error("TSASPDMA-CORRECTION: No evaluator available")
                     return ActionSelectionDMAResult(
                         selected_action=HandlerActionType.PONDER,
                         action_parameters=PonderParams(
@@ -365,7 +365,7 @@ class ThoughtProcessor(
                                 "TSASPDMA evaluator unavailable for correction.",
                             ],
                         ),
-                        rationale=f"TSASPDMA-CORRECTION: Evaluator unavailable",
+                        rationale="TSASPDMA-CORRECTION: Evaluator unavailable",
                     )
 
                 correction_result = await run_tsaspdma_correction(

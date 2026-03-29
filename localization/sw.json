@@ -1281,7 +1281,14 @@
     "processing_recalling": "Inarudisha...",
     "processing_tool": "Inatumia zana...",
     "processing_pondering": "Inafikiria...",
-    "processing_failed": "Imeshindwa kutuma ujumbe: {error}"
+    "processing_failed": "Imeshindwa kutuma ujumbe: {error}",
+    "credits_no_credits": "Huna akrediti zilizobaki. Tafadhali nunua akrediti au subiri kwa akrediti za kila siku zisitekeleze saa ya sita asubuhi UTC.",
+    "credits_no_credits_short": "Hakuna akrediti zinazopatikana",
+    "credits_purchase_required": "Nunua akrediti ili kuendelea",
+    "credits_renews_at": "Akrediti za kila siku zitatekeleza saa ya sita asubuhi UTC",
+    "credits_error_generic": "Imeshindwa kusindika ujumbe wako. Tafadhali jaribu baadaye.",
+    "credits_error_network": "Hitilafu ya mtandao. Tafadhali angalia muunganisho wako na ujaribu tena.",
+    "credits_error_server": "Seva haipo. Tafadhali jaribu baadaye."
   },
   "conscience": {
     "ponder_attempted": "Nilijaribu {action}",

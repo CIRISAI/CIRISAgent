@@ -19,13 +19,37 @@ from ciris_engine.logic.adapters.api.auth import get_current_user
 from ciris_engine.logic.adapters.api.models import TokenData
 
 
+# ============================================================================
+# Signing Infrastructure Mocking
+# ============================================================================
+# The signing key singleton (get_unified_signing_key) requires ciris_verify
+# which is not available in unit tests. We mock the fallback hash function
+# to prevent hangs during initialization when calling API endpoints.
+
+
+@pytest.fixture
+def mock_signing_key_fallback():
+    """Mock the signing key fallback to prevent hangs in tests.
+
+    _compute_agent_id_hash_from_signer() tries to initialize the
+    ciris_verify singleton which blocks in test environments.
+
+    This fixture is used by client fixtures that make API calls.
+    """
+    with patch(
+        "ciris_engine.logic.adapters.api.routes.my_data._compute_agent_id_hash_from_signer",
+        return_value="mock_test_hash_1234",
+    ):
+        yield
+
+
 async def _mock_admin_user():
     return TokenData(username="admin", email="admin@ciris.ai", role="ADMIN")
 
 
 @pytest.fixture
-def mock_runtime():
-    """Create mock runtime with agent identity."""
+def my_data_mock_runtime():
+    """Create mock runtime with agent identity for my_data tests."""
     runtime = MagicMock()
     runtime.agent_identity = MagicMock()
     runtime.agent_identity.agent_id = "test-agent-001"
@@ -74,35 +98,35 @@ def mock_adapter_instance(mock_accord_adapter):
 
 
 @pytest.fixture
-def app_with_runtime(mock_runtime, mock_adapter_instance):
+def app_with_runtime(my_data_mock_runtime, mock_adapter_instance):
     """Create app with mock runtime and accord adapter."""
     app = create_app()
-    app.state.runtime = mock_runtime
+    app.state.runtime = my_data_mock_runtime
 
     # RuntimeAdapterManager stores AdapterInstance objects in loaded_adapters
-    mock_runtime.adapter_manager.loaded_adapters = {"accord": mock_adapter_instance}
+    my_data_mock_runtime.adapter_manager.loaded_adapters = {"accord": mock_adapter_instance}
 
     app.dependency_overrides[get_current_user] = _mock_admin_user
     return app
 
 
 @pytest.fixture
-def client(app_with_runtime):
+def client(app_with_runtime, mock_signing_key_fallback):
     return TestClient(app_with_runtime)
 
 
 @pytest.fixture
-def app_no_adapter(mock_runtime):
+def app_no_adapter(my_data_mock_runtime):
     """Create app with runtime but NO accord adapter."""
     app = create_app()
-    app.state.runtime = mock_runtime
-    mock_runtime.adapter_manager.loaded_adapters = {}
+    app.state.runtime = my_data_mock_runtime
+    my_data_mock_runtime.adapter_manager.loaded_adapters = {}
     app.dependency_overrides[get_current_user] = _mock_admin_user
     return app
 
 
 @pytest.fixture
-def client_no_adapter(app_no_adapter):
+def client_no_adapter(app_no_adapter, mock_signing_key_fallback):
     return TestClient(app_no_adapter)
 
 
@@ -115,7 +139,7 @@ def app_no_runtime():
 
 
 @pytest.fixture
-def client_no_runtime(app_no_runtime):
+def client_no_runtime(app_no_runtime, mock_signing_key_fallback):
     return TestClient(app_no_runtime)
 
 
@@ -920,20 +944,20 @@ class TestAdapterWithoutMetricsService:
         return adapter
 
     @pytest.fixture
-    def app_with_basic_adapter(self, mock_runtime, mock_adapter_no_metrics):
+    def app_with_basic_adapter(self, my_data_mock_runtime, mock_adapter_no_metrics):
         """Create app with basic adapter (no metrics_service)."""
         app = create_app()
-        app.state.runtime = mock_runtime
+        app.state.runtime = my_data_mock_runtime
 
         mock_instance = MagicMock()
         mock_instance.adapter = mock_adapter_no_metrics
 
-        mock_runtime.adapter_manager.loaded_adapters = {"accord": mock_instance}
+        my_data_mock_runtime.adapter_manager.loaded_adapters = {"accord": mock_instance}
         app.dependency_overrides[get_current_user] = _mock_admin_user
         return app
 
     @pytest.fixture
-    def client_basic_adapter(self, app_with_basic_adapter):
+    def client_basic_adapter(self, app_with_basic_adapter, mock_signing_key_fallback):
         return TestClient(app_with_basic_adapter)
 
     def test_lens_identifier_with_basic_adapter(self, client_basic_adapter):

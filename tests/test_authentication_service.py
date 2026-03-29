@@ -579,8 +579,9 @@ class TestAuthenticationServiceJWT:
         # Verify synchronously
         result = auth_service.verify_token_sync(token)
         assert result is not None
-        assert result["sub"] == "test-wa-id"
-        assert result["sub_type"] == JWTSubType.USER.value
+        assert result.valid is True
+        assert result.wa_id == "test-wa-id"
+        assert result.name == "Test User"
 
         # Authority tokens cannot be verified sync (need DB lookup)
         authority_payload = payload.copy()

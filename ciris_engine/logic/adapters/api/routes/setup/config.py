@@ -99,6 +99,7 @@ def _validate_config_path(config_path: Path) -> Path:
     # Allowlist of parent directories where config files may exist
     allowed_parents = [
         Path.home() / "ciris",  # User install: ~/ciris/.env
+        Path.home() / "Documents" / "ciris",  # iOS default: ~/Documents/ciris/.env
         Path("/app"),  # Managed/Docker: /app/.env
         Path("/etc/ciris"),  # System config: /etc/ciris/.env
     ]
@@ -110,7 +111,7 @@ def _validate_config_path(config_path: Path) -> Path:
     except OSError:
         pass  # cwd may not be accessible
 
-    # Add CIRIS_HOME if set (Android/iOS)
+    # Add CIRIS_HOME if set (Android/iOS/custom installs)
     ciris_home = os.environ.get("CIRIS_HOME")
     if ciris_home:
         allowed_parents.append(Path(ciris_home))

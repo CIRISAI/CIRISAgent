@@ -11,19 +11,9 @@ This module centralizes all SQL generation logic, making it easy to:
 """
 
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any, Dict, List, Optional
 
-# Note: DialectAdapter type hint replaced with Any to break cyclic dependency with dialect.py
-# The adapter parameter is duck-typed: must have .dialect attribute
-
-
-class ConflictResolution(str, Enum):
-    """How to handle conflicts during INSERT operations."""
-
-    IGNORE = "ignore"  # INSERT OR IGNORE / ON CONFLICT DO NOTHING
-    REPLACE = "replace"  # INSERT OR REPLACE / ON CONFLICT DO UPDATE
-    ERROR = "error"  # Let database raise error (default behavior)
+from ciris_engine.logic.persistence.db.types import ConflictResolution, Dialect
 
 
 @dataclass
@@ -56,8 +46,6 @@ class InsertQuery:
         Returns:
             SQL string with ? placeholders (will be translated by cursor wrapper)
         """
-        from ciris_engine.logic.persistence.db.dialect import Dialect
-
         placeholders = ", ".join(["?"] * len(self.columns))
         columns_str = ", ".join(self.columns)
 

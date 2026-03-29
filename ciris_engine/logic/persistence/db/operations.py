@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.persistence.db.core import get_db_connection
 from ciris_engine.logic.persistence.db.dialect import get_adapter
-from ciris_engine.logic.persistence.db.query_builder import ConflictResolution
+from ciris_engine.logic.persistence.db.types import ConflictResolution
 
 logger = logging.getLogger(__name__)
 

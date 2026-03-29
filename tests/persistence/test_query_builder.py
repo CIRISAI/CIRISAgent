@@ -6,8 +6,9 @@ Tests dialect-aware SQL generation for SQLite and PostgreSQL.
 
 import pytest
 
-from ciris_engine.logic.persistence.db.dialect import Dialect, DialectAdapter
-from ciris_engine.logic.persistence.db.query_builder import ConflictResolution, InsertQuery, QueryBuilder, SelectQuery
+from ciris_engine.logic.persistence.db.dialect import DialectAdapter
+from ciris_engine.logic.persistence.db.query_builder import InsertQuery, QueryBuilder, SelectQuery
+from ciris_engine.logic.persistence.db.types import ConflictResolution, Dialect
 
 
 class TestInsertQuery:

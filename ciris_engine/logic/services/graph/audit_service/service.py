@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from uuid import uuid4
 
 from ciris_engine.logic.persistence.db.dialect import get_adapter
-from ciris_engine.logic.persistence.db.query_builder import ConflictResolution
+from ciris_engine.logic.persistence.db.types import ConflictResolution
 from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
 from ciris_engine.schemas.types import JSONDict
 

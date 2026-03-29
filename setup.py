@@ -37,7 +37,6 @@ class _BuildPyWithLocalization(_build_py):
 
         super().run()
 
-
 try:
     from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 except ImportError:

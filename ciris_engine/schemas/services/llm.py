@@ -185,3 +185,39 @@ class CachedLLMResponse(BaseModel):
     cached_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: LLMCallMetadata = Field(..., description="Call metadata")
     expires_at: Optional[datetime] = Field(None, description="When cache entry expires")
+
+
+class RetryState(BaseModel):
+    """State tracking for LLM request retries."""
+
+    count: int = Field(0, description="Current retry count")
+    previous_error: Optional[str] = Field(None, description="Error message from previous attempt")
+    original_request_id: Optional[str] = Field(None, description="Request ID from first attempt")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class LLMRequestMetadata(BaseModel):
+    """Metadata for LLM proxy requests (used with CIRIS proxy)."""
+
+    interaction_id: str = Field(..., description="Unique interaction ID for billing/tracing")
+    retry_count: Optional[int] = Field(None, description="Current retry count if retrying")
+    previous_error: Optional[str] = Field(None, description="Error from previous attempt")
+    original_request_id: Optional[str] = Field(None, description="Original request ID for retry correlation")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class EndpointStats(BaseModel):
+    """Statistics for an LLM endpoint."""
+
+    total_calls: int = Field(0, description="Total number of calls made")
+    successful_calls: int = Field(0, description="Number of successful calls")
+    failed_calls: int = Field(0, description="Number of failed calls")
+    total_tokens: int = Field(0, description="Total tokens used")
+    total_cost_usd: float = Field(0.0, description="Total cost in USD")
+    avg_latency_ms: float = Field(0.0, description="Average latency in milliseconds")
+    last_call_at: Optional[datetime] = Field(None, description="Timestamp of last call")
+    circuit_breaker_state: Optional[str] = Field(None, description="Current circuit breaker state")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)

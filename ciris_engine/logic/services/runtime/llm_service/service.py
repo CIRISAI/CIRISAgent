@@ -46,12 +46,15 @@ from ciris_engine.schemas.runtime.protocols_core import LLMStatus, LLMUsageStati
 from ciris_engine.schemas.runtime.resources import ResourceUsage
 from ciris_engine.schemas.services.capabilities import LLMCapabilities
 from ciris_engine.schemas.services.core import ServiceCapabilities
-from ciris_engine.schemas.services.llm import ExtractedJSONData, JSONExtractionResult
+from ciris_engine.schemas.services.llm import (
+    EndpointStats,
+    ExtractedJSONData,
+    JSONExtractionResult,
+    LLMRequestMetadata,
+    RetryState,
+)
 
 from .pricing_calculator import LLMPricingCalculator
-
-# Type alias for error context dict used in error handling
-ErrorContext = Dict[str, Any]
 
 
 def _build_ciris_proxy_metadata(

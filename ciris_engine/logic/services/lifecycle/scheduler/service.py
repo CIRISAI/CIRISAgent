@@ -211,8 +211,8 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             # Add a small buffer (1 second) to avoid missing triggers due to timing
             return bool(current_time >= next_time - timedelta(seconds=1))
 
-        except Exception as e:
-            # Sanitize for logging (CWE-117)
+        except Exception:
+            # Sanitize for logging (CWE-117) - don't log exception details
             safe_task_id = _sanitize_for_log(task.task_id)
             logger.error(f"Invalid cron expression for task {safe_task_id}: parse error")
             return False
@@ -284,7 +284,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             if task.defer_until and not task.schedule_cron:
                 await self._complete_task(task)
 
-        except Exception as e:
+        except Exception:
             # Increment failed counter
             self._tasks_failed += 1
             # Sanitize task_id for logging (CWE-117) - don't log exception details

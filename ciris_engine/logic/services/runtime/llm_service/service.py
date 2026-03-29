@@ -56,6 +56,9 @@ from ciris_engine.schemas.services.llm import (
 
 from .pricing_calculator import LLMPricingCalculator
 
+# Type alias for error context dict - contains arbitrary debugging info for logging
+ErrorContext = Dict[str, Any]
+
 
 def _build_ciris_proxy_metadata(
     task_id: Optional[str],

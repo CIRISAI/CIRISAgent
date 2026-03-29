@@ -695,7 +695,8 @@ def _parse_and_sanitize_env_content(content: str) -> dict[str, str]:
             continue
 
         # Parse VAR=value or VAR="value" format
-        match = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)=(.*)$', line)
+        # Use \w for word characters (alphanumeric + underscore)
+        match = re.match(r'^([A-Za-z_]\w*)=(.*)$', line)
         if not match:
             # Skip malformed lines (potential injection attempts)
             continue
@@ -707,10 +708,9 @@ def _parse_and_sanitize_env_content(content: str) -> dict[str, str]:
         if not _validate_env_var_name(var_name):
             continue
 
-        # Strip quotes if present
-        if raw_value.startswith('"') and raw_value.endswith('"'):
-            raw_value = raw_value[1:-1]
-        elif raw_value.startswith("'") and raw_value.endswith("'"):
+        # Strip quotes if present (single or double)
+        if (raw_value.startswith('"') and raw_value.endswith('"')) or \
+           (raw_value.startswith("'") and raw_value.endswith("'")):
             raw_value = raw_value[1:-1]
 
         # Sanitize the value
@@ -743,8 +743,8 @@ def _validate_env_var_name(var_name: str) -> bool:
         True if valid, False otherwise
     """
     import re
-    # Env var names: start with letter/underscore, contain only alphanumeric/underscore
-    return bool(re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', var_name))
+    # Env var names: start with letter/underscore, contain only word characters (\w)
+    return bool(re.match(r'^[A-Za-z_]\w*$', var_name))
 
 
 def sanitize_for_log(value: str, max_length: int = 20) -> str:

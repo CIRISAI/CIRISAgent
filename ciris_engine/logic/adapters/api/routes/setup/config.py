@@ -81,14 +81,18 @@ def _validate_provider_name(provider: str) -> str:
 def _validate_config_path(config_path: Path) -> Path:
     """Validate that config path is within allowed directories.
 
-    SECURITY: This breaks the taint chain by validating the path against
-    an allowlist of known config directories before any file operations.
+    SECURITY: This breaks the taint chain by:
+    1. Validating the path against an allowlist of known config directories
+    2. Returning a NEW Path object constructed from validated components
+
+    The returned Path is constructed from the resolved string, which SonarCloud
+    recognizes as breaking the taint chain from user-controlled input.
 
     Args:
         config_path: Path from get_default_config_path()
 
     Returns:
-        Validated path (same as input if valid)
+        New validated Path object (breaks taint chain)
 
     Raises:
         ValueError: If path is not within allowed directories
@@ -127,8 +131,12 @@ def _validate_config_path(config_path: Path) -> Path:
     # Check if config path is within any allowed parent
     for allowed_parent in resolved_allowed:
         try:
-            resolved.relative_to(allowed_parent)
-            return config_path  # Valid - return original path
+            # Verify path is within allowed directory
+            relative_path = resolved.relative_to(allowed_parent)
+            # SECURITY: Construct NEW Path from validated allowed_parent + relative_path
+            # This breaks the taint chain by creating a path from known-safe components
+            validated_path = allowed_parent / relative_path
+            return validated_path
         except ValueError:
             continue  # Not under this parent, try next
 
@@ -377,9 +385,10 @@ async def update_llm_config(
             )
 
         # SECURITY: Validate config path is within allowed directories.
-        # This breaks the taint chain from environment variables to file write.
+        # This breaks the taint chain by returning a NEW Path constructed from
+        # validated components (allowed_parent / relative_path).
         try:
-            _validate_config_path(config_path)
+            config_path = _validate_config_path(config_path)
         except ValueError as e:
             logger.error("Config path validation failed")
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid config path")

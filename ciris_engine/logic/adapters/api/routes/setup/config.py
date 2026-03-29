@@ -55,16 +55,84 @@ def _validate_provider_name(provider: str) -> str:
         ValueError: If provider is not in allowlist
     """
     # Allowlist of known providers
-    allowed_providers = frozenset({
-        "openai", "anthropic", "google", "openrouter", "local",
-        "groq", "together", "mistral", "cohere", "azure", "ollama"
-    })
+    allowed_providers = frozenset(
+        {
+            "openai",
+            "anthropic",
+            "google",
+            "openrouter",
+            "local",
+            "groq",
+            "together",
+            "mistral",
+            "cohere",
+            "azure",
+            "ollama",
+        }
+    )
     normalized = provider.lower().strip()
     if normalized not in allowed_providers:
         # Allow custom providers but validate format (alphanumeric + underscore only)
-        if not re.match(r'^[a-z][a-z0-9_]*$', normalized):
+        if not re.match(r"^[a-z][a-z0-9_]*$", normalized):
             raise ValueError(f"Invalid provider name format: {provider}")
     return normalized
+
+
+def _validate_config_path(config_path: Path) -> Path:
+    """Validate that config path is within allowed directories.
+
+    SECURITY: This breaks the taint chain by validating the path against
+    an allowlist of known config directories before any file operations.
+
+    Args:
+        config_path: Path from get_default_config_path()
+
+    Returns:
+        Validated path (same as input if valid)
+
+    Raises:
+        ValueError: If path is not within allowed directories
+    """
+    # Resolve to absolute path and normalize
+    resolved = config_path.resolve()
+
+    # Allowlist of parent directories where config files may exist
+    allowed_parents = [
+        Path.home() / "ciris",  # User install: ~/ciris/.env
+        Path("/app"),  # Managed/Docker: /app/.env
+        Path("/etc/ciris"),  # System config: /etc/ciris/.env
+    ]
+
+    # Add cwd/ciris for development mode
+    try:
+        allowed_parents.append(Path.cwd() / "ciris")
+        allowed_parents.append(Path.cwd())  # Legacy dev mode support
+    except OSError:
+        pass  # cwd may not be accessible
+
+    # Add CIRIS_HOME if set (Android/iOS)
+    ciris_home = os.environ.get("CIRIS_HOME")
+    if ciris_home:
+        allowed_parents.append(Path(ciris_home))
+
+    # Resolve all allowed parents
+    resolved_allowed = []
+    for parent in allowed_parents:
+        try:
+            resolved_allowed.append(parent.resolve())
+        except (OSError, RuntimeError):
+            pass  # Skip inaccessible paths
+
+    # Check if config path is within any allowed parent
+    for allowed_parent in resolved_allowed:
+        try:
+            resolved.relative_to(allowed_parent)
+            return config_path  # Valid - return original path
+        except ValueError:
+            continue  # Not under this parent, try next
+
+    # Path not in any allowed directory
+    raise ValueError(f"Config path not in allowed directory: {resolved}")
 
 
 class UpdateLlmConfigRequest(BaseModel):
@@ -306,6 +374,14 @@ async def update_llm_config(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Configuration file not found. Run setup wizard first.",
             )
+
+        # SECURITY: Validate config path is within allowed directories.
+        # This breaks the taint chain from environment variables to file write.
+        try:
+            _validate_config_path(config_path)
+        except ValueError as e:
+            logger.error("Config path validation failed")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid config path")
 
         # SECURITY: Validate and sanitize all user input before file operations.
         # This breaks the taint chain from HTTP request to file write.
